@@ -6,12 +6,16 @@ Check each item only after its acceptance evidence is recorded. Stage 01 uses th
 
 Source: [01-repo-foundation.md](01-repo-foundation.md)
 
-- [ ] `pnpm install && pnpm check && pnpm build` passes on a clean clone.
-- [ ] `pnpm dev` serves the placeholder page. The Playwright smoke test passes in Chromium, Firefox and WebKit.
-- [ ] Adding `import 'react'` to the engine fails `pnpm deps:check`.
-- [ ] Using `Math.random()` or `document` in the engine fails `pnpm check`.
-- [ ] CI runs green on GitHub Actions, or the same checks pass locally under the user-authorized local verification path in `README.md`.
-- [ ] `docs/STATUS.md` and `docs/DECISIONS.md` exist.
+- [x] `pnpm install && pnpm check && pnpm build` passes on a clean clone.
+- [x] `pnpm dev` serves the placeholder page. The Playwright smoke test passes in Chromium, Firefox and WebKit.
+- [x] Adding `import 'react'` to the engine fails `pnpm deps:check`.
+- [x] Using `Math.random()` or `document` in the engine fails `pnpm check`.
+- [x] CI runs green on GitHub Actions, or the same checks pass locally under the user-authorized local verification path in `README.md`.
+- [x] `docs/STATUS.md` and `docs/DECISIONS.md` exist.
+
+Verified 2026-09-24 from a fresh local clone of commit `ec4f04f`, with no installed dependencies or build outputs copied from the workspace. Node `22.23.3`, pnpm `10.7.1`. `pnpm install --frozen-lockfile --offline` and `CI=1 pnpm run ci` passed. The CI script ran production and test typechecks, the engine ambient-global guard, lint with warnings denied, format verification, seven dependency-boundary fixtures, the filesystem purity tests, 12 unit tests, all package/app builds, coverage, and all three browser smoke tests. Chromium, Firefox and WebKit reported no console or page errors. The clone remained clean after generation and build.
+
+For local browser checks, install the browsers with `pnpm exec playwright install chromium firefox webkit`. This host used `PLAYWRIGHT_BROWSERS_PATH=/private/tmp/hexfield-playwright` and an escalated browser launch. `pnpm run ci` is the script invocation; `pnpm ci` is a reserved pnpm command. The GitHub workflow runs the equivalent checks when a remote is available.
 
 ## 02 — Engine Core
 
