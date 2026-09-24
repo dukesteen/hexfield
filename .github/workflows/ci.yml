@@ -3,6 +3,8 @@ name: CI
 on:
   push:
   pull_request:
+  schedule:
+    - cron: '17 2 * * *'
 
 jobs:
   check:
@@ -35,4 +37,38 @@ jobs:
         with:
           name: playwright-report
           path: apps/web/playwright-report/
+          if-no-files-found: ignore
+
+  simulation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.7.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec tsc -b tools/sim
+      - name: Verified games
+        run: |
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            node tools/sim/dist/index.js run --games 100000 --players 4 --seed 42 --parallel 4 > simulation-games.json
+          else
+            node tools/sim/dist/index.js run --games 2000 --players 4 --seed 42 --parallel 4 > simulation-games.json
+          fi
+      - name: Fuzz inputs
+        if: github.event_name != 'schedule'
+        run: node tools/sim/dist/index.js fuzz --iterations 50000 --seed 42 > simulation-fuzz.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: simulation
+          path: |
+            simulation-games.json
+            simulation-fuzz.json
+            failures/
           if-no-files-found: ignore

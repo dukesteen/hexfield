@@ -193,6 +193,8 @@ interface SystemInput {
 
 - Command types are namespaced by module when ambiguous (`base/BUILD_ROAD` internally). The wire format uses plain `type` strings that are unique across all modules, enforced by the registry at startup.
 - A system input answers a `Pending` of kind `random` or `reveal`, or is a protocol-level event (`TIMEOUT`, `SEAT_STATUS`). Random and reveal inputs must match a current pending item. `TIMEOUT` must match a current player pending and its phase; `SEAT_STATUS` validates its seat and status independently.
+- The command envelope contains only `kind`, `seat`, and `command`. A handler may declare `keys: { allowed: readonly string[]; optional?: readonly string[] }` for its payload, excluding `type` (commands) or `kind`/`type` (system inputs). Declared shapes reject undeclared fields with `unknown-field`, after JSON validation and before pending checks. Handlers without this metadata remain open; every base handler declares its shape. The core also closes the built-in `SEAT_STATUS` shape.
+- The registry checks and snapshots key metadata. Optional keys must be allowed, lists cannot contain duplicates or reserved envelope names, and declared `TIMEOUT` keys must include `seat` and `phase`. Handlers validate required fields, values, and conditional/nested shapes. A module that needs new parameters for a closed base command must register a new command type. Protocol signatures, reveal proofs, and timing evidence belong in the surrounding log entry, never as extra engine-input fields.
 
 ## 6. Pipeline API
 
@@ -203,17 +205,21 @@ createGame(config: GameConfig, genesisSeed: Uint8Array): GameState
 validate(state: GameState, input: Input): Result<void>
 apply(state: GameState, input: Input): Result<{ state: GameState; events: GameEvent[] }>  // calls validate first
 applyPrivate(priv: PrivateState, before: GameState, input: Input, privInput?: PrivateInputData): Result<PrivateState>
+applyAllPrivates(privates: ReadonlyMap<Seat, PrivateState>, before: GameState, input: Input, privateData?: Partial<Record<Seat, PrivateInputData>>): Result<Map<Seat, PrivateState>>
 getPending(state: GameState): Pending[]
-getLegalCommands(state: GameState, seat: Seat, priv?: PrivateState): LegalCommandSet
+getLegalCommands(state: GameState, seat: Seat, priv?: PrivateState, filter?: (command: CommandShape) => boolean): LegalCommandSet
 project(state: GameState, viewer: Seat | 'spectator'): PublicView   // convenience for UI
 computeVictoryPoints(state, seat, priv?): { public: number; total?: number }
 ```
 
 - `LegalCommandSet` lists concrete commands for discrete choices (placements) and **templates** for combinatorial ones (trades, discards), e.g. `{ type: 'DISCARD', count: 4, from: bounds }`. Stage 04 adds an enumerator for bots.
+- An optional pure `getLegalCommands` filter removes unwanted concrete candidates before validation. Every returned concrete command still passes validation; templates are unchanged. Enumeration applies the same filter before validating expanded templates.
 - `applyPrivate` is how the owner's client keeps the exact hand in step with public events. `privInput` carries secret data the owner learned out of band (e.g. which card was stolen from them). Only the owner (or an omniscient local driver) calls it.
+- `applyAllPrivates` updates every configured seat for an omniscient local driver. It validates the input once and returns a new map only if every private update succeeds. Single-seat clients continue to use `applyPrivate`.
 - **Omniscient mode** (hotseat, simulation, audit): a `LocalGame` wrapper holds `GameState` plus every seat's `PrivateState` and asserts after each input that the true hands sit inside the public bounds.
 - `LocalGame` answers local deck draws using the injected random source and the remaining card identities. These identities stay outside public state. It records all automatically submitted inputs, including victory claims, so replay uses the same deterministic pipeline.
 - A local submission commits its command and generated inputs as one batch. If an automatic input or external source fails, the driver retains the previous committed state and log and becomes terminal. This prevents retrying after a source has already consumed hidden randomness. Ordinary rejected player commands leave the driver usable. State is a borrowed frozen view; log and event getters copy their arrays of frozen records. Use explicit snapshots before passing state to code that may mutate it.
+- `privateView(seat)` borrows that seat's deeply frozen private state. Re-read it after submitting an input. `privateState(seat)` returns an owned copy for consumers that need to mutate their copy.
 
 ## 7. Module system (skeleton)
 

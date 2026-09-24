@@ -64,6 +64,8 @@ An invalid entry signed by the sequencer is **misbehaviour evidence**. Keep it, 
 
 All wire messages are validated on receipt with Valibot schemas (`v.safeParse`). Use `v.variant("t", [...])` for the message union and `v.strictObject` so unknown fields are rejected. Oversized (> 256 KB after reassembly), malformed or unknown messages are dropped and counted against the sender's reputation (disconnect after a threshold).
 
+The wire schema validates the surrounding message; the engine validates registered command and system-input keys. Signatures, reveal proofs, and timer evidence stay in their log-entry fields. The P2P adapter must reject a local-mode `CARD_DEALT.card` value and deliver that identity privately instead.
+
 ```ts
 type Msg =
   | { t: 'HELLO'; peerId; gameId?; protocolVersion; appVersion; head?: { seq; hash; term }; sig }

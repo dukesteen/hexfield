@@ -11,16 +11,54 @@ import type {
   RegisteredHandler,
   SystemInputHandler,
   PhaseHandler,
+  InputKeys,
 } from './types.js';
+
+function copyKeys(keys: InputKeys, reserved: readonly string[]): InputKeys {
+  if (
+    !Array.isArray(keys.allowed) ||
+    (keys.optional !== undefined && !Array.isArray(keys.optional))
+  )
+    throw new Error('Input keys must be arrays');
+  const allowed = [...keys.allowed];
+  const optional = [...(keys.optional ?? [])];
+  if (
+    allowed.some((key) => typeof key !== 'string' || key.length === 0 || reserved.includes(key)) ||
+    new Set(allowed).size !== allowed.length
+  )
+    throw new Error('Input keys contain a duplicate or reserved field');
+  if (optional.some((key) => !allowed.includes(key)) || new Set(optional).size !== optional.length)
+    throw new Error('Optional input keys must be unique allowed fields');
+  return Object.freeze({
+    allowed: Object.freeze(allowed),
+    ...(keys.optional ? { optional: Object.freeze(optional) } : {}),
+  });
+}
+
+function copyHandler(handler: CommandHandler, reserved: readonly string[]): CommandHandler;
+function copyHandler(handler: SystemInputHandler, reserved: readonly string[]): SystemInputHandler;
+function copyHandler(
+  handler: CommandHandler | SystemInputHandler,
+  reserved: readonly string[],
+): CommandHandler | SystemInputHandler {
+  // A handler's functions are intentionally retained, while mutable field lists are owned here.
+  return Object.freeze({
+    ...handler,
+    ...(handler.keys ? { keys: copyKeys(handler.keys, reserved) } : {}),
+  });
+}
 
 function copyModule(module: GameModule): GameModule {
   const commands = Object.fromEntries(
-    Object.entries(module.commands).map(([name, handler]) => [name, Object.freeze({ ...handler })]),
+    Object.entries(module.commands).map(([name, handler]) => [
+      name,
+      copyHandler(handler, ['type']),
+    ]),
   );
   const systemInputs = Object.fromEntries(
     Object.entries(module.systemInputs).map(([name, handler]) => [
       name,
-      Object.freeze({ ...handler }),
+      copyHandler(handler, ['kind', 'type']),
     ]),
   );
   const phases = Object.fromEntries(
@@ -216,6 +254,12 @@ export function createRegistry(input: readonly GameModule[]): ModuleRegistry {
       a < b ? -1 : a > b ? 1 : 0,
     )) {
       if (type === 'SEAT_STATUS') throw new Error('SEAT_STATUS is reserved by the engine');
+      if (
+        type === 'TIMEOUT' &&
+        handler.keys &&
+        (!handler.keys.allowed.includes('seat') || !handler.keys.allowed.includes('phase'))
+      )
+        throw new Error('TIMEOUT input keys must include seat and phase');
       if (systemInputs.has(type)) throw new Error(`Duplicate system input type: ${type}`);
       systemInputs.set(type, { module: module.id, handler });
     }

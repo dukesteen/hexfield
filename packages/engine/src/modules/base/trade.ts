@@ -106,6 +106,7 @@ export const maritimeTrade: CommandHandler = {
     let due = 0;
     for (const resource of RESOURCES) {
       const given = sides.value.give[resource];
+      if (given === 0) continue;
       const rate = harborRate(state, input.seat, resource);
       if (given % rate !== 0)
         return failure('invalid-maritime-rate', `${resource} requires a ${rate}:1 rate`);

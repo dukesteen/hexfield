@@ -18,7 +18,7 @@
     "purity:check": "node tools/check-engine-purity.mjs",
     "check": "pnpm typecheck && pnpm lint && pnpm format:check && pnpm deps:check && pnpm purity:check && pnpm test",
     "ci": "pnpm check && pnpm build && pnpm test:coverage && pnpm test:e2e",
-    "sim": "pnpm --filter @cp2p/sim start"
+    "sim": "tsc -b tools/sim && node tools/sim/dist/index.js"
   },
   "devDependencies": {
     "@playwright/test": "^1.63.0",

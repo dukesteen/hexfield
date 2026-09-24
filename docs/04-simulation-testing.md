@@ -30,7 +30,7 @@ packages/engine/test/golden.test.ts
 
 ## 1. Enumerating legal commands
 
-- `enumerateCommands(state, seat, priv, opts)`:
+- `enumerateCommands(engine, state, seat, priv, opts)` uses the supplied engine's module registry:
   - discrete sets (placements, robber hexes, victims, card plays) are returned in full;
   - templates are expanded with caps:
     - **Discard**: all multisets of size k drawn from the private hand, capped at `opts.maxDiscardOptions` (default 50, sampled deterministically by the bot RNG when the space is larger).
@@ -57,7 +57,7 @@ interface BotView {
 } // never other seats' PrivateState
 ```
 
-`RandomBot` picks uniformly among enumerated commands, with light weighting so games finish: prefer building over ending the turn when affordable, and prefer `END_TURN` over offering trades after N offers in a turn. It accepts trades with probability 0.3.
+`RandomBot` groups enumerated commands by action type, chooses a weighted group, then chooses randomly among its preferred moves. It favors productive settlement sites and affordable buildings, trades toward a feasible build cost, and preserves saved resources when discarding. It limits repeated offers and accepts trades with probability 0.3. These choices use the public board and that bot's own private hand.
 
 `BotRng` is seeded per bot and per game. It's the bot's own randomness, separate from the game's randomness.
 
@@ -91,6 +91,7 @@ interface BotView {
 - During random games, before each real input, generate K random _mutations_: random command types, out-of-range ids, wrong seats, negative counts, huge counts, extra fields, missing fields, and system inputs that don't match a pending.
 - For each mutation, assert `validate` returns `{ ok: false }` **without throwing**, and that the state is unchanged.
 - Also, as a property test, fuzz random valid-looking commands (right type, random params) and check that whatever `validate` accepts keeps all invariants when applied.
+- Extra-field mutations add an undeclared key, including inside nested card parameters. Missing-field mutations remove a required field. Omitting optional `to` or `card`, or including explicit zero resource counts, is not inherently invalid: exercise those in the valid-looking path. All base handlers declare their allowed keys; report counts by mutation family and do not skip accepted mutants that were classified as invalid.
 
 ## 5. Golden replays
 
@@ -108,6 +109,7 @@ interface BotView {
 
 - A 4-player RandomBot game: < 30 ms average in Node on a modern laptop (excluding invariant checks). `apply` p99 < 0.5 ms.
 - Add a `pnpm sim bench` command and record the baseline in STATUS.md.
+- Time the full single-worker game, including bot decisions, validation, private updates and LocalGame bookkeeping. Warmup games are separate. Report the invariant setting and machine details; parallel throughput is not single-game latency. LocalGame invariant diagnostics are enabled by default and remain enabled for simulation acceptance runs.
 
 ## Steps
 

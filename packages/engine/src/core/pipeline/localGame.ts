@@ -28,9 +28,18 @@ export interface LocalStep {
   events: readonly GameEvent[];
 }
 
+export interface LocalGameOptions {
+  /** Keep local omniscient hand and module assertions enabled unless explicitly disabled for timing. */
+  verifyInvariants?: boolean;
+}
+
 function freezeTree<T>(value: T): T {
   if (value && typeof value === 'object' && !Object.isFrozen(value)) {
-    for (const child of Object.values(value)) freezeTree(child);
+    if (Array.isArray(value)) {
+      for (const child of value) freezeTree(child);
+    } else {
+      for (const key in value) if (Object.hasOwn(value, key)) freezeTree(Reflect.get(value, key));
+    }
     Object.freeze(value);
   }
   return value;
@@ -71,13 +80,16 @@ export class LocalGame {
   private readonly entries: Input[] = [];
   private readonly emitted: GameEvent[] = [];
   private terminalError: string | null = null;
+  private readonly verifyInvariants: boolean;
 
   private constructor(
     private readonly engine: Engine,
     config: GameConfig,
     genesisSeed: Uint8Array,
     private readonly randomSource: LocalRandomSource,
+    options: LocalGameOptions,
   ) {
+    this.verifyInvariants = options.verifyInvariants !== false;
     this.current = freezeTree(engine.createGame(config, genesisSeed));
     this.privateBySeat = new Map(
       this.current.config.seats.map((seat) => [seat, freezeTree(engine.createPrivateState(seat))]),
@@ -89,9 +101,10 @@ export class LocalGame {
     config: GameConfig,
     genesisSeed: Uint8Array,
     randomSource: LocalRandomSource,
+    options: LocalGameOptions = {},
   ): Result<LocalGame> {
     try {
-      const game = new LocalGame(engine, config, genesisSeed, randomSource);
+      const game = new LocalGame(engine, config, genesisSeed, randomSource, options);
       const initialized = game.run();
       return initialized.ok ? success(game) : initialized;
     } catch (error) {
@@ -125,6 +138,11 @@ export class LocalGame {
     return value ? cloneJson(value) : undefined;
   }
 
+  /** Deeply frozen borrowed private view for one seat. Re-read after submit(). */
+  privateView(seat: Seat): Readonly<PrivateState> | undefined {
+    return this.privateBySeat.get(seat);
+  }
+
   getPending(): Pending[] {
     return this.engine.getPending(this.current);
   }
@@ -140,14 +158,24 @@ export class LocalGame {
     initialPrivateData?: Partial<Record<Seat, PrivateInputData>>,
   ): Result<LocalStep> {
     let state = this.current;
-    let privates = new Map(this.privateBySeat);
+    let privates = this.privateBySeat;
     const inputs: Input[] = [];
     const events: GameEvent[] = [];
     try {
-      const initialBounds = checkTrueHands(state, privates);
-      if (!initialBounds.ok) return initialBounds;
-      const initialPrivate = this.engine.checkPrivateInvariants(state, privates);
-      if (initialPrivate.length) return failure('private-invariant', initialPrivate.join('; '));
+      const verify = (
+        nextState: GameState,
+        nextPrivates: ReadonlyMap<Seat, PrivateState>,
+      ): Result<void> => {
+        if (!this.verifyInvariants) return success(undefined);
+        const bounds = checkTrueHands(nextState, nextPrivates);
+        if (!bounds.ok) return bounds;
+        const violations = this.engine.checkPrivateInvariants(nextState, nextPrivates);
+        return violations.length
+          ? failure('private-invariant', violations.join('; '))
+          : success(undefined);
+      };
+      const initialCheck = verify(state, privates);
+      if (!initialCheck.ok) return initialCheck;
       const applyOne = (
         input: Input,
         privateData?: Partial<Record<Seat, PrivateInputData>>,
@@ -155,30 +183,13 @@ export class LocalGame {
         const before = state;
         const applied = this.engine.apply(before, input);
         if (!applied.ok) return applied;
-        const nextPrivates = new Map<Seat, PrivateState>();
-        for (const seat of before.config.seats) {
-          const previous = privates.get(seat);
-          if (!previous)
-            return failure('missing-private-state', `Missing private state for seat ${seat}`);
-          const next = this.engine.applyPrivate(previous, before, input, privateData?.[seat]);
-          if (!next.ok) return next;
-          if (next.value.seat !== seat)
-            return failure(
-              'private-seat-changed',
-              `Private state for seat ${seat} changed ownership`,
-            );
-          nextPrivates.set(seat, freezeTree(next.value));
-        }
-        const checked = checkTrueHands(applied.value.state, nextPrivates);
+        const nextPrivates = this.engine.applyAllPrivates(privates, before, input, privateData);
+        if (!nextPrivates.ok) return nextPrivates;
+        for (const value of nextPrivates.value.values()) freezeTree(value);
+        const checked = verify(applied.value.state, nextPrivates.value);
         if (!checked.ok) return checked;
-        const privateViolations = this.engine.checkPrivateInvariants(
-          applied.value.state,
-          nextPrivates,
-        );
-        if (privateViolations.length)
-          return failure('private-invariant', privateViolations.join('; '));
         state = freezeTree(applied.value.state);
-        privates = nextPrivates;
+        privates = nextPrivates.value;
         inputs.push(freezeTree(cloneJson(input)));
         events.push(...applied.value.events.map((event) => freezeTree(cloneJson(event))));
         return success(undefined);

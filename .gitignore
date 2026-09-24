@@ -4,5 +4,7 @@ coverage/
 .turbo/
 playwright-report/
 test-results/
+failures/
+reports/
 *.local
 *.tsbuildinfo

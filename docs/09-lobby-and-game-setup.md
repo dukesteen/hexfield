@@ -88,6 +88,7 @@ Version compatibility: in `HELLO` and in step 1, peers compare `protocolVersion`
 ## 5. Turn timers in P2P
 
 - Timer config lives in genesis. The **sequencer** tracks deadlines using the entry times it observes. When a deadline passes, the sequencer appends a `system` `TIMEOUT` entry whose evidence is `{ pendingSince: seq, deadlineMs }`.
+- That evidence is outside the engine input. The input itself contains only `kind`, `type`, `seat`, and `phase`.
 - Peers accept it if their own local clock agrees (with ±3 s tolerance) that the deadline has passed since they applied `pendingSince`. If they disagree, they reject it, and the sequencer retries later. Don't use absolute timestamps across devices; use each peer's own monotonic time since it applied the referenced entry.
 - The UI timer ring uses local time since the referenced entry.
 - Timeout auto-actions that need the timed-out seat's private data (e.g. discard) are computed by that seat's client if it's online (it submits the command itself when its own local timer expires). If it's offline, the action waits until takeover (stage 10).

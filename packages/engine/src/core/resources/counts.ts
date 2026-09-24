@@ -1,5 +1,9 @@
 import { failure, success } from '../types/result.js';
+import { RESOURCES } from '../types/resources.js';
 import type { CountMap, Result } from '../types/index.js';
+
+const resourceKinds = new Set<string>(RESOURCES);
+const validatedFrozenBaseCounts = new WeakSet<object>();
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
@@ -8,6 +12,7 @@ function isPlainRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function validateKinds(kinds: readonly string[]): Result<void> {
+  if (kinds === RESOURCES) return success(undefined);
   if (kinds.length === 0)
     return failure('invalid-count-kinds', 'At least one count kind is required.');
   if (new Set(kinds).size !== kinds.length) {
@@ -21,15 +26,12 @@ function validateKinds(kinds: readonly string[]): Result<void> {
 
 /** Creates a zero-filled count map for the supplied stable kind order. */
 export function zeroCounts<K extends string>(kinds: readonly K[]): Record<K, number> {
-  const counts: Record<string, number> = {};
-  for (const kind of kinds) {
-    Object.defineProperty(counts, kind, {
-      value: 0,
-      enumerable: true,
-      writable: true,
-      configurable: true,
-    });
+  if (kinds === RESOURCES) {
+    const resources: Record<string, number> = { brick: 0, lumber: 0, wool: 0, grain: 0, ore: 0 };
+    return resources;
   }
+  const counts: Record<string, number> = Object.create(null);
+  for (const kind of kinds) counts[kind] = 0;
   return counts;
 }
 
@@ -38,8 +40,9 @@ export function validateCounts(counts: unknown, kinds: readonly string[]): Resul
   const kindResult = validateKinds(kinds);
   if (!kindResult.ok) return kindResult;
   if (!isPlainRecord(counts)) return failure('invalid-count-map', 'Counts must be a plain record.');
+  if (kinds === RESOURCES && validatedFrozenBaseCounts.has(counts)) return success(undefined);
 
-  const expected = new Set<string>(kinds);
+  const expected = kinds === RESOURCES ? resourceKinds : new Set<string>(kinds);
   const ownKeys = Reflect.ownKeys(counts);
   if (
     ownKeys.length !== kinds.length ||
@@ -64,6 +67,7 @@ export function validateCounts(counts: unknown, kinds: readonly string[]): Resul
       });
     }
   }
+  if (kinds === RESOURCES && Object.isFrozen(counts)) validatedFrozenBaseCounts.add(counts);
   return success(undefined);
 }
 

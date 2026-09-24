@@ -1,0 +1,37 @@
+{
+  "seed": 42,
+  "iterations": 1000000,
+  "families": {
+    "unknown-type": 191096,
+    "wrong-seat": 145819,
+    "extra-field": 191096,
+    "missing-required": 191096,
+    "system-mismatch": 191096,
+    "out-of-range-id": 39852,
+    "negative-count": 24872,
+    "huge-count": 24872,
+    "extra-nested-field": 201
+  },
+  "validLookingChecked": 172182,
+  "validLookingAccepted": 149381,
+  "validLookingUnchangedSkipped": 18914,
+  "validLookingOptionalOmissions": 3615,
+  "validLookingZeroCounts": 10359,
+  "validLookingCardVariants": 1356,
+  "gamesSampled": 328,
+  "deadGamePrefixes": 0,
+  "outcome": {
+    "acceptedInvalidMutations": 0,
+    "validationOrApplyThrows": 0
+  },
+  "evidence": {
+    "command": "node tools/sim/dist/index.js fuzz --iterations 1000000 --seed 42",
+    "node": "v22.23.3",
+    "cpu": "Apple M3 Pro",
+    "platform": "darwin",
+    "arch": "arm64",
+    "gitHead": "f3c45f6fa1241d6783cfa86d2cd16c180d11bab3",
+    "workingTree": "uncommitted Stage04 strict-key and simulation changes"
+  },
+  "status": "diagnostic-pre-final"
+}

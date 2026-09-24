@@ -4,6 +4,7 @@ import type {
   GameModule,
   SystemInputHandler,
   Transition,
+  InputKeys,
 } from '../../core/modules/index.js';
 import type { GameState } from '../../core/state/index.js';
 import { BASE_OPTIONS } from './config.js';
@@ -60,6 +61,39 @@ import { baseInvariants, basePrivateInvariants } from './invariants.js';
 import { afterInput, frame } from './shared.js';
 import { baseOptions } from './types.js';
 
+const COMMAND_KEYS: Record<string, InputKeys> = {
+  PLACE_SETTLEMENT: { allowed: ['vertex'] },
+  PLACE_ROAD: { allowed: ['edge'] },
+  ROLL_DICE: { allowed: [] },
+  DISCARD: { allowed: ['cards'] },
+  MOVE_ROBBER: { allowed: ['hex'] },
+  STEAL: { allowed: ['victim'] },
+  BUILD_ROAD: { allowed: ['edge'] },
+  BUILD_SETTLEMENT: { allowed: ['vertex'] },
+  BUILD_CITY: { allowed: ['vertex'] },
+  BUY_DEV_CARD: { allowed: [] },
+  PLAY_DEV_CARD: { allowed: ['slotId', 'card', 'params'], optional: ['params'] },
+  CLAIM_VICTORY: { allowed: ['slotIds'] },
+  PLACE_FREE_ROAD: { allowed: ['edge'] },
+  SKIP: { allowed: [] },
+  MARITIME_TRADE: { allowed: ['give', 'get'] },
+  OFFER_TRADE: { allowed: ['give', 'want', 'to'], optional: ['to'] },
+  RESPOND_TRADE: { allowed: ['offerId', 'accept'] },
+  PROPOSE_TRADE: { allowed: ['give', 'want'] },
+  CONFIRM_TRADE: { allowed: ['offerId', 'withSeat'] },
+  CANCEL_TRADE: { allowed: ['offerId'] },
+  END_TURN: { allowed: [] },
+};
+
+const SYSTEM_KEYS: Record<string, InputKeys> = {
+  START_SEAT: { allowed: ['seat'] },
+  DICE_RESULT: { allowed: ['dice', 'index'], optional: ['index'] },
+  CARD_DEALT: { allowed: ['seat', 'deck', 'slotId', 'card'], optional: ['card'] },
+  STEAL_RESULT: { allowed: ['thief', 'victim', 'resource'] },
+  REVEAL_COUNT: { allowed: ['seat', 'resource', 'count'] },
+  TIMEOUT: { allowed: ['seat', 'phase'] },
+};
+
 function finalize(transition: Transition): Transition {
   const state = afterInput(transition.state);
   if (!transition.state.result && state.result) {
@@ -79,8 +113,11 @@ function finalizedCommands(
 ): Record<string, CommandHandler> {
   const output: Record<string, CommandHandler> = {};
   for (const [name, handler] of Object.entries(entries)) {
+    const keys = COMMAND_KEYS[name];
+    if (!keys) throw new Error(`Undeclared base command fields: ${name}`);
     output[name] = {
       ...handler,
+      keys,
       apply: (state, input, ctx) => {
         const transition = handler.apply(state, input, ctx);
         return finalize(transition);
@@ -95,8 +132,11 @@ function finalizedSystems(
 ): Record<string, SystemInputHandler> {
   const output: Record<string, SystemInputHandler> = {};
   for (const [name, handler] of Object.entries(entries)) {
+    const keys = SYSTEM_KEYS[name];
+    if (!keys) throw new Error(`Undeclared base system fields: ${name}`);
     output[name] = {
       ...handler,
+      keys,
       apply: (state, input, ctx) => {
         const transition = handler.apply(state, input, ctx);
         return finalize(transition);

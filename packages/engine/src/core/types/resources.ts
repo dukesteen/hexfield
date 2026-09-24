@@ -2,7 +2,13 @@
 export type Resource = 'brick' | 'lumber' | 'wool' | 'grain' | 'ore';
 
 /** Base resources in their stable canonical order. */
-export const RESOURCES: readonly Resource[] = ['brick', 'lumber', 'wool', 'grain', 'ore'];
+export const RESOURCES: readonly Resource[] = Object.freeze([
+  'brick',
+  'lumber',
+  'wool',
+  'grain',
+  'ore',
+]);
 
 /** A string-keyed count map shared by base resources and expansion card kinds. */
 export type CountMap<K extends string = string> = Readonly<Record<K, number>>;

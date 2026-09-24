@@ -1,0 +1,97 @@
+{
+  "mode": "run",
+  "seed": 42,
+  "players": 4,
+  "baseOptions": {},
+  "requestedGames": 1000,
+  "parallel": 4,
+  "warmupGames": 0,
+  "completedGames": 994,
+  "failedGames": 6,
+  "averageTurns": 167.24346076458752,
+  "averageInputs": 766.3249496981891,
+  "wins": {
+    "0": 255,
+    "1": 233,
+    "2": 242,
+    "3": 264
+  },
+  "dice": [0, 0, 4506, 9237, 13962, 18453, 23037, 27454, 23085, 18353, 14065, 9387, 4612],
+  "diceChiSquare": 12.436433124085932,
+  "dicePValue": 0.2569085972719331,
+  "commands": {
+    "PLACE_SETTLEMENT": 7952,
+    "PLACE_ROAD": 7952,
+    "ROLL_DICE": 166151,
+    "END_TURN": 165246,
+    "OFFER_TRADE": 25542,
+    "RESPOND_TRADE": 23320,
+    "MARITIME_TRADE": 29871,
+    "CANCEL_TRADE": 9338,
+    "DISCARD": 52242,
+    "MOVE_ROBBER": 29925,
+    "STEAL": 21272,
+    "BUILD_CITY": 7679,
+    "BUILD_ROAD": 6366,
+    "BUY_DEV_CARD": 5150,
+    "BUILD_SETTLEMENT": 3631,
+    "PLAY_DEV_CARD": 3713,
+    "CLAIM_VICTORY": 446,
+    "CONFIRM_TRADE": 1116,
+    "SKIP": 269,
+    "PLACE_FREE_ROAD": 290
+  },
+  "awardSwingPercent": 33.098591549295776,
+  "averageApplyMilliseconds": 20.396753774647888,
+  "averageGameMilliseconds": 206.16832193460763,
+  "applyP99Milliseconds": 0.085,
+  "elapsedMilliseconds": 53473.918957999995,
+  "failures": [
+    {
+      "gameIndex": 405,
+      "message": "driver-error: Error: Dead game: turn 501 exceeds 500",
+      "replayPath": "failures/42-405.replay.json",
+      "repro": "pnpm sim replay failures/42-405.replay.json"
+    },
+    {
+      "gameIndex": 425,
+      "message": "driver-error: Error: Dead game: turn 501 exceeds 500",
+      "replayPath": "failures/42-425.replay.json",
+      "repro": "pnpm sim replay failures/42-425.replay.json"
+    },
+    {
+      "gameIndex": 452,
+      "message": "driver-error: Error: Dead game: turn 501 exceeds 500",
+      "replayPath": "failures/42-452.replay.json",
+      "repro": "pnpm sim replay failures/42-452.replay.json"
+    },
+    {
+      "gameIndex": 653,
+      "message": "driver-error: Error: Dead game: turn 501 exceeds 500",
+      "replayPath": "failures/42-653.replay.json",
+      "repro": "pnpm sim replay failures/42-653.replay.json"
+    },
+    {
+      "gameIndex": 654,
+      "message": "driver-error: Error: Dead game: turn 501 exceeds 500",
+      "replayPath": "failures/42-654.replay.json",
+      "repro": "pnpm sim replay failures/42-654.replay.json"
+    },
+    {
+      "gameIndex": 744,
+      "message": "driver-error: Error: Dead game: turn 501 exceeds 500",
+      "replayPath": "failures/42-744.replay.json",
+      "repro": "pnpm sim replay failures/42-744.replay.json"
+    }
+  ],
+  "evidence": {
+    "command": "node tools/sim/dist/index.js run --games 1000 --players 4 --seed 42 --parallel 4",
+    "node": "v22.23.3",
+    "cpu": "Apple M3 Pro",
+    "platform": "darwin",
+    "arch": "arm64",
+    "gitHead": "f3c45f6fa1241d6783cfa86d2cd16c180d11bab3",
+    "workingTree": "uncommitted Stage04 changes"
+  },
+  "status": "diagnostic-pre-final"
+}

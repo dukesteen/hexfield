@@ -92,7 +92,7 @@ For roll `n`: for each land hex with token `n` **without the robber**, each adja
 ### Development cards
 
 - `BUY_DEV_CARD` needs the cost and a non-empty deck. It creates a `random` pending `draw: dev` for that seat. In P2P this is answered by the deck protocol (stage 07). The public state gains a face-down slot `{ slotId, deck: 'dev', acquiredTurn }`. The owner learns the identity privately.
-- Playing (`PLAY_DEV_CARD { slotId, card, ...params }`): the card is revealed publicly at play time. In P2P, the protocol verifies the reveal proof before the engine sees the input.
+- Playing (`PLAY_DEV_CARD { slotId, card, params? }`): the card is revealed publicly at play time. Knight and road building omit `params`; year of plenty uses exactly `params: { resources }`, and monopoly uses exactly `params: { resource }`. In P2P, the protocol verifies the reveal proof in the log entry's evidence before the engine sees the input.
 - A card can't be played on the turn it was acquired (`acquiredTurn == turn.number`), except VP cards, which are never "played" and only count toward the total.
 - Max one non-VP card per turn, and it can be played in `preRoll` or `main`.
 - **Knight**: move the robber (a different hex) plus steal as on a 7 (no discard). Increments `knightsPlayed`.
@@ -161,7 +161,9 @@ The road-building interrupt uses `mainSec` for its deadline, including when the 
 
 `PLACE_SETTLEMENT`, `PLACE_ROAD` (setup), `ROLL_DICE`, `DISCARD {cards}`, `MOVE_ROBBER {hex}`, `STEAL {victim}`, `BUILD_ROAD {edge}`, `BUILD_SETTLEMENT {vertex}`, `BUILD_CITY {vertex}`, `BUY_DEV_CARD`, `PLAY_DEV_CARD {slotId, card, params}`, `CLAIM_VICTORY {slotIds}`, `PLACE_FREE_ROAD {edge}`, `SKIP`, `MARITIME_TRADE`, `OFFER_TRADE`, `RESPOND_TRADE`, `PROPOSE_TRADE`, `CONFIRM_TRADE`, `CANCEL_TRADE`, `END_TURN`.
 
-System inputs: `START_SEAT {seat}`, `DICE_RESULT {dice}`, `CARD_DEALT {seat, deck, slotId, card?}` (card present only in local mode), `STEAL_RESULT`, `REVEAL_COUNT {seat, resource, count}` (monopoly), `TIMEOUT`, `SEAT_STATUS {seat, status}`.
+System inputs: `START_SEAT {seat}`, `DICE_RESULT {dice, index?}`, `CARD_DEALT {seat, deck, slotId, card?}` (card present only in local mode), `STEAL_RESULT {thief, victim, resource}`, `REVEAL_COUNT {seat, resource, count}` (monopoly), `TIMEOUT {seat, phase}`, `SEAT_STATUS {seat, status}`. Balanced dice require `index`; random dice omit it. A steal resource is a base resource or `'hidden'`.
+
+All base payloads reject undeclared fields. Placement commands use `vertex` for settlements/cities and `edge` for roads. The trade shapes are `MARITIME_TRADE {give, get}`, `OFFER_TRADE {give, want, to?}`, `PROPOSE_TRADE {give, want}`, `RESPOND_TRADE {offerId, accept}`, `CONFIRM_TRADE {offerId, withSeat}`, and `CANCEL_TRADE {offerId}`. Resource maps may omit zero counts or include them explicitly. Optional properties are omitted rather than set to `undefined`.
 
 ## Implementation layout
 

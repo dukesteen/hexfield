@@ -13,5 +13,12 @@
   "scripts": {
     "build": "tsc -b",
     "start": "pnpm build && node dist/index.js"
+  },
+  "dependencies": {
+    "@cp2p/bots": "workspace:*",
+    "@cp2p/codec": "workspace:*",
+    "@cp2p/engine": "workspace:*",
+    "@cp2p/maps": "workspace:*",
+    "valibot": "^1.0.0"
   }
 }

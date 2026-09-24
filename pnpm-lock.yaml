@@ -154,6 +154,9 @@ importers:
 
   packages/engine:
     devDependencies:
+      '@cp2p/codec':
+        specifier: workspace:*
+        version: link:../codec
       fast-check:
         specifier: ^4.0.0
         version: 4.10.2
@@ -213,7 +216,23 @@ importers:
         specifier: ^8.0.0
         version: 8.0.3
 
-  tools/sim: {}
+  tools/sim:
+    dependencies:
+      '@cp2p/bots':
+        specifier: workspace:*
+        version: link:../../packages/bots
+      '@cp2p/codec':
+        specifier: workspace:*
+        version: link:../../packages/codec
+      '@cp2p/engine':
+        specifier: workspace:*
+        version: link:../../packages/engine
+      '@cp2p/maps':
+        specifier: workspace:*
+        version: link:../../packages/maps
+      valibot:
+        specifier: ^1.0.0
+        version: 1.5.0(typescript@5.9.3)
 
 packages:
 

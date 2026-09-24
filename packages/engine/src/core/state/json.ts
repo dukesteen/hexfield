@@ -1,7 +1,6 @@
-/** Copy JSON data and reject values that would make public state ambiguous. */
-export function cloneJson<T>(value: T): T {
+function traverseJson(value: unknown, copyValues: boolean): unknown {
   const active = new WeakSet<object>();
-  function copy(current: unknown): unknown {
+  function visit(current: unknown): unknown {
     if (current === null || typeof current === 'string' || typeof current === 'boolean')
       return current;
     if (typeof current === 'number') {
@@ -18,14 +17,15 @@ export function cloneJson<T>(value: T): T {
       if (keys.length !== current.length + 1 || keys.some((key) => typeof key === 'symbol')) {
         throw new Error('Game state arrays cannot have sparse slots, extra properties or symbols');
       }
-      const values: unknown[] = [];
+      const values: unknown[] | undefined = copyValues ? [] : undefined;
       for (let index = 0; index < current.length; index++) {
         const descriptor = Object.getOwnPropertyDescriptor(current, String(index));
         if (!descriptor) throw new Error('Game state contains a sparse array');
         if (!descriptor.enumerable || !('value' in descriptor)) {
           throw new Error('Game state arrays must contain enumerable data elements');
         }
-        values.push(copy(descriptor.value));
+        const child = visit(descriptor.value);
+        values?.push(child);
       }
       output = values;
     } else {
@@ -43,20 +43,31 @@ export function cloneJson<T>(value: T): T {
       if (names.length === 1 && names[0] === '$b') {
         throw new Error('Game state cannot contain a reserved byte-tag object');
       }
-      output = Object.fromEntries(
-        names.toSorted().map((key) => {
-          const descriptor = Object.getOwnPropertyDescriptor(current, key);
-          if (!descriptor || !descriptor.enumerable || !('value' in descriptor)) {
-            throw new Error('Game state objects must contain enumerable data properties');
-          }
-          return [key, copy(descriptor.value)];
-        }),
-      );
+      const entries: [string, unknown][] | undefined = copyValues ? [] : undefined;
+      for (const key of copyValues ? names.toSorted() : names) {
+        const descriptor = Object.getOwnPropertyDescriptor(current, key);
+        if (!descriptor || !descriptor.enumerable || !('value' in descriptor)) {
+          throw new Error('Game state objects must contain enumerable data properties');
+        }
+        const child = visit(descriptor.value);
+        entries?.push([key, child]);
+      }
+      output = entries ? Object.fromEntries(entries) : undefined;
     }
     active.delete(current);
     return output;
   }
+  return visit(value);
+}
+
+/** Copy JSON data and reject values that would make public state ambiguous. */
+export function cloneJson<T>(value: T): T {
   // Runtime validation and copying preserve the JSON shape of the supplied value.
   // oxlint-disable-next-line typescript/no-unsafe-type-assertion
-  return copy(value) as T;
+  return traverseJson(value, true) as T;
+}
+
+/** Check the same JSON shape without allocating an owned copy. */
+export function validateJson(value: unknown): void {
+  traverseJson(value, false);
 }

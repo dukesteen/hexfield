@@ -5,6 +5,7 @@ export type {
   GenesisRandom,
   HandlerContext,
   HookPipeline,
+  InputKeys,
   Hooks,
   ModuleRegistry,
   OptionSpec,

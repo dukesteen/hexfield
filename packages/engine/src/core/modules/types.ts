@@ -71,7 +71,14 @@ export interface Transition {
   events: GameEvent[];
 }
 
+/** Declared payload fields. Missing fields remain the handler's validation concern. */
+export interface InputKeys {
+  allowed: readonly string[];
+  optional?: readonly string[];
+}
+
 export interface CommandHandler {
+  keys?: InputKeys;
   validate(state: GameState, input: CommandInput, ctx: HandlerContext): Result<void>;
   apply(state: GameState, input: CommandInput, ctx: HandlerContext): Transition;
   applyPrivate?(
@@ -84,6 +91,7 @@ export interface CommandHandler {
 }
 
 export interface SystemInputHandler {
+  keys?: InputKeys;
   validate(state: GameState, input: SystemInput, ctx: HandlerContext): Result<void>;
   apply(state: GameState, input: SystemInput, ctx: HandlerContext): Transition;
   accepts?(pending: Pending, input: SystemInput, state: GameState): boolean;

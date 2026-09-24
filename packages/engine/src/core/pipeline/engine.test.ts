@@ -5,6 +5,7 @@ import { LocalGame } from './localGame.js';
 import type { LocalRandomAnswer, LocalRandomSource } from './localGame.js';
 import type { Input } from './types.js';
 import type { Seat } from '../types/index.js';
+import { failure } from '../types/index.js';
 import { config, privateObserved, seed, testCounter } from './__tests__/testCounter.js';
 
 function frozen<T>(value: T): T {
@@ -158,7 +159,96 @@ describe('pipeline and local driver', () => {
     expect(() => engine.getPending(noPhase)).toThrow(/no phase/);
     expect(engine.getLegalCommands(noPhase, 0)).toEqual({ commands: [], templates: [] });
     expect(engine.getLegalCommands(live, runtimeSeat(99))).toEqual({ commands: [], templates: [] });
+    const allLegal = engine.getLegalCommands(live, 0);
+    expect(
+      engine.getLegalCommands(live, 0, undefined, (command) => command.type === 'INC'),
+    ).toEqual({
+      commands: allLegal.commands.filter((command) => command.type === 'INC'),
+      templates: allLegal.templates,
+    });
     expect(() => engine.computeVictoryPoints(live, runtimeSeat(99))).toThrow(/Unknown seat/);
+  });
+
+  test('batch private dispatch validates once and rejects missing or mismatched seats', () => {
+    const module = testCounter();
+    const incHandler = module.commands?.INC;
+    if (!incHandler) throw new Error('Missing increment handler');
+    let validations = 0;
+    module.commands = {
+      ...module.commands,
+      INC: {
+        ...incHandler,
+        validate: (state, input, ctx) => {
+          validations++;
+          return incHandler.validate(state, input, ctx);
+        },
+      },
+    };
+    const engine = createEngine([module]);
+    const started = engine.apply(engine.createGame(config, seed), {
+      kind: 'system',
+      type: 'START_SEAT',
+      seat: 0,
+    });
+    if (!started.ok) throw new Error('Could not start game');
+    const before = started.value.state;
+    const privates = new Map(config.seats.map((seat) => [seat, engine.createPrivateState(seat)]));
+    const private0 = privates.get(0);
+    const private1 = privates.get(1);
+    if (!private0 || !private1) throw new Error('Missing private fixture');
+    expect(engine.applyAllPrivates(privates, before, inc).ok).toBe(true);
+    expect(validations).toBe(1);
+    expect(engine.applyPrivate(private0, before, inc).ok).toBe(true);
+    expect(engine.applyPrivate(private1, before, inc).ok).toBe(true);
+    expect(validations).toBe(3);
+    const local = LocalGame.create(engine, config, seed, source());
+    if (!local.ok) throw new Error('Could not create local game');
+    validations = 0;
+    expect(local.value.submit(inc).ok).toBe(true);
+    expect(validations).toBe(2);
+    expect(engine.applyAllPrivates(privates, before, { ...inc, seat: 1 })).toMatchObject({
+      ok: false,
+      error: { code: 'not-pending' },
+    });
+    const missing = new Map(privates);
+    missing.delete(1);
+    expect(engine.applyAllPrivates(missing, before, inc)).toMatchObject({
+      ok: false,
+      error: { code: 'missing-private-state' },
+    });
+    const mismatched = new Map(privates);
+    mismatched.set(1, private0);
+    expect(engine.applyAllPrivates(mismatched, before, inc)).toMatchObject({
+      ok: false,
+      error: { code: 'private-seat-changed' },
+    });
+    expect(
+      engine.applyAllPrivates(privates, before, {
+        kind: 'system',
+        type: 'SEAT_STATUS',
+        seat: 1,
+        status: 'bot',
+      }),
+    ).toEqual({ ok: true, value: privates });
+
+    const failing = testCounter();
+    const failingInc = failing.commands?.INC;
+    const failingPrivate = failingInc?.applyPrivate?.bind(failingInc);
+    if (!failingInc || !failingPrivate) throw new Error('Missing increment handler');
+    failing.commands = {
+      ...failing.commands,
+      INC: {
+        ...failingInc,
+        applyPrivate: (priv, state, input, data, ctx) =>
+          priv.seat === 1
+            ? failure('private-failure', 'Second private handler failed')
+            : failingPrivate(priv, state, input, data, ctx),
+      },
+    };
+    const failingEngine = createEngine([failing]);
+    const failed = failingEngine.applyAllPrivates(privates, before, inc);
+    expect(failed).toMatchObject({ ok: false, error: { code: 'private-failure' } });
+    expect(privates.get(0)).toEqual(engine.createPrivateState(0));
   });
 
   test('reports malformed states and contained module invariant failures', () => {
@@ -329,6 +419,11 @@ describe('pipeline and local driver', () => {
     });
     expect(game.state.ext['test-counter']).toMatchObject({ value: 0 });
     expect(game.log).toEqual([{ kind: 'system', type: 'START_SEAT', seat: 0 }]);
+    const benchmark = LocalGame.create(engine, config, seed, source(), { verifyInvariants: false });
+    if (!benchmark.ok) throw new Error('Could not create benchmark fixture');
+    expect(benchmark.value.submit(inc).ok).toBe(true);
+    expect(benchmark.value.state.ext['test-counter']).toMatchObject({ value: 3 });
+    expect(benchmark.value.log.length).toBeGreaterThan(1);
   });
 
   test('logs random and reveal inputs, nested phases and private updates through completion', () => {
@@ -362,6 +457,25 @@ describe('pipeline and local driver', () => {
     expect(engine.computeVictoryPoints(game.snapshot(), 0)).toEqual({ public: 3 });
     expect(engine.checkInvariants(game.snapshot())).toEqual([]);
     expect(game.submit(inc).ok).toBe(false);
+  });
+
+  test('borrows frozen private views while privateState returns an owned copy', () => {
+    const engine = createEngine([testCounter()]);
+    const created = LocalGame.create(engine, config, seed, source());
+    if (!created.ok) throw new Error('Could not create local game');
+    const game = created.value;
+    const borrowed = game.privateView(0);
+    const owned = game.privateState(0);
+    if (!borrowed || !owned) throw new Error('Missing private state');
+    expect(game.privateView(0)).toBe(borrowed);
+    expect(Object.isFrozen(borrowed)).toBe(true);
+    expect(Object.isFrozen(borrowed.hand)).toBe(true);
+    expect(Reflect.set(borrowed.hand, 'brick', 99)).toBe(false);
+    owned.hand.brick = 99;
+    expect(game.privateView(0)?.hand.brick).toBe(0);
+    expect(game.submit(inc).ok).toBe(true);
+    expect(game.privateView(0)).not.toBe(borrowed);
+    expect(borrowed.hand.brick).toBe(0);
   });
 
   test('automatic inputs precede source resolution and are logged', () => {
@@ -483,6 +597,11 @@ describe('pipeline and local driver', () => {
       error: { code: 'private-hand-total-mismatch' },
     });
     expect(second.value.log).toHaveLength(1);
+    const benchmark = LocalGame.create(createEngine([mismatch]), config, seed, source(), {
+      verifyInvariants: false,
+    });
+    if (!benchmark.ok) throw new Error('Could not create benchmark hand fixture');
+    expect(benchmark.value.submit(inc).ok).toBe(true);
   });
 
   test('rejects private invariants already broken at genesis', () => {

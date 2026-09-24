@@ -369,6 +369,19 @@ describe('resource counts and bounds', () => {
     });
   });
 
+  test('normalization returns owned count maps when the input is mutable', () => {
+    const min = countsFromTuple([0, 0, 0, 0, 0]);
+    const max = countsFromTuple([3, 3, 3, 3, 3]);
+    const normalized = unwrap(normalizeBounds({ total: 3, min, max }));
+
+    expect(normalized.min).not.toBe(min);
+    expect(normalized.max).not.toBe(max);
+    expect(Reflect.set(min, 'brick', 2)).toBe(true);
+    expect(Reflect.set(max, 'ore', 2)).toBe(true);
+    expect(normalized.min.brick).toBe(0);
+    expect(normalized.max.ore).toBe(3);
+  });
+
   test('count helpers preserve custom keys including __proto__', () => {
     const kinds = ['__proto__', 'gold'] as const;
     const left = zeroCounts(kinds);

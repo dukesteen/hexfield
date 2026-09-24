@@ -82,7 +82,7 @@ apps/web ─────────────┬─────────�
                  ▼
              (nothing)
 apps/signaling  → depends on nothing from the workspace except @cp2p/codec types (optional)
-tools/sim       → engine, bots, protocol (for network chaos sims)
+tools/sim       → engine, bots, codec, maps, protocol (for network chaos sims)
 ```
 
 Rules (enforced by dependency-cruiser in CI, stage 01):

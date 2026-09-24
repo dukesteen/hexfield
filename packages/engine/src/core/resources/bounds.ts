@@ -13,11 +13,13 @@ export interface ResourceBounds<K extends string = Resource> {
   readonly max: CountMap<K>;
 }
 
-type MutableBounds<K extends string> = {
+interface ReadBounds<K extends string> {
   total: number;
-  min: Record<K, number>;
-  max: Record<K, number>;
-};
+  min: CountMap<K>;
+  max: CountMap<K>;
+  minTotal: number;
+  maxTotal: number;
+}
 
 // Expansion callers pass their own kinds. The default applies only to the base-game K=Resource API.
 function defaultResourceKinds<K extends string>(kinds?: readonly K[]): readonly K[] {
@@ -39,10 +41,23 @@ function copyCounts<K extends string>(counts: CountMap<K>, kinds: readonly K[]):
   return copy;
 }
 
+function sumValidatedCounts<K extends string>(
+  counts: CountMap<K>,
+  kinds: readonly K[],
+): Result<number> {
+  let total = 0;
+  for (const kind of kinds) {
+    total += counts[kind];
+    if (!Number.isSafeInteger(total))
+      return failure('count-overflow', 'Count total exceeds the safe integer range.');
+  }
+  return success(total);
+}
+
 function readBounds<K extends string>(
   bounds: ResourceBounds<K>,
   kinds: readonly K[],
-): Result<MutableBounds<K>> {
+): Result<ReadBounds<K>> {
   if (!isPlainRecord(bounds)) return failure('invalid-bounds', 'Bounds must be a plain record.');
   const keys = Reflect.ownKeys(bounds);
   if (
@@ -80,15 +95,13 @@ function readBounds<K extends string>(
   const maxValid = validateCounts(max, kinds);
   if (!maxValid.ok) return maxValid;
 
-  const minCounts = copyCounts(min, kinds);
-  const maxCounts = copyCounts(max, kinds);
   for (const kind of kinds) {
-    if (minCounts[kind] > maxCounts[kind]) {
+    if (min[kind] > max[kind]) {
       return failure('infeasible-bounds', `Minimum ${kind} exceeds its maximum.`, { kind });
     }
   }
-  const minTotal = sumCounts(minCounts, kinds);
-  const maxTotal = sumCounts(maxCounts, kinds);
+  const minTotal = sumValidatedCounts(min, kinds);
+  const maxTotal = sumValidatedCounts(max, kinds);
   if (!minTotal.ok) return minTotal;
   if (!maxTotal.ok) return maxTotal;
   if (minTotal.value > total || maxTotal.value < total) {
@@ -98,7 +111,7 @@ function readBounds<K extends string>(
       maximumTotal: maxTotal.value,
     });
   }
-  return success({ total, min: minCounts, max: maxCounts });
+  return success({ total, min, max, minTotal: minTotal.value, maxTotal: maxTotal.value });
 }
 
 /** Tightens feasible bounds to a fixpoint without excluding any possible hand. */
@@ -110,14 +123,10 @@ export function normalizeBounds<K extends string = Resource>(
   if (!read.ok) return read;
   const { total } = read.value;
   let { min, max } = read.value;
+  let minTotal = read.value.minTotal;
+  let maxTotal = read.value.maxTotal;
 
   for (let round = 0; round <= kinds.length; round += 1) {
-    const minTotalResult = sumCounts(min, kinds);
-    const maxTotalResult = sumCounts(max, kinds);
-    if (!minTotalResult.ok) return minTotalResult;
-    if (!maxTotalResult.ok) return maxTotalResult;
-    const minTotal = minTotalResult.value;
-    const maxTotal = maxTotalResult.value;
     const nextMin = copyCounts(min, kinds);
     const nextMax = copyCounts(max, kinds);
 
@@ -135,6 +144,14 @@ export function normalizeBounds<K extends string = Resource>(
     min = nextMin;
     max = nextMax;
     if (stable) return success({ total, min, max });
+    if (round < kinds.length) {
+      const nextMinTotal = sumValidatedCounts(min, kinds);
+      const nextMaxTotal = sumValidatedCounts(max, kinds);
+      if (!nextMinTotal.ok) return nextMinTotal;
+      if (!nextMaxTotal.ok) return nextMaxTotal;
+      minTotal = nextMinTotal.value;
+      maxTotal = nextMaxTotal.value;
+    }
   }
 
   return failure('bounds-did-not-converge', 'Bounds normalization did not reach a fixpoint.');

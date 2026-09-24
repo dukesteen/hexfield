@@ -2,6 +2,9 @@ export const PACKAGE_NAME = '@cp2p/engine';
 
 export { baseModule, createBaseEngine } from './modules/base/index.js';
 export type { BaseOptions, TurnTimer, MapLayout, DiceMode } from './modules/base/config.js';
+export type { TradeOffer } from './modules/base/types.js';
+export { enumerateCommands } from './core/enumerate.js';
+export type { EnumerateOptions } from './core/enumerate.js';
 
 export { createEngine, LocalGame } from './core/pipeline/index.js';
 export type {
@@ -15,6 +18,8 @@ export type {
   LocalRandomSource,
   LocalRandomAnswer,
   LocalStep,
+  LocalGameOptions,
+  CommandShape,
 } from './core/pipeline/index.js';
 export { ENGINE_VERSION } from './core/state/index.js';
 export type {
@@ -39,6 +44,7 @@ export type {
   OptionSpec,
   VpContribution,
   HandlerContext,
+  InputKeys,
   SetupCtx,
   GenesisRandom,
   Transition,

@@ -53,7 +53,16 @@ export function updateBase(state: GameState, change: (old: BaseExt) => BaseExt):
 }
 
 export function isResource(value: unknown): value is Resource {
-  return typeof value === 'string' && RESOURCES.some((kind) => kind === value);
+  switch (value) {
+    case 'brick':
+    case 'lumber':
+    case 'wool':
+    case 'grain':
+    case 'ore':
+      return true;
+    default:
+      return false;
+  }
 }
 
 /** Accept partial command maps and fill omitted base-resource keys with zero. */
@@ -190,23 +199,35 @@ export function afterInput(state: GameState): GameState {
   let next = state;
   const offers = baseExt(state.ext.base).offers;
   if (offers.length) {
+    let changed = false;
     const checked = offers.map((offer) => {
       const possible = canAfford(ownSeat(next, offer.proposer).resources, offer.give);
-      return { ...offer, valid: possible.ok && possible.value };
+      const valid = possible.ok && possible.value;
+      if (valid === offer.valid) return offer;
+      changed = true;
+      return { ...offer, valid };
     });
-    next = updateBase(next, (old) => ({ ...old, offers: checked }));
+    if (changed) next = updateBase(next, (old) => ({ ...old, offers: checked }));
   }
+  const buildingVp = new Map<Seat, number>();
+  for (const building of next.board.buildings)
+    buildingVp.set(
+      building.seat,
+      (buildingVp.get(building.seat) ?? 0) + (building.kind === 'city' ? 2 : 1),
+    );
+  let seatsChanged = false;
   const seats = next.seats.map((seat) => {
-    const buildings = next.board.buildings
-      .filter((item) => item.seat === seat.seat)
-      .reduce((sum, item) => sum + (item.kind === 'city' ? 2 : 1), 0);
     const awards =
       (next.awards.longestRoad === seat.seat ? 2 : 0) +
       (next.awards.largestArmy === seat.seat ? 2 : 0);
-    const revealed = seat.cardSlots.filter((slot) => slot.revealed === 'victoryPoint').length;
-    return { ...seat, publicVp: buildings + awards + revealed };
+    let revealed = 0;
+    for (const slot of seat.cardSlots) if (slot.revealed === 'victoryPoint') revealed++;
+    const publicVp = (buildingVp.get(seat.seat) ?? 0) + awards + revealed;
+    if (publicVp === seat.publicVp) return seat;
+    seatsChanged = true;
+    return { ...seat, publicVp };
   });
-  next = { ...next, seats };
+  if (seatsChanged) next = { ...next, seats };
   const active = ownSeat(next, next.turn.activeSeat);
   const options = baseOptions(next.config.options.base);
   if (!next.result && top(next).id !== 'setup' && active.publicVp >= options.vpTarget) {

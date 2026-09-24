@@ -100,13 +100,48 @@ export function legalSettlementVertices(
   options: SettlementOptions = {},
 ): string[] {
   const graph = boardGraph(state);
-  return graph.vertexIds.filter((vertex) => canSettle(state, seat, vertex, options, graph));
+  const blocked = new Set<string>();
+  for (const building of state.board.buildings) {
+    blocked.add(building.vertex);
+    const index = graph.vertexIndex[building.vertex];
+    if (index !== undefined)
+      for (const neighbor of graph.vertexNeighbors[index] ?? []) blocked.add(neighbor);
+  }
+  if (options.setup === true) return graph.vertexIds.filter((vertex) => !blocked.has(vertex));
+  const connected = new Set<string>();
+  for (const road of state.board.roads) {
+    if (road.seat !== seat) continue;
+    const index = graph.edgeIndex[road.edge];
+    if (index !== undefined)
+      for (const vertex of graph.edgeVertices[index] ?? []) connected.add(vertex);
+  }
+  return graph.vertexIds.filter((vertex) => !blocked.has(vertex) && connected.has(vertex));
 }
 
 /** Enumerate all legal road edges in canonical ID order. */
 export function legalRoadEdges(state: GameState, seat: Seat, options: RoadOptions = {}): string[] {
   const graph = boardGraph(state);
-  return graph.edgeIds.filter((edge) => canRoad(state, seat, edge, options, graph));
+  if (options.setupVertex !== undefined)
+    return graph.edgeIds.filter((edge) => canRoad(state, seat, edge, options, graph));
+  const occupied = new Set(state.board.roads.map((road) => road.edge));
+  const buildings = new Map<string, Seat>();
+  for (const building of state.board.buildings)
+    if (!buildings.has(building.vertex)) buildings.set(building.vertex, building.seat);
+  const connected = new Set<string>();
+  for (const road of state.board.roads) {
+    if (road.seat !== seat) continue;
+    const index = graph.edgeIndex[road.edge];
+    if (index !== undefined)
+      for (const vertex of graph.edgeVertices[index] ?? []) connected.add(vertex);
+  }
+  return graph.edgeIds.filter((edge) => {
+    if (occupied.has(edge)) return false;
+    const index = graph.edgeIndex[edge];
+    if (index === undefined) return false;
+    return (graph.edgeVertices[index] ?? []).some((vertex) =>
+      buildings.has(vertex) ? buildings.get(vertex) === seat : connected.has(vertex),
+    );
+  });
 }
 
 /** Enumerate settlements the seat may upgrade. */

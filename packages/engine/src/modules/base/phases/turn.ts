@@ -155,7 +155,10 @@ export const diceResult: SystemInputHandler = {
   validate: (state, input) => {
     if (!validDice(input.dice))
       return failure('invalid-dice', 'Dice must contain two faces from 1 to 6');
-    if (baseOptions(state.config.options.base).diceMode !== 'balanced') return success(undefined);
+    if (baseOptions(state.config.options.base).diceMode !== 'balanced')
+      return Object.hasOwn(input, 'index')
+        ? failure('unknown-field', 'Random dice results cannot include an index')
+        : success(undefined);
     if (typeof input.index !== 'number' || !Number.isSafeInteger(input.index))
       return failure('invalid-dice-index', 'Balanced dice index is required');
     const id = baseExt(state.ext.base).diceDeck[input.index];

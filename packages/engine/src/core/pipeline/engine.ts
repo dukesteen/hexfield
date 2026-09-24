@@ -2,12 +2,13 @@ import { createRegistry } from '../modules/registry.js';
 import type { GameModule, ModuleRegistry, Transition } from '../modules/types.js';
 import { checkBounds } from '../resources/index.js';
 import { createGame as createGenesis, createPrivateState } from '../state/createGame.js';
-import { cloneJson } from '../state/json.js';
+import { cloneJson, validateJson } from '../state/json.js';
 import type { GameConfig, GameState, PrivateState, PublicView } from '../state/types.js';
 import { failure, success } from '../types/index.js';
 import type { Result, Seat } from '../types/index.js';
 import type {
   CommandInput,
+  CommandShape,
   Input,
   LegalCommandSet,
   Pending,
@@ -33,10 +34,22 @@ export interface Engine {
     input: Input,
     privInput?: PrivateInputData,
   ): Result<PrivateState>;
+  /** Validate once, then update all configured private seats atomically. */
+  applyAllPrivates(
+    privates: ReadonlyMap<Seat, PrivateState>,
+    before: GameState,
+    input: Input,
+    privateData?: Partial<Record<Seat, PrivateInputData>>,
+  ): Result<Map<Seat, PrivateState>>;
   /** Return the requests represented by the top phase frame. */
   getPending(state: GameState): Pending[];
-  /** List fully specified commands and templates available to one seat. */
-  getLegalCommands(state: GameState, seat: Seat, priv?: PrivateState): LegalCommandSet;
+  /** List fully specified commands and templates. A pure filter may avoid validating discarded concrete commands. */
+  getLegalCommands(
+    state: GameState,
+    seat: Seat,
+    priv?: PrivateState,
+    filter?: (command: CommandShape) => boolean,
+  ): LegalCommandSet;
   /** Return a public spectator or seat view without secret state. */
   project(state: GameState, viewer: Seat | 'spectator'): PublicView;
   /** Include hidden contributions only when the matching private state is supplied. */
@@ -74,6 +87,41 @@ function validSeat(state: GameState, value: unknown): value is Seat {
 
 function isSeatStatus(value: unknown): value is 'active' | 'departed' | 'bot' {
   return value === 'active' || value === 'departed' || value === 'bot';
+}
+
+const COMMAND_ENVELOPE = ['kind', 'seat', 'command'] as const;
+const COMMAND_TYPE_KEY = ['type'] as const;
+const SYSTEM_ENVELOPE = ['kind', 'type'] as const;
+const SEAT_STATUS_KEYS = ['kind', 'type', 'seat', 'status'] as const;
+
+function checkKeys(
+  value: object,
+  allowed: readonly string[],
+  extra: readonly string[] = [],
+): Result<void> {
+  for (const key of Object.keys(value))
+    if (!allowed.includes(key) && !extra.includes(key))
+      return failure('unknown-field', `Unknown input field: ${key}`);
+  return success(undefined);
+}
+
+function checkInputKeys(input: Input, registry: ModuleRegistry): Result<void> {
+  if (input.kind === 'command') {
+    const envelope = checkKeys(input, COMMAND_ENVELOPE);
+    if (!envelope.ok) return envelope;
+    if (!isRecord(input.command) || typeof input.command.type !== 'string')
+      return failure('invalid-command', 'Command must have a string type');
+    const keys = registry.commands.get(input.command.type)?.handler.keys;
+    return keys ? checkKeys(input.command, keys.allowed, COMMAND_TYPE_KEY) : success(undefined);
+  }
+  if (input.kind === 'system') {
+    if (typeof input.type !== 'string')
+      return failure('invalid-system-input', 'Missing system type');
+    if (input.type === 'SEAT_STATUS') return checkKeys(input, SEAT_STATUS_KEYS);
+    const keys = registry.systemInputs.get(input.type)?.handler.keys;
+    return keys ? checkKeys(input, keys.allowed, SYSTEM_ENVELOPE) : success(undefined);
+  }
+  return failure('invalid-input', 'Input kind must be command or system');
 }
 
 function validateCommand(
@@ -174,10 +222,12 @@ export function createEngine(modules: readonly GameModule[]): Engine {
       return failure('invalid-input', 'Input must be an object');
     }
     try {
-      cloneJson(input);
+      validateJson(input);
     } catch (error) {
       return failure('invalid-input-json', String(error));
     }
+    const keys = checkInputKeys(input, registry);
+    if (!keys.ok) return keys;
     const pending = getPending(state);
     if (input.kind === 'command') return validateCommand(state, input, pending, registry);
     if (input.kind === 'system') return validateSystem(state, input, pending, registry);
@@ -205,16 +255,12 @@ export function createEngine(modules: readonly GameModule[]): Engine {
     return success(advance(state, handler.apply(state, input, { hooks: registry.hooks })));
   }
 
-  function applyPrivate(
+  function dispatchPrivate(
     priv: PrivateState,
     before: GameState,
     input: Input,
     privInput?: PrivateInputData,
   ): Result<PrivateState> {
-    if (!validSeat(before, priv.seat))
-      return failure('invalid-seat', 'Private state has no game seat');
-    const valid = validate(before, input);
-    if (!valid.ok) return valid;
     if (input.kind === 'system' && input.type === 'SEAT_STATUS') return success(priv);
     if (input.kind === 'command') {
       const handler = registry.commands.get(input.command.type)?.handler;
@@ -228,7 +274,47 @@ export function createEngine(modules: readonly GameModule[]): Engine {
       : success(priv);
   }
 
-  function getLegalCommands(state: GameState, seat: Seat, priv?: PrivateState): LegalCommandSet {
+  function applyPrivate(
+    priv: PrivateState,
+    before: GameState,
+    input: Input,
+    privInput?: PrivateInputData,
+  ): Result<PrivateState> {
+    if (!validSeat(before, priv.seat))
+      return failure('invalid-seat', 'Private state has no game seat');
+    const valid = validate(before, input);
+    return valid.ok ? dispatchPrivate(priv, before, input, privInput) : valid;
+  }
+
+  function applyAllPrivates(
+    privates: ReadonlyMap<Seat, PrivateState>,
+    before: GameState,
+    input: Input,
+    privateData?: Partial<Record<Seat, PrivateInputData>>,
+  ): Result<Map<Seat, PrivateState>> {
+    const valid = validate(before, input);
+    if (!valid.ok) return valid;
+    const next = new Map<Seat, PrivateState>();
+    for (const seat of before.config.seats) {
+      const prior = privates.get(seat);
+      if (!prior) return failure('missing-private-state', `Missing private state for seat ${seat}`);
+      if (prior.seat !== seat)
+        return failure('private-seat-changed', `Private state for seat ${seat} changed ownership`);
+      const updated = dispatchPrivate(prior, before, input, privateData?.[seat]);
+      if (!updated.ok) return updated;
+      if (updated.value.seat !== seat)
+        return failure('private-seat-changed', `Private state for seat ${seat} changed ownership`);
+      next.set(seat, updated.value);
+    }
+    return success(next);
+  }
+
+  function getLegalCommands(
+    state: GameState,
+    seat: Seat,
+    priv?: PrivateState,
+    filter?: (command: CommandShape) => boolean,
+  ): LegalCommandSet {
     if (priv && priv.seat !== seat) throw new Error('Private state belongs to another seat');
     if (state.result || !validSeat(state, seat)) return { commands: [], templates: [] };
     const top = topPhase(state);
@@ -238,7 +324,8 @@ export function createEngine(modules: readonly GameModule[]): Engine {
       const listed = handler.legalCommands(state, top, seat, priv, { hooks: registry.hooks });
       return {
         commands: listed.commands.filter(
-          (command) => validate(state, { kind: 'command', seat, command }).ok,
+          (command) =>
+            (filter?.(command) ?? true) && validate(state, { kind: 'command', seat, command }).ok,
         ),
         templates: listed.templates,
       };
@@ -295,7 +382,7 @@ export function createEngine(modules: readonly GameModule[]): Engine {
       }
     }
     try {
-      cloneJson(state);
+      validateJson(state);
     } catch (error) {
       violations.push(`non-JSON state: ${String(error)}`);
     }
@@ -324,6 +411,7 @@ export function createEngine(modules: readonly GameModule[]): Engine {
     validate,
     apply,
     applyPrivate,
+    applyAllPrivates,
     getPending,
     getLegalCommands,
     project: (state: GameState, viewer: Seat | 'spectator') => ({

@@ -1,0 +1,251 @@
+{
+  "format": "cp2p-golden-manifest",
+  "version": 1,
+  "fixtures": [
+    {
+      "name": "normal-completion",
+      "file": "normal-completion.replay.json",
+      "seed": 4100,
+      "gameIndex": 2,
+      "players": 4,
+      "baseOptions": {},
+      "features": ["bank-shortage", "largest-army-win", "normal-completion"],
+      "inputs": 392,
+      "winner": 1,
+      "engineVersion": "0.1.0"
+    },
+    {
+      "name": "longest-road-win",
+      "file": "longest-road-win.replay.json",
+      "seed": 8301,
+      "gameIndex": 7,
+      "players": 4,
+      "baseOptions": {},
+      "features": ["bank-shortage", "longest-road-win", "normal-completion"],
+      "inputs": 545,
+      "winner": 3,
+      "engineVersion": "0.1.0"
+    },
+    {
+      "name": "largest-army-win",
+      "file": "largest-army-win.replay.json",
+      "seed": 8301,
+      "gameIndex": 4,
+      "players": 4,
+      "baseOptions": {},
+      "features": ["bank-shortage", "largest-army-win", "normal-completion"],
+      "inputs": 636,
+      "winner": 3,
+      "engineVersion": "0.1.0"
+    },
+    {
+      "name": "hidden-vp-win",
+      "file": "hidden-vp-win.replay.json",
+      "seed": 8301,
+      "gameIndex": 0,
+      "players": 4,
+      "baseOptions": {},
+      "features": ["hidden-vp-win", "normal-completion"],
+      "inputs": 597,
+      "winner": 0,
+      "engineVersion": "0.1.0"
+    },
+    {
+      "name": "bank-shortage",
+      "file": "bank-shortage.replay.json",
+      "seed": 8301,
+      "gameIndex": 0,
+      "players": 4,
+      "baseOptions": {},
+      "fixedDiceTotal": 6,
+      "features": ["bank-shortage"],
+      "inputs": 1578,
+      "winner": null,
+      "engineVersion": "0.1.0"
+    },
+    {
+      "name": "friendly-robber",
+      "file": "friendly-robber.replay.json",
+      "seed": 9200,
+      "gameIndex": 0,
+      "players": 4,
+      "baseOptions": {
+        "friendlyRobber": true
+      },
+      "features": ["friendly-robber-restriction", "longest-road-win", "normal-completion"],
+      "inputs": 292,
+      "winner": 3,
+      "engineVersion": "0.1.0"
+    },
+    {
+      "name": "balanced-dice",
+      "file": "balanced-dice.replay.json",
+      "seed": 9200,
+      "gameIndex": 0,
+      "players": 4,
+      "baseOptions": {
+        "diceMode": "balanced"
+      },
+      "features": ["balanced-dice", "bank-shortage", "longest-road-win", "normal-completion"],
+      "inputs": 464,
+      "winner": 3,
+      "engineVersion": "0.1.0"
+    },
+    {
+      "name": "all-development-card-types",
+      "file": "all-development-card-types.replay.json",
+      "seed": 8301,
+      "gameIndex": 3,
+      "players": 4,
+      "baseOptions": {},
+      "features": ["all-development-card-types", "bank-shortage", "normal-completion"],
+      "inputs": 685,
+      "winner": 0,
+      "engineVersion": "0.1.0"
+    },
+    {
+      "name": "road-building-no-legal-spots",
+      "file": "road-building-no-legal-spots.replay.json",
+      "seed": 1392,
+      "gameIndex": 0,
+      "players": 4,
+      "baseOptions": {},
+      "features": ["bank-shortage", "road-building-no-legal-spots"],
+      "inputs": 544,
+      "winner": null,
+      "engineVersion": "0.1.0"
+    },
+    {
+      "name": "normal-game-01",
+      "file": "normal-game-01.replay.json",
+      "seed": 4100,
+      "gameIndex": 0,
+      "players": 4,
+      "baseOptions": {},
+      "features": ["bank-shortage", "longest-road-win", "normal-completion"],
+      "inputs": 420,
+      "winner": 3,
+      "engineVersion": "0.1.0"
+    },
+    {
+      "name": "normal-game-02",
+      "file": "normal-game-02.replay.json",
+      "seed": 4100,
+      "gameIndex": 1,
+      "players": 4,
+      "baseOptions": {},
+      "features": ["bank-shortage", "longest-road-win", "normal-completion"],
+      "inputs": 407,
+      "winner": 3,
+      "engineVersion": "0.1.0"
+    },
+    {
+      "name": "normal-game-03",
+      "file": "normal-game-03.replay.json",
+      "seed": 4100,
+      "gameIndex": 2,
+      "players": 4,
+      "baseOptions": {},
+      "features": ["bank-shortage", "largest-army-win", "normal-completion"],
+      "inputs": 392,
+      "winner": 1,
+      "engineVersion": "0.1.0"
+    },
+    {
+      "name": "normal-game-04",
+      "file": "normal-game-04.replay.json",
+      "seed": 4100,
+      "gameIndex": 3,
+      "players": 4,
+      "baseOptions": {},
+      "features": ["bank-shortage", "longest-road-win", "normal-completion"],
+      "inputs": 505,
+      "winner": 1,
+      "engineVersion": "0.1.0"
+    },
+    {
+      "name": "normal-game-05",
+      "file": "normal-game-05.replay.json",
+      "seed": 4100,
+      "gameIndex": 4,
+      "players": 4,
+      "baseOptions": {},
+      "features": ["all-development-card-types", "bank-shortage", "normal-completion"],
+      "inputs": 510,
+      "winner": 1,
+      "engineVersion": "0.1.0"
+    },
+    {
+      "name": "normal-game-08",
+      "file": "normal-game-08.replay.json",
+      "seed": 8301,
+      "gameIndex": 2,
+      "players": 4,
+      "baseOptions": {},
+      "features": ["bank-shortage", "normal-completion"],
+      "inputs": 691,
+      "winner": 0,
+      "engineVersion": "0.1.0"
+    },
+    {
+      "name": "normal-game-09",
+      "file": "normal-game-09.replay.json",
+      "seed": 8301,
+      "gameIndex": 3,
+      "players": 4,
+      "baseOptions": {},
+      "features": ["all-development-card-types", "bank-shortage", "normal-completion"],
+      "inputs": 685,
+      "winner": 0,
+      "engineVersion": "0.1.0"
+    },
+    {
+      "name": "normal-game-10",
+      "file": "normal-game-10.replay.json",
+      "seed": 8301,
+      "gameIndex": 4,
+      "players": 4,
+      "baseOptions": {},
+      "features": ["bank-shortage", "largest-army-win", "normal-completion"],
+      "inputs": 636,
+      "winner": 3,
+      "engineVersion": "0.1.0"
+    },
+    {
+      "name": "normal-game-11",
+      "file": "normal-game-11.replay.json",
+      "seed": 8301,
+      "gameIndex": 5,
+      "players": 4,
+      "baseOptions": {},
+      "features": ["bank-shortage", "normal-completion"],
+      "inputs": 555,
+      "winner": 3,
+      "engineVersion": "0.1.0"
+    },
+    {
+      "name": "normal-game-13",
+      "file": "normal-game-13.replay.json",
+      "seed": 8301,
+      "gameIndex": 7,
+      "players": 4,
+      "baseOptions": {},
+      "features": ["bank-shortage", "longest-road-win", "normal-completion"],
+      "inputs": 545,
+      "winner": 3,
+      "engineVersion": "0.1.0"
+    },
+    {
+      "name": "normal-game-14",
+      "file": "normal-game-14.replay.json",
+      "seed": 8301,
+      "gameIndex": 8,
+      "players": 4,
+      "baseOptions": {},
+      "features": ["bank-shortage", "hidden-vp-win", "normal-completion"],
+      "inputs": 360,
+      "winner": 2,
+      "engineVersion": "0.1.0"
+    }
+  ]
+}

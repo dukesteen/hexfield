@@ -180,9 +180,16 @@ function playParams(
   card: DevCard,
   params: unknown,
 ): Result<{ resource?: Resource; requested?: ResourceCounts }> {
+  if (card === 'knight' || card === 'roadBuilding')
+    return params === undefined
+      ? success({})
+      : failure('unknown-field', `${card} does not take params`);
+  if (typeof params !== 'object' || params === null || Array.isArray(params))
+    return failure('invalid-dev-params', `${card} needs params`);
+  const allowed = card === 'yearOfPlenty' ? 'resources' : 'resource';
+  const extra = Object.keys(params).find((key) => key !== allowed);
+  if (extra !== undefined) return failure('unknown-field', `Unknown card parameter: ${extra}`);
   if (card === 'yearOfPlenty') {
-    if (typeof params !== 'object' || params === null)
-      return failure('invalid-dev-params', 'Year of plenty needs resource counts');
     const requested = plentyRequest(Reflect.get(params, 'resources'));
     return requested.ok ? success({ requested: requested.value }) : requested;
   }
