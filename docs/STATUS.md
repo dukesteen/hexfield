@@ -79,6 +79,8 @@ Source: [05-local-ui.md](05-local-ui.md)
 
 Implementation is in progress. The local-session foundation now supports CSPRNG outcomes, paced bots, phase timers, revision-checked submissions, and validated save restoration. Focused tests cover completed bot-game replay, malformed save data, timer expiry/pause/disposal, private-view copies, and subscription ordering. Settings/save repositories and namespaced translations are in place. The coordinator ran `pnpm check` successfully on 2026-09-24 with Node `22.23.3` and pnpm `10.7.1`: 251 tests across 53 files, all typechecks, lint, formatting, 15 boundary fixtures, engine purity, and the missing-translation check passed. Unused translations are expected while the gameplay screens are being connected. The stage acceptance criteria remain open.
 
+The static Pixi board is available at `#/dev/board`. A Chrome visual check confirmed the placeholder terrain, number tokens and pips, player markers, wheel zoom, drag pan, and background double-click refit. The check caught and resolved the strict-CSP initialization and stale-renderer lifecycle failures without changing the CSP. Camera bounds and legal-only target geometry have focused regression tests. This desktop inspection does not establish the later mobile performance or full-game acceptance criteria.
+
 ## 06 — Protocol & Replicated Event Log
 
 Source: [06-protocol-event-log.md](06-protocol-event-log.md)

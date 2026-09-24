@@ -26,3 +26,142 @@ p {
 small {
   color: #506169;
 }
+
+.board-dev-page {
+  box-sizing: border-box;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  justify-content: flex-start;
+  padding: 1.5rem;
+  background: #f4f7f6;
+  color: #18332b;
+  font-family:
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    sans-serif;
+}
+
+.board-dev-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.board-dev-header p,
+.board-dev-help p {
+  margin-top: 0.5rem;
+  color: #49665b;
+}
+
+.board-dev-header span {
+  border: 1px solid #b9ccc3;
+  border-radius: 999px;
+  padding: 0.5rem 0.75rem;
+  color: #086b52;
+  font-size: 0.875rem;
+}
+
+.board-dev-layout {
+  min-height: min(72vh, 720px);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 280px);
+  gap: 1rem;
+}
+
+.board-dev-board {
+  min-width: 0;
+  min-height: 420px;
+  overflow: hidden;
+  border: 1px solid #b9ccc3;
+  border-radius: 12px;
+  background: #d1e7e9;
+}
+
+.board-view-canvas {
+  width: 100%;
+  height: 100%;
+  min-height: inherit;
+}
+
+.board-dev-help {
+  align-self: start;
+  padding: 1rem;
+  border: 1px solid #b9ccc3;
+  border-radius: 12px;
+  background: #fcfdfc;
+  line-height: 1.5;
+}
+
+.board-dev-help h2 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.board-dev-help ul {
+  padding-left: 1.25rem;
+  color: #49665b;
+}
+
+.board-keyboard-targets {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(44px, 1fr));
+  gap: 0.25rem;
+  max-height: 12rem;
+  overflow: auto;
+}
+
+.board-keyboard-targets button {
+  min-width: 44px;
+  min-height: 44px;
+}
+
+@media (max-width: 767px) {
+  .board-dev-page {
+    padding: 1rem;
+  }
+
+  .board-dev-layout {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(60vh, 1fr) auto;
+  }
+
+  .board-dev-board {
+    min-height: 60vh;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+.board-dev-board,
+.board-renderer-root {
+  position: relative;
+}
+
+.board-renderer-status {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  color: #18332b;
+  text-align: center;
+  pointer-events: none;
+}
+
+.board-renderer-error {
+  color: #ae3329;
+}
