@@ -43,22 +43,22 @@
     "PLACE_FREE_ROAD": 263
   },
   "awardSwingPercent": 30.9,
-  "averageApplyMillisecondsPerGame": 6.480644248,
-  "averageGameMilliseconds": 27.960271605000003,
+  "averageApplyMillisecondsPerGame": 6.525429605,
+  "averageGameMilliseconds": 28.031580237,
   "applyP99Milliseconds": 0.037,
-  "elapsedMilliseconds": 27969.542584,
-  "sourceFingerprint": "1df98e084d42b1480c6c35cbedfe31ae5d1839948cb68041a592c989e2a861d9",
+  "elapsedMilliseconds": 28041.588708,
+  "sourceFingerprint": "cf421de99e16a547bd89b1c75b5f567df8fdce86398d22dd95a5b3c6e1270e62",
   "sourceUnchanged": true,
   "failures": [],
   "status": "acceptance-performance",
   "evidence": {
-    "command": "node tools/sim/dist/index.js bench --games 1000 --players 4 --seed 42 --parallel 1",
     "node": "v22.23.3",
     "cpu": "Apple M3 Pro",
     "platform": "darwin",
     "arch": "arm64",
-    "gitHead": "f3c45f6fa1241d6783cfa86d2cd16c180d11bab3",
-    "workingTree": "uncommitted Stage04 runtime; sourceFingerprint and sourceUnchanged identify exact measured source",
-    "note": "Idle CPU; five warmup games excluded; LocalGame diagnostic private invariants disabled while validation, applyPrivate and freezing remained enabled"
+    "gitHead": "2012b269b39f26f0448b00c81915e6e0db6d31f5",
+    "workingTree": "clean committed Stage04 baseline",
+    "command": "pnpm sim bench --games 1000 --players 4 --seed 42 --parallel 1",
+    "note": "Idle CPU; five warmups excluded; diagnostic private invariants disabled, validation/applyPrivate/freezing enabled"
   }
 }

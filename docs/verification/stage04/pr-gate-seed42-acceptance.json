@@ -1,0 +1,22 @@
+{
+  "status": "acceptance-pr-gate",
+  "seed": 42,
+  "gameCount": 2000,
+  "gameFailures": 0,
+  "gameElapsedMilliseconds": 40741.913834,
+  "fuzzIterations": 50000,
+  "fuzzElapsedMillisecondsApproximately": 1921,
+  "totalElapsedMillisecondsApproximately": 42662.913834,
+  "sourceFingerprint": "cf421de99e16a547bd89b1c75b5f567df8fdce86398d22dd95a5b3c6e1270e62",
+  "sourceUnchanged": true,
+  "evidence": {
+    "node": "v22.23.3",
+    "cpu": "Apple M3 Pro",
+    "platform": "darwin",
+    "arch": "arm64",
+    "gitHead": "2012b269b39f26f0448b00c81915e6e0db6d31f5",
+    "workingTree": "clean committed Stage04 baseline",
+    "gameCommand": "node tools/sim/dist/index.js run --games 2000 --players 4 --seed 42 --parallel 4",
+    "fuzzCommand": "node tools/sim/dist/index.js fuzz --iterations 50000 --seed 42"
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "status": "acceptance-dice",
+  "gameCount": 110000,
+  "playersByRun": {
+    "four": 100000,
+    "three": 10000
+  },
+  "dice": [
+    0, 0, 362596, 725887, 1090066, 1453439, 1817915, 2180294, 1813089, 1453959, 1087935, 726206,
+    363900
+  ],
+  "rolls": 13075286,
+  "diceChiSquare": 13.951108006356577,
+  "dicePValue": 0.17523342796816288,
+  "sourceFingerprint": "cf421de99e16a547bd89b1c75b5f567df8fdce86398d22dd95a5b3c6e1270e62",
+  "sourceUnchanged": true,
+  "evidence": {
+    "node": "v22.23.3",
+    "cpu": "Apple M3 Pro",
+    "platform": "darwin",
+    "arch": "arm64",
+    "gitHead": "2012b269b39f26f0448b00c81915e6e0db6d31f5",
+    "workingTree": "clean committed Stage04 source baseline; acceptance evidence JSON added during run",
+    "sourceFiles": ["games-100k-4p-seed42-acceptance.json", "games-10k-3p-seed42-acceptance.json"]
+  }
+}

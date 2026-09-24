@@ -52,13 +52,19 @@ A read-only `claude -p` stage review and a separate review of longest-road logic
 
 Source: [04-simulation-testing.md](04-simulation-testing.md)
 
-- [ ] 100,000 random 4-player games (and 10,000 3-player games) complete with zero invariant violations and zero dead games.
-- [ ] 1,000,000 fuzz mutations, zero throws, zero accepted-invalid inputs.
-- [ ] The dice distribution over all simulated rolls matches 2d6 within statistical tolerance (chi-square p > 0.001).
-- [ ] Golden replays pass. CI runs sim + fuzz on each PR.
-- [ ] Performance budget met.
+- [x] 100,000 random 4-player games (and 10,000 3-player games) complete with zero invariant violations and zero dead games.
+- [x] 1,000,000 fuzz mutations, zero throws, zero accepted-invalid inputs.
+- [x] The dice distribution over all simulated rolls matches 2d6 within statistical tolerance (chi-square p > 0.001).
+- [x] Golden replays pass. CI runs sim + fuzz on each PR.
+- [x] Performance budget met.
 
-Implementation checks passed on 2026-09-24 with Node `22.23.3`, pnpm `10.7.1`, and `CI=1 pnpm run ci`. All 225 tests across 45 files, production/test typechecks, lint, formatting, dependency boundaries, engine purity, builds, coverage and Chromium/Firefox/WebKit smoke tests passed. Engine coverage is 4,869/4,932 lines (98.72%) and 2,102/2,372 branches (88.62%). All 20 golden replays match their checkpoints and compare batch private updates against per-seat updates after every input. The end-stage read-only review found no blocking issue; its confirmed fuzz-coverage and failure-reporting findings have regression coverage. Final scale, fuzz and timing evidence remains required before this stage closes.
+Implementation checks passed on 2026-09-24 with Node `22.23.3`, pnpm `10.7.1`, and `CI=1 pnpm run ci`. All 225 tests across 45 files, production/test typechecks, lint, formatting, dependency boundaries, engine purity, builds, coverage and Chromium/Firefox/WebKit smoke tests passed. Engine coverage is 4,869/4,932 lines (98.72%) and 2,102/2,372 branches (88.62%). All 20 golden replays match their checkpoints and compare batch private updates against per-seat updates after every input. The end-stage read-only review found no blocking issue; its confirmed fuzz-coverage and failure-reporting findings have regression coverage.
+
+The implementation checkpoint is `2012b269b39f26f0448b00c81915e6e0db6d31f5`. Its [final fuzz run](verification/stage04/fuzz-1m-seed42-acceptance.json) passed 1,000,000 invalid mutations across 18 families and checked 62,595 accepted alternative inputs, with zero throws, accepted-invalid inputs or dead prefixes. The [PR-sized checks](verification/stage04/pr-gate-seed42-acceptance.json) completed 2,000 verified four-player games and 50,000 mutations in approximately 42.7 seconds, below the three-minute budget. The workflow runs these checks on pushes and pull requests and 100,000 games nightly. The user-authorized equivalent was run locally.
+
+The [single-worker benchmark](verification/stage04/bench-1000-seed42-acceptance.json) completed 1,000 default four-player games at 28.03 ms per game on an Apple M3 Pro, with five separate warmups. Public apply p99 was 0.037 ms. Diagnostic invariants were disabled only for timing; validation, private updates, freezing and driver bookkeeping remained enabled. Each run records the committed source fingerprint and confirms matching source before and after execution.
+
+The [100,000 four-player games](verification/stage04/games-100k-4p-seed42-acceptance.json) and [10,000 three-player games](verification/stage04/games-10k-3p-seed42-acceptance.json) completed with diagnostic invariants enabled, zero failures and zero dead games. Both used seed 42, default 10-point games, the 500-turn limit and unchanged source fingerprint `cf421de99e16a547bd89b1c75b5f567df8fdce86398d22dd95a5b3c6e1270e62`. The four-player batch took 35.45 minutes with four workers; its dice chi-square p was 0.4347. The three-player p-value was 0.3712. The [combined 13,075,286 rolls](verification/stage04/dice-110k-combined-acceptance.json) gave chi-square 13.9511 with 10 degrees of freedom and p = 0.1752, above 0.001. The coordinator independently parsed both raw reports and recomputed the combined statistic. Milestone A is complete.
 
 ## 05 — Local UI (Hotseat & vs RandomBot)
 
