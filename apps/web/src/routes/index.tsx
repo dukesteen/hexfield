@@ -8,8 +8,8 @@ function Home() {
   const { t } = useTranslation('common');
   return (
     <main>
-      <h1>{t('appTitle', { defaultValue: APP_NAME })}</h1>
-      <p>{t('welcome')}</p>
+      <h1>{t('common:appTitle', { defaultValue: APP_NAME })}</h1>
+      <p>{t('common:welcome')}</p>
       <small>v{APP_VERSION}</small>
     </main>
   );

@@ -77,6 +77,8 @@ Source: [05-local-ui.md](05-local-ui.md)
 - [ ] All UI strings go through react-i18next; the missing-key check passes in CI; keyboard-only play is possible.
 - [ ] Live game state is only in Zustand; persisted/async data is only accessed via TanStack Query hooks.
 
+Implementation is in progress. The local-session foundation now supports CSPRNG outcomes, paced bots, phase timers, revision-checked submissions, and validated save restoration. Focused tests cover completed bot-game replay, malformed save data, timer expiry/pause/disposal, private-view copies, and subscription ordering. Settings/save repositories and namespaced translations are in place. The coordinator ran `pnpm check` successfully on 2026-09-24 with Node `22.23.3` and pnpm `10.7.1`: 251 tests across 53 files, all typechecks, lint, formatting, 15 boundary fixtures, engine purity, and the missing-translation check passed. Unused translations are expected while the gameplay screens are being connected. The stage acceptance criteria remain open.
+
 ## 06 — Protocol & Replicated Event Log
 
 Source: [06-protocol-event-log.md](06-protocol-event-log.md)

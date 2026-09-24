@@ -16,12 +16,16 @@
     "test:e2e": "pnpm --filter @cp2p/web test:e2e",
     "deps:check": "depcruise --config .dependency-cruiser.cjs apps packages tools && node tools/check-boundaries.mjs",
     "purity:check": "node tools/check-engine-purity.mjs",
-    "check": "pnpm typecheck && pnpm lint && pnpm format:check && pnpm deps:check && pnpm purity:check && pnpm test",
+    "i18n:check": "node tools/check-i18n-keys.mjs",
+    "check": "pnpm typecheck && pnpm lint && pnpm format:check && pnpm deps:check && pnpm purity:check && pnpm i18n:check && pnpm test",
     "ci": "pnpm check && pnpm build && pnpm test:coverage && pnpm test:e2e",
     "sim": "tsc -b tools/sim && node tools/sim/dist/index.js"
   },
   "devDependencies": {
     "@playwright/test": "^1.63.0",
+    "@testing-library/dom": "^10.4.2",
+    "@testing-library/react": "^16.3.3",
+    "@testing-library/user-event": "^14.6.7",
     "@types/node": "^22",
     "@types/react": "^19",
     "@types/react-dom": "^19",
@@ -32,6 +36,7 @@
     "oxfmt": "^0.70.0",
     "oxlint": "^1.85.0",
     "oxlint-tsgolint": "^7.0.2003",
+    "svgo": "^4.1.0",
     "typescript": "^5.9",
     "vite": "^8.3.1",
     "vitest": "^3"
