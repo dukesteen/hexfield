@@ -1,4 +1,15 @@
 /** @type {import('dependency-cruiser').IConfiguration} */
+const { existsSync, readdirSync } = require('node:fs');
+const path = require('node:path');
+
+const modulesDir = path.join(__dirname, 'packages/engine/src/modules');
+const moduleIds = existsSync(modulesDir)
+  ? readdirSync(modulesDir, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => entry.name)
+  : [];
+const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 module.exports = {
   forbidden: [
     { name: 'no-circular', severity: 'error', from: {}, to: { circular: true } },
@@ -14,6 +25,41 @@ module.exports = {
       from: { path: '^packages/engine/', pathNot: '\\.test\\.[cm]?[jt]sx?$' },
       to: { pathNot: '^packages/engine/' },
     },
+    {
+      name: 'engine-rng-only-in-setup',
+      severity: 'error',
+      from: {
+        path: '^packages/engine/src/',
+        pathNot:
+          '^packages/engine/src/(?:core/state/createGame\\.ts$|modules/[^/]+/setup(?:/|\\.ts$)|rng\\.ts$)|\\.(?:test|spec)\\.[cm]?[jt]sx?$|/(?:__tests__|test|tests)/',
+      },
+      to: {
+        path: '^packages/engine/src/(?:core/rng/|rng\\.ts$)',
+        dependencyTypesNot: ['type-only'],
+      },
+    },
+    // Stage 11 can allow sibling imports after reading each module's declared dependencies.
+    ...moduleIds.map((id) => ({
+      name: `engine-module-${id}-no-siblings`,
+      severity: 'error',
+      from: {
+        path: `^packages/engine/src/modules/${escapeRegex(id)}/`,
+        pathNot: '\\.(?:test|spec)\\.[cm]?[jt]sx?$|/(?:__tests__|test|tests)/',
+      },
+      to: { path: `^packages/engine/src/modules/(?!${escapeRegex(id)}/)[^/]+/` },
+    })),
+    ...moduleIds.map((id) => ({
+      name: `engine-module-${id}-setup-private`,
+      severity: 'error',
+      from: {
+        path: `^packages/engine/src/modules/${escapeRegex(id)}/`,
+        pathNot: `^packages/engine/src/modules/${escapeRegex(id)}/(?:setup/|index\\.ts$)|\\.(?:test|spec)\\.[cm]?[jt]sx?$|/(?:__tests__|test|tests)/`,
+      },
+      to: {
+        path: `^packages/engine/src/modules/${escapeRegex(id)}/(?:setup/|index\\.ts$)`,
+        dependencyTypesNot: ['type-only'],
+      },
+    })),
     {
       name: 'codec-only-noble-hashes',
       severity: 'error',

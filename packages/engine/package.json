@@ -9,6 +9,16 @@
       "types": "./src/index.ts",
       "@cp2p/source": "./src/index.ts",
       "default": "./dist/index.js"
+    },
+    "./geometry": {
+      "types": "./src/geometry.ts",
+      "@cp2p/source": "./src/geometry.ts",
+      "default": "./dist/geometry.js"
+    },
+    "./rng": {
+      "types": "./src/rng.ts",
+      "@cp2p/source": "./src/rng.ts",
+      "default": "./dist/rng.js"
     }
   },
   "scripts": {

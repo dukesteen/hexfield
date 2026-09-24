@@ -21,12 +21,16 @@ For local browser checks, install the browsers with `pnpm exec playwright instal
 
 Source: [02-engine-core.md](02-engine-core.md)
 
-- [ ] Geometry counts and cross-check tests pass for radius 2, radius 3 and random shapes.
-- [ ] `ResourceBounds` soundness property test passes 10k runs.
-- [ ] `test-counter` module plays to completion through `LocalGame` with injected randomness.
-- [ ] Engine has zero dependencies and passes the purity check.
-- [ ] Deep-freeze tests prove `apply` is non-mutating.
-- [ ] Public API documented; `geometry.ts` entry importable by the renderer without pulling in the pipeline.
+- [x] Geometry counts and cross-check tests pass for radius 2, radius 3 and random shapes.
+- [x] `ResourceBounds` soundness property test passes 10k runs.
+- [x] `test-counter` module plays to completion through `LocalGame` with injected randomness.
+- [x] Engine has zero dependencies and passes the purity check.
+- [x] Deep-freeze tests prove `apply` is non-mutating.
+- [x] Public API documented; `geometry.ts` entry importable by the renderer without pulling in the pipeline.
+
+Verified 2026-09-24 with Node `22.23.3`, pnpm `10.7.1`, and `CI=1 pnpm run ci`. All 55 tests, production/test typechecks, lint, formatting, purity, 15 boundary fixtures, builds, coverage, and Chromium/Firefox/WebKit smoke tests passed. Geometry includes pixel cross-checks on 300 random connected shapes. Resource tests include 10,000 operation sequences and 2,000 comparisons against brute-force feasible hands. RNG tests pin ten outputs and check 600,000 six-sided draws. The counter module completes through random and reveal interrupts, and protocol tests prove deterministic replay hashes. The protocol test also passed with engine and codec build directories absent, confirming source resolution before a build. Public methods have TSDoc; boundary fixtures prove renderer geometry imports cannot reach the rules pipeline and handlers cannot import RNG through setup reexports.
+
+A read-only `claude -p` stage review preceded the gate. Regressions cover its confirmed input-encoding, automatic-source failure, invariant-reporting and registration findings. Local submissions retain atomic rollback and become terminal on automatic failure, as recorded in `DECISIONS.md`.
 
 ## 03 — Base Rules Module (`base`)
 

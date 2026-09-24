@@ -196,6 +196,8 @@ interface SystemInput {
 
 ## 6. Pipeline API
 
+`createEngine(modules)` returns an engine whose methods have the signatures below. It snapshots the registered modules and binds their dependency-ordered registry, so separate games can use different module sets without process-global registration.
+
 ```ts
 createGame(config: GameConfig, genesisSeed: Uint8Array): GameState
 validate(state: GameState, input: Input): Result<void>
@@ -211,6 +213,7 @@ computeVictoryPoints(state, seat, priv?): { public: number; total?: number }
 - `applyPrivate` is how the owner's client keeps the exact hand in step with public events. `privInput` carries secret data the owner learned out of band (e.g. which card was stolen from them). Only the owner (or an omniscient local driver) calls it.
 - **Omniscient mode** (hotseat, simulation, audit): a `LocalGame` wrapper holds `GameState` plus every seat's `PrivateState` and asserts after each input that the true hands sit inside the public bounds.
 - `LocalGame` answers local deck draws using the injected random source and the remaining card identities. These identities stay outside public state. It records all automatically submitted inputs, including victory claims, so replay uses the same deterministic pipeline.
+- A local submission commits its command and generated inputs as one batch. If an automatic input or external source fails, the driver retains the previous committed state and log and becomes terminal. This prevents retrying after a source has already consumed hidden randomness. Ordinary rejected player commands leave the driver usable. State is a borrowed frozen view; log and event getters copy their arrays of frozen records. Use explicit snapshots before passing state to code that may mutate it.
 
 ## 7. Module system (skeleton)
 
@@ -223,9 +226,12 @@ interface GameModule<Ext = unknown, PExt = unknown> {
   optionsSchema: OptionSpec[]; // for lobby UI + validation
   // setup
   initState?(ctx: SetupCtx): Ext; // may use genesis RNG
+  initializeState?(ctx: SetupCtx, state: GameState): GameState; // bank, decks, seat pieces
+  initialPhase?(ctx: SetupCtx): PhaseFrame | null; // exactly one module supplies the root
   modifyConfig?(cfg: GameConfig): GameConfig;
   buildBoard?(ctx: SetupCtx, board: BoardState): BoardState;
   initPrivate?(seat: Seat): PExt;
+  autoInput?(state: GameState, privates: ReadonlyMap<Seat, PrivateState>): Input | null; // local claims/reveals
   // rules
   commands: Record<string, CommandHandler>; // validate + apply + applyPrivate
   systemInputs: Record<string, SystemInputHandler>;

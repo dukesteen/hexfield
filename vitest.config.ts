@@ -1,6 +1,14 @@
 import { defineConfig } from 'vitest/config';
+import { defaultClientConditions, defaultExternalConditions, defaultServerConditions } from 'vite';
 
 export default defineConfig({
+  resolve: { conditions: ['@cp2p/source', ...defaultClientConditions] },
+  ssr: {
+    resolve: {
+      conditions: ['@cp2p/source', ...defaultServerConditions],
+      externalConditions: ['@cp2p/source', ...defaultExternalConditions],
+    },
+  },
   test: {
     environment: 'node',
     exclude: ['**/node_modules/**', '**/dist/**', '**/tests/**'],
@@ -12,7 +20,11 @@ export default defineConfig({
         'apps/*/src/**/*.{ts,tsx}',
         'tools/sim/src/**/*.ts',
       ],
-      exclude: ['**/*.test.ts', 'apps/web/src/routeTree.gen.ts'],
+      exclude: [
+        '**/*.{test,spec}.{ts,tsx}',
+        '**/{__tests__,test,tests}/**',
+        'apps/web/src/routeTree.gen.ts',
+      ],
       thresholds: { lines: 0, branches: 0, functions: 0, statements: 0 },
     },
   },

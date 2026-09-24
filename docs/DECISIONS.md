@@ -52,3 +52,21 @@ Record decisions here as they are made. Keep earlier entries.
 - Decision: Use a clean, readable interface with clear controls and meaningful animation. Avoid medieval styling, parchment textures, decorative type and visual clutter.
 - Alternatives: A themed tabletop interface with ornamental panels and period typography.
 - Reason: The user explicitly requested a UI that is easy to read and reason about. Motion should explain game events and respect reduced-motion preferences.
+
+## 2026-09-24: Canonical byte tag and strict decoding
+
+- Stage: 02.
+- Decision: Reserve an exact one-key `{"$b":"..."}` object for `Uint8Array`. Encoding rejects every ordinary one-key object named `$b`, regardless of its value. Decoding accepts that exact shape only when its value is canonical unpadded base64url. `canonicalDecode` also requires re-encoding the decoded value to reproduce the input bytes exactly, rejecting duplicate keys, whitespace, unsorted keys and other noncanonical JSON forms.
+- Alternatives: Allow ordinary objects to collide with the byte tag, or accept noncanonical JSON and normalize it during decoding.
+- Reason: A single byte tag shape makes snapshot decoding reversible, and strict decoding ensures peers hash one representation for each value.
+
+## 2026-09-24: Engine registration and local submission ownership
+
+- Stage: 02.
+- Decision: Bind each engine's pipeline methods to a copied module registry through `createEngine(modules)`. Order dependency-ready modules by id. Require one explicit initial phase and provide an ordered genesis hook for shared bank, deck and seat fields.
+- Alternatives: Use mutable global registration, choose the first phase alphabetically, or force common state initialization into module extension data.
+- Reason: Multiple engines can coexist, module order is deterministic, and genesis remains explicit.
+- Decision: Commit a `LocalGame.submit` command and its generated inputs atomically. If automatic resolution fails, preserve the previous committed state and log and make the driver terminal. Ordinary invalid player commands remain recoverable. Expose borrowed state and log views, with explicit snapshots for mutable consumers.
+- Alternatives: Retry the source after rolling back, or clone the whole state and log on every simulation access.
+- Reason: An external source may already have consumed a secret deck item when it fails. Retrying would silently change its outcome. Borrowed views avoid repeated copies in simulations while retaining the engine's immutable-state contract.
+- Consultation: A read-only `claude -p` stage review identified non-JSON inputs accepted before log encoding, uncaught automatic-source errors, invariant checks that threw on missing phases, registration edge cases and the single-kind bounds convergence bug. Focused regressions reproduced and fixed these cases. The review also prompted a guard against rule handlers importing RNG through setup reexports. Atomic rollback remains deliberate; the failed batch is never retried. Local committed values are frozen with already-frozen shared branches skipped, and log/event getters copy their arrays. The codec accepts integer values as documented; engine state uses the stricter safe-integer range.
