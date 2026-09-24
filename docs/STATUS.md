@@ -36,11 +36,17 @@ A read-only `claude -p` stage review preceded the gate. Regressions cover its co
 
 Source: [03-base-rules.md](03-base-rules.md)
 
-- [ ] Every rule in this document has at least one test. `docs/rules/base.md` is complete, with every `[VERIFY]` resolved.
-- [ ] A full 4-player game can be scripted and completed through `LocalGame`.
-- [ ] Engine coverage ≥ 90% lines, ≥ 85% branches.
-- [ ] All option variants are covered by tests.
-- [ ] `getPending` is never empty until `result` is set (checked by the stage 04 fuzzer, and here by a simple assertion helper).
+- [x] Every rule in this document has at least one test. `docs/rules/base.md` is complete, with every `[VERIFY]` resolved.
+- [x] A full 4-player game can be scripted and completed through `LocalGame`.
+- [x] Engine coverage ≥ 90% lines, ≥ 85% branches.
+- [x] All option variants are covered by tests.
+- [x] `getPending` is never empty until `result` is set (checked here after every input in the full-game replay; stage 04 adds the fuzzer).
+
+Verified 2026-09-24 with Node `22.23.3`, pnpm `10.7.1`, and `CI=1 pnpm run ci`. All 151 tests, production/test typechecks, lint, formatting, 15 dependency-boundary fixtures, engine purity, builds, coverage, and Chromium/Firefox/WebKit smoke tests passed. Engine coverage is 4,436/4,520 lines (98.14%) and 1,699/1,997 branches (85.08%); CI now enforces the engine's 90%/85% thresholds.
+
+Board tests cover 10,000 seeds in each balanced mode, original fixed-map genesis, placement constraints, and the required road/army award fixtures, including the 15-road performance case. The full four-seat scenario starts from genesis, completes snake setup, and reaches the default 10-point target using legal production, maritime trades and builds without hand gifts. Its entire log replays to the same final state, checking public invariants and nonempty pending inputs after every input. `LocalGame` checks exact-hand bounds and private resource conservation throughout. Tests also cover every option, public/private card effects, hidden-steal audit necessity, private trade transfers, and timeout discards. [The implemented rules](rules/base.md) include the rule-to-test map and source attribution.
+
+A read-only `claude -p` stage review and a separate review of longest-road logic preceded the gate. Confirmed findings were reproduced and fixed: timeout actions must answer the relevant pending choice, balanced-dice production uses the same public/private hook state, victory claims appear in every turn interruption, and trade replacement/withdrawal and response deadlines are explicit. The decisions and follow-up tests are recorded in `DECISIONS.md`.
 
 ## 04 — Simulation & Rule Testing
 

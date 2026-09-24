@@ -1,5 +1,8 @@
 export const PACKAGE_NAME = '@cp2p/engine';
 
+export { baseModule, createBaseEngine } from './modules/base/index.js';
+export type { BaseOptions, TurnTimer, MapLayout, DiceMode } from './modules/base/config.js';
+
 export { createEngine, LocalGame } from './core/pipeline/index.js';
 export type {
   Engine,

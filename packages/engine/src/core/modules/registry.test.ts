@@ -30,19 +30,135 @@ const sampleState = createEngine([testCounter()]).createGame(config, seed);
 
 describe('module registry', () => {
   test('sorts ready modules by id while respecting dependencies', () => {
+    const called: string[] = [];
     const a = module('A', ['Z']);
     const b = module('B');
     const z = module('Z');
-    a.hooks = { handLimit: (_state, _seat, limit) => limit * 10 + 1 };
-    b.hooks = { handLimit: (_state, _seat, limit) => limit * 10 + 2 };
-    z.hooks = { handLimit: (_state, _seat, limit) => limit * 10 + 3 };
+    a.hooks = {
+      handLimit: (_state, _seat, limit) => {
+        called.push('A');
+        return limit * 10 + 1;
+      },
+    };
+    b.hooks = {
+      handLimit: (_state, _seat, limit) => {
+        called.push('B');
+        return limit * 10 + 2;
+      },
+    };
+    z.hooks = {
+      handLimit: (_state, _seat, limit) => {
+        called.push('Z');
+        return limit * 10 + 3;
+      },
+    };
     const registry = createRegistry([a, z, b]);
     expect(registry.modules.map((item) => item.id)).toEqual(['B', 'Z', 'A']);
     expect(registry.hooks.handLimit(sampleState, 0, 0)).toBe(231);
+    expect(called).toEqual(['B', 'Z', 'A']);
+  });
+
+  test('runs each hook family in dependency order and composes its result', () => {
+    const called: string[] = [];
+    const decorate = (id: string, increment: number): NonNullable<GameModule['hooks']> => ({
+      afterDiceRolled: (state) => {
+        called.push(`${id}:dice`);
+        return state;
+      },
+      computeProduction: (_state, _roll, acc) => {
+        called.push(`${id}:production`);
+        return { ...acc, [id]: { grain: increment } };
+      },
+      placementRules: {
+        settlement: (_state, _seat, _loc, verdict) => {
+          called.push(`${id}:settlement`);
+          return verdict;
+        },
+        road: (_state, _seat, _loc, verdict) => {
+          called.push(`${id}:road`);
+          return verdict;
+        },
+        city: (_state, _seat, _loc, verdict) => {
+          called.push(`${id}:city`);
+          return verdict;
+        },
+      },
+      costOf: (_state, _buildType, cost) => {
+        called.push(`${id}:cost`);
+        return { ...cost, brick: (cost.brick ?? 0) + increment };
+      },
+      afterBuild: (state) => {
+        called.push(`${id}:build`);
+        return state;
+      },
+      onTurnStart: (state) => {
+        called.push(`${id}:start`);
+        return state;
+      },
+      onTurnEnd: (state) => {
+        called.push(`${id}:end`);
+        return state;
+      },
+      robberTargets: (_state, _seat, _hex, targets) => {
+        called.push(`${id}:robber`);
+        return targets;
+      },
+      handLimit: (_state, _seat, limit) => {
+        called.push(`${id}:limit`);
+        return limit + increment;
+      },
+    });
+    const parent = module('A');
+    const child = module('Z', ['A']);
+    const tied = module('B');
+    const empty = module('C');
+    parent.hooks = decorate('A', 1);
+    child.hooks = decorate('Z', 3);
+    tied.hooks = decorate('B', 2);
+    const hooks = createRegistry([child, empty, parent, tied]).hooks;
+
+    hooks.afterDiceRolled(sampleState, [2, 4]);
+    expect(hooks.computeProduction(sampleState, 6, {})).toEqual({
+      B: { grain: 2 },
+      A: { grain: 1 },
+      Z: { grain: 3 },
+    });
+    expect(hooks.placementRules.settlement(sampleState, 0, 'v', true)).toBe(true);
+    expect(hooks.placementRules.road(sampleState, 0, 'e', true)).toBe(true);
+    expect(hooks.placementRules.city(sampleState, 0, 'v', true)).toBe(true);
+    expect(hooks.costOf(sampleState, 'road', { brick: 0 })).toEqual({ brick: 6 });
+    hooks.afterBuild(sampleState, 0, 'road', 'e');
+    hooks.onTurnStart(sampleState, 0);
+    hooks.onTurnEnd(sampleState, 0);
+    expect(hooks.robberTargets(sampleState, 0, 'h', [1])).toEqual([1]);
+    expect(hooks.handLimit(sampleState, 0, 0)).toBe(6);
+
+    for (const family of [
+      'dice',
+      'production',
+      'settlement',
+      'road',
+      'city',
+      'cost',
+      'build',
+      'start',
+      'end',
+      'robber',
+      'limit',
+    ]) {
+      expect(called.filter((entry) => entry.endsWith(`:${family}`))).toEqual([
+        `A:${family}`,
+        `B:${family}`,
+        `Z:${family}`,
+      ]);
+    }
   });
 
   test('rejects missing, conflicting, cyclic and duplicate registrations', () => {
     expect(() => createRegistry([module('A', ['B'])])).toThrow(/missing dependency/);
+    expect(() => createRegistry([module('B'), module('A', ['B', 'B'])])).toThrow(
+      /repeats a dependency/,
+    );
     expect(() => createRegistry([module('A', ['B']), module('B', ['A'])])).toThrow(/cycle/);
     const conflicting = module('A');
     conflicting.conflictsWith = ['B'];

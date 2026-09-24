@@ -47,6 +47,8 @@ export interface Engine {
   ): { public: number; total?: number };
   /** Collect debug invariant failures without changing state. */
   checkInvariants(state: GameState): string[];
+  /** Collect optional module invariants over every owner's secret state. */
+  checkPrivateInvariants(state: GameState, privates: ReadonlyMap<Seat, PrivateState>): string[];
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -217,12 +219,12 @@ export function createEngine(modules: readonly GameModule[]): Engine {
     if (input.kind === 'command') {
       const handler = registry.commands.get(input.command.type)?.handler;
       return handler?.applyPrivate
-        ? handler.applyPrivate(priv, before, input, privInput)
+        ? handler.applyPrivate(priv, before, input, privInput, { hooks: registry.hooks })
         : success(priv);
     }
     const handler = registry.systemInputs.get(input.type)?.handler;
     return handler?.applyPrivate
-      ? handler.applyPrivate(priv, before, input, privInput)
+      ? handler.applyPrivate(priv, before, input, privInput, { hooks: registry.hooks })
       : success(priv);
   }
 
@@ -233,7 +235,13 @@ export function createEngine(modules: readonly GameModule[]): Engine {
     if (!top) return { commands: [], templates: [] };
     const handler = registry.phases.get(`${top.module}/${top.id}`)?.handler;
     if (handler?.legalCommands) {
-      return handler.legalCommands(state, top, seat, priv, { hooks: registry.hooks });
+      const listed = handler.legalCommands(state, top, seat, priv, { hooks: registry.hooks });
+      return {
+        commands: listed.commands.filter(
+          (command) => validate(state, { kind: 'command', seat, command }).ok,
+        ),
+        templates: listed.templates,
+      };
     }
     const allowed = getPending(state)
       .filter((item) => item.kind === 'player' && item.seat === seat)
@@ -294,6 +302,21 @@ export function createEngine(modules: readonly GameModule[]): Engine {
     return violations;
   }
 
+  function checkPrivateInvariants(
+    state: GameState,
+    privates: ReadonlyMap<Seat, PrivateState>,
+  ): string[] {
+    const violations: string[] = [];
+    for (const module of registry.modules) {
+      try {
+        violations.push(...(module.privateInvariants?.(state, privates) ?? []));
+      } catch (error) {
+        violations.push(`module ${module.id} private invariant threw: ${String(error)}`);
+      }
+    }
+    return violations;
+  }
+
   return Object.freeze({
     createGame: (config: GameConfig, seed: Uint8Array) => createGenesis(config, seed, registry),
     createPrivateState: (seat: Seat) => createPrivateState(seat, registry),
@@ -309,5 +332,6 @@ export function createEngine(modules: readonly GameModule[]): Engine {
     }),
     computeVictoryPoints,
     checkInvariants,
+    checkPrivateInvariants,
   });
 }

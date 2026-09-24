@@ -97,7 +97,7 @@ For roll `n`: for each land hex with token `n` **without the robber**, each adja
 - Max one non-VP card per turn, and it can be played in `preRoll` or `main`.
 - **Knight**: move the robber (a different hex) plus steal as on a 7 (no discard). Increments `knightsPlayed`.
 - **Road building**: pushes a `roadBuilding { remaining: 2 }` frame. The seat places up to 2 free roads (`PLACE_FREE_ROAD`). If it has no legal placement or no road pieces, the frame ends early. The seat may `SKIP` the remaining placements.
-- **Year of plenty**: take any 2 resources from the bank (same or different). If the bank lacks one, only what's available.
+- **Year of plenty**: request exactly 2 resources from the bank, the same or different. Receive the smaller of the requested count and available bank count for each resource. Missing requested cards are not replaced with other resource types.
 - **Monopoly**: name a resource. Every other seat must give _all_ of theirs. In P2P, the counts are revealed by each opponent (`reveal` pending per opponent with `max[r] > 0`; seats with `max[r] == 0` are auto-resolved as 0).
 - Victory-point cards: hidden VP. Public VP shows only visible points.
 
@@ -117,7 +117,10 @@ For roll `n`: for each land hex with token `n` **without the robber**, each adja
 - **Player trades** (only during the active seat's `main`; each trade must involve the active seat):
   - `OFFER_TRADE { give, want, to?: Seat[] }` from the active seat creates `offers[offerId]`. Opponents answer `RESPOND_TRADE { offerId, accept: boolean }`. The active seat finalises with `CONFIRM_TRADE { offerId, withSeat }`, where `withSeat` must have accepted. `CANCEL_TRADE { offerId }`.
   - Non-active seats may send `PROPOSE_TRADE { give, want }` to the active seat (a counter-offer). The active seat can `CONFIRM_TRADE` it directly.
+  - Each proposer has at most one open offer. A new offer replaces that proposer's previous offer with a fresh id and no responses; confirmations of the old id are rejected.
+  - The active seat may cancel any offer. A non-active seat may use `CANCEL_TRADE` to remove its own counter-offer or withdraw its acceptance of the active seat's offer. Withdrawal removes that acceptance and records a decline. Other seats cannot cancel an offer they do not own or have not accepted.
   - During `main`, each other seat has optional player pendings for permitted proposals and responses. The active seat can continue or end its turn without waiting for them. Legal-command generation and timeout handling must include those pending choices.
+  - An unanswered trade response uses the configured `mainSec` deadline. A pending that only permits optional proposals or withdrawals has no deadline.
   - Validation: both sides non-empty; no resource on both sides; the affordability check (bounds) is repeated at _confirm_ time for both parties.
   - Delete all open offers at `END_TURN`. When a hand change makes an offer unaffordable, mark it invalid instead of deleting it, so the UI can show why.
   - Option `playerTrades: boolean` (default true).
@@ -145,8 +148,10 @@ For roll `n`: for each land hex with token `n` **without the robber**, each adja
 
 ### Timeout auto-actions (`TIMEOUT { seat, phase }` system input)
 
+The road-building interrupt uses `mainSec` for its deadline, including when the card was played before rolling. Robber movement and victim selection use `robberSec`.
+
 - `preRoll` → roll.
-- `discard` → discard a deterministic choice: the most plentiful resources first, ties broken by canonical resource order. In P2P the seat's own client computes this from its private hand if online. If the seat is offline, discards are resolved through escrow/bot takeover (stage 10). Until then the game waits.
+- `discard` → discard a deterministic choice: sort resource piles once by their initial counts, largest first, with ties broken by canonical resource order; take from each pile until the required count is reached. Do not re-sort after each card. In P2P the seat's own client computes this from its private hand if online. If the seat is offline, discards are resolved through escrow/bot takeover (stage 10). Until then the game waits. A required discard of zero is resolved without a player input, including a one-card hand with `discardLimit: 0`.
 - `moveRobber` → the first legal hex in canonical id order that doesn't touch the active seat (else the first legal hex).
 - `steal` → the first eligible victim by seat order.
 - `main` / `roadBuilding` → end the frame / end the turn.

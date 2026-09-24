@@ -79,6 +79,7 @@ export interface CommandHandler {
     before: GameState,
     input: CommandInput,
     data: PrivateInputData | undefined,
+    ctx: HandlerContext,
   ): Result<PrivateState>;
 }
 
@@ -91,6 +92,7 @@ export interface SystemInputHandler {
     before: GameState,
     input: SystemInput,
     data: PrivateInputData | undefined,
+    ctx: HandlerContext,
   ): Result<PrivateState>;
 }
 
@@ -135,6 +137,8 @@ export interface GameModule<Ext = unknown, PExt = unknown> {
   };
   victoryPoints?(state: GameState, seat: Seat, priv?: PrivateState): VpContribution[];
   invariants?(state: GameState): string[];
+  /** Omniscient checks that require all private states; never used by public replay. */
+  privateInvariants?(state: GameState, privates: ReadonlyMap<Seat, PrivateState>): string[];
 }
 
 export interface RegisteredHandler<T> {

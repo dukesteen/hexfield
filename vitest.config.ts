@@ -25,7 +25,13 @@ export default defineConfig({
         '**/{__tests__,test,tests}/**',
         'apps/web/src/routeTree.gen.ts',
       ],
-      thresholds: { lines: 0, branches: 0, functions: 0, statements: 0 },
+      thresholds: {
+        lines: 0,
+        branches: 0,
+        functions: 0,
+        statements: 0,
+        'packages/engine/src/**': { lines: 90, branches: 85 },
+      },
     },
   },
 });

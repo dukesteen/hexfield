@@ -118,6 +118,7 @@ function sortedMembers<K, V extends string>(members: Map<K, Set<V>>, key: K): V[
 
 function indexOfIds(ids: readonly string[]): Record<string, number> {
   const indices: Record<string, number> = {};
+  Object.setPrototypeOf(indices, null);
   ids.forEach((id, index) => {
     indices[id] = index;
   });

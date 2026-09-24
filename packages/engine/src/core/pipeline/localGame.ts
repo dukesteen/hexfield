@@ -146,6 +146,8 @@ export class LocalGame {
     try {
       const initialBounds = checkTrueHands(state, privates);
       if (!initialBounds.ok) return initialBounds;
+      const initialPrivate = this.engine.checkPrivateInvariants(state, privates);
+      if (initialPrivate.length) return failure('private-invariant', initialPrivate.join('; '));
       const applyOne = (
         input: Input,
         privateData?: Partial<Record<Seat, PrivateInputData>>,
@@ -169,6 +171,12 @@ export class LocalGame {
         }
         const checked = checkTrueHands(applied.value.state, nextPrivates);
         if (!checked.ok) return checked;
+        const privateViolations = this.engine.checkPrivateInvariants(
+          applied.value.state,
+          nextPrivates,
+        );
+        if (privateViolations.length)
+          return failure('private-invariant', privateViolations.join('; '));
         state = freezeTree(applied.value.state);
         privates = nextPrivates;
         inputs.push(freezeTree(cloneJson(input)));

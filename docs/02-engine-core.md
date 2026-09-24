@@ -239,6 +239,7 @@ interface GameModule<Ext = unknown, PExt = unknown> {
   hooks?: Partial<Hooks>; // see below
   victoryPoints?(state, seat, priv?): VpContribution[];
   invariants?(state): string[]; // returns violations
+  privateInvariants?(state, privates: ReadonlyMap<Seat, PrivateState>): string[]; // local/audit checks
 }
 ```
 
@@ -252,6 +253,10 @@ Hooks are ordered calls (in module dependency order, then by id) at defined exte
 - `onTurnStart / onTurnEnd`
 - `robberTargets(state, seat, hex, targets) → targets`
 - `handLimit(state, seat, limit) → limit`
+
+Public and private handler callbacks receive the same `HandlerContext`, including this hook pipeline. The `computeProduction` accumulator describes demand before bank shortages are applied, so private updates can use the same hook-adjusted payments as public state.
+
+The engine dispatches module private invariants in registry order. `LocalGame` checks them after each input, alongside each hand's public bounds. The base module uses this to verify resource conservation across the bank and exact hands without coupling the core to the base bank size.
 
 Implement the registry, dependency topological sort, conflict detection, command-type uniqueness, and the dispatcher that routes inputs to handlers based on the top phase frame. Test it with a tiny `test-counter` module (commands `INC`/`END`, a `random` pending) that lives only in tests.
 

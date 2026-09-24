@@ -70,3 +70,32 @@ Record decisions here as they are made. Keep earlier entries.
 - Alternatives: Retry the source after rolling back, or clone the whole state and log on every simulation access.
 - Reason: An external source may already have consumed a secret deck item when it fails. Retrying would silently change its outcome. Borrowed views avoid repeated copies in simulations while retaining the engine's immutable-state contract.
 - Consultation: A read-only `claude -p` stage review identified non-JSON inputs accepted before log encoding, uncaught automatic-source errors, invariant checks that threw on missing phases, registration edge cases and the single-kind bounds convergence bug. Focused regressions reproduced and fixed these cases. The review also prompted a guard against rule handlers importing RNG through setup reexports. Atomic rollback remains deliberate; the failed batch is never retried. Local committed values are frozen with already-frozen shared branches skipped, and log/event getters copy their arrays. The codec accepts integer values as documented; engine state uses the stricter safe-integer range.
+
+## 2026-09-24: Base card shortages and deterministic dice reset
+
+- Stage: 03.
+- Decision: A year-of-plenty command requests exactly two cards and receives the available portion of each requested resource. It does not substitute other types. This pins the project specification's partial-shortage wording, including when unrequested resources remain available.
+- Alternatives: Require two available cards whenever the bank's total allows it, or reject any request the bank cannot fill completely.
+- Reason: The plan explicitly allows partial fulfillment when a selected resource is unavailable. The [published base-game almanac](https://www.catan.com/sites/default/files/2024-01/Almanac%20CATAN-3D.pdf) describes choosing two resources from supply; the partial-request behavior here is our interpretation of this project's specification, not a claim about that publication.
+- Decision: Balanced dice reset to all 36 ordered combinations when the next roll is requested and six or fewer combinations remain. Each external random answer selects uniformly among remaining combinations.
+- Reason: This fixes the reset point in the input log and keeps all live randomness outside the engine.
+- Decision: Test the literal figure-eight trail on an abstract graph. Real board fixtures retain their maximum vertex degree of three.
+- Reason: Two edge-disjoint loops sharing one vertex require degree four. The abstract fixture tests the required trail behavior without changing hex geometry.
+- Decision: Pass `HandlerContext` as the final private-handler callback argument, while keeping the external `Engine.applyPrivate` signature unchanged. Production hooks modify demand before bank shortage allocation.
+- Reason: Public and private updates must use identical hook-adjusted costs and production. Without the hook context, a private handler could silently calculate different resource changes.
+- Decision: Add ordered module private-invariant callbacks and invoke them from `LocalGame` after each input. Base rules check the bank plus exact hands against the initial 19 cards of each resource.
+- Reason: Individual hands can fit their public bounds even when a hidden transfer incorrectly changes resource composition. A private conservation check detects that error while keeping the core independent of base-game quantities.
+- Consultation: A read-only `claude -p` review of longest-road search and award transfer found no incorrect result for a legal base-game position. We retained exhaustive edge-unique traversal, allowed repeated vertices and blocked passage through opponent buildings. Tests cover the abstract figure-eight, real-board loops and cuts, holder transfers after cuts, and a 15-road three-hex graph whose longest trail has 14 edges. Geometry is cached by its immutable hex-array identity, outside public state.
+
+## 2026-09-24 — Stage 03: road-building deadline
+
+- Decision: The road-building card interrupt uses `mainSec`, including when played before rolling. Robber movement and victim selection use `robberSec`.
+- Reason: The four timer settings did not specify the building interrupt. Reusing the action timer gives building decisions the configured main-action duration without adding an option.
+
+## 2026-09-24 — Stage 03: trade lifetime and timeout clarifications
+
+- Decision: Keep at most one open offer per proposer. A new offer replaces that proposer's previous offer with a new id and no responses. The active seat can cancel any offer; another seat can cancel its own counter-offer or withdraw its acceptance of an active-seat offer, recording a decline. An actual unanswered trade response has a `mainSec` deadline; optional proposals and withdrawals do not.
+- Reason: Repeated proposals otherwise grew shared state without limit, and a responder could remain committed to an offer after deciding to withdraw. Fresh ids ensure an old acceptance cannot authorize a replacement offer.
+- Decision: Resolve a zero-card discard automatically. Timeout discards sort piles once by initial size, then drain each pile as needed, breaking ties in canonical resource order. They do not rebalance after each removed card.
+- Reason: The zero discard needs no decision, and the timeout wording admitted two interpretations. These choices make the input sequence and the client's private-hand calculation unambiguous.
+- Consultation: The read-only Stage 03 review found no additional high-severity defect after the timeout and public/private dice fixes. Its trade lifetime, withdrawal and missing response-deadline findings were reproduced before fixes. It also confirmed the legal-command omission for hidden victory claims during interrupts, which the concurrent legal-action review had already found. The zero-discard and whole-pile timeout clarifications were adopted with regression tests.

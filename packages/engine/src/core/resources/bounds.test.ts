@@ -5,6 +5,7 @@ import {
   canAfford,
   checkBounds,
   createResourceBounds,
+  exactResourceBounds,
   gainHidden,
   gainKnown,
   loseHidden,
@@ -41,6 +42,11 @@ function resourceAt(index: number): Resource {
 function unwrap<T>(result: Result<T>): T {
   if (!result.ok) throw new Error(result.error.message);
   return result.value;
+}
+
+function normalizeUnknown(value: unknown): Result<ResourceBounds> {
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Exercise malformed runtime inputs.
+  return normalizeBounds(value as ResourceBounds);
 }
 
 function coveredByBounds(hand: readonly number[], bounds: ResourceBounds): boolean {
@@ -154,6 +160,125 @@ describe('resource counts and bounds', () => {
     expect(validateCounts({ ...countsFromTuple([0, 0, 0, 0, 0]), extra: 1 }, RESOURCES).ok).toBe(
       false,
     );
+    expect(validateCounts({}, [])).toMatchObject({
+      ok: false,
+      error: { code: 'invalid-count-kinds' },
+    });
+    expect(validateCounts({ only: 0 }, ['only', 'only'])).toMatchObject({
+      ok: false,
+      error: { code: 'invalid-count-kinds' },
+    });
+    expect(validateCounts({ only: Number.MAX_SAFE_INTEGER + 1 }, ['only']).ok).toBe(false);
+    expect(validateCounts({ only: 0.5 }, ['only']).ok).toBe(false);
+    const symbolKeyed = { only: 0, [Symbol('extra')]: 0 };
+    expect(validateCounts(symbolKeyed, ['only']).ok).toBe(false);
+    const accessor = Object.defineProperty({}, 'only', { enumerable: true, get: () => 0 });
+    expect(validateCounts(accessor, ['only']).ok).toBe(false);
+    const hidden = Object.defineProperty({}, 'only', { value: 0, enumerable: false });
+    expect(validateCounts(hidden, ['only']).ok).toBe(false);
+    expect(validateCounts([], ['only']).ok).toBe(false);
+    expect(
+      validateCounts(
+        new (class CustomMap {
+          readonly extra = 0;
+        })(),
+        ['only'],
+      ).ok,
+    ).toBe(false);
+    const nullPrototype = Object.setPrototypeOf({ only: 0 }, null);
+    expect(validateCounts(nullPrototype, ['only']).ok).toBe(true);
+    const customPrototype = Object.setPrototypeOf({ only: 0 }, {});
+    expect(validateCounts(customPrototype, ['only']).ok).toBe(false);
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Deliberately malformed runtime kind list.
+    expect(validateCounts({ brick: 0, 1: 0 }, ['brick', 1] as unknown as string[])).toMatchObject({
+      ok: false,
+      error: { code: 'invalid-count-kinds' },
+    });
+    expect(addCounts({ a: -1 }, { a: 0 }, ['a'])).toMatchObject({
+      ok: false,
+      error: { code: 'invalid-count' },
+    });
+    expect(addCounts({ a: 0 }, { a: -1 }, ['a'])).toMatchObject({
+      ok: false,
+      error: { code: 'invalid-count' },
+    });
+    expect(subtractCounts({ a: -1 }, { a: 0 }, ['a'])).toMatchObject({
+      ok: false,
+      error: { code: 'invalid-count' },
+    });
+    expect(subtractCounts({ a: 0 }, { a: -1 }, ['a'])).toMatchObject({
+      ok: false,
+      error: { code: 'invalid-count' },
+    });
+  });
+
+  test('rejects unsafe count arithmetic and negative subtraction', () => {
+    const kinds = ['a', 'b'] as const;
+    expect(sumCounts({ a: Number.MAX_SAFE_INTEGER, b: 1 }, kinds)).toMatchObject({
+      ok: false,
+      error: { code: 'count-overflow' },
+    });
+    expect(addCounts({ a: Number.MAX_SAFE_INTEGER, b: 0 }, { a: 1, b: 0 }, kinds)).toMatchObject({
+      ok: false,
+      error: { code: 'count-overflow' },
+    });
+    expect(subtractCounts({ a: 1, b: 0 }, { a: 2, b: 0 }, kinds)).toMatchObject({
+      ok: false,
+      error: { code: 'negative-count' },
+    });
+  });
+
+  test('rejects malformed and non-feasible bounds at operation boundaries', () => {
+    const zero = countsFromTuple([0, 0, 0, 0, 0]);
+    expect(normalizeBounds({ total: -1, min: zero, max: zero })).toMatchObject({
+      ok: false,
+      error: { code: 'invalid-bounds-total' },
+    });
+    const maxWithExtra = Object.assign({}, zero, { extra: 0 });
+    expect(normalizeBounds({ total: 0, min: zero, max: maxWithExtra })).toMatchObject({
+      ok: false,
+      error: { code: 'invalid-count-keys' },
+    });
+    expect(normalizeBounds({ total: 0, min: { ...zero, brick: 1 }, max: zero })).toMatchObject({
+      ok: false,
+      error: { code: 'infeasible-bounds' },
+    });
+    expect(createResourceBounds(Number.MAX_SAFE_INTEGER, zero, zero)).toMatchObject({
+      ok: false,
+      error: { code: 'infeasible-bounds' },
+    });
+    expect(normalizeUnknown(null)).toMatchObject({
+      ok: false,
+      error: { code: 'invalid-bounds' },
+    });
+    expect(normalizeUnknown([])).toMatchObject({ ok: false, error: { code: 'invalid-bounds' } });
+    expect(
+      normalizeUnknown(
+        new (class CustomBounds {
+          readonly extra = 0;
+        })(),
+      ),
+    ).toMatchObject({
+      ok: false,
+      error: { code: 'invalid-bounds' },
+    });
+    expect(normalizeUnknown({ total: 0, min: zero, max: zero, extra: true })).toMatchObject({
+      ok: false,
+      error: { code: 'invalid-bounds' },
+    });
+    const symbolKeyedBounds = { total: 0, min: zero, max: zero, [Symbol('extra')]: true };
+    expect(normalizeUnknown(symbolKeyedBounds)).toMatchObject({
+      ok: false,
+      error: { code: 'invalid-bounds' },
+    });
+    const accessorBounds = Object.defineProperty({ min: zero, max: zero }, 'total', {
+      enumerable: true,
+      get: () => 0,
+    });
+    expect(normalizeUnknown(accessorBounds)).toMatchObject({
+      ok: false,
+      error: { code: 'invalid-bounds' },
+    });
   });
 
   test('returns typed failures for illegal bounds operations', () => {
@@ -161,13 +286,78 @@ describe('resource counts and bounds', () => {
       createResourceBounds(2, countsFromTuple([1, 0, 0, 0, 1]), countsFromTuple([1, 0, 0, 0, 1])),
     );
     expect(gainHidden(bounds, -1).ok).toBe(false);
+    expect(gainKnown(bounds, { ...countsFromTuple([0, 0, 0, 0, 0]), ore: -1 }).ok).toBe(false);
     expect(loseHidden(bounds, 3).ok).toBe(false);
+    expect(loseHidden(bounds, -1).ok).toBe(false);
     expect(loseKnown(bounds, countsFromTuple([0, 1, 0, 0, 0])).ok).toBe(false);
     expect(revealExact(bounds, 'ore', 0).ok).toBe(false);
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Exercise the runtime unknown-kind check.
+    expect(revealExact(bounds, 'unknown' as Resource, 0).ok).toBe(false);
     expect(
       createResourceBounds(1, countsFromTuple([1, 1, 0, 0, 0]), countsFromTuple([1, 1, 0, 0, 0]))
         .ok,
     ).toBe(false);
+  });
+
+  test('rejects unsafe totals and invalid affordability costs', () => {
+    const huge = createResourceBounds(
+      Number.MAX_SAFE_INTEGER,
+      countsFromTuple([0, 0, 0, 0, 0]),
+      countsFromTuple([
+        Number.MAX_SAFE_INTEGER,
+        Number.MAX_SAFE_INTEGER,
+        Number.MAX_SAFE_INTEGER,
+        Number.MAX_SAFE_INTEGER,
+        Number.MAX_SAFE_INTEGER,
+      ]),
+    );
+    expect(huge.ok).toBe(false);
+    const exact = unwrap(
+      createResourceBounds(1, countsFromTuple([1, 0, 0, 0, 0]), countsFromTuple([1, 0, 0, 0, 0])),
+    );
+    expect(canAfford(exact, { ...countsFromTuple([0, 0, 0, 0, 0]), brick: -1 })).toMatchObject({
+      ok: false,
+      error: { code: 'invalid-count' },
+    });
+    expect(
+      canAfford(
+        { total: -1, min: countsFromTuple([0, 0, 0, 0, 0]), max: countsFromTuple([0, 0, 0, 0, 0]) },
+        countsFromTuple([0, 0, 0, 0, 0]),
+      ),
+    ).toMatchObject({
+      ok: false,
+      error: { code: 'invalid-bounds-total' },
+    });
+    const exactLarge = unwrap(
+      exactResourceBounds({
+        brick: Number.MAX_SAFE_INTEGER,
+        lumber: 0,
+        wool: 0,
+        grain: 0,
+        ore: 0,
+      }),
+    );
+    expect(gainHidden(exactLarge, 1)).toMatchObject({
+      ok: false,
+      error: { code: 'count-overflow' },
+    });
+    expect(gainKnown(exactLarge, countsFromTuple([0, 1, 0, 0, 0]))).toMatchObject({
+      ok: false,
+      error: { code: 'count-overflow' },
+    });
+    expect(
+      exactResourceBounds({
+        brick: Number.MAX_SAFE_INTEGER,
+        lumber: 1,
+        wool: 0,
+        grain: 0,
+        ore: 0,
+      }),
+    ).toMatchObject({ ok: false, error: { code: 'count-overflow' } });
+    expect(gainHidden(exact, 0.5)).toMatchObject({
+      ok: false,
+      error: { code: 'invalid-hidden-count' },
+    });
   });
 
   test('normalizes one-kind bounds after tightening its maximum', () => {

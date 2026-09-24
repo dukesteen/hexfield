@@ -150,6 +150,15 @@ describe('pointy-top board geometry', () => {
     expect(edgeId(center, 'SE')).toBe(edgeId({ q: 0, r: 1 }, 'NW'));
   });
 
+  test('index records do not inherit prototype names as board IDs', () => {
+    const graph = buildBoardGraph([{ q: 0, r: 0 }]);
+    for (const id of ['constructor', 'toString', '__proto__']) {
+      expect(graph.hexIndex[id]).toBeUndefined();
+      expect(graph.vertexIndex[id]).toBeUndefined();
+      expect(graph.edgeIndex[id]).toBeUndefined();
+    }
+  });
+
   test('random connected sets have consistent incidence and symmetric neighbors', () => {
     assert(
       property(array(integer({ min: 0, max: 5 }), { maxLength: 40 }), (steps) => {
