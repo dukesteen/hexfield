@@ -1,0 +1,44 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    "noEmit": true,
+    "types": ["vite/client"],
+    "allowImportingTsExtensions": true,
+    "paths": {
+      "@cp2p/engine/geometry": ["../../packages/engine/src/geometry.ts"],
+      "@cp2p/*": ["../../packages/*/src/index.ts"]
+    }
+  },
+  "include": ["src/**/*.ts", "src/**/*.tsx", "vite.config.ts"],
+  "references": [
+    {
+      "path": "../../packages/engine"
+    },
+    {
+      "path": "../../packages/codec"
+    },
+    {
+      "path": "../../packages/crypto"
+    },
+    {
+      "path": "../../packages/protocol"
+    },
+    {
+      "path": "../../packages/p2p"
+    },
+    {
+      "path": "../../packages/storage"
+    },
+    {
+      "path": "../../packages/renderer"
+    },
+    {
+      "path": "../../packages/bots"
+    },
+    {
+      "path": "../../packages/maps"
+    }
+  ]
+}

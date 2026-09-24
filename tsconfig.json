@@ -1,0 +1,17 @@
+{
+  "files": [],
+  "references": [
+    { "path": "./apps/web" },
+    { "path": "./apps/signaling" },
+    { "path": "./packages/engine" },
+    { "path": "./packages/codec" },
+    { "path": "./packages/crypto" },
+    { "path": "./packages/protocol" },
+    { "path": "./packages/p2p" },
+    { "path": "./packages/storage" },
+    { "path": "./packages/renderer" },
+    { "path": "./packages/bots" },
+    { "path": "./packages/maps" },
+    { "path": "./tools/sim" }
+  ]
+}

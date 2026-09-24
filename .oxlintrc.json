@@ -1,0 +1,59 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "categories": {
+    "correctness": "error",
+    "suspicious": "error",
+    "perf": "error"
+  },
+  "plugins": ["eslint", "typescript", "unicorn", "import", "promise", "vitest"],
+  "rules": {
+    "typescript/no-explicit-any": "error",
+    "typescript/no-non-null-assertion": "warn",
+    "typescript/switch-exhaustiveness-check": "error",
+    "typescript/no-floating-promises": "error",
+    "no-console": "warn",
+    "eqeqeq": "error",
+    "import/no-cycle": "error"
+  },
+  "overrides": [
+    {
+      "files": ["apps/web/**"],
+      "plugins": [
+        "eslint",
+        "typescript",
+        "unicorn",
+        "import",
+        "promise",
+        "vitest",
+        "react",
+        "jsx-a11y"
+      ],
+      "rules": {
+        "import/no-unassigned-import": "off",
+        "react-hooks/rules-of-hooks": "error",
+        "react-hooks/exhaustive-deps": "error"
+      }
+    },
+    {
+      "files": ["tools/**"],
+      "rules": { "no-console": "off" }
+    },
+    {
+      "files": ["packages/engine/**"],
+      "rules": {
+        "no-console": "error",
+        "no-restricted-globals": [
+          "error",
+          "Date",
+          "setTimeout",
+          "setInterval",
+          "crypto",
+          "performance",
+          "window",
+          "document",
+          "process"
+        ]
+      }
+    }
+  ]
+}

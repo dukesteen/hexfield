@@ -1,0 +1,21 @@
+{
+  "name": "@cp2p/storage",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "@cp2p/source": "./src/index.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "dependencies": {
+    "@cp2p/protocol": "workspace:*",
+    "idb": "^8.0.0"
+  }
+}
