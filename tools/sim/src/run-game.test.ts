@@ -91,7 +91,8 @@ describe('simulation runner', () => {
     }
     expect(states).toBeGreaterThanOrEqual(2_000);
     expect(actions).toBeGreaterThan(2_000);
-  });
+    // Coverage instrumentation exceeds Vitest's default timeout on this exhaustive check.
+  }, 15_000);
 
   test('discrete placement enumeration matches brute-force validation across live states', () => {
     let checked = 0;

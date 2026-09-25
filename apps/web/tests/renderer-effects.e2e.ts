@@ -66,23 +66,6 @@ async function expectHarborFit(
   expect(allFit).toBe(true);
 }
 
-function parseDiagnostics(text: string): RendererDiagnostics {
-  const value: unknown = JSON.parse(text);
-  if (typeof value !== 'object' || value === null) throw new Error('Invalid renderer diagnostics');
-  const readCounter = (key: keyof RendererDiagnostics): number => {
-    const counter: unknown = Reflect.get(value, key);
-    if (typeof counter !== 'number' || !Number.isSafeInteger(counter) || counter < 0)
-      throw new Error(`Invalid renderer diagnostic ${key}`);
-    return counter;
-  };
-  return {
-    renderedFrames: readCounter('renderedFrames'),
-    rebuiltLayers: readCounter('rebuiltLayers'),
-    activeEffects: readCounter('activeEffects'),
-    queuedDisposals: readCounter('queuedDisposals'),
-  };
-}
-
 test('board effects animate, skip, respect reduced motion, and release retired objects', async ({
   page,
 }, testInfo) => {
@@ -165,9 +148,13 @@ test('board effects animate, skip, respect reduced motion, and release retired o
   await phonePage.getByRole('button', { name: 'Skip animations' }).click();
   await phonePage.close();
 
-  const diagnostics = page.getByTestId('renderer-diagnostics');
-  const readDiagnostics = async (): Promise<RendererDiagnostics> =>
-    parseDiagnostics(await diagnostics.innerText());
+  const readDiagnostics = async (): Promise<RendererDiagnostics> => {
+    const value = await page.evaluate(
+      () => window['__cp2pBoard']?.renderer.getDiagnostics() ?? null,
+    );
+    if (!value) throw new Error('Board renderer diagnostics are unavailable');
+    return value;
+  };
   const expectNoRetiredObjects = async (): Promise<void> => {
     await expect
       .poll(async () => {

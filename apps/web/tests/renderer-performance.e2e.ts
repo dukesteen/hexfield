@@ -2,7 +2,6 @@
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { writeFile } from 'node:fs/promises';
-import { fileURLToPath } from 'node:url';
 import type { BoardRenderer } from '@cp2p/renderer';
 
 interface FrameSampler {
@@ -117,8 +116,7 @@ test('mobile board gestures remain bounded under a four-times CPU throttle', asy
     expect(errors).toEqual([]);
     const report = JSON.stringify(
       {
-        environment:
-          'Chromium headless on macOS arm64, mobile viewport 390x844, 4x CDP CPU throttle',
+        environment: `Chromium headless on ${process.platform} ${process.arch}, mobile viewport 390x844, 4x CDP CPU throttle`,
         limitation: 'This is a controlled proxy, not a physical mid-range phone measurement.',
         drag: frameSummary(dragFrames),
         zoom: frameSummary(zoomFrames),
@@ -132,15 +130,7 @@ test('mobile board gestures remain bounded under a four-times CPU throttle', asy
       body: report,
       contentType: 'application/json',
     });
-    await writeFile(
-      fileURLToPath(
-        new URL(
-          '../../../docs/verification/stage05/renderer-performance-proxy.json',
-          import.meta.url,
-        ),
-      ),
-      report,
-    );
+    await writeFile(testInfo.outputPath('renderer-performance-proxy.json'), report);
   } finally {
     await cdp.send('Emulation.setCPUThrottlingRate', { rate: 1 });
     await context.close();

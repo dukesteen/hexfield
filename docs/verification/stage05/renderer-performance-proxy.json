@@ -1,0 +1,30 @@
+{
+  "environment": "Chromium headless on macOS arm64, mobile viewport 390x844, 4x CDP CPU throttle",
+  "limitation": "This is a controlled proxy, not a physical mid-range phone measurement.",
+  "drag": {
+    "count": 273,
+    "meanIntervalMs": 16.78791208791209,
+    "medianIntervalMs": 16.699999999999818,
+    "p95IntervalMs": 16.700000000000728,
+    "meanFps": 59.56666884859592
+  },
+  "zoom": {
+    "count": 88,
+    "meanIntervalMs": 16.854545454545462,
+    "medianIntervalMs": 16.699999999999818,
+    "p95IntervalMs": 16.800000000000182,
+    "meanFps": 59.33117583603018
+  },
+  "before": {
+    "renderedFrames": 1,
+    "rebuiltLayers": 9,
+    "activeEffects": 0,
+    "queuedDisposals": 0
+  },
+  "after": {
+    "renderedFrames": 129,
+    "rebuiltLayers": 9,
+    "activeEffects": 0,
+    "queuedDisposals": 0
+  }
+}

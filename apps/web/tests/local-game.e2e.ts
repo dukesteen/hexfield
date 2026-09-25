@@ -1,6 +1,6 @@
 /* eslint-disable no-await-in-loop -- Each browser action depends on the preceding game state. */
 import { expect, test } from '@playwright/test';
-import type { Page, TestInfo } from '@playwright/test';
+import type { Locator, Page, TestInfo } from '@playwright/test';
 import { createHash } from 'node:crypto';
 import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join, relative, resolve } from 'node:path';
@@ -81,11 +81,31 @@ function watchBrowserErrors(page: Page): string[] {
 }
 
 async function capturePreview(page: Page, testInfo: TestInfo, name: string): Promise<void> {
-  const screenshot = await page.screenshot();
+  const screenshot = await page.screenshot({ animations: 'disabled' });
   await testInfo.attach(name, { body: screenshot, contentType: 'image/png' });
   const folder = join(repoRoot, 'reports/stage05');
   await mkdir(folder, { recursive: true });
   await writeFile(join(folder, `${name}.png`), screenshot);
+}
+
+async function expectSettledPrimaryColors(button: Locator): Promise<void> {
+  await expect(button).toBeEnabled();
+  await expect
+    .poll(() =>
+      button.evaluate((element) => {
+        const probe = document.createElement('span');
+        probe.style.backgroundColor = 'var(--accent)';
+        probe.style.color = 'var(--accent-text)';
+        document.body.append(probe);
+        const actual = getComputedStyle(element);
+        const target = getComputedStyle(probe);
+        const settled =
+          actual.backgroundColor === target.backgroundColor && actual.color === target.color;
+        probe.remove();
+        return settled;
+      }),
+    )
+    .toBe(true);
 }
 
 async function createGame(page: Page, options: NewGameOptions): Promise<void> {
@@ -178,7 +198,7 @@ async function revealIfCovered(page: Page, input: 'mouse' | 'touch' = 'mouse'): 
 async function openGameMenu(page: Page): Promise<void> {
   const menu = page.locator('.game-menu');
   if (!(await menu.evaluate((element) => element instanceof HTMLDetailsElement && element.open)))
-    await menu.locator('summary').click();
+    await menu.locator(':scope > summary').click();
 }
 
 test('four zero-delay bots finish a default ten-point game on the game screen', async ({
@@ -197,7 +217,7 @@ test('four zero-delay bots finish a default ten-point game on the game screen', 
       { timeout: 150_000 },
     )
     .not.toBeNull();
-  const gameOver = page.getByRole('region', { name: 'Game over' });
+  const gameOver = page.getByRole('dialog', { name: /Player \d+ wins/ });
   await expect(gameOver).toBeVisible();
   const winnerSeat = await page.evaluate(() => {
     const hook: DevHook | undefined = Reflect.get(window, '__cp2p');
@@ -223,7 +243,9 @@ test('leaving a rematch prompts from the new game and saves before navigation', 
   test.setTimeout(180_000);
   await createGame(page, { players: 4, humans: [] });
   const firstGameUrl = page.url();
-  await expect(page.getByRole('region', { name: 'Game over' })).toBeVisible({ timeout: 150_000 });
+  await expect(page.getByRole('dialog', { name: /Player \d+ wins/ })).toBeVisible({
+    timeout: 150_000,
+  });
   await page.getByRole('button', { name: 'Rematch' }).click();
   await expect(page).toHaveURL(/#\/local\/[^/]+$/);
   await expect.poll(() => page.url()).not.toBe(firstGameUrl);
@@ -242,6 +264,106 @@ test('leaving a rematch prompts from the new game and saves before navigation', 
   expect(pageErrors.get(page)).toEqual([]);
 });
 
+test('claimed VP cards appear once in fullscreen results, which reopen after dismissal and reload', async ({
+  browser,
+  browserName,
+}, testInfo) => {
+  test.skip(browserName !== 'chromium', 'Results layout is checked in Chromium');
+  for (const viewport of [
+    { width: 1280, height: 720 },
+    { width: 1024, height: 768 },
+    { width: 390, height: 844 },
+    { width: 844, height: 390 },
+  ]) {
+    const context = await browser.newContext({ viewport });
+    try {
+      const page = await context.newPage();
+      await page.emulateMedia({ colorScheme: 'dark' });
+      await openGoldenPrefix(page, 597, 'hidden-vp-win.replay.json');
+      const results = page.getByRole('dialog', { name: 'Player 1 wins' });
+      await expect(results).toBeVisible();
+      await expect(results.locator('.results-hero')).toContainText('10');
+      await expect(results.locator('.results-score-parts > div')).toContainText([
+        'Buildings6',
+        'Awards2',
+        'VP cards2',
+      ]);
+      await expect(results.locator('.results-standing').first()).toContainText('Player 1');
+      await expect(results.locator('.results-standing')).toHaveCount(4);
+      if (viewport.height >= 720) {
+        const body = await results.locator('.results-body').boundingBox();
+        const lastStanding = await results.locator('.results-standing').last().boundingBox();
+        if (!body || !lastStanding) throw new Error('Initial standings bounds missing');
+        expect(lastStanding.y + lastStanding.height).toBeLessThanOrEqual(body.y + body.height + 1);
+      }
+      await capturePreview(page, testInfo, `${viewport.width}-claimed-vp-results-initial`);
+      const stats = results.locator('.results-stats');
+      if (
+        !(await stats.evaluate((details) => details instanceof HTMLDetailsElement && details.open))
+      )
+        await stats.getByText('Game statistics').click();
+      await results.locator('.results-body').evaluate((body) => {
+        body.scrollTop = body.scrollHeight;
+      });
+      const bounds = await results.evaluate((dialog) => {
+        const body = dialog.querySelector('.results-body');
+        const footer = dialog.querySelector('.results-footer');
+        if (!body || !footer) throw new Error('Results regions missing');
+        const box = dialog.getBoundingClientRect();
+        const bodyBox = body.getBoundingClientRect();
+        const footerBox = footer.getBoundingClientRect();
+        return {
+          dialog: { left: box.left, top: box.top, right: box.right, bottom: box.bottom },
+          bodyBottom: bodyBox.bottom,
+          footerTop: footerBox.top,
+          footerBottom: footerBox.bottom,
+          buttons: [...footer.querySelectorAll('button')].map((button) => {
+            const rect = button.getBoundingClientRect();
+            return { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom };
+          }),
+        };
+      });
+      expect(bounds.dialog.left).toBeGreaterThanOrEqual(-1);
+      expect(bounds.dialog.top).toBeGreaterThanOrEqual(-1);
+      expect(bounds.dialog.right).toBeLessThanOrEqual(viewport.width + 1);
+      expect(bounds.dialog.bottom).toBeLessThanOrEqual(viewport.height + 1);
+      expect(bounds.bodyBottom).toBeLessThanOrEqual(bounds.footerTop + 1);
+      expect(bounds.footerBottom).toBeLessThanOrEqual(bounds.dialog.bottom + 1);
+      for (const button of bounds.buttons) {
+        expect(button.left).toBeGreaterThanOrEqual(bounds.dialog.left - 1);
+        expect(button.right).toBeLessThanOrEqual(bounds.dialog.right + 1);
+        expect(button.top).toBeGreaterThanOrEqual(bounds.footerTop - 1);
+        expect(button.bottom).toBeLessThanOrEqual(bounds.dialog.bottom + 1);
+      }
+      await capturePreview(page, testInfo, `${viewport.width}-claimed-vp-results-expanded`);
+
+      if (viewport.width === 1280) {
+        const downloadPromise = page.waitForEvent('download');
+        await results.getByRole('button', { name: 'Export replay JSON' }).click();
+        const download = await downloadPromise;
+        expect(download.suggestedFilename()).toMatch(/\.replay\.json$/);
+      }
+      await results.getByRole('button', { name: 'View board' }).click();
+      await expect(results).toBeHidden();
+      await expect(page.getByRole('region', { name: 'Game board' })).toBeVisible();
+      await expect(page.locator('.placement-confirmation')).toHaveCount(0);
+      await expect(page.locator('.board-offers button')).toHaveCount(0);
+      await page.locator('.finished-dock').getByRole('button', { name: 'Results' }).click();
+      await expect(results).toBeVisible();
+      await page.keyboard.press('Escape');
+      await expect(results).toBeHidden();
+      await openGameMenu(page);
+      await page.locator('.game-menu-panel').getByRole('button', { name: 'Results' }).click();
+      await expect(results).toBeVisible();
+      await page.reload();
+      await expect(results).toBeVisible();
+      expect(pageErrors.get(page)).toEqual([]);
+    } finally {
+      await context.close();
+    }
+  }
+});
+
 test('a replay-backed bank trade uses the visible multi-resource form', async ({
   page,
 }, testInfo) => {
@@ -249,7 +371,7 @@ test('a replay-backed bank trade uses the visible multi-resource form', async ({
   await page.emulateMedia({ colorScheme: 'dark' });
   await openGoldenPrefix(page, 102);
   const before = await observedRevision(page);
-  await page.getByRole('button', { name: 'Trade with bank' }).click();
+  await page.getByRole('button', { name: 'Bank trade' }).click();
   const dialog = page.getByRole('dialog', { name: 'Bank trade' });
   await expect(dialog).toBeVisible();
   await dialog.getByRole('button', { name: 'Add Brick to You give' }).click();
@@ -267,7 +389,7 @@ test('a replay-backed trade offer and named confirmations use visible controls',
   await page.emulateMedia({ colorScheme: 'dark' });
   await openGoldenPrefix(page, 22);
   const before = await observedRevision(page);
-  await page.getByRole('button', { name: 'Offer a trade' }).click();
+  await page.getByRole('button', { name: 'Offer trade' }).click();
   const dialog = page.getByRole('dialog', { name: 'Player trade' });
   await expect(dialog).toBeVisible();
   await dialog.getByRole('button', { name: 'Add Lumber to You give' }).click();
@@ -352,7 +474,7 @@ test('trade recipients remain above the modal footer at desktop and phone sizes'
     try {
       const page = await context.newPage();
       await openGoldenPrefix(page, 22);
-      await page.getByRole('button', { name: 'Offer a trade' }).click();
+      await page.getByRole('button', { name: 'Offer trade' }).click();
       const dialog = page.getByRole('dialog', { name: 'Player trade' });
       await dialog.getByRole('button', { name: 'Add Lumber to You give' }).click();
       await dialog.getByRole('button', { name: 'Add Ore to You get' }).click();
@@ -421,7 +543,7 @@ test('card picker keeps keyboard focus after removing the final card or clearing
 }) => {
   test.skip(test.info().project.name !== 'chromium', 'Card picker keyboard focus runs in Chromium');
   await openGoldenPrefix(page, 22);
-  await page.getByRole('button', { name: 'Offer a trade' }).click();
+  await page.getByRole('button', { name: 'Offer trade' }).click();
   const dialog = page.getByRole('dialog', { name: 'Player trade' });
   const addBrick = dialog.getByRole('button', { name: 'Add Brick to You get' });
   await addBrick.click();
@@ -440,41 +562,283 @@ test('card picker keeps keyboard focus after removing the final card or clearing
   await expect(addBrick).toBeFocused();
 });
 
-test('a replay-backed development card enters the visible robber flow', async ({ page }) => {
+test('a replay-backed development card enters the visible robber flow', async ({
+  browser,
+  page,
+}, testInfo) => {
   test.skip(test.info().project.name !== 'chromium', 'Development card flow runs in Chromium');
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.emulateMedia({ colorScheme: 'dark' });
   await openGoldenPrefix(page, 124);
-  const before = await observedRevision(page);
-  await page.getByRole('button', { name: 'Play Knight' }).click();
-  await expect.poll(() => observedRevision(page)).toBeGreaterThan(before);
-  const target = await page.evaluate(() => {
+  const before = await page.evaluate(() => {
     const hook: DevHook | undefined = Reflect.get(window, '__cp2p');
-    return hook?.diagnostics().actions?.placements.robber[0]?.id ?? null;
+    if (!hook) return null;
+    const seat = hook.session.getState().turn.activeSeat;
+    return {
+      revision: hook.diagnostics().revision,
+      hash: hook.diagnostics().hash,
+      slots: Object.keys(hook.session.getPrivate(seat)?.slots ?? {}).length,
+    };
   });
-  expect(target).not.toBeNull();
-  if (target) await chooseKeyboardPlacement(page, 'hex', target, before + 1);
+  expect(before).not.toBeNull();
+  if (!before) throw new Error('Knight fixture has no active game');
+  const action = page.locator('.action-dock').getByRole('button', { name: 'Play Knight' });
+  const knight = page
+    .locator('.hand-dock > .development-hand .development-card')
+    .filter({ hasText: 'Knight' });
+  const cardAction = knight.getByRole('button', { name: 'Knight', exact: true });
+  const confirmation = knight.getByRole('group', { name: 'Play Knight?' });
+  const assertIntentFits = async (screen: Page, card: Locator, name: string) => {
+    const bounds = await card.evaluate((element) => {
+      const art = element.querySelector('.development-card-art');
+      const image = art?.querySelector('img');
+      const label = element.querySelector('strong');
+      const hand = element.closest('.development-hand');
+      const controls = [...element.querySelectorAll('.knight-card-choice')];
+      if (!art || !image || !label || !hand || controls.length !== 2) return null;
+      const artRect = art.getBoundingClientRect();
+      const imageRect = image.getBoundingClientRect();
+      const cardRect = element.getBoundingClientRect();
+      const handRect = hand.getBoundingClientRect();
+      const labelRect = label.getBoundingClientRect();
+      return {
+        art: { left: artRect.left, right: artRect.right, top: artRect.top, bottom: artRect.bottom },
+        image: { left: imageRect.left, right: imageRect.right, top: imageRect.top },
+        hand: { left: handRect.left, right: handRect.right, top: handRect.top },
+        card: {
+          left: cardRect.left,
+          right: cardRect.right,
+          top: cardRect.top,
+          bottom: cardRect.bottom,
+        },
+        label: { top: labelRect.top, bottom: labelRect.bottom },
+        controls: controls.map((control) => {
+          const rect = control.getBoundingClientRect();
+          return { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom };
+        }),
+        viewportWidth: window.innerWidth,
+        viewportHeight: window.innerHeight,
+      };
+    });
+    await capturePreview(screen, testInfo, name);
+    if (!bounds) throw new Error('Knight art, name, or controls are missing');
+    expect(bounds.image.top, `${name} clips selected outline at hand top`).toBeGreaterThanOrEqual(
+      bounds.hand.top + 1,
+    );
+    expect(bounds.image.left, `${name} clips selected outline at hand edge`).toBeGreaterThanOrEqual(
+      bounds.hand.left + 1,
+    );
+    expect(bounds.image.right, `${name} clips selected outline at hand edge`).toBeLessThanOrEqual(
+      bounds.hand.right - 1,
+    );
+    expect(bounds.label.top, `${name} covers the card name`).toBeGreaterThanOrEqual(
+      Math.max(...bounds.controls.map((control) => control.bottom)) - 1,
+    );
+    expect(bounds.label.bottom, `${name} clips the card name`).toBeLessThanOrEqual(
+      bounds.viewportHeight,
+    );
+    for (const control of bounds.controls) {
+      expect(control.left, `${name} control leaves card`).toBeGreaterThanOrEqual(
+        bounds.card.left - 1,
+      );
+      expect(control.right, `${name} control leaves card`).toBeLessThanOrEqual(
+        bounds.card.right + 1,
+      );
+      expect(control.top, `${name} control leaves card`).toBeGreaterThanOrEqual(
+        bounds.card.top - 1,
+      );
+      expect(control.bottom, `${name} control leaves card`).toBeLessThanOrEqual(
+        bounds.card.bottom + 1,
+      );
+      expect(
+        (control.top + control.bottom) / 2,
+        `${name} control misses art bottom`,
+      ).toBeGreaterThanOrEqual(bounds.art.bottom - 20);
+      expect(
+        (control.top + control.bottom) / 2,
+        `${name} control misses art bottom`,
+      ).toBeLessThanOrEqual(bounds.art.bottom + 1);
+      expect(control.left).toBeGreaterThanOrEqual(0);
+      expect(control.right).toBeLessThanOrEqual(bounds.viewportWidth);
+      expect(control.bottom).toBeLessThanOrEqual(bounds.viewportHeight);
+    }
+  };
+  const assertUncommitted = async () => {
+    expect(await observedRevision(page)).toBe(before.revision);
+    const after = await page.evaluate(() => {
+      const hook: DevHook | undefined = Reflect.get(window, '__cp2p');
+      if (!hook) return null;
+      const seat = hook.session.getState().turn.activeSeat;
+      return {
+        hash: hook.diagnostics().hash,
+        slots: Object.keys(hook.session.getPrivate(seat)?.slots ?? {}).length,
+      };
+    });
+    expect(after).toEqual({ hash: before.hash, slots: before.slots });
+  };
+  await action.click();
+  await expect(confirmation).toBeVisible();
+  await assertIntentFits(page, knight, 'desktop-knight-intent');
+  await assertUncommitted();
+  await confirmation.getByRole('button', { name: 'Cancel Knight' }).click();
+  await expect(confirmation).toBeHidden();
+  await assertUncommitted();
+  await cardAction.click();
+  await expect(confirmation).toBeVisible();
+  await assertUncommitted();
+  await cardAction.click();
+  await expect(confirmation).toBeHidden();
+  await assertUncommitted();
+  await page.setViewportSize({ width: 1024, height: 768 });
+  await cardAction.focus();
+  await page.keyboard.press('Enter');
+  await expect(confirmation).toBeVisible();
+  await assertIntentFits(page, knight, 'compact-desktop-knight-intent');
+  await page.keyboard.press('Escape');
+  await expect(confirmation).toBeHidden();
+  await assertUncommitted();
+  await cardAction.focus();
+  await page.keyboard.press('Space');
+  await expect(confirmation).toBeVisible();
+  await assertUncommitted();
+  await confirmation.getByRole('button', { name: 'Cancel Knight' }).click();
+  await expect(confirmation).toBeHidden();
+  await assertUncommitted();
+  await action.click();
+  await action.click();
+  await expect(confirmation).toBeHidden();
+  await assertUncommitted();
+  await action.click();
+  await confirmation.getByRole('button', { name: 'Play Knight' }).click();
+  await expect.poll(() => observedRevision(page)).toBeGreaterThan(before.revision);
+  const afterPlay = await page.evaluate(() => {
+    const hook: DevHook | undefined = Reflect.get(window, '__cp2p');
+    if (!hook) return null;
+    const seat = hook.session.getState().turn.activeSeat;
+    return Object.keys(hook.session.getPrivate(seat)?.slots ?? {}).length;
+  });
+  expect(afterPlay).toBe(before.slots - 1);
+  const target = await readPresent(page, 'Robber target', () =>
+    page.evaluate(() => {
+      const hook: DevHook | undefined = Reflect.get(window, '__cp2p');
+      return hook?.diagnostics().actions?.placements.robber[0]?.id ?? null;
+    }),
+  );
+  await chooseKeyboardPlacement(page, 'hex', target, before.revision + 1);
   expect(pageErrors.get(page)).toEqual([]);
+
+  const mobile = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    isMobile: true,
+    hasTouch: true,
+  });
+  try {
+    const phone = await mobile.newPage();
+    await openGoldenPrefix(phone, 124);
+    const phoneAction = phone.locator('.action-dock').getByRole('button', { name: 'Play Knight' });
+    const phoneDialog = phone.getByRole('dialog', { name: 'Development cards: 1' });
+    const phoneKnight = phoneDialog.locator('.development-card').filter({ hasText: 'Knight' });
+    const phoneConfirmation = phoneKnight.getByRole('group', { name: 'Play Knight?' });
+    const initial = await phone.evaluate(() => {
+      const hook: DevHook | undefined = Reflect.get(window, '__cp2p');
+      return hook ? { revision: hook.diagnostics().revision, hash: hook.diagnostics().hash } : null;
+    });
+    if (!initial) throw new Error('Phone Knight fixture has no diagnostics');
+    const assertPhoneUncommitted = async () => {
+      expect(await observedRevision(phone)).toBe(initial.revision);
+      expect(
+        await phone.evaluate(() => {
+          const hook: DevHook | undefined = Reflect.get(window, '__cp2p');
+          return hook?.diagnostics().hash ?? null;
+        }),
+      ).toBe(initial.hash);
+    };
+    await phoneAction.tap();
+    await expect(phoneDialog).toBeVisible();
+    await expect(phoneConfirmation).toBeVisible();
+    await assertIntentFits(phone, phoneKnight, 'phone-knight-intent');
+    await assertPhoneUncommitted();
+    await phoneConfirmation.getByRole('button', { name: 'Cancel Knight' }).tap();
+    await expect(phoneDialog).toBeHidden();
+    await assertPhoneUncommitted();
+    await phoneAction.tap();
+    await expect(phoneDialog).toBeVisible();
+    await phone.keyboard.press('Escape');
+    await expect(phoneDialog).toBeHidden();
+    await assertPhoneUncommitted();
+    await phoneAction.tap();
+    await expect(phoneDialog).toBeVisible();
+    await phoneDialog.getByRole('button', { name: 'Close cards' }).tap();
+    await expect(phoneDialog).toBeHidden();
+    await assertPhoneUncommitted();
+    await phone.getByRole('button', { name: 'Development cards: 1' }).tap();
+    await phoneKnight.getByRole('button', { name: 'Knight', exact: true }).tap();
+    await expect(phoneConfirmation).toBeVisible();
+    await assertPhoneUncommitted();
+    await phoneKnight.getByRole('button', { name: 'Knight', exact: true }).tap();
+    await expect(phoneConfirmation).toBeHidden();
+    await assertPhoneUncommitted();
+    await phoneDialog.getByRole('button', { name: 'Close cards' }).tap();
+    await expect(phoneDialog).toBeHidden();
+    await phoneAction.tap();
+    await phoneConfirmation.getByRole('button', { name: 'Play Knight' }).tap();
+    await expect.poll(() => observedRevision(phone)).toBeGreaterThan(initial.revision);
+    expect(pageErrors.get(phone)).toEqual([]);
+  } finally {
+    await mobile.close();
+  }
 });
 
-test('replay-backed Year of Plenty and Monopoly use the visible card dialogs', async ({ page }) => {
+test('replay-backed Year of Plenty and Monopoly use the visible card dialogs', async ({
+  page,
+}, testInfo) => {
   test.skip(test.info().project.name !== 'chromium', 'Development card flow runs in Chromium');
   await openGoldenPrefix(page, 289, 'all-development-card-types.replay.json');
   const before = await observedRevision(page);
   await page.getByRole('button', { name: 'Play Year of plenty' }).click();
   const plenty = page.getByRole('dialog', { name: 'Year of Plenty' });
   await expect(plenty).toBeVisible();
-  await plenty.getByRole('combobox', { name: 'Second resource' }).selectOption('grain');
+  const addGrain = plenty.getByRole('button', { name: 'Add Grain to Resources to take' });
+  await addGrain.click();
+  await addGrain.click();
+  await expect(plenty.locator('.trade-card-add img')).toHaveCount(5);
+  expect(await observedRevision(page)).toBe(before);
+  await plenty.getByRole('button', { name: 'Cancel' }).click();
+  await expect(plenty).toBeHidden();
+  expect(await observedRevision(page)).toBe(before);
+  await page.getByRole('button', { name: 'Play Year of plenty' }).click();
+  await expect(plenty).toBeVisible();
+  await addGrain.click();
+  await addGrain.click();
+  await expectSettledPrimaryColors(plenty.getByRole('button', { name: 'Confirm' }));
+  await capturePreview(page, testInfo, 'year-of-plenty-cards-desktop');
   await plenty.getByRole('button', { name: 'Confirm' }).click();
   await expect.poll(() => observedRevision(page)).toBeGreaterThan(before);
   expect(pageErrors.get(page)).toEqual([]);
 
   const monopolyPage = await page.context().newPage();
   try {
+    await monopolyPage.setViewportSize({ width: 390, height: 844 });
     await openGoldenPrefix(monopolyPage, 226, 'all-development-card-types.replay.json');
     const revision = await observedRevision(monopolyPage);
     await monopolyPage.getByRole('button', { name: 'Play Monopoly' }).click();
     const monopoly = monopolyPage.getByRole('dialog', { name: 'Monopoly' });
     await expect(monopoly).toBeVisible();
-    await monopoly.getByRole('button', { name: 'Ore' }).click();
+    await monopoly.getByRole('button', { name: 'Add Brick to Resource to collect' }).click();
+    await monopoly.getByRole('button', { name: 'Add Ore to Resource to collect' }).click();
+    await expect(monopoly.locator('.trade-card-add img')).toHaveCount(5);
+    await expect(monopoly.locator('.trade-card-choice').first()).toHaveAttribute(
+      'data-selected',
+      'false',
+    );
+    await expect(monopoly.locator('.trade-card-choice').last()).toHaveAttribute(
+      'data-selected',
+      'true',
+    );
+    expect(await observedRevision(monopolyPage)).toBe(revision);
+    await expectSettledPrimaryColors(monopoly.getByRole('button', { name: 'Confirm' }));
+    await capturePreview(monopolyPage, testInfo, 'monopoly-cards-phone');
+    await monopoly.getByRole('button', { name: 'Confirm' }).click();
     await expect.poll(() => observedRevision(monopolyPage)).toBeGreaterThan(revision);
     expect(pageErrors.get(monopolyPage)).toEqual([]);
   } finally {
@@ -530,15 +894,30 @@ test('a replay-backed city upgrade previews a legal site before spending resourc
   );
   const cityAction = page
     .getByRole('group', { name: 'Choose a board action' })
-    .getByRole('button', { name: 'city site' });
+    .getByRole('button', { name: 'Upgrade city' });
+  await cityAction.click();
+  await expect(cityAction).toHaveAttribute('aria-pressed', 'true');
+  await cityAction.click();
+  await expect(cityAction).toHaveAttribute('aria-pressed', 'false');
+  expect(await observedRevision(page)).toBe(city.revision);
   await cityAction.click();
   await capturePreview(page, testInfo, 'city-legal-upgrades');
   await selectKeyboardPlacement(page, 'vertex', city.id);
   await expect(page.getByRole('button', { name: 'Confirm city' })).toBeVisible();
   expect(await observedRevision(page)).toBe(city.revision);
-  await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await page
+    .getByRole('region', { name: 'Game board' })
+    .getByRole('button', { name: 'Cancel', exact: true })
+    .click();
   await expect(page.getByRole('button', { name: 'Confirm city' })).toBeHidden();
   expect(await observedRevision(page)).toBe(city.revision);
+  await page
+    .getByRole('group', { name: 'Choose a board action' })
+    .getByRole('button', { name: 'Cancel' })
+    .click();
+  await expect(cityAction).toHaveAttribute('aria-pressed', 'false');
+  expect(await observedRevision(page)).toBe(city.revision);
+  await cityAction.click();
   await selectKeyboardPlacement(page, 'vertex', city.id);
   await capturePreview(page, testInfo, 'city-preview-confirmation');
   await confirmPlacement(page, 'city', city.revision);
@@ -589,12 +968,15 @@ test('a replay-backed paid settlement commits only after confirmation', async ({
   );
   await page
     .getByRole('group', { name: 'Choose a board action' })
-    .getByRole('button', { name: 'settlement spot' })
+    .getByRole('button', { name: 'Build settlement' })
     .click();
   await selectKeyboardPlacement(page, 'vertex', before.id);
   await expect(page.getByRole('button', { name: 'Confirm settlement' })).toBeVisible();
   expect(await observedRevision(page)).toBe(before.revision);
-  await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await page
+    .getByRole('region', { name: 'Game board' })
+    .getByRole('button', { name: 'Cancel', exact: true })
+    .click();
   expect(await observedRevision(page)).toBe(before.revision);
   await selectKeyboardPlacement(page, 'vertex', before.id);
   await confirmPlacement(page, 'settlement', before.revision);
@@ -647,6 +1029,8 @@ test('game cockpit fits desktop, compact, and phone viewports without document s
     });
     try {
       const page = await context.newPage();
+      page.setDefaultTimeout(10_000);
+      if (device.name === 'desktop-wide') await page.emulateMedia({ colorScheme: 'dark' });
       await openGoldenPrefix(page, 42);
       await expect(page.getByRole('region', { name: 'Your hand' })).toBeVisible();
       await expect(page.locator('.resource-hand-card')).toHaveCount(5);
@@ -656,11 +1040,21 @@ test('game cockpit fits desktop, compact, and phone viewports without document s
           const panel = page.locator('.player-panel').filter({ hasText: player });
           await expect(panel).toBeVisible();
           await expect(panel.locator('.player-vp')).toBeVisible();
+          const pieceCounts = panel.locator('.player-piece-count');
+          await expect(pieceCounts).toHaveCount(3);
+          for (const piece of await pieceCounts.all()) {
+            await expect(piece.locator('img')).toBeVisible();
+            await expect(piece.locator('span')).toHaveText(/^\d+$/);
+          }
         }
       }
       const dimensions = await page.evaluate(() => {
         const board = document.querySelector('.game-board')?.getBoundingClientRect();
         const hand = document.querySelector('.hand-dock')?.getBoundingClientRect();
+        const dock = document.querySelector('.action-dock')?.getBoundingClientRect();
+        const costsTrigger = document
+          .querySelector('.action-costs-trigger')
+          ?.getBoundingClientRect();
         // Playwright serializes this callback; helpers outside it are unavailable in the page.
         // eslint-disable-next-line unicorn/consistent-function-scoping
         const inside = (rect: DOMRect, bounds: DOMRect): boolean =>
@@ -684,6 +1078,37 @@ test('game cockpit fits desktop, compact, and phone viewports without document s
         const visibleActions = [
           ...document.querySelectorAll('.action-dock button:not([disabled])'),
         ].filter((button) => inside(button.getBoundingClientRect(), viewport)).length;
+        const contextual = document.querySelector('.action-context')?.getBoundingClientRect();
+        const normal = document.querySelector('.action-normal-buttons')?.getBoundingClientRect();
+        const normalElements = [
+          ...document.querySelectorAll('.action-normal-buttons .action-control'),
+        ];
+        const normalButtons = normalElements.map((button) => button.getBoundingClientRect());
+        const normalContentFits = normalElements.map((button) => {
+          const tile = button.getBoundingClientRect();
+          const art = button.querySelector('img, svg')?.getBoundingClientRect();
+          const caption = button.querySelector('span')?.getBoundingClientRect();
+          return Boolean(
+            art &&
+            caption &&
+            art.top >= tile.top + 3 &&
+            caption.bottom <= tile.bottom - 3 &&
+            Math.abs((art.left + art.right - tile.left - tile.right) / 2) <= 2 &&
+            Math.abs((caption.left + caption.right - tile.left - tile.right) / 2) <= 2,
+          );
+        });
+        const contextualButtons = [
+          ...document.querySelectorAll('.action-context-buttons .action-control:not([disabled])'),
+        ].map((button) => button.getBoundingClientRect());
+        const illustratedActions = [...document.querySelectorAll('.action-control')]
+          .filter((button) => inside(button.getBoundingClientRect(), viewport))
+          .map((button) => {
+            const art = button.querySelector('img, svg')?.getBoundingClientRect();
+            return {
+              label: button.textContent?.trim() ?? '',
+              artVisible: art ? inside(art, button.getBoundingClientRect()) : false,
+            };
+          });
         return {
           viewportWidth: window.innerWidth,
           viewportHeight: window.innerHeight,
@@ -692,8 +1117,28 @@ test('game cockpit fits desktop, compact, and phone viewports without document s
           bodyHeight: document.body.scrollHeight,
           boardTop: board?.top ?? -1,
           boardBottom: board?.bottom ?? Infinity,
+          dockHeight: dock?.height ?? Infinity,
+          costsTriggerVisible: costsTrigger ? inside(costsTrigger, viewport) : false,
           cards,
           visibleActions,
+          actionGroups:
+            contextual && normal
+              ? {
+                  contextRight: contextual.right,
+                  normalLeft: normal.left,
+                  normalButtonTops: normalButtons.map((button) => button.top),
+                  normalButtonSizes: normalButtons.map((button) => ({
+                    width: button.width,
+                    height: button.height,
+                  })),
+                  normalContentFits,
+                }
+              : null,
+          contextualActions: {
+            available: contextualButtons.length,
+            visible: contextualButtons.filter((button) => inside(button, viewport)).length,
+          },
+          illustratedActions,
         };
       });
       expect(
@@ -709,6 +1154,13 @@ test('game cockpit fits desktop, compact, and phone viewports without document s
       );
       expect(dimensions.boardTop).toBeGreaterThanOrEqual(0);
       expect(dimensions.boardBottom).toBeLessThanOrEqual(dimensions.viewportHeight + 2);
+      expect(dimensions.costsTriggerVisible, `${device.name} Build costs control is clipped`).toBe(
+        true,
+      );
+      if (!device.mobile)
+        expect(dimensions.dockHeight, `${device.name} action dock is too tall`).toBeLessThanOrEqual(
+          205,
+        );
       expect(dimensions.cards).toHaveLength(5);
       for (const card of dimensions.cards) {
         expect(card.inViewport, `${device.name} ${card.resource} card is clipped`).toBe(true);
@@ -722,9 +1174,79 @@ test('game cockpit fits desktop, compact, and phone viewports without document s
         dimensions.visibleActions,
         `${device.name} has no visible next action`,
       ).toBeGreaterThan(0);
+      expect(
+        dimensions.illustratedActions.length,
+        `${device.name} has no visible illustrated action`,
+      ).toBeGreaterThan(0);
+      for (const action of dimensions.illustratedActions) {
+        expect(action.label, `${device.name} action has no readable label`).not.toBe('');
+        expect(action.artVisible, `${device.name} ${action.label} art is clipped`).toBe(true);
+      }
+      if (dimensions.contextualActions.available > 0)
+        expect(
+          dimensions.contextualActions.visible,
+          `${device.name} hides all contextual actions below the viewport`,
+        ).toBeGreaterThan(0);
+      if (!device.mobile) {
+        expect(dimensions.actionGroups, `${device.name} is missing a dock group`).not.toBeNull();
+        if (dimensions.actionGroups) {
+          expect(dimensions.actionGroups.contextRight).toBeLessThanOrEqual(
+            dimensions.actionGroups.normalLeft + 2,
+          );
+          const tops = dimensions.actionGroups.normalButtonTops;
+          for (let index = 1; index < tops.length; index++)
+            expect(tops[index], `${device.name} normal actions should stack`).toBeGreaterThan(
+              tops[index - 1] ?? Infinity,
+            );
+          for (const tile of dimensions.actionGroups.normalButtonSizes)
+            expect(
+              Math.abs(tile.width - tile.height),
+              `${device.name} normal action tile is not square`,
+            ).toBeLessThanOrEqual(2);
+          expect(
+            dimensions.actionGroups.normalContentFits,
+            `${device.name} normal action art or caption touches the tile edge`,
+          ).toEqual(Array(dimensions.actionGroups.normalContentFits.length).fill(true));
+        }
+      }
       await page.evaluate(() => window.scrollTo(0, 10_000));
       expect(await page.evaluate(() => window.scrollY)).toBe(0);
       await capturePreview(page, testInfo, `${device.name}-cockpit`);
+      const revision = await observedRevision(page);
+      await page.getByRole('button', { name: 'Build costs' }).click();
+      const costs = page.getByRole('dialog', { name: 'Build costs' });
+      await expect(costs).toBeVisible();
+      const costRows = costs.locator('.build-cost-row');
+      await expect(costRows).toHaveCount(4);
+      for (const [index, label] of ['Road', 'Settlement', 'City', 'Development card'].entries()) {
+        const row = costRows.nth(index);
+        await row.scrollIntoViewIfNeeded();
+        await expect(row).toBeVisible();
+        await expect(row.locator('dt')).toHaveText(label);
+        expect(await row.locator('.build-cost-resource').count()).toBeGreaterThan(0);
+        const bounds = await row.boundingBox();
+        if (!bounds) throw new Error(`${label} cost row has no visible bounds`);
+        expect(bounds.x).toBeGreaterThanOrEqual(0);
+        expect(bounds.y).toBeGreaterThanOrEqual(0);
+        expect(bounds.x + bounds.width).toBeLessThanOrEqual(device.width + 2);
+        expect(bounds.y + bounds.height).toBeLessThanOrEqual(device.height + 2);
+      }
+      const dialogBounds = await costs.boundingBox();
+      const closeBounds = await costs.getByRole('button', { name: 'Close' }).boundingBox();
+      if (!dialogBounds || !closeBounds) throw new Error('Build costs close control has no bounds');
+      expect(closeBounds.x).toBeGreaterThanOrEqual(dialogBounds.x);
+      expect(closeBounds.y).toBeGreaterThanOrEqual(dialogBounds.y);
+      expect(closeBounds.x + closeBounds.width).toBeLessThanOrEqual(
+        dialogBounds.x + dialogBounds.width,
+      );
+      expect(closeBounds.y + closeBounds.height).toBeLessThanOrEqual(
+        dialogBounds.y + dialogBounds.height,
+      );
+      expect(closeBounds.y + closeBounds.height).toBeLessThanOrEqual(device.height + 2);
+      await capturePreview(page, testInfo, `${device.name}-build-costs`);
+      expect(await observedRevision(page)).toBe(revision);
+      await costs.getByRole('button', { name: 'Close' }).click();
+      await expect(costs).toBeHidden();
       const gameInfo = page.locator('.game-info');
       if (
         !(await gameInfo.evaluate(
@@ -754,13 +1276,14 @@ test('game cockpit fits desktop, compact, and phone viewports without document s
   }
 });
 
-test('a replay-backed Knight hand stays visible on desktop and phone', async ({
+test('two replay-backed development cards stay readable on desktop and phone', async ({
   browser,
   browserName,
 }, testInfo) => {
   test.skip(browserName !== 'chromium', 'Card visual acceptance runs in Chromium');
   for (const device of [
     { name: 'desktop', width: 1280, height: 720, mobile: false },
+    { name: 'compact-desktop', width: 1024, height: 768, mobile: false },
     { name: 'phone', width: 390, height: 844, mobile: true },
   ] as const) {
     const context = await browser.newContext({
@@ -770,19 +1293,45 @@ test('a replay-backed Knight hand stays visible on desktop and phone', async ({
     });
     try {
       const page = await context.newPage();
-      await openGoldenPrefix(page, 124);
+      await openGoldenPrefix(page, 365, 'normal-game-05.replay.json');
       const openCards = page.getByRole('button', { name: /Development cards:/ });
       if (await openCards.isVisible()) await openCards.click();
-      const knight = page.locator('.development-card:visible').filter({ hasText: 'Knight' });
-      await expect(knight).toBeVisible();
-      await expect(knight.locator('img')).toBeVisible();
-      const cardBounds = await knight.boundingBox();
-      if (!cardBounds) throw new Error('Knight card has no visible bounds');
-      expect(cardBounds.x).toBeGreaterThanOrEqual(0);
-      expect(cardBounds.y).toBeGreaterThanOrEqual(0);
-      expect(cardBounds.x + cardBounds.width).toBeLessThanOrEqual(device.width + 2);
-      expect(cardBounds.y + cardBounds.height).toBeLessThanOrEqual(device.height + 2);
-      await capturePreview(page, testInfo, `${device.name}-knight-hand`);
+      const cards = page.locator('.development-card:visible');
+      await expect(cards).toHaveCount(2);
+      for (const label of ['Knight', 'Road building']) {
+        const card = cards.filter({ hasText: label });
+        await expect(card).toBeVisible();
+        await expect(card.locator('img')).toBeVisible();
+        await expect(card.locator('strong')).toHaveText(label);
+        const bounds = await card.boundingBox();
+        if (!bounds) throw new Error(`${label} card has no visible bounds`);
+        expect(bounds.x).toBeGreaterThanOrEqual(0);
+        expect(bounds.y).toBeGreaterThanOrEqual(0);
+        expect(bounds.x + bounds.width).toBeLessThanOrEqual(device.width + 2);
+        expect(bounds.y + bounds.height).toBeLessThanOrEqual(device.height + 2);
+        const labelFits = await card.locator('strong').evaluate((element) => {
+          const hand = element.closest('.development-hand');
+          const labelBounds = element.getBoundingClientRect();
+          const handBounds = hand?.getBoundingClientRect();
+          return (
+            element.scrollWidth <= element.clientWidth + 1 &&
+            element.scrollHeight <= element.clientHeight + 1 &&
+            handBounds !== undefined &&
+            labelBounds.left >= handBounds.left - 1 &&
+            labelBounds.right <= handBounds.right + 1 &&
+            labelBounds.bottom <= handBounds.bottom + 1
+          );
+        });
+        expect(labelFits, `${label} is clipped`).toBe(true);
+      }
+      if (!device.mobile) {
+        const hand = page.locator('.hand-dock > .development-hand');
+        await expect(hand).toBeVisible();
+        expect(
+          await hand.evaluate((element) => element.scrollWidth <= element.clientWidth + 1),
+        ).toBe(true);
+      }
+      await capturePreview(page, testInfo, `${device.name}-two-development-cards`);
       expect(pageErrors.get(page)).toEqual([]);
     } finally {
       await context.close();
@@ -816,7 +1365,9 @@ async function completeSetup(
             const own = hook?.session.getPrivate(seat)?.hand;
             if (!own) return false;
             return (['brick', 'lumber', 'wool', 'grain', 'ore'] as const).every((resource) => {
-              const shown = document.querySelector(`.hand-dock .resource-${resource} strong`);
+              const shown = document.querySelector(
+                `.hand-dock .resource-hand-card .resource-card[data-resource="${resource}"] .resource-card-count`,
+              );
               return shown?.textContent?.trim() === String(own[resource] ?? 0);
             });
           }, actor),
@@ -883,7 +1434,22 @@ async function completeSetup(
       .toBe(target.pieces);
     expect(await observedRevision(page)).toBe(revision);
     if (settlement && placement === 0) {
-      const cancel = page.getByRole('button', { name: 'Cancel', exact: true });
+      const requiredAction = page
+        .getByRole('group', { name: 'Choose a board action' })
+        .getByRole('button', { name: 'Build settlement' });
+      await expect(
+        page
+          .getByRole('group', { name: 'Choose a board action' })
+          .getByRole('button', { name: 'Cancel' }),
+      ).toHaveCount(0);
+      await requiredAction.click();
+      await expect(page.getByRole('button', { name: 'Confirm settlement' })).toBeHidden();
+      await expect(requiredAction).toHaveAttribute('aria-pressed', 'true');
+      if (input === 'touch') await page.touchscreen.tap(point.x, point.y);
+      else await page.mouse.click(point.x, point.y);
+      const cancel = page
+        .getByRole('region', { name: 'Game board' })
+        .getByRole('button', { name: 'Cancel', exact: true });
       if (input === 'touch') await cancel.tap();
       else await cancel.click();
       await expect(page.getByRole('button', { name: 'Confirm settlement' })).toBeHidden();
@@ -972,7 +1538,7 @@ async function rollAndBuildRoad(
   // The ordinary action dock must offer an affordable road after this setup.
   const roadAction = page
     .getByRole('group', { name: 'Choose a board action' })
-    .getByRole('button', { name: 'road edge' });
+    .getByRole('button', { name: 'Build road' });
   if (await roadAction.isVisible()) {
     if (input === 'touch') await roadAction.tap();
     else await roadAction.click();
@@ -1009,7 +1575,9 @@ async function rollAndBuildRoad(
   ).toBe(target.roads);
   if (input === 'mouse') await assertRoadConfirmationTracksBoard(page, target.id, revision);
   if (testInfo) await capturePreview(page, testInfo, `${input}-paid-road-preview`);
-  const cancel = page.getByRole('button', { name: 'Cancel', exact: true });
+  const cancel = page
+    .getByRole('region', { name: 'Game board' })
+    .getByRole('button', { name: 'Cancel', exact: true });
   if (input === 'touch') await cancel.tap();
   else await cancel.click();
   await expect(page.getByRole('button', { name: 'Confirm road' })).toBeHidden();
@@ -1117,7 +1685,7 @@ test('four zero-delay bots finish a default ten-point game on a phone viewport',
         { timeout: 150_000 },
       )
       .not.toBeNull();
-    await expect(page.getByRole('region', { name: 'Game over' })).toBeVisible();
+    await expect(page.getByRole('dialog', { name: /Player \d+ wins/ })).toBeVisible();
     expect(pageErrors.get(page)).toEqual([]);
   } finally {
     await context.close();
@@ -1336,8 +1904,8 @@ async function playVisibleHumanStep(
   }
   if (view.phase === 'main') {
     for (const [kind, label] of [
-      ['city', 'city site'],
-      ['settlement', 'settlement spot'],
+      ['city', 'Upgrade city'],
+      ['settlement', 'Build settlement'],
     ] as const) {
       const choice = actions.placements[kind][0];
       if (!choice) continue;
@@ -1461,7 +2029,7 @@ test('a human completes a default ten-point game against three bots on a phone',
     page.setDefaultTimeout(10_000);
     await createGame(page, { players: 4, humans: [0] });
     await completeVisibleGame(page, 'touch');
-    await expect(page.getByRole('region', { name: 'Game over' })).toBeVisible();
+    await expect(page.getByRole('dialog', { name: /Player \d+ wins/ })).toBeVisible();
     const summary = await completedGameSummary(page);
     expect(summary.vpTarget).toBe(10);
     expect(summary.result?.winner).not.toBeNull();
@@ -1491,13 +2059,16 @@ test('twenty complete ten-point games use only offered visible controls without 
         const page = await context.newPage();
         await createGame(page, { players: 4, humans: [0] });
         await completeVisibleGame(page, 'mouse');
-        await expect(page.getByRole('region', { name: 'Game over' })).toBeVisible();
+        await expect(page.getByRole('dialog', { name: /Player \d+ wins/ })).toBeVisible();
         expect(pageErrors.get(page), `Game ${game + 1} had browser errors`).toEqual([]);
         const summary = await completedGameSummary(page);
         expect(summary.vpTarget).toBe(10);
         expect(summary.result?.winner).not.toBeNull();
         expect(summary.rejectionCount).toBe(0);
         games.push({ game: game + 1, summary });
+        process.stdout.write(
+          `Completed visible UI game ${game + 1}/20: ${summary.turns} turns, ${summary.revision} inputs, ${summary.rejectionCount} rejected\n`,
+        );
       } finally {
         await context.close();
       }

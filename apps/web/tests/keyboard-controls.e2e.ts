@@ -37,15 +37,24 @@ async function openGoldenPrefix(page: Page, file: string, stopBefore: number): P
 }
 
 async function boardSnapshot(page: Page) {
-  return page.evaluate(() => {
-    const hook: DevHook | undefined = Reflect.get(window, '__cp2p');
-    const state = hook?.session.getState();
-    return {
-      revision: hook?.diagnostics().revision ?? -1,
-      buildings: state?.board.buildings.length ?? -1,
-      roads: state?.board.roads.length ?? -1,
-    };
-  });
+  for (let attempt = 0; attempt < 100; attempt++) {
+    // The route can briefly reinstall the DEV hook while the renderer mounts.
+    // eslint-disable-next-line no-await-in-loop
+    const snapshot = await page.evaluate(() => {
+      const hook: DevHook | undefined = Reflect.get(window, '__cp2p');
+      if (!hook) return null;
+      const state = hook.session.getState();
+      return {
+        revision: hook.diagnostics().revision,
+        buildings: state.board.buildings.length,
+        roads: state.board.roads.length,
+      };
+    });
+    if (snapshot) return snapshot;
+    // eslint-disable-next-line no-await-in-loop
+    await page.waitForTimeout(20);
+  }
+  throw new Error('Game hook did not expose a board snapshot');
 }
 
 async function chooseFirstLocationWithKeyboard(page: Page): Promise<void> {
@@ -91,7 +100,7 @@ test('keyboard shortcuts and native board chooser preview, cancel and confirm se
   await page.keyboard.press('2');
   await expect(
     page.getByRole('group', { name: 'Choose a board action' }).getByRole('button', {
-      name: 'settlement spot',
+      name: 'Build settlement',
     }),
   ).toHaveAttribute('aria-pressed', 'true');
   await previewCancelConfirm(page, 'settlement');
@@ -101,7 +110,7 @@ test('keyboard shortcuts and native board chooser preview, cancel and confirm se
   await page.keyboard.press('1');
   await expect(
     page.getByRole('group', { name: 'Choose a board action' }).getByRole('button', {
-      name: 'road edge',
+      name: 'Build road',
     }),
   ).toHaveAttribute('aria-pressed', 'true');
   await previewCancelConfirm(page, 'road');

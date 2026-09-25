@@ -1,0 +1,97 @@
+.dice-roll-readout {
+  position: absolute;
+  z-index: 4;
+  top: 12px;
+  right: 12px;
+  display: block;
+  margin: 0;
+  padding: 7px 9px;
+  border: 1px solid rgb(28 54 67 / 16%);
+  border-radius: 12px;
+  background: rgb(255 255 255 / 94%);
+  box-shadow: 0 2px 8px rgb(25 48 59 / 18%);
+  color: #172c37;
+  pointer-events: none;
+}
+
+.dice-roll-readout figcaption {
+  margin-bottom: 4px;
+  color: #4d6470;
+  font-size: 0.625rem;
+  font-weight: 700;
+  line-height: 1;
+  text-align: center;
+}
+
+.dice-roll-display {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+}
+
+.dice-roll-face {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  grid-template: repeat(3, 1fr) / repeat(3, 1fr);
+  padding: 3px;
+  border: 1px solid #c7d2d8;
+  border-radius: 6px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgb(23 44 55 / 14%);
+}
+
+.dice-roll-pip {
+  width: 4px;
+  height: 4px;
+  align-self: center;
+  justify-self: center;
+  border-radius: 50%;
+}
+
+.dice-roll-pip.is-active {
+  background: #203946;
+}
+
+.dice-roll-total {
+  min-width: 1.1em;
+  margin-left: 1px;
+  color: #163d54;
+  font-size: 1.1rem;
+  font-weight: 800;
+  line-height: 1;
+  text-align: center;
+}
+
+@media (max-width: 600px) {
+  .dice-roll-readout {
+    top: 7px;
+    right: 7px;
+    padding: 5px 6px;
+    border-radius: 10px;
+  }
+
+  .dice-roll-readout figcaption {
+    margin-bottom: 3px;
+  }
+
+  .dice-roll-display {
+    gap: 5px;
+  }
+
+  .dice-roll-face {
+    width: 23px;
+    height: 23px;
+    padding: 2px;
+  }
+
+  .dice-roll-pip {
+    width: 3.5px;
+    height: 3.5px;
+  }
+
+  .dice-roll-total {
+    font-size: 1rem;
+  }
+}

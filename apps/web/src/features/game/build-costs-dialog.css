@@ -1,0 +1,119 @@
+.action-dock dialog:has(.build-costs-panel) {
+  width: min(28rem, calc(100vw - 24px));
+  max-width: none;
+  max-height: calc(100dvh - 16px);
+  padding: 1rem;
+}
+
+.action-dock dialog:has(.build-costs-panel)[open] {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.action-dock dialog:has(.build-costs-panel) > h2 {
+  margin: 0 0 0.75rem;
+}
+
+.action-dock dialog:has(.build-costs-panel) > * + * {
+  margin-top: 0;
+}
+
+.build-costs-panel {
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.build-costs-note {
+  margin: 0 0 0.75rem;
+  color: var(--muted);
+  font-size: 0.85rem;
+  line-height: 1.35;
+}
+
+.build-costs-list {
+  display: grid;
+  gap: 0.45rem;
+  margin: 0;
+}
+
+.build-cost-row {
+  display: grid;
+  grid-template-columns: minmax(7.5rem, 1fr) minmax(0, 1.2fr);
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 2.75rem;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 0.65rem;
+  background: var(--raised);
+}
+
+.build-cost-row dt {
+  font-weight: 700;
+}
+
+.build-cost-row dd {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  gap: 0.45rem;
+  margin: 0;
+}
+
+.build-cost-resource {
+  display: inline-flex;
+  min-width: 2rem;
+  align-items: center;
+  justify-content: center;
+  gap: 0.2rem;
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.build-cost-resource img {
+  width: 1.45rem;
+  height: 1.45rem;
+  object-fit: contain;
+}
+
+.action-dock dialog:has(.build-costs-panel) > .build-costs-footer {
+  display: flex;
+  flex: none;
+  justify-content: flex-end;
+  margin-top: 0.8rem;
+}
+
+@media (max-height: 500px) {
+  .build-costs-note {
+    margin-bottom: 0.4rem;
+  }
+
+  .build-costs-list {
+    gap: 0.25rem;
+  }
+
+  .build-cost-row {
+    min-height: 2.35rem;
+    padding-block: 0.2rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .action-dock dialog:has(.build-costs-panel) {
+    width: calc(100vw - 20px);
+    padding: 0.85rem;
+  }
+
+  .build-cost-row {
+    grid-template-columns: minmax(6.5rem, 0.9fr) minmax(0, 1.1fr);
+    gap: 0.35rem;
+    padding: 0.3rem 0.4rem;
+  }
+
+  .build-cost-row dd {
+    gap: 0.3rem;
+  }
+}

@@ -9,7 +9,7 @@ import editor from '../../i18n/locales/en/editor.json';
 import { LocalSession } from '../../session/local-session.js';
 import { deriveActionAvailability } from '../actions/availability.js';
 import { DevDrawer } from './DevDrawer.js';
-import { installDevHook } from './hook.js';
+import { installDevHook, type DevHookView } from './hook.js';
 
 const i18n = createInstance();
 beforeAll(async () => {
@@ -69,16 +69,34 @@ describe('development diagnostics', () => {
       session.getPending(),
       seat,
     );
-    const remove = installDevHook({ session, renderer, actions });
+    const view: DevHookView = { renderer, actions: null };
+    const remove = installDevHook({ session, view });
     const hook = Reflect.get(window, '__cp2p');
+    view.actions = { revision: hook?.diagnostics().revision ?? -1, availability: actions };
     expect(hook?.session).toBe(session);
     expect(hook?.diagnostics().actions).toEqual(actions);
     expect(hook?.diagnostics().actions).not.toBe(actions);
     expect(hook?.diagnostics().hash).toMatch(/^[a-f0-9]{64}$/);
-    const target = actions.placements.settlement[0];
-    if (!target) throw new Error('No settlement target');
     expect(hook?.pixelPosition({ kind: 'vertex', id: 'v:0,0,N' })).toEqual({ x: 18, y: 29 });
-    const removeNewer = installDevHook({ session });
+    const updatedActions = { ...actions, availableTypes: ['UPDATED'] };
+    const updatedRenderer: BoardRenderer = {
+      ...renderer,
+      getPixelPosition: () => ({ x: 31, y: 47 }),
+    };
+    view.actions = { revision: -1, availability: updatedActions };
+    view.renderer = updatedRenderer;
+    expect(Reflect.get(window, '__cp2p')).toBe(hook);
+    expect(hook?.renderer).toBe(updatedRenderer);
+    expect(hook?.diagnostics().actions).toBeNull();
+    view.actions = { revision: hook?.diagnostics().revision ?? -1, availability: updatedActions };
+    expect(hook?.diagnostics().actions).toEqual(updatedActions);
+    expect(hook?.diagnostics().actions).not.toBe(updatedActions);
+    expect(hook?.pixelPosition({ kind: 'vertex', id: 'v:0,0,N' })).toEqual({ x: 31, y: 47 });
+    view.actions = null;
+    view.renderer = null;
+    expect(hook?.diagnostics().actions).toBeNull();
+    expect(hook?.pixelPosition({ kind: 'vertex', id: 'v:0,0,N' })).toBeNull();
+    const removeNewer = installDevHook({ session, view: { renderer: null, actions: null } });
     remove();
     expect(Reflect.get(window, '__cp2p')).toBeTruthy();
     removeNewer();

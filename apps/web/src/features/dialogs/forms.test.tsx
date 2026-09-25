@@ -84,7 +84,7 @@ describe('rule-backed dialogs', () => {
     expect(confirm.hasAttribute('disabled')).toBe(true);
   });
 
-  test('Year of Plenty requests two of one kind and shows short bank stock', () => {
+  test('Year of Plenty requests exactly two cards even when the bank is short', () => {
     const onSubmit = vi.fn<(command: CommandShape) => void>();
     const legal = {
       commands: [],
@@ -96,8 +96,21 @@ describe('rule-backed dialogs', () => {
         state={{ ...state, bank: { ...state.bank, brick: 0 } }}
       />,
     );
+    const confirm = screen.getByRole('button', { name: 'Confirm' });
+    const brick = screen.getByRole('button', { name: 'Add Brick to Resources to take' });
+    expect(confirm.hasAttribute('disabled')).toBe(true);
+    fireEvent.click(brick);
+    expect(confirm.hasAttribute('disabled')).toBe(true);
+    fireEvent.click(brick);
+    expect(confirm.hasAttribute('disabled')).toBe(false);
     expect(screen.getByText(/Bank stock for these choices: 0 and 0/)).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
+    expect(onSubmit).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Add Grain to Resources to take' }));
+    expect(screen.getByText('Selected 3 of 2')).toBeTruthy();
+    expect(confirm.hasAttribute('disabled')).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: 'Remove Grain from Resources to take' }));
+    expect(screen.getByText('Selected 2 of 2')).toBeTruthy();
+    fireEvent.click(confirm);
     expect(onSubmit).toHaveBeenCalledWith({
       type: 'PLAY_DEV_CARD',
       slotId: 'slot-2',
@@ -113,9 +126,20 @@ describe('rule-backed dialogs', () => {
           commands: [],
           templates: [{ type: 'PLAY_DEV_CARD', slotId: 'slot-2', card: 'yearOfPlenty' }],
         })}
+        state={{
+          ...state,
+          config: {
+            ...state.config,
+            options: { ...state.config.options, base: { hideBankCounts: true } },
+          },
+        }}
         validate={() => failure('stale-phase', 'Internal engine English')}
       />,
     );
+    expect(screen.getByText(/Bank counts are hidden/)).toBeTruthy();
+    expect(screen.queryByText(/Bank stock for these choices/)).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Add Brick to Resources to take' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add Ore to Resources to take' }));
     expect(screen.getByRole('button', { name: 'Confirm' }).hasAttribute('disabled')).toBe(true);
     expect(screen.getByRole('alert').textContent).toBe(
       'These resource choices cannot be played right now.',
@@ -133,9 +157,17 @@ describe('rule-backed dialogs', () => {
     const view = mount(
       <MonopolyDialog {...props({ commands: [monopoly], templates: [] }, onMonopoly)} />,
     );
-    fireEvent.click(screen.getByRole('button', { name: 'Ore' }));
+    const confirm = screen.getByRole('button', { name: 'Confirm' });
+    expect(confirm.hasAttribute('disabled')).toBe(true);
+    const brick = screen.getByRole('button', { name: 'Add Brick to Resource to collect' });
+    expect(brick.getAttribute('aria-disabled')).toBe('true');
+    fireEvent.click(brick);
+    expect(onMonopoly).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Add Ore to Resource to collect' }));
+    expect(confirm.hasAttribute('disabled')).toBe(false);
+    expect(onMonopoly).not.toHaveBeenCalled();
+    fireEvent.click(confirm);
     expect(onMonopoly).toHaveBeenCalledWith(monopoly);
-    expect(screen.queryByRole('button', { name: 'Brick' })).toBeNull();
     view.unmount();
 
     const steal = { type: 'STEAL', victim: 2 };

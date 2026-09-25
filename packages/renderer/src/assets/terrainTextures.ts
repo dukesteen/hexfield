@@ -61,6 +61,12 @@ const DEVELOPMENT_CARD_URLS: Readonly<Record<DevelopmentCard, string>> = {
   victoryPoint: victoryPointCardUrl,
 };
 
+const PIECE_ICON_URLS = {
+  road: roadUrl,
+  settlement: settlementUrl,
+  city: cityUrl,
+} as const;
+
 export interface BoardTextures {
   readonly terrain: Readonly<
     Record<'forest' | 'hills' | 'pasture' | 'fields' | 'mountains' | 'desert' | 'sea', Texture>
@@ -88,6 +94,11 @@ export function getResourceCardUrl(resource: Resource): string {
 /** Return the static, same-origin SVG URL for a development card face. */
 export function getDevelopmentCardUrl(card: DevelopmentCard): string {
   return DEVELOPMENT_CARD_URLS[card];
+}
+
+/** Return the board piece art for a labeled action button. */
+export function getPieceIconUrl(piece: keyof typeof PIECE_ICON_URLS): string {
+  return PIECE_ICON_URLS[piece];
 }
 
 /** Select an SVG raster resolution for its largest on-screen size and device pixel ratio. */

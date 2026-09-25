@@ -479,7 +479,8 @@ describe('resource counts and bounds', () => {
       }),
       { numRuns: 10_000 },
     );
-  });
+    // Keep all generated sequences under coverage and parallel suite load.
+  }, 15_000);
 
   test('matches brute-force affordability and known-loss hand sets', () => {
     const totalArb = integer({ min: 0, max: 6 });

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { BoardHighlights, BoardHit } from '@cp2p/renderer';
+import { getPieceIconUrl, type BoardHighlights, type BoardHit } from '@cp2p/renderer';
 import type { EdgeId, HexId, VertexId } from '@cp2p/engine/geometry';
 import { buildBoardGraph } from '@cp2p/engine/geometry';
 import {
@@ -21,10 +21,48 @@ import {
 import { actingSeat } from '../../store/pending-actors';
 import type { GamePresentation } from '../../queries/repositories/saved-games';
 import { recordOrdinaryActionRejection } from './action-diagnostics';
+import { BuildCostsDialog } from './BuildCostsDialog.js';
 
 const boardOrder: readonly PlacementKind[] = ['settlement', 'road', 'city', 'freeRoad', 'robber'];
+const normalActionOrder: Readonly<Record<string, number>> = {
+  ROLL_DICE: 0,
+  END_TURN: 0,
+  MARITIME_TRADE: 1,
+  OFFER_TRADE: 2,
+  PROPOSE_TRADE: 2,
+};
+const actionPaths: Readonly<Record<string, string>> = {
+  ROLL_DICE: 'M5 5h6v6H5zM13 13h6v6h-6zM7.5 7.5h1M15.5 15.5h1',
+  END_TURN: 'M4 12h15m-6-6 6 6-6 6',
+  MARITIME_TRADE: 'M4 8h15m-4-4 4 4-4 4M20 16H5m4-4-4 4 4 4',
+  OFFER_TRADE:
+    'M7 8a2 2 0 1 0 0-4 2 2 0 0 0 0 4Zm10 0a2 2 0 1 0 0-4 2 2 0 0 0 0 4ZM3 17v-2a4 4 0 0 1 7-2.6M21 17v-2a4 4 0 0 0-7-2.6M9 16h6m-2-2 2 2-2 2',
+  PROPOSE_TRADE:
+    'M7 8a2 2 0 1 0 0-4 2 2 0 0 0 0 4Zm10 0a2 2 0 1 0 0-4 2 2 0 0 0 0 4ZM3 17v-2a4 4 0 0 1 7-2.6M21 17v-2a4 4 0 0 0-7-2.6M9 16h6m-2-2 2 2-2 2',
+  robber: 'M12 4a3 3 0 1 0 0 6 3 3 0 0 0 0-6ZM8 20v-4a4 4 0 0 1 8 0v4Z',
+  BUY_DEV_CARD: 'M5 4h12v15H5zM8 7h12v15H8z',
+  PLAY_DEV_CARD: 'M5 4h12v15H5zM8 7h12v15H8z',
+};
 const noChoices = [] as const;
 const closeForm = () => useSessionStore.getState().closeActionDialog();
+
+function ActionIcon({ kind }: { kind: string }) {
+  const piece = kind === 'freeRoad' ? 'road' : kind;
+  if (piece === 'road' || piece === 'settlement' || piece === 'city')
+    return <img className="action-icon" src={getPieceIconUrl(piece)} alt="" aria-hidden="true" />;
+  const path = actionPaths[kind] ?? 'M5 12h14m-5-5 5 5-5 5';
+  return (
+    <svg className="action-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d={path}
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
 
 function boardHitKind(kind: PlacementKind): BoardHit['kind'] {
   return kind === 'road' || kind === 'freeRoad' ? 'edge' : kind === 'robber' ? 'hex' : 'vertex';
@@ -71,6 +109,8 @@ export interface GameActionController {
   targetLabel(hit: BoardHit): string;
   offerOverlay: React.ReactNode;
   placementActive: boolean;
+  knightIntent: { slotId: string; confirm: () => void; cancel: () => void } | null;
+  toggleKnightIntent: (slotId: string) => void;
   dock: React.ReactNode;
 }
 
@@ -95,6 +135,7 @@ export function useGameActions(
   const optionalChoices = useSessionStore((store) => store.optionalChoices);
   const optionalViewingSeat = useSessionStore((store) => store.optionalViewingSeat);
   const [error, setError] = useState<string | null>(null);
+  const [buildCostsOpen, setBuildCostsOpen] = useState(false);
   const submitting = useRef(false);
   const actorSeat = actingSeat(state, pending);
   const availability = useMemo(
@@ -201,10 +242,11 @@ export function useGameActions(
           useSessionStore.getState().clearPlacementCandidate();
           return;
         }
-        useSessionStore.getState().cancelPlacement();
+        if (!mandatoryPlacement) useSessionStore.getState().cancelPlacement();
         useSessionStore.getState().closeActionDialog();
         return;
       }
+      if (form === 'knight') return;
       const shortcuts: Record<string, PlacementKind> = {
         '1': 'road',
         '2': 'settlement',
@@ -237,6 +279,14 @@ export function useGameActions(
     if (hit.kind !== hitKind) return;
     const choice = choices.find((item) => item.id === hit.id);
     if (!choice) return;
+    if (
+      previewPlacement &&
+      previewPlacement.kind === selectedKind &&
+      previewPlacement.id === hit.id
+    ) {
+      useSessionStore.getState().clearPlacementCandidate();
+      return;
+    }
     if ((selectedKind === 'road' || selectedKind === 'freeRoad') && hit.kind === 'edge') {
       useSessionStore.getState().selectPlacementCandidate({ kind: selectedKind, id: hit.id });
       return;
@@ -314,41 +364,187 @@ export function useGameActions(
       : null;
   const visibleForm = forcedForm ?? form;
   const cardPlays = availability?.cardPlays ?? [];
+  const selectedKnight =
+    form === 'knight' && slotId
+      ? cardPlays.find(
+          (card) => card.slotId === slotId && (card.card ?? priv?.slots[card.slotId]) === 'knight',
+        )
+      : undefined;
+  const toggleKnightIntent = (cardSlotId: string) => {
+    const card = cardPlays.find(
+      (item) => item.slotId === cardSlotId && (item.card ?? priv?.slots[item.slotId]) === 'knight',
+    );
+    if (!card?.commands[0]) return;
+    if (form === 'knight' && slotId === cardSlotId) closeForm();
+    else useSessionStore.getState().openActionDialog('knight', cardSlotId);
+  };
   const primary = availability?.primary ?? [];
+  const normalGroups = primary
+    .filter((group) => group.type in normalActionOrder)
+    .toSorted(
+      (left, right) => (normalActionOrder[left.type] ?? 0) - (normalActionOrder[right.type] ?? 0),
+    );
+  const contextualGroups = primary.filter((group) => !(group.type in normalActionOrder));
+  const actionButtons = (groups: typeof primary) =>
+    groups.flatMap((group) => {
+      if (
+        ['RESPOND_TRADE', 'CANCEL_TRADE', 'CONFIRM_TRADE', 'STEAL', 'DISCARD'].includes(group.type)
+      )
+        return [];
+      const buttonClass = `button button-quiet action-control ${group.type in normalActionOrder ? 'action-normal-control' : ''}`;
+      if (group.type === 'OFFER_TRADE' || group.type === 'PROPOSE_TRADE')
+        return [
+          <button
+            className={buttonClass}
+            type="button"
+            key={group.type}
+            title={t('game:command.trade')}
+            onClick={() => useSessionStore.getState().openActionDialog('trade')}
+          >
+            <ActionIcon kind={group.type} />
+            <span>{t('game:normalTrade')}</span>
+          </button>,
+        ];
+      if (group.type === 'MARITIME_TRADE')
+        return [
+          <button
+            className={buttonClass}
+            type="button"
+            key={group.type}
+            title={t('game:command.bank')}
+            onClick={() => useSessionStore.getState().openActionDialog('bank')}
+          >
+            <ActionIcon kind={group.type} />
+            <span>{t('game:normalBank')}</span>
+          </button>,
+        ];
+      return group.commands.map((command, index) => (
+        <button
+          className={buttonClass}
+          type="button"
+          key={`${group.type}:${index}`}
+          onClick={() => submit(command)}
+        >
+          <ActionIcon kind={group.type} />
+          <span>{t(`game:command.${group.type}`)}</span>
+        </button>
+      ));
+    });
+  const optionalTradeChooser =
+    optionalChoices.length > 0 && optionalViewingSeat === null ? (
+      <details className="optional-trade-chooser">
+        <summary>{t('game:optionalTrade')}</summary>
+        <div>
+          {optionalChoices.map((choiceSeat) => (
+            <button
+              className="button button-quiet"
+              type="button"
+              key={choiceSeat}
+              onClick={() => useSessionStore.getState().viewOptionalSeat(choiceSeat)}
+            >
+              {t('game:viewOptionalTrade', { player: playerLabel(choiceSeat) })}
+            </button>
+          ))}
+        </div>
+      </details>
+    ) : null;
 
   const dock = (
     <section className="action-dock" aria-label={t('game:actions')}>
-      <h2>{t('game:actions')}</h2>
-      {optionalChoices.length > 0 && optionalViewingSeat === null && (
-        <details className="optional-trade-chooser">
-          <summary>{t('game:optionalTrade')}</summary>
-          <div>
-            {optionalChoices.map((choiceSeat) => (
-              <button
-                className="button button-quiet"
-                type="button"
-                key={choiceSeat}
-                onClick={() => useSessionStore.getState().viewOptionalSeat(choiceSeat)}
-              >
-                {t('game:viewOptionalTrade', { player: playerLabel(choiceSeat) })}
-              </button>
-            ))}
-          </div>
-        </details>
-      )}
+      <div className="action-dock-heading">
+        <h2>{t('game:actions')}</h2>
+        <button
+          className="button button-quiet action-costs-trigger"
+          type="button"
+          onClick={() => setBuildCostsOpen(true)}
+        >
+          {t('game:buildCostsTitle')}
+        </button>
+      </div>
       {conflicted ? (
         <p role="alert">{t('game:saveConflictStopped')}</p>
       ) : status?.kind === 'error' ? (
         <p role="alert">{t('game:sessionStopped')}</p>
       ) : seat === null || !availability ? (
-        <p className="muted">{t('game:awaitingAction')}</p>
+        <>
+          <p className="muted">{t('game:awaitingAction')}</p>
+          {optionalTradeChooser}
+        </>
       ) : (
         <>
-          {availableBoardKinds.length > 0 && (
-            <>
-              <p>
-                {selectedKind
-                  ? selectedPlacement
+          <div className={`action-dock-layout ${normalGroups.length ? 'has-normal' : ''}`}>
+            <div className="action-context">
+              {availableBoardKinds.length > 0 && (
+                <div
+                  className="action-context-buttons"
+                  role="group"
+                  aria-label={t('game:chooseBoardAction')}
+                >
+                  {availableBoardKinds.map((kind) => (
+                    <button
+                      className={`button action-control ${selectedKind === kind ? 'button-primary' : 'button-quiet'}`}
+                      type="button"
+                      key={kind}
+                      aria-pressed={selectedKind === kind}
+                      onClick={() => {
+                        const store = useSessionStore.getState();
+                        if (selectedKind !== kind) store.choosePlacement(kind);
+                        else if (mandatoryPlacement) store.clearPlacementCandidate();
+                        else store.cancelPlacement();
+                      }}
+                    >
+                      <ActionIcon kind={kind} />
+                      <span>{t(`game:buildAction.${kind}`)}</span>
+                    </button>
+                  ))}
+                  {selectedKind && !mandatoryPlacement && !selectedPlacement && (
+                    <button
+                      className="button button-quiet action-control action-cancel"
+                      type="button"
+                      onClick={() => useSessionStore.getState().cancelPlacement()}
+                    >
+                      <span>{t('game:cancelAction')}</span>
+                    </button>
+                  )}
+                </div>
+              )}
+              {(contextualGroups.length > 0 || cardPlays.length > 0) && (
+                <div
+                  className="action-context-buttons"
+                  role="group"
+                  aria-label={t('game:contextActions')}
+                >
+                  {actionButtons(contextualGroups)}
+                  {cardPlays.map((card) => {
+                    const cardKind = card.card ?? priv?.slots[card.slotId] ?? 'Hidden';
+                    const knightSelected =
+                      cardKind === 'knight' && form === 'knight' && slotId === card.slotId;
+                    return (
+                      <button
+                        className={`button action-control ${knightSelected ? 'button-primary' : 'button-quiet'}`}
+                        type="button"
+                        key={card.slotId}
+                        {...(cardKind === 'knight' ? { 'aria-pressed': knightSelected } : {})}
+                        onClick={() => {
+                          if (cardKind === 'knight') {
+                            toggleKnightIntent(card.slotId);
+                          } else if (cardKind === 'yearOfPlenty') {
+                            useSessionStore.getState().openActionDialog('plenty', card.slotId);
+                          } else if (cardKind === 'monopoly') {
+                            useSessionStore.getState().openActionDialog('monopoly', card.slotId);
+                          } else if (card.commands[0]) submit(card.commands[0]);
+                        }}
+                      >
+                        <ActionIcon kind="PLAY_DEV_CARD" />
+                        <span>{t('game:playCard', { card: t(`game:dev${cardKind}`) })}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+              {selectedKind && (
+                <p className="action-context-hint" role="status">
+                  {selectedPlacement
                     ? t('game:placementSelectedInstruction', {
                         piece: t(
                           `game:piece.${selectedKind === 'freeRoad' ? 'road' : selectedKind}`,
@@ -360,84 +556,20 @@ export function useGameActions(
                         ? t('game:buildingInstruction', { count: choices.length })
                         : t('game:boardInstruction', {
                             action: t(`game:placement.${selectedKind}`),
-                          })
-                  : t('game:chooseBoardAction')}
-              </p>
-              <div className="action-row" role="group" aria-label={t('game:chooseBoardAction')}>
-                {availableBoardKinds.map((kind) => (
-                  <button
-                    className={`button ${selectedKind === kind ? 'button-primary' : 'button-quiet'}`}
-                    type="button"
-                    key={kind}
-                    aria-pressed={selectedKind === kind}
-                    onClick={() => useSessionStore.getState().choosePlacement(kind)}
-                  >
-                    {t(`game:placement.${kind}`)}
-                  </button>
-                ))}
+                          })}
+                </p>
+              )}
+              {optionalTradeChooser}
+            </div>
+            {normalGroups.length > 0 && (
+              <div
+                className="action-normal-buttons"
+                role="group"
+                aria-label={t('game:normalActions')}
+              >
+                {actionButtons(normalGroups)}
               </div>
-            </>
-          )}
-          <div className="action-row">
-            {primary.flatMap((group) => {
-              if (
-                ['RESPOND_TRADE', 'CANCEL_TRADE', 'CONFIRM_TRADE', 'STEAL', 'DISCARD'].includes(
-                  group.type,
-                )
-              )
-                return [];
-              if (group.type === 'OFFER_TRADE' || group.type === 'PROPOSE_TRADE')
-                return [
-                  <button
-                    className="button button-quiet"
-                    type="button"
-                    key={group.type}
-                    onClick={() => useSessionStore.getState().openActionDialog('trade')}
-                  >
-                    {t('game:command.trade')}
-                  </button>,
-                ];
-              if (group.type === 'MARITIME_TRADE')
-                return [
-                  <button
-                    className="button button-quiet"
-                    type="button"
-                    key={group.type}
-                    onClick={() => useSessionStore.getState().openActionDialog('bank')}
-                  >
-                    {t('game:command.bank')}
-                  </button>,
-                ];
-              return group.commands.map((command, index) => (
-                <button
-                  className="button button-quiet"
-                  type="button"
-                  key={`${group.type}:${index}`}
-                  onClick={() => submit(command)}
-                >
-                  {t(`game:command.${group.type}`)}
-                </button>
-              ));
-            })}
-            {cardPlays.map((card) => {
-              const cardKind = card.card ?? priv?.slots[card.slotId] ?? 'Hidden';
-              return (
-                <button
-                  className="button button-quiet"
-                  type="button"
-                  key={card.slotId}
-                  onClick={() => {
-                    if (cardKind === 'yearOfPlenty') {
-                      useSessionStore.getState().openActionDialog('plenty', card.slotId);
-                    } else if (cardKind === 'monopoly') {
-                      useSessionStore.getState().openActionDialog('monopoly', card.slotId);
-                    } else if (card.commands[0]) submit(card.commands[0]);
-                  }}
-                >
-                  {t('game:playCard', { card: t(`game:dev${cardKind}`) })}
-                </button>
-              );
-            })}
+            )}
           </div>
           {formProps && visibleForm === 'discard' && <DiscardDialog {...formProps} />}
           {formProps && visibleForm === 'steal' && <StealDialog {...formProps} />}
@@ -464,6 +596,7 @@ export function useGameActions(
           {error}
         </p>
       )}
+      {buildCostsOpen && <BuildCostsDialog onClose={() => setBuildCostsOpen(false)} />}
     </section>
   );
 
@@ -497,6 +630,17 @@ export function useGameActions(
     targetLabel,
     offerOverlay,
     placementActive: selectedKind !== undefined,
+    knightIntent:
+      selectedKnight && slotId
+        ? {
+            slotId,
+            confirm: () => {
+              if (selectedKnight.commands[0]) submit(selectedKnight.commands[0]);
+            },
+            cancel: closeForm,
+          }
+        : null,
+    toggleKnightIntent,
     dock,
   };
 }

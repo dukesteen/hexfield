@@ -124,15 +124,23 @@ Later stages add `online/create`, `join/$roomId` (stage 09), `game/$gameId` (sta
 
 - **Layout**: the game fills one viewport without document scrolling or outer gutters. Desktop has the board on the left, hand and actions directly below it, and players with a collapsible log on the right. A top-left hamburger overlay holds save status, Leave, animation controls and secondary utilities instead of header rows. Mobile keeps a usable board, compact player strip, hand and primary actions visible, with secondary details in a disclosure and trade composition in a full-screen sheet. Long detail lists can scroll inside their own panes.
 - **Player panels**: name, colour, public VP, resource card count, dev card count, knights played, longest road length, award badges, "active" indicator, timer ring, connection status (placeholder).
+  Remaining roads, settlements, and cities use small piece icons with counts and accessible labels.
   Public resource payouts also appear beside each player for eight seconds. Recent payouts remain readable across fast bot turns; each payout expires independently. These readouts use the public production event, remain visible with reduced motion or skipped animations, and do not reveal private transfers.
 - **Hand**: original SVG resource cards grouped with visible counts; dev cards (face up for the owner) showing a "new — playable next turn" state; disabled states with a tooltip explaining why (from the `RuleError` message).
 - **Actions** are contextual and derived from `getLegalCommands` for the controllable seat:
+  - desktop places contextual actions on the left and square normal-action buttons in a vertical stack on the right; narrow layouts keep labels and touch targets visible in a compact horizontal strip,
   - build road/settlement/city → enters placement mode with highlights,
   - road, settlement, and city selection previews the piece at a legal location; an explicit confirmation on the board commits it, while Cancel clears the preview. This also applies during setup and free-road placement,
+  - clicking an active optional build action again exits its placement mode. Reselecting an uncommitted board preview clears that preview,
+  - clicking a playable Knight card or its action selects it and shows cross/check confirmation controls at the bottom of that card. Cancel keeps it unplayed; the check commits it and starts the required robber move. Narrow layouts open the card dialog for this choice,
   - buy dev card, trade, bank trade, end turn,
   - roll dice (in preRoll).
+  - a compact Build costs dialog shows the engine's public road, settlement, city, and development-card prices, even when the current hand cannot afford them.
   - Keyboard shortcuts: `R` roll, `E` end turn, `1/2/3` build modes, `Esc` cancel.
+- **Last roll**: two dice faces and their total remain at the top-right of the board viewport after the animation, across turn changes and saved-game restoration.
+- **Hand sizing**: desktop reserves space for two development cards with full names beside the resource cards. A compact eye control conceals the hand. Narrow screens and larger development-card hands use the card dialog.
 - **Dialogs**: discard (select resource cards with the same SVG picker used for trades, choose exactly N with a selected/required count, and confirm before spending), robber (select hex on board), steal target (choose among eligible players with card counts), year of plenty, monopoly, road building (placement mode ×2 with skip).
+  Year of Plenty and Monopoly also use the SVG card picker and a separate confirmation footer. Year of Plenty selects exactly two requested cards; Monopoly selects one resource type. Cancelling either dialog does not spend the development card.
 - **Trade**:
   - The composer lets players select resource cards to give and receive, with quantities, separate remove controls, available hand counts and target players. Give and receive stay visible together on desktop; mobile uses compact stacked selections and a visible submit footer. Incoming offers appear as a compact overlay at the bottom-right of the board viewport, with resource card graphics and accept/decline controls. Offer wording must identify whose cards each side represents.
   - The active seat sees the responses and confirms with one.
@@ -140,7 +148,7 @@ Later stages add `online/create`, `join/$roomId` (stage 09), `game/$gameId` (sta
   - Completed public player trades animate the exchanged cards between player panels. Creating or accepting an offer does not imply a completed transfer. Animation uses public offer terms and the confirmed counterparty, respects reduced motion and can be skipped.
 - **Log**: human-readable event history ("Red built a road", "Blue rolled 8: Red +1 grain…") generated from `GameEvent`s by an i18n formatter.
 - **Hotseat privacy**: when control passes to a different human seat, show a full-screen "Pass to <Name> — tap to reveal" cover that hides hands. Option to disable.
-- **Game over** screen: winner, final VP breakdown per seat, stats (dice histogram, resources gained per seat), "rematch" and "view replay" (replay viewer arrives in stage 17, so just export the replay JSON for now).
+- **Game over** screen: a full-screen results modal over the preserved game cockpit, opened on completion and when loading a completed game. Show the recorded winner, final VP breakdown per seat, dice histogram, resources gained per seat, Rematch, and Export replay. Combine claimed and still-hidden victory-point cards into one VP cards total without double-counting. Keep unavailable private totals unknown. View board or Escape dismisses the modal, and Results reopens it from the finished board. Keep the footer visible while long content scrolls inside the modal. The replay viewer arrives in stage 17, so export the replay JSON for now.
 - **New local game** screen: player count 2–4 (2 players uses base rules without variants), names and colours, human/bot per seat, and all base options from stage 03.
 - **Accessibility**: all actions reachable by keyboard; ARIA labels on panels; colour-blind-safe player colours plus a pattern or shape per player; resource icons carry text labels on hover/focus.
 - **Theming**: light/dark via CSS variables.

@@ -46,10 +46,12 @@ async function openBeforeProductionRoll(page: Page, id: string): Promise<number>
     },
     save,
   };
-  await page.addInitScript(({ key, value }) => localStorage.setItem(key, value), {
-    key: `hexfield:save:v1:${id}`,
-    value: JSON.stringify(record),
-  });
+  await page.addInitScript(
+    ({ key, value }) => {
+      if (localStorage.getItem(key) === null) localStorage.setItem(key, value);
+    },
+    { key: `hexfield:save:v1:${id}`, value: JSON.stringify(record) },
+  );
   await page.goto(`/#/local/${id}`);
   await expect.poll(() => page.evaluate(() => Boolean(Reflect.get(window, '__cp2p')))).toBe(true);
   const reveal = page.getByRole('button', { name: 'Reveal hand' });
@@ -136,11 +138,14 @@ test('visible production receipts survive Skip animations and the next turn, the
   page.on('pageerror', (error) => errors.push(error.message));
   const beforeEvents = await openBeforeProductionRoll(page, 'payout-desktop');
   const bySeat = await rollForProduction(page, beforeEvents);
+  const lastRoll = page.getByRole('img', { name: 'Last roll: 1 and 5, total 6' });
+  await expect(lastRoll).toBeVisible();
   await expectVisibleReceipts(page, bySeat);
   await capture(page, 'payout-desktop-dark.png');
 
   await page.getByLabel('Open game menu').click();
   await page.getByRole('button', { name: 'Skip animations' }).click();
+  await expect(lastRoll).toBeVisible();
   await expectVisibleReceipts(page, bySeat);
   await page.getByLabel('Open game menu').click();
 
@@ -160,7 +165,19 @@ test('visible production receipts survive Skip animations and the next turn, the
     )
     .not.toBe(activeBefore);
   await expectVisibleReceipts(page, bySeat);
+  await expect(lastRoll).toBeVisible();
   await expect(page.locator('.production-receipt')).toHaveCount(0, { timeout: 12_000 });
+  await expect(page.locator('.save-indicator.status-saved')).toHaveText('Saved');
+  await page.reload();
+  await page.getByRole('button', { name: 'Reveal hand' }).click();
+  const restoredEvents = await page.evaluate(() => {
+    const hook: DevHook | undefined = Reflect.get(window, '__cp2p');
+    return hook?.session.getEvents().filter((event) => event.type === 'diceRolled') ?? [];
+  });
+  expect(restoredEvents, 'Saved replay should restore the public roll event').toContainEqual(
+    expect.objectContaining({ type: 'diceRolled', dice: [1, 5], roll: 6 }),
+  );
+  await expect(lastRoll).toBeVisible();
   expect(errors).toEqual([]);
 });
 
@@ -174,6 +191,14 @@ test('reduced-motion phone keeps public payout receipts beside all paid seats', 
   page.on('pageerror', (error) => errors.push(error.message));
   const beforeEvents = await openBeforeProductionRoll(page, 'payout-phone');
   const bySeat = await rollForProduction(page, beforeEvents);
+  const lastRoll = page.getByRole('img', { name: 'Last roll: 1 and 5, total 6' });
+  await expect(lastRoll).toBeVisible();
+  const rollBounds = await lastRoll.boundingBox();
+  expect(rollBounds).not.toBeNull();
+  if (rollBounds) {
+    expect(rollBounds.x + rollBounds.width).toBeLessThanOrEqual(390);
+    expect(rollBounds.y + rollBounds.height).toBeLessThanOrEqual(844);
+  }
   await expectVisibleReceipts(page, bySeat);
   await capture(page, 'payout-phone.png');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);

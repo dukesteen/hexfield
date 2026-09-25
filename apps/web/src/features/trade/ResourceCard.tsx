@@ -10,6 +10,7 @@ interface CardPickerProps {
   label: string;
   values: ResourceCounts;
   stock?: { source: 'hand' | 'bank'; counts: Partial<ResourceCounts> };
+  selectable?: readonly Resource[];
   steps?: Partial<ResourceCounts>;
   onChange: (resource: Resource, count: number) => void;
   onClear: () => void;
@@ -47,6 +48,7 @@ export function ResourceCardPicker({
   label,
   values,
   stock,
+  selectable,
   steps,
   onChange,
   onClear,
@@ -105,6 +107,7 @@ export function ResourceCardPicker({
           const stockCount = stock?.counts[resource];
           const step = steps?.[resource] ?? 1;
           const atCap = stockCount !== undefined && count + step > stockCount;
+          const unavailable = selectable !== undefined && !selectable.includes(resource);
           const name = resourceLabel(t, resource);
           const rateId = `${id}-${resource}-rate`;
           const stockId = `${id}-${resource}-stock`;
@@ -125,9 +128,9 @@ export function ResourceCardPicker({
                 }}
                 aria-label={t('rules:trade.addCard', { resource: name, side: label })}
                 {...(describedBy ? { 'aria-describedby': describedBy } : {})}
-                aria-disabled={atCap}
+                aria-disabled={atCap || unavailable}
                 onClick={() => {
-                  if (!atCap) onChange(resource, count + step);
+                  if (!atCap && !unavailable) onChange(resource, count + step);
                 }}
               >
                 <ResourceCard

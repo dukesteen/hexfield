@@ -17,6 +17,12 @@ export interface DevHook {
   pixelPosition(hit: BoardHit): ScreenPoint | null;
 }
 
+/** Stable installation, with values refreshed by the route as the UI changes. */
+export interface DevHookView {
+  renderer: BoardRenderer | null;
+  actions: { revision: number; availability: ActionAvailability | null } | null;
+}
+
 declare global {
   interface Window {
     __cp2p?: DevHook;
@@ -26,12 +32,10 @@ declare global {
 /** Install from a development route only; cleanup cannot remove a newer hook. */
 export function installDevHook({
   session,
-  renderer = null,
-  actions = null,
+  view,
 }: {
   session: GameSession;
-  renderer?: BoardRenderer | null;
-  actions?: ActionAvailability | null;
+  view: DevHookView;
 }): () => void {
   if (!import.meta.env.DEV || typeof window === 'undefined') return () => {};
   let revision = 0;
@@ -40,15 +44,20 @@ export function installDevHook({
   });
   const hook: DevHook = {
     session,
-    renderer,
+    get renderer() {
+      return view.renderer;
+    },
     diagnostics: () => ({
       hash: toHex(hashValue(session.getState())),
       revision,
       rejectionCount: ordinaryActionRejectionCount(),
       pending: session.getPending(),
-      actions: actions === null ? null : structuredClone(actions),
+      actions:
+        view.actions?.revision === revision && view.actions.availability !== null
+          ? structuredClone(view.actions.availability)
+          : null,
     }),
-    pixelPosition: (hit) => renderer?.getPixelPosition(hit) ?? null,
+    pixelPosition: (hit) => view.renderer?.getPixelPosition(hit) ?? null,
   };
   Reflect.set(window, '__cp2p', hook);
   return () => {

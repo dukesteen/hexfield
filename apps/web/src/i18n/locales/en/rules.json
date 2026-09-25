@@ -20,12 +20,17 @@
   "plenty": {
     "title": "Year of Plenty",
     "instruction": "Choose two resources. You may choose the same kind twice.",
+    "cards": "Resources to take",
     "first": "First resource",
     "second": "Second resource",
     "bankHidden": "Bank counts are hidden. You may receive fewer cards if stock is short.",
     "bankAvailable": "Bank stock for these choices: {{first}} and {{second}}"
   },
-  "monopoly": { "title": "Monopoly", "instruction": "Choose the resource to collect." },
+  "monopoly": {
+    "title": "Monopoly",
+    "instruction": "Choose the resource to collect.",
+    "cards": "Resource to collect"
+  },
   "steal": {
     "title": "Steal a card",
     "instruction": "Choose a player next to the robber.",

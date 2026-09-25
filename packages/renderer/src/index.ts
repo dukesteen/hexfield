@@ -4,6 +4,7 @@ export { PixiBoardRenderer, createBoardRenderer } from './BoardRenderer.js';
 export { hitTestBoard } from './input/hitTest.js';
 export {
   getDevelopmentCardUrl,
+  getPieceIconUrl,
   getResourceCardUrl,
   getResourceIconUrl,
 } from './assets/terrainTextures.js';

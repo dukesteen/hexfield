@@ -46,6 +46,7 @@ export function victoryBreakdown(state: GameState, seat: Seat, hidden: number | 
     awards,
     revealed,
     hidden,
+    vpCards: hidden === null ? null : revealed + hidden,
     total: hidden === null ? null : buildings + awards + revealed + hidden,
   };
 }

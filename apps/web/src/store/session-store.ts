@@ -30,7 +30,7 @@ interface SessionView {
   placementMode: 'road' | 'settlement' | 'city' | 'freeRoad' | 'robber' | null;
   placementCancelled: boolean;
   previewPlacement: PlacementCandidate | null;
-  openDialog: 'discard' | 'steal' | 'trade' | 'bank' | 'plenty' | 'monopoly' | null;
+  openDialog: 'discard' | 'steal' | 'trade' | 'bank' | 'plenty' | 'monopoly' | 'knight' | null;
   selectedCardSlot: string | null;
   optionalChoices: readonly Seat[];
   optionalViewingSeat: Seat | null;

@@ -74,10 +74,11 @@ export async function saveBeforeGoldenInput(
     if (!applied.ok) throw new Error(`Golden prefix rejected: ${applied.error.code}`);
     state = applied.value.state;
     if (next === genesis) continue;
-    if (next.kind === 'command') batches.push({ submitted: next, generated: [] });
+    if (next.kind === 'command' && next.command.type !== 'CLAIM_VICTORY')
+      batches.push({ submitted: next, generated: [] });
     else {
       const batch = batches.at(-1);
-      if (!batch) throw new Error('System outcome has no submitted command');
+      if (!batch) throw new Error('Generated input has no submitted command');
       batch.generated.push(next);
     }
   }

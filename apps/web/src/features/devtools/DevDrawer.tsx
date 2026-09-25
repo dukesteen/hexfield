@@ -10,7 +10,7 @@ import type { ActionAvailability } from '../actions/availability.js';
 export interface DevDrawerProps {
   session: GameSession;
   renderer?: BoardRenderer | null;
-  actions?: ActionAvailability | null;
+  getActions?: () => ActionAvailability | null;
   onImportSave: (raw: unknown) => Promise<void>;
   onExportSave: (save: unknown) => Promise<void>;
   onExportReplay: (save: unknown) => Promise<void>;
@@ -23,7 +23,7 @@ function json(value: unknown): string {
 /** Diagnostic controls. The exported save is the authoritative log, not a public-state dump. */
 export function DevDrawer({
   session,
-  actions,
+  getActions,
   onImportSave,
   onExportSave,
   onExportReplay,
@@ -108,7 +108,7 @@ export function DevDrawer({
           </details>
           <details>
             <summary>{t('editor:actions')}</summary>
-            <pre>{json(actions ?? null)}</pre>
+            <pre>{json(getActions?.() ?? null)}</pre>
           </details>
           <label>
             {t('editor:commandSeat')}

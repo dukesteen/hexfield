@@ -1,5 +1,5 @@
 import { createFileRoute, Link, notFound, useBlocker, useNavigate } from '@tanstack/react-router';
-import { lazy, Suspense, useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { BoardRenderer } from '@cp2p/renderer';
 import type { ActionAvailability } from '../../features/actions/availability';
@@ -149,7 +149,17 @@ function LocalGameInstance({ record, gameId }: { record: SavedGameRecord; gameId
   const allowNavigationRef = useRef(false);
   const sessionRef = useRef<LocalSession | null>(null);
   const [renderer, setRenderer] = useState<BoardRenderer | null>(null);
-  const [actions, setActions] = useState<ActionAvailability | null>(null);
+  const devViewRef = useRef<{
+    renderer: BoardRenderer | null;
+    actions: { revision: number; availability: ActionAvailability | null } | null;
+  }>({ renderer, actions: null });
+  devViewRef.current.renderer = renderer;
+  const onActionsChange = useCallback(
+    (availability: ActionAvailability | null, revision: number) => {
+      devViewRef.current.actions = { availability, revision };
+    },
+    [],
+  );
   const blocker = useBlocker({
     shouldBlockFn: ({ current, next }) =>
       ready && !allowNavigationRef.current && current.pathname !== next.pathname,
@@ -226,14 +236,14 @@ function LocalGameInstance({ record, gameId }: { record: SavedGameRecord; gameId
     let active = true;
     let remove: () => void = () => undefined;
     void import('../../features/devtools').then(({ installDevHook }) => {
-      if (active) remove = installDevHook({ session, renderer, actions });
+      if (active) remove = installDevHook({ session, view: devViewRef.current });
       return undefined;
     });
     return () => {
       active = false;
       remove();
     };
-  }, [gameId, ready, renderer, actions]);
+  }, [gameId, ready, record]);
 
   useEffect(() => {
     if (settings.data?.hotseatCover === false && waitingSeat !== null && revealedSeat === null) {
@@ -319,7 +329,7 @@ function LocalGameInstance({ record, gameId }: { record: SavedGameRecord; gameId
                 <DevDrawer
                   session={sessionRef.current}
                   renderer={renderer}
-                  actions={actions}
+                  getActions={() => devViewRef.current.actions?.availability ?? null}
                   onImportSave={async (raw) => {
                     await importSave(raw);
                   }}
@@ -340,7 +350,7 @@ function LocalGameInstance({ record, gameId }: { record: SavedGameRecord; gameId
           onRematch={rematch}
           onExportReplay={exportCurrentReplay}
           onRendererReady={setRenderer}
-          onActionsChange={setActions}
+          onActionsChange={onActionsChange}
         />
       ) : (
         <p role="status">{t('game:loadingGame')}</p>

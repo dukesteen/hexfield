@@ -1,9 +1,51 @@
+import { readFile } from 'node:fs/promises';
+import { fromBase64Url } from '@cp2p/codec';
+import {
+  createBaseEngine,
+  type GameConfig,
+  type GameEvent,
+  type Input,
+  type Seat,
+} from '@cp2p/engine';
 import { expect, test } from 'vitest';
-import type { GameEvent } from '@cp2p/engine';
 import { buildBoardGraph } from '@cp2p/engine/geometry';
 import { standardFixedBoard } from '@cp2p/maps';
 import { LocalSession } from '../../session/local-session.js';
 import { diceHistogram, productionBySeat, victoryBreakdown } from './stats';
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isSeat(value: unknown): value is Seat {
+  return Number.isInteger(value) && typeof value === 'number' && value >= 0 && value <= 5;
+}
+
+function isGoldenConfig(value: unknown): value is GameConfig {
+  return (
+    isRecord(value) &&
+    Array.isArray(value.modules) &&
+    value.modules.every(
+      (module: unknown) =>
+        isRecord(module) && typeof module.id === 'string' && typeof module.version === 'string',
+    ) &&
+    Array.isArray(value.seats) &&
+    value.seats.every((seat: unknown) => isSeat(seat)) &&
+    isRecord(value.options) &&
+    value.board === undefined
+  );
+}
+
+function isGoldenInput(value: unknown): value is Input {
+  return (
+    isRecord(value) &&
+    ((value.kind === 'system' && typeof value.type === 'string') ||
+      (value.kind === 'command' &&
+        isSeat(value.seat) &&
+        isRecord(value.command) &&
+        typeof value.command.type === 'string'))
+  );
+}
 
 test('game-over dice and production statistics reflect only recorded events', () => {
   const events: GameEvent[] = [
@@ -129,6 +171,7 @@ test('final scoring includes winner and loser private VP without guessing missin
       awards: 2,
       revealed: 1,
       hidden: 1,
+      vpCards: 2,
       total: 5,
     });
     expect(victoryBreakdown(state, 1, 2)).toEqual({
@@ -136,10 +179,54 @@ test('final scoring includes winner and loser private VP without guessing missin
       awards: 0,
       revealed: 0,
       hidden: 2,
+      vpCards: 2,
       total: 4,
     });
-    expect(victoryBreakdown(state, 1, null).total).toBeNull();
+    expect(victoryBreakdown(state, 1, null)).toMatchObject({ vpCards: null, total: null });
   } finally {
     made.value.dispose();
   }
+});
+
+test('claimed victory cards appear once in the final VP-card total', async () => {
+  const fixtureUrl = new URL(
+    '../../../../../packages/engine/test/golden/hidden-vp-win.replay.json',
+    import.meta.url,
+  );
+  // This is the verified engine golden with a final two-slot CLAIM_VICTORY input.
+  const replay: unknown = JSON.parse(await readFile(fixtureUrl, 'utf8'));
+  if (
+    typeof replay !== 'object' ||
+    replay === null ||
+    !('config' in replay) ||
+    !isGoldenConfig(replay.config) ||
+    !('genesisSeed' in replay) ||
+    typeof replay.genesisSeed !== 'string' ||
+    !('inputs' in replay) ||
+    !Array.isArray(replay.inputs) ||
+    !replay.inputs.every((input: unknown) => isGoldenInput(input))
+  )
+    throw new Error('Hidden-VP golden is malformed');
+  const inputs: Input[] = replay.inputs;
+  const engine = createBaseEngine();
+  let state = engine.createGame(replay.config, fromBase64Url(replay.genesisSeed));
+  for (const input of inputs) {
+    const applied = engine.apply(state, input);
+    if (!applied.ok) throw new Error(`Hidden-VP golden rejected: ${applied.error.code}`);
+    state = applied.value.state;
+  }
+  expect(inputs.at(-1)).toMatchObject({
+    kind: 'command',
+    command: { type: 'CLAIM_VICTORY', slotIds: ['dev:2', 'dev:7'] },
+  });
+  expect(state.result?.winner).toBe(0);
+  const score = victoryBreakdown(state, 0, 0);
+  expect(score).toMatchObject({
+    buildings: 6,
+    awards: 2,
+    revealed: 2,
+    hidden: 0,
+    vpCards: 2,
+    total: 10,
+  });
 });
