@@ -2627,6 +2627,8 @@ async function selectBoardPlacement(
   id: string,
   input: 'mouse' | 'touch' = 'mouse',
 ): Promise<void> {
+  // The session hook is available before the asynchronous renderer has loaded its assets.
+  await expect(page.locator('.board-view-canvas')).toHaveAttribute('aria-hidden', 'false');
   const point = await page.evaluate(
     (hit) => {
       const hook: DevHook | undefined = Reflect.get(window, '__cp2p');

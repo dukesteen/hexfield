@@ -20,3 +20,12 @@ Validation in the isolated `fix/port-ratio-glyphs` worktree:
 
 Firefox and WebKit remain for the normal Linux CI browser matrix; they were not
 run locally on macOS.
+
+The first hosted run, [36179964504](https://github.com/dukesteen/hexfield/actions/runs/36179964504),
+passed build, unit, coverage and simulation checks. Browser tests reported 50
+passes and 69 intentional skips, then the twenty-game test tried to read a board
+coordinate before asynchronous renderer initialization completed. The placement
+helper now waits for the board canvas's ready state before reading coordinates.
+It still checks that the target is visible and unobscured before clicking.
+`pnpm check` passes after that test correction; the full twenty-game rerun and
+replacement hosted deployment are pending.
