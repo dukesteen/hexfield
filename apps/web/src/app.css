@@ -1012,7 +1012,10 @@ input[type='checkbox'] {
 .action-error {
   color: var(--error);
 }
-.action-dock dialog {
+.action-forms {
+  display: contents;
+}
+.action-forms dialog {
   width: min(92vw, 520px);
   max-height: min(86vh, 780px);
   padding: 24px;
@@ -1023,25 +1026,25 @@ input[type='checkbox'] {
   color: var(--text);
   box-shadow: 0 24px 80px #0005;
 }
-.action-dock dialog.trade-dialog {
+.action-forms dialog.trade-dialog {
   width: min(94vw, 680px);
 }
-.action-dock dialog::backdrop {
+.action-forms dialog::backdrop {
   background: #091d17a8;
 }
-.action-dock dialog > * + * {
+.action-forms dialog > * + * {
   margin-top: 14px;
 }
-.action-dock dialog label {
+.action-forms dialog label {
   display: grid;
   gap: 6px;
 }
-:where(.action-dock dialog) fieldset {
+:where(.action-forms dialog) fieldset {
   padding: 12px;
   border: 1px solid var(--border);
   border-radius: 8px;
 }
-:where(.action-dock dialog) button {
+:where(.action-forms dialog) button {
   min-height: 44px;
   padding: 8px 13px;
   border: 1px solid var(--control);
@@ -1050,7 +1053,7 @@ input[type='checkbox'] {
   color: var(--text);
   cursor: pointer;
 }
-:where(.action-dock dialog) button:disabled {
+:where(.action-forms dialog) button:disabled {
   cursor: not-allowed;
   opacity: 0.5;
 }
@@ -1795,7 +1798,7 @@ button.development-card-main:focus-visible img {
     grid-template-columns: repeat(5, minmax(0, 48px));
     gap: 4px;
   }
-  .action-dock dialog.trade-dialog {
+  .action-forms dialog.trade-dialog {
     width: 100vw;
     max-width: none;
     height: 100dvh;
@@ -2239,4 +2242,448 @@ button.development-card-main:focus-visible img {
 :root[data-motion='reduce'] .resource-flight {
   transition: none;
   animation: none;
+}
+
+/* Compact cockpit: the board stays visible while the hand and next decision remain anchored. */
+.cockpit-sheet {
+  inset: auto 0 0;
+  width: 100%;
+  max-width: none;
+  max-height: min(72dvh, 560px);
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--control);
+  border-bottom: 0;
+  border-radius: 16px 16px 0 0;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 -12px 40px #091d1733;
+}
+.cockpit-sheet[open] {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  animation: cockpit-sheet-in 180ms ease-out;
+}
+.cockpit-sheet::backdrop {
+  background: #091d1780;
+}
+.cockpit-sheet-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 8px 6px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.cockpit-sheet-header h2 {
+  min-width: 0;
+  font-size: 1.125rem;
+}
+.cockpit-sheet-header h2:focus {
+  outline: none;
+}
+.cockpit-sheet-close {
+  min-width: 64px;
+  min-height: 44px;
+}
+.cockpit-sheet-body {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 12px 16px max(16px, env(safe-area-inset-bottom));
+}
+.cockpit-sheet .action-dock {
+  min-height: 0;
+  padding: 0;
+  overflow: visible;
+}
+.cockpit-sheet .action-dock-heading h2 {
+  display: none;
+}
+.cockpit-sheet .action-context-buttons,
+.cockpit-sheet .action-normal-buttons {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.cockpit-sheet .action-control {
+  min-height: 48px;
+  justify-content: flex-start;
+}
+.player-details-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.player-details-head strong {
+  flex: 1;
+}
+.player-details-head .player-vp small {
+  display: inline;
+}
+.player-details-head .player-marker {
+  width: 24px;
+  height: 24px;
+}
+.player-details-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 16px 0;
+}
+.player-details-stats > div {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 44px;
+  padding: 8px;
+  border-radius: 8px;
+  background: var(--raised);
+}
+.player-details-stats dt {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+.player-details-stats dd {
+  margin: 2px 0 0;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+}
+.player-details h3 {
+  margin: 14px 0 8px;
+  font-size: 0.875rem;
+}
+.player-details-pieces,
+.player-details-gains {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  min-height: 32px;
+  align-items: center;
+}
+.player-details-pieces > span,
+.player-details-gains > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-variant-numeric: tabular-nums;
+}
+.player-details-pieces img,
+.player-details-gains img {
+  width: 24px;
+  height: 24px;
+}
+@keyframes cockpit-sheet-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+}
+@media (max-width: 767px) {
+  .game-grid {
+    grid-template-rows: minmax(0, 1fr) 56px auto;
+  }
+  .player-panel {
+    position: relative;
+  }
+  .player-panel-open {
+    position: absolute;
+    inset: 0;
+    min-height: 44px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    cursor: pointer;
+  }
+  .player-panel-open:focus-visible {
+    outline: 3px solid var(--accent);
+    outline-offset: -3px;
+  }
+  .game-bottom {
+    grid-template-rows: 76px 52px;
+    padding-bottom: env(safe-area-inset-bottom);
+    background: var(--surface);
+  }
+  .game-bottom > .hand-dock {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr)) 52px 44px;
+    grid-template-rows: 1fr;
+    align-items: start;
+    gap: 4px;
+    padding: 6px 8px 0;
+  }
+  .hand-dock .section-heading {
+    display: contents;
+  }
+  .hand-dock .section-heading h2 {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+  .hand-dock .hand-controls {
+    grid-column: 6 / 8;
+    grid-row: 1;
+    display: grid;
+    grid-template-columns: 52px 44px;
+    gap: 0;
+  }
+  .hand-dock .resource-hand {
+    grid-column: 1 / 6;
+    grid-row: 1;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 4px;
+    margin: 0;
+  }
+  .hand-dock .resource-card {
+    --card-w: min(44px, 100%);
+  }
+  .hand-dock .resource-card[data-size='md'] img {
+    width: var(--card-w);
+    height: 50px;
+  }
+  .hand-dock .resource-card-name {
+    font-size: 12px;
+    line-height: 14px;
+  }
+  .hand-dock > .muted {
+    grid-column: 1 / -1;
+    grid-row: 1;
+    align-self: center;
+    margin: 0;
+  }
+  .hand-dev-control {
+    display: grid;
+    align-content: center;
+    justify-items: center;
+    width: 52px;
+    min-width: 52px;
+    height: 64px;
+    padding: 0;
+    font-size: 0.75rem;
+    line-height: 1.1;
+  }
+  .hand-dev-control b {
+    font-size: 1rem;
+    font-variant-numeric: tabular-nums;
+  }
+  .hand-hide-control {
+    align-self: start;
+  }
+  .next-step-bar {
+    grid-row: 2;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 8px;
+    min-height: 52px;
+    padding: 4px 8px;
+    border-top: 1px solid var(--border);
+  }
+  .next-step-primary {
+    min-width: 0;
+    min-height: 44px;
+  }
+  .next-step-message {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    min-width: 0;
+    font-size: 0.875rem;
+    line-height: 1.2;
+  }
+  .next-step-message > span {
+    min-width: 0;
+  }
+  .next-step-message > button {
+    min-width: 44px;
+    min-height: 44px;
+    padding: 4px;
+  }
+  .next-step-actions {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    min-width: 108px;
+    min-height: 44px;
+    padding: 4px 8px;
+  }
+  .next-step-actions b {
+    padding: 0 5px;
+    border-radius: 999px;
+    background: var(--accent);
+    color: var(--accent-text);
+    font-size: 0.75rem;
+  }
+  .next-step-actions i {
+    position: absolute;
+    top: 3px;
+    right: 3px;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
+  }
+}
+@media (max-width: 359px) {
+  .hand-dock .resource-card-name {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+}
+@media (max-height: 500px) and (min-width: 768px) {
+  .game-grid {
+    grid-template-columns: minmax(0, 1fr) 288px;
+  }
+  .player-panel {
+    position: relative;
+    padding-inline: 1px;
+  }
+  .player-panel-heading .player-marker {
+    width: 14px;
+    height: 14px;
+    border-width: 1px;
+  }
+  .player-panel .player-vp {
+    min-width: 18px;
+    padding: 1px;
+    font-size: 0.75rem;
+  }
+  .player-panel-open {
+    position: absolute;
+    inset: 0;
+    min-height: 44px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    cursor: pointer;
+  }
+  .player-panel-open:focus-visible {
+    outline: 3px solid var(--accent);
+    outline-offset: -3px;
+  }
+  .game-sidebar {
+    align-self: start;
+    height: 56px;
+    z-index: 1;
+  }
+  .game-sidebar .player-rail {
+    min-width: 0;
+    flex: 1 1 0%;
+  }
+  .game-sidebar .game-info {
+    width: 44px;
+    flex: 0 0 44px;
+  }
+  .game-bottom {
+    align-self: stretch;
+    height: 100%;
+    grid-template-rows: minmax(0, 1fr) 52px;
+    padding-top: 56px;
+    background: var(--surface);
+  }
+  .game-bottom > .hand-dock {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-template-rows: auto 44px;
+    align-content: start;
+    padding: 8px;
+  }
+  .hand-dock .section-heading {
+    display: contents;
+  }
+  .hand-dock .section-heading h2 {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+  .hand-dock .resource-hand {
+    grid-column: 1 / -1;
+    grid-row: 1;
+    margin: 0;
+  }
+  .hand-dock .hand-controls {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    display: flex;
+    justify-content: flex-end;
+  }
+  .hand-dev-control {
+    min-width: 52px;
+    min-height: 44px;
+    padding: 2px 6px;
+  }
+  .hand-dock .resource-card {
+    --card-w: min(42px, 100%);
+  }
+  .hand-dock .resource-card[data-size='md'] img {
+    width: var(--card-w);
+    height: 59px;
+  }
+  .hand-dock .resource-card-name {
+    font-size: 11px;
+  }
+  .next-step-bar {
+    grid-row: 2;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 8px;
+    border-top: 1px solid var(--border);
+  }
+  .next-step-primary,
+  .next-step-actions {
+    min-height: 44px;
+  }
+  .next-step-actions {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 6px;
+  }
+  .next-step-actions b {
+    padding: 0 4px;
+    border-radius: 999px;
+    background: var(--accent);
+    color: var(--accent-text);
+    font-size: 0.75rem;
+  }
+  .next-step-actions i {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
+  }
+  .cockpit-sheet {
+    inset: 0 0 0 auto;
+    width: min(360px, 100vw);
+    height: 100dvh;
+    max-height: none;
+    border: 0;
+    border-left: 1px solid var(--control);
+    border-radius: 16px 0 0 16px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cockpit-sheet[open] {
+    animation: none;
+  }
+}
+:root[data-motion='reduce'] .cockpit-sheet[open] {
+  animation: none;
+}
+@media (max-width: 767px), (max-height: 500px) {
+  .player-rail .award-chip {
+    display: none;
+  }
 }

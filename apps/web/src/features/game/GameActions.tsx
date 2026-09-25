@@ -112,13 +112,22 @@ export interface GameActionController {
   knightIntent: { slotId: string; confirm: () => void; cancel: () => void } | null;
   toggleKnightIntent: (slotId: string) => void;
   dock: React.ReactNode;
+  forms: React.ReactNode;
+  nextStep: NextStep;
+  actionCount: number;
 }
+
+export type NextStep =
+  | { kind: 'command'; label: string; run: () => void }
+  | { kind: 'board'; text: string; cancel?: () => void }
+  | { kind: 'text'; text: string; tone: 'muted' | 'alert' };
 
 /** The controller only offers engine-provided commands and checks the live revision on submission. */
 export function useGameActions(
   state: GameState,
   pending: readonly Pending[],
   presentation: GamePresentation,
+  options: { compact?: boolean; onHandOff?: () => void; onFormClosed?: () => void } = {},
 ): GameActionController {
   const { t } = useTranslation('game');
   const seat = useSessionStore((store) => store.revealedSeat);
@@ -364,6 +373,10 @@ export function useGameActions(
       : null;
   const visibleForm = forcedForm ?? form;
   const cardPlays = availability?.cardPlays ?? [];
+  const closeFormAndFocus = () => {
+    closeForm();
+    options.onFormClosed?.();
+  };
   const selectedKnight =
     form === 'knight' && slotId
       ? cardPlays.find(
@@ -375,7 +388,7 @@ export function useGameActions(
       (item) => item.slotId === cardSlotId && (item.card ?? priv?.slots[item.slotId]) === 'knight',
     );
     if (!card?.commands[0]) return;
-    if (form === 'knight' && slotId === cardSlotId) closeForm();
+    if (form === 'knight' && slotId === cardSlotId) closeFormAndFocus();
     else useSessionStore.getState().openActionDialog('knight', cardSlotId);
   };
   const primary = availability?.primary ?? [];
@@ -385,6 +398,10 @@ export function useGameActions(
       (left, right) => (normalActionOrder[left.type] ?? 0) - (normalActionOrder[right.type] ?? 0),
     );
   const contextualGroups = primary.filter((group) => !(group.type in normalActionOrder));
+  const promoted = options.compact
+    ? normalGroups.find((group) => group.type === 'ROLL_DICE' || group.type === 'END_TURN')
+    : undefined;
+  const sheetNormalGroups = normalGroups.filter((group) => group !== promoted);
   const actionButtons = (groups: typeof primary) =>
     groups.flatMap((group) => {
       if (
@@ -399,7 +416,10 @@ export function useGameActions(
             type="button"
             key={group.type}
             title={t('game:command.trade')}
-            onClick={() => useSessionStore.getState().openActionDialog('trade')}
+            onClick={() => {
+              options.onHandOff?.();
+              useSessionStore.getState().openActionDialog('trade');
+            }}
           >
             <ActionIcon kind={group.type} />
             <span>{t('game:normalTrade')}</span>
@@ -412,7 +432,10 @@ export function useGameActions(
             type="button"
             key={group.type}
             title={t('game:command.bank')}
-            onClick={() => useSessionStore.getState().openActionDialog('bank')}
+            onClick={() => {
+              options.onHandOff?.();
+              useSessionStore.getState().openActionDialog('bank');
+            }}
           >
             <ActionIcon kind={group.type} />
             <span>{t('game:normalBank')}</span>
@@ -423,7 +446,10 @@ export function useGameActions(
           className={buttonClass}
           type="button"
           key={`${group.type}:${index}`}
-          onClick={() => submit(command)}
+          onClick={() => {
+            options.onHandOff?.();
+            submit(command);
+          }}
         >
           <ActionIcon kind={group.type} />
           <span>{t(`game:command.${group.type}`)}</span>
@@ -440,7 +466,10 @@ export function useGameActions(
               className="button button-quiet"
               type="button"
               key={choiceSeat}
-              onClick={() => useSessionStore.getState().viewOptionalSeat(choiceSeat)}
+              onClick={() => {
+                options.onHandOff?.();
+                useSessionStore.getState().viewOptionalSeat(choiceSeat);
+              }}
             >
               {t('game:viewOptionalTrade', { player: playerLabel(choiceSeat) })}
             </button>
@@ -456,7 +485,10 @@ export function useGameActions(
         <button
           className="button button-quiet action-costs-trigger"
           type="button"
-          onClick={() => setBuildCostsOpen(true)}
+          onClick={() => {
+            options.onHandOff?.();
+            setBuildCostsOpen(true);
+          }}
         >
           {t('game:buildCostsTitle')}
         </button>
@@ -487,6 +519,7 @@ export function useGameActions(
                       key={kind}
                       aria-pressed={selectedKind === kind}
                       onClick={() => {
+                        options.onHandOff?.();
                         const store = useSessionStore.getState();
                         if (selectedKind !== kind) store.choosePlacement(kind);
                         else if (mandatoryPlacement) store.clearPlacementCandidate();
@@ -526,6 +559,7 @@ export function useGameActions(
                         key={card.slotId}
                         {...(cardKind === 'knight' ? { 'aria-pressed': knightSelected } : {})}
                         onClick={() => {
+                          options.onHandOff?.();
                           if (cardKind === 'knight') {
                             toggleKnightIntent(card.slotId);
                           } else if (cardKind === 'yearOfPlenty') {
@@ -561,44 +595,97 @@ export function useGameActions(
               )}
               {optionalTradeChooser}
             </div>
-            {normalGroups.length > 0 && (
+            {sheetNormalGroups.length > 0 && (
               <div
                 className="action-normal-buttons"
                 role="group"
                 aria-label={t('game:normalActions')}
               >
-                {actionButtons(normalGroups)}
+                {actionButtons(sheetNormalGroups)}
               </div>
             )}
           </div>
-          {formProps && visibleForm === 'discard' && <DiscardDialog {...formProps} />}
-          {formProps && visibleForm === 'steal' && <StealDialog {...formProps} />}
-          {formProps && visibleForm === 'trade' && (
-            <TradeComposer {...formProps} onCancel={closeForm} />
-          )}
-          {formProps && visibleForm === 'bank' && (
-            <BankTradePicker {...formProps} onCancel={closeForm} />
-          )}
-          {formProps && visibleForm === 'plenty' && (
-            <YearOfPlentyDialog
-              {...formProps}
-              onCancel={closeForm}
-              {...(slotId ? { slotId } : {})}
-            />
-          )}
-          {formProps && visibleForm === 'monopoly' && (
-            <MonopolyDialog {...formProps} onCancel={closeForm} {...(slotId ? { slotId } : {})} />
-          )}
         </>
       )}
-      {error && (
+      {error && !options.compact && (
         <p className="action-error" role="alert">
           {error}
         </p>
       )}
-      {buildCostsOpen && <BuildCostsDialog onClose={() => setBuildCostsOpen(false)} />}
     </section>
   );
+
+  const forms = (
+    <div className="action-forms">
+      {!conflicted && status?.kind !== 'error' && availability && formProps && (
+        <>
+          {visibleForm === 'discard' && <DiscardDialog {...formProps} />}
+          {visibleForm === 'steal' && <StealDialog {...formProps} />}
+          {visibleForm === 'trade' && <TradeComposer {...formProps} onCancel={closeFormAndFocus} />}
+          {visibleForm === 'bank' && (
+            <BankTradePicker {...formProps} onCancel={closeFormAndFocus} />
+          )}
+          {visibleForm === 'plenty' && (
+            <YearOfPlentyDialog
+              {...formProps}
+              onCancel={closeFormAndFocus}
+              {...(slotId ? { slotId } : {})}
+            />
+          )}
+          {visibleForm === 'monopoly' && (
+            <MonopolyDialog
+              {...formProps}
+              onCancel={closeFormAndFocus}
+              {...(slotId ? { slotId } : {})}
+            />
+          )}
+        </>
+      )}
+      {buildCostsOpen && (
+        <BuildCostsDialog
+          onClose={() => {
+            setBuildCostsOpen(false);
+            options.onFormClosed?.();
+          }}
+        />
+      )}
+    </div>
+  );
+
+  const promotedCommand = promoted?.commands[0];
+  let nextStep: NextStep;
+  if (conflicted) {
+    nextStep = { kind: 'text', tone: 'alert', text: t('game:saveConflictStopped') };
+  } else if (status?.kind === 'error') {
+    nextStep = { kind: 'text', tone: 'alert', text: t('game:sessionStopped') };
+  } else if (error) {
+    nextStep = { kind: 'text', tone: 'alert', text: error };
+  } else if (seat === null || !availability) {
+    nextStep = { kind: 'text', tone: 'muted', text: t('game:awaitingAction') };
+  } else if (selectedKind) {
+    nextStep = {
+      kind: 'board',
+      text: selectedPlacement
+        ? t('game:cockpit.confirmOnBoard')
+        : t('game:cockpit.tapTarget', { target: t(`game:placement.${selectedKind}`) }),
+      ...(!mandatoryPlacement && !selectedPlacement
+        ? { cancel: () => useSessionStore.getState().cancelPlacement() }
+        : {}),
+    };
+  } else if (promotedCommand) {
+    nextStep = {
+      kind: 'command',
+      label: t(`game:command.${promoted?.type}`),
+      run: () => submit(promotedCommand),
+    };
+  } else {
+    nextStep = { kind: 'text', tone: 'muted', text: t('game:cockpit.chooseAction') };
+  }
+  const actionCount =
+    availableBoardKinds.length +
+    cardPlays.length +
+    contextualGroups.length +
+    sheetNormalGroups.length;
 
   const placementConfirmation =
     selectedPlacement && focusTarget && selectedKind && selectedKind !== 'robber'
@@ -637,10 +724,13 @@ export function useGameActions(
             confirm: () => {
               if (selectedKnight.commands[0]) submit(selectedKnight.commands[0]);
             },
-            cancel: closeForm,
+            cancel: closeFormAndFocus,
           }
         : null,
     toggleKnightIntent,
     dock,
+    forms,
+    nextStep,
+    actionCount,
   };
 }

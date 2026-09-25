@@ -122,13 +122,14 @@ Later stages add `online/create`, `join/$roomId` (stage 09), `game/$gameId` (sta
 
 ## UI requirements
 
-- **Layout**: the game fills one viewport without document scrolling or outer gutters. Desktop has the board on the left, hand and actions directly below it, and players with a collapsible log on the right. A top-left hamburger overlay holds save status, Leave, animation controls and secondary utilities instead of header rows. Mobile keeps a usable board, compact player strip, hand and primary actions visible, with secondary details in a disclosure and trade composition in a full-screen sheet. Long detail lists can scroll inside their own panes.
+- **Layout**: the game fills one viewport without document scrolling or outer gutters. Desktop has the board on the left, hand and actions directly below it, and players with a collapsible log on the right. A top-left hamburger overlay holds save status, Leave, animation controls and secondary utilities instead of header rows. Mobile keeps a compact hand at the bottom, below a tappable player strip. A short next-step row keeps Roll, End turn, or the current board instruction visible; Actions opens a sheet for other choices. Short landscape layouts use a compact side rail. Long detail lists can scroll inside their own panes.
 - **Player panels**: name, colour, public VP, resource card count, dev card count, knights played, longest road length, award badges, "active" indicator, timer ring, connection status (placeholder).
   Remaining roads, settlements, and cities use small piece icons with counts and accessible labels.
+  Tapping any mobile player tile opens their full public details, including knights played, longest road, remaining pieces, awards, timer, and recent resource gains. Resource and development-card totals are public; opponents' private card identities are not displayed.
   Public resource payouts also appear beside each player for eight seconds. Recent payouts remain readable across fast bot turns; each payout expires independently. These readouts use the public production event, remain visible with reduced motion or skipped animations, and do not reveal private transfers.
 - **Hand**: original SVG resource cards grouped with visible counts; dev cards (face up for the owner) showing a "new — playable next turn" state; disabled states with a tooltip explaining why (from the `RuleError` message).
 - **Actions** are contextual and derived from `getLegalCommands` for the controllable seat:
-  - desktop places contextual actions on the left and square normal-action buttons in a vertical stack on the right; narrow layouts keep labels and touch targets visible in a compact horizontal strip,
+  - desktop places contextual actions on the left and square normal-action buttons in a vertical stack on the right; mobile uses the Actions sheet and a persistent next-step row, with 44px touch targets,
   - build road/settlement/city → enters placement mode with highlights,
   - road, settlement, and city selection previews the piece at a legal location; an explicit confirmation on the board commits it, while Cancel clears the preview. This also applies during setup and free-road placement,
   - clicking an active optional build action again exits its placement mode. Reselecting an uncommitted board preview clears that preview,
@@ -136,6 +137,7 @@ Later stages add `online/create`, `join/$roomId` (stage 09), `game/$gameId` (sta
   - buy dev card, trade, bank trade, end turn,
   - roll dice (in preRoll).
   - a compact Build costs dialog shows the engine's public road, settlement, city, and development-card prices, even when the current hand cannot afford them.
+  - selecting a board action closes the mobile Actions sheet before exposing placement targets. Opening another dialog closes the sheet first. Required discard and steal choices open independently of the sheet; required setup and robber instructions remain visible beside the Actions trigger.
   - Keyboard shortcuts: `R` roll, `E` end turn, `1/2/3` build modes, `Esc` cancel.
 - **Last roll**: two dice faces and their total remain at the top-right of the board viewport after the animation, across turn changes and saved-game restoration.
 - **Hand sizing**: desktop reserves space for two development cards with full names beside the resource cards. A compact eye control conceals the hand. Narrow screens and larger development-card hands use the card dialog.

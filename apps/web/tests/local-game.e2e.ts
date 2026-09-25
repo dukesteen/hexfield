@@ -5,7 +5,7 @@ import { createHash } from 'node:crypto';
 import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { Seat } from '@cp2p/engine';
+import { baseLongestRoadLength, type Seat } from '@cp2p/engine';
 import { buildBoardGraph } from '@cp2p/engine/geometry';
 import { standardFixedBoard } from '@cp2p/maps';
 import type { DevHook } from '../src/features/devtools/hook.js';
@@ -348,7 +348,7 @@ test('claimed VP cards appear once in fullscreen results, which reopen after dis
       await expect(page.getByRole('region', { name: 'Game board' })).toBeVisible();
       await expect(page.locator('.placement-confirmation')).toHaveCount(0);
       await expect(page.locator('.board-offers button')).toHaveCount(0);
-      await page.locator('.finished-dock').getByRole('button', { name: 'Results' }).click();
+      await page.locator('.game-bottom').getByRole('button', { name: 'Results' }).click();
       await expect(results).toBeVisible();
       await page.keyboard.press('Escape');
       await expect(results).toBeHidden();
@@ -430,6 +430,44 @@ test('a replay-backed trade offer and named confirmations use visible controls',
   }
 });
 
+test('mobile Actions hands off bank and player trades to one visible dialog', async ({
+  browser,
+  browserName,
+}) => {
+  test.skip(browserName !== 'chromium', 'Touch trade handoff runs in Chromium');
+  for (const trade of [
+    { prefix: 102, action: 'Bank trade', dialog: 'Bank trade' },
+    { prefix: 22, action: 'Offer trade', dialog: 'Player trade' },
+  ]) {
+    const context = await browser.newContext({
+      viewport: { width: 390, height: 844 },
+      isMobile: true,
+      hasTouch: true,
+    });
+    try {
+      const page = await context.newPage();
+      await openGoldenPrefix(page, trade.prefix);
+      const revision = await observedRevision(page);
+      const trigger = page.locator('.next-step-actions');
+      await trigger.tap();
+      const actions = page.getByRole('dialog', { name: 'Actions' });
+      await expect(actions).toBeVisible();
+      await actions.getByRole('button', { name: trade.action }).tap();
+      await expect(actions).toBeHidden();
+      const form = page.getByRole('dialog', { name: trade.dialog });
+      await expect(form).toBeVisible();
+      await expect(page.locator('dialog[open]')).toHaveCount(1);
+      await form.getByRole('button', { name: 'Cancel' }).tap();
+      await expect(form).toBeHidden();
+      await expect(trigger).toBeFocused();
+      expect(await observedRevision(page)).toBe(revision);
+      expect(pageErrors.get(page)).toEqual([]);
+    } finally {
+      await context.close();
+    }
+  }
+});
+
 test('an incoming replay-backed offer shows the exact viewer-relative card exchange', async ({
   page,
 }, testInfo) => {
@@ -474,7 +512,13 @@ test('trade recipients remain above the modal footer at desktop and phone sizes'
     try {
       const page = await context.newPage();
       await openGoldenPrefix(page, 22);
-      await page.getByRole('button', { name: 'Offer trade' }).click();
+      const offerTrade = await revealActionButton(
+        page,
+        'Offer trade',
+        device.mobile ? 'touch' : 'mouse',
+      );
+      if (device.mobile) await offerTrade.tap();
+      else await offerTrade.click();
       const dialog = page.getByRole('dialog', { name: 'Player trade' });
       await dialog.getByRole('button', { name: 'Add Lumber to You give' }).click();
       await dialog.getByRole('button', { name: 'Add Ore to You get' }).click();
@@ -735,7 +779,8 @@ test('a replay-backed development card enters the visible robber flow', async ({
   try {
     const phone = await mobile.newPage();
     await openGoldenPrefix(phone, 124);
-    const phoneAction = phone.locator('.action-dock').getByRole('button', { name: 'Play Knight' });
+    const tapPhoneKnight = async () =>
+      (await revealActionButton(phone, 'Play Knight', 'touch')).tap();
     const phoneDialog = phone.getByRole('dialog', { name: 'Development cards: 1' });
     const phoneKnight = phoneDialog.locator('.development-card').filter({ hasText: 'Knight' });
     const phoneConfirmation = phoneKnight.getByRole('group', { name: 'Play Knight?' });
@@ -753,7 +798,8 @@ test('a replay-backed development card enters the visible robber flow', async ({
         }),
       ).toBe(initial.hash);
     };
-    await phoneAction.tap();
+    await tapPhoneKnight();
+    await expect(phone.getByRole('dialog', { name: 'Actions' })).toBeHidden();
     await expect(phoneDialog).toBeVisible();
     await expect(phoneConfirmation).toBeVisible();
     await assertIntentFits(phone, phoneKnight, 'phone-knight-intent');
@@ -761,12 +807,12 @@ test('a replay-backed development card enters the visible robber flow', async ({
     await phoneConfirmation.getByRole('button', { name: 'Cancel Knight' }).tap();
     await expect(phoneDialog).toBeHidden();
     await assertPhoneUncommitted();
-    await phoneAction.tap();
+    await tapPhoneKnight();
     await expect(phoneDialog).toBeVisible();
     await phone.keyboard.press('Escape');
     await expect(phoneDialog).toBeHidden();
     await assertPhoneUncommitted();
-    await phoneAction.tap();
+    await tapPhoneKnight();
     await expect(phoneDialog).toBeVisible();
     await phoneDialog.getByRole('button', { name: 'Close cards' }).tap();
     await expect(phoneDialog).toBeHidden();
@@ -780,7 +826,7 @@ test('a replay-backed development card enters the visible robber flow', async ({
     await assertPhoneUncommitted();
     await phoneDialog.getByRole('button', { name: 'Close cards' }).tap();
     await expect(phoneDialog).toBeHidden();
-    await phoneAction.tap();
+    await tapPhoneKnight();
     await phoneConfirmation.getByRole('button', { name: 'Play Knight' }).tap();
     await expect.poll(() => observedRevision(phone)).toBeGreaterThan(initial.revision);
     expect(pageErrors.get(phone)).toEqual([]);
@@ -1034,7 +1080,8 @@ test('game cockpit fits desktop, compact, and phone viewports without document s
       await openGoldenPrefix(page, 42);
       await expect(page.getByRole('region', { name: 'Your hand' })).toBeVisible();
       await expect(page.locator('.resource-hand-card')).toHaveCount(5);
-      await expect(page.getByRole('region', { name: 'Actions' })).toBeVisible();
+      if (device.mobile) await expect(page.locator('.next-step-actions')).toBeVisible();
+      else await expect(page.getByRole('region', { name: 'Actions' })).toBeVisible();
       if (!device.mobile) {
         for (const player of ['Player 1', 'Player 2', 'Player 3', 'Player 4']) {
           const panel = page.locator('.player-panel').filter({ hasText: player });
@@ -1154,9 +1201,11 @@ test('game cockpit fits desktop, compact, and phone viewports without document s
       );
       expect(dimensions.boardTop).toBeGreaterThanOrEqual(0);
       expect(dimensions.boardBottom).toBeLessThanOrEqual(dimensions.viewportHeight + 2);
-      expect(dimensions.costsTriggerVisible, `${device.name} Build costs control is clipped`).toBe(
-        true,
-      );
+      if (!device.mobile)
+        expect(
+          dimensions.costsTriggerVisible,
+          `${device.name} Build costs control is clipped`,
+        ).toBe(true);
       if (!device.mobile)
         expect(dimensions.dockHeight, `${device.name} action dock is too tall`).toBeLessThanOrEqual(
           205,
@@ -1170,14 +1219,16 @@ test('game cockpit fits desktop, compact, and phone viewports without document s
         expect(card.faceVisible, `${device.name} ${card.resource} art is clipped`).toBe(true);
         expect(card.countVisible, `${device.name} ${card.resource} count is clipped`).toBe(true);
       }
-      expect(
-        dimensions.visibleActions,
-        `${device.name} has no visible next action`,
-      ).toBeGreaterThan(0);
-      expect(
-        dimensions.illustratedActions.length,
-        `${device.name} has no visible illustrated action`,
-      ).toBeGreaterThan(0);
+      if (!device.mobile) {
+        expect(
+          dimensions.visibleActions,
+          `${device.name} has no visible next action`,
+        ).toBeGreaterThan(0);
+        expect(
+          dimensions.illustratedActions.length,
+          `${device.name} has no visible illustrated action`,
+        ).toBeGreaterThan(0);
+      }
       for (const action of dimensions.illustratedActions) {
         expect(action.label, `${device.name} action has no readable label`).not.toBe('');
         expect(action.artVisible, `${device.name} ${action.label} art is clipped`).toBe(true);
@@ -1213,6 +1264,7 @@ test('game cockpit fits desktop, compact, and phone viewports without document s
       expect(await page.evaluate(() => window.scrollY)).toBe(0);
       await capturePreview(page, testInfo, `${device.name}-cockpit`);
       const revision = await observedRevision(page);
+      if (device.mobile) await page.locator('.next-step-actions').tap();
       await page.getByRole('button', { name: 'Build costs' }).click();
       const costs = page.getByRole('dialog', { name: 'Build costs' });
       await expect(costs).toBeVisible();
@@ -1269,6 +1321,172 @@ test('game cockpit fits desktop, compact, and phone viewports without document s
       expect(bankCardsVisible, `${device.name} bank card row is clipped`).toEqual(
         Array(5).fill(true),
       );
+      expect(pageErrors.get(page)).toEqual([]);
+    } finally {
+      await context.close();
+    }
+  }
+});
+
+test('compact phone cockpit exposes public player details and reachable Actions without crowding the board', async ({
+  browser,
+  browserName,
+}, testInfo) => {
+  test.skip(browserName === 'firefox', 'Compact touch sheets run in Chromium and WebKit');
+  const devices =
+    browserName === 'webkit'
+      ? [{ name: 'webkit-phone', width: 390, height: 844 }]
+      : [
+          { name: 'phone', width: 390, height: 844 },
+          { name: 'small-phone', width: 360, height: 740 },
+          { name: 'narrow-phone', width: 320, height: 568 },
+          { name: 'phone-landscape', width: 844, height: 390 },
+        ];
+  for (const device of devices) {
+    const context = await browser.newContext({
+      viewport: { width: device.width, height: device.height },
+      deviceScaleFactor: 2,
+      isMobile: true,
+      hasTouch: true,
+    });
+    try {
+      const page = await context.newPage();
+      page.setDefaultTimeout(10_000);
+      if (device.name === 'phone') await page.emulateMedia({ colorScheme: 'dark' });
+      await openGoldenPrefix(page, 496, 'hidden-vp-win.replay.json');
+      const hand = page.getByRole('region', { name: 'Your hand' });
+      const trigger = page.locator('.next-step-actions');
+      await expect(hand).toBeVisible();
+      await expect(hand.locator('.resource-hand-card')).toHaveCount(5);
+      await expect(trigger).toBeVisible();
+      await expect(trigger).toHaveAccessibleName(/^Actions, \d+ available$/);
+      const geometry = await page.evaluate(() => {
+        const board = document.querySelector('.game-board')?.getBoundingClientRect();
+        const handBounds = document.querySelector('.hand-dock')?.getBoundingClientRect();
+        const triggerBounds = document.querySelector('.next-step-actions')?.getBoundingClientRect();
+        const cards = [...document.querySelectorAll('.resource-hand-card')].map((card) => {
+          const rect = card.getBoundingClientRect();
+          return (
+            rect.left >= -1 &&
+            rect.right <= window.innerWidth + 1 &&
+            rect.top >= -1 &&
+            rect.bottom <= window.innerHeight + 1
+          );
+        });
+        const playerTiles = [...document.querySelectorAll('.player-panel')].map((panel) => {
+          const bounds = panel.getBoundingClientRect();
+          const parts = [
+            panel.querySelector('.player-marker'),
+            panel.querySelector('.player-panel-heading strong'),
+            panel.querySelector('.player-seat-index'),
+            panel.querySelector('.player-vp'),
+          ];
+          return parts.every((part) => {
+            if (!part) return false;
+            const style = getComputedStyle(part);
+            if (style.display === 'none' || style.visibility === 'hidden') return true;
+            const rect = part.getBoundingClientRect();
+            return (
+              rect.left >= bounds.left - 1 &&
+              rect.right <= bounds.right + 1 &&
+              rect.top >= bounds.top - 1 &&
+              rect.bottom <= bounds.bottom + 1
+            );
+          });
+        });
+        return {
+          boardHeight: board?.height ?? 0,
+          handHeight: handBounds?.height ?? 0,
+          triggerVisible: Boolean(
+            triggerBounds &&
+            triggerBounds.left >= -1 &&
+            triggerBounds.top >= -1 &&
+            triggerBounds.right <= window.innerWidth + 1 &&
+            triggerBounds.bottom <= window.innerHeight + 1,
+          ),
+          cards,
+          playerTiles,
+          documentWidth: document.documentElement.scrollWidth,
+          documentHeight: document.documentElement.scrollHeight,
+        };
+      });
+      expect(geometry.documentWidth).toBeLessThanOrEqual(device.width + 2);
+      expect(geometry.documentHeight).toBeLessThanOrEqual(device.height + 2);
+      expect(geometry.boardHeight).toBeGreaterThan(device.height * 0.55);
+      if (device.width < device.height)
+        expect(geometry.handHeight).toBeLessThanOrEqual(device.height * 0.25);
+      expect(geometry.triggerVisible).toBe(true);
+      expect(geometry.cards).toEqual(Array(5).fill(true));
+      expect(geometry.playerTiles).toEqual(Array(4).fill(true));
+      await capturePreview(page, testInfo, `${device.name}-compact-cockpit`);
+
+      await trigger.tap();
+      const actionsSheet = page.getByRole('dialog', { name: 'Actions' });
+      await expect(actionsSheet).toBeVisible();
+      await capturePreview(page, testInfo, `${device.name}-actions-sheet`);
+      await actionsSheet.getByRole('button', { name: 'Close' }).tap();
+      await expect(actionsSheet).toBeHidden();
+      await expect(trigger).toBeFocused();
+      await trigger.tap();
+      await page.keyboard.press('Escape');
+      await expect(actionsSheet).toBeHidden();
+      await expect(trigger).toBeFocused();
+
+      const publicState = await page.evaluate(() => {
+        const hook: DevHook | undefined = Reflect.get(window, '__cp2p');
+        if (!hook) throw new Error('DEV read-only diagnostics unavailable');
+        return hook.session.getState();
+      });
+      const baseExt = publicState.ext.base;
+      if (
+        typeof baseExt !== 'object' ||
+        baseExt === null ||
+        !('knightsPlayed' in baseExt) ||
+        !Array.isArray(baseExt.knightsPlayed)
+      )
+        throw new Error('Public knight counts are unavailable');
+      for (const seat of publicState.seats) {
+        const name = `Player ${seat.seat + 1}`;
+        const tile = page.getByRole('button', { name: `Show ${name}'s public details` });
+        await expect(page.locator(`[data-seat-panel="${seat.seat}"]`)).toHaveCount(1);
+        await tile.tap();
+        const details = page.getByRole('dialog', { name });
+        await expect(details).toBeVisible();
+        await expect(details.locator('.player-vp')).toContainText(String(seat.publicVp));
+        const rows = details.locator('.player-details-stats > div');
+        await expect(rows.nth(0).locator('dd')).toHaveText(String(seat.resources.total));
+        await expect(rows.nth(1).locator('dd')).toHaveText(
+          String(seat.cardSlots.filter((slot) => !slot.revealed).length),
+        );
+        const knightCount: unknown = baseExt.knightsPlayed[seat.seat];
+        if (typeof knightCount !== 'number') throw new Error('Public knight count is malformed');
+        await expect(rows.nth(2).locator('dd')).toHaveText(String(knightCount));
+        await expect(rows.nth(3).locator('dd')).toHaveText(
+          String(baseLongestRoadLength(publicState, seat.seat)),
+        );
+        await expect(details.locator('.player-details-pieces > span')).toHaveCount(3);
+        await expect(details.locator('.resource-hand-card, .development-card')).toHaveCount(0);
+        await expect(page.locator(`[data-seat-panel="${seat.seat}"]`)).toHaveCount(1);
+        if (seat.seat === 0) {
+          expect(knightCount).toBeGreaterThanOrEqual(3);
+          if (publicState.awards.largestArmy === 0)
+            await expect(details).toContainText('Largest army');
+          if (device.name === 'phone' || device.name === 'phone-landscape')
+            await capturePreview(page, testInfo, `${device.name}-player-details`);
+        }
+        await details.getByRole('button', { name: 'Close' }).tap();
+        await expect(details).toBeHidden();
+        await expect(tile).toBeFocused();
+      }
+
+      await trigger.tap();
+      await actionsSheet.getByRole('button', { name: 'Build costs' }).tap();
+      await expect(actionsSheet).toBeHidden();
+      const costs = page.getByRole('dialog', { name: 'Build costs' });
+      await expect(costs).toBeVisible();
+      await costs.getByRole('button', { name: 'Close' }).tap();
+      await expect(costs).toBeHidden();
+      await expect(trigger).toBeFocused();
       expect(pageErrors.get(page)).toEqual([]);
     } finally {
       await context.close();
@@ -1434,19 +1652,22 @@ async function completeSetup(
       .toBe(target.pieces);
     expect(await observedRevision(page)).toBe(revision);
     if (settlement && placement === 0) {
-      const requiredAction = page
-        .getByRole('group', { name: 'Choose a board action' })
-        .getByRole('button', { name: 'Build settlement' });
-      await expect(
-        page
+      if (input === 'mouse') {
+        const requiredAction = page
           .getByRole('group', { name: 'Choose a board action' })
-          .getByRole('button', { name: 'Cancel' }),
-      ).toHaveCount(0);
-      await requiredAction.click();
-      await expect(page.getByRole('button', { name: 'Confirm settlement' })).toBeHidden();
-      await expect(requiredAction).toHaveAttribute('aria-pressed', 'true');
-      if (input === 'touch') await page.touchscreen.tap(point.x, point.y);
-      else await page.mouse.click(point.x, point.y);
+          .getByRole('button', { name: 'Build settlement' });
+        await expect(
+          page
+            .getByRole('group', { name: 'Choose a board action' })
+            .getByRole('button', { name: 'Cancel' }),
+        ).toHaveCount(0);
+        await requiredAction.click();
+        await expect(page.getByRole('button', { name: 'Confirm settlement' })).toBeHidden();
+        await expect(requiredAction).toHaveAttribute('aria-pressed', 'true');
+        await page.mouse.click(point.x, point.y);
+      } else {
+        await expect(page.locator('.next-step-message')).toContainText('Confirm on the board');
+      }
       const cancel = page
         .getByRole('region', { name: 'Game board' })
         .getByRole('button', { name: 'Cancel', exact: true });
@@ -1539,6 +1760,8 @@ async function rollAndBuildRoad(
   const roadAction = page
     .getByRole('group', { name: 'Choose a board action' })
     .getByRole('button', { name: 'Build road' });
+  if (input === 'touch' && !(await roadAction.isVisible()))
+    await revealActionButton(page, 'Build road', input);
   if (await roadAction.isVisible()) {
     if (input === 'touch') await roadAction.tap();
     else await roadAction.click();
@@ -1651,6 +1874,7 @@ test('phone touch controls complete hotseat setup, roll, and road placement', as
   });
   try {
     const page = await context.newPage();
+    page.setDefaultTimeout(10_000);
     await createGame(page, { players: 3, humans: [0, 1, 2], fixedBoard: true });
     await completeSetup(page, 'touch', testInfo);
     await rollAndBuildRoad(page, 'touch', testInfo);
@@ -1730,13 +1954,31 @@ async function clickLegalPlacement(
     .toBeGreaterThan(revision);
 }
 
+async function revealActionButton(
+  page: Page,
+  name: string,
+  input: 'mouse' | 'touch',
+): Promise<Locator> {
+  const button = page.getByRole('button', { name, exact: true }).first();
+  if (!(await button.isVisible())) {
+    const trigger = page.locator('.next-step-actions');
+    if (await trigger.isVisible()) {
+      if (input === 'touch') await trigger.tap();
+      else await trigger.click();
+      await expect(page.getByRole('dialog', { name: 'Actions' })).toBeVisible();
+    }
+  }
+  await expect(button).toBeVisible();
+  return button;
+}
+
 async function clickAction(
   page: Page,
   name: string,
   revision: number,
   input: 'mouse' | 'touch' = 'mouse',
 ): Promise<void> {
-  const button = page.getByRole('button', { name, exact: true }).first();
+  const button = await revealActionButton(page, name, input);
   if (input === 'touch') await button.tap();
   else await button.click();
   await expect
@@ -1912,6 +2154,7 @@ async function playVisibleHumanStep(
       const chooser = page
         .getByRole('group', { name: 'Choose a board action' })
         .getByRole('button', { name: label });
+      if (!(await chooser.isVisible())) await revealActionButton(page, label, input);
       if (await chooser.isVisible()) {
         if (input === 'touch') await chooser.tap();
         else await chooser.click();

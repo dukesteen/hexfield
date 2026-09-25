@@ -24,5 +24,10 @@ const workspaceAliases = Object.fromEntries(
 export default defineConfig({
   plugins: [tanstackRouter({ target: 'react', autoCodeSplitting: true }), react()],
   resolve: { conditions: ['@cp2p/source', ...defaultClientConditions], alias: workspaceAliases },
-  server: { host: '127.0.0.1', port: 5187, strictPort: true },
+  server: {
+    host: '127.0.0.1',
+    port: 5187,
+    strictPort: true,
+    watch: { ignored: ['**/playwright-report/**', '**/test-results/**'] },
+  },
 });

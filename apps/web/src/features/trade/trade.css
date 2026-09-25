@@ -446,7 +446,7 @@
   transform: none;
 }
 
-.action-dock dialog.trade-dialog .trade-card-clear {
+.action-forms dialog.trade-dialog .trade-card-clear {
   min-width: 44px;
   min-height: 44px;
   padding: 0 8px;
@@ -458,14 +458,14 @@
   font-weight: 600;
 }
 
-.action-dock dialog.trade-dialog .trade-card-clear:hover:not(:disabled) {
+.action-forms dialog.trade-dialog .trade-card-clear:hover:not(:disabled) {
   background: transparent;
   color: var(--text);
   text-decoration: underline;
   text-underline-offset: 3px;
 }
 
-.action-dock dialog.trade-dialog .trade-card-clear:disabled {
+.action-forms dialog.trade-dialog .trade-card-clear:disabled {
   border: 0;
   background: transparent;
   box-shadow: none;
@@ -599,13 +599,13 @@
 }
 
 /* Composer / bank dialog */
-.action-dock dialog.trade-dialog[open] {
+.action-forms dialog.trade-dialog[open] {
   display: flex;
   flex-direction: column;
   overflow: hidden;
 }
 
-.action-dock dialog.trade-dialog > * + * {
+.action-forms dialog.trade-dialog > * + * {
   margin-top: 0;
 }
 
