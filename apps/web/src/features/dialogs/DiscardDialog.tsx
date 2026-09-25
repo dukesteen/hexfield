@@ -2,8 +2,9 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { RESOURCES } from '@cp2p/engine';
 import type { Resource, ResourceCounts } from '@cp2p/engine';
+import { ResourceCardPicker } from '../trade/ResourceCard.js';
 import { DialogFrame } from './DialogFrame.js';
-import { emptyCounts, ResourceFields } from './resources.js';
+import { emptyCounts } from './resources.js';
 import type { CommandFormProps } from './types.js';
 
 /** The exact count comes from the engine's discard template. */
@@ -23,33 +24,45 @@ export function DiscardDialog({
   const command = { type: 'DISCARD', cards };
   const valid = selected === count && validate(command).ok;
   const change = (resource: Resource, value: number) => {
-    if (value <= (privateState.hand[resource] ?? 0))
-      setCards((current) => ({ ...current, [resource]: value }));
+    if (value < 0 || value > (privateState.hand[resource] ?? 0)) return;
+    setCards((current) => ({ ...current, [resource]: value }));
   };
 
   return (
-    <DialogFrame title={t('rules:discard.title')} onCancel={onCancel}>
-      <p>{t('rules:discard.selected', { selected, count })}</p>
-      <ResourceFields
+    <DialogFrame
+      title={t('rules:discard.title')}
+      onCancel={onCancel}
+      variant="trade"
+      footer={
+        <div className="trade-dialog-footer">
+          <p aria-live="polite">{t('rules:discard.selected', { selected, count })}</p>
+          <div className="trade-dialog-buttons">
+            {onCancel && (
+              <button className="button button-quiet" type="button" onClick={onCancel}>
+                {t('rules:action.cancel')}
+              </button>
+            )}
+            <button
+              className="button button-primary"
+              type="button"
+              disabled={!valid}
+              onClick={() => {
+                if (selected === count && validate(command).ok) onSubmit(command);
+              }}
+            >
+              {t('rules:action.confirm')}
+            </button>
+          </div>
+        </div>
+      }
+    >
+      <ResourceCardPicker
         label={t('rules:discard.cards')}
         values={cards}
-        maximum={privateState.hand}
+        stock={{ source: 'hand', counts: privateState.hand }}
         onChange={change}
+        onClear={() => setCards(emptyCounts)}
       />
-      <button
-        type="button"
-        disabled={!valid}
-        onClick={() => {
-          if (valid) onSubmit(command);
-        }}
-      >
-        {t('rules:action.confirm')}
-      </button>
-      {onCancel && (
-        <button type="button" onClick={onCancel}>
-          {t('rules:action.cancel')}
-        </button>
-      )}
     </DialogFrame>
   );
 }

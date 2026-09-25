@@ -68,7 +68,7 @@ export function BankTradePicker({
         <ResourceCardPicker
           label={t('rules:trade.give')}
           values={give}
-          available={privateState.hand}
+          stock={{ source: 'hand', counts: privateState.hand }}
           steps={rates}
           onChange={(resource, value) => {
             setTouched(true);
@@ -83,7 +83,7 @@ export function BankTradePicker({
         <ResourceCardPicker
           label={t('rules:bank.get')}
           values={get}
-          {...(hideBankCounts ? {} : { available: state.bank })}
+          {...(hideBankCounts ? {} : { stock: { source: 'bank' as const, counts: state.bank } })}
           onChange={(resource, value) => {
             setTouched(true);
             setGet((current) => ({ ...current, [resource]: value }));

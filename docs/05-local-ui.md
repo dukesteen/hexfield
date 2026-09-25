@@ -132,7 +132,7 @@ Later stages add `online/create`, `join/$roomId` (stage 09), `game/$gameId` (sta
   - buy dev card, trade, bank trade, end turn,
   - roll dice (in preRoll).
   - Keyboard shortcuts: `R` roll, `E` end turn, `1/2/3` build modes, `Esc` cancel.
-- **Dialogs**: discard (select exactly N, with running count), robber (select hex on board), steal target (choose among eligible players with card counts), year of plenty, monopoly, road building (placement mode ×2 with skip).
+- **Dialogs**: discard (select resource cards with the same SVG picker used for trades, choose exactly N with a selected/required count, and confirm before spending), robber (select hex on board), steal target (choose among eligible players with card counts), year of plenty, monopoly, road building (placement mode ×2 with skip).
 - **Trade**:
   - The composer lets players select resource cards to give and receive, with quantities, separate remove controls, available hand counts and target players. Give and receive stay visible together on desktop; mobile uses compact stacked selections and a visible submit footer. Incoming offers appear as a compact overlay at the bottom-right of the board viewport, with resource card graphics and accept/decline controls. Offer wording must identify whose cards each side represents.
   - The active seat sees the responses and confirms with one.

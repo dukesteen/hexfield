@@ -58,19 +58,30 @@ describe('rule-backed dialogs', () => {
     );
     const confirm = screen.getByRole('button', { name: 'Confirm' });
     expect(confirm.hasAttribute('disabled')).toBe(true);
-    const brick = screen.getByRole('spinbutton', { name: 'Cards to discard: Brick' });
-    fireEvent.change(brick, { target: { value: '1' } });
+    const brick = screen.getByRole('button', { name: 'Add Brick to Cards to discard' });
+    const ore = screen.getByRole('button', { name: 'Add Ore to Cards to discard' });
+    fireEvent.click(brick);
     expect(confirm.hasAttribute('disabled')).toBe(true);
-    fireEvent.change(brick, { target: { value: '2' } });
+    expect(screen.getByText('Selected 1 of 2')).toBeTruthy();
+    fireEvent.click(ore);
+    expect(confirm.hasAttribute('disabled')).toBe(false);
+    expect(screen.getByText('Selected 2 of 2')).toBeTruthy();
+    fireEvent.click(brick);
+    expect(confirm.hasAttribute('disabled')).toBe(true);
+    expect(screen.getByText('Selected 3 of 2')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Remove Brick from Cards to discard' }));
     expect(confirm.hasAttribute('disabled')).toBe(false);
     fireEvent.click(confirm);
     expect(onSubmit).toHaveBeenCalledWith({
       type: 'DISCARD',
-      cards: { brick: 2, lumber: 0, wool: 0, grain: 0, ore: 0 },
+      cards: { brick: 1, lumber: 0, wool: 0, grain: 0, ore: 1 },
     });
-    fireEvent.change(brick, { target: { value: '3' } });
-    if (!(brick instanceof HTMLInputElement)) throw new Error('Brick field is not an input');
-    expect(brick.value).toBe('2');
+    fireEvent.click(ore);
+    expect(screen.getByText('Selected 2 of 2')).toBeTruthy();
+    expect(ore.getAttribute('aria-disabled')).toBe('true');
+    fireEvent.click(screen.getByRole('button', { name: 'Clear Cards to discard' }));
+    expect(screen.getByText('Selected 0 of 2')).toBeTruthy();
+    expect(confirm.hasAttribute('disabled')).toBe(true);
   });
 
   test('Year of Plenty requests two of one kind and shows short bank stock', () => {

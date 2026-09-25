@@ -136,6 +136,16 @@ describe('controlled trade forms', () => {
       />,
     );
     expect(screen.getAllByText('4 for 1').length).toBeGreaterThan(0);
+    const handAdd = screen.getByRole('button', { name: 'Add Brick to You give' });
+    const stockDescription = handAdd.getAttribute('aria-describedby');
+    expect(stockDescription).toBeTruthy();
+    expect(
+      stockDescription
+        ?.split(' ')
+        .some((id) => document.getElementById(id)?.textContent === '4 in hand'),
+    ).toBe(true);
+    const bankCards = screen.getByRole('group', { name: 'Bank gives' });
+    expect(within(bankCards).getByText('in bank')).toBeTruthy();
     expect(screen.queryByRole('alert')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Add Brick to You give' }));
     const addBrick = screen.getByRole('button', { name: 'Add Brick to You give' });
@@ -175,7 +185,8 @@ describe('controlled trade forms', () => {
       />,
     );
     const bankCards = screen.getByRole('group', { name: 'Bank gives' });
-    expect(within(bankCards).queryAllByText(/available/)).toHaveLength(0);
+    expect(within(bankCards).queryAllByText(/in bank/)).toHaveLength(0);
+    expect(bankCards.querySelectorAll('.resource-card-stock')).toHaveLength(0);
     expect(within(bankCards).getByRole('button', { name: 'Add Ore to Bank gives' })).toBeTruthy();
   });
 

@@ -1,4 +1,4 @@
-import { useId } from 'react';
+import { useId, useRef } from 'react';
 import { RESOURCES } from '@cp2p/engine';
 import type { Resource, ResourceCounts } from '@cp2p/engine';
 import { getResourceCardUrl } from '@cp2p/renderer';
@@ -9,7 +9,7 @@ import './trade.css';
 interface CardPickerProps {
   label: string;
   values: ResourceCounts;
-  available?: Partial<ResourceCounts>;
+  stock?: { source: 'hand' | 'bank'; counts: Partial<ResourceCounts> };
   steps?: Partial<ResourceCounts>;
   onChange: (resource: Resource, count: number) => void;
   onClear: () => void;
@@ -19,10 +19,12 @@ interface CardPickerProps {
 export function ResourceCard({
   resource,
   count,
+  stock,
   size = 'md',
 }: {
   resource: Resource;
   count?: number;
+  stock?: number;
   size?: 'sm' | 'md';
 }) {
   const { t } = useTranslation('rules');
@@ -30,6 +32,11 @@ export function ResourceCard({
     <span className="resource-card" data-resource={resource} data-size={size}>
       <img src={getResourceCardUrl(resource)} alt="" aria-hidden="true" draggable={false} />
       {count !== undefined && <b className="resource-card-count">{count}</b>}
+      {stock !== undefined && (
+        <span className="resource-card-stock" aria-hidden="true">
+          {stock}
+        </span>
+      )}
       <span className="resource-card-name">{resourceLabel(t, resource)}</span>
     </span>
   );
@@ -39,13 +46,18 @@ export function ResourceCard({
 export function ResourceCardPicker({
   label,
   values,
-  available,
+  stock,
   steps,
   onChange,
   onClear,
 }: CardPickerProps) {
   const { t } = useTranslation('rules');
+  const id = useId();
+  const addButtons = useRef(new Map<Resource, HTMLButtonElement>());
   const selected = RESOURCES.reduce((total, resource) => total + (values[resource] ?? 0), 0);
+  const stockTotal = stock
+    ? RESOURCES.reduce((total, resource) => total + (stock.counts[resource] ?? 0), 0)
+    : 0;
   return (
     <fieldset className="trade-card-picker">
       <legend>{label}</legend>
@@ -53,12 +65,36 @@ export function ResourceCardPicker({
         <p className="trade-card-picker-total">
           {t('rules:trade.cardSelected', { count: selected })}
         </p>
+        {stock && (
+          <p className="trade-card-stock-key">
+            <span className="resource-card-stock" aria-hidden="true">
+              {stockTotal}
+            </span>
+            <span aria-hidden="true">
+              {stock.source === 'bank' ? t('rules:trade.inBank') : t('rules:trade.inHand')}
+            </span>
+            <span className="trade-visually-hidden">
+              {stock.source === 'bank'
+                ? t('rules:trade.stockBank', { count: stockTotal })
+                : t('rules:trade.stockHand', { count: stockTotal })}
+            </span>
+          </p>
+        )}
         <button
           className="button button-quiet trade-card-clear"
           type="button"
           aria-label={t('rules:trade.clearSide', { side: label })}
           disabled={selected === 0}
-          onClick={onClear}
+          onClick={() => {
+            onClear();
+            for (const resource of RESOURCES) {
+              const button = addButtons.current.get(resource);
+              if (button) {
+                button.focus();
+                break;
+              }
+            }
+          }}
         >
           {t('rules:trade.clear')}
         </button>
@@ -66,31 +102,50 @@ export function ResourceCardPicker({
       <div className="trade-card-grid">
         {RESOURCES.map((resource) => {
           const count = values[resource] ?? 0;
-          const stock = available?.[resource];
+          const stockCount = stock?.counts[resource];
           const step = steps?.[resource] ?? 1;
-          const atCap = stock !== undefined && count + step > stock;
+          const atCap = stockCount !== undefined && count + step > stockCount;
           const name = resourceLabel(t, resource);
+          const rateId = `${id}-${resource}-rate`;
+          const stockId = `${id}-${resource}-stock`;
+          const describedBy = [
+            step > 1 ? rateId : undefined,
+            stockCount !== undefined ? stockId : undefined,
+          ]
+            .filter(Boolean)
+            .join(' ');
           return (
             <div className="trade-card-choice" data-selected={count > 0} key={resource}>
               <button
                 className="trade-card-add"
                 type="button"
+                ref={(button) => {
+                  if (button) addButtons.current.set(resource, button);
+                  else addButtons.current.delete(resource);
+                }}
                 aria-label={t('rules:trade.addCard', { resource: name, side: label })}
+                {...(describedBy ? { 'aria-describedby': describedBy } : {})}
                 aria-disabled={atCap}
                 onClick={() => {
                   if (!atCap) onChange(resource, count + step);
                 }}
               >
-                <ResourceCard resource={resource} {...(count > 0 ? { count } : {})} />
+                <ResourceCard
+                  resource={resource}
+                  {...(count > 0 ? { count } : {})}
+                  {...(stockCount !== undefined ? { stock: stockCount } : {})}
+                />
                 {step > 1 && (
-                  <small className="trade-card-rate">
+                  <small className="trade-card-rate" id={rateId}>
                     {t('rules:bank.rateBadge', { rate: step })}
                   </small>
                 )}
-                {stock !== undefined && (
-                  <small className="trade-card-stock">
-                    {t('rules:trade.cardAvailable', { count: stock })}
-                  </small>
+                {stockCount !== undefined && (
+                  <span className="trade-visually-hidden" id={stockId}>
+                    {stock?.source === 'bank'
+                      ? t('rules:trade.stockBank', { count: stockCount })
+                      : t('rules:trade.stockHand', { count: stockCount })}
+                  </span>
                 )}
               </button>
               <output className="trade-visually-hidden" aria-live="polite">
@@ -101,7 +156,11 @@ export function ResourceCardPicker({
                 type="button"
                 aria-label={t('rules:trade.removeCard', { resource: name, side: label })}
                 hidden={count === 0}
-                onClick={() => onChange(resource, Math.max(0, count - step))}
+                onClick={() => {
+                  const nextCount = Math.max(0, count - step);
+                  onChange(resource, nextCount);
+                  if (nextCount === 0) addButtons.current.get(resource)?.focus();
+                }}
               >
                 <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
                   <path d="M3.5 8h9" />

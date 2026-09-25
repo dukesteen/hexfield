@@ -63,6 +63,25 @@
   white-space: nowrap;
 }
 
+.resource-card-stock {
+  position: absolute;
+  top: calc(var(--card-w) * 1.4 - 9px);
+  left: 50%;
+  transform: translateX(-50%);
+  min-width: 22px;
+  height: 18px;
+  padding: 0 5px;
+  border: 1px solid var(--control);
+  border-radius: 9px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 16px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
 /* Exchange: two groups and an arrow */
 .trade-exchange {
   display: grid;
@@ -410,9 +429,47 @@
   font-variant-numeric: tabular-nums;
 }
 
-.trade-card-clear {
-  padding: 8px 12px;
-  font-size: 14px;
+.trade-card-stock-key {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 16px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.trade-card-stock-key .resource-card-stock {
+  position: static;
+  transform: none;
+}
+
+.action-dock dialog.trade-dialog .trade-card-clear {
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 8px;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.action-dock dialog.trade-dialog .trade-card-clear:hover:not(:disabled) {
+  background: transparent;
+  color: var(--text);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.action-dock dialog.trade-dialog .trade-card-clear:disabled {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--muted);
 }
 
 .trade-card-grid {
@@ -424,6 +481,7 @@
 .trade-card-choice {
   position: relative;
   display: grid;
+  grid-template-rows: auto 44px;
   align-content: start;
   justify-items: center;
   min-width: 0;
@@ -431,14 +489,6 @@
 
 .trade-dialog .resource-card {
   --card-w: 48px;
-}
-
-.trade-dialog .resource-card-name {
-  justify-self: center;
-  max-width: none;
-  width: calc(var(--card-w) + 14px);
-  overflow: visible;
-  text-overflow: clip;
 }
 
 .trade-dialog .trade-card-grid {
@@ -457,6 +507,26 @@
   border-radius: 8px;
   background: transparent;
   color: var(--text);
+}
+
+.trade-card-add .resource-card {
+  width: 100%;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+}
+
+.trade-card-add .resource-card-name {
+  justify-self: stretch;
+  max-width: none;
+  overflow: hidden;
+  text-align: center;
+  text-overflow: ellipsis;
+}
+
+.trade-card-add .resource-card-count {
+  right: calc(50% - var(--card-w) / 2 - 6px);
+  background: var(--accent);
+  color: var(--accent-text);
 }
 
 .trade-card-add:hover {
@@ -479,8 +549,8 @@
   opacity: 0.45;
 }
 
-.trade-card-choice[data-selected='true'] .resource-card {
-  transform: translateY(-4px);
+.trade-card-add[aria-disabled='true']:hover {
+  background: transparent;
 }
 
 .trade-card-choice[data-selected='true'] .resource-card img {
@@ -494,20 +564,12 @@
   font-weight: 650;
 }
 
-.trade-card-rate,
-.trade-card-stock {
+.trade-card-rate {
   color: var(--muted);
   font-size: 12px;
   line-height: 16px;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
-}
-
-.trade-dialog .trade-card-stock {
-  font-size: 11px;
-}
-
-.trade-card-rate {
   padding: 0 6px;
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -516,18 +578,20 @@
 .trade-card-remove {
   display: grid;
   place-items: center;
-  width: 44px;
+  grid-row: 2;
+  width: 100%;
+  max-width: 56px;
   height: 44px;
   padding: 0;
-  border: 1px solid var(--control);
-  border-radius: 22px;
-  background: var(--surface);
+  border: 6px solid transparent;
+  border-radius: 14px;
+  background: var(--surface) padding-box;
+  box-shadow: inset 0 0 0 1px var(--control);
   color: var(--text);
-  margin-top: 2px;
 }
 
 .trade-card-remove:hover {
-  background: var(--raised);
+  background: var(--raised) padding-box;
 }
 
 .trade-card-remove[hidden] {
@@ -535,11 +599,6 @@
 }
 
 /* Composer / bank dialog */
-.trade-dialog {
-  --trade-pad-x: 24px;
-  --trade-pad-b: 24px;
-}
-
 .action-dock dialog.trade-dialog[open] {
   display: flex;
   flex-direction: column;
@@ -671,16 +730,8 @@
   .resource-card {
     transition: none;
   }
-
-  .trade-card-choice[data-selected='true'] .resource-card {
-    transform: none;
-  }
 }
 
 :root[data-motion='reduce'] .resource-card {
   transition: none;
-}
-
-:root[data-motion='reduce'] .trade-card-choice[data-selected='true'] .resource-card {
-  transform: none;
 }

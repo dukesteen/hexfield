@@ -197,7 +197,7 @@ test('four zero-delay bots finish a default ten-point game on the game screen', 
       { timeout: 150_000 },
     )
     .not.toBeNull();
-  await expect(page.getByRole('heading', { name: /wins/ })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Game over' })).toBeVisible();
   const target = await page.evaluate(() => {
     const hook: DevHook | undefined = Reflect.get(window, '__cp2p');
     const base = hook?.session.getState().config.options.base;
@@ -214,7 +214,7 @@ test('leaving a rematch prompts from the new game and saves before navigation', 
   test.setTimeout(180_000);
   await createGame(page, { players: 4, humans: [] });
   const firstGameUrl = page.url();
-  await expect(page.getByRole('heading', { name: /wins/ })).toBeVisible({ timeout: 150_000 });
+  await expect(page.getByRole('region', { name: 'Game over' })).toBeVisible({ timeout: 150_000 });
   await page.getByRole('button', { name: 'Rematch' }).click();
   await expect(page).toHaveURL(/#\/local\/[^/]+$/);
   await expect.poll(() => page.url()).not.toBe(firstGameUrl);
@@ -348,19 +348,24 @@ test('trade recipients remain above the modal footer at desktop and phone sizes'
       await dialog.getByRole('button', { name: 'Add Lumber to You give' }).click();
       await dialog.getByRole('button', { name: 'Add Ore to You get' }).click();
       const brickCard = dialog.getByRole('button', { name: 'Add Brick to You get' });
-      const cardCenters = await brickCard.evaluate((button) => {
-        const art = button.querySelector('img')?.getBoundingClientRect();
-        const target = button.getBoundingClientRect();
-        return {
-          artX: art ? art.left + art.width / 2 : Infinity,
-          targetX: target.left + target.width / 2,
-        };
-      });
-      expect(
-        Math.abs(cardCenters.artX - cardCenters.targetX),
-        `${device.name} hover target shifts from card art`,
-      ).toBeLessThanOrEqual(1);
+      const centeredArt = async (button: typeof brickCard, state: string) => {
+        const centers = await button.evaluate((element) => {
+          const art = element.querySelector('img')?.getBoundingClientRect();
+          const target = element.getBoundingClientRect();
+          return {
+            artX: art ? art.left + art.width / 2 : Infinity,
+            targetX: target.left + target.width / 2,
+          };
+        });
+        expect(
+          Math.abs(centers.artX - centers.targetX),
+          `${device.name} ${state} target shifts from card art`,
+        ).toBeLessThanOrEqual(0.5);
+      };
+      await centeredArt(brickCard, 'idle');
+      await centeredArt(dialog.getByRole('button', { name: 'Add Lumber to You give' }), 'selected');
       if (!device.mobile) await brickCard.hover();
+      await centeredArt(brickCard, 'hovered');
       const recipients = dialog.locator('.trade-recipients');
       await recipients.scrollIntoViewIfNeeded();
       const geometry = await dialog.evaluate((element) => {
@@ -400,6 +405,30 @@ test('trade recipients remain above the modal footer at desktop and phone sizes'
       await context.close();
     }
   }
+});
+
+test('card picker keeps keyboard focus after removing the final card or clearing a side', async ({
+  page,
+}) => {
+  test.skip(test.info().project.name !== 'chromium', 'Card picker keyboard focus runs in Chromium');
+  await openGoldenPrefix(page, 22);
+  await page.getByRole('button', { name: 'Offer a trade' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Player trade' });
+  const addBrick = dialog.getByRole('button', { name: 'Add Brick to You get' });
+  await addBrick.click();
+  const removeBrick = dialog.getByRole('button', { name: 'Remove Brick from You get' });
+  await removeBrick.focus();
+  await page.keyboard.press('Enter');
+  await expect(removeBrick).toBeHidden();
+  await expect(addBrick).toBeFocused();
+
+  const addLumber = dialog.getByRole('button', { name: 'Add Lumber to You get' });
+  await addLumber.click();
+  const clear = dialog.getByRole('button', { name: 'Clear You get' });
+  await clear.focus();
+  await page.keyboard.press('Enter');
+  await expect(clear).toBeDisabled();
+  await expect(addBrick).toBeFocused();
 });
 
 test('a replay-backed development card enters the visible robber flow', async ({ page }) => {
@@ -1079,7 +1108,7 @@ test('four zero-delay bots finish a default ten-point game on a phone viewport',
         { timeout: 150_000 },
       )
       .not.toBeNull();
-    await expect(page.getByRole('heading', { name: /wins/ })).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Game over' })).toBeVisible();
     expect(pageErrors.get(page)).toEqual([]);
   } finally {
     await context.close();
@@ -1254,11 +1283,9 @@ async function playVisibleHumanStep(
     for (const resource of ['brick', 'lumber', 'wool', 'grain', 'ore'] as const) {
       const count = Math.min(remaining, view.hand[resource] ?? 0);
       if (count > 0) {
-        await page
-          .getByRole('spinbutton', {
-            name: `Cards to discard: ${resource[0]?.toUpperCase()}${resource.slice(1)}`,
-          })
-          .fill(String(count));
+        const name = `${resource[0]?.toUpperCase()}${resource.slice(1)}`;
+        const addCard = page.getByRole('button', { name: `Add ${name} to Cards to discard` });
+        for (let card = 0; card < count; card++) await addCard.click();
         remaining -= count;
       }
     }
@@ -1425,7 +1452,7 @@ test('a human completes a default ten-point game against three bots on a phone',
     page.setDefaultTimeout(10_000);
     await createGame(page, { players: 4, humans: [0] });
     await completeVisibleGame(page, 'touch');
-    await expect(page.getByRole('heading', { name: /wins/ })).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Game over' })).toBeVisible();
     const summary = await completedGameSummary(page);
     expect(summary.vpTarget).toBe(10);
     expect(summary.result?.winner).not.toBeNull();
@@ -1455,7 +1482,7 @@ test('twenty complete ten-point games use only offered visible controls without 
         const page = await context.newPage();
         await createGame(page, { players: 4, humans: [0] });
         await completeVisibleGame(page, 'mouse');
-        await expect(page.getByRole('heading', { name: /wins/ })).toBeVisible();
+        await expect(page.getByRole('region', { name: 'Game over' })).toBeVisible();
         expect(pageErrors.get(page), `Game ${game + 1} had browser errors`).toEqual([]);
         const summary = await completedGameSummary(page);
         expect(summary.vpTarget).toBe(10);

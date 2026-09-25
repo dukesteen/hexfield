@@ -86,7 +86,7 @@ export function TradeComposer({
         <ResourceCardPicker
           label={t('rules:trade.give')}
           values={give}
-          available={privateState.hand}
+          stock={{ source: 'hand', counts: privateState.hand }}
           onChange={(resource, value) => change('give', resource, value)}
           onClear={() => {
             setTouched(true);
