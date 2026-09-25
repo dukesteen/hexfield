@@ -124,8 +124,10 @@ interface BotView {
 
 ## Acceptance criteria
 
-- [ ] 100,000 random 4-player games (and 10,000 3-player games) complete with zero invariant violations and zero dead games.
-- [ ] 1,000,000 fuzz mutations, zero throws, zero accepted-invalid inputs.
-- [ ] The dice distribution over all simulated rolls matches 2d6 within statistical tolerance (chi-square p > 0.001).
-- [ ] Golden replays pass. CI runs sim + fuzz on each PR.
-- [ ] Performance budget met.
+Acceptance evidence is recorded in [STATUS.md](STATUS.md).
+
+- [x] 100,000 random 4-player games (and 10,000 3-player games) complete with zero invariant violations and zero dead games.
+- [x] 1,000,000 fuzz mutations, zero throws, zero accepted-invalid inputs.
+- [x] The dice distribution over all simulated rolls matches 2d6 within statistical tolerance (chi-square p > 0.001).
+- [x] Golden replays pass. CI runs sim + fuzz on each PR.
+- [x] Performance budget met.

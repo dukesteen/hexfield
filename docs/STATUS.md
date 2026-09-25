@@ -2,6 +2,8 @@
 
 Check each item only after its acceptance evidence is recorded. Stage 01 uses the user-authorized local CI equivalent.
 
+Milestones A and B are complete. The [release and milestone audit](verification/stage05/pages-release.md) links the acceptance evidence and the published local-play app.
+
 ## 01 — Repository Foundation
 
 Source: [01-repo-foundation.md](01-repo-foundation.md)
@@ -102,6 +104,8 @@ The earlier [desktop performance proxy](verification/stage05/renderer-performanc
 Release source `ce6bdd1` adds the charcoal dark theme, corrected triangle marker, direct board keyboard navigation, mobile player-sheet swipe dismissal, and the omission of the manual hide-hand control for single-human games. `pnpm check` passes all 317 tests and the Pages production build passes. Ten focused board/keyboard tests and both new mobile-control tests pass. A complete phone game using touch controls finishes against three bots at the default ten-point target. Production browser checks cover setup and saved-game route reloads, board rendering, loaded artwork, absence of development tools, and desktop/phone dialog layouts, with no failed asset requests or browser errors. The coordinator inspected the final screenshots.
 
 A subsequent short-landscape CSS correction prevents the open Game info panel from inheriting the closed button's 44px width and places it above the hand. Its 844×390 touch regression verifies readable bank cards, Event log expansion, and closing the panel. The renderer and portrait layout are unchanged from the measured physical-phone build.
+
+The published release `f9b7559` passes the complete local Chromium/Firefox/WebKit suite: 51 tests passed, 69 intentional browser-specific skips, and no failures. The [twenty release UI games](verification/stage05/ui-full20-release.json) completed 11,083 inputs across 2,303 turns with no rejected actions or browser errors. Source fingerprint `5e88158fbd25f96b9acefddc85a3bd78ce732ea7e6914483236f9a9cb3f94459` was unchanged through the run and independently recomputed afterward. The same run includes a complete touch-phone game. The [release report](verification/stage05/pages-release.md) records the successful GitHub checks and deployment, the explicitly skipped hosted E2E, live-site checks, and the final A/B acceptance audit.
 
 ## 06 — Protocol & Replicated Event Log
 

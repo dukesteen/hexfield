@@ -306,9 +306,11 @@ Implement the registry, dependency topological sort, conflict detection, command
 
 ## Acceptance criteria
 
-- [ ] Geometry counts and cross-check tests pass for radius 2, radius 3 and random shapes.
-- [ ] `ResourceBounds` soundness property test passes 10k runs.
-- [ ] `test-counter` module plays to completion through `LocalGame` with injected randomness.
-- [ ] Engine has zero dependencies and passes the purity check.
-- [ ] Deep-freeze tests prove `apply` is non-mutating.
-- [ ] Public API documented; `geometry.ts` entry importable by the renderer without pulling in the pipeline.
+Acceptance evidence is recorded in [STATUS.md](STATUS.md).
+
+- [x] Geometry counts and cross-check tests pass for radius 2, radius 3 and random shapes.
+- [x] `ResourceBounds` soundness property test passes 10k runs.
+- [x] `test-counter` module plays to completion through `LocalGame` with injected randomness.
+- [x] Engine has zero dependencies and passes the purity check.
+- [x] Deep-freeze tests prove `apply` is non-mutating.
+- [x] Public API documented; `geometry.ts` entry importable by the renderer without pulling in the pipeline.

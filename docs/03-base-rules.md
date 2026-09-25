@@ -222,8 +222,10 @@ packages/engine/src/modules/base/
 
 ## Acceptance criteria
 
-- [ ] Every rule in this document has at least one test. `docs/rules/base.md` is complete, with every `[VERIFY]` resolved.
-- [ ] A full 4-player game can be scripted and completed through `LocalGame`.
-- [ ] Engine coverage ≥ 90% lines, ≥ 85% branches.
-- [ ] All option variants are covered by tests.
-- [ ] `getPending` is never empty until `result` is set (checked by the stage 04 fuzzer, and here by a simple assertion helper).
+Acceptance evidence is recorded in [STATUS.md](STATUS.md).
+
+- [x] Every rule in this document has at least one test. `docs/rules/base.md` is complete, with every `[VERIFY]` resolved.
+- [x] A full 4-player game can be scripted and completed through `LocalGame`.
+- [x] Engine coverage ≥ 90% lines, ≥ 85% branches.
+- [x] All option variants are covered by tests.
+- [x] `getPending` is never empty until `result` is set (checked by the stage 04 fuzzer, and here by a simple assertion helper).

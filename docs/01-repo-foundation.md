@@ -130,9 +130,11 @@ Each package has `package.json` (name `@cp2p/<name>`, `"type": "module"`, `expor
 
 ## Acceptance criteria
 
-- [ ] `pnpm install && pnpm check && pnpm build` passes on a clean clone.
-- [ ] `pnpm dev` serves the placeholder page. The Playwright smoke test passes in Chromium, Firefox and WebKit.
-- [ ] Adding `import 'react'` to the engine fails `pnpm deps:check`.
-- [ ] Using `Math.random()` or `document` in the engine fails `pnpm check`.
-- [ ] CI runs green on GitHub Actions, or the same checks pass locally under the user-authorized local verification path in `README.md`.
-- [ ] `docs/STATUS.md` and `docs/DECISIONS.md` exist.
+Acceptance evidence is recorded in [STATUS.md](STATUS.md).
+
+- [x] `pnpm install && pnpm check && pnpm build` passes on a clean clone.
+- [x] `pnpm dev` serves the placeholder page. The Playwright smoke test passes in Chromium, Firefox and WebKit.
+- [x] Adding `import 'react'` to the engine fails `pnpm deps:check`.
+- [x] Using `Math.random()` or `document` in the engine fails `pnpm check`.
+- [x] CI runs green on GitHub Actions, or the same checks pass locally under the user-authorized local verification path in `README.md`.
+- [x] `docs/STATUS.md` and `docs/DECISIONS.md` exist.
