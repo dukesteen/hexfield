@@ -22,6 +22,7 @@ const workspaceAliases = Object.fromEntries(
 );
 
 export default defineConfig({
+  base: process.env.GITHUB_PAGES === 'true' ? '/hexfield/' : '/',
   plugins: [tanstackRouter({ target: 'react', autoCodeSplitting: true }), react()],
   resolve: { conditions: ['@cp2p/source', ...defaultClientConditions], alias: workspaceAliases },
   server: {

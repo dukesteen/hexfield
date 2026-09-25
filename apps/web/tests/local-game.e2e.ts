@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { baseLongestRoadLength, type Seat } from '@cp2p/engine';
 import { buildBoardGraph } from '@cp2p/engine/geometry';
 import { standardFixedBoard } from '@cp2p/maps';
+import type { BoardHit } from '@cp2p/renderer';
 import type { DevHook } from '../src/features/devtools/hook.js';
 import { LocalSession } from '../src/session/local-session.js';
 import { saveBeforeGoldenInput } from './golden-save.js';
@@ -26,6 +27,26 @@ interface NewGameOptions {
 
 const fixedBoard = standardFixedBoard();
 const fixedGraph = buildBoardGraph(fixedBoard.hexes);
+function canonicalBoardHit(kind: BoardHit['kind'], id: string): BoardHit {
+  switch (kind) {
+    case 'hex': {
+      const found = fixedGraph.hexIds.find((candidate) => candidate === id);
+      if (found) return { kind, id: found };
+      break;
+    }
+    case 'vertex': {
+      const found = fixedGraph.vertexIds.find((candidate) => candidate === id);
+      if (found) return { kind, id: found };
+      break;
+    }
+    case 'edge': {
+      const found = fixedGraph.edgeIds.find((candidate) => candidate === id);
+      if (found) return { kind, id: found };
+      break;
+    }
+  }
+  throw new Error(`Unknown board location ${kind}:${id}`);
+}
 const dualResourceSites = fixedGraph.vertexIds.filter((_, index) => {
   const terrain = fixedGraph.vertexHexes[index]?.map(
     (id) => fixedBoard.hexes.find((hex) => hex.id === id)?.terrain,
@@ -779,7 +800,7 @@ test('a replay-backed development card enters the visible robber flow', async ({
       return hook?.diagnostics().actions?.placements.robber[0]?.id ?? null;
     }),
   );
-  await chooseKeyboardPlacement(page, 'hex', target, before.revision + 1);
+  await chooseBoardPlacement(page, 'hex', target, before.revision + 1);
   expect(pageErrors.get(page)).toEqual([]);
 
   const mobile = await browser.newContext({
@@ -903,9 +924,7 @@ test('replay-backed Year of Plenty and Monopoly use the visible card dialogs', a
   }
 });
 
-test('a replay-backed Road Building card places a free road through the board chooser', async ({
-  page,
-}) => {
+test('a replay-backed Road Building card places a free road on the board', async ({ page }) => {
   test.skip(test.info().project.name !== 'chromium', 'Development card flow runs in Chromium');
   await openGoldenPrefix(page, 97, 'all-development-card-types.replay.json');
   const before = await observedRevision(page);
@@ -919,7 +938,7 @@ test('a replay-backed Road Building card places a free road through the board ch
   await expect.poll(firstTarget).not.toBeNull();
   const target = await firstTarget();
   expect(target).not.toBeNull();
-  if (target) await chooseKeyboardPlacement(page, 'edge', target, before + 1);
+  if (target) await chooseBoardPlacement(page, 'edge', target, before + 1);
   const afterRoad = await observedRevision(page);
   const skip = page.getByRole('button', { name: 'Skip free road' });
   await expect(skip).toBeVisible();
@@ -959,7 +978,7 @@ test('a replay-backed city upgrade previews a legal site before spending resourc
   expect(await observedRevision(page)).toBe(city.revision);
   await cityAction.click();
   await capturePreview(page, testInfo, 'city-legal-upgrades');
-  await selectKeyboardPlacement(page, 'vertex', city.id);
+  await selectBoardPlacement(page, 'vertex', city.id);
   await expect(page.getByRole('button', { name: 'Confirm city' })).toBeVisible();
   expect(await observedRevision(page)).toBe(city.revision);
   await page
@@ -975,7 +994,7 @@ test('a replay-backed city upgrade previews a legal site before spending resourc
   await expect(cityAction).toHaveAttribute('aria-pressed', 'false');
   expect(await observedRevision(page)).toBe(city.revision);
   await cityAction.click();
-  await selectKeyboardPlacement(page, 'vertex', city.id);
+  await selectBoardPlacement(page, 'vertex', city.id);
   await capturePreview(page, testInfo, 'city-preview-confirmation');
   await confirmPlacement(page, 'city', city.revision);
   const after = await page.evaluate((vertex) => {
@@ -1027,7 +1046,7 @@ test('a replay-backed paid settlement commits only after confirmation', async ({
     .getByRole('group', { name: 'Choose a board action' })
     .getByRole('button', { name: 'Build settlement' })
     .click();
-  await selectKeyboardPlacement(page, 'vertex', before.id);
+  await selectBoardPlacement(page, 'vertex', before.id);
   await expect(page.getByRole('button', { name: 'Confirm settlement' })).toBeVisible();
   expect(await observedRevision(page)).toBe(before.revision);
   await page
@@ -1035,7 +1054,7 @@ test('a replay-backed paid settlement commits only after confirmation', async ({
     .getByRole('button', { name: 'Cancel', exact: true })
     .click();
   expect(await observedRevision(page)).toBe(before.revision);
-  await selectKeyboardPlacement(page, 'vertex', before.id);
+  await selectBoardPlacement(page, 'vertex', before.id);
   await confirmPlacement(page, 'settlement', before.revision);
   const after = await page.evaluate((vertex) => {
     const hook: DevHook | undefined = Reflect.get(window, '__cp2p');
@@ -1884,10 +1903,15 @@ test('phone development drawer closes after committing a Knight with other cards
       }),
     );
     expect(target).toMatch(/^h:/);
-    await expect(page.getByTestId('board-keyboard-targets')).toBeVisible();
-    await expect(
-      page.getByTestId('board-keyboard-targets').locator(`option[value="hex:${target}"]`),
-    ).toHaveCount(1);
+    await expect(page.getByRole('group', { name: 'Game board' })).toBeVisible();
+    const targetPoint = await page.evaluate(
+      (hit) => {
+        const hook: DevHook | undefined = Reflect.get(window, '__cp2p');
+        return hook?.pixelPosition(hit) ?? null;
+      },
+      canonicalBoardHit('hex', target),
+    );
+    expect(targetPoint).not.toBeNull();
     await expect(page.getByRole('button', { name: 'Development cards: 2' })).toBeVisible();
     expect(pageErrors.get(page)).toEqual([]);
   } finally {
@@ -2224,13 +2248,11 @@ async function completeSetup(
     if (!id) throw new Error(`No suitable setup site at placement ${placement}`);
     const point = await readPresent(page, 'Setup board coordinate', () =>
       page.evaluate(
-        ({ kind, id: targetId }) => {
+        (hit) => {
           const hook: DevHook | undefined = Reflect.get(window, '__cp2p');
-          // The ID is one of the exact engine-provided legal targets selected above.
-          // eslint-disable-next-line typescript/no-unsafe-type-assertion
-          return hook?.pixelPosition({ kind, id: targetId } as never) ?? null;
+          return hook?.pixelPosition(hit) ?? null;
         },
-        { kind: settlement ? 'vertex' : 'edge', id },
+        canonicalBoardHit(settlement ? 'vertex' : 'edge', id),
       ),
     );
     const revision = await observedRevision(page);
@@ -2362,14 +2384,14 @@ async function rollAndBuildRoad(
     else await roadAction.click();
   }
   const target = await readPresent(page, 'Legal road coordinate', () =>
-    page.evaluate(() => {
+    page.evaluate((knownEdges) => {
       const hook: DevHook | undefined = Reflect.get(window, '__cp2p');
       if (!hook?.renderer) return null;
       const roads = hook.diagnostics().actions?.placements.road ?? [];
       for (const road of roads) {
-        // The engine supplied this edge as a concrete legal action.
-        // eslint-disable-next-line typescript/no-unsafe-type-assertion
-        const point = hook.pixelPosition({ kind: 'edge', id: road.id } as never);
+        const edge = knownEdges.find((candidate) => candidate === road.id);
+        if (!edge) continue;
+        const point = hook.pixelPosition({ kind: 'edge', id: edge });
         if (
           point &&
           document.elementFromPoint(point.x, point.y) instanceof HTMLCanvasElement &&
@@ -2378,7 +2400,7 @@ async function rollAndBuildRoad(
           return { ...point, id: road.id, roads: hook.session.getState().board.roads.length };
       }
       return null;
-    }),
+    }, fixedGraph.edgeIds),
   );
   const revision = await observedRevision(page);
   if (input === 'touch') await page.touchscreen.tap(target.x, target.y);
@@ -2419,22 +2441,23 @@ async function assertRoadConfirmationTracksBoard(
   revision: number,
 ): Promise<void> {
   const position = async () =>
-    page.evaluate((id) => {
-      const hook: DevHook | undefined = Reflect.get(window, '__cp2p');
-      const popup = document.querySelector('.game-board .placement-confirmation');
-      // The edge comes from the exact legal road choices offered by the engine.
-      // eslint-disable-next-line typescript/no-unsafe-type-assertion
-      const point = hook?.pixelPosition({ kind: 'edge', id } as never);
-      if (!point || !popup) return null;
-      const rect = popup.getBoundingClientRect();
-      return {
-        point,
-        gap: Math.hypot(
-          Math.max(rect.left - point.x, point.x - rect.right, 0),
-          Math.max(rect.top - point.y, point.y - rect.bottom, 0),
-        ),
-      };
-    }, edge);
+    page.evaluate(
+      (hit) => {
+        const hook: DevHook | undefined = Reflect.get(window, '__cp2p');
+        const popup = document.querySelector('.game-board .placement-confirmation');
+        const point = hook?.pixelPosition(hit);
+        if (!point || !popup) return null;
+        const rect = popup.getBoundingClientRect();
+        return {
+          point,
+          gap: Math.hypot(
+            Math.max(rect.left - point.x, point.x - rect.right, 0),
+            Math.max(rect.top - point.y, point.y - rect.bottom, 0),
+          ),
+        };
+      },
+      canonicalBoardHit('edge', edge),
+    );
   await expect.poll(async () => (await position())?.gap ?? Infinity).toBeLessThan(80);
   const before = await position();
   const canvas = page.locator('.board-view-canvas canvas');
@@ -2520,13 +2543,11 @@ async function clickLegalPlacement(
 ): Promise<void> {
   const point = await readPresent(page, 'Board coordinate', () =>
     page.evaluate(
-      ({ kind: hitKind, id: targetId }) => {
+      (hit) => {
         const hook: DevHook | undefined = Reflect.get(window, '__cp2p');
-        // The target is selected from this same hook's exact legal actions.
-        // eslint-disable-next-line typescript/no-unsafe-type-assertion
-        return hook?.pixelPosition({ kind: hitKind, id: targetId } as never) ?? null;
+        return hook?.pixelPosition(hit) ?? null;
       },
-      { kind, id },
+      canonicalBoardHit(kind, id),
     ),
   );
   await expect
@@ -2600,24 +2621,40 @@ async function confirmPlacement(
   await expect.poll(() => observedRevision(page)).toBeGreaterThan(revision);
 }
 
-async function selectKeyboardPlacement(
+async function selectBoardPlacement(
   page: Page,
   kind: 'vertex' | 'edge' | 'hex',
   id: string,
   input: 'mouse' | 'touch' = 'mouse',
 ): Promise<void> {
-  const chooser = page.getByTestId('board-keyboard-targets');
-  if ((await chooser.getAttribute('open')) === null) {
-    if (input === 'touch') await chooser.locator('summary').tap();
-    else await chooser.locator('summary').click();
-  }
-  await chooser.getByLabel('Board location').selectOption(`${kind}:${id}`);
-  const select = chooser.getByRole('button', { name: 'Select location' });
-  if (input === 'touch') await select.tap();
-  else await select.click();
+  const point = await page.evaluate(
+    (hit) => {
+      const hook: DevHook | undefined = Reflect.get(window, '__cp2p');
+      return hook?.pixelPosition(hit) ?? null;
+    },
+    canonicalBoardHit(kind, id),
+  );
+  if (!point) throw new Error(`No visible board point for ${kind}:${id}`);
+  const board = page.locator('.board-view-canvas canvas');
+  const bounds = await board.boundingBox();
+  if (
+    !bounds ||
+    point.x < bounds.x ||
+    point.x > bounds.x + bounds.width ||
+    point.y < bounds.y ||
+    point.y > bounds.y + bounds.height
+  )
+    throw new Error(`Board point for ${kind}:${id} is outside the visible canvas`);
+  const unobscured = await board.evaluate(
+    (canvas, position) => document.elementFromPoint(position.x, position.y) === canvas,
+    point,
+  );
+  if (!unobscured) throw new Error(`Board point for ${kind}:${id} is covered`);
+  if (input === 'touch') await page.touchscreen.tap(point.x, point.y);
+  else await page.mouse.click(point.x, point.y);
 }
 
-async function chooseKeyboardPlacement(
+async function chooseBoardPlacement(
   page: Page,
   kind: 'vertex' | 'edge' | 'hex',
   id: string,
@@ -2625,7 +2662,7 @@ async function chooseKeyboardPlacement(
   input: 'mouse' | 'touch' = 'mouse',
   piece?: 'settlement' | 'city',
 ): Promise<void> {
-  await selectKeyboardPlacement(page, kind, id, input);
+  await selectBoardPlacement(page, kind, id, input);
   if (kind === 'edge') await confirmPlacement(page, 'road', revision, input);
   if (kind === 'vertex') {
     if (!piece) throw new Error('Vertex placement needs a building kind');
@@ -2681,7 +2718,7 @@ async function playVisibleHumanStep(
     const road = actions.placements.road[0];
     const choice = settlement ?? road;
     if (!choice) return 'waiting';
-    await chooseKeyboardPlacement(
+    await chooseBoardPlacement(
       page,
       settlement ? 'vertex' : 'edge',
       choice.id,
@@ -2708,13 +2745,7 @@ async function playVisibleHumanStep(
     return 'acted';
   }
   if (actions.placements.robber[0]) {
-    await chooseKeyboardPlacement(
-      page,
-      'hex',
-      actions.placements.robber[0].id,
-      view.revision,
-      input,
-    );
+    await chooseBoardPlacement(page, 'hex', actions.placements.robber[0].id, view.revision, input);
     return 'acted';
   }
   if (actions.stealTargets.length > 0) {
@@ -2754,7 +2785,7 @@ async function playVisibleHumanStep(
         if (input === 'touch') await chooser.tap();
         else await chooser.click();
       }
-      await chooseKeyboardPlacement(page, 'vertex', choice.id, view.revision, input, kind);
+      await chooseBoardPlacement(page, 'vertex', choice.id, view.revision, input, kind);
       return 'acted';
     }
     if (actions.primary.some((group) => group.type === 'BUY_DEV_CARD')) {

@@ -7,6 +7,7 @@ import * as v from 'valibot';
 import { useSaveGame } from '../../queries/hooks';
 import type { GamePresentation } from '../../queries/repositories/saved-games';
 import { LocalSession } from '../../session';
+import { PlayerMarker } from '../../features/game/PlayerMarker.js';
 
 export const newGameSearchSchema = v.object({
   map: v.optional(v.picklist(['balanced-random', 'random', 'standard-fixed'])),
@@ -178,10 +179,7 @@ function NewLocalGame() {
             <div className="player-form-list">
               {players.slice(0, playerCount).map((player, index) => (
                 <div className="player-form-row" key={player.seat}>
-                  <span
-                    className={`player-marker marker-${player.shape} color-${player.color}`}
-                    aria-hidden="true"
-                  />
+                  <PlayerMarker shape={player.shape} color={player.color} />
                   <label>
                     {t('lobby:playerName', { number: index + 1 })}
                     <input

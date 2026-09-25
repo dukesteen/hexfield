@@ -41,6 +41,7 @@ const EDGE_RING_LENGTH = 0.82;
 const EDGE_RING_HEIGHT = 0.32;
 const EDGE_INK = 0x18332b;
 const EDGE_PAPER = 0xfcfdfc;
+const DARK_BOARD_BACKDROP = 0x17191c;
 const SITE_HALO = 0.2;
 const SITE_RING = 0.11;
 const SITE_RING_WIDTH = 0.04;
@@ -280,7 +281,7 @@ export class PixiBoardRenderer implements BoardRenderer {
         autoDensity: true,
         resolution: devicePixelRatio,
         antialias: true,
-        backgroundColor: options.appearance?.theme === 'dark' ? 0x15231f : 0xd1e7e9,
+        backgroundColor: options.appearance?.theme === 'dark' ? DARK_BOARD_BACKDROP : 0xd1e7e9,
         preference: 'webgl',
       });
       const hexSize = options.hexSize ?? HEX_SIZE;
@@ -812,7 +813,8 @@ export class PixiBoardRenderer implements BoardRenderer {
     if (this.destroyed) return;
     if (sameAppearance(this.appearance, appearance)) return;
     this.appearance = appearance;
-    this.app.renderer.background.color = appearance.theme === 'dark' ? 0x15231f : 0xd1e7e9;
+    this.app.renderer.background.color =
+      appearance.theme === 'dark' ? DARK_BOARD_BACKDROP : 0xd1e7e9;
     this.signatures.delete('background');
     this.signatures.delete('roads');
     this.signatures.delete('buildings');
@@ -943,7 +945,7 @@ export class PixiBoardRenderer implements BoardRenderer {
     const model = this.model;
     if (!model) return;
     if (name === 'background') {
-      const color = this.appearance.theme === 'dark' ? 0x15231f : 0xd1e7e9;
+      const color = this.appearance.theme === 'dark' ? DARK_BOARD_BACKDROP : 0xd1e7e9;
       layer.addChild(new Graphics().rect(-8192, -8192, 16384, 16384).fill({ color }));
     } else if (name === 'terrain') {
       for (const center of this.waterCenters())

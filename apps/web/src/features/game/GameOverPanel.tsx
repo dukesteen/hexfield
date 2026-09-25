@@ -4,6 +4,7 @@ import type { GameEvent, GameState } from '@cp2p/engine';
 import type { GamePresentation } from '../../queries/repositories/saved-games';
 import { useSessionStore } from '../../store/session-store';
 import { diceHistogram, productionBySeat, victoryBreakdown } from './stats';
+import { PlayerMarker } from './PlayerMarker.js';
 
 type Score = ReturnType<typeof victoryBreakdown>;
 
@@ -122,9 +123,10 @@ export function GameOverPanel({
         <div className="results-layout">
           <section className="results-hero" aria-label={t('game:resultsWinnerScore')}>
             <div className="results-identity">
-              <span
-                className={`player-marker marker-${winner.identity?.shape ?? 'circle'} color-${winner.identity?.color ?? 'blue'}`}
-                aria-hidden="true"
+              <PlayerMarker
+                shape={winner.identity?.shape ?? 'circle'}
+                color={winner.identity?.color ?? 'blue'}
+                hero
               />
               <strong>{winner.name}</strong>
               <span className="results-winner-badge">{t('game:resultsWinnerBadge')}</span>
@@ -146,9 +148,9 @@ export function GameOverPanel({
             <ol>
               {standings.map((player) => (
                 <li className="results-standing" key={player.seat}>
-                  <span
-                    className={`player-marker marker-${player.identity?.shape ?? 'circle'} color-${player.identity?.color ?? 'blue'}`}
-                    aria-hidden="true"
+                  <PlayerMarker
+                    shape={player.identity?.shape ?? 'circle'}
+                    color={player.identity?.color ?? 'blue'}
                   />
                   <span className="results-standing-name">
                     <strong>{player.name}</strong>

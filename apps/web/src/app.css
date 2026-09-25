@@ -23,31 +23,31 @@
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) {
-    --page: #15231f;
-    --surface: #1d3029;
-    --raised: #294137;
-    --text: #edf5f0;
-    --muted: #adc5b8;
-    --border: #49685b;
-    --control: #6b9984;
-    --accent: #80d9b4;
-    --accent-text: #153226;
-    --error: #ffaaa0;
+    --page: #17191c;
+    --surface: #202327;
+    --raised: #2b3036;
+    --text: #f1f3f5;
+    --muted: #b3bac2;
+    --border: #41474f;
+    --control: #77818b;
+    --accent: #8ab4f8;
+    --accent-text: #15191f;
+    --error: #ff938a;
     color-scheme: dark;
   }
 }
 
 :root[data-theme='dark'] {
-  --page: #15231f;
-  --surface: #1d3029;
-  --raised: #294137;
-  --text: #edf5f0;
-  --muted: #adc5b8;
-  --border: #49685b;
-  --control: #6b9984;
-  --accent: #80d9b4;
-  --accent-text: #153226;
-  --error: #ffaaa0;
+  --page: #17191c;
+  --surface: #202327;
+  --raised: #2b3036;
+  --text: #f1f3f5;
+  --muted: #b3bac2;
+  --border: #41474f;
+  --control: #77818b;
+  --accent: #8ab4f8;
+  --accent-text: #15191f;
+  --error: #ff938a;
   color-scheme: dark;
 }
 
@@ -358,7 +358,25 @@ input[type='checkbox'] {
   border-radius: 50%;
 }
 .marker-triangle {
-  clip-path: polygon(50% 0, 100% 100%, 0 100%);
+  border: 0;
+  box-shadow: none;
+  background: none;
+}
+.marker-triangle svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.marker-triangle .triangle-outline,
+.marker-triangle .triangle-solid {
+  stroke: var(--text);
+}
+.marker-triangle .triangle-outline {
+  fill: white;
+}
+.marker-triangle .triangle-solid,
+.marker-triangle .triangle-fill {
+  fill: var(--player-color);
 }
 .marker-square {
   border-radius: 2px;
@@ -445,7 +463,7 @@ input[type='checkbox'] {
   border: 1px solid var(--control);
   border-radius: 9px;
   background: var(--surface);
-  box-shadow: 0 3px 12px #091d1733;
+  box-shadow: 0 3px 12px #090b0e33;
   cursor: pointer;
   list-style: none;
   font-size: 1.25rem;
@@ -464,7 +482,7 @@ input[type='checkbox'] {
   border: 1px solid var(--control);
   border-radius: 10px;
   background: var(--surface);
-  box-shadow: 0 16px 42px #091d1740;
+  box-shadow: 0 16px 42px #090b0e40;
 }
 .game-menu-panel > button {
   min-height: 44px;
@@ -560,7 +578,7 @@ input[type='checkbox'] {
   background: var(--surface);
   color: var(--text);
   font-size: 0.75rem;
-  box-shadow: 0 3px 12px #091d1733;
+  box-shadow: 0 3px 12px #090b0e33;
   animation: resource-flight 800ms ease-in forwards;
 }
 .resource-flight img {
@@ -1030,7 +1048,7 @@ input[type='checkbox'] {
   width: min(94vw, 680px);
 }
 .action-forms dialog::backdrop {
-  background: #091d17a8;
+  background: #090b0ea8;
 }
 .action-forms dialog > * + * {
   margin-top: 14px;
@@ -1088,7 +1106,7 @@ input[type='checkbox'] {
   display: grid;
 }
 .results-dialog::backdrop {
-  background: #091d17a8;
+  background: #090b0ea8;
 }
 .results-header {
   display: grid;
@@ -1644,7 +1662,7 @@ button.development-card-main:focus-visible img {
   color: var(--text);
 }
 .development-dialog::backdrop {
-  background: #091d17a8;
+  background: #090b0ea8;
 }
 .development-dialog .development-hand {
   min-height: 0;
@@ -1818,7 +1836,7 @@ button.development-card-main:focus-visible img {
   box-shadow: 0 20px 60px #0003;
 }
 .app-dialog::backdrop {
-  background: #091d17a8;
+  background: #090b0ea8;
 }
 .app-dialog p {
   margin-top: 12px;
@@ -2082,7 +2100,7 @@ button.development-card-main:focus-visible img {
     overflow-y: auto;
     border-top: 1px solid var(--control);
     background: var(--surface);
-    box-shadow: 0 -10px 36px #091d1726;
+    box-shadow: 0 -10px 36px #090b0e26;
   }
   .game-info[open] > summary {
     width: 100%;
@@ -2319,7 +2337,7 @@ button.development-card-main:focus-visible img {
     max-height: 75dvh;
     overflow-y: auto;
     background: var(--surface);
-    box-shadow: 0 -10px 36px #091d1726;
+    box-shadow: 0 -10px 36px #090b0e26;
   }
   .hand-dock,
   .action-dock {
@@ -2420,7 +2438,7 @@ button.development-card-main:focus-visible img {
   border-radius: 16px 16px 0 0;
   background: var(--surface);
   color: var(--text);
-  box-shadow: 0 -12px 40px #091d1733;
+  box-shadow: 0 -12px 40px #090b0e33;
 }
 .cockpit-sheet[open] {
   display: grid;
@@ -2428,7 +2446,7 @@ button.development-card-main:focus-visible img {
   animation: cockpit-sheet-in 180ms ease-out;
 }
 .cockpit-sheet::backdrop {
-  background: #091d1780;
+  background: #090b0e80;
 }
 .cockpit-sheet-header {
   display: flex;

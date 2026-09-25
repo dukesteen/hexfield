@@ -6,17 +6,17 @@
   display: block;
   margin: 0;
   padding: 7px 9px;
-  border: 1px solid rgb(28 54 67 / 16%);
+  border: 1px solid var(--border);
   border-radius: 12px;
-  background: rgb(255 255 255 / 94%);
-  box-shadow: 0 2px 8px rgb(25 48 59 / 18%);
-  color: #172c37;
+  background: var(--surface);
+  box-shadow: 0 2px 8px #090b0e33;
+  color: var(--text);
   pointer-events: none;
 }
 
 .dice-roll-readout figcaption {
   margin-bottom: 4px;
-  color: #4d6470;
+  color: var(--muted);
   font-size: 0.625rem;
   font-weight: 700;
   line-height: 1;
@@ -36,7 +36,7 @@
   height: 26px;
   grid-template: repeat(3, 1fr) / repeat(3, 1fr);
   padding: 3px;
-  border: 1px solid #c7d2d8;
+  border: 1px solid var(--border);
   border-radius: 6px;
   background: #fff;
   box-shadow: 0 1px 2px rgb(23 44 55 / 14%);
@@ -57,7 +57,7 @@
 .dice-roll-total {
   min-width: 1.1em;
   margin-left: 1px;
-  color: #163d54;
+  color: var(--text);
   font-size: 1.1rem;
   font-weight: 800;
   line-height: 1;

@@ -5,7 +5,7 @@ This folder is the complete implementation plan for a browser-based, fully peer-
 ## Instructions for the implementing agent
 
 1. **Read `00-architecture.md` first, then read it again before every stage.** It holds the non-negotiable invariants: determinism, dependency direction, where randomness comes from, and how public and private state are separated. Any code that breaks them is wrong, even if its tests pass.
-2. **Work one stage at a time.** Don't start stage N+1 until every acceptance criterion in stage N passes in CI. For this workspace, the user authorized running the same checks locally because there is no GitHub remote. Record the commands and results in `STATUS.md`; keep the GitHub Actions workflow ready for a future remote.
+2. **Work one stage at a time.** Don't start stage N+1 until every acceptance criterion in stage N passes in CI. The user authorized equivalent local checks before the GitHub repository existed; those historical results remain recorded in `STATUS.md`. The repository is now `dukesteen/hexfield`, and GitHub Actions runs the checks and gates publication.
 3. **Follow the steps as written.** Each step is sized so it ends in a verifiable result: code plus tests. After each step, run `pnpm check` (typecheck + lint + test) and commit.
 4. **Tests are part of the deliverable.** "Required tests" sections are minimums. Where a rule is ambiguous, write a test that pins down the interpretation you chose, and record the choice in `docs/DECISIONS.md`.
 5. **Rules marked `[VERIFY]`** are details the plan author wasn't fully sure of. Before implementing one, check it against the official published rules for that mechanic, then record the resolved rule in `docs/rules/<module>.md` along with the source you used. Never guess silently.

@@ -1,0 +1,7 @@
+# Triangle player marker review
+
+The 18 px CSS triangle clipped a square border and inset shadow, leaving a white bar at its base. A CSS replacement with nested triangular insets still left too little orange visible. The two read-only Claude reviews are recorded by their [geometry prompt](../../../packages/renderer/src/assets/prompts/player-marker-ui.md) and [color prompt](../../../packages/renderer/src/assets/prompts/player-marker-color-review.md); their full local outputs are `/private/tmp/hexfield-player-marker-claude.out` and `/private/tmp/hexfield-player-marker-color-claude.out`.
+
+The final marker uses an inline SVG polygon. At 18 px it has an orange fill and a continuous 1.5 px outline, with no white inset. The first SVG proposal kept a white inset but left orange at roughly 39% of the nominal triangle area. The final polygon puts orange across roughly 70% of that area. The 28 px results marker retains a thin white keyline. Circle, square and diamond markers remain unchanged.
+
+Fresh-server Chromium captures covered setup and player panels at 1280 × 720 and 390 × 844 in light and dark themes. The final crops are `/private/tmp/hexfield-marker-solid-crop-desktop-dark.png` and `/private/tmp/hexfield-marker-solid-crop-desktop-light.png`; the phone player strip is `/private/tmp/hexfield-marker-solid-game-phone-dark.png`. Web TypeScript, scoped type-aware lint and formatting checks passed.

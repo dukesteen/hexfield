@@ -29,6 +29,7 @@ import { sessionForActions } from '../../store/session-store';
 import { useVisualEffects, type ProductionReceipt } from './use-visual-effects';
 import { DiceRollReadout, latestDiceRoll } from './DiceRollReadout.js';
 import { CockpitSheet } from './CockpitSheet.js';
+import { PlayerMarker } from './PlayerMarker.js';
 import { NextStepBar } from './NextStepBar.js';
 import { useCompactCockpit } from './use-compact-cockpit.js';
 import type { SaveStatus } from './save-coordinator';
@@ -152,9 +153,9 @@ function PlayerRail({
               aria-current={activeSeat === seatState.seat ? 'step' : undefined}
             >
               <div className="player-panel-heading">
-                <span
-                  className={`player-marker marker-${identity?.shape ?? 'circle'} color-${identity?.color ?? 'blue'}`}
-                  aria-hidden="true"
+                <PlayerMarker
+                  shape={identity?.shape ?? 'circle'}
+                  color={identity?.color ?? 'blue'}
                 />
                 <strong>{playerName(presentation, seatState.seat)}</strong>
                 <span className="player-seat-index" aria-hidden="true">
@@ -301,10 +302,7 @@ function PlayerDetails({
   return (
     <section className="player-details">
       <div className="player-details-head">
-        <span
-          className={`player-marker marker-${identity?.shape ?? 'circle'} color-${identity?.color ?? 'blue'}`}
-          aria-hidden="true"
-        />
+        <PlayerMarker shape={identity?.shape ?? 'circle'} color={identity?.color ?? 'blue'} />
         <strong>{identity?.name ?? t('game:playerFallback', { number: seat + 1 })}</strong>
         <SeatTimer seat={seat} />
         <span
@@ -386,6 +384,7 @@ function HandDock({
   const revealedSeat = useSessionStore((store) => store.revealedSeat);
   const privateState = useSessionStore((store) => store.privateState);
   const optionalViewingSeat = useSessionStore((store) => store.optionalViewingSeat);
+  const allowManualHide = (sessionForActions()?.controllableSeats().length ?? 0) > 1;
   const developmentDialog = useRef<HTMLDialogElement>(null);
   const intentOpenedDialog = useRef(false);
   const closeAfterKnightCommit = useRef(false);
@@ -585,27 +584,29 @@ function HandDock({
                 {t('game:returnToBoard')}
               </button>
             )}
-            <button
-              className="button button-quiet hand-hide-control"
-              type="button"
-              aria-label={t('game:hideHand')}
-              title={t('game:hideHand')}
-              onClick={() => {
-                const store = useSessionStore.getState();
-                if (optionalViewingSeat !== null) store.leaveOptionalSeat();
-                else store.conceal();
-              }}
-            >
-              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false">
-                <path
-                  d="M3 3 21 21M10.6 5.2A10.8 10.8 0 0 1 12 5c4.6 0 8.5 2.7 10 7-0.5 1.2-1.2 2.2-2.2 3.2M6.2 6.3C4.4 7.5 3 9.5 2 12c1.5 4.3 5.4 7 10 7 1.8 0 3.5-0.4 4.9-1.2M9.9 9.9a3 3 0 0 0 4.2 4.2"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-            </button>
+            {allowManualHide && (
+              <button
+                className="button button-quiet hand-hide-control"
+                type="button"
+                aria-label={t('game:hideHand')}
+                title={t('game:hideHand')}
+                onClick={() => {
+                  const store = useSessionStore.getState();
+                  if (optionalViewingSeat !== null) store.leaveOptionalSeat();
+                  else store.conceal();
+                }}
+              >
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false">
+                  <path
+                    d="M3 3 21 21M10.6 5.2A10.8 10.8 0 0 1 12 5c4.6 0 8.5 2.7 10 7-0.5 1.2-1.2 2.2-2.2 3.2M6.2 6.3C4.4 7.5 3 9.5 2 12c1.5 4.3 5.4 7 10 7 1.8 0 3.5-0.4 4.9-1.2M9.9 9.9a3 3 0 0 0 4.2 4.2"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -1049,6 +1050,7 @@ function LiveGame({
               sheet.kind === 'actions' ? t('game:actions') : playerName(presentation, sheet.seat)
             }
             dialogRef={sheetRef}
+            swipeToDismiss={sheet.kind === 'player'}
             onClosed={() => {
               setSheet(null);
               if (restoreSheetFocus.current)

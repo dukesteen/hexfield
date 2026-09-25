@@ -58,15 +58,10 @@ async function boardSnapshot(page: Page) {
 }
 
 async function chooseFirstLocationWithKeyboard(page: Page): Promise<void> {
-  const chooser = page.getByTestId('board-keyboard-targets');
-  if ((await chooser.getAttribute('open')) === null)
-    await chooser.locator('summary').press('Enter');
-  const select = chooser.getByLabel('Board location');
-  await select.focus();
-  await select.press('Home');
-  await select.press('Tab');
-  await expect(chooser.getByRole('button', { name: 'Select location' })).toBeFocused();
-  await page.keyboard.press('Enter');
+  const board = page.getByRole('group', { name: 'Game board' });
+  await board.focus();
+  await board.press('Home');
+  await board.press('Enter');
 }
 
 async function previewCancelConfirm(page: Page, piece: 'settlement' | 'road'): Promise<void> {
@@ -90,7 +85,7 @@ async function previewCancelConfirm(page: Page, piece: 'settlement' | 'road'): P
   expect(after.roads).toBe(before.roads + (piece === 'road' ? 1 : 0));
 }
 
-test('keyboard shortcuts and native board chooser preview, cancel and confirm setup pieces', async ({
+test('keyboard shortcuts and board focus preview, cancel and confirm setup pieces', async ({
   page,
 }) => {
   test.skip(test.info().project.name !== 'chromium', 'Keyboard board smoke runs in Chromium');

@@ -280,3 +280,19 @@ Record decisions here as they are made. Keep earlier entries.
 ## 2026-09-25: Local save lifecycle
 
 - Architecture review: Session subscriptions push live state, events, and pending choices into Zustand. Normal saved-game reads and writes use TanStack Query hooks and mutations. The save coordinator has one synchronous persistence exception for `pagehide` and effect cleanup: it flushes the latest revision through the localStorage repository because page exit cannot wait for an asynchronous mutation. This lifecycle write does not introduce another live-state store. Coordinator and repository tests cover retrying a failed write, rejecting stale revisions, and preserving a synchronous flush over an older queued write.
+
+## 2026-09-25: First public local-play deployment
+
+- Request: Publish the existing app from `dukesteen/hexfield` on GitHub Pages.
+- Decision: Keep hash-based SPA routing and build production assets with the `/hexfield/` prefix. Ordinary local builds and development retain `/`. Publish through the existing CI workflow after its check and simulation jobs both pass; newer runs on the same ref cancel older runs. The public release includes local hotseat and bot play. P2P play remains in later milestones.
+- Evidence: The Pages build and all 317 local tests pass. A production browser check at `/hexfield/` opens the home page, reloads the setup route, creates and reloads a saved game, displays the board, and confirms that the debug hook and development board route are unavailable. It reports no failed asset requests or browser errors.
+
+## 2026-09-25: Release interface adjustments
+
+- Request: Fix the triangle player marker, replace the green dark theme with charcoal, and remove the visible Keyboard targets control.
+- Consultation: Claude's [marker review](verification/stage05/player-marker-review.md) recommended SVG geometry that follows the triangle edges. The small marker uses a solid player-colored fill and one contrasting outline; the larger results marker adds a thin keyline. The coordinator inspected the actual desktop and phone captures in both themes.
+- Decision: Dark mode uses neutral charcoal surfaces, grey borders and text, and a restrained blue accent. The canvas backdrop and dice readout follow the theme. The light palette and game-resource/player colors retain their existing meaning. The updated visual guide records the tokens and measured contrast ratios.
+- Decision: Keyboard users navigate legal locations directly while the board is focused. Arrow keys and Home/End move the preview, Enter or Space select, and Escape leaves keyboard focus. Screen-reader instructions and the current location remain available. Pointer and touch input continue to use the board and its confirmation controls.
+- Request: Dismiss mobile player details with a downward swipe and omit the hide-hand icon when only one human is playing.
+- Decision: A downward touch gesture from the sheet header or the top of its scrollable body closes player details and restores focus to the player tile. Short, sideways, upward, and already-scrolled gestures preserve the sheet. The hand's privacy control appears only when the session has multiple controllable human seats; a single human's hand remains automatically visible.
+- Evidence: Both focused touch-browser tests pass, including scrolling, dismissal, focus restoration, multi-human privacy, and a solo hand after saved-game reload. The final `pnpm check` passes all 317 tests and the Pages production build passes. The coordinator inspected desktop and phone captures of the charcoal cockpit, player sheet, and build-cost dialog. Production route/reload checks report no failed asset requests or browser errors.

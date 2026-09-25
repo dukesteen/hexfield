@@ -82,8 +82,8 @@ function expectLastFocusCall(...args: Parameters<BoardRenderer['setFocusTarget']
   expect(focusCalls.at(-1)).toEqual(args);
 }
 
-describe('BoardView keyboard target chooser', () => {
-  test('keeps targets collapsed and previews the selected semantic target', async () => {
+describe('BoardView keyboard locations', () => {
+  test('cycles legal locations and selects one without a visible target panel', async () => {
     prepareRenderer();
     const onSelect = vi.fn<(hit: BoardHit) => void>();
     const onTargetPreview = vi.fn<(hit: BoardHit | null) => void>();
@@ -100,10 +100,11 @@ describe('BoardView keyboard target chooser', () => {
       />,
     );
 
-    const disclosure = screen.getByText('Keyboard targets (2)');
-    expect(disclosure.parentElement?.hasAttribute('open')).toBe(false);
-    fireEvent.click(disclosure);
-    expect(disclosure.parentElement?.hasAttribute('open')).toBe(true);
+    const board = screen.getByRole('group', { name: 'Game board' });
+    await waitFor(() => expect(board.getAttribute('tabindex')).toBe('0'));
+    expect(screen.queryByText('Keyboard targets (2)')).toBeNull();
+    board.focus();
+    fireEvent.keyDown(board, { key: 'Home' });
     expect(onTargetPreview).toHaveBeenLastCalledWith({ kind: 'vertex', id: targets[0] });
     await waitFor(() =>
       expectLastFocusCall({
@@ -112,20 +113,20 @@ describe('BoardView keyboard target chooser', () => {
       }),
     );
 
-    const select = screen.getByRole('combobox', { name: 'Board location' });
     const chosenTarget = targets[1];
     if (!chosenTarget) throw new Error('Expected a second board target');
-    fireEvent.change(select, { target: { value: `vertex:${chosenTarget}` } });
+    fireEvent.keyDown(board, { key: 'ArrowRight' });
     expect(onTargetPreview).toHaveBeenLastCalledWith({ kind: 'vertex', id: chosenTarget });
-    fireEvent.click(screen.getByRole('button', { name: 'Select location' }));
+    expect(screen.getByText(`Intersection ${chosenTarget}, 2 of 2`)).toBeDefined();
+    fireEvent.keyDown(board, { key: 'Enter' });
 
     expect(onSelect).toHaveBeenCalledWith({ kind: 'vertex', id: chosenTarget });
-    fireEvent.click(disclosure);
+    fireEvent.keyDown(board, { key: 'Escape' });
     expect(onTargetPreview).toHaveBeenLastCalledWith(null);
     await waitFor(() => expectLastFocusCall(null));
   });
 
-  test('restores an uncommitted selected road preview after the chooser closes', async () => {
+  test('keeps a selected road preview above keyboard location browsing', async () => {
     prepareRenderer();
     expect(rendererForTest).toBeDefined();
     const edges = graph.edgeIds.slice(0, 2);
@@ -143,11 +144,12 @@ describe('BoardView keyboard target chooser', () => {
     );
 
     await waitFor(() => expectLastFocusCall(focusTarget, { piece: 'road', color: 0xd55e00 }));
-    fireEvent.click(screen.getByText('Keyboard targets (2)'));
-    const select = screen.getByRole('combobox', { name: 'Board location' });
-    fireEvent.change(select, { target: { value: `edge:${otherEdge}` } });
+    const board = screen.getByRole('group', { name: 'Game board' });
+    board.focus();
+    fireEvent.keyDown(board, { key: 'End' });
+    expect(screen.getByText(`Edge ${otherEdge}, 2 of 2`)).toBeDefined();
     await waitFor(() => expectLastFocusCall(focusTarget, { piece: 'road', color: 0xd55e00 }));
-    fireEvent.click(screen.getByText('Keyboard targets (2)'));
+    fireEvent.keyDown(board, { key: 'Escape' });
     await waitFor(() => expectLastFocusCall(focusTarget, { piece: 'road', color: 0xd55e00 }));
   });
 

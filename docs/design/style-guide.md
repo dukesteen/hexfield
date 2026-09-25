@@ -14,20 +14,20 @@ This is a new game interface replacing the foundation placeholder. The frontend 
 
 | Purpose            | Light     | Dark      |
 | ------------------ | --------- | --------- |
-| Page               | `#f4f7f6` | `#15231f` |
-| Surface            | `#fcfdfc` | `#1d3029` |
-| Raised surface     | `#eaf0ed` | `#294137` |
-| Main text          | `#18332b` | `#edf5f0` |
-| Secondary text     | `#49665b` | `#adc5b8` |
-| Border             | `#b9ccc3` | `#49685b` |
-| Control boundary   | `#738d81` | `#6b9984` |
-| Accent             | `#086b52` | `#80d9b4` |
-| Accent button text | `#fcfdfc` | `#153226` |
-| Error text         | `#ae3329` | `#ffaaa0` |
+| Page               | `#f4f7f6` | `#17191c` |
+| Surface            | `#fcfdfc` | `#202327` |
+| Raised surface     | `#eaf0ed` | `#2b3036` |
+| Main text          | `#18332b` | `#f1f3f5` |
+| Secondary text     | `#49665b` | `#b3bac2` |
+| Border             | `#b9ccc3` | `#41474f` |
+| Control boundary   | `#738d81` | `#77818b` |
+| Accent             | `#086b52` | `#8ab4f8` |
+| Accent button text | `#fcfdfc` | `#15191f` |
+| Error text         | `#ae3329` | `#ff938a` |
 
 Use one accent for navigation and primary actions. Terrain, resources, player identity, warnings, and errors have semantic colors and are not decorative accents. Respect system theme by default and allow a saved light/dark/system setting. Every screen uses the selected theme throughout.
 
-The quiet border is for grouping panels. Inputs and controls that need a visible boundary use the stronger control-boundary token. Against their surface, body text has contrast ratios of 13.31:1 in light mode and 12.55:1 in dark mode; secondary text has 6.18:1 and 7.60:1. Accent-button text has 6.37:1 and 8.25:1. Control boundaries have 3.52:1 and 4.32:1. Recheck rendered combinations if tokens change.
+The quiet border is for grouping panels. Inputs and controls that need a visible boundary use the stronger control-boundary token. Against their surface, body text has contrast ratios of 13.31:1 in light mode and 14.18:1 in dark mode; secondary text has 6.18:1 and 8.05:1. Accent-button text has 6.37:1 and 8.37:1. Control boundaries have 3.52:1 and 3.98:1. Recheck rendered combinations if tokens change.
 
 Use a native sans-serif stack: `ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`. Default body 16 px, compact game labels 14 px, secondary metadata no smaller than 12 px. Headings use weight and spacing rather than ornament. Use tabular numerals for counts and timers. No externally hosted fonts.
 
@@ -46,12 +46,14 @@ The z-index scale is board controls 10, sticky mobile controls 20, sheets 30, di
 - The new-game form groups players, board/rule choices, and timers. Keep advanced options in a labeled disclosure without omitting them.
 - During a turn, emphasize the current instruction and next action. Setup and build modes share one selection pattern. Show legal targets and a clear cancel action.
 - Privacy covers remove private hand content from view and keyboard access until the next player explicitly reveals it.
-- Pair player color with a distinct shape/pattern and a name. Keyboard users get named, focusable target choices alongside canvas selection.
+- Pair player color with a distinct shape/pattern and a name. Keyboard users focus the board, browse named legal locations with the arrow keys or Home/End, and select with Enter or Space. Escape clears keyboard focus.
 - Copy is functional and short. All visible text, labels, errors, tooltips, resource names, and event text use translation keys.
 
 ## Player identity
 
 Default identity colors are blue `#0072b2`, orange `#d55e00`, green `#009e73`, and magenta `#b35b93`. Pair these consistently with circle, triangle, square, and diamond markers. Pieces need a light inset and dark outline so identity remains visible over any terrain. Do not rely on red/green differences alone. Custom color choices must retain a distinct marker.
+
+Small interface triangles use a filled SVG polygon with a continuous contrasting outline. Keep the colored area dominant at 14 and 18 px. The 28 px results marker adds a thin white keyline.
 
 ## Board art
 

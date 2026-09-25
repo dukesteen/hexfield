@@ -46,7 +46,7 @@ export function BoardView({
   targetLabel,
 }: BoardViewProps) {
   const { t } = useTranslation('common');
-  const targetSelectId = useId();
+  const keyboardHelpId = useId();
   const accessibleLabel = label ?? t('common:boardDefaultLabel');
   const formatHarborLabel = useCallback(
     (kind: string): string => {
@@ -71,7 +71,7 @@ export function BoardView({
   );
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [selectedTargetKey, setSelectedTargetKey] = useState('');
-  const [targetChooserOpen, setTargetChooserOpen] = useState(false);
+  const [keyboardActive, setKeyboardActive] = useState(false);
   const hostRef = useRef<HTMLDivElement>(null);
   const rendererRef = useRef<BoardRenderer | null>(null);
   const propsRef = useRef({
@@ -165,31 +165,73 @@ export function BoardView({
     ...(highlights?.edges ?? []).map((id) => ({ kind: 'edge' as const, id })),
     ...(highlights?.hexes ?? []).map((id) => ({ kind: 'hex' as const, id })),
   ];
-  const selectedTarget =
-    keyboardTargets.find((hit) => targetKey(hit) === selectedTargetKey) ?? keyboardTargets[0];
+  const selectedTargetIndex = Math.max(
+    0,
+    keyboardTargets.findIndex((hit) => targetKey(hit) === selectedTargetKey),
+  );
+  const selectedTarget = keyboardTargets[selectedTargetIndex];
   const selectedTargetPreviewKey = selectedTarget ? targetKey(selectedTarget) : '';
   const selectedTargetRef = useRef(selectedTarget);
   selectedTargetRef.current = selectedTarget;
 
   useEffect(() => {
-    const target = focusTarget ?? (targetChooserOpen ? (selectedTargetRef.current ?? null) : null);
+    const target = focusTarget ?? (keyboardActive ? (selectedTargetRef.current ?? null) : null);
     const preview = focusTarget ? focusPreview : undefined;
     if (preview) rendererRef.current?.setFocusTarget(target, preview);
     else rendererRef.current?.setFocusTarget(target);
-  }, [focusPreview, focusTarget, selectedTargetPreviewKey, status, targetChooserOpen]);
+  }, [focusPreview, focusTarget, keyboardActive, selectedTargetPreviewKey, status]);
 
   useEffect(() => {
-    propsRef.current.onTargetPreview?.(
-      targetChooserOpen ? (selectedTargetRef.current ?? null) : null,
-    );
-  }, [onTargetPreview, selectedTargetPreviewKey, targetChooserOpen]);
+    propsRef.current.onTargetPreview?.(keyboardActive ? (selectedTargetRef.current ?? null) : null);
+  }, [keyboardActive, onTargetPreview, selectedTargetPreviewKey]);
 
   return (
     <div
       className={['board-renderer-root', className].filter(Boolean).join(' ')}
       role="group"
       aria-label={accessibleLabel}
+      aria-describedby={keyboardTargets.length > 0 ? keyboardHelpId : undefined}
+      tabIndex={keyboardTargets.length > 0 && status === 'ready' ? 0 : -1}
       data-testid="board-renderer"
+      onFocus={(event) => {
+        if (event.currentTarget.matches(':focus-visible')) setKeyboardActive(true);
+      }}
+      onBlur={() => setKeyboardActive(false)}
+      onKeyDown={(event) => {
+        if (keyboardTargets.length === 0) return;
+        let nextIndex: number;
+        switch (event.key) {
+          case 'ArrowRight':
+          case 'ArrowDown':
+            nextIndex = (selectedTargetIndex + 1) % keyboardTargets.length;
+            break;
+          case 'ArrowLeft':
+          case 'ArrowUp':
+            nextIndex = (selectedTargetIndex - 1 + keyboardTargets.length) % keyboardTargets.length;
+            break;
+          case 'Home':
+            nextIndex = 0;
+            break;
+          case 'End':
+            nextIndex = keyboardTargets.length - 1;
+            break;
+          case 'Enter':
+          case ' ':
+            event.preventDefault();
+            setKeyboardActive(true);
+            if (selectedTarget) onSelect?.(selectedTarget);
+            return;
+          case 'Escape':
+            event.currentTarget.blur();
+            return;
+          default:
+            return;
+        }
+        event.preventDefault();
+        setKeyboardActive(true);
+        const nextTarget = keyboardTargets[nextIndex];
+        if (nextTarget) setSelectedTargetKey(targetKey(nextTarget));
+      }}
     >
       <div ref={hostRef} className="board-view-canvas" aria-hidden={status !== 'ready'} />
       {status === 'loading' && (
@@ -203,32 +245,20 @@ export function BoardView({
         </div>
       )}
       {keyboardTargets.length > 0 && (
-        <details
-          className="board-keyboard-targets"
-          data-testid="board-keyboard-targets"
-          onToggle={(event) => setTargetChooserOpen(event.currentTarget.open)}
-        >
-          <summary>{t('common:legalBoardTargets', { count: keyboardTargets.length })}</summary>
-          <label htmlFor={targetSelectId}>{t('common:boardTargetSelectLabel')}</label>
-          <select
-            id={targetSelectId}
-            value={selectedTarget ? targetKey(selectedTarget) : ''}
-            onChange={(event) => setSelectedTargetKey(event.currentTarget.value)}
-          >
-            {keyboardTargets.map((hit) => (
-              <option key={targetKey(hit)} value={targetKey(hit)}>
-                {targetLabel?.(hit) ?? describeTarget(hit, t)}
-              </option>
-            ))}
-          </select>
-          <button
-            type="button"
-            disabled={!selectedTarget || !onSelect}
-            onClick={() => selectedTarget && onSelect?.(selectedTarget)}
-          >
-            {t('common:boardTargetChoose')}
-          </button>
-        </details>
+        <>
+          <span id={keyboardHelpId} className="board-keyboard-help">
+            {t('common:boardKeyboardHelp')}
+          </span>
+          <span className="board-keyboard-help" aria-live="polite" aria-atomic="true">
+            {keyboardActive && selectedTarget
+              ? t('common:boardKeyboardPosition', {
+                  label: targetLabel?.(selectedTarget) ?? describeTarget(selectedTarget, t),
+                  index: selectedTargetIndex + 1,
+                  count: keyboardTargets.length,
+                })
+              : ''}
+          </span>
+        </>
       )}
     </div>
   );
