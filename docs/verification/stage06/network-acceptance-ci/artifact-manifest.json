@@ -1,0 +1,54 @@
+{
+  "run": "https://github.com/dukesteen/hexfield/actions/runs/36188542842",
+  "commit": "53c33a2593359171ae5a4dccf39cdcc7f1698860",
+  "status": "accepted; all nine scenarios and complete CI workflow passed",
+  "sourceFingerprint": "175031536ec5345fbcc6c3aca275c521af7b7becad2901d7d3fe4fb61563967d",
+  "formatting": "Repository JSON formatting only; parsed values equal downloaded artifacts.",
+  "reports": [
+    {
+      "file": "network-scenario-1-start-0.json",
+      "downloadedArtifactSha256": "11c4b17066f15d1900bd9453ec743b6f06659bf803e80fa9140da6c45d2b3204",
+      "recordedFileSha256": "00adb52aacffb86d4ecac887539b80751401337ec0d6ee0ae98712dae735896c"
+    },
+    {
+      "file": "network-scenario-2-start-0.json",
+      "downloadedArtifactSha256": "92914766ac46b471101e30c56e227668399aba38e7ae7cc0c9597c7351fb0b97",
+      "recordedFileSha256": "0787d6c0cf3a63a10452254e19e418815bef4f4f0198aff3fada1bb5255415e8"
+    },
+    {
+      "file": "network-scenario-3-start-0.json",
+      "downloadedArtifactSha256": "063b8606971738a6d2fd875f41d82e552b02aed199a760b8c890684940f29b31",
+      "recordedFileSha256": "ade2628650b59ff38e8cee6a5303b733b6d4380f833a7a83041d17844f93eeb0"
+    },
+    {
+      "file": "network-scenario-4-start-0.json",
+      "downloadedArtifactSha256": "7bc0c8ee883f794ab9c9217a88fcae508b7ae65ea33024b10e1ad965ea1225f2",
+      "recordedFileSha256": "749ac484518ead8111f1ad3a2d59268b0d30539d018cf329fa6ee2c7987a3cb2"
+    },
+    {
+      "file": "network-scenario-5-start-0.json",
+      "downloadedArtifactSha256": "df8548169620c61a7c8232b49afaa95255c142867c8466f87568d125cf5b479b",
+      "recordedFileSha256": "003f69220dea5d075796c1865bd4d18fdc57005a8d5b310cf230a2d4feae928b"
+    },
+    {
+      "file": "network-scenario-6-start-0.json",
+      "downloadedArtifactSha256": "d5b1dff458ab1eb45fcec180fa0bd95ca3c0c302a9c49a5894d8f041cf84c563",
+      "recordedFileSha256": "723810ff3dab745a4396917dafde4619fe8614a44c27ac2a2609b4a4404d5873"
+    },
+    {
+      "file": "network-scenario-7-start-0.json",
+      "downloadedArtifactSha256": "0625179e54ca6c02e726c2d76decaafd8e32786b5a8562211ac5703badec00d4",
+      "recordedFileSha256": "04753a04c4dad8b01d16ad8207fd9ecab0b71097add86675001fde84b74062f2"
+    },
+    {
+      "file": "network-scenario-8-start-0.json",
+      "downloadedArtifactSha256": "1f07ed83d93d7384f473cc6d6cf2af99207a41c83769a25c181c09108f2bd98e",
+      "recordedFileSha256": "f4a8df9bcb27464aa63c435f00886a7341357280cca95d5a93e3ecc36b0c3ca4"
+    },
+    {
+      "file": "network-scenario-9-start-0.json",
+      "downloadedArtifactSha256": "3c5e811f8535085b844b93a2f4bde5b96a332fcbc9f5a58eff1ec99ab995c812",
+      "recordedFileSha256": "3bfc1328267e4ccd12259245112950caaecbdeb90b9b18b628f04c4119c4daab"
+    }
+  ]
+}

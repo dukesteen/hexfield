@@ -1,0 +1,50 @@
+{
+  "run": "https://github.com/dukesteen/hexfield/actions/runs/36188542842",
+  "commit": "53c33a2593359171ae5a4dccf39cdcc7f1698860",
+  "unitTests": 534,
+  "unitFiles": 98,
+  "browserStats": {
+    "total": 123,
+    "expected": 54,
+    "unexpected": 0,
+    "flaky": 0,
+    "skipped": 69,
+    "ok": true
+  },
+  "projects": ["chromium", "firefox", "webkit"],
+  "fourPeerViews": [
+    {
+      "projectName": "chromium",
+      "duration": 6893,
+      "outcome": "expected",
+      "ok": true
+    },
+    {
+      "projectName": "firefox",
+      "duration": 3772,
+      "outcome": "expected",
+      "ok": true
+    },
+    {
+      "projectName": "webkit",
+      "duration": 6677,
+      "outcome": "expected",
+      "ok": true
+    }
+  ],
+  "fullUiGames": {
+    "games": 20,
+    "inputs": 11336,
+    "turns": 2338,
+    "rejected": 0,
+    "durationMilliseconds": 2507359,
+    "sourceFingerprint": "d05fe81f27533cee6dece5f0f34d61da1e8e13978a2067a70648c34685b2a458",
+    "sourceUnchanged": true
+  },
+  "engineCoverage": {
+    "linesCovered": 4897,
+    "linesTotal": 4954,
+    "branchesCovered": 2118,
+    "branchesTotal": 2388
+  }
+}

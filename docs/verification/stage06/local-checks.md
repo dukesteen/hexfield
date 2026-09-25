@@ -28,7 +28,6 @@ and confirm it remained unchanged. The shared simulation provenance helper gives
 the broader source fingerprint
 `175031536ec5345fbcc6c3aca275c521af7b7becad2901d7d3fe4fb61563967d`.
 
-These checks do not complete Stage 06 acceptance. The final gate requires twenty
-games in each of the nine scenarios and a green GitHub Actions run. It will use
-manual dispatch with the full browser suite enabled. No local Firefox or WebKit
-process was launched for this verification pass.
+These local checks were followed by the successful [CI acceptance run](ci-acceptance.md),
+including twenty games in every network scenario and the complete browser suite.
+No local Firefox or WebKit process was launched for this verification pass.

@@ -187,8 +187,8 @@ Also run the adversarial traces in the strict-agreement design, including equivo
 
 ## Acceptance criteria
 
-- [ ] All 9 chaos scenarios pass on 20 seeds each with zero divergence for initial acceptance.
+- [x] All 9 chaos scenarios pass on 20 seeds each with zero divergence for initial acceptance.
 - [x] Forged signatures, replayed nonces, wrong prevHash and invalid commands are all rejected (unit tests).
-- [ ] A Byzantine sequencer is detected and replaced in scenarios 6 and 7.
+- [x] A Byzantine sequencer is detected and replaced in scenarios 6 and 7.
 - [x] Adversarial vote, lock, persistence and small-population pause tests pass. No unavailable voter is removed without the required certificates.
 - [x] The web app can run a "simulated P2P" dev mode: 4 `P2PSession`s over memnet in one tab, with 4 small game views. Useful for debugging.
