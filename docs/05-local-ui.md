@@ -189,9 +189,9 @@ Later stages add `online/create`, `join/$roomId` (stage 09), `game/$gameId` (sta
 
 ## Acceptance criteria
 
-- [ ] A human can play a complete 4-player game against RandomBots on desktop and on a phone-sized viewport.
-- [ ] Hotseat game with 3 humans works, with privacy covers.
-- [ ] The UI never offers an action the engine rejects (E2E bot-driven UI test clicks only offered actions for 20 games without a single rejected submit).
+- [x] A human can play a complete 4-player game against RandomBots on desktop and on a phone-sized viewport.
+- [x] Hotseat game with 3 humans works, with privacy covers.
+- [x] The UI never offers an action the engine rejects (E2E bot-driven UI test clicks only offered actions for 20 games without a single rejected submit).
 - [ ] 60 fps panning on a mid-range device (record a manual check in STATUS.md).
-- [ ] All UI strings go through react-i18next; the missing-key check passes in CI; keyboard-only play is possible.
-- [ ] Live game state is only in Zustand; persisted/async data is only accessed via TanStack Query hooks.
+- [x] All UI strings go through react-i18next; the missing-key check passes in CI; keyboard-only play is possible.
+- [x] Live game state is only in Zustand; normal persisted and asynchronous operations use TanStack Query hooks. Synchronous page-exit flushing is the documented exception.

@@ -1,0 +1,495 @@
+{
+  "sourceBefore": "86cd4a0e58b9e5b6a3a47493e58d2f3eff9f9a2cbef9a47472b141dab3ffda73",
+  "sourceAfter": "86cd4a0e58b9e5b6a3a47493e58d2f3eff9f9a2cbef9a47472b141dab3ffda73",
+  "games": [
+    {
+      "game": 1,
+      "summary": {
+        "vpTarget": 10,
+        "result": {
+          "winner": 3,
+          "reason": "public-vp",
+          "atTurn": 121
+        },
+        "turns": 121,
+        "revision": 600,
+        "humanActions": {
+          "PLACE_SETTLEMENT": 2,
+          "PLACE_ROAD": 2,
+          "ROLL_DICE": 30,
+          "END_TURN": 30,
+          "RESPOND_TRADE": 19,
+          "DISCARD": 11,
+          "MOVE_ROBBER": 7,
+          "STEAL": 7,
+          "BUY_DEV_CARD": 1
+        },
+        "rejectionCount": 0
+      }
+    },
+    {
+      "game": 2,
+      "summary": {
+        "vpTarget": 10,
+        "result": {
+          "winner": 3,
+          "reason": "claimed-vp",
+          "atTurn": 116
+        },
+        "turns": 116,
+        "revision": 558,
+        "humanActions": {
+          "PLACE_SETTLEMENT": 2,
+          "PLACE_ROAD": 2,
+          "ROLL_DICE": 29,
+          "END_TURN": 29,
+          "RESPOND_TRADE": 15,
+          "MOVE_ROBBER": 4,
+          "STEAL": 4,
+          "DISCARD": 8,
+          "BUILD_CITY": 2
+        },
+        "rejectionCount": 0
+      }
+    },
+    {
+      "game": 3,
+      "summary": {
+        "vpTarget": 10,
+        "result": {
+          "winner": 1,
+          "reason": "public-vp",
+          "atTurn": 87
+        },
+        "turns": 87,
+        "revision": 418,
+        "humanActions": {
+          "PLACE_SETTLEMENT": 2,
+          "PLACE_ROAD": 2,
+          "ROLL_DICE": 22,
+          "MOVE_ROBBER": 4,
+          "STEAL": 4,
+          "END_TURN": 22,
+          "BUY_DEV_CARD": 6,
+          "BUILD_CITY": 2,
+          "RESPOND_TRADE": 9,
+          "DISCARD": 2
+        },
+        "rejectionCount": 0
+      }
+    },
+    {
+      "game": 4,
+      "summary": {
+        "vpTarget": 10,
+        "result": {
+          "winner": 3,
+          "reason": "claimed-vp",
+          "atTurn": 104
+        },
+        "turns": 104,
+        "revision": 480,
+        "humanActions": {
+          "PLACE_SETTLEMENT": 2,
+          "PLACE_ROAD": 2,
+          "ROLL_DICE": 26,
+          "END_TURN": 26,
+          "RESPOND_TRADE": 9,
+          "MOVE_ROBBER": 4,
+          "DISCARD": 3
+        },
+        "rejectionCount": 0
+      }
+    },
+    {
+      "game": 5,
+      "summary": {
+        "vpTarget": 10,
+        "result": {
+          "winner": 2,
+          "reason": "public-vp",
+          "atTurn": 167
+        },
+        "turns": 167,
+        "revision": 829,
+        "humanActions": {
+          "PLACE_SETTLEMENT": 2,
+          "PLACE_ROAD": 2,
+          "ROLL_DICE": 42,
+          "END_TURN": 42,
+          "RESPOND_TRADE": 24,
+          "MOVE_ROBBER": 10,
+          "STEAL": 10,
+          "DISCARD": 8
+        },
+        "rejectionCount": 0
+      }
+    },
+    {
+      "game": 6,
+      "summary": {
+        "vpTarget": 10,
+        "result": {
+          "winner": 3,
+          "reason": "public-vp",
+          "atTurn": 103
+        },
+        "turns": 103,
+        "revision": 515,
+        "humanActions": {
+          "PLACE_SETTLEMENT": 2,
+          "PLACE_ROAD": 2,
+          "RESPOND_TRADE": 16,
+          "ROLL_DICE": 25,
+          "END_TURN": 25,
+          "BUY_DEV_CARD": 1,
+          "DISCARD": 5,
+          "MOVE_ROBBER": 5,
+          "STEAL": 1
+        },
+        "rejectionCount": 0
+      }
+    },
+    {
+      "game": 7,
+      "summary": {
+        "vpTarget": 10,
+        "result": {
+          "winner": 2,
+          "reason": "public-vp",
+          "atTurn": 57
+        },
+        "turns": 57,
+        "revision": 275,
+        "humanActions": {
+          "PLACE_SETTLEMENT": 2,
+          "PLACE_ROAD": 2,
+          "RESPOND_TRADE": 9,
+          "ROLL_DICE": 14,
+          "END_TURN": 14,
+          "DISCARD": 3,
+          "MOVE_ROBBER": 3
+        },
+        "rejectionCount": 0
+      }
+    },
+    {
+      "game": 8,
+      "summary": {
+        "vpTarget": 10,
+        "result": {
+          "winner": 2,
+          "reason": "public-vp",
+          "atTurn": 81
+        },
+        "turns": 81,
+        "revision": 429,
+        "humanActions": {
+          "PLACE_SETTLEMENT": 2,
+          "PLACE_ROAD": 2,
+          "ROLL_DICE": 20,
+          "END_TURN": 20,
+          "RESPOND_TRADE": 16,
+          "DISCARD": 5,
+          "MOVE_ROBBER": 2,
+          "STEAL": 1
+        },
+        "rejectionCount": 0
+      }
+    },
+    {
+      "game": 9,
+      "summary": {
+        "vpTarget": 10,
+        "result": {
+          "winner": 3,
+          "reason": "claimed-vp",
+          "atTurn": 180
+        },
+        "turns": 180,
+        "revision": 849,
+        "humanActions": {
+          "PLACE_SETTLEMENT": 2,
+          "PLACE_ROAD": 2,
+          "ROLL_DICE": 45,
+          "END_TURN": 45,
+          "RESPOND_TRADE": 24,
+          "MOVE_ROBBER": 9,
+          "STEAL": 9,
+          "DISCARD": 14
+        },
+        "rejectionCount": 0
+      }
+    },
+    {
+      "game": 10,
+      "summary": {
+        "vpTarget": 10,
+        "result": {
+          "winner": 1,
+          "reason": "claimed-vp",
+          "atTurn": 106
+        },
+        "turns": 106,
+        "revision": 512,
+        "humanActions": {
+          "PLACE_SETTLEMENT": 2,
+          "PLACE_ROAD": 2,
+          "ROLL_DICE": 27,
+          "MOVE_ROBBER": 4,
+          "STEAL": 4,
+          "END_TURN": 27,
+          "BUY_DEV_CARD": 2,
+          "RESPOND_TRADE": 10,
+          "DISCARD": 4
+        },
+        "rejectionCount": 0
+      }
+    },
+    {
+      "game": 11,
+      "summary": {
+        "vpTarget": 10,
+        "result": {
+          "winner": 2,
+          "reason": "claimed-vp",
+          "atTurn": 87
+        },
+        "turns": 87,
+        "revision": 395,
+        "humanActions": {
+          "PLACE_SETTLEMENT": 2,
+          "PLACE_ROAD": 2,
+          "ROLL_DICE": 22,
+          "END_TURN": 22,
+          "MOVE_ROBBER": 3,
+          "STEAL": 3,
+          "RESPOND_TRADE": 9,
+          "BUILD_CITY": 1,
+          "DISCARD": 5
+        },
+        "rejectionCount": 0
+      }
+    },
+    {
+      "game": 12,
+      "summary": {
+        "vpTarget": 10,
+        "result": {
+          "winner": 1,
+          "reason": "public-vp",
+          "atTurn": 137
+        },
+        "turns": 137,
+        "revision": 678,
+        "humanActions": {
+          "PLACE_SETTLEMENT": 2,
+          "PLACE_ROAD": 2,
+          "RESPOND_TRADE": 18,
+          "ROLL_DICE": 34,
+          "END_TURN": 34,
+          "BUY_DEV_CARD": 3,
+          "MOVE_ROBBER": 5,
+          "STEAL": 5,
+          "BUILD_CITY": 2,
+          "DISCARD": 6
+        },
+        "rejectionCount": 0
+      }
+    },
+    {
+      "game": 13,
+      "summary": {
+        "vpTarget": 10,
+        "result": {
+          "winner": 3,
+          "reason": "claimed-vp",
+          "atTurn": 101
+        },
+        "turns": 101,
+        "revision": 489,
+        "humanActions": {
+          "PLACE_SETTLEMENT": 2,
+          "PLACE_ROAD": 2,
+          "ROLL_DICE": 25,
+          "END_TURN": 25,
+          "RESPOND_TRADE": 14,
+          "MOVE_ROBBER": 3,
+          "DISCARD": 3,
+          "BUY_DEV_CARD": 3
+        },
+        "rejectionCount": 0
+      }
+    },
+    {
+      "game": 14,
+      "summary": {
+        "vpTarget": 10,
+        "result": {
+          "winner": 2,
+          "reason": "public-vp",
+          "atTurn": 62
+        },
+        "turns": 62,
+        "revision": 321,
+        "humanActions": {
+          "PLACE_SETTLEMENT": 2,
+          "PLACE_ROAD": 2,
+          "ROLL_DICE": 15,
+          "BUY_DEV_CARD": 2,
+          "END_TURN": 15,
+          "RESPOND_TRADE": 9,
+          "DISCARD": 3,
+          "MOVE_ROBBER": 2,
+          "STEAL": 2
+        },
+        "rejectionCount": 0
+      }
+    },
+    {
+      "game": 15,
+      "summary": {
+        "vpTarget": 10,
+        "result": {
+          "winner": 1,
+          "reason": "public-vp",
+          "atTurn": 136
+        },
+        "turns": 136,
+        "revision": 680,
+        "humanActions": {
+          "PLACE_SETTLEMENT": 2,
+          "PLACE_ROAD": 2,
+          "ROLL_DICE": 34,
+          "END_TURN": 34,
+          "RESPOND_TRADE": 21,
+          "DISCARD": 11,
+          "BUILD_CITY": 2,
+          "MOVE_ROBBER": 3
+        },
+        "rejectionCount": 0
+      }
+    },
+    {
+      "game": 16,
+      "summary": {
+        "vpTarget": 10,
+        "result": {
+          "winner": 1,
+          "reason": "public-vp",
+          "atTurn": 107
+        },
+        "turns": 107,
+        "revision": 563,
+        "humanActions": {
+          "PLACE_SETTLEMENT": 2,
+          "PLACE_ROAD": 2,
+          "ROLL_DICE": 27,
+          "END_TURN": 27,
+          "RESPOND_TRADE": 18,
+          "MOVE_ROBBER": 6,
+          "STEAL": 6,
+          "BUY_DEV_CARD": 3,
+          "DISCARD": 9
+        },
+        "rejectionCount": 0
+      }
+    },
+    {
+      "game": 17,
+      "summary": {
+        "vpTarget": 10,
+        "result": {
+          "winner": 2,
+          "reason": "claimed-vp",
+          "atTurn": 174
+        },
+        "turns": 174,
+        "revision": 839,
+        "humanActions": {
+          "PLACE_SETTLEMENT": 2,
+          "PLACE_ROAD": 2,
+          "RESPOND_TRADE": 24,
+          "ROLL_DICE": 43,
+          "BUY_DEV_CARD": 9,
+          "END_TURN": 43,
+          "DISCARD": 8,
+          "MOVE_ROBBER": 4,
+          "STEAL": 4
+        },
+        "rejectionCount": 0
+      }
+    },
+    {
+      "game": 18,
+      "summary": {
+        "vpTarget": 10,
+        "result": {
+          "winner": 2,
+          "reason": "public-vp",
+          "atTurn": 143
+        },
+        "turns": 143,
+        "revision": 731,
+        "humanActions": {
+          "PLACE_SETTLEMENT": 2,
+          "PLACE_ROAD": 2,
+          "ROLL_DICE": 36,
+          "END_TURN": 36,
+          "MOVE_ROBBER": 7,
+          "RESPOND_TRADE": 21,
+          "DISCARD": 8,
+          "STEAL": 1
+        },
+        "rejectionCount": 0
+      }
+    },
+    {
+      "game": 19,
+      "summary": {
+        "vpTarget": 10,
+        "result": {
+          "winner": 3,
+          "reason": "public-vp",
+          "atTurn": 141
+        },
+        "turns": 141,
+        "revision": 700,
+        "humanActions": {
+          "PLACE_SETTLEMENT": 2,
+          "PLACE_ROAD": 2,
+          "ROLL_DICE": 35,
+          "END_TURN": 35,
+          "DISCARD": 11,
+          "MOVE_ROBBER": 4,
+          "STEAL": 4,
+          "RESPOND_TRADE": 17
+        },
+        "rejectionCount": 0
+      }
+    },
+    {
+      "game": 20,
+      "summary": {
+        "vpTarget": 10,
+        "result": {
+          "winner": 2,
+          "reason": "public-vp",
+          "atTurn": 93
+        },
+        "turns": 93,
+        "revision": 450,
+        "humanActions": {
+          "PLACE_SETTLEMENT": 2,
+          "PLACE_ROAD": 2,
+          "ROLL_DICE": 23,
+          "END_TURN": 23,
+          "RESPOND_TRADE": 14,
+          "DISCARD": 2,
+          "MOVE_ROBBER": 4
+        },
+        "rejectionCount": 0
+      }
+    }
+  ]
+}
