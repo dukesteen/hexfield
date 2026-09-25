@@ -28,6 +28,14 @@ export type BoardHit =
 
 export type HitMode = BoardHit['kind'] | 'any';
 
+/** Base-game development-card identities with original renderer artwork. */
+export type DevelopmentCard =
+  | 'knight'
+  | 'roadBuilding'
+  | 'yearOfPlenty'
+  | 'monopoly'
+  | 'victoryPoint';
+
 /** The supplied IDs are the currently legal targets, not all board locations. */
 export interface BoardHighlights {
   readonly vertices?: readonly VertexId[];

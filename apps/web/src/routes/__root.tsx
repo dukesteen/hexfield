@@ -1,5 +1,7 @@
 import { createRootRouteWithContext, Link, Outlet } from '@tanstack/react-router';
+import { useRouterState } from '@tanstack/react-router';
 import { TanStackRouterDevtools } from '@tanstack/react-router-devtools';
+import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 import type { QueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -26,14 +28,25 @@ function RouteMessage({ kind }: { kind: 'missing' | 'error' }) {
   );
 }
 
-export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
-  component: () => (
+function RootContent() {
+  const path = useRouterState({ select: (state) => state.location.pathname });
+  const localGame = path.startsWith('/local/');
+  return (
     <>
       <ThemePreference />
       <Outlet />
-      {import.meta.env.DEV && <TanStackRouterDevtools />}
+      {import.meta.env.DEV && !localGame && (
+        <>
+          <TanStackRouterDevtools />
+          <ReactQueryDevtools initialIsOpen={false} />
+        </>
+      )}
     </>
-  ),
+  );
+}
+
+export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
+  component: RootContent,
   notFoundComponent: () => <RouteMessage kind="missing" />,
   errorComponent: () => <RouteMessage kind="error" />,
 });

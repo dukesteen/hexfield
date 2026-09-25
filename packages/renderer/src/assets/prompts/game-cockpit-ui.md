@@ -1,3 +1,27 @@
+# Full-viewport game cockpit
+
+The user explicitly requests a redesign: "make the ui non-scrollable, so I can see the board, my hand, actions, etc, in one viewport. Board on the left, own cards + actions in the bottom & players + collapsible event log on the right, no whitespace between them, making it feel more like a game cockpit." They also said "and for mobile figure something out" and invited Claude's help.
+
+Author a concrete responsive UI/code proposal, using read-only tools to inspect files. Do not edit files directly. Keep the answer focused and below 2,000 words; give the important JSX structure and CSS, not whole-file rewrites. No new dependency. This is game UI, not a marketing landing page or dashboard of floating cards.
+
+Inspect `apps/web/src/features/game/GameReadOnly.tsx`, `GameActions.tsx`, `EventLog.tsx`, `GameOverPanel.tsx`, `PlacementConfirmation.tsx`, `apps/web/src/routes/local/$gameId.tsx`, `app.css`, and `style.css`. Current screenshots in the repo, if your image reader supports them: `reports/stage05/city-preview-confirmation.png`, `city-legal-upgrades.png`, and `touch-setup-settlement-preview.png`. They show the problem: desktop board/players make the page taller than the screen, hand/actions are below it, and phone HUD is oversized. Existing `.game-page` max-width/padding, grid gap16, board min-height61vh, and full-width bottom row all contribute.
+
+The implementation agent is beginning this authorized structural change while you design: `.local-game-page` becomes a 100dvh shell; the board occupies the main left cell; a `.game-sidebar` wraps PlayerRail, compact bank counts, and collapsible EventLog on the right; `.game-bottom` holds own HandDock and actions/GameOver below the board. You may refine the structure but avoid racing full-file assumptions.
+
+Requirements:
+
+- The local game must not scroll as a document. Fill the available viewport, including at1280x720 and1728x960. No outer gutters or gaps between panes. Use shared hairline borders and sensible padding inside controls, rather than rounded floating panels. Other app pages may still scroll.
+- Board is the largest area on desktop, left of a roughly260-300px sidebar, with own resource cards, development cards and contextual actions directly beneath it. Players and collapsible log remain on the right. Collapsed log should release its space; expanded long log can scroll internally. Keep four player summaries compact and readable, including public VP/card counts, active player, pieces/awards access.
+- Keep a slim status/turn header, not two tall stacks of headings. Save status and Leave stay reachable. Timer and Skip animations remain available without dominating.
+- Own resource counts and next required action must always be visible. Long development-card lists and rare details may use an internal scroller/disclosure; bank/trade/card dialogs must remain usable. Do not hide ordinary build, roll, end turn, or incoming trade controls permanently.
+- Mobile portrait390x844: retain useful board size, a compact player strip, all five resource counts, and a clear action area in one viewport. Use a drawer/disclosure for log and secondary player detail, rather than shrinking the entire desktop layout. Landscape844x390 should remain functional. Keep primary touch targets44px. Explain the responsive arrangement precisely.
+- Preserve on-board road/settlement/city previews and compact Confirm/Cancel popover. The popover is already camera-tracked and clamped to the visible board. Preserve the keyboard target chooser, privacy cover, native dialogs, and all engine-derived legal actions. Do not change game rules, persistence, privacy, or renderer geometry.
+- The board renderer observes its host size and refits. Grid/flex containers must use min-height:0/min-width:0 and definite canvas space so the renderer does not force page height or resize-loop. Do not solve overflow by clipping required controls.
+- Empty settlement sites now use high-contrast white rings on dark halos; city upgrades have exterior brackets + up-arrow; roads use inset white-dashed lanes. These and the approved blue sea, connected ports, world-space scaling, and larger dice stay unchanged.
+- All new labels go through i18n. Use existing colors/fonts. No medieval ornament, excessive shadows, glow, or irrelevant animation.
+
+Return a practical desktop/mobile structure and concrete CSS/JSX snippets matched to existing classes, with any small DOM moves. The user specifically overrides any older style-guide requirement for wide page gutters or gaps in the game screen. The rest of the guide follows.
+
 # Hexfield visual guide
 
 ## Direction
@@ -37,11 +61,8 @@ The z-index scale is board controls 10, sticky mobile controls 20, sheets 30, di
 
 ## Layout and interaction
 
-- Desktop: a viewport-filling cockpit with the board on the left, player rail on the right, and resource hand and primary actions directly below the board. Panes meet at hairline borders without outer gutters. A top-left hamburger overlay replaces header rows. The event log is collapsible.
-- Portrait below 768 px: compact player strip, board and bounded hand/action area in one viewport. Secondary details use a disclosure. Trade composition occupies a full-screen sheet; incoming offers stay accessible at the bottom-right of the board. Avoid hiding the next required action below a fixed panel.
-- Resource hands and trade terms use original SVG cards with HTML names and quantities. Card selection adds a resource and a separate minus control removes it. Completed public exchanges can animate cards between player panels; offers alone do not trigger a transfer.
-- Trade composition shows "You give" and "You get" beside each other on desktop, with compact stacked selections on phones. Keep the submit controls visible and avoid repeating the selected cards in a second preview.
-- Player panels show small resource icons and quantities for public payouts during the previous eight seconds. Keep these readable across turn changes and when animations are disabled.
+- Desktop: restrained header, central board, player rail on the right, resource hand and primary actions along the bottom. The event log is collapsible.
+- Portrait below 768 px: compact header and player strip, board above the hand/action sheet. Trades occupy a full-screen sheet. Avoid hiding the next required action below a fixed panel.
 - The home screen provides a direct new-game action and real saved games. Any board preview uses the actual renderer and game data, not an invented screenshot or stock photograph.
 - The new-game form groups players, board/rule choices, and timers. Keep advanced options in a labeled disclosure without omitting them.
 - During a turn, emphasize the current instruction and next action. Setup and build modes share one selection pattern. Show legal targets and a clear cancel action.

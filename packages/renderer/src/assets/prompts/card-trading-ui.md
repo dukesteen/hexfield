@@ -1,3 +1,27 @@
+# Resource cards and board trade overlay
+
+The user wants a clean, readable local Catan-style game cockpit. They have now asked for actual original SVG resource cards instead of text-led resource tiles, so cards can also be shown trading between players. Player trades should be composed by selecting cards they have and selecting cards they want. Incoming trade offers belong in the BOTTOM-RIGHT of the BOARD VIEWPORT as an overlay, not in the actions panel. This is only UI placement, not a change to engine state or game rules.
+
+Use Read/Grep/Glob only. Do not edit files. Give concrete JSX/CSS/interaction guidance under 1500 words. No new dependencies, no engine changes, no copied branded art.
+
+Inspect apps/web/src/features/trade/{TradeComposer,BankTradePicker,IncomingOffers}.tsx, features/dialogs/resources.tsx, features/game/{GameReadOnly,GameActions,use-visual-effects}.tsx or .ts, apps/web/src/app.css, and packages/renderer/src/assets/manifest.ts if present. Files are being implemented concurrently, so recommend bounded refinements rather than full rewrites.
+
+Implementation boundaries already agreed: one agent authors five original SVG card assets and getResourceCardUrl(resource); another implements trade components + a shared card display/picker; layout agent moves the existing incoming offers UI into an absolute bottom-right board slot and uses the shared cards for the hand. This consultation is for cohesive design, interaction and potential problems.
+
+Requirements:
+
+- Actual consistent clean SVG card faces ~80x112 viewBox, no baked text, central resource illustration from the existing flat original icons/terrain palette. Render resource names and counts in HTML with accessible names. Five different palettes and shapes, not color alone. Readable at about48x68 or64x88 CSS px.
+- Hand remains all five resources visible in bounded bottom HUD. Show grouped stacks/counts, do not render an unbounded fan of every card. Keep hidden hand removed from DOM during privacy cover.
+- Player trade composer: tap/click a resource card to increment offered/requested quantity, obvious selected count and a separate accessible minus button to remove. Offered counts capped by actual visible private hand. No resource number-input form as primary UI. Want side can ask any valid resource count, engine validates final terms. Recipients remain explicit. Sending creates offer only, does not transfer cards.
+- Bank composer should use same vocabulary and card selection, show each engine-derived harbor rate and distinguish input card count from output units. Avoid giant list of every possible shortcut.
+- Bottom-right offers overlay: compact, card groups with a direction arrow, named proposer/recipient context that makes who gives/receives unambiguous, response controls, accepted recipient choice/withdraw. Multiple offers must not cover the whole board; consider tabs/counter/collapse with a clear pending badge. Do not bury response actions or show stale offers as actionable.
+- On mobile390x844, incoming offer affordance stays bottom-right of board; expanding can use a bounded overlay or sheet. Composer can be full-screen native dialog. All buttons touch44px, no horizontal/document overflow. Portrait/short landscape working.
+- Coexist with top-left44px hamburger overlay, keyboard target chooser, and on-board piece confirm/cancel popup. Do not block placement targets with full-board pointer interception. Details/long lists can scroll internally, core actions remain reachable.
+- Existing use-visual-effects handles resource flights. Recommend how accepted public trades can show card graphics between player panels, only after committed event and with skip/reduced-motion support. Do not expose private stolen-card resource types or fabricate transfers on offer/accept.
+- All visible strings use i18n. Reuse theme variables and existing fonts. Short motion only for selected card lift/committed exchange, no continuous flourish.
+
+Give the interaction and layout contract with key CSS, and identify any serious ambiguous perspective or privacy risk in current code. The appended style guide is a reference; newest user layout request overrides older header/gutter/stepper guidance.
+
 # Hexfield visual guide
 
 ## Direction
@@ -37,11 +61,8 @@ The z-index scale is board controls 10, sticky mobile controls 20, sheets 30, di
 
 ## Layout and interaction
 
-- Desktop: a viewport-filling cockpit with the board on the left, player rail on the right, and resource hand and primary actions directly below the board. Panes meet at hairline borders without outer gutters. A top-left hamburger overlay replaces header rows. The event log is collapsible.
-- Portrait below 768 px: compact player strip, board and bounded hand/action area in one viewport. Secondary details use a disclosure. Trade composition occupies a full-screen sheet; incoming offers stay accessible at the bottom-right of the board. Avoid hiding the next required action below a fixed panel.
-- Resource hands and trade terms use original SVG cards with HTML names and quantities. Card selection adds a resource and a separate minus control removes it. Completed public exchanges can animate cards between player panels; offers alone do not trigger a transfer.
-- Trade composition shows "You give" and "You get" beside each other on desktop, with compact stacked selections on phones. Keep the submit controls visible and avoid repeating the selected cards in a second preview.
-- Player panels show small resource icons and quantities for public payouts during the previous eight seconds. Keep these readable across turn changes and when animations are disabled.
+- Desktop: restrained header, central board, player rail on the right, resource hand and primary actions along the bottom. The event log is collapsible.
+- Portrait below 768 px: compact header and player strip, board above the hand/action sheet. Trades occupy a full-screen sheet. Avoid hiding the next required action below a fixed panel.
 - The home screen provides a direct new-game action and real saved games. Any board preview uses the actual renderer and game data, not an invented screenshot or stock photograph.
 - The new-game form groups players, board/rule choices, and timers. Keep advanced options in a labeled disclosure without omitting them.
 - During a turn, emphasize the current instruction and next action. Setup and build modes share one selection pattern. Show legal targets and a clear cancel action.

@@ -38,7 +38,7 @@ export function PlacementConfirmation({
         const projectedHalfSize =
           hit.kind === 'vertex'
             ? Math.abs(
-                renderer.boardToScreen({ x: 25, y: 0 }).x -
+                renderer.boardToScreen({ x: piece === 'city' ? 34 : 25, y: 0 }).x -
                   renderer.boardToScreen({ x: 0, y: 0 }).x,
               )
             : 0;
@@ -66,7 +66,7 @@ export function PlacementConfirmation({
       window.removeEventListener('resize', place);
       window.removeEventListener('scroll', place, true);
     };
-  }, [boardRef, hit, renderer]);
+  }, [boardRef, hit, piece, renderer]);
 
   return (
     <div

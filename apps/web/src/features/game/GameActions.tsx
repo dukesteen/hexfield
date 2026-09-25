@@ -69,6 +69,8 @@ export interface GameActionController {
   } | null;
   onBoardSelect(hit: BoardHit): void;
   targetLabel(hit: BoardHit): string;
+  offerOverlay: React.ReactNode;
+  placementActive: boolean;
   dock: React.ReactNode;
 }
 
@@ -90,6 +92,8 @@ export function useGameActions(
   const previewPlacement = useSessionStore((store) => store.previewPlacement);
   const form = useSessionStore((store) => store.openDialog);
   const slotId = useSessionStore((store) => store.selectedCardSlot);
+  const optionalChoices = useSessionStore((store) => store.optionalChoices);
+  const optionalViewingSeat = useSessionStore((store) => store.optionalViewingSeat);
   const [error, setError] = useState<string | null>(null);
   const submitting = useRef(false);
   const actorSeat = actingSeat(state, pending);
@@ -315,6 +319,23 @@ export function useGameActions(
   const dock = (
     <section className="action-dock" aria-label={t('game:actions')}>
       <h2>{t('game:actions')}</h2>
+      {optionalChoices.length > 0 && optionalViewingSeat === null && (
+        <details className="optional-trade-chooser">
+          <summary>{t('game:optionalTrade')}</summary>
+          <div>
+            {optionalChoices.map((choiceSeat) => (
+              <button
+                className="button button-quiet"
+                type="button"
+                key={choiceSeat}
+                onClick={() => useSessionStore.getState().viewOptionalSeat(choiceSeat)}
+              >
+                {t('game:viewOptionalTrade', { player: playerLabel(choiceSeat) })}
+              </button>
+            ))}
+          </div>
+        </details>
+      )}
       {conflicted ? (
         <p role="alert">{t('game:saveConflictStopped')}</p>
       ) : status?.kind === 'error' ? (
@@ -418,7 +439,6 @@ export function useGameActions(
               );
             })}
           </div>
-          {formProps && <IncomingOffers {...formProps} />}
           {formProps && visibleForm === 'discard' && <DiscardDialog {...formProps} />}
           {formProps && visibleForm === 'steal' && <StealDialog {...formProps} />}
           {formProps && visibleForm === 'trade' && (
@@ -457,6 +477,15 @@ export function useGameActions(
           cancel: () => useSessionStore.getState().clearPlacementCandidate(),
         }
       : null;
+  const offerOverlay =
+    formProps &&
+    legal?.commands.some(
+      (command) =>
+        ['RESPOND_TRADE', 'CANCEL_TRADE', 'CONFIRM_TRADE'].includes(command.type) &&
+        typeof command.offerId === 'number',
+    ) ? (
+      <IncomingOffers {...formProps} collapsedWhilePlacing={selectedKind !== undefined} />
+    ) : null;
 
   return {
     actorSeat,
@@ -466,6 +495,8 @@ export function useGameActions(
     placementConfirmation,
     onBoardSelect,
     targetLabel,
+    offerOverlay,
+    placementActive: selectedKind !== undefined,
     dock,
   };
 }

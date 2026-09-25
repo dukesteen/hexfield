@@ -1,11 +1,22 @@
 import { Assets } from 'pixi.js';
 import type { Texture } from 'pixi.js';
 import type { Resource } from '@cp2p/engine';
+import type { DevelopmentCard } from '../types.js';
 import brickUrl from './resources/brick.svg?no-inline';
+import brickCardUrl from './cards/brick.svg?no-inline';
 import grainUrl from './resources/grain.svg?no-inline';
+import grainCardUrl from './cards/grain.svg?no-inline';
+import knightCardUrl from './cards/development/knight.svg?no-inline';
+import monopolyCardUrl from './cards/development/monopoly.svg?no-inline';
+import roadBuildingCardUrl from './cards/development/roadBuilding.svg?no-inline';
+import victoryPointCardUrl from './cards/development/victoryPoint.svg?no-inline';
+import yearOfPlentyCardUrl from './cards/development/yearOfPlenty.svg?no-inline';
 import lumberUrl from './resources/lumber.svg?no-inline';
+import lumberCardUrl from './cards/lumber.svg?no-inline';
 import oreUrl from './resources/ore.svg?no-inline';
+import oreCardUrl from './cards/ore.svg?no-inline';
 import woolUrl from './resources/wool.svg?no-inline';
+import woolCardUrl from './cards/wool.svg?no-inline';
 import harborUrl from './harbors/marker.svg?no-inline';
 import jettyUrl from './harbors/jetty.svg?no-inline';
 import cityUrl from './pieces/city.svg?no-inline';
@@ -34,6 +45,22 @@ const RESOURCE_ICON_URLS: Readonly<Record<Resource, string>> = {
   ore: oreUrl,
 };
 
+const RESOURCE_CARD_URLS: Readonly<Record<Resource, string>> = {
+  brick: brickCardUrl,
+  lumber: lumberCardUrl,
+  wool: woolCardUrl,
+  grain: grainCardUrl,
+  ore: oreCardUrl,
+};
+
+const DEVELOPMENT_CARD_URLS: Readonly<Record<DevelopmentCard, string>> = {
+  knight: knightCardUrl,
+  roadBuilding: roadBuildingCardUrl,
+  yearOfPlenty: yearOfPlentyCardUrl,
+  monopoly: monopolyCardUrl,
+  victoryPoint: victoryPointCardUrl,
+};
+
 export interface BoardTextures {
   readonly terrain: Readonly<
     Record<'forest' | 'hills' | 'pasture' | 'fields' | 'mountains' | 'desert' | 'sea', Texture>
@@ -51,6 +78,16 @@ export interface BoardTextures {
 /** Return the static, same-origin SVG URL for a resource icon. */
 export function getResourceIconUrl(resource: Resource): string {
   return RESOURCE_ICON_URLS[resource];
+}
+
+/** Return the static, same-origin SVG URL for a full resource card face. */
+export function getResourceCardUrl(resource: Resource): string {
+  return RESOURCE_CARD_URLS[resource];
+}
+
+/** Return the static, same-origin SVG URL for a development card face. */
+export function getDevelopmentCardUrl(card: DevelopmentCard): string {
+  return DEVELOPMENT_CARD_URLS[card];
 }
 
 /** Select an SVG raster resolution for its largest on-screen size and device pixel ratio. */

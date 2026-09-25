@@ -285,7 +285,10 @@ export const confirmTrade: CommandHandler = {
       ...old,
       offers: old.offers.filter((item) => item.id !== offer.id),
     }));
-    return { state: next, events: [{ type: 'tradeConfirmed', offerId: offer.id }] };
+    return {
+      state: next,
+      events: [{ type: 'tradeConfirmed', offerId: offer.id, withSeat: recipient }],
+    };
   },
   applyPrivate: (priv, before, input): Result<PrivateState> => {
     const offer = offerById(before, input.command.offerId);

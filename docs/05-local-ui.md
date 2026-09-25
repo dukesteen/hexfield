@@ -122,9 +122,10 @@ Later stages add `online/create`, `join/$roomId` (stage 09), `game/$gameId` (sta
 
 ## UI requirements
 
-- **Layout**: desktop = board centre, player panels on the right, hand and actions bottom, log collapsible. Mobile portrait = board top, compact player strip, hand and actions bottom sheet; the trade UI is a full-screen sheet.
+- **Layout**: the game fills one viewport without document scrolling or outer gutters. Desktop has the board on the left, hand and actions directly below it, and players with a collapsible log on the right. A top-left hamburger overlay holds save status, Leave, animation controls and secondary utilities instead of header rows. Mobile keeps a usable board, compact player strip, hand and primary actions visible, with secondary details in a disclosure and trade composition in a full-screen sheet. Long detail lists can scroll inside their own panes.
 - **Player panels**: name, colour, public VP, resource card count, dev card count, knights played, longest road length, award badges, "active" indicator, timer ring, connection status (placeholder).
-- **Hand**: resources grouped with counts; dev cards (face up for the owner) showing a "new — playable next turn" state; disabled states with a tooltip explaining why (from the `RuleError` message).
+  Public resource payouts also appear beside each player for eight seconds. Recent payouts remain readable across fast bot turns; each payout expires independently. These readouts use the public production event, remain visible with reduced motion or skipped animations, and do not reveal private transfers.
+- **Hand**: original SVG resource cards grouped with visible counts; dev cards (face up for the owner) showing a "new — playable next turn" state; disabled states with a tooltip explaining why (from the `RuleError` message).
 - **Actions** are contextual and derived from `getLegalCommands` for the controllable seat:
   - build road/settlement/city → enters placement mode with highlights,
   - road, settlement, and city selection previews the piece at a legal location; an explicit confirmation on the board commits it, while Cancel clears the preview. This also applies during setup and free-road placement,
@@ -133,9 +134,10 @@ Later stages add `online/create`, `join/$roomId` (stage 09), `game/$gameId` (sta
   - Keyboard shortcuts: `R` roll, `E` end turn, `1/2/3` build modes, `Esc` cancel.
 - **Dialogs**: discard (select exactly N, with running count), robber (select hex on board), steal target (choose among eligible players with card counts), year of plenty, monopoly, road building (placement mode ×2 with skip).
 - **Trade**:
-  - The composer has give/want steppers and target players. Incoming offers (for bots/other seats) show as cards with accept/decline.
+  - The composer lets players select resource cards to give and receive, with quantities, separate remove controls, available hand counts and target players. Give and receive stay visible together on desktop; mobile uses compact stacked selections and a visible submit footer. Incoming offers appear as a compact overlay at the bottom-right of the board viewport, with resource card graphics and accept/decline controls. Offer wording must identify whose cards each side represents.
   - The active seat sees the responses and confirms with one.
   - Bank trade picker shows the best rate for each resource.
+  - Completed public player trades animate the exchanged cards between player panels. Creating or accepting an offer does not imply a completed transfer. Animation uses public offer terms and the confirmed counterparty, respects reduced motion and can be skipped.
 - **Log**: human-readable event history ("Red built a road", "Blue rolled 8: Red +1 grain…") generated from `GameEvent`s by an i18n formatter.
 - **Hotseat privacy**: when control passes to a different human seat, show a full-screen "Pass to <Name> — tap to reveal" cover that hides hands. Option to disable.
 - **Game over** screen: winner, final VP breakdown per seat, stats (dice histogram, resources gained per seat), "rematch" and "view replay" (replay viewer arrives in stage 17, so just export the replay JSON for now).

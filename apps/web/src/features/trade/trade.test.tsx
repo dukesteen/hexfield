@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeAll, describe, expect, test, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { createInstance } from 'i18next';
 import { I18nextProvider } from 'react-i18next';
 import { createBaseEngine, failure, success } from '@cp2p/engine';
@@ -31,7 +31,7 @@ const state = engine.createGame(
   },
   new Uint8Array(32).fill(7),
 );
-const hand: ResourceCounts = { brick: 4, lumber: 3, wool: 0, grain: 0, ore: 0 };
+const hand: ResourceCounts = { brick: 4, lumber: 4, wool: 0, grain: 0, ore: 0 };
 const privateState: PrivateState = { ...engine.createPrivateState(0), hand };
 
 function mount(element: React.ReactElement) {
@@ -85,8 +85,8 @@ function validateBank(command: CommandShape): Result<void> {
     Reflect.get(give, 'lumber') === 0 &&
     Reflect.get(get, 'grain') === 0) ||
     (Reflect.get(give, 'brick') === 4 &&
-      Reflect.get(give, 'lumber') === 3 &&
-      Reflect.get(get, 'ore') === 2 &&
+      Reflect.get(give, 'lumber') === 4 &&
+      Reflect.get(get, 'ore') === 1 &&
       Reflect.get(get, 'grain') === 1)
     ? success(undefined)
     : failure('terms', 'Invalid bank trade');
@@ -101,16 +101,20 @@ describe('controlled trade forms', () => {
       />,
     );
     const send = screen.getByRole('button', { name: 'Send offer' });
+    const dialog = screen.getByRole('dialog', { name: 'Player trade' });
+    expect(dialog.querySelector('.trade-dialog-body')?.contains(send)).toBe(false);
+    expect(dialog.querySelector('.trade-dialog-footer')?.contains(send)).toBe(true);
     expect(send.hasAttribute('disabled')).toBe(true);
-    expect(screen.getByRole('alert').textContent).toContain('These trade terms cannot be offered');
-    fireEvent.change(screen.getByRole('spinbutton', { name: 'You give: Brick' }), {
-      target: { value: '1' },
-    });
-    fireEvent.change(screen.getByRole('spinbutton', { name: 'You receive: Ore' }), {
-      target: { value: '1' },
-    });
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Bea' }));
+    expect(screen.queryByRole('alert')).toBeNull();
+    fireEvent.touchStart(screen.getByRole('button', { name: 'Add Brick to You give' }));
+    fireEvent.touchEnd(screen.getByRole('button', { name: 'Add Brick to You give' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add Brick to You give' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add Ore to You get' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Bea' }));
     expect(send.hasAttribute('disabled')).toBe(false);
+    expect(screen.getByRole('group', { name: 'You give' })).toBeTruthy();
+    expect(screen.getByRole('group', { name: 'You get' })).toBeTruthy();
+    expect(screen.queryByRole('region', { name: 'Offer preview' })).toBeNull();
     fireEvent.click(send);
     expect(onSubmit).toHaveBeenCalledWith({
       type: 'OFFER_TRADE',
@@ -131,28 +135,48 @@ describe('controlled trade forms', () => {
         )}
       />,
     );
-    expect(screen.getByText('Brick: 4 for 1')).toBeTruthy();
-    expect(screen.getByText('Ore: 4 for 1')).toBeTruthy();
-    expect(screen.getByRole('alert').textContent).toContain('This bank trade cannot be made');
-    expect(screen.getByRole('button', { name: 'Give 4 Brick for 1 Ore' })).toBeTruthy();
-    fireEvent.change(screen.getByRole('spinbutton', { name: 'You give: Brick' }), {
-      target: { value: '4' },
-    });
-    fireEvent.change(screen.getByRole('spinbutton', { name: 'You give: Lumber' }), {
-      target: { value: '3' },
-    });
-    fireEvent.change(screen.getByRole('spinbutton', { name: 'Bank gives: Ore' }), {
-      target: { value: '2' },
-    });
-    fireEvent.change(screen.getByRole('spinbutton', { name: 'Bank gives: Grain' }), {
-      target: { value: '1' },
-    });
+    expect(screen.getAllByText('4 for 1').length).toBeGreaterThan(0);
+    expect(screen.queryByRole('alert')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Add Brick to You give' }));
+    const addBrick = screen.getByRole('button', { name: 'Add Brick to You give' });
+    expect(addBrick.getAttribute('aria-disabled')).toBe('true');
+    fireEvent.click(addBrick);
+    expect(screen.getByText('Selected: 4')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Remove Brick from You give' }));
+    expect(addBrick.getAttribute('aria-disabled')).toBe('false');
+    fireEvent.click(addBrick);
+    fireEvent.click(screen.getByRole('button', { name: 'Add Lumber to You give' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add Ore to Bank gives' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add Grain to Bank gives' }));
+    expect(screen.getByText('Give 8 cards for 2 from the bank')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
     expect(onSubmit).toHaveBeenCalledWith({
       type: 'MARITIME_TRADE',
-      give: { brick: 4, lumber: 3, wool: 0, grain: 0, ore: 0 },
-      get: { brick: 0, lumber: 0, wool: 0, grain: 1, ore: 2 },
+      give: { brick: 4, lumber: 4, wool: 0, grain: 0, ore: 0 },
+      get: { brick: 0, lumber: 0, wool: 0, grain: 1, ore: 1 },
     });
+  });
+
+  test('bank picker conceals exact bank stock when the rule option hides it', () => {
+    const hiddenState = {
+      ...state,
+      config: {
+        ...state.config,
+        options: {
+          ...state.config.options,
+          base: { mapLayout: 'random', hideBankCounts: true },
+        },
+      },
+    };
+    mount(
+      <BankTradePicker
+        {...props({ commands: [], templates: [{ type: 'MARITIME_TRADE' }] }, validateBank)}
+        state={hiddenState}
+      />,
+    );
+    const bankCards = screen.getByRole('group', { name: 'Bank gives' });
+    expect(within(bankCards).queryAllByText(/available/)).toHaveLength(0);
+    expect(within(bankCards).getByRole('button', { name: 'Add Ore to Bank gives' })).toBeTruthy();
   });
 
   test('offer cards expose only concrete response choices, disabling rejected acceptance', () => {
@@ -168,7 +192,7 @@ describe('controlled trade forms', () => {
             {
               id: 7,
               proposer: 1,
-              give: { brick: 1 },
+              give: { wool: 2 },
               want: { ore: 1 },
               to: [0],
               acceptedBy: [],
@@ -187,6 +211,10 @@ describe('controlled trade forms', () => {
         state={offerState}
       />,
     );
+    const receive = screen.getByRole('group', { name: 'You get' });
+    const give = screen.getByRole('group', { name: 'You give' });
+    expect(within(receive).getByText('Wool')).toBeTruthy();
+    expect(within(give).getByText('Ore')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Accept' }).hasAttribute('disabled')).toBe(true);
     fireEvent.click(screen.getByRole('button', { name: 'Decline' }));
     expect(onSubmit).toHaveBeenCalledWith(decline);
@@ -223,13 +251,59 @@ describe('controlled trade forms', () => {
       />,
     );
     expect(screen.getByRole('list', { name: 'Player responses' }).textContent).toContain(
-      'Ari: accepted',
+      'Ariaccepted',
     );
     expect(screen.getByRole('list', { name: 'Player responses' }).textContent).toContain(
-      'Bea: accepted',
+      'Beaaccepted',
     );
     fireEvent.click(screen.getByRole('button', { name: 'Trade with Bea' }));
     expect(onSubmit).toHaveBeenCalledWith(second);
     expect(onSubmit.mock.calls[0]?.[0]).toBe(second);
+  });
+
+  test('shows public offers without inventing response actions and collapses for placement', () => {
+    const offerState = {
+      ...state,
+      ext: {
+        ...state.ext,
+        base: {
+          offers: [
+            {
+              id: 4,
+              proposer: 1,
+              give: { brick: 2 },
+              want: { ore: 1 },
+              to: [2],
+              acceptedBy: [],
+              declinedBy: [],
+              valid: true,
+            },
+          ],
+        },
+      },
+    };
+    const { rerender } = mount(
+      <IncomingOffers
+        {...props({ commands: [], templates: [] }, () => success(undefined))}
+        state={offerState}
+      />,
+    );
+    const details = screen.getByText('Offer from Ari').closest<HTMLDetailsElement>('details');
+    expect(details?.open).toBe(false);
+    fireEvent.click(screen.getByText('Offer from Ari'));
+    expect(details?.open).toBe(true);
+    expect(screen.getByText('Ari gives')).toBeTruthy();
+    expect(screen.getByText('Ari wants')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Accept' })).toBeNull();
+    rerender(
+      <I18nextProvider i18n={i18n}>
+        <IncomingOffers
+          {...props({ commands: [], templates: [] }, () => success(undefined))}
+          state={offerState}
+          collapsedWhilePlacing
+        />
+      </I18nextProvider>,
+    );
+    expect(details?.open).toBe(false);
   });
 });

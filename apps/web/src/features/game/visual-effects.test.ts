@@ -48,6 +48,7 @@ test('public production gains create exact flights from a producing tile', () =>
     expect(effects.flights).toEqual([
       { id: '20:1:0:grain:0', seat: 0, resource: 'grain', count: 2, fromHex: source.id },
     ]);
+    expect(effects.productionGains).toEqual([{ id: '20:1:0', seat: 0, resources: { grain: 2 } }]);
     expect(
       deriveVisualEffects(
         state,
@@ -59,6 +60,14 @@ test('public production gains create exact flights from a producing tile', () =>
         21,
       ).flights,
     ).toEqual([]);
+    expect(
+      deriveVisualEffects(
+        state,
+        state,
+        [{ type: 'resourcesProduced', bySeat: { '0': { wool: 1 }, '1': { ore: 0 } } }],
+        24,
+      ).productionGains,
+    ).toEqual([{ id: '24:0:0', seat: 0, resources: { wool: 1 } }]);
     const distant = before.board.hexes.find((hex) => {
       if (hex.id === source.id) return false;
       const otherIndex = graph.hexIndex[hex.id];
@@ -106,6 +115,96 @@ test('public production gains create exact flights from a producing tile', () =>
       23,
     ).flights;
     expect(shortage.reduce((sum, flight) => sum + flight.count, 0)).toBe(1);
+  } finally {
+    made.value.dispose();
+  }
+});
+
+test('only confirmed trades create grouped public card flights to the chosen recipient', () => {
+  const made = LocalSession.create({
+    config: {
+      modules: [{ id: 'base', version: '1.0.0' }],
+      seats: [0, 1, 2],
+      options: { base: { mapLayout: 'standard-fixed' } },
+      board: standardFixedBoard(),
+    },
+    humanSeats: [0, 1, 2],
+    botSeats: [],
+    genesisSeed: new Uint8Array(32).fill(5),
+  });
+  if (!made.ok) throw new Error(made.error.message);
+  try {
+    const state = made.value.getState();
+    const before = {
+      ...state,
+      ext: {
+        ...state.ext,
+        base: {
+          offers: [
+            {
+              id: 17,
+              proposer: 0,
+              give: { brick: 2, lumber: 0, wool: 0, grain: 1, ore: 0 },
+              want: { brick: 0, lumber: 1, wool: 0, grain: 0, ore: 0 },
+              to: [1, 2],
+              acceptedBy: [1, 2],
+              declinedBy: [],
+              valid: true,
+            },
+          ],
+        },
+      },
+    };
+    const after = deriveVisualEffects(
+      before,
+      state,
+      [{ type: 'tradeConfirmed', offerId: 17, withSeat: 2 }],
+      31,
+    ).tradeFlights;
+    expect(after).toEqual([
+      { id: '31:0:trade:17:give:brick', from: 0, to: 2, resource: 'brick', count: 2 },
+      { id: '31:0:trade:17:give:grain', from: 0, to: 2, resource: 'grain', count: 1 },
+      { id: '31:0:trade:17:want:lumber', from: 2, to: 0, resource: 'lumber', count: 1 },
+    ]);
+    expect(
+      deriveVisualEffects(before, state, [{ type: 'tradeOffered', offerId: 17, withSeat: 2 }], 32)
+        .tradeFlights,
+    ).toEqual([]);
+    expect(
+      deriveVisualEffects(before, state, [{ type: 'tradeConfirmed', offerId: 17, withSeat: 9 }], 33)
+        .tradeFlights,
+    ).toEqual([]);
+    const counterOffer = {
+      ...before,
+      ext: {
+        ...before.ext,
+        base: {
+          offers: [
+            {
+              id: 18,
+              proposer: 1,
+              give: { brick: 0, lumber: 0, wool: 1, grain: 0, ore: 0 },
+              want: { brick: 0, lumber: 0, wool: 0, grain: 0, ore: 2 },
+              to: [0],
+              acceptedBy: [],
+              declinedBy: [],
+              valid: true,
+            },
+          ],
+        },
+      },
+    };
+    expect(
+      deriveVisualEffects(
+        counterOffer,
+        state,
+        [{ type: 'tradeConfirmed', offerId: 18, withSeat: 0 }],
+        34,
+      ).tradeFlights,
+    ).toEqual([
+      { id: '34:0:trade:18:give:wool', from: 1, to: 0, resource: 'wool', count: 1 },
+      { id: '34:0:trade:18:want:ore', from: 0, to: 1, resource: 'ore', count: 2 },
+    ]);
   } finally {
     made.value.dispose();
   }

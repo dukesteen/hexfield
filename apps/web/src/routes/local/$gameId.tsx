@@ -308,22 +308,35 @@ function LocalGameInstance({ record, gameId }: { record: SavedGameRecord; gameId
 
   return (
     <main className="app-page local-game-page">
-      <div className="game-utility-bar">
-        <span className="app-brand">{t('game:gameTitle')}</span>
-        <span className={`save-indicator status-${saveStatus}`} role="status">
-          {saveStatus === 'saved'
-            ? t('game:saveStatus')
-            : saveStatus === 'saving'
-              ? t('game:saving')
-              : t('game:saveError')}
-        </span>
-        <Link to="/" className="text-link">
-          {t('game:leaveGame')}
-        </Link>
-      </div>
       {ready ? (
         <GameReadOnly
           presentation={record.presentation}
+          saveStatus={saveStatus}
+          onLeave={() => void navigate({ to: '/' })}
+          devTools={
+            DevDrawer && sessionRef.current ? (
+              <Suspense fallback={null}>
+                <DevDrawer
+                  session={sessionRef.current}
+                  renderer={renderer}
+                  actions={actions}
+                  onImportSave={async (raw) => {
+                    await importSave(raw);
+                  }}
+                  onExportSave={async (save) => {
+                    await exportGame.mutateAsync({ name: gameId, save });
+                  }}
+                  onExportReplay={async (save) => {
+                    await exportReplay.mutateAsync({
+                      name: gameId,
+                      save,
+                      presentation: record.presentation,
+                    });
+                  }}
+                />
+              </Suspense>
+            ) : null
+          }
           onRematch={rematch}
           onExportReplay={exportCurrentReplay}
           onRendererReady={setRenderer}
@@ -339,28 +352,6 @@ function LocalGameInstance({ record, gameId }: { record: SavedGameRecord; gameId
         onConfirm={() => void leave()}
         error={leaveError}
       />
-      {DevDrawer && ready && sessionRef.current && (
-        <Suspense fallback={null}>
-          <DevDrawer
-            session={sessionRef.current}
-            renderer={renderer}
-            actions={actions}
-            onImportSave={async (raw) => {
-              await importSave(raw);
-            }}
-            onExportSave={async (save) => {
-              await exportGame.mutateAsync({ name: gameId, save });
-            }}
-            onExportReplay={async (save) => {
-              await exportReplay.mutateAsync({
-                name: gameId,
-                save,
-                presentation: record.presentation,
-              });
-            }}
-          />
-        </Suspense>
-      )}
     </main>
   );
 }

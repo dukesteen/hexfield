@@ -1,3 +1,34 @@
+# Redesign the actual trade offer UI
+
+The user rejected the currently implemented trade overlay and explicitly said: "what is this, ask claude for a better ui". Their screenshot is `reports/stage05/trade-overlay-user-feedback.png`. Read that image first. It is inside the repo for your image reader. Read the actual current `apps/web/src/features/trade/{IncomingOffers,ResourceCard,TradeComposer,BankTradePicker}.tsx`, `features/trade/trade.css`, relevant `.board-offers` and button rules in `apps/web/src/app.css`, and `apps/web/src/style.css`.
+
+Author a concrete replacement visual design in JSX/CSS snippets on stdout, using Read/Grep/Glob only. Do not edit files. This is implementation-ready UI authorship, not a general design contract. Keep explanation brief, focus on code matched to current components/classes. No dependency. Original clean flat game UI, not a generic dashboard or medieval design.
+
+Current problems visible in the screenshot:
+
+- Enormous verbose "Trade offers (1) · 1 action available" heading. Action availability is implementation jargon.
+- A giant browser-default, double-outlined button labelled Offer from Player3 despite being the only offer.
+- Give/get headings visually collide.
+- Small card faces boxed again, huge count badges obscuring the illustrations.
+- Three redundant bulleted "waiting" statuses for an incoming recipient.
+- Native grey Accept/Decline buttons and inconsistent spacing.
+
+User intent and required behavior:
+
+- Offers remain a BOTTOM-RIGHT overlay inside the board viewport. Aim~300px wide, about230–300px high for a simple1:1incomingoffer. One offer visible at a time. A compact collapsible header with total count, then named proposer. When only one offer exists, no redundant tab button. Multiple offers get compact navigable chips or previous/next controls.
+- Clear trade perspective: recipient sees "You get" and "You give" with a small directional/exchange arrow between resource card groups. Named proposer is in the header. Proposer sees "You give" and "You get", plus explicit per-accepted-player completion actions. Keep exact engine-provided response/confirm/withdraw commands and live validation.
+- Resource cards must be the main visual, about44x62or48x68 each, with smallcountcornerbadge that doesnotobscurecentralart. Shortresourcecaptionbeneath. Avoid drawinganotherboxaroundeachcard. Multi-resourcegroupswrapinternally; maxoverlayheightbounded, coreactionssticky/reachable.
+- Incoming recipients need Accept primary (accent) and Decline secondary (outlined),44px touch targets, fullwidthbalancedrow. Disabled Accept clearly disabled whileDecline remainsusable. Do not accidentallychangeenginechoicesforvisualreasons.
+- Response status detail matters for proposer; compact namedchipswithaccepted/declined/waiting insteadofbullets. Forincomingrecipient, don'tburnspaceonothers'waitingresponses. Preserveavailableacceptedcounterpartychoiceforproposer.
+- Theme uses current CSSvariables surface/text/muted/border/control/accent/accent-ink. Inspectexacttokensratherthaninventingundefinedvariables. Native buttonreset globally doesnotcoverallbuttons; explicitlyuseexisting`.button`/`.button-primary`/`.button-quiet`or scopedstyles.
+- Highcontrastfocusringonlyonkeyboardfocus, notpermanentmultioutlineonselectedoffer.
+- Collapsed summary~44px. Placementmodeforcescollapse, nofullboardpointer-eventsblock, confirmationstaysaboveoverlay. Escape collapses. Use section/details, NOT dialog forpersistentoffer (open dialog disablesboardkeyboardshortcuts).
+- Phone390x844: boundedbottom-rightoffer withhand/actionsstillvisible. Composer separatefullscreenmodal. At844x390landscapeoverlaycaninternallyscroll. No documentscroll.
+- Keepcardpickerconsistent: selectedcards,palette,countbadges, polishedbuttons. Ifitcurrentlyusesnativeunstyledelements, providecohesivescopedrulesforthoseaswell. Don't balloonthescopeintonewgamebehavior.
+- Alltextthroughi18n. Proposernamesandresponsestatusaccessible. Hiddenhandcontentstaysabsentunderprivacycover. Exactcommands/statehandlingremainownedbyourimplementationagent.
+
+Deliver specific replacementmarkupfortheofferheader/exchange/footer, corresponding completeCSSsectionand any sharedcardbadge/pickerbuttonadjustments. Explain majortradesin4sentencesmax. Do not add futureideasorchecklists. The complete visualguide follows. Neweruserrequestsaboveoverrideolderlayoutrecommendations.
+
 # Hexfield visual guide
 
 ## Direction
@@ -40,8 +71,6 @@ The z-index scale is board controls 10, sticky mobile controls 20, sheets 30, di
 - Desktop: a viewport-filling cockpit with the board on the left, player rail on the right, and resource hand and primary actions directly below the board. Panes meet at hairline borders without outer gutters. A top-left hamburger overlay replaces header rows. The event log is collapsible.
 - Portrait below 768 px: compact player strip, board and bounded hand/action area in one viewport. Secondary details use a disclosure. Trade composition occupies a full-screen sheet; incoming offers stay accessible at the bottom-right of the board. Avoid hiding the next required action below a fixed panel.
 - Resource hands and trade terms use original SVG cards with HTML names and quantities. Card selection adds a resource and a separate minus control removes it. Completed public exchanges can animate cards between player panels; offers alone do not trigger a transfer.
-- Trade composition shows "You give" and "You get" beside each other on desktop, with compact stacked selections on phones. Keep the submit controls visible and avoid repeating the selected cards in a second preview.
-- Player panels show small resource icons and quantities for public payouts during the previous eight seconds. Keep these readable across turn changes and when animations are disabled.
 - The home screen provides a direct new-game action and real saved games. Any board preview uses the actual renderer and game data, not an invented screenshot or stock photograph.
 - The new-game form groups players, board/rule choices, and timers. Keep advanced options in a labeled disclosure without omitting them.
 - During a turn, emphasize the current instruction and next action. Setup and build modes share one selection pattern. Show legal targets and a clear cancel action.

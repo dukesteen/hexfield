@@ -2,7 +2,11 @@ export const PACKAGE_NAME = '@cp2p/renderer';
 
 export { PixiBoardRenderer, createBoardRenderer } from './BoardRenderer.js';
 export { hitTestBoard } from './input/hitTest.js';
-export { getResourceIconUrl } from './assets/terrainTextures.js';
+export {
+  getDevelopmentCardUrl,
+  getResourceCardUrl,
+  getResourceIconUrl,
+} from './assets/terrainTextures.js';
 export type {
   BoardAppearance,
   BoardEffect,
@@ -12,6 +16,7 @@ export type {
   BoardHit,
   BoardRenderer,
   BoardRendererOptions,
+  DevelopmentCard,
   HitMode,
   RenderModel,
   ScreenPoint,

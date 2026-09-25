@@ -7,9 +7,14 @@ import {
   type GameState,
   type Seat,
 } from '@cp2p/engine';
-import { getResourceIconUrl } from '@cp2p/renderer';
 import { BoardView } from '../board/BoardView';
-import type { BoardRenderer } from '@cp2p/renderer';
+import { ResourceCard } from '../trade/ResourceCard';
+import {
+  getDevelopmentCardUrl,
+  getResourceIconUrl,
+  type BoardRenderer,
+  type DevelopmentCard,
+} from '@cp2p/renderer';
 import type { ActionAvailability } from '../actions/availability';
 import { toRenderModel } from '../board/toRenderModel';
 import type { GamePresentation } from '../../queries/repositories/saved-games';
@@ -20,7 +25,8 @@ import { GameOverPanel } from './GameOverPanel';
 import { PlacementConfirmation } from './PlacementConfirmation';
 import { useBoardAppearance } from './use-appearance';
 import { sessionForActions } from '../../store/session-store';
-import { useVisualEffects } from './use-visual-effects';
+import { useVisualEffects, type ProductionReceipt } from './use-visual-effects';
+import type { SaveStatus } from './save-coordinator';
 
 function playerName(presentation: GamePresentation, seat: Seat): string {
   return presentation.players.find((player) => player.seat === seat)?.name ?? String(seat + 1);
@@ -31,6 +37,19 @@ function knightsPlayed(state: GameState, seat: Seat): number {
   if (typeof base !== 'object' || base === null || !('knightsPlayed' in base)) return 0;
   const counts = base.knightsPlayed;
   return Array.isArray(counts) && typeof counts[seat] === 'number' ? counts[seat] : 0;
+}
+
+function developmentCardArt(card: string): string | null {
+  switch (card) {
+    case 'knight':
+    case 'roadBuilding':
+    case 'yearOfPlenty':
+    case 'monopoly':
+    case 'victoryPoint':
+      return getDevelopmentCardUrl(card satisfies DevelopmentCard);
+    default:
+      return null;
+  }
 }
 
 function SeatTimer({ seat }: { seat: Seat }) {
@@ -74,10 +93,12 @@ function PlayerRail({
   state,
   presentation,
   activeSeat,
+  receipts,
 }: {
   state: GameState;
   presentation: GamePresentation;
   activeSeat: Seat;
+  receipts: readonly ProductionReceipt[];
 }) {
   const { t } = useTranslation('game');
   return (
@@ -86,11 +107,18 @@ function PlayerRail({
       <div className="player-list">
         {state.seats.map((seatState) => {
           const identity = presentation.players.find((player) => player.seat === seatState.seat);
+          const receipt = receipts.find((entry) => entry.seat === seatState.seat);
+          const gains = receipt
+            ? RESOURCES.flatMap((resource) => {
+                const count = receipt.resources[resource];
+                return count && count > 0 ? [{ resource, count }] : [];
+              })
+            : [];
           return (
             <section
               key={seatState.seat}
               data-seat-panel={seatState.seat}
-              className={`player-panel ${activeSeat === seatState.seat ? 'is-active' : ''}`}
+              className={`player-panel ${activeSeat === seatState.seat ? 'is-active' : ''} ${gains.length ? 'has-receipt' : ''}`}
               aria-label={playerName(presentation, seatState.seat)}
               aria-current={activeSeat === seatState.seat ? 'step' : undefined}
             >
@@ -100,6 +128,9 @@ function PlayerRail({
                   aria-hidden="true"
                 />
                 <strong>{playerName(presentation, seatState.seat)}</strong>
+                <span className="player-seat-index" aria-hidden="true">
+                  {t('game:playerShort', { number: seatState.seat + 1 })}
+                </span>
                 <SeatTimer seat={seatState.seat} />
                 <span
                   className="player-vp"
@@ -109,28 +140,79 @@ function PlayerRail({
                 </span>
               </div>
               <div className="player-panel-status">
-                {activeSeat === seatState.seat && <span>{t('game:actingNow')}</span>}
-                <span className="connection-status">{t('game:localConnection')}</span>
+                {gains.length ? (
+                  <span
+                    className="production-receipt"
+                    role="status"
+                    aria-label={t('game:recentGains', {
+                      resources: gains
+                        .map(({ resource, count }) => `${count} ${t(`game:${resource}`)}`)
+                        .join(', '),
+                    })}
+                  >
+                    <span className="receipt-label">{t('game:recentGainsLabel')}</span>
+                    {gains.map(({ resource, count }) => (
+                      <span
+                        className="receipt-resource"
+                        key={resource}
+                        tabIndex={0}
+                        title={t('game:resourceGain', {
+                          count,
+                          resource: t(`game:${resource}`),
+                        })}
+                        aria-label={t('game:resourceGain', {
+                          count,
+                          resource: t(`game:${resource}`),
+                        })}
+                      >
+                        <img src={getResourceIconUrl(resource)} alt="" aria-hidden="true" />
+                        <b>+{count}</b>
+                      </span>
+                    ))}
+                  </span>
+                ) : (
+                  <>
+                    {activeSeat === seatState.seat && <span>{t('game:actingNow')}</span>}
+                    <span className="connection-status">{t('game:localConnection')}</span>
+                  </>
+                )}
               </div>
-              <div className="player-panel-stats">
-                <span>{t('game:resourceCards', { count: seatState.resources.total })}</span>
-                <span>
-                  {t('game:developmentCards', {
+              <dl className="player-panel-stats">
+                <div title={t('game:resourceCards', { count: seatState.resources.total })}>
+                  <dt>{t('game:statCards')}</dt>
+                  <dd>{seatState.resources.total}</dd>
+                </div>
+                <div
+                  title={t('game:developmentCards', {
                     count: seatState.cardSlots.filter((slot) => !slot.revealed).length,
                   })}
-                </span>
-                <span>
-                  {t('game:knightsPlayed', { count: knightsPlayed(state, seatState.seat) })}
-                </span>
-                <span>
-                  {t('game:roadLength', { count: baseLongestRoadLength(state, seatState.seat) })}
-                </span>
+                >
+                  <dt>{t('game:statDev')}</dt>
+                  <dd>{seatState.cardSlots.filter((slot) => !slot.revealed).length}</dd>
+                </div>
+                <div
+                  title={t('game:knightsPlayed', { count: knightsPlayed(state, seatState.seat) })}
+                >
+                  <dt>{t('game:statKnights')}</dt>
+                  <dd>{knightsPlayed(state, seatState.seat)}</dd>
+                </div>
+                <div
+                  title={t('game:roadLength', {
+                    count: baseLongestRoadLength(state, seatState.seat),
+                  })}
+                >
+                  <dt>{t('game:statRoad')}</dt>
+                  <dd>{baseLongestRoadLength(state, seatState.seat)}</dd>
+                </div>
+              </dl>
+              <details className="player-pieces">
+                <summary>{t('game:piecesLeft')}</summary>
                 <span>{t('game:roadsLeft', { count: seatState.piecesLeft.road ?? 0 })}</span>
                 <span>
                   {t('game:settlementsLeft', { count: seatState.piecesLeft.settlement ?? 0 })}
                 </span>
                 <span>{t('game:citiesLeft', { count: seatState.piecesLeft.city ?? 0 })}</span>
-              </div>
+              </details>
               {state.awards.longestRoad === seatState.seat && (
                 <span className="award-chip">{t('game:longestRoad')}</span>
               )}
@@ -150,6 +232,19 @@ function HandDock({ state }: { state: GameState }) {
   const revealedSeat = useSessionStore((store) => store.revealedSeat);
   const privateState = useSessionStore((store) => store.privateState);
   const optionalViewingSeat = useSessionStore((store) => store.optionalViewingSeat);
+  const developmentDialog = useRef<HTMLDialogElement>(null);
+  const [compactHand, setCompactHand] = useState(
+    () => window.matchMedia('(max-width: 767px), (max-height: 500px)').matches,
+  );
+  useEffect(() => {
+    const media = window.matchMedia('(max-width: 767px), (max-height: 500px)');
+    const update = () => setCompactHand(media.matches);
+    media.addEventListener('change', update);
+    return () => media.removeEventListener('change', update);
+  }, []);
+  useEffect(() => {
+    developmentDialog.current?.close();
+  }, [revealedSeat]);
   const seatState = state.seats.find((seat) => seat.seat === revealedSeat);
   const cardReason = (slotId: string, card: string, acquiredTurn: number): string | null => {
     if (card === 'Hidden') return t('game:cardUnavailable');
@@ -180,12 +275,46 @@ function HandDock({ state }: { state: GameState }) {
       return t('game:cardNeedsChoices');
     return t('game:cardRuleUnavailable');
   };
+  const developmentCards =
+    seatState?.cardSlots
+      .filter((slot) => !slot.revealed)
+      .map((slot) => {
+        const card = privateState?.slots[slot.slotId] ?? 'Hidden';
+        const label = t(`game:dev${card}`);
+        const reason = cardReason(slot.slotId, card, slot.acquiredTurn);
+        const art = developmentCardArt(card);
+        return (
+          <span
+            className={`development-card ${reason && card !== 'victoryPoint' ? 'is-disabled' : ''}`}
+            key={slot.slotId}
+            tabIndex={0}
+            title={reason ?? label}
+            aria-label={reason ? `${label}: ${reason}` : label}
+          >
+            {art && <img src={art} alt="" aria-hidden="true" draggable={false} />}
+            <strong>{label}</strong>
+          </span>
+        );
+      }) ?? [];
   return (
     <section className="hand-dock" aria-label={t('game:yourHand')}>
       <div className="section-heading">
         <h2>{t('game:yourHand')}</h2>
         {revealedSeat !== null && (
           <div className="hand-controls">
+            {compactHand && privateState && developmentCards.length > 0 && (
+              <button
+                className="button button-quiet"
+                type="button"
+                aria-label={t('game:developmentCards', { count: developmentCards.length })}
+                onClick={() => {
+                  if (developmentDialog.current && !developmentDialog.current.open)
+                    developmentDialog.current.showModal();
+                }}
+              >
+                {t('game:devCardsShort', { count: developmentCards.length })}
+              </button>
+            )}
             {optionalViewingSeat !== null && (
               <button
                 className="button button-quiet"
@@ -216,8 +345,9 @@ function HandDock({ state }: { state: GameState }) {
           <div className="resource-hand">
             {RESOURCES.map((resource) => (
               <div
-                className={`resource-count resource-${resource}`}
+                className="resource-hand-card"
                 key={resource}
+                data-empty={(privateState.hand[resource] ?? 0) === 0}
                 tabIndex={0}
                 title={t('game:resourceInHand', {
                   resource: t(`game:${resource}`),
@@ -228,36 +358,31 @@ function HandDock({ state }: { state: GameState }) {
                   count: privateState.hand[resource] ?? 0,
                 })}
               >
-                <span className="resource-count-label">
-                  <img src={getResourceIconUrl(resource)} alt="" aria-hidden="true" />
-                  {t(`game:${resource}`)}
-                </span>
-                <strong>{privateState.hand[resource] ?? 0}</strong>
+                <ResourceCard resource={resource} count={privateState.hand[resource] ?? 0} />
               </div>
             ))}
           </div>
-          {seatState.cardSlots.some((slot) => !slot.revealed) && (
-            <div className="development-hand">
-              {seatState.cardSlots
-                .filter((slot) => !slot.revealed)
-                .map((slot) => {
-                  const card = privateState.slots[slot.slotId] ?? 'Hidden';
-                  const label = t(`game:dev${card}`);
-                  const reason = cardReason(slot.slotId, card, slot.acquiredTurn);
-                  return (
-                    <span
-                      className={`development-card ${reason ? 'is-disabled' : ''}`}
-                      key={slot.slotId}
-                      tabIndex={0}
-                      title={reason ?? label}
-                      aria-label={reason ? `${label}: ${reason}` : label}
-                    >
-                      {label}
-                      {reason && <small>{reason}</small>}
-                    </span>
-                  );
-                })}
-            </div>
+          {!compactHand && developmentCards.length > 0 && (
+            <div className="development-hand">{developmentCards}</div>
+          )}
+          {compactHand && developmentCards.length > 0 && (
+            <dialog
+              ref={developmentDialog}
+              className="development-dialog"
+              aria-labelledby="development-dialog-title"
+            >
+              <h2 id="development-dialog-title">
+                {t('game:developmentCards', { count: developmentCards.length })}
+              </h2>
+              <div className="development-hand">{developmentCards}</div>
+              <button
+                className="button button-quiet"
+                type="button"
+                onClick={() => developmentDialog.current?.close()}
+              >
+                {t('game:closeDevCards')}
+              </button>
+            </dialog>
           )}
         </>
       )}
@@ -324,6 +449,9 @@ function PrivacyCover({ player, seat }: { player: string; seat: Seat }) {
 
 interface GameScreenProps {
   presentation: GamePresentation;
+  saveStatus: SaveStatus;
+  onLeave: () => void;
+  devTools?: React.ReactNode;
   onRematch: () => Promise<void>;
   onExportReplay: () => Promise<void>;
   onRendererReady?: (renderer: BoardRenderer) => void;
@@ -332,6 +460,9 @@ interface GameScreenProps {
 
 export function GameReadOnly({
   presentation,
+  saveStatus,
+  onLeave,
+  devTools,
   onRematch,
   onExportReplay,
   onRendererReady,
@@ -344,6 +475,9 @@ export function GameReadOnly({
     <LiveGame
       state={state}
       presentation={presentation}
+      saveStatus={saveStatus}
+      onLeave={onLeave}
+      {...(devTools ? { devTools } : {})}
       onRematch={onRematch}
       onExportReplay={onExportReplay}
       {...(onRendererReady ? { onRendererReady } : {})}
@@ -355,6 +489,9 @@ export function GameReadOnly({
 function LiveGame({
   state,
   presentation,
+  saveStatus,
+  onLeave,
+  devTools,
   onRematch,
   onExportReplay,
   onRendererReady,
@@ -365,12 +502,19 @@ function LiveGame({
   const pending = useSessionStore((store) => store.pending);
   const waitingSeat = useSessionStore((store) => store.waitingSeat);
   const revealedSeat = useSessionStore((store) => store.revealedSeat);
-  const optionalChoices = useSessionStore((store) => store.optionalChoices);
-  const optionalViewingSeat = useSessionStore((store) => store.optionalViewingSeat);
   const { appearance, reducedMotion } = useBoardAppearance(presentation);
+  const [gameInfoOpen, setGameInfoOpen] = useState(
+    () => !window.matchMedia('(max-width: 767px), (max-height: 500px)').matches,
+  );
+  useEffect(() => {
+    const media = window.matchMedia('(max-width: 767px), (max-height: 500px)');
+    const update = () => setGameInfoOpen(!media.matches);
+    media.addEventListener('change', update);
+    return () => media.removeEventListener('change', update);
+  }, []);
   const [renderer, setRenderer] = useState<BoardRenderer | null>(null);
   const boardRef = useRef<HTMLElement>(null);
-  const { skip, overlay } = useVisualEffects(renderer, reducedMotion);
+  const { skip, overlay, receipts } = useVisualEffects(renderer, reducedMotion);
   const model = useMemo(() => toRenderModel(state, 'spectator'), [state]);
   const actions = useGameActions(state, pending, presentation);
   const previewPlayer = appearance.players.find((player) => player.seat === actions.actorSeat);
@@ -386,37 +530,35 @@ function LiveGame({
 
   return (
     <div className="game-page">
-      <header className="game-header">
-        <div>
-          <p className="eyebrow">{t('game:turnNumber', { number: state.turn.number })}</p>
-          <h1>
+      <details className="game-menu">
+        <summary aria-label={t('game:openMenu')}>
+          <span aria-hidden="true">☰</span>
+        </summary>
+        <div className="game-menu-panel">
+          <strong>{t('game:gameTitle')}</strong>
+          <p>{t('game:turnNumber', { number: state.turn.number })}</p>
+          <p>
             {winner
               ? t('game:winner', { player: winner })
               : t('game:activePlayer', { player: activeName })}
-          </h1>
-        </div>
-        <div className="game-header-controls">
+          </p>
+          <span className={`save-indicator status-${saveStatus}`} role="status">
+            {saveStatus === 'saved'
+              ? t('game:saveStatus')
+              : saveStatus === 'saving'
+                ? t('game:saving')
+                : t('game:saveError')}
+          </span>
           <TurnTimer />
           <button className="button button-quiet" type="button" onClick={skip}>
             {t('game:skipAnimations')}
           </button>
+          <button className="button button-quiet" type="button" onClick={onLeave}>
+            {t('game:leaveGame')}
+          </button>
+          {devTools}
         </div>
-      </header>
-      {optionalChoices.length > 0 && optionalViewingSeat === null && (
-        <div className="optional-trade-chooser" role="group" aria-label={t('game:optionalTrade')}>
-          <span>{t('game:optionalTrade')}</span>
-          {optionalChoices.map((seat) => (
-            <button
-              className="button button-quiet"
-              type="button"
-              key={seat}
-              onClick={() => useSessionStore.getState().viewOptionalSeat(seat)}
-            >
-              {t('game:viewOptionalTrade', { player: playerName(presentation, seat) })}
-            </button>
-          ))}
-        </div>
-      )}
+      </details>
       <div className="game-grid">
         <section ref={boardRef} className="game-board" aria-label={t('game:board')}>
           <BoardView
@@ -453,8 +595,50 @@ function LiveGame({
               onCancel={actions.placementConfirmation.cancel}
             />
           )}
+          {actions.offerOverlay && <div className="board-offers">{actions.offerOverlay}</div>}
         </section>
-        <PlayerRail state={state} presentation={presentation} activeSeat={actions.actorSeat} />
+        <aside className="game-sidebar" aria-label={t('game:players')}>
+          <PlayerRail
+            state={state}
+            presentation={presentation}
+            activeSeat={actions.actorSeat}
+            receipts={receipts}
+          />
+          <details
+            className="game-info"
+            open={gameInfoOpen}
+            onToggle={(event) => setGameInfoOpen(event.currentTarget.open)}
+          >
+            <summary>{t('game:gameInfo')}</summary>
+            {!hideBankCounts ? (
+              <section className="bank-panel" aria-label={t('game:bank')}>
+                <h2>{t('game:bank')}</h2>
+                <div className="bank-cards">
+                  {RESOURCES.map((resource) => (
+                    <span
+                      className="bank-card"
+                      key={resource}
+                      tabIndex={0}
+                      aria-label={t('game:resourceInBank', {
+                        resource: t(`game:${resource}`),
+                        count: state.bank[resource] ?? 0,
+                      })}
+                    >
+                      <ResourceCard
+                        resource={resource}
+                        count={state.bank[resource] ?? 0}
+                        size="sm"
+                      />
+                    </span>
+                  ))}
+                </div>
+              </section>
+            ) : (
+              <p className="bank-panel muted">{t('game:bankHidden')}</p>
+            )}
+            <EventLog events={events} presentation={presentation} />
+          </details>
+        </aside>
         <div className="game-bottom">
           <HandDock state={state} />
           {winner ? (
@@ -468,21 +652,6 @@ function LiveGame({
           ) : (
             actions.dock
           )}
-          {!hideBankCounts ? (
-            <section className="bank-panel" aria-label={t('game:bank')}>
-              <h2>{t('game:bank')}</h2>
-              <div>
-                {RESOURCES.map((resource) => (
-                  <span key={resource}>
-                    {t(`game:${resource}`)} {state.bank[resource] ?? 0}
-                  </span>
-                ))}
-              </div>
-            </section>
-          ) : (
-            <p className="bank-panel muted">{t('game:bankHidden')}</p>
-          )}
-          <EventLog events={events} presentation={presentation} />
         </div>
       </div>
       {waitingSeat !== null && revealedSeat === null && !winner && (

@@ -1,4 +1,11 @@
-import { RESOURCES, type GameEvent, type GameState, type Resource, type Seat } from '@cp2p/engine';
+import {
+  RESOURCES,
+  type GameEvent,
+  type GameState,
+  type Resource,
+  type ResourceCounts,
+  type Seat,
+} from '@cp2p/engine';
 import { buildBoardGraph, type EdgeId, type HexId, type VertexId } from '@cp2p/engine/geometry';
 import type { BoardEffect } from '@cp2p/renderer';
 
@@ -19,9 +26,32 @@ export interface ResourceFlight {
   readonly fromHex: HexId;
 }
 
+export interface TradeCardFlight {
+  readonly id: string;
+  readonly from: Seat;
+  readonly to: Seat;
+  readonly resource: Resource;
+  readonly count: number;
+}
+
+export interface ProductionGain {
+  readonly id: string;
+  readonly seat: Seat;
+  readonly resources: Partial<ResourceCounts>;
+}
+
+interface PublicTradeTerms {
+  readonly id: number;
+  readonly proposer: Seat;
+  readonly give: ResourceCounts;
+  readonly want: ResourceCounts;
+}
+
 export interface VisualEffects {
   readonly board: readonly BoardEffect[];
   readonly flights: readonly ResourceFlight[];
+  readonly tradeFlights: readonly TradeCardFlight[];
+  readonly productionGains: readonly ProductionGain[];
 }
 
 function isEdgeId(value: unknown): value is EdgeId {
@@ -52,6 +82,37 @@ function record(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+function validResourceCounts(counts: Record<string, unknown>): counts is ResourceCounts {
+  return RESOURCES.every((resource) => {
+    const count = counts[resource];
+    return typeof count === 'number' && Number.isSafeInteger(count) && count >= 0;
+  });
+}
+
+function tradeOfferById(state: GameState, id: unknown): PublicTradeTerms | undefined {
+  if (typeof id !== 'number' || !Number.isSafeInteger(id)) return undefined;
+  const base = state.ext.base;
+  if (!record(base) || !Array.isArray(base.offers)) return undefined;
+  const offer = base.offers.find((candidate: unknown) => {
+    return record(candidate) && candidate.id === id;
+  });
+  if (!record(offer)) return undefined;
+  if (
+    typeof offer.proposer !== 'number' ||
+    !isSeat(state, offer.proposer) ||
+    !record(offer.give) ||
+    !record(offer.want)
+  )
+    return undefined;
+  if (!validResourceCounts(offer.give) || !validResourceCounts(offer.want)) return undefined;
+  return {
+    id,
+    proposer: offer.proposer,
+    give: offer.give,
+    want: offer.want,
+  };
+}
+
 /** Translate an accepted public event batch into rule-neutral, deduplicated motion cues. */
 export function deriveVisualEffects(
   before: GameState,
@@ -59,9 +120,11 @@ export function deriveVisualEffects(
   events: readonly GameEvent[],
   revision: number,
 ): VisualEffects {
-  if (events.length === 0) return { board: [], flights: [] };
+  if (events.length === 0) return { board: [], flights: [], tradeFlights: [], productionGains: [] };
   const board: BoardEffect[] = [];
   const flights: ResourceFlight[] = [];
+  const tradeFlights: TradeCardFlight[] = [];
+  const productionGains: ProductionGain[] = [];
   const rolled = events.find((event) => event.type === 'diceRolled');
   const roll = rolled && 'roll' in rolled && typeof rolled.roll === 'number' ? rolled.roll : null;
   const graph =
@@ -99,17 +162,46 @@ export function deriveVisualEffects(
     ) {
       board.push({ id, kind: 'robber-move', fromHex: before.board.robberHex, toHex: event.hex });
     } else if (
-      event.type === 'resourcesProduced' &&
-      record(event.bySeat) &&
-      graph &&
-      roll !== null
+      event.type === 'tradeConfirmed' &&
+      'offerId' in event &&
+      'withSeat' in event &&
+      isSeat(after, event.withSeat)
     ) {
+      const offer = tradeOfferById(before, event.offerId);
+      if (!offer || offer.proposer === event.withSeat) continue;
+      for (const [from, to, counts, direction] of [
+        [offer.proposer, event.withSeat, offer.give, 'give'],
+        [event.withSeat, offer.proposer, offer.want, 'want'],
+      ] as const) {
+        for (const resource of RESOURCES) {
+          const count = counts[resource];
+          if (count > 0) {
+            tradeFlights.push({
+              id: `${id}:trade:${offer.id}:${direction}:${resource}`,
+              from,
+              to,
+              resource,
+              count,
+            });
+          }
+        }
+      }
+    } else if (event.type === 'resourcesProduced' && record(event.bySeat)) {
       for (const seat of after.config.seats) {
         const gains = event.bySeat[String(seat)];
         if (!record(gains)) continue;
+        const resources: Partial<Record<Resource, number>> = {};
         for (const resource of RESOURCES) {
           const gained = gains[resource];
           if (typeof gained !== 'number' || !Number.isSafeInteger(gained) || gained <= 0) continue;
+          resources[resource] = gained;
+        }
+        if (Object.keys(resources).length === 0) continue;
+        productionGains.push({ id: `${id}:${seat}`, seat, resources });
+        if (!graph || roll === null) continue;
+        for (const resource of RESOURCES) {
+          const gained = resources[resource] ?? 0;
+          if (gained <= 0) continue;
           const sources = after.board.hexes
             .flatMap((hex) => {
               if (
@@ -148,5 +240,5 @@ export function deriveVisualEffects(
       }
     }
   }
-  return { board, flights };
+  return { board, flights, tradeFlights, productionGains };
 }

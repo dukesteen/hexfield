@@ -568,7 +568,9 @@ describe('base rule handlers', () => {
       }),
     ).toMatchObject({ ok: false, error: { code: 'unaccepted-offer' } });
     const accepted = command(offered, 1, 'RESPOND_TRADE', { offerId: 0, accept: true }).state;
-    const confirmed = command(accepted, 0, 'CONFIRM_TRADE', { offerId: 0, withSeat: 1 }).state;
+    const confirmation = command(accepted, 0, 'CONFIRM_TRADE', { offerId: 0, withSeat: 1 });
+    expect(confirmation.events).toContainEqual({ type: 'tradeConfirmed', offerId: 0, withSeat: 1 });
+    const confirmed = confirmation.state;
     expect(confirmed.seats[0]?.resources.min).toMatchObject({ brick: 3, ore: 1 });
     expect(confirmed.seats[1]?.resources.min).toMatchObject({ brick: 1, ore: 0 });
     const bankTrade = command(
@@ -578,6 +580,23 @@ describe('base rule handlers', () => {
       { give: { brick: 4 }, get: { ore: 1 } },
     ).state;
     expect(bankTrade.seats[0]?.resources.min).toMatchObject({ brick: 0, ore: 1 });
+  });
+
+  test('trade confirmation event identifies the chosen recipient when two accepted', () => {
+    let state = hand(main(genesis()), 0, { ...zero, brick: 1 });
+    state = hand(state, 1, { ...zero, ore: 1 });
+    state = hand(state, 2, { ...zero, ore: 1 });
+    state = command(state, 0, 'OFFER_TRADE', {
+      give: { brick: 1 },
+      want: { ore: 1 },
+      to: [1, 2],
+    }).state;
+    state = command(state, 1, 'RESPOND_TRADE', { offerId: 0, accept: true }).state;
+    state = command(state, 2, 'RESPOND_TRADE', { offerId: 0, accept: true }).state;
+    const chosen = command(state, 0, 'CONFIRM_TRADE', { offerId: 0, withSeat: 2 });
+    expect(chosen.events).toContainEqual({ type: 'tradeConfirmed', offerId: 0, withSeat: 2 });
+    expect(chosen.state.seats[1]?.resources.min).toMatchObject({ ore: 1, brick: 0 });
+    expect(chosen.state.seats[2]?.resources.min).toMatchObject({ ore: 0, brick: 1 });
   });
 
   test('private trade confirmation debits both parties and leaves bystanders unchanged', () => {
