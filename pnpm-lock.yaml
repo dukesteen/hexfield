@@ -245,6 +245,9 @@ importers:
       '@cp2p/maps':
         specifier: workspace:*
         version: link:../../packages/maps
+      '@cp2p/protocol':
+        specifier: workspace:*
+        version: link:../../packages/protocol
       valibot:
         specifier: ^1.0.0
         version: 1.5.0(typescript@5.9.3)

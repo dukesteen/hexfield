@@ -68,6 +68,28 @@ describe('Ed25519 identity', () => {
 });
 
 describe('signature verification', () => {
+  test('rechecks current bytes after successful verification and returns owned parsed keys', () => {
+    const key = parsePeerId(toBase64Url(PUBLIC));
+    const message = utf8ToBytes('mutable buffers');
+    const signature = sign(message, SECRET);
+    expect(verify(signature, message, key)).toBe(true);
+    const first = message[0] ?? 0;
+    message[0] = first ^ 1;
+    expect(verify(signature, message, key)).toBe(false);
+    message[0] = first;
+    expect(verify(signature, message, key)).toBe(true);
+    const firstSignature = signature[0] ?? 0;
+    signature[0] = firstSignature ^ 1;
+    expect(verify(signature, message, key)).toBe(false);
+    signature[0] = firstSignature;
+    expect(verify(signature, message, key)).toBe(true);
+    key.fill(0);
+    expect(verify(signature, message, key)).toBe(false);
+    const fresh = parsePeerId(toBase64Url(PUBLIC));
+    expect(fresh).toEqual(PUBLIC);
+    expect(verify(signature, message, fresh)).toBe(true);
+  });
+
   test('rejects tampering, wrong keys, truncated signatures, and weak public keys without throwing', () => {
     const other = generateIdentity();
     const tampered = Uint8Array.from(SIGNATURE);
