@@ -1847,9 +1847,11 @@ button.development-card-main:focus-visible img {
     grid-template-columns: repeat(5, minmax(0, 48px));
     gap: 4px;
   }
-  .hand-dock .resource-card[data-size='md'] img {
-    width: min(100%, 44px);
-    height: 60px;
+  .hand-dock .resource-card {
+    --card-w: 44px;
+  }
+  .hand-dock .resource-card-count {
+    right: -2px;
   }
   .hand-dock .development-card {
     --dev-art-height: 52px;
@@ -1890,9 +1892,16 @@ button.development-card-main:focus-visible img {
     grid-template-columns: repeat(5, minmax(0, 38px));
     gap: 4px;
   }
-  .hand-dock .resource-card[data-size='md'] img {
-    width: min(100%, 38px);
-    height: 52px;
+  .hand-dock .resource-card {
+    --card-w: 38px;
+  }
+  .hand-dock .resource-card-count {
+    right: -2px;
+  }
+  .hand-dock .resource-card-name {
+    max-width: none;
+    overflow: visible;
+    font-size: 11px;
   }
   .hand-dock .development-card {
     --dev-art-height: 52px;

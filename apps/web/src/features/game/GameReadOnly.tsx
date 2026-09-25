@@ -388,6 +388,7 @@ function HandDock({
   const optionalViewingSeat = useSessionStore((store) => store.optionalViewingSeat);
   const developmentDialog = useRef<HTMLDialogElement>(null);
   const intentOpenedDialog = useRef(false);
+  const closeAfterKnightCommit = useRef(false);
   const [compactHand, setCompactHand] = useState(
     () => window.matchMedia('(max-width: 767px), (max-height: 500px), (pointer: coarse)').matches,
   );
@@ -490,7 +491,10 @@ function HandDock({
               type="button"
               aria-label={t('game:cancelKnight')}
               title={t('game:cancelKnight')}
-              onClick={knightIntent.cancel}
+              onClick={() => {
+                closeAfterKnightCommit.current = false;
+                knightIntent.cancel();
+              }}
             >
               <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
                 <path d="M5 5 15 15M15 5 5 15" />
@@ -501,7 +505,10 @@ function HandDock({
               type="button"
               aria-label={t('game:playCard', { card: t('game:devknight') })}
               title={t('game:playCard', { card: t('game:devknight') })}
-              onClick={knightIntent.confirm}
+              onClick={() => {
+                closeAfterKnightCommit.current = developmentDialog.current?.open ?? false;
+                knightIntent.confirm();
+              }}
             >
               <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
                 <path d="m4 10 4 4 8-8" />
@@ -529,9 +536,10 @@ function HandDock({
         dialog.showModal();
         intentOpenedDialog.current = true;
       }
-    } else if (intentOpenedDialog.current) {
+    } else if (intentOpenedDialog.current || closeAfterKnightCommit.current) {
       if (dialog.open) dialog.close();
       intentOpenedDialog.current = false;
+      closeAfterKnightCommit.current = false;
     }
   }, [activeKnightSlot, activeKnightIsOverflow, compactHand, useDevelopmentDialog]);
   return (
@@ -641,12 +649,14 @@ function HandDock({
               onCancel={(event) => {
                 if (knightIntent) {
                   event.preventDefault();
+                  closeAfterKnightCommit.current = false;
                   knightIntent.cancel();
                   developmentDialog.current?.close();
                 }
               }}
               onClose={() => {
                 intentOpenedDialog.current = false;
+                closeAfterKnightCommit.current = false;
               }}
             >
               <h2 id="development-dialog-title">
@@ -657,6 +667,7 @@ function HandDock({
                 className="button button-quiet"
                 type="button"
                 onClick={() => {
+                  closeAfterKnightCommit.current = false;
                   knightIntent?.cancel();
                   developmentDialog.current?.close();
                 }}

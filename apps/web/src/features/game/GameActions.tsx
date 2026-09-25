@@ -383,6 +383,14 @@ export function useGameActions(
           (card) => card.slotId === slotId && (card.card ?? priv?.slots[card.slotId]) === 'knight',
         )
       : undefined;
+  const seenCardKinds = new Set<string>();
+  const dockCardPlays = cardPlays.filter((card) => {
+    const kind = card.card ?? priv?.slots[card.slotId] ?? 'Hidden';
+    if (kind === 'knight' && selectedKnight) return card.slotId === selectedKnight.slotId;
+    if (seenCardKinds.has(kind)) return false;
+    seenCardKinds.add(kind);
+    return true;
+  });
   const toggleKnightIntent = (cardSlotId: string) => {
     const card = cardPlays.find(
       (item) => item.slotId === cardSlotId && (item.card ?? priv?.slots[item.slotId]) === 'knight',
@@ -541,14 +549,14 @@ export function useGameActions(
                   )}
                 </div>
               )}
-              {(contextualGroups.length > 0 || cardPlays.length > 0) && (
+              {(contextualGroups.length > 0 || dockCardPlays.length > 0) && (
                 <div
                   className="action-context-buttons"
                   role="group"
                   aria-label={t('game:contextActions')}
                 >
                   {actionButtons(contextualGroups)}
-                  {cardPlays.map((card) => {
+                  {dockCardPlays.map((card) => {
                     const cardKind = card.card ?? priv?.slots[card.slotId] ?? 'Hidden';
                     const knightSelected =
                       cardKind === 'knight' && form === 'knight' && slotId === card.slotId;
@@ -683,7 +691,7 @@ export function useGameActions(
   }
   const actionCount =
     availableBoardKinds.length +
-    cardPlays.length +
+    dockCardPlays.length +
     contextualGroups.length +
     sheetNormalGroups.length;
 

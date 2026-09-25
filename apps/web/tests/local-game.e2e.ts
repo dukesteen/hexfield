@@ -878,7 +878,7 @@ test('replay-backed Year of Plenty and Monopoly use the visible card dialogs', a
     await monopolyPage.setViewportSize({ width: 390, height: 844 });
     await openGoldenPrefix(monopolyPage, 226, 'all-development-card-types.replay.json');
     const revision = await observedRevision(monopolyPage);
-    await monopolyPage.getByRole('button', { name: 'Play Monopoly' }).click();
+    await (await revealActionButton(monopolyPage, 'Play Monopoly', 'mouse')).click();
     const monopoly = monopolyPage.getByRole('dialog', { name: 'Monopoly' });
     await expect(monopoly).toBeVisible();
     await monopoly.getByRole('button', { name: 'Add Brick to Resource to collect' }).click();
@@ -1075,6 +1075,8 @@ test('game cockpit fits desktop, compact, and phone viewports without document s
   for (const device of [
     { name: 'desktop-wide', width: 1728, height: 960, mobile: false },
     { name: 'desktop-compact', width: 1280, height: 720, mobile: false },
+    { name: 'desktop-1024', width: 1024, height: 768, mobile: false },
+    { name: 'desktop-900', width: 900, height: 768, mobile: false },
     { name: 'phone', width: 390, height: 844, mobile: true },
     { name: 'phone-landscape', width: 844, height: 390, mobile: true },
   ] as const) {
@@ -1131,6 +1133,8 @@ test('game cockpit fits desktop, compact, and phone viewports without document s
             inHand: hand ? inside(cardBounds, hand) : false,
             faceVisible: face ? inside(face, viewport) : false,
             countVisible: count ? inside(count, viewport) : false,
+            faceLeft: face?.left ?? -1,
+            badgeRight: count?.right ?? Infinity,
           };
         });
         const visibleActions = [
@@ -1230,6 +1234,12 @@ test('game cockpit fits desktop, compact, and phone viewports without document s
         expect(card.faceVisible, `${device.name} ${card.resource} art is clipped`).toBe(true);
         expect(card.countVisible, `${device.name} ${card.resource} count is clipped`).toBe(true);
       }
+      if (device.name === 'desktop-900' || device.name === 'desktop-1024')
+        for (let index = 0; index < dimensions.cards.length - 1; index++)
+          expect(
+            dimensions.cards[index]?.badgeRight,
+            `${device.name} ${dimensions.cards[index]?.resource} badge overlaps the next card`,
+          ).toBeLessThanOrEqual((dimensions.cards[index + 1]?.faceLeft ?? -1) + 1);
       if (!device.mobile) {
         expect(
           dimensions.visibleActions,
@@ -1728,6 +1738,23 @@ test('three held development cards fan on desktop and keep the phone drawer', as
       await expect(confirmation).toBeHidden();
       expect(await observedRevision(page)).toBe(revision);
       await sweep();
+      if (device.name === 'desktop') {
+        const dockKnight = page
+          .locator('.action-dock')
+          .getByRole('button', { name: 'Play Knight', exact: true });
+        await expect(dockKnight).toHaveCount(1);
+        await last.getByRole('button', { name: 'Knight', exact: true }).click({
+          position: { x: 4, y: 12 },
+        });
+        await expect(last).toHaveClass(/has-knight-intent/);
+        await expect(knight).not.toHaveClass(/has-knight-intent/);
+        await expect(dockKnight).toHaveAttribute('aria-pressed', 'true');
+        expect(await observedRevision(page)).toBe(revision);
+        await dockKnight.click();
+        await expect(last).not.toHaveClass(/has-knight-intent/);
+        await expect(dockKnight).toHaveAttribute('aria-pressed', 'false');
+        expect(await observedRevision(page)).toBe(revision);
+      }
       await page.emulateMedia({ reducedMotion: 'reduce' });
       await first.hover({ position: { x: 4, y: 12 } });
       await expect(first.locator('strong')).toBeVisible();
@@ -1822,6 +1849,49 @@ test('three held development cards fan on desktop and keep the phone drawer', as
     expect(pageErrors.get(page)).toEqual([]);
   } finally {
     await tablet.close();
+  }
+});
+
+test('phone development drawer closes after committing a Knight with other cards held', async ({
+  browser,
+  browserName,
+}) => {
+  test.skip(browserName !== 'chromium', 'Phone development-card flow runs in Chromium');
+  const context = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    isMobile: true,
+    hasTouch: true,
+  });
+  try {
+    const page = await context.newPage();
+    page.setDefaultTimeout(10_000);
+    await openGoldenPrefix(page, 460, 'hidden-vp-win.replay.json');
+    const before = await observedRevision(page);
+    await page.getByRole('button', { name: 'Development cards: 3' }).tap();
+    const drawer = page.getByRole('dialog', { name: 'Development cards: 3' });
+    await expect(drawer).toBeVisible();
+    const knight = drawer.locator('.development-card').filter({ hasText: 'Knight' }).first();
+    await knight.getByRole('button', { name: 'Knight', exact: true }).tap();
+    await expect(knight.getByRole('group', { name: 'Play Knight?' })).toBeVisible();
+    expect(await observedRevision(page)).toBe(before);
+    await knight.getByRole('button', { name: 'Play Knight' }).tap();
+    await expect.poll(() => observedRevision(page)).toBeGreaterThan(before);
+    await expect(page.locator('.development-dialog[open]')).toHaveCount(0);
+    const target = await readPresent(page, 'Robber target after Knight', () =>
+      page.evaluate(() => {
+        const hook: DevHook | undefined = Reflect.get(window, '__cp2p');
+        return hook?.diagnostics().actions?.placements.robber[0]?.id ?? null;
+      }),
+    );
+    expect(target).toMatch(/^h:/);
+    await expect(page.getByTestId('board-keyboard-targets')).toBeVisible();
+    await expect(
+      page.getByTestId('board-keyboard-targets').locator(`option[value="hex:${target}"]`),
+    ).toHaveCount(1);
+    await expect(page.getByRole('button', { name: 'Development cards: 2' })).toBeVisible();
+    expect(pageErrors.get(page)).toEqual([]);
+  } finally {
+    await context.close();
   }
 });
 
