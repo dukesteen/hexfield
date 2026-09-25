@@ -1,8 +1,134 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import * as v from 'valibot';
 import type { Seat } from '@cp2p/engine';
+import { LocalSession } from '../session/local-session';
+import { parseSave, sameCanonical } from '../session/save';
+import type { LocalSessionSave } from '../session/types';
 import { getWebRepositories } from './hooks';
 import { queryKeys } from './keys';
 import type { GamePresentation, SavedGameRecord } from './repositories/saved-games';
+
+const presentationSchema = v.strictObject({
+  players: v.pipe(
+    v.array(
+      v.strictObject({
+        seat: v.picklist([0, 1, 2, 3]),
+        name: v.pipe(v.string(), v.minLength(1), v.maxLength(40)),
+        color: v.picklist(['blue', 'orange', 'green', 'magenta']),
+        shape: v.picklist(['circle', 'triangle', 'square', 'diamond']),
+      }),
+    ),
+    v.minLength(2),
+    v.maxLength(4),
+  ),
+  botDelayMs: v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(60_000)),
+});
+
+const replaySchema = v.strictObject({
+  format: v.literal('hexfield-local-replay'),
+  v: v.literal(2),
+  engineVersion: v.string(),
+  save: v.unknown(),
+  inputs: v.array(v.unknown()),
+  finalHash: v.string(),
+  presentation: v.optional(presentationSchema),
+});
+
+export interface LocalReplay {
+  format: 'hexfield-local-replay';
+  v: 2;
+  engineVersion: string;
+  save: LocalSessionSave;
+  inputs: readonly unknown[];
+  finalHash: string;
+  presentation?: GamePresentation;
+}
+
+function flattenedInputs(save: LocalSessionSave): unknown[] {
+  return [
+    ...save.genesis,
+    ...save.batches.flatMap((batch) => [batch.submitted, ...batch.generated]),
+  ];
+}
+
+function verifiedSave(raw: unknown): LocalSessionSave {
+  const restored = LocalSession.restore(raw);
+  if (!restored.ok) throw new Error(`${restored.error.code}: ${restored.error.message}`);
+  try {
+    restored.value.setPaused(true);
+    return restored.value.exportSave();
+  } finally {
+    restored.value.dispose();
+  }
+}
+
+function checkedPresentation(raw: unknown, save: LocalSessionSave): GamePresentation {
+  const presentation = v.parse(presentationSchema, raw);
+  const seats: number[] = presentation.players.map((player) => player.seat);
+  if (
+    new Set(seats).size !== seats.length ||
+    seats.length !== save.config.seats.length ||
+    save.config.seats.some((seat) => !seats.includes(seat))
+  )
+    throw new Error('Replay presentation seats differ from the game');
+  return presentation;
+}
+
+/** Keep batch boundaries so an exported replay remains a verifiable local authority. */
+export function createLocalReplay(raw: unknown, presentation?: GamePresentation): LocalReplay {
+  const save = verifiedSave(raw);
+  return {
+    format: 'hexfield-local-replay',
+    v: 2,
+    engineVersion: save.engineVersion,
+    save,
+    inputs: flattenedInputs(save),
+    finalHash: save.finalHash,
+    ...(presentation ? { presentation: checkedPresentation(presentation, save) } : {}),
+  };
+}
+
+/** Validate an untrusted replay envelope and its complete public/private input history. */
+export function parseLocalReplay(raw: unknown): LocalReplay {
+  const envelope = v.parse(replaySchema, raw);
+  const save = verifiedSave(envelope.save);
+  if (
+    envelope.engineVersion !== save.engineVersion ||
+    envelope.finalHash !== save.finalHash ||
+    !sameCanonical(envelope.inputs, flattenedInputs(save))
+  )
+    throw new Error('Replay envelope differs from its authoritative save');
+  return {
+    format: envelope.format,
+    v: envelope.v,
+    engineVersion: envelope.engineVersion,
+    save,
+    inputs: envelope.inputs,
+    finalHash: envelope.finalHash,
+    ...(envelope.presentation
+      ? { presentation: checkedPresentation(envelope.presentation, save) }
+      : {}),
+  };
+}
+
+export function parseLocalImport(raw: unknown): {
+  save: LocalSessionSave;
+  presentation?: GamePresentation;
+} {
+  if (
+    typeof raw === 'object' &&
+    raw !== null &&
+    !Array.isArray(raw) &&
+    Reflect.get(raw, 'format') === 'hexfield-local-replay'
+  ) {
+    const replay = parseLocalReplay(raw);
+    return {
+      save: replay.save,
+      ...(replay.presentation ? { presentation: replay.presentation } : {}),
+    };
+  }
+  return { save: verifiedSave(raw) };
+}
 
 function downloadJson(name: string, value: unknown): void {
   const blob = new Blob([JSON.stringify(value, null, 2)], { type: 'application/json' });
@@ -27,21 +153,16 @@ export function useExportGame() {
 
 export function useExportReplay() {
   return useMutation({
-    mutationFn: async ({ name, save }: { name: string; save: unknown }) => {
-      const { parseSave } = await import('../session/save');
-      const local = parseSave(save);
-      downloadJson(`${name}.replay.json`, {
-        format: 'hexfield-local-replay',
-        v: 1,
-        engineVersion: local.engineVersion,
-        config: local.config,
-        genesisSeed: local.genesisSeed,
-        inputs: [
-          ...local.genesis,
-          ...local.batches.flatMap((batch) => [batch.submitted, ...batch.generated]),
-        ],
-        finalHash: local.finalHash,
-      });
+    mutationFn: async ({
+      name,
+      save,
+      presentation,
+    }: {
+      name: string;
+      save: unknown;
+      presentation?: GamePresentation;
+    }) => {
+      downloadJson(`${name}.replay.json`, createLocalReplay(save, presentation));
     },
   });
 }
@@ -54,15 +175,15 @@ export function useImportLocalSave(playerName: (seat: Seat) => string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (raw: unknown): Promise<SavedGameRecord> => {
-      const { LocalSession } = await import('../session');
-      const restored = LocalSession.restore(raw);
+      const payload = parseLocalImport(raw);
+      const restored = LocalSession.restore(payload.save);
       if (!restored.ok) throw new Error(restored.error.message);
       const session = restored.value;
       try {
         session.setPaused(true);
         const save = session.exportSave();
         const seats = session.getState().config.seats;
-        const presentation: GamePresentation = {
+        const presentation: GamePresentation = payload.presentation ?? {
           players: seats.map((seat, index) => {
             const displaySeat = ([0, 1, 2, 3] as const).find((candidate) => candidate === seat);
             if (displaySeat === undefined) throw new Error('Imported game has unsupported seats');
@@ -95,6 +216,17 @@ export function useImportLocalSave(playerName: (seat: Seat) => string) {
   });
 }
 
+/** Async replay data is checked against persisted authority before reaching a viewer. */
+export function useReplay(gameId: string) {
+  return useQuery({
+    queryKey: queryKeys.replay(gameId),
+    queryFn: async (): Promise<LocalReplay | null> => {
+      const record = await getWebRepositories().savedGames.get(gameId);
+      return record ? createLocalReplay(record.save, record.presentation) : null;
+    },
+  });
+}
+
 /** A rematch keeps rules and seats, but starts from fresh browser entropy. */
 export function useCreateRematch() {
   const queryClient = useQueryClient();
@@ -106,10 +238,6 @@ export function useCreateRematch() {
       save: unknown;
       presentation: GamePresentation;
     }) => {
-      const [{ parseSave }, { LocalSession }] = await Promise.all([
-        import('../session/save'),
-        import('../session'),
-      ]);
       const previous = parseSave(raw);
       const created = LocalSession.create({
         config: previous.config,

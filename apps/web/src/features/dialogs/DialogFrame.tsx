@@ -5,10 +5,11 @@ interface DialogFrameProps {
   title: string;
   children: ReactNode;
   onCancel?: (() => void) | undefined;
+  variant?: 'trade';
 }
 
 /** Native modal supplies focus containment; Escape invokes the optional cancel action. */
-export function DialogFrame({ title, children, onCancel }: DialogFrameProps) {
+export function DialogFrame({ title, children, onCancel, variant }: DialogFrameProps) {
   const titleId = useId();
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => {
@@ -24,6 +25,7 @@ export function DialogFrame({ title, children, onCancel }: DialogFrameProps) {
   return (
     <dialog
       ref={ref}
+      className={variant === 'trade' ? 'trade-dialog' : undefined}
       aria-labelledby={titleId}
       onCancel={(event) => {
         event.preventDefault();

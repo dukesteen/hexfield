@@ -5,6 +5,9 @@ export { hitTestBoard } from './input/hitTest.js';
 export { getResourceIconUrl } from './assets/terrainTextures.js';
 export type {
   BoardAppearance,
+  BoardEffect,
+  BoardFocusPreview,
+  BoardRendererDiagnostics,
   BoardHighlights,
   BoardHit,
   BoardRenderer,

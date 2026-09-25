@@ -4,6 +4,7 @@ import type { TFunction } from 'i18next';
 import { createBoardRenderer } from '@cp2p/renderer';
 import type {
   BoardAppearance,
+  BoardFocusPreview,
   BoardHighlights,
   BoardHit,
   BoardRenderer,
@@ -13,9 +14,12 @@ import type {
 export interface BoardViewProps {
   readonly model: RenderModel;
   readonly highlights?: BoardHighlights;
+  readonly focusTarget?: BoardHit | null;
+  readonly focusPreview?: BoardFocusPreview;
   readonly appearance?: BoardAppearance;
   readonly reducedMotion?: boolean;
   readonly onSelect?: (hit: BoardHit) => void;
+  readonly onTargetPreview?: (hit: BoardHit | null) => void;
   readonly onHover?: (hit: BoardHit | null) => void;
   readonly onRendererReady?: (renderer: BoardRenderer) => void;
   readonly className?: string;
@@ -28,9 +32,12 @@ export interface BoardViewProps {
 export function BoardView({
   model,
   highlights,
+  focusTarget,
+  focusPreview,
   appearance,
   reducedMotion = false,
   onSelect,
+  onTargetPreview,
   onHover,
   onRendererReady,
   onRendererError,
@@ -64,6 +71,7 @@ export function BoardView({
   );
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [selectedTargetKey, setSelectedTargetKey] = useState('');
+  const [targetChooserOpen, setTargetChooserOpen] = useState(false);
   const hostRef = useRef<HTMLDivElement>(null);
   const rendererRef = useRef<BoardRenderer | null>(null);
   const propsRef = useRef({
@@ -72,6 +80,7 @@ export function BoardView({
     appearance,
     reducedMotion,
     onSelect,
+    onTargetPreview,
     onHover,
     onRendererReady,
     onRendererError,
@@ -84,6 +93,7 @@ export function BoardView({
     appearance,
     reducedMotion,
     onSelect,
+    onTargetPreview,
     onHover,
     onRendererReady,
     onRendererError,
@@ -157,6 +167,22 @@ export function BoardView({
   ];
   const selectedTarget =
     keyboardTargets.find((hit) => targetKey(hit) === selectedTargetKey) ?? keyboardTargets[0];
+  const selectedTargetPreviewKey = selectedTarget ? targetKey(selectedTarget) : '';
+  const selectedTargetRef = useRef(selectedTarget);
+  selectedTargetRef.current = selectedTarget;
+
+  useEffect(() => {
+    const target = focusTarget ?? (targetChooserOpen ? (selectedTargetRef.current ?? null) : null);
+    const preview = focusTarget ? focusPreview : undefined;
+    if (preview) rendererRef.current?.setFocusTarget(target, preview);
+    else rendererRef.current?.setFocusTarget(target);
+  }, [focusPreview, focusTarget, selectedTargetPreviewKey, status, targetChooserOpen]);
+
+  useEffect(() => {
+    propsRef.current.onTargetPreview?.(
+      targetChooserOpen ? (selectedTargetRef.current ?? null) : null,
+    );
+  }, [onTargetPreview, selectedTargetPreviewKey, targetChooserOpen]);
 
   return (
     <div
@@ -177,7 +203,11 @@ export function BoardView({
         </div>
       )}
       {keyboardTargets.length > 0 && (
-        <details className="board-keyboard-targets" data-testid="board-keyboard-targets">
+        <details
+          className="board-keyboard-targets"
+          data-testid="board-keyboard-targets"
+          onToggle={(event) => setTargetChooserOpen(event.currentTarget.open)}
+        >
           <summary>{t('common:legalBoardTargets', { count: keyboardTargets.length })}</summary>
           <label htmlFor={targetSelectId}>{t('common:boardTargetSelectLabel')}</label>
           <select

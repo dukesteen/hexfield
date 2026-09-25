@@ -1,10 +1,16 @@
 import { createFileRoute, notFound } from '@tanstack/react-router';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { standardFixedBoard } from '@cp2p/maps';
 import { buildBoardGraph } from '@cp2p/engine/geometry';
 import { BoardView } from '../../features/board/BoardView.js';
-import type { BoardHit, BoardRenderer, RenderModel } from '@cp2p/renderer';
+import type { BoardEffect, BoardHit, BoardRenderer, RenderModel } from '@cp2p/renderer';
+
+type BoardEffectInput = BoardEffect extends infer Effect
+  ? Effect extends BoardEffect
+    ? Omit<Effect, 'id'>
+    : never
+  : never;
 
 const board = standardFixedBoard();
 const graph = buildBoardGraph(board.hexes);
@@ -59,9 +65,52 @@ export const Route = createFileRoute('/dev/board')({
 function BoardDevelopmentPage() {
   const { t } = useTranslation('common');
   const [rendererError, setRendererError] = useState<string | null>(null);
+  const [reducedMotion, setReducedMotion] = useState(false);
+  const [diagnostics, setDiagnostics] = useState({
+    renderedFrames: 0,
+    rebuiltLayers: 0,
+    activeEffects: 0,
+    queuedDisposals: 0,
+  });
+  const effectSequence = useRef(0);
   const onRendererReady = (renderer: BoardRenderer) => {
     Reflect.set(window, '__cp2pBoard', { renderer, model });
   };
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      const preview = window['__cp2pBoard'];
+      if (preview) {
+        const next = preview.renderer.getDiagnostics();
+        setDiagnostics((current) =>
+          current.renderedFrames === next.renderedFrames &&
+          current.rebuiltLayers === next.rebuiltLayers &&
+          current.activeEffects === next.activeEffects &&
+          current.queuedDisposals === next.queuedDisposals
+            ? current
+            : next,
+        );
+      }
+    }, 50);
+    return () => {
+      window.clearInterval(timer);
+      Reflect.deleteProperty(window, '__cp2pBoard');
+    };
+  }, []);
+
+  const playEffect = (effect: BoardEffectInput): void => {
+    effectSequence.current += 1;
+    window['__cp2pBoard']?.renderer.playEffects([
+      { ...effect, id: `preview-${effectSequence.current}` },
+    ]);
+  };
+  const playRobberMove = (): void => {
+    const startHex = model.robberHex ?? model.hexes[0]?.id;
+    const targetHex = model.hexes.find((hex) => hex.id !== startHex)?.id;
+    if (!startHex || !targetHex) return;
+    playEffect({ kind: 'robber-move', fromHex: startHex, toHex: targetHex });
+  };
+  const firstVertex = model.buildings[0]?.vertex;
+  const firstEdge = model.roads[0]?.edge;
 
   return (
     <main className="board-dev-page">
@@ -76,6 +125,7 @@ function BoardDevelopmentPage() {
         <BoardView
           model={model}
           label={t('common:boardPreviewAriaLabel')}
+          reducedMotion={reducedMotion}
           onSelect={selectBoardTarget}
           onRendererReady={onRendererReady}
           onRendererError={(error) => {
@@ -95,6 +145,62 @@ function BoardDevelopmentPage() {
             <li>{t('common:boardPreviewLegendToken')}</li>
             <li>{t('common:boardPreviewLegendPieces')}</li>
           </ul>
+          <h2>{t('common:boardEffectsTitle')}</h2>
+          <div className="board-dev-effects">
+            <button type="button" onClick={() => playEffect({ kind: 'dice-roll', dice: [3, 5] })}>
+              {t('common:boardEffectDice')}
+            </button>
+            <button
+              type="button"
+              disabled={!firstVertex}
+              onClick={() =>
+                firstVertex &&
+                playEffect({
+                  kind: 'piece-pop',
+                  piece: 'settlement',
+                  seat: 0,
+                  at: { kind: 'vertex', id: firstVertex },
+                })
+              }
+            >
+              {t('common:boardEffectBuilding')}
+            </button>
+            <button
+              type="button"
+              disabled={!firstEdge}
+              onClick={() =>
+                firstEdge &&
+                playEffect({
+                  kind: 'piece-pop',
+                  piece: 'road',
+                  seat: 0,
+                  at: { kind: 'edge', id: firstEdge },
+                })
+              }
+            >
+              {t('common:boardEffectRoad')}
+            </button>
+            <button type="button" onClick={playRobberMove}>
+              {t('common:boardEffectRobber')}
+            </button>
+            <button type="button" onClick={() => window['__cp2pBoard']?.renderer.skipAnimations()}>
+              {t('common:boardEffectSkip')}
+            </button>
+            <label>
+              <input
+                type="checkbox"
+                checked={reducedMotion}
+                onChange={(event) => setReducedMotion(event.currentTarget.checked)}
+              />
+              {t('common:boardEffectReducedMotion')}
+            </label>
+          </div>
+          <output
+            data-testid="renderer-diagnostics"
+            aria-label={t('common:boardEffectDiagnostics')}
+          >
+            {JSON.stringify(diagnostics)}
+          </output>
         </aside>
       </div>
     </main>

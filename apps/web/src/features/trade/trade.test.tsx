@@ -191,4 +191,45 @@ describe('controlled trade forms', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Decline' }));
     expect(onSubmit).toHaveBeenCalledWith(decline);
   });
+
+  test('names each accepted counterparty and shows every response before confirmation', () => {
+    const first = { type: 'CONFIRM_TRADE', offerId: 9, withSeat: 1 };
+    const second = { type: 'CONFIRM_TRADE', offerId: 9, withSeat: 2 };
+    const onSubmit = vi.fn<(command: CommandShape) => void>();
+    const offerState = {
+      ...state,
+      ext: {
+        ...state.ext,
+        base: {
+          offers: [
+            {
+              id: 9,
+              proposer: 0,
+              give: { brick: 1 },
+              want: { ore: 1 },
+              to: [1, 2],
+              acceptedBy: [1, 2],
+              declinedBy: [],
+              valid: true,
+            },
+          ],
+        },
+      },
+    };
+    mount(
+      <IncomingOffers
+        {...props({ commands: [first, second], templates: [] }, () => success(undefined), onSubmit)}
+        state={offerState}
+      />,
+    );
+    expect(screen.getByRole('list', { name: 'Player responses' }).textContent).toContain(
+      'Ari: accepted',
+    );
+    expect(screen.getByRole('list', { name: 'Player responses' }).textContent).toContain(
+      'Bea: accepted',
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Trade with Bea' }));
+    expect(onSubmit).toHaveBeenCalledWith(second);
+    expect(onSubmit.mock.calls[0]?.[0]).toBe(second);
+  });
 });

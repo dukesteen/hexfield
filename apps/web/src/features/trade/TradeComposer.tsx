@@ -38,7 +38,7 @@ export function TradeComposer({
     } else setWant((current) => ({ ...current, [resource]: value }));
   };
   return (
-    <DialogFrame title={t('rules:trade.title')} onCancel={onCancel}>
+    <DialogFrame title={t('rules:trade.title')} onCancel={onCancel} variant="trade">
       <ResourceFields
         label={t('rules:trade.give')}
         values={give}

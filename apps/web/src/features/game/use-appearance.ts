@@ -16,9 +16,17 @@ export function useBoardAppearance(presentation: GamePresentation): {
 } {
   const settings = useSettings();
   const [systemDark, setSystemDark] = useState(false);
+  const [systemReducedMotion, setSystemReducedMotion] = useState(false);
   useEffect(() => {
     const media = window.matchMedia('(prefers-color-scheme: dark)');
     const update = () => setSystemDark(media.matches);
+    update();
+    media.addEventListener('change', update);
+    return () => media.removeEventListener('change', update);
+  }, []);
+  useEffect(() => {
+    const media = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const update = () => setSystemReducedMotion(media.matches);
     update();
     media.addEventListener('change', update);
     return () => media.removeEventListener('change', update);
@@ -33,6 +41,6 @@ export function useBoardAppearance(presentation: GamePresentation): {
         marker: player.shape,
       })),
     },
-    reducedMotion: settings.data?.reducedMotion === 'reduce',
+    reducedMotion: settings.data?.reducedMotion === 'reduce' || systemReducedMotion,
   };
 }

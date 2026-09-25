@@ -108,6 +108,85 @@ describe('base rule handlers', () => {
     expect(productionPayments(blocked, producing.token, context).get(0)?.[kind]).toBe(0);
   });
 
+  test('dice production event reports the actual bank-limited payment', () => {
+    const initial = genesis();
+    const hex = initial.board.hexes.find(
+      (item) => item.token !== null && item.terrain !== 'desert',
+    );
+    if (!hex?.token) throw new Error('No producing hex');
+    const [first, second] = verticesForHex(initial, hex.id);
+    if (!first || !second) throw new Error('Missing producing vertices');
+    const kind =
+      hex.terrain === 'hills'
+        ? 'brick'
+        : hex.terrain === 'forest'
+          ? 'lumber'
+          : hex.terrain === 'pasture'
+            ? 'wool'
+            : hex.terrain === 'fields'
+              ? 'grain'
+              : 'ore';
+    const dice: [number, number] = [Math.max(1, hex.token - 6), 0];
+    dice[1] = hex.token - dice[0];
+    const rolling = {
+      ...initial,
+      bank: { ...initial.bank, [kind]: 1 },
+      turn: { ...initial.turn, phase: [frame('dice')] },
+      board: { ...initial.board, buildings: [{ vertex: first, seat: 0 as const, kind: 'city' }] },
+    };
+    const lone = system(rolling, 'DICE_RESULT', { dice });
+    expect(lone.events.find((event) => event.type === 'resourcesProduced')).toMatchObject({
+      bySeat: { '0': { [kind]: 1 } },
+    });
+    const assertPayment = (before: GameState, result: typeof lone) => {
+      const produced = result.events.find((event) => event.type === 'resourcesProduced');
+      if (produced?.type !== 'resourcesProduced') throw new Error('Production event missing');
+      const bySeat = Reflect.get(produced, 'bySeat');
+      const payment = (seat: Seat): number => {
+        if (typeof bySeat !== 'object' || bySeat === null) return 0;
+        const counts = Reflect.get(bySeat, String(seat));
+        if (typeof counts !== 'object' || counts === null) return 0;
+        const value = Reflect.get(counts, kind);
+        return typeof value === 'number' ? value : 0;
+      };
+      const paid = before.config.seats.reduce<number>((sum, seat) => sum + payment(seat), 0);
+      expect(paid).toBe((before.bank[kind] ?? 0) - (result.state.bank[kind] ?? 0));
+      for (const seat of before.config.seats) {
+        const old = before.seats.find((item) => item.seat === seat);
+        const next = result.state.seats.find((item) => item.seat === seat);
+        if (!old || !next) throw new Error('Game seat missing');
+        expect(payment(seat)).toBe(
+          (next.resources.min[kind] ?? 0) - (old.resources.min[kind] ?? 0),
+        );
+      }
+    };
+    assertPayment(rolling, lone);
+    const fullBank = { ...rolling, bank: { ...rolling.bank, [kind]: 19 } };
+    const full = system(fullBank, 'DICE_RESULT', { dice });
+    assertPayment(fullBank, full);
+    expect(full.events.find((event) => event.type === 'resourcesProduced')).toMatchObject({
+      bySeat: { '0': { [kind]: 2 } },
+    });
+    const sharedBank = {
+      ...rolling,
+      board: {
+        ...rolling.board,
+        buildings: [
+          ...rolling.board.buildings,
+          { vertex: second, seat: 1 as const, kind: 'settlement' },
+        ],
+      },
+    };
+    const shared = system(sharedBank, 'DICE_RESULT', { dice });
+    assertPayment(sharedBank, shared);
+    expect(shared.events.find((event) => event.type === 'resourcesProduced')).toEqual({
+      type: 'resourcesProduced',
+      bySeat: {},
+    });
+    const seven = system(rolling, 'DICE_RESULT', { dice: [3, 4] });
+    expect(seven.events.some((event) => event.type === 'resourcesProduced')).toBe(false);
+  });
+
   test('road and city builds pay costs and obey piece limits', () => {
     let state = main(genesis());
     const vertex = verticesForHex(state, state.board.hexes[0]?.id ?? '')[0];

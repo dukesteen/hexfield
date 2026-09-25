@@ -30,7 +30,10 @@ export function StealDialog({
             if (validate(command).ok) onSubmit(command);
           }}
         >
-          {t('rules:steal.seat', { player: playerLabel(victim) })}
+          {t('rules:steal.seat', {
+            player: playerLabel(victim),
+            count: state.seats.find((item) => item.seat === victim)?.resources.total ?? 0,
+          })}
         </button>
       ))}
       {onCancel && (

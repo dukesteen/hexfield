@@ -51,12 +51,18 @@ export function productionPayments(
   return demand;
 }
 
-export function applyProduction(state: GameState, roll: number, ctx: HandlerContext): GameState {
+export function applyProduction(
+  state: GameState,
+  roll: number,
+  ctx: HandlerContext,
+): { state: GameState; bySeat: Record<string, ResourceCounts> } {
   let next = state;
+  const bySeat: Record<string, ResourceCounts> = {};
   for (const [seat, counts] of productionPayments(state, roll, ctx)) {
     next = exchangeBank(next, seat, counts, true);
+    if (RESOURCES.some((kind) => counts[kind] > 0)) bySeat[seat] = { ...counts };
   }
-  return next;
+  return { state: next, bySeat };
 }
 
 export function applyPrivateProduction(

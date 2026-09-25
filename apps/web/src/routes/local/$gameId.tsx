@@ -12,6 +12,7 @@ import type { SavedGameRecord } from '../../queries/repositories/saved-games';
 import {
   attachSession,
   pauseForExternalConflict,
+  restoreSessionPause,
   useSessionStore,
 } from '../../store/session-store';
 import type { LocalSession } from '../../session';
@@ -91,9 +92,40 @@ function LeaveDialog({
   );
 }
 
+function ConflictDialog() {
+  const { t } = useTranslation(['game', 'lobby']);
+  const dialog = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    const element = dialog.current;
+    element?.showModal();
+    return () => element?.close();
+  }, []);
+  return (
+    <dialog
+      ref={dialog}
+      className="app-dialog conflict-dialog"
+      onCancel={(event) => event.preventDefault()}
+    >
+      <h2>{t('game:saveConflictStopped')}</h2>
+      <p>{t('lobby:saveConflict')}</p>
+      <button
+        className="button button-primary"
+        type="button"
+        onClick={() => window.location.reload()}
+      >
+        {t('game:reloadGame')}
+      </button>
+    </dialog>
+  );
+}
+
 function LocalGamePage() {
   const record = Route.useLoaderData();
   const { gameId } = Route.useParams();
+  return <LocalGameInstance key={gameId} record={record} gameId={gameId} />;
+}
+
+function LocalGameInstance({ record, gameId }: { record: SavedGameRecord; gameId: string }) {
   const navigate = useNavigate();
   const { t } = useTranslation(['game', 'lobby']);
   const settings = useSettings();
@@ -201,11 +233,11 @@ function LocalGamePage() {
       active = false;
       remove();
     };
-  }, [ready, renderer, actions]);
+  }, [gameId, ready, renderer, actions]);
 
   useEffect(() => {
     if (settings.data?.hotseatCover === false && waitingSeat !== null && revealedSeat === null) {
-      useSessionStore.getState().reveal(waitingSeat);
+      useSessionStore.getState().autoReveal(waitingSeat);
     }
   }, [settings.data?.hotseatCover, waitingSeat, revealedSeat]);
 
@@ -214,18 +246,24 @@ function LocalGamePage() {
   }, [conflict]);
 
   const leave = async () => {
+    sessionRef.current?.setPaused(true);
     try {
       await coordinatorRef.current?.flush();
       blocker.proceed?.();
     } catch {
       setLeaveError(true);
+      restoreSessionPause();
     }
   };
 
   const exportCurrentReplay = async () => {
     const session = sessionRef.current;
     if (!session) throw new Error('No live session');
-    await exportReplay.mutateAsync({ name: gameId, save: session.exportSave() });
+    await exportReplay.mutateAsync({
+      name: gameId,
+      save: session.exportSave(),
+      presentation: record.presentation,
+    });
   };
 
   const rematch = async () => {
@@ -239,6 +277,18 @@ function LocalGamePage() {
     allowNavigationRef.current = true;
     try {
       await navigate({ to: '/local/$gameId', params: { gameId: created.id } });
+    } catch (error) {
+      allowNavigationRef.current = false;
+      throw error;
+    }
+  };
+
+  const importSave = async (raw: unknown) => {
+    const imported = await importMutation.mutateAsync(raw);
+    await coordinatorRef.current?.flush();
+    allowNavigationRef.current = true;
+    try {
+      await navigate({ to: '/local/$gameId', params: { gameId: imported.id } });
     } catch (error) {
       allowNavigationRef.current = false;
       throw error;
@@ -282,18 +332,7 @@ function LocalGamePage() {
       ) : (
         <p role="status">{t('game:loadingGame')}</p>
       )}
-      {conflict && (
-        <div className="conflict-banner" role="alert">
-          <p>{t('lobby:saveConflict')}</p>
-          <button
-            className="button button-primary"
-            type="button"
-            onClick={() => window.location.reload()}
-          >
-            {t('game:reloadGame')}
-          </button>
-        </div>
-      )}
+      {conflict && <ConflictDialog />}
       <LeaveDialog
         blocked={blocker.status === 'blocked'}
         onCancel={() => blocker.reset?.()}
@@ -307,13 +346,17 @@ function LocalGamePage() {
             renderer={renderer}
             actions={actions}
             onImportSave={async (raw) => {
-              await importMutation.mutateAsync(raw);
+              await importSave(raw);
             }}
             onExportSave={async (save) => {
               await exportGame.mutateAsync({ name: gameId, save });
             }}
             onExportReplay={async (save) => {
-              await exportReplay.mutateAsync({ name: gameId, save });
+              await exportReplay.mutateAsync({
+                name: gameId,
+                save,
+                presentation: record.presentation,
+              });
             }}
           />
         </Suspense>

@@ -3,11 +3,19 @@ import { baseModule, type BaseOptions } from '@cp2p/engine';
 import { standardFixedBoard } from '@cp2p/maps';
 import { useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
+import * as v from 'valibot';
 import { useSaveGame } from '../../queries/hooks';
 import type { GamePresentation } from '../../queries/repositories/saved-games';
 import { LocalSession } from '../../session';
 
-export const Route = createFileRoute('/local/new')({ component: NewLocalGame });
+export const newGameSearchSchema = v.object({
+  map: v.optional(v.picklist(['balanced-random', 'random', 'standard-fixed'])),
+});
+
+export const Route = createFileRoute('/local/new')({
+  validateSearch: newGameSearchSchema,
+  component: NewLocalGame,
+});
 
 const COLORS = ['blue', 'orange', 'green', 'magenta'] as const;
 type PlayerColor = (typeof COLORS)[number];
@@ -51,6 +59,7 @@ const DEFAULT_OPTIONS: BaseOptions = {
 
 function NewLocalGame() {
   const { t } = useTranslation('lobby');
+  const search = Route.useSearch();
   const navigate = useNavigate();
   const save = useSaveGame();
   const [playerCount, setPlayerCount] = useState(4);
@@ -61,9 +70,13 @@ function NewLocalGame() {
       role: preset.seat === 0 ? 'human' : 'bot',
     })),
   );
-  const [options, setOptions] = useState<BaseOptions>(DEFAULT_OPTIONS);
+  const [options, setOptions] = useState<BaseOptions>(() => ({
+    ...DEFAULT_OPTIONS,
+    mapLayout: search.map ?? DEFAULT_OPTIONS.mapLayout,
+  }));
   const [botDelayMs, setBotDelayMs] = useState(450);
   const [error, setError] = useState(false);
+  const [invalidNames, setInvalidNames] = useState<number[]>([]);
 
   const patchPlayer = (seat: number, patch: Partial<PlayerDraft>) => {
     setPlayers((current) =>
@@ -88,6 +101,11 @@ function NewLocalGame() {
     event.preventDefault();
     setError(false);
     const selected = players.slice(0, playerCount);
+    const emptyNames = selected.filter((player) => player.name.trim().length === 0);
+    if (emptyNames.length) {
+      setInvalidNames(emptyNames.map((player) => player.seat));
+      return;
+    }
     const seats = selected.map((player) => player.seat);
     const config = {
       modules: [{ id: 'base', version: baseModule().version }],
@@ -170,8 +188,17 @@ function NewLocalGame() {
                       value={player.name}
                       required
                       maxLength={40}
-                      onChange={(event) => patchPlayer(player.seat, { name: event.target.value })}
+                      aria-invalid={invalidNames.includes(player.seat)}
+                      onChange={(event) => {
+                        patchPlayer(player.seat, { name: event.target.value });
+                        setInvalidNames((current) =>
+                          current.filter((seat) => seat !== player.seat),
+                        );
+                      }}
                     />
+                    {invalidNames.includes(player.seat) && (
+                      <small role="alert">{t('lobby:nameRequired')}</small>
+                    )}
                   </label>
                   <label>
                     {t('lobby:playerRole', { number: index + 1 })}

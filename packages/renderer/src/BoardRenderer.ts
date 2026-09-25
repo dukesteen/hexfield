@@ -7,8 +7,14 @@ import { cameraPositionAtAnchor, clampCameraAxis } from './input/camera.js';
 import { loadBoardTextures } from './assets/terrainTextures.js';
 import type { BoardTextures } from './assets/terrainTextures.js';
 import { sameAppearance } from './appearance.js';
+import { diceMotion, robberPosition } from './effectMotion.js';
+import { harborLayout } from './harborLayout.js';
+import { tokenFontSize, tokenPipRadius, tokenPips } from './tokenLayout.js';
 import type {
   BoardAppearance,
+  BoardRendererDiagnostics,
+  BoardEffect,
+  BoardFocusPreview,
   BoardHighlights,
   BoardHit,
   BoardRenderer,
@@ -23,15 +29,37 @@ import type {
 const HEX_SIZE = 54;
 const MIN_ZOOM = 0.35;
 const MAX_ZOOM = 3.2;
+const HARBOR_MARKER_SCALE = 0.96;
+const ROAD_LENGTH = 0.74;
+const ROAD_THICKNESS = 0.18;
+const LANE_INSET = 0.22;
+const LANE_WIDTH = 0.15;
+const LANE_DASHES = 3;
+const LANE_DASH_LENGTH = 0.12;
+const LANE_DASH_WIDTH = 0.06;
+const EDGE_RING_LENGTH = 0.82;
+const EDGE_RING_HEIGHT = 0.32;
+const EDGE_INK = 0x18332b;
+const EDGE_PAPER = 0xfcfdfc;
+const SITE_HALO = 0.2;
+const SITE_RING = 0.11;
+const SITE_RING_WIDTH = 0.04;
+const BRACKET_HALF = 0.46;
+const BRACKET_ARM = 0.16;
+const BADGE_RADIUS = 0.13;
+const PREVIEW_CORNER = 0.12;
 const LAYER_NAMES = [
   'background',
   'terrain',
   'harbors',
   'tokens',
   'roads',
+  'edgeTargets',
+  'edgeFocus',
   'buildings',
   'robber',
   'highlights',
+  'focus',
   'effects',
 ] as const;
 type LayerName = (typeof LAYER_NAMES)[number];
@@ -53,6 +81,39 @@ const HEX_NEIGHBORS = [
   { q: 0, r: -1 },
   { q: 1, r: -1 },
 ] as const;
+const DICE_DOTS: readonly (readonly Point[])[] = [
+  [{ x: 0, y: 0 }],
+  [
+    { x: -1, y: -1 },
+    { x: 1, y: 1 },
+  ],
+  [
+    { x: -1, y: -1 },
+    { x: 0, y: 0 },
+    { x: 1, y: 1 },
+  ],
+  [
+    { x: -1, y: -1 },
+    { x: 1, y: -1 },
+    { x: -1, y: 1 },
+    { x: 1, y: 1 },
+  ],
+  [
+    { x: -1, y: -1 },
+    { x: 1, y: -1 },
+    { x: 0, y: 0 },
+    { x: -1, y: 1 },
+    { x: 1, y: 1 },
+  ],
+  [
+    { x: -1, y: -1 },
+    { x: 1, y: -1 },
+    { x: -1, y: 0 },
+    { x: 1, y: 0 },
+    { x: -1, y: 1 },
+    { x: 1, y: 1 },
+  ],
+];
 const HARBOR_RESOURCE: Readonly<Record<string, 'brick' | 'lumber' | 'wool' | 'grain' | 'ore'>> = {
   brick: 'brick',
   lumber: 'lumber',
@@ -82,38 +143,6 @@ function hexCorners(center: Point, size: number): number[] {
   return points;
 }
 
-function tokenPips(token: number): readonly Point[] {
-  const count = Math.max(0, 6 - Math.abs(7 - token));
-  if (count === 1) return [{ x: 0, y: 12 }];
-  if (count === 2)
-    return [
-      { x: -4, y: 11 },
-      { x: 4, y: 11 },
-    ];
-  if (count === 3)
-    return [
-      { x: -4, y: 9 },
-      { x: 0, y: 13 },
-      { x: 4, y: 9 },
-    ];
-  if (count === 4)
-    return [
-      { x: -4, y: 9 },
-      { x: 4, y: 9 },
-      { x: -4, y: 13 },
-      { x: 4, y: 13 },
-    ];
-  if (count === 5)
-    return [
-      { x: -4, y: 9 },
-      { x: 4, y: 9 },
-      { x: 0, y: 11 },
-      { x: -4, y: 14 },
-      { x: 4, y: 14 },
-    ];
-  return [];
-}
-
 function markerShape(
   graphics: Graphics,
   x: number,
@@ -136,13 +165,27 @@ export class PixiBoardRenderer implements BoardRenderer {
   private readonly host: HTMLElement;
   private readonly hexSize: number;
   private readonly camera: Container;
+  private readonly screenEffects = new Container();
   private readonly layers: Record<LayerName, Container>;
-  private readonly screenSizedObjects: Record<'tokens' | 'harbors', Container[]> = {
-    tokens: [],
-    harbors: [],
-  };
+  private readonly buildingNodes = new Map<VertexId, Container>();
   private readonly detachedChildren: Container[] = [];
+  private readonly activeEffects = new Map<
+    string,
+    {
+      readonly kind: BoardEffect['kind'];
+      readonly node: Container;
+      readonly update: (progress: number) => boolean;
+      readonly started: number;
+      readonly duration: number;
+    }
+  >();
+  private readonly recentEffectIds = new Set<string>();
+  private effectFrame = 0;
+  private robberSprite: Sprite | null = null;
+  private robberMoveActive = false;
   private readonly signatures = new Map<LayerName, string>();
+  private readonly viewChangeListeners = new Set<() => void>();
+  private viewSignature = '';
   private readonly onSelect?: BoardRendererOptions['onSelect'];
   private readonly onHover?: BoardRendererOptions['onHover'];
   private readonly onReady?: BoardRendererOptions['onReady'];
@@ -153,6 +196,9 @@ export class PixiBoardRenderer implements BoardRenderer {
   private graph: BoardGraph | null = null;
   private model: RenderModel | null = null;
   private highlights: BoardHighlights = {};
+  private focusTarget: BoardHit | null = null;
+  private focusPreview: BoardFocusPreview | undefined;
+  private hiddenBuilding: VertexId | null = null;
   private appearance: BoardAppearance;
   private zoom = 1;
   private cameraX = 0;
@@ -166,6 +212,8 @@ export class PixiBoardRenderer implements BoardRenderer {
   private readyNotified = false;
   private pulseFrame = 0;
   private renderFrameId = 0;
+  private renderedFrames = 0;
+  private rebuiltLayers = 0;
 
   private constructor(
     host: HTMLElement,
@@ -193,13 +241,17 @@ export class PixiBoardRenderer implements BoardRenderer {
       harbors: new Container(),
       tokens: new Container(),
       roads: new Container(),
+      edgeTargets: new Container(),
+      edgeFocus: new Container(),
       buildings: new Container(),
       robber: new Container(),
       highlights: new Container(),
+      focus: new Container(),
       effects: new Container(),
     };
     app.stage.addChild(this.camera);
     for (const name of LAYER_NAMES) this.camera.addChild(this.layers[name]);
+    app.stage.addChild(this.screenEffects);
 
     app.canvas.style.display = 'block';
     app.canvas.style.width = '100%';
@@ -263,6 +315,11 @@ export class PixiBoardRenderer implements BoardRenderer {
     this.drawChanged('roads', [model.roads, this.appearance.players]);
     this.drawChanged('buildings', [model.buildings, this.appearance.players]);
     this.drawChanged('robber', [model.robberHex, model.pirateHex]);
+    this.drawChanged('focus', [
+      this.focusTarget,
+      this.focusPreview,
+      model.hexes.map(({ id, q, r }) => ({ id, q, r })),
+    ]);
     if (firstRender) this.fitToBoard();
     else {
       this.clampCamera();
@@ -282,12 +339,17 @@ export class PixiBoardRenderer implements BoardRenderer {
     const signature = JSON.stringify(highlights);
     if (this.signatures.get('highlights') === signature) return;
     this.signatures.set('highlights', signature);
+    this.rebuiltLayers += 1;
     const layer = this.layers.highlights;
-    this.detachedChildren.push(...layer.removeChildren());
+    this.detachedChildren.push(
+      ...layer.removeChildren(),
+      ...this.layers.edgeTargets.removeChildren(),
+    );
     const style = highlights.style ?? {};
     const color = style.color ?? 0x086b52;
     const graphics = new Graphics();
     let hasGeometry = false;
+    let hasEdgeGeometry = false;
     for (const id of highlights.hexes ?? []) {
       const hex = this.model?.hexes.find((candidate) => candidate.id === id);
       if (hex) {
@@ -298,29 +360,96 @@ export class PixiBoardRenderer implements BoardRenderer {
         hasGeometry = true;
       }
     }
+    const lanes = new Graphics();
+    const dashes = new Graphics();
     for (const id of highlights.edges ?? []) {
-      const index = this.graph?.edgeIndex[id];
-      const endpoints = index === undefined ? undefined : this.graph?.edgeVertices[index];
+      const endpoints = this.edgeEndpoints(id);
       if (!endpoints) continue;
-      const first = vertexToPixel(endpoints[0], this.hexSize);
-      const second = vertexToPixel(endpoints[1], this.hexSize);
-      graphics
-        .moveTo(first.x, first.y)
-        .lineTo(second.x, second.y)
-        .stroke({ color, width: 9, alpha: 0.8 });
-      hasGeometry = true;
+      this.traceEdgeLane(lanes, dashes, endpoints[0], endpoints[1]);
+      hasEdgeGeometry = true;
     }
-    for (const id of highlights.vertices ?? []) {
-      const point = vertexToPixel(id, this.hexSize);
-      graphics
-        .circle(point.x, point.y, this.hexSize * 0.25)
-        .fill({ color, alpha: 0.5 })
-        .stroke({ color, width: 3 });
-      hasGeometry = true;
+    const vertices = (highlights.vertices ?? []).filter(
+      (id) => this.graph?.vertexIndex[id] !== undefined,
+    );
+    if (style.vertexTarget === 'site' && vertices.length > 0) {
+      const halos = new Graphics();
+      const rings = new Graphics();
+      for (const id of vertices) {
+        const point = vertexToPixel(id, this.hexSize);
+        halos.circle(point.x, point.y, this.hexSize * SITE_HALO);
+        rings.circle(point.x, point.y, this.hexSize * SITE_RING);
+      }
+      halos.fill({ color: EDGE_INK, alpha: 0.34 });
+      rings.stroke({ color: EDGE_PAPER, width: this.hexSize * SITE_RING_WIDTH });
+      layer.addChild(halos, rings);
+    } else if (style.vertexTarget === 'upgrade' && vertices.length > 0) {
+      const ink = new Graphics();
+      const paper = new Graphics();
+      for (const id of vertices) {
+        const point = vertexToPixel(id, this.hexSize);
+        this.traceBrackets(ink, point.x, point.y);
+        this.traceBrackets(paper, point.x, point.y);
+      }
+      ink.stroke({ color: EDGE_INK, width: this.hexSize * 0.065, cap: 'round', join: 'round' });
+      paper.stroke({ color: EDGE_PAPER, width: this.hexSize * 0.032, cap: 'round', join: 'round' });
+      layer.addChild(ink, paper);
+      for (const id of vertices) {
+        const point = vertexToPixel(id, this.hexSize);
+        layer.addChild(
+          this.upgradeBadge(
+            point.x + this.hexSize * BRACKET_HALF,
+            point.y - this.hexSize * BRACKET_HALF,
+          ),
+        );
+      }
+    } else {
+      for (const id of vertices) {
+        const point = vertexToPixel(id, this.hexSize);
+        graphics
+          .circle(point.x, point.y, this.hexSize * 0.25)
+          .fill({ color, alpha: 0.5 })
+          .stroke({ color, width: 3 });
+        hasGeometry = true;
+      }
     }
     if (hasGeometry) layer.addChild(graphics);
+    if (hasEdgeGeometry) {
+      lanes.stroke({
+        color: EDGE_INK,
+        alpha: 0.32,
+        width: this.hexSize * LANE_WIDTH,
+        cap: 'round',
+      });
+      dashes.stroke({
+        color: EDGE_PAPER,
+        width: this.hexSize * LANE_DASH_WIDTH,
+        cap: 'butt',
+      });
+      this.layers.edgeTargets.addChild(lanes, dashes);
+    }
     this.syncMotion();
     if (previous !== highlights) this.renderFrame();
+  }
+
+  setFocusTarget(hit: BoardHit | null, preview?: BoardFocusPreview): void {
+    if (
+      this.destroyed ||
+      (sameHit(this.focusTarget, hit) &&
+        this.focusPreview?.piece === preview?.piece &&
+        this.focusPreview?.color === preview?.color &&
+        this.focusPreview?.marker === preview?.marker)
+    )
+      return;
+    this.focusTarget = hit;
+    this.focusPreview = preview;
+    this.updateHiddenBuilding(hit, preview);
+    this.drawChanged('focus', [
+      hit,
+      preview,
+      this.model?.hexes.map(({ id, q, r }) => ({ id, q, r })),
+    ]);
+    this.syncMotion();
+    this.renderFrame();
   }
 
   private get reducedMotion(): boolean {
@@ -329,6 +458,7 @@ export class PixiBoardRenderer implements BoardRenderer {
 
   private readonly onMotionPreferenceChange = (): void => {
     if (this.destroyed) return;
+    if (this.reducedMotion) this.skipAnimations();
     this.syncMotion();
     this.renderFrame();
   };
@@ -336,36 +466,344 @@ export class PixiBoardRenderer implements BoardRenderer {
   setReducedMotion(reduced: boolean): void {
     if (this.destroyed) return;
     this.forceReducedMotion = reduced;
+    if (this.reducedMotion) this.skipAnimations();
     this.syncMotion();
     this.renderFrame();
   }
 
+  playEffects(effects: readonly BoardEffect[]): void {
+    if (this.destroyed) return;
+    for (const effect of effects) {
+      if (!effect.id || this.recentEffectIds.has(effect.id)) continue;
+      this.recentEffectIds.add(effect.id);
+      if (this.recentEffectIds.size > 256) {
+        const oldest = this.recentEffectIds.values().next().value;
+        if (oldest !== undefined) this.recentEffectIds.delete(oldest);
+      }
+      if (this.reducedMotion) continue;
+      if (effect.kind === 'robber-move') this.cancelRobberMove();
+      const active = this.createEffect(effect);
+      if (active)
+        this.activeEffects.set(effect.id, {
+          kind: effect.kind,
+          ...active,
+          started: performance.now(),
+        });
+    }
+    this.ensureEffectFrame();
+    this.renderFrame();
+  }
+
+  skipAnimations(): void {
+    if (this.effectFrame !== 0) cancelAnimationFrame(this.effectFrame);
+    this.effectFrame = 0;
+    for (const { node } of this.activeEffects.values()) this.retireNode(node);
+    this.activeEffects.clear();
+    this.setRobberMoveActive(false);
+    this.renderFrame();
+  }
+
+  getDiagnostics(): BoardRendererDiagnostics {
+    return {
+      renderedFrames: this.renderedFrames,
+      rebuiltLayers: this.rebuiltLayers,
+      activeEffects: this.activeEffects.size,
+      queuedDisposals: this.detachedChildren.length,
+    };
+  }
+
+  private createEffect(effect: BoardEffect): {
+    readonly node: Container;
+    readonly update: (progress: number) => boolean;
+    readonly duration: number;
+  } | null {
+    const node = new Container();
+    const duration = effect.kind === 'dice-roll' ? 700 : 420;
+    if (effect.kind === 'dice-roll') {
+      if (effect.dice.some((face) => !Number.isInteger(face) || face < 1 || face > 6)) return null;
+      const faceSize = Math.min(64, Math.max(56, this.app.screen.width * 0.07));
+      const gap = Math.max(10, faceSize * 0.2);
+      node.position.set(this.app.screen.width / 2, this.app.screen.height / 2);
+      for (const [index, face] of effect.dice.entries()) {
+        const die = new Container();
+        die.position.set(index === 0 ? -(faceSize + gap) / 2 : (faceSize + gap) / 2, 0);
+        die.addChild(
+          new Graphics()
+            .roundRect(-faceSize / 2, -faceSize / 2, faceSize, faceSize, faceSize * 0.16)
+            .fill({ color: 0xffffff })
+            .stroke({ color: 0x18332b, width: Math.max(2, faceSize * 0.04) }),
+        );
+        const faceGraphics = new Graphics();
+        const spots = DICE_DOTS[face - 1];
+        if (spots) {
+          for (const spot of spots)
+            faceGraphics
+              .circle(spot.x * faceSize * 0.19, spot.y * faceSize * 0.19, faceSize * 0.075)
+              .fill({ color: 0x18332b });
+          die.addChild(faceGraphics);
+        }
+        node.addChild(die);
+      }
+      this.screenEffects.addChild(node);
+      return {
+        node,
+        duration,
+        update: (progress) => {
+          const motion = diceMotion(progress);
+          node.position.set(this.app.screen.width / 2, this.app.screen.height / 2);
+          node.alpha = motion.alpha;
+          node.scale.set(motion.scale);
+          node.children.forEach((child, index) => {
+            child.rotation = motion.rotation * (index === 0 ? 1 : -1);
+          });
+          return progress >= 1;
+        },
+      };
+    }
+    if (effect.kind === 'piece-pop') {
+      const point = this.pointForHit(effect.at);
+      if (!point) return null;
+      node.position.set(point.x, point.y);
+      const texture =
+        effect.piece === 'road'
+          ? this.textures.road
+          : effect.piece === 'city'
+            ? this.textures.city
+            : this.textures.settlement;
+      const sprite = new Sprite(texture);
+      sprite.anchor.set(0.5);
+      sprite.position.set(0, 0);
+      const size = effect.piece === 'road' ? this.hexSize * 0.72 : this.hexSize * 0.5;
+      sprite.width = size;
+      sprite.height = effect.piece === 'road' ? this.hexSize * 0.14 : size;
+      sprite.tint = this.playerStyleMap().get(effect.seat)?.color ?? DEFAULT_PLAYER_STYLE.color;
+      if (effect.piece === 'road' && effect.at.kind === 'edge')
+        sprite.rotation = edgeToPixel(effect.at.id, this.hexSize).angle;
+      node.addChild(sprite);
+      this.layers.effects.addChild(node);
+      return {
+        node,
+        duration,
+        update: (progress) => {
+          node.alpha = Math.min(1, progress * 4) * Math.max(0, 1 - progress * 0.25);
+          node.scale.set(0.65 + 0.45 * Math.sin(Math.PI * progress));
+          return progress >= 1;
+        },
+      };
+    }
+    const from = this.model?.hexes.find((hex) => hex.id === effect.fromHex);
+    const to = this.model?.hexes.find((hex) => hex.id === effect.toHex);
+    if (!from || !to) return null;
+    const sprite = new Sprite(this.textures.robber);
+    sprite.anchor.set(0.5);
+    sprite.width = this.hexSize * 0.52;
+    sprite.height = this.hexSize * 0.52;
+    node.addChild(sprite);
+    this.layers.effects.addChild(node);
+    const start = hexToPixel(from.q, from.r, this.hexSize);
+    const end = hexToPixel(to.q, to.r, this.hexSize);
+    this.setRobberMoveActive(true);
+    return {
+      node,
+      duration,
+      update: (progress) => {
+        const position = robberPosition(start, end, progress, this.hexSize * 0.18);
+        sprite.position.set(position.x, position.y);
+        node.alpha = Math.min(1, progress * 5);
+        return progress >= 1;
+      },
+    };
+  }
+
+  private readonly tickEffects = (now: number): void => {
+    this.effectFrame = 0;
+    if (this.destroyed) return;
+    for (const [id, effect] of this.activeEffects) {
+      if (effect.update(Math.min(1, (now - effect.started) / effect.duration))) {
+        this.retireNode(effect.node);
+        this.activeEffects.delete(id);
+        if (effect.kind === 'robber-move') this.setRobberMoveActive(false);
+      }
+    }
+    this.renderFrame();
+    this.ensureEffectFrame();
+  };
+
+  private ensureEffectFrame(): void {
+    if (this.activeEffects.size > 0 && this.effectFrame === 0 && !this.destroyed)
+      this.effectFrame = requestAnimationFrame(this.tickEffects);
+  }
+
+  private retireNode(node: Container): void {
+    node.parent?.removeChild(node);
+    this.detachedChildren.push(node);
+  }
+
+  private setRobberMoveActive(active: boolean): void {
+    this.robberMoveActive = active;
+    if (this.robberSprite) this.robberSprite.visible = !active;
+  }
+
+  private cancelRobberMove(): void {
+    for (const [id, effect] of this.activeEffects) {
+      if (effect.kind !== 'robber-move') continue;
+      this.retireNode(effect.node);
+      this.activeEffects.delete(id);
+    }
+    this.setRobberMoveActive(false);
+  }
+
+  private pointForHit(hit: BoardHit): Point | null {
+    if (hit.kind === 'vertex') return vertexToPixel(hit.id, this.hexSize);
+    if (hit.kind === 'edge') return edgeToPixel(hit.id, this.hexSize).midpoint;
+    const hex = this.model?.hexes.find((candidate) => candidate.id === hit.id);
+    return hex ? hexToPixel(hex.q, hex.r, this.hexSize) : null;
+  }
+
+  private isLegalHighlight(hit: BoardHit): boolean {
+    if (hit.kind === 'vertex') return this.highlights.vertices?.includes(hit.id) ?? false;
+    if (hit.kind === 'edge') return this.highlights.edges?.includes(hit.id) ?? false;
+    return this.highlights.hexes?.includes(hit.id) ?? false;
+  }
+
+  private updateHiddenBuilding(hit: BoardHit | null, preview: BoardFocusPreview | undefined): void {
+    if (this.hiddenBuilding) {
+      const previous = this.buildingNodes.get(this.hiddenBuilding);
+      if (previous) previous.visible = true;
+    }
+    const hidden =
+      hit?.kind === 'vertex' &&
+      preview?.piece === 'city' &&
+      this.model?.buildings.some(
+        (building) => building.vertex === hit.id && building.kind === 'settlement',
+      )
+        ? hit.id
+        : null;
+    this.hiddenBuilding = hidden;
+    if (hidden) {
+      const current = this.buildingNodes.get(hidden);
+      if (current) current.visible = false;
+    }
+  }
+
+  private edgeEndpoints(id: EdgeId): readonly [Point, Point] | null {
+    const index = this.graph?.edgeIndex[id];
+    const endpoints = index === undefined ? undefined : this.graph?.edgeVertices[index];
+    return endpoints
+      ? [vertexToPixel(endpoints[0], this.hexSize), vertexToPixel(endpoints[1], this.hexSize)]
+      : null;
+  }
+
+  private traceEdgeLane(lanes: Graphics, dashes: Graphics, first: Point, second: Point): void {
+    const at = (amount: number): Point => ({
+      x: first.x + (second.x - first.x) * amount,
+      y: first.y + (second.y - first.y) * amount,
+    });
+    const start = at(LANE_INSET);
+    const end = at(1 - LANE_INSET);
+    lanes.moveTo(start.x, start.y).lineTo(end.x, end.y);
+    const span = 1 - LANE_INSET * 2;
+    const gap = (span - LANE_DASH_LENGTH * LANE_DASHES) / (LANE_DASHES - 1);
+    for (let index = 0; index < LANE_DASHES; index += 1) {
+      const dashStart = at(LANE_INSET + index * (LANE_DASH_LENGTH + gap));
+      const dashEnd = at(LANE_INSET + index * (LANE_DASH_LENGTH + gap) + LANE_DASH_LENGTH);
+      dashes.moveTo(dashStart.x, dashStart.y).lineTo(dashEnd.x, dashEnd.y);
+    }
+  }
+
+  private roadSprite(id: EdgeId, color: number): Sprite {
+    const edge = edgeToPixel(id, this.hexSize);
+    const sprite = new Sprite(this.textures.road);
+    sprite.anchor.set(0.5);
+    sprite.position.set(edge.midpoint.x, edge.midpoint.y);
+    sprite.width = this.hexSize * ROAD_LENGTH;
+    sprite.height = this.hexSize * ROAD_THICKNESS;
+    sprite.rotation = edge.angle;
+    sprite.tint = color;
+    return sprite;
+  }
+
+  private buildingNode(
+    kind: 'settlement' | 'city',
+    style: Pick<BoardAppearance['players'][number], 'color' | 'marker'>,
+    point: Point,
+  ): Container {
+    const size = kind === 'city' ? 14 : 12;
+    const node = new Container();
+    node.position.set(point.x, point.y);
+    const marker = new Graphics();
+    markerShape(marker, 0, 0, style.color, style.marker, size + 5);
+    const sprite = new Sprite(kind === 'city' ? this.textures.city : this.textures.settlement);
+    sprite.anchor.set(0.5);
+    sprite.width = size * 2;
+    sprite.height = size * 2;
+    node.addChild(marker, sprite);
+    return node;
+  }
+
+  private traceBrackets(graphics: Graphics, x: number, y: number): void {
+    const half = this.hexSize * BRACKET_HALF;
+    const arm = this.hexSize * BRACKET_ARM;
+    for (const [sx, sy] of [
+      [-1, -1],
+      [-1, 1],
+      [1, 1],
+    ] as const) {
+      graphics
+        .moveTo(x + sx * half, y + sy * (half - arm))
+        .lineTo(x + sx * half, y + sy * half)
+        .lineTo(x + sx * (half - arm), y + sy * half);
+    }
+  }
+
+  private upgradeBadge(x: number, y: number): Graphics {
+    const unit = this.hexSize;
+    const width = unit * 0.055;
+    const height = unit * 0.03;
+    return new Graphics()
+      .circle(x, y, unit * BADGE_RADIUS)
+      .fill({ color: EDGE_INK })
+      .stroke({ color: EDGE_PAPER, width: unit * 0.024 })
+      .moveTo(x - width, y + height / 2 + width * 0.3)
+      .lineTo(x, y - height / 2 - width * 0.3)
+      .lineTo(x + width, y + height / 2 + width * 0.3)
+      .stroke({ color: EDGE_PAPER, width: unit * 0.03, cap: 'round', join: 'round' });
+  }
+
   private syncMotion(): void {
     if (this.destroyed) return;
-    if (this.highlights.style?.pulse && !this.reducedMotion) {
+    if (this.pulseActive) {
       if (this.pulseFrame === 0) this.pulseFrame = requestAnimationFrame(this.tickHighlights);
       return;
     }
     if (this.pulseFrame !== 0) cancelAnimationFrame(this.pulseFrame);
     this.pulseFrame = 0;
-    this.layers.highlights.alpha = 1;
+    this.setPulseAlpha(1);
+  }
+
+  private get pulseActive(): boolean {
+    return (
+      this.highlights.style?.pulse === true &&
+      !this.reducedMotion &&
+      !(this.focusTarget !== null && this.focusPreview !== undefined)
+    );
+  }
+
+  private setPulseAlpha(alpha: number): void {
+    this.layers.highlights.alpha = alpha;
+    this.layers.edgeTargets.alpha = alpha;
   }
 
   private readonly tickHighlights = (): void => {
     this.pulseFrame = 0;
     if (this.destroyed) return;
-    if (!this.highlights.style?.pulse) {
-      this.layers.highlights.alpha = 1;
+    if (!this.pulseActive) {
+      this.setPulseAlpha(1);
       this.renderFrame();
       return;
     }
-    if (this.reducedMotion) {
-      this.layers.highlights.alpha = 1;
-      this.renderFrame();
-      return;
-    }
-    const phase = (Math.sin(performance.now() / 360) + 1) / 2;
-    this.layers.highlights.alpha = 0.76 + phase * 0.24;
+    const phase = (Math.sin(performance.now() / 400) + 1) / 2;
+    this.setPulseAlpha(0.72 + phase * 0.28);
     this.renderFrame();
     this.pulseFrame = requestAnimationFrame(this.tickHighlights);
   };
@@ -389,7 +827,7 @@ export class PixiBoardRenderer implements BoardRenderer {
     if (this.destroyed) return;
     this.harborLabelFormatter = formatter;
     this.signatures.delete('harbors');
-    if (this.model) this.drawChanged('harbors', this.model.harbors);
+    if (this.model) this.drawChanged('harbors', [this.model.harbors]);
     this.renderFrame();
   }
 
@@ -414,6 +852,14 @@ export class PixiBoardRenderer implements BoardRenderer {
           }
         : {}),
     });
+  }
+
+  subscribeViewChange(listener: () => void): () => void {
+    if (this.destroyed) return () => undefined;
+    const isNewListener = !this.viewChangeListeners.has(listener);
+    this.viewChangeListeners.add(listener);
+    if (isNewListener) listener();
+    return () => this.viewChangeListeners.delete(listener);
   }
 
   getPixelPosition(hit: BoardHit): ScreenPoint {
@@ -451,19 +897,19 @@ export class PixiBoardRenderer implements BoardRenderer {
 
   fitToBoard(): void {
     if (this.destroyed || !this.model?.hexes.length) return;
-    const xs = this.model.hexes.map((hex) => hexToPixel(hex.q, hex.r, this.hexSize).x);
-    const ys = this.model.hexes.map((hex) => hexToPixel(hex.q, hex.r, this.hexSize).y);
-    const width = Math.max(...xs) - Math.min(...xs) + this.hexSize * 2;
-    const height = Math.max(...ys) - Math.min(...ys) + this.hexSize * 2;
+    const bounds = this.fitPixelBounds();
+    if (!bounds) return;
+    const width = bounds.maxX - bounds.minX;
+    const height = bounds.maxY - bounds.minY;
     this.zoom = Math.max(
       MIN_ZOOM,
       Math.min(
         MAX_ZOOM,
-        Math.min((this.app.screen.width - 48) / width, (this.app.screen.height - 48) / height),
+        Math.min((this.app.screen.width - 24) / width, (this.app.screen.height - 24) / height),
       ),
     );
-    const centerX = (Math.min(...xs) + Math.max(...xs)) / 2;
-    const centerY = (Math.min(...ys) + Math.max(...ys)) / 2;
+    const centerX = (bounds.minX + bounds.maxX) / 2;
+    const centerY = (bounds.minY + bounds.maxY) / 2;
     this.cameraX = this.app.screen.width / 2 - centerX * this.zoom;
     this.cameraY = this.app.screen.height / 2 - centerY * this.zoom;
     this.clampCamera();
@@ -479,6 +925,10 @@ export class PixiBoardRenderer implements BoardRenderer {
     this.unbindInput();
     if (this.pulseFrame !== 0) cancelAnimationFrame(this.pulseFrame);
     if (this.renderFrameId !== 0) cancelAnimationFrame(this.renderFrameId);
+    if (this.effectFrame !== 0) cancelAnimationFrame(this.effectFrame);
+    for (const { node } of this.activeEffects.values()) node.destroy({ children: true });
+    this.activeEffects.clear();
+    this.viewChangeListeners.clear();
     this.app.destroy(true, { children: true, texture: false, textureSource: false });
     this.destroyDetachedChildren();
   }
@@ -487,8 +937,8 @@ export class PixiBoardRenderer implements BoardRenderer {
     const signature = JSON.stringify(value);
     if (this.signatures.get(name) === signature) return;
     this.signatures.set(name, signature);
+    this.rebuiltLayers += 1;
     const layer = this.layers[name];
-    if (name === 'tokens' || name === 'harbors') this.screenSizedObjects[name] = [];
     this.detachedChildren.push(...layer.removeChildren());
     const model = this.model;
     if (!model) return;
@@ -496,17 +946,7 @@ export class PixiBoardRenderer implements BoardRenderer {
       const color = this.appearance.theme === 'dark' ? 0x15231f : 0xd1e7e9;
       layer.addChild(new Graphics().rect(-8192, -8192, 16384, 16384).fill({ color }));
     } else if (name === 'terrain') {
-      const occupied = new Set(model.hexes.map((hex) => `${hex.q},${hex.r}`));
-      const water = new Map<string, Point>();
-      for (const hex of model.hexes) {
-        for (const offset of HEX_NEIGHBORS) {
-          const q = hex.q + offset.q;
-          const r = hex.r + offset.r;
-          const key = `${q},${r}`;
-          if (!occupied.has(key)) water.set(key, hexToPixel(q, r, this.hexSize));
-        }
-      }
-      for (const center of water.values())
+      for (const center of this.waterCenters())
         this.drawTerrainTile(layer, center, this.textures.terrain.sea);
 
       for (const hex of model.hexes) {
@@ -515,113 +955,134 @@ export class PixiBoardRenderer implements BoardRenderer {
         if (textureKey) this.drawTerrainTile(layer, center, this.textures.terrain[textureKey]);
       }
     } else if (name === 'harbors') {
-      for (const harbor of model.harbors) {
-        const edge = edgeToPixel(harbor.edge, this.hexSize);
-        const marker = new Sprite(this.textures.harborMarker);
-        marker.anchor.set(0.5);
-        marker.position.set(edge.midpoint.x, edge.midpoint.y);
-        marker.width = this.hexSize * 0.82;
-        marker.height = this.hexSize * 0.82;
-        layer.addChild(marker);
-
-        const resource = HARBOR_RESOURCE[harbor.kind];
-        if (resource) {
-          const icon = new Sprite(this.textures.resources[resource]);
-          icon.anchor.set(0.5);
-          icon.position.set(edge.midpoint.x, edge.midpoint.y - this.hexSize * 0.08);
-          icon.width = this.hexSize * 0.29;
-          icon.height = this.hexSize * 0.29;
-          layer.addChild(icon);
-        }
-        const label = new Text({
-          text:
-            resource === undefined && harbor.kind === 'generic'
-              ? '3:1'
-              : resource
-                ? '2:1'
-                : this.harborLabelFormatter(harbor.kind),
-          style: {
-            fontFamily: 'system-ui, sans-serif',
-            fontSize: 12,
-            fill: 0x18332b,
-            fontWeight: '700',
-          },
-          resolution: this.app.renderer.resolution * MAX_ZOOM,
-        });
-        label.anchor.set(0.5);
-        label.position.set(edge.midpoint.x, edge.midpoint.y + this.hexSize * (resource ? 0.1 : 0));
-        layer.addChild(label);
-        this.screenSizedObjects.harbors.push(label);
-      }
+      for (const harbor of model.harbors) this.drawHarbor(layer, harbor.edge, harbor.kind);
     } else if (name === 'tokens') {
       for (const hex of model.hexes) {
         if (hex.token === null) continue;
         const center = hexToPixel(hex.q, hex.r, this.hexSize);
-        const token = new Sprite(this.textures.numberToken);
-        token.anchor.set(0.5);
+        const token = new Container();
         token.position.set(center.x, center.y);
-        token.width = this.hexSize * 0.82;
-        token.height = this.hexSize * 0.82;
-        layer.addChild(token);
+        const face = new Sprite(this.textures.numberToken);
+        face.anchor.set(0.5);
+        face.width = this.hexSize * 0.82;
+        face.height = this.hexSize * 0.82;
+        token.addChild(face);
         const pipColor = hex.token === 6 || hex.token === 8 ? 0xae3329 : 0x49665b;
-        const pips = tokenPips(hex.token);
+        const pips = tokenPips(hex.token, this.hexSize);
         if (pips.length > 0) {
           const graphics = new Graphics();
           for (const pip of pips) {
-            graphics.circle(pip.x, pip.y, 1.5).fill({ color: pipColor });
+            graphics.circle(pip.x, pip.y, tokenPipRadius(this.hexSize)).fill({ color: pipColor });
           }
-          graphics.position.set(center.x, center.y);
-          layer.addChild(graphics);
-          this.screenSizedObjects.tokens.push(graphics);
+          token.addChild(graphics);
         }
         const text = new Text({
           text: String(hex.token),
           style: {
             fontFamily: 'system-ui, sans-serif',
-            fontSize: 12,
+            fontSize: tokenFontSize(this.hexSize),
             fill: hex.token === 6 || hex.token === 8 ? 0xae3329 : 0x18332b,
             fontWeight: '700',
           },
           resolution: this.app.renderer.resolution * MAX_ZOOM,
         });
         text.anchor.set(0.5);
-        text.position.set(center.x, center.y - 1);
-        layer.addChild(text);
-        this.screenSizedObjects.tokens.push(text);
+        text.position.set(0, -this.hexSize * 0.06);
+        token.addChild(text);
+        layer.addChild(token);
       }
+    } else if (name === 'focus') {
+      this.detachedChildren.push(...this.layers.edgeFocus.removeChildren());
+      const hit = this.focusTarget;
+      if (!hit) return;
+      const color = 0xf0b64a;
+      const graphics = new Graphics();
+      if (hit.kind === 'hex') {
+        const hex = model.hexes.find((candidate) => candidate.id === hit.id);
+        if (!hex) return;
+        graphics
+          .poly(hexCorners(hexToPixel(hex.q, hex.r, this.hexSize), this.hexSize * 0.88), true)
+          .fill({ color, alpha: 0.12 })
+          .stroke({ color: 0xffffff, width: 7 })
+          .stroke({ color, width: 3 });
+      } else if (hit.kind === 'edge') {
+        if (this.focusPreview && this.focusPreview.piece !== 'road') return;
+        const endpoints = this.edgeEndpoints(hit.id);
+        if (!endpoints) return;
+        const edge = edgeToPixel(hit.id, this.hexSize);
+        const width = this.hexSize * EDGE_RING_LENGTH;
+        const height = this.hexSize * EDGE_RING_HEIGHT;
+        const ring = new Graphics()
+          .roundRect(-width / 2, -height / 2, width, height, height / 2)
+          .stroke({ color: EDGE_INK, width: this.hexSize * 0.065 })
+          .roundRect(-width / 2, -height / 2, width, height, height / 2)
+          .stroke({ color: EDGE_PAPER, width: this.hexSize * 0.032 });
+        ring.position.set(edge.midpoint.x, edge.midpoint.y);
+        ring.rotation = edge.angle;
+        this.layers.edgeFocus.addChild(ring);
+        if (this.focusPreview)
+          this.layers.edgeFocus.addChild(this.roadSprite(hit.id, this.focusPreview.color));
+        return;
+      } else {
+        const previewPiece = this.focusPreview?.piece;
+        if (previewPiece === 'road') return;
+        const point = vertexToPixel(hit.id, this.hexSize);
+        if (this.graph?.vertexIndex[hit.id] === undefined) return;
+        const existing = model.buildings.find((building) => building.vertex === hit.id);
+        if (this.focusPreview && previewPiece) {
+          if (existing?.kind === this.focusPreview.piece) return;
+          const half = this.hexSize * BRACKET_HALF;
+          const corner = this.hexSize * PREVIEW_CORNER;
+          const preview = this.buildingNode(
+            previewPiece,
+            {
+              color: this.focusPreview.color,
+              marker: this.focusPreview.marker ?? 'circle',
+            },
+            point,
+          );
+          const outline = new Graphics()
+            .roundRect(point.x - half, point.y - half, 2 * half, 2 * half, corner)
+            .stroke({ color: EDGE_INK, width: this.hexSize * 0.065 })
+            .roundRect(point.x - half, point.y - half, 2 * half, 2 * half, corner)
+            .stroke({ color: EDGE_PAPER, width: this.hexSize * 0.032 });
+          layer.addChild(preview, outline);
+          if (this.focusPreview.piece === 'city')
+            layer.addChild(this.upgradeBadge(point.x + half, point.y - half));
+          return;
+        }
+        graphics
+          .circle(point.x, point.y, this.hexSize * 0.4)
+          .fill({ color, alpha: 0.18 })
+          .stroke({ color: 0xffffff, width: 7 })
+          .stroke({ color, width: 3 });
+      }
+      layer.addChild(graphics);
     } else if (name === 'roads') {
       const styles = this.playerStyleMap();
       for (const road of model.roads) {
-        const edge = edgeToPixel(road.edge, this.hexSize);
-        const length = this.hexSize * 0.74;
-        const sprite = new Sprite(this.textures.road);
-        sprite.anchor.set(0.5);
-        sprite.position.set(edge.midpoint.x, edge.midpoint.y);
-        sprite.width = length;
-        sprite.height = this.hexSize * 0.18;
-        sprite.rotation = edge.angle;
-        sprite.tint = styles.get(road.seat)?.color ?? 0x49665b;
-        layer.addChild(sprite);
+        layer.addChild(this.roadSprite(road.edge, styles.get(road.seat)?.color ?? 0x49665b));
       }
     } else if (name === 'buildings') {
       const styles = this.playerStyleMap();
+      this.buildingNodes.clear();
+      if (
+        this.hiddenBuilding &&
+        !model.buildings.some(
+          (building) => building.vertex === this.hiddenBuilding && building.kind === 'settlement',
+        )
+      )
+        this.hiddenBuilding = null;
       for (const building of model.buildings) {
         const point = vertexToPixel(building.vertex, this.hexSize);
         const style = styles.get(building.seat) ?? DEFAULT_PLAYER_STYLE;
-        const size = building.kind === 'city' ? 14 : 12;
-        const graphics = new Graphics();
-        markerShape(graphics, point.x, point.y, style.color, style.marker, size + 5);
-        layer.addChild(graphics);
-        const sprite = new Sprite(
-          building.kind === 'city' ? this.textures.city : this.textures.settlement,
-        );
-        sprite.anchor.set(0.5);
-        sprite.position.set(point.x, point.y);
-        sprite.width = size * 2;
-        sprite.height = size * 2;
-        layer.addChild(sprite);
+        const node = this.buildingNode(building.kind, style, point);
+        node.visible = building.vertex !== this.hiddenBuilding;
+        this.buildingNodes.set(building.vertex, node);
+        layer.addChild(node);
       }
     } else if (name === 'robber') {
+      this.robberSprite = null;
       const hex = model.hexes.find((candidate) => candidate.id === model.robberHex);
       if (hex) {
         const center = hexToPixel(hex.q, hex.r, this.hexSize);
@@ -630,9 +1091,90 @@ export class PixiBoardRenderer implements BoardRenderer {
         sprite.position.set(center.x, center.y);
         sprite.width = this.hexSize * 0.52;
         sprite.height = this.hexSize * 0.52;
+        sprite.visible = !this.robberMoveActive;
         layer.addChild(sprite);
+        this.robberSprite = sprite;
       }
     }
+  }
+
+  private drawHarbor(layer: Container, edgeId: EdgeId, kind: string): void {
+    const model = this.model;
+    const graph = this.graph;
+    const edgeIndex = graph?.edgeIndex[edgeId];
+    if (!model || !graph || edgeIndex === undefined) return;
+    const endpoints = graph.edgeVertices[edgeIndex];
+    if (!endpoints) return;
+    const first = vertexToPixel(endpoints[0], this.hexSize);
+    const second = vertexToPixel(endpoints[1], this.hexSize);
+    const landHexId = graph.edgeHexes[edgeIndex]?.find((id) => {
+      const hex = model.hexes.find((candidate) => candidate.id === id);
+      return hex !== undefined && hex.terrain !== 'sea';
+    });
+    const landHex = model.hexes.find((hex) => hex.id === landHexId);
+    if (!landHex) return;
+
+    const landCenter = hexToPixel(landHex.q, landHex.r, this.hexSize);
+    const layout = harborLayout(first, second, landCenter);
+    if (!layout) return;
+
+    const jetty = new Sprite(this.textures.harborJetty);
+    jetty.anchor.set(0.5, 104 / 112);
+    jetty.position.set(layout.midpoint.x, layout.midpoint.y);
+    jetty.width = 128 * layout.scale;
+    jetty.height = 112 * layout.scale;
+    jetty.scale.y *= layout.verticalFlip;
+    jetty.rotation = layout.angle;
+    layer.addChild(jetty);
+
+    const badge = new Container();
+    badge.position.set(layout.hub.x, layout.hub.y);
+    const marker = new Sprite(this.textures.harborMarker);
+    marker.anchor.set(0.5);
+    marker.position.set(0, 0);
+    marker.width = this.hexSize * HARBOR_MARKER_SCALE;
+    marker.height = this.hexSize * HARBOR_MARKER_SCALE;
+    badge.addChild(marker);
+
+    const resource = HARBOR_RESOURCE[kind];
+    if (resource) {
+      const icon = new Sprite(this.textures.resources[resource]);
+      icon.anchor.set(0.5);
+      icon.position.set(0, -this.hexSize * 0.17);
+      icon.width = this.hexSize * 0.29;
+      icon.height = this.hexSize * 0.29;
+      badge.addChild(icon);
+    }
+    const generic = kind === 'generic';
+    const label = new Text({
+      text: generic ? '3:1' : resource ? '2:1' : this.harborLabelFormatter(kind),
+      style: {
+        fontFamily: 'system-ui, sans-serif',
+        fontSize: this.hexSize * (generic ? 0.3 : 0.23),
+        fill: 0x18332b,
+        fontWeight: '700',
+      },
+      resolution: this.app.renderer.resolution * MAX_ZOOM,
+    });
+    label.anchor.set(0.5);
+    label.position.set(0, this.hexSize * (generic ? -0.06 : 0.1));
+    badge.addChild(label);
+    layer.addChild(badge);
+  }
+
+  private waterCenters(): Point[] {
+    if (!this.model) return [];
+    const occupied = new Set(this.model.hexes.map((hex) => `${hex.q},${hex.r}`));
+    const water = new Map<string, Point>();
+    for (const hex of this.model.hexes) {
+      for (const offset of HEX_NEIGHBORS) {
+        const q = hex.q + offset.q;
+        const r = hex.r + offset.r;
+        const key = `${q},${r}`;
+        if (!occupied.has(key)) water.set(key, hexToPixel(q, r, this.hexSize));
+      }
+    }
+    return [...water.values()];
   }
 
   private drawTerrainTile(layer: Container, center: Point, texture: Texture): void {
@@ -666,37 +1208,123 @@ export class PixiBoardRenderer implements BoardRenderer {
       this.app.renderer.resize(width, height);
       resized = true;
     }
+    if (!resized) return;
     if (this.model) this.fitToBoard();
-    else if (resized) this.renderFrame();
+    else this.renderFrame();
   }
 
   private clampCamera(): void {
     const width = this.app.screen.width;
     const height = this.app.screen.height;
-    const points = this.model?.hexes.map((hex) => hexToPixel(hex.q, hex.r, this.hexSize)) ?? [];
-    if (!points.length) return;
-    const minX = Math.min(...points.map((p) => p.x)) - this.hexSize;
-    const maxX = Math.max(...points.map((p) => p.x)) + this.hexSize;
-    const minY = Math.min(...points.map((p) => p.y)) - this.hexSize;
-    const maxY = Math.max(...points.map((p) => p.y)) + this.hexSize;
+    const bounds = this.boardPixelBounds();
+    if (!bounds) return;
     const margin = 24;
-    this.cameraX = clampCameraAxis(this.cameraX, minX, maxX, width, this.zoom, margin);
-    this.cameraY = clampCameraAxis(this.cameraY, minY, maxY, height, this.zoom, margin);
+    this.cameraX = clampCameraAxis(
+      this.cameraX,
+      bounds.minX,
+      bounds.maxX,
+      width,
+      this.zoom,
+      margin,
+    );
+    this.cameraY = clampCameraAxis(
+      this.cameraY,
+      bounds.minY,
+      bounds.maxY,
+      height,
+      this.zoom,
+      margin,
+    );
+  }
+
+  private boardPixelBounds(): {
+    readonly minX: number;
+    readonly maxX: number;
+    readonly minY: number;
+    readonly maxY: number;
+  } | null {
+    if (!this.model?.hexes.length) return null;
+    const centers = [
+      ...this.model.hexes.map((hex) => hexToPixel(hex.q, hex.r, this.hexSize)),
+      ...this.waterCenters(),
+    ];
+    return {
+      minX: Math.min(...centers.map((point) => point.x)) - this.hexSize,
+      maxX: Math.max(...centers.map((point) => point.x)) + this.hexSize,
+      minY: Math.min(...centers.map((point) => point.y)) - this.hexSize,
+      maxY: Math.max(...centers.map((point) => point.y)) + this.hexSize,
+    };
+  }
+
+  private fitPixelBounds(): {
+    readonly minX: number;
+    readonly maxX: number;
+    readonly minY: number;
+    readonly maxY: number;
+  } | null {
+    if (!this.model?.hexes.length) return null;
+    const points: Point[] = [];
+    for (const hex of this.model.hexes) {
+      if (hex.terrain === 'sea') continue;
+      const corners = hexCorners(hexToPixel(hex.q, hex.r, this.hexSize), this.hexSize);
+      for (let index = 0; index < corners.length; index += 2) {
+        const x = corners[index];
+        const y = corners[index + 1];
+        if (x !== undefined && y !== undefined) points.push({ x, y });
+      }
+    }
+    if (points.length === 0) return this.boardPixelBounds();
+    const badgeRadius = this.hexSize * (HARBOR_MARKER_SCALE / 2);
+    for (const harbor of this.model.harbors) {
+      const edgeIndex = this.graph?.edgeIndex[harbor.edge];
+      const endpoints = edgeIndex === undefined ? undefined : this.graph?.edgeVertices[edgeIndex];
+      const landHexId =
+        edgeIndex === undefined
+          ? undefined
+          : this.graph?.edgeHexes[edgeIndex]?.find((id) => {
+              const hex = this.model?.hexes.find((candidate) => candidate.id === id);
+              return hex !== undefined && hex.terrain !== 'sea';
+            });
+      const landHex = this.model.hexes.find((hex) => hex.id === landHexId);
+      if (!endpoints || !landHex) continue;
+      const layout = harborLayout(
+        vertexToPixel(endpoints[0], this.hexSize),
+        vertexToPixel(endpoints[1], this.hexSize),
+        hexToPixel(landHex.q, landHex.r, this.hexSize),
+      );
+      if (!layout) continue;
+      points.push(
+        { x: layout.hub.x - badgeRadius, y: layout.hub.y - badgeRadius },
+        { x: layout.hub.x + badgeRadius, y: layout.hub.y + badgeRadius },
+      );
+    }
+    const padding = this.hexSize * 0.075;
+    return {
+      minX: Math.min(...points.map((point) => point.x)) - padding,
+      maxX: Math.max(...points.map((point) => point.x)) + padding,
+      minY: Math.min(...points.map((point) => point.y)) - padding,
+      maxY: Math.max(...points.map((point) => point.y)) + padding,
+    };
   }
 
   private updateCamera(): void {
     this.camera.position.set(this.cameraX, this.cameraY);
     this.camera.scale.set(this.zoom);
-    const labelScale = 1 / this.zoom;
-    for (const item of [...this.screenSizedObjects.tokens, ...this.screenSizedObjects.harbors])
-      item.scale.set(labelScale);
+    const signature = `${this.cameraX},${this.cameraY},${this.zoom},${this.app.screen.width},${this.app.screen.height}`;
+    if (signature === this.viewSignature) return;
+    this.viewSignature = signature;
+    for (const listener of this.viewChangeListeners) listener();
   }
 
   private renderFrame(): void {
     if (this.destroyed || this.renderFrameId !== 0) return;
     this.renderFrameId = requestAnimationFrame(() => {
       this.renderFrameId = 0;
-      if (!this.destroyed) this.app.render();
+      if (!this.destroyed) {
+        this.app.render();
+        this.renderedFrames += 1;
+        this.destroyDetachedChildren();
+      }
     });
   }
 
@@ -803,6 +1431,7 @@ export class PixiBoardRenderer implements BoardRenderer {
       }
     }
     const hit = this.hitTest({ x: event.clientX, y: event.clientY });
+    this.app.canvas.style.cursor = hit && this.isLegalHighlight(hit) ? 'pointer' : '';
     if (!sameHit(hit, this.lastHit)) {
       this.lastHit = hit;
       this.onHover?.(hit);
@@ -818,9 +1447,9 @@ export class PixiBoardRenderer implements BoardRenderer {
     if (drag?.pointerId === event.pointerId && !drag.moved && this.pointers.size === 0) {
       const point = { x: event.clientX, y: event.clientY };
       const hit = this.hitTest(point);
-      if (hit) {
+      if (hit) this.onSelect?.(hit);
+      if (hit && this.isLegalHighlight(hit)) {
         this.lastTap = null;
-        this.onSelect?.(hit);
       } else {
         const now = performance.now();
         const prior = this.lastTap;
@@ -856,7 +1485,8 @@ export class PixiBoardRenderer implements BoardRenderer {
   private readonly onDoubleClick = (event: MouseEvent): void => {
     if (this.destroyed) return;
     event.preventDefault();
-    if (!this.hitTest({ x: event.clientX, y: event.clientY })) this.fitToBoard();
+    const hit = this.hitTest({ x: event.clientX, y: event.clientY });
+    if (!hit || !this.isLegalHighlight(hit)) this.fitToBoard();
   };
 }
 

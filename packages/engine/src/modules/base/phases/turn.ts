@@ -5,6 +5,7 @@ import type {
   SystemInputHandler,
 } from '../../../core/modules/index.js';
 import type { SystemInput } from '../../../core/pipeline/index.js';
+import type { GameEvent } from '../../../core/events/index.js';
 import type { GameState, PrivateState } from '../../../core/state/index.js';
 import { failure, success } from '../../../core/types/index.js';
 import type { Result, Seat } from '../../../core/types/index.js';
@@ -173,8 +174,11 @@ export const diceResult: SystemInputHandler = {
     if (!validDice(input.dice)) throw new Error('Validated dice missing');
     const roll = input.dice[0] + input.dice[1];
     let next = preparedDiceState(state, input, ctx);
+    let productionEvent: GameEvent | null = null;
     if (roll !== 7) {
-      next = applyProduction(next, roll, ctx);
+      const production = applyProduction(next, roll, ctx);
+      next = production.state;
+      productionEvent = { type: 'resourcesProduced', bySeat: production.bySeat };
       next = replaceTop(next, frame('main'));
     } else {
       const limit = baseOptions(next.config.options.base).discardLimit;
@@ -193,7 +197,13 @@ export const diceResult: SystemInputHandler = {
           : frame('moveRobber', { returnTo: 'main' }),
       );
     }
-    return { state: next, events: [{ type: 'diceRolled', dice: input.dice, roll }] };
+    return {
+      state: next,
+      events: [
+        { type: 'diceRolled', dice: input.dice, roll },
+        ...(productionEvent ? [productionEvent] : []),
+      ],
+    };
   },
   applyPrivate: (priv, before, input, _data, ctx): Result<PrivateState> => {
     if (!validDice(input.dice)) return failure('invalid-dice', 'Dice missing');

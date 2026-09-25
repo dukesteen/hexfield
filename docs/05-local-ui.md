@@ -127,6 +127,7 @@ Later stages add `online/create`, `join/$roomId` (stage 09), `game/$gameId` (sta
 - **Hand**: resources grouped with counts; dev cards (face up for the owner) showing a "new — playable next turn" state; disabled states with a tooltip explaining why (from the `RuleError` message).
 - **Actions** are contextual and derived from `getLegalCommands` for the controllable seat:
   - build road/settlement/city → enters placement mode with highlights,
+  - road, settlement, and city selection previews the piece at a legal location; an explicit confirmation on the board commits it, while Cancel clears the preview. This also applies during setup and free-road placement,
   - buy dev card, trade, bank trade, end turn,
   - roll dice (in preRoll).
   - Keyboard shortcuts: `R` roll, `E` end turn, `1/2/3` build modes, `Esc` cancel.

@@ -29,7 +29,8 @@
   "steal": {
     "title": "Steal a card",
     "instruction": "Choose a player next to the robber.",
-    "seat": "{{player}}"
+    "seat_one": "{{player}} — {{count}} card",
+    "seat_other": "{{player}} — {{count}} cards"
   },
   "trade": {
     "title": "Player trade",
@@ -40,9 +41,15 @@
     "offers": "Trade offers",
     "offerFrom": "Offer from {{player}}",
     "offerTerms": "Give {{give}} for {{want}}",
+    "responses": "Player responses",
+    "responseStatus": "{{player}}: {{status}}",
+    "accepted": "accepted",
+    "declined": "declined",
+    "waiting": "waiting",
     "accept": "Accept",
     "decline": "Decline",
     "confirm": "Complete trade",
+    "confirmWith": "Trade with {{player}}",
     "withdraw": "Withdraw"
   },
   "bank": {

@@ -196,7 +196,17 @@ describe('LocalSession', () => {
     await reachTimedTurn(session);
     expect(session.getTimers()).toHaveLength(1);
     const before = session.getTimers()[0]?.remainingMs;
+    const command = session.getLegalCommands(session.getState().turn.activeSeat).commands[0];
+    if (!command) throw new Error('Active choice missing');
     session.setPaused(true);
+    expect(session.validate(session.getState().turn.activeSeat, command)).toMatchObject({
+      ok: false,
+      error: { code: 'session-paused' },
+    });
+    expect(await session.submit(session.getState().turn.activeSeat, command)).toMatchObject({
+      ok: false,
+      error: { code: 'session-paused' },
+    });
     expect(session.getTimers()[0]?.expiresAt).toBeNull();
     clock.advance(10_000);
     expect(session.getTimers()[0]?.remainingMs).toBe(before);

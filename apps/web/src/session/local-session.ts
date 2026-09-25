@@ -246,6 +246,7 @@ export class LocalSession implements GameSession<LocalSessionSave> {
     return this.engine.getLegalCommands(this.game.state, seat, this.game.privateView(seat));
   }
   validate(seat: Seat, command: CommandShape): Result<void> {
+    if (this.paused) return failure('session-paused', 'Local game is paused');
     if (this.status.kind !== 'running')
       return failure('session-inactive', 'Local session is not running');
     if (!this.humans.has(seat))

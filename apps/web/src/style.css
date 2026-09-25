@@ -108,6 +108,26 @@ small {
   color: #49665b;
 }
 
+.board-dev-effects {
+  display: grid;
+  gap: 0.5rem;
+  margin-block: 0.5rem;
+}
+
+.board-dev-effects button,
+.board-dev-effects label {
+  min-height: 2.75rem;
+}
+
+.board-dev-help output {
+  display: block;
+  overflow-wrap: anywhere;
+  color: #49665b;
+  font:
+    0.75rem ui-monospace,
+    monospace;
+}
+
 .board-keyboard-targets {
   position: absolute;
   z-index: 2;

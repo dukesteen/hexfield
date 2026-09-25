@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { GameEvent, GameState } from '@cp2p/engine';
 import type { GamePresentation } from '../../queries/repositories/saved-games';
-import { sessionForActions } from '../../store/session-store';
+import { useSessionStore } from '../../store/session-store';
 import { diceHistogram, productionBySeat, victoryBreakdown } from './stats';
 
 export function GameOverPanel({
@@ -21,7 +21,7 @@ export function GameOverPanel({
   const { t } = useTranslation('game');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(false);
-  const session = sessionForActions();
+  const finalHidden = useSessionStore((store) => store.finalHiddenVictoryPoints);
   const dice = diceHistogram(events);
   const peak = Math.max(1, ...dice.map((entry) => entry.count));
   const run = async (action: () => Promise<void>) => {
@@ -41,15 +41,19 @@ export function GameOverPanel({
       <p>{t('game:finalScore')}</p>
       <div className="final-scores">
         {state.config.seats.map((seat) => {
-          const score = victoryBreakdown(state, seat, session);
+          const score = victoryBreakdown(state, seat, finalHidden[seat] ?? null);
           const name =
             presentation.players.find((player) => player.seat === seat)?.name ??
             t('game:playerFallback', { number: seat + 1 });
           return (
             <div className="final-score" key={seat}>
               <strong>{name}</strong>
-              <b>{t('game:victoryPoints', { count: score.total })}</b>
-              <small>{t('game:scoreBreakdown', score)}</small>
+              <b>
+                {score.total === null
+                  ? t('game:scoreUnknown')
+                  : t('game:victoryPoints', { count: score.total })}
+              </b>
+              <small>{t('game:scoreBreakdown', { ...score, hidden: score.hidden ?? '?' })}</small>
               <small>{t('game:productionTotal', { count: productionBySeat(events, seat) })}</small>
             </div>
           );

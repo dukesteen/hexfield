@@ -53,7 +53,7 @@ export function BankTradePicker({
   }));
   const shortcuts = bestSingleTrades(rates, privateState.hand, validate);
   return (
-    <DialogFrame title={t('rules:bank.title')} onCancel={onCancel}>
+    <DialogFrame title={t('rules:bank.title')} onCancel={onCancel} variant="trade">
       <p>{t('rules:bank.bestRates')}</p>
       <ul>
         {rates.map(({ resource, rate }) => (

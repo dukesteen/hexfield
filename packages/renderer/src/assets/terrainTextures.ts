@@ -7,6 +7,7 @@ import lumberUrl from './resources/lumber.svg?no-inline';
 import oreUrl from './resources/ore.svg?no-inline';
 import woolUrl from './resources/wool.svg?no-inline';
 import harborUrl from './harbors/marker.svg?no-inline';
+import jettyUrl from './harbors/jetty.svg?no-inline';
 import cityUrl from './pieces/city.svg?no-inline';
 import roadUrl from './pieces/road.svg?no-inline';
 import robberUrl from './pieces/robber.svg?no-inline';
@@ -39,6 +40,7 @@ export interface BoardTextures {
   >;
   readonly numberToken: Texture;
   readonly harborMarker: Texture;
+  readonly harborJetty: Texture;
   readonly road: Texture;
   readonly settlement: Texture;
   readonly city: Texture;
@@ -89,18 +91,27 @@ export async function loadBoardTextures(
     maxPixelRatio,
     maxZoom,
     hexSize,
-    0.68,
-    0.68,
+    0.82,
+    0.82,
     80,
   );
-  const harborResolution = assetResolution(
+  const harborResolution = rasterResolution(
     devicePixelRatio,
     maxPixelRatio,
     maxZoom,
-    hexSize,
-    0.82,
-    0.82,
+    hexSize * 0.96,
+    hexSize * 0.96,
     SQUARE_ASSET_SIZE,
+    SQUARE_ASSET_SIZE,
+  );
+  const jettyResolution = rasterResolution(
+    devicePixelRatio,
+    maxPixelRatio,
+    maxZoom,
+    (hexSize * 4) / 3,
+    (hexSize * 7) / 6,
+    128,
+    112,
   );
   const pieceResolution = assetResolution(
     devicePixelRatio,
@@ -141,6 +152,7 @@ export async function loadBoardTextures(
     sea,
     numberToken,
     harborMarker,
+    harborJetty,
     road,
     settlement,
     city,
@@ -160,6 +172,7 @@ export async function loadBoardTextures(
     loadTexture('terrain-sea', seaUrl, HEX_WIDTH, HEX_HEIGHT, terrainResolution),
     loadTexture('token-number', numberTokenUrl, 80, 80, tokenResolution),
     loadTexture('harbor-marker', harborUrl, SQUARE_ASSET_SIZE, SQUARE_ASSET_SIZE, harborResolution),
+    loadTexture('harbor-jetty', jettyUrl, 128, 112, jettyResolution),
     loadTexture('piece-road', roadUrl, 96, 24, roadResolution),
     loadTexture(
       'piece-settlement',
@@ -199,6 +212,7 @@ export async function loadBoardTextures(
     terrain: { forest, hills, pasture, fields, mountains, desert, sea },
     numberToken,
     harborMarker,
+    harborJetty,
     road,
     settlement,
     city,

@@ -1,6 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { RESOURCES, baseLongestRoadLength, type GameState, type Seat } from '@cp2p/engine';
+import {
+  RESOURCES,
+  baseLongestRoadLength,
+  type CommandShape,
+  type GameState,
+  type Seat,
+} from '@cp2p/engine';
 import { getResourceIconUrl } from '@cp2p/renderer';
 import { BoardView } from '../board/BoardView';
 import type { BoardRenderer } from '@cp2p/renderer';
@@ -11,7 +17,10 @@ import { useSessionStore } from '../../store/session-store';
 import { EventLog } from './EventLog';
 import { useGameActions } from './GameActions';
 import { GameOverPanel } from './GameOverPanel';
+import { PlacementConfirmation } from './PlacementConfirmation';
 import { useBoardAppearance } from './use-appearance';
+import { sessionForActions } from '../../store/session-store';
+import { useVisualEffects } from './use-visual-effects';
 
 function playerName(presentation: GamePresentation, seat: Seat): string {
   return presentation.players.find((player) => player.seat === seat)?.name ?? String(seat + 1);
@@ -61,7 +70,15 @@ function SeatTimer({ seat }: { seat: Seat }) {
   );
 }
 
-function PlayerRail({ state, presentation }: { state: GameState; presentation: GamePresentation }) {
+function PlayerRail({
+  state,
+  presentation,
+  activeSeat,
+}: {
+  state: GameState;
+  presentation: GamePresentation;
+  activeSeat: Seat;
+}) {
   const { t } = useTranslation('game');
   return (
     <aside className="player-rail" aria-label={t('game:players')}>
@@ -72,8 +89,10 @@ function PlayerRail({ state, presentation }: { state: GameState; presentation: G
           return (
             <section
               key={seatState.seat}
-              className={`player-panel ${state.turn.activeSeat === seatState.seat ? 'is-active' : ''}`}
+              data-seat-panel={seatState.seat}
+              className={`player-panel ${activeSeat === seatState.seat ? 'is-active' : ''}`}
               aria-label={playerName(presentation, seatState.seat)}
+              aria-current={activeSeat === seatState.seat ? 'step' : undefined}
             >
               <div className="player-panel-heading">
                 <span
@@ -82,7 +101,16 @@ function PlayerRail({ state, presentation }: { state: GameState; presentation: G
                 />
                 <strong>{playerName(presentation, seatState.seat)}</strong>
                 <SeatTimer seat={seatState.seat} />
-                <span className="player-vp">{seatState.publicVp}</span>
+                <span
+                  className="player-vp"
+                  aria-label={t('game:publicVictoryPoints', { count: seatState.publicVp })}
+                >
+                  {seatState.publicVp} <small>{t('game:vpShort')}</small>
+                </span>
+              </div>
+              <div className="player-panel-status">
+                {activeSeat === seatState.seat && <span>{t('game:actingNow')}</span>}
+                <span className="connection-status">{t('game:localConnection')}</span>
               </div>
               <div className="player-panel-stats">
                 <span>{t('game:resourceCards', { count: seatState.resources.total })}</span>
@@ -121,19 +149,64 @@ function HandDock({ state }: { state: GameState }) {
   const { t } = useTranslation('game');
   const revealedSeat = useSessionStore((store) => store.revealedSeat);
   const privateState = useSessionStore((store) => store.privateState);
+  const optionalViewingSeat = useSessionStore((store) => store.optionalViewingSeat);
   const seatState = state.seats.find((seat) => seat.seat === revealedSeat);
+  const cardReason = (slotId: string, card: string, acquiredTurn: number): string | null => {
+    if (card === 'Hidden') return t('game:cardUnavailable');
+    if (acquiredTurn === state.turn.number && card !== 'victoryPoint') return t('game:newCard');
+    if (card === 'victoryPoint') return t('game:vpCardExplanation');
+    if (revealedSeat === null) return t('game:cardUnavailable');
+    const params =
+      card === 'yearOfPlenty'
+        ? { resources: { brick: 2, lumber: 0, wool: 0, grain: 0, ore: 0 } }
+        : card === 'monopoly'
+          ? { resource: 'brick' }
+          : undefined;
+    const command: CommandShape = {
+      type: 'PLAY_DEV_CARD',
+      slotId,
+      card,
+      ...(params ? { params } : {}),
+    };
+    const valid = sessionForActions()?.validate(revealedSeat, command);
+    if (valid?.ok) return null;
+    const code = valid?.error.code;
+    if (code === 'not-pending') return t('game:cardNotYourTurn');
+    if (code === 'dev-card-already-played') return t('game:cardAlreadyPlayed');
+    if (code === 'new-dev-card') return t('game:newCard');
+    if (code === 'session-paused') return t('game:cardPaused');
+    if (code === 'invalid-dev-slot') return t('game:cardSlotUnavailable');
+    if (code === 'invalid-dev-params' || code === 'unknown-field')
+      return t('game:cardNeedsChoices');
+    return t('game:cardRuleUnavailable');
+  };
   return (
     <section className="hand-dock" aria-label={t('game:yourHand')}>
       <div className="section-heading">
         <h2>{t('game:yourHand')}</h2>
         {revealedSeat !== null && (
-          <button
-            className="button button-quiet"
-            type="button"
-            onClick={() => useSessionStore.getState().conceal()}
-          >
-            {t('game:hideHand')}
-          </button>
+          <div className="hand-controls">
+            {optionalViewingSeat !== null && (
+              <button
+                className="button button-quiet"
+                type="button"
+                onClick={() => useSessionStore.getState().leaveOptionalSeat()}
+              >
+                {t('game:returnToBoard')}
+              </button>
+            )}
+            <button
+              className="button button-quiet"
+              type="button"
+              onClick={() => {
+                const store = useSessionStore.getState();
+                if (optionalViewingSeat !== null) store.leaveOptionalSeat();
+                else store.conceal();
+              }}
+            >
+              {t('game:hideHand')}
+            </button>
+          </div>
         )}
       </div>
       {!privateState || !seatState ? (
@@ -142,7 +215,19 @@ function HandDock({ state }: { state: GameState }) {
         <>
           <div className="resource-hand">
             {RESOURCES.map((resource) => (
-              <div className={`resource-count resource-${resource}`} key={resource}>
+              <div
+                className={`resource-count resource-${resource}`}
+                key={resource}
+                tabIndex={0}
+                title={t('game:resourceInHand', {
+                  resource: t(`game:${resource}`),
+                  count: privateState.hand[resource] ?? 0,
+                })}
+                aria-label={t('game:resourceInHand', {
+                  resource: t(`game:${resource}`),
+                  count: privateState.hand[resource] ?? 0,
+                })}
+              >
                 <span className="resource-count-label">
                   <img src={getResourceIconUrl(resource)} alt="" aria-hidden="true" />
                   {t(`game:${resource}`)}
@@ -155,12 +240,23 @@ function HandDock({ state }: { state: GameState }) {
             <div className="development-hand">
               {seatState.cardSlots
                 .filter((slot) => !slot.revealed)
-                .map((slot) => (
-                  <span className="development-card" key={slot.slotId}>
-                    {t(`game:dev${privateState.slots[slot.slotId] ?? 'Hidden'}`)}
-                    {slot.acquiredTurn === state.turn.number && <small>{t('game:newCard')}</small>}
-                  </span>
-                ))}
+                .map((slot) => {
+                  const card = privateState.slots[slot.slotId] ?? 'Hidden';
+                  const label = t(`game:dev${card}`);
+                  const reason = cardReason(slot.slotId, card, slot.acquiredTurn);
+                  return (
+                    <span
+                      className={`development-card ${reason ? 'is-disabled' : ''}`}
+                      key={slot.slotId}
+                      tabIndex={0}
+                      title={reason ?? label}
+                      aria-label={reason ? `${label}: ${reason}` : label}
+                    >
+                      {label}
+                      {reason && <small>{reason}</small>}
+                    </span>
+                  );
+                })}
             </div>
           )}
         </>
@@ -269,9 +365,15 @@ function LiveGame({
   const pending = useSessionStore((store) => store.pending);
   const waitingSeat = useSessionStore((store) => store.waitingSeat);
   const revealedSeat = useSessionStore((store) => store.revealedSeat);
+  const optionalChoices = useSessionStore((store) => store.optionalChoices);
+  const optionalViewingSeat = useSessionStore((store) => store.optionalViewingSeat);
   const { appearance, reducedMotion } = useBoardAppearance(presentation);
+  const [renderer, setRenderer] = useState<BoardRenderer | null>(null);
+  const boardRef = useRef<HTMLElement>(null);
+  const { skip, overlay } = useVisualEffects(renderer, reducedMotion);
   const model = useMemo(() => toRenderModel(state, 'spectator'), [state]);
   const actions = useGameActions(state, pending, presentation);
+  const previewPlayer = appearance.players.find((player) => player.seat === actions.actorSeat);
   useEffect(() => onActionsChange?.(actions.availability), [actions.availability, onActionsChange]);
   const activeName = playerName(presentation, actions.actorSeat);
   const winner = state.result ? playerName(presentation, state.result.winner) : null;
@@ -293,22 +395,66 @@ function LiveGame({
               : t('game:activePlayer', { player: activeName })}
           </h1>
         </div>
-        <TurnTimer />
+        <div className="game-header-controls">
+          <TurnTimer />
+          <button className="button button-quiet" type="button" onClick={skip}>
+            {t('game:skipAnimations')}
+          </button>
+        </div>
       </header>
+      {optionalChoices.length > 0 && optionalViewingSeat === null && (
+        <div className="optional-trade-chooser" role="group" aria-label={t('game:optionalTrade')}>
+          <span>{t('game:optionalTrade')}</span>
+          {optionalChoices.map((seat) => (
+            <button
+              className="button button-quiet"
+              type="button"
+              key={seat}
+              onClick={() => useSessionStore.getState().viewOptionalSeat(seat)}
+            >
+              {t('game:viewOptionalTrade', { player: playerName(presentation, seat) })}
+            </button>
+          ))}
+        </div>
+      )}
       <div className="game-grid">
-        <section className="game-board" aria-label={t('game:board')}>
+        <section ref={boardRef} className="game-board" aria-label={t('game:board')}>
           <BoardView
             model={model}
             appearance={appearance}
             reducedMotion={reducedMotion}
             label={t('game:board')}
             highlights={actions.highlights}
+            focusTarget={actions.focusTarget}
+            {...(!previewPlayer || !actions.placementConfirmation
+              ? {}
+              : {
+                  focusPreview: {
+                    piece: actions.placementConfirmation.piece,
+                    color: previewPlayer.color,
+                    marker: previewPlayer.marker,
+                  },
+                })}
             onSelect={(hit) => actions.onBoardSelect(hit)}
             targetLabel={(hit) => actions.targetLabel(hit)}
-            {...(onRendererReady ? { onRendererReady } : {})}
+            onRendererReady={(readyRenderer) => {
+              setRenderer(readyRenderer);
+              onRendererReady?.(readyRenderer);
+            }}
           />
+          {actions.placementConfirmation && (
+            <PlacementConfirmation
+              boardRef={boardRef}
+              renderer={renderer}
+              hit={actions.placementConfirmation.hit}
+              piece={actions.placementConfirmation.piece}
+              label={actions.placementConfirmation.label}
+              onConfirm={actions.placementConfirmation.confirm}
+              onCancel={actions.placementConfirmation.cancel}
+            />
+          )}
         </section>
-        <PlayerRail state={state} presentation={presentation} />
+        <PlayerRail state={state} presentation={presentation} activeSeat={actions.actorSeat} />
         <div className="game-bottom">
           <HandDock state={state} />
           {winner ? (
@@ -342,6 +488,7 @@ function LiveGame({
       {waitingSeat !== null && revealedSeat === null && !winner && (
         <PrivacyCover player={playerName(presentation, waitingSeat)} seat={waitingSeat} />
       )}
+      {overlay}
     </div>
   );
 }

@@ -56,25 +56,28 @@ Use original, flat vector art with simplified natural forms and a restrained upp
 
 Pointy-top terrain SVGs use `viewBox="0 0 200 231"`, with hex corners `(100,0)`, `(200,57.75)`, `(200,173.25)`, `(100,231)`, `(0,173.25)`, `(0,57.75)`. Keep all artwork inside the hex. Use roughly 3 px strokes at this viewBox, rounded joins where natural, and a quiet perimeter. The central number token occupies a radius of about 32 units around `(100,115.5)`; terrain landmarks should remain identifiable around it.
 
-| Terrain   | Base      | Recognizable forms                            |
-| --------- | --------- | --------------------------------------------- |
-| Forest    | `#80b09a` | Two or three simple tree crowns and trunks    |
-| Hills     | `#cb9176` | Rounded ridges and exposed stone planes       |
-| Pasture   | `#b7d197` | Open grass with small, simple grazing shapes  |
-| Fields    | `#e8cb78` | Broad crop rows and a few clear grain heads   |
-| Mountains | `#94a8b1` | Angular peaks with light and shaded facets    |
-| Desert    | `#ddcda7` | Two broad dune curves and sparse stone shapes |
-| Sea       | `#d1e7e9` | Sparse low-contrast wave strokes              |
+| Terrain   | Base      | Recognizable forms                                          |
+| --------- | --------- | ----------------------------------------------------------- |
+| Forest    | `#80b09a` | Two or three simple tree crowns and trunks                  |
+| Hills     | `#cb9176` | Rounded ridges and exposed stone planes                     |
+| Pasture   | `#b7d197` | Open grass with small, simple grazing shapes                |
+| Fields    | `#e8cb78` | Broad crop rows and a few clear grain heads                 |
+| Mountains | `#94a8b1` | Angular peaks with light and shaded facets                  |
+| Desert    | `#ddcda7` | Two broad dune curves and sparse stone shapes               |
+| Sea       | `#a8d6e8` | Blue wave strokes `#629eb8` and subtle highlights `#e2f3f9` |
 
 Each terrain uses its base plus two or three harmonious values. The shapes provide identification independently of color. No walls, castles, scrolls, banners, or decorative crests.
 
 Tokens, harbors, pieces, robber, and resource icons use the same outline weight and simple geometry. Resource icons must remain legible at 24 px with adjacent text available on hover/focus. Tokens have a neutral face with a strong number; renderer text and pip dots sit on the original SVG token base. Numbers 6 and 8 use red plus their pip count. Player piece SVGs may be neutral masks tinted by the renderer; never encode one player's color into a shared asset.
+
+Board objects share the camera scale. A token's face, numeral and pips keep their proportions, as do a port's connecting arms, badge, resource symbol and ratio. Port labels stay upright. Fit the island and port badges with a small margin; decorative water may extend beyond the viewport. Canvas labels naturally become smaller when zooming out. The interface text minimum does not justify enlarging labels independently of their board objects. Phone players can zoom for detail, and keyboard location descriptions include port access.
 
 Generate the first forest tile with `claude -p`, save its complete prompt under `packages/renderer/src/assets/prompts/`, optimize with SVGO, and inspect it on the actual dev board before generating the remaining batch. Pass that approved SVG and this guide as references for the batch. Keep each optimized tile below 8 KB, with no external references or scripts. Record significant art batches in `DECISIONS.md`.
 
 ## Motion
 
 - Dice briefly turn or tumble, then settle on the actual result.
+- The rolling pair stays centered over the visible board, with 64 px dice on desktop and 56 px dice on phone layouts. Its size is independent of board zoom.
 - Produced resources travel from their producing hex toward the receiving player panel, making the distribution visible.
 - A placed piece makes one small scale transition to confirm placement.
 - The robber moves between its old and new hex so the changed restriction is clear.

@@ -37,6 +37,8 @@ export interface BoardHighlights {
   readonly style?: {
     readonly color?: number;
     readonly pulse?: boolean;
+    /** Empty settlement sites or existing settlements available for city upgrade. */
+    readonly vertexTarget?: 'site' | 'upgrade';
   };
 }
 
@@ -61,19 +63,62 @@ export interface BoardRendererOptions {
   readonly onReady?: (renderer: BoardRenderer) => void;
 }
 
+/** Read-only counters for acceptance and performance diagnostics. */
+export interface BoardRendererDiagnostics {
+  readonly renderedFrames: number;
+  readonly rebuiltLayers: number;
+  readonly activeEffects: number;
+  readonly queuedDisposals: number;
+}
+
+export interface BoardFocusPreview {
+  /** Temporary, uncommitted piece shown at the focused legal target. */
+  readonly piece: 'road' | 'settlement' | 'city';
+  /** The active player's public board color. */
+  readonly color: number;
+  /** Player marker shape, used behind building previews. */
+  readonly marker?: BoardAppearance['players'][number]['marker'];
+}
+
 export interface ScreenPoint {
   readonly x: number;
   readonly y: number;
 }
 
+/** A rules-neutral visual cue. IDs are stable per public event and deduplicated briefly. */
+export type BoardEffect =
+  | { readonly id: string; readonly kind: 'dice-roll'; readonly dice: readonly [number, number] }
+  | {
+      readonly id: string;
+      readonly kind: 'piece-pop';
+      readonly piece: 'road' | 'settlement' | 'city';
+      readonly seat: Seat;
+      readonly at: BoardHit;
+    }
+  | {
+      readonly id: string;
+      readonly kind: 'robber-move';
+      readonly fromHex: HexId;
+      readonly toHex: HexId;
+    };
+
 export interface BoardRenderer {
   render(model: RenderModel): void;
   setHighlights(highlights: BoardHighlights): void;
+  /** Highlight a keyboard-selected target in board coordinates. */
+  setFocusTarget(hit: BoardHit | null, preview?: BoardFocusPreview): void;
   setAppearance(appearance: BoardAppearance): void;
   setReducedMotion(reduced: boolean): void;
+  /** Play public, board-contained effects; repeated IDs are ignored. */
+  playEffects(effects: readonly BoardEffect[]): void;
+  /** Immediately removes all active effects. */
+  skipAnimations(): void;
+  getDiagnostics(): BoardRendererDiagnostics;
   setHarborLabelFormatter(formatter: (kind: string) => string): void;
   /** Input coordinates are CSS client coordinates. */
   hitTest(clientPoint: ScreenPoint, mode?: HitMode): BoardHit | null;
+  /** Subscribe to camera or viewport changes; the listener fires once immediately. */
+  subscribeViewChange(listener: () => void): () => void;
   /** Returns a target center in CSS client coordinates. */
   getPixelPosition(hit: BoardHit): ScreenPoint;
   /** Board points use engine geometry's local pixel basis. */

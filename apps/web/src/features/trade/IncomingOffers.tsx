@@ -1,5 +1,5 @@
 import { RESOURCES } from '@cp2p/engine';
-import type { CommandShape } from '@cp2p/engine';
+import type { CommandShape, Seat } from '@cp2p/engine';
 import { useTranslation } from 'react-i18next';
 import { resourceLabel } from '../dialogs/resources.js';
 import type { CommandFormProps } from '../dialogs/types.js';
@@ -16,11 +16,32 @@ function offerSide(value: unknown, t: ReturnType<typeof useTranslation>['t']): s
   }).join(', ');
 }
 
-function actionLabel(command: CommandShape, t: ReturnType<typeof useTranslation>['t']): string {
+function actionLabel(
+  command: CommandShape,
+  t: ReturnType<typeof useTranslation>['t'],
+  seats: readonly Seat[],
+  playerLabel: (seat: Seat) => string,
+): string {
   if (command.type === 'RESPOND_TRADE')
     return command.accept === true ? t('rules:trade.accept') : t('rules:trade.decline');
-  if (command.type === 'CONFIRM_TRADE') return t('rules:trade.confirm');
+  const counterparty = seats.find((seat) => seat === command.withSeat);
+  if (command.type === 'CONFIRM_TRADE')
+    return counterparty === undefined
+      ? t('rules:trade.confirm')
+      : t('rules:trade.confirmWith', { player: playerLabel(counterparty) });
   return t('rules:trade.withdraw');
+}
+
+function responseStatus(offer: Record<string, unknown>, seat: number): string {
+  if (Array.isArray(offer.acceptedBy) && offer.acceptedBy.includes(seat)) return 'accepted';
+  if (Array.isArray(offer.declinedBy) && offer.declinedBy.includes(seat)) return 'declined';
+  return 'waiting';
+}
+
+function statusLabel(status: string, t: ReturnType<typeof useTranslation>['t']): string {
+  if (status === 'accepted') return t('rules:trade.accepted');
+  if (status === 'declined') return t('rules:trade.declined');
+  return t('rules:trade.waiting');
 }
 
 /** Public offer cards with only the supplied concrete response commands. */
@@ -61,6 +82,23 @@ export function IncomingOffers({
                 want: offerSide(offer.want, t),
               })}
             </p>
+            {Array.isArray(offer.to) && (
+              <ul aria-label={t('rules:trade.responses')}>
+                {offer.to.flatMap((recipient) => {
+                  const seat = state.config.seats.find((candidate) => candidate === recipient);
+                  return seat === undefined
+                    ? []
+                    : [
+                        <li key={seat}>
+                          {t('rules:trade.responseStatus', {
+                            player: playerLabel(seat),
+                            status: statusLabel(responseStatus(offer, seat), t),
+                          })}
+                        </li>,
+                      ];
+                })}
+              </ul>
+            )}
             {choices.map((command, index) => (
               <button
                 type="button"
@@ -70,7 +108,7 @@ export function IncomingOffers({
                   if (validate(command).ok) onSubmit(command);
                 }}
               >
-                {actionLabel(command, t)}
+                {actionLabel(command, t, state.config.seats, playerLabel)}
               </button>
             ))}
           </article>

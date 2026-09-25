@@ -12,6 +12,7 @@
   "players": "Players",
   "playerCount": "Player count",
   "playerName": "Player {{number}} name",
+  "nameRequired": "Enter a player name that is not blank.",
   "defaultPlayerName": "Player {{number}}",
   "playerRole": "Player {{number}} control",
   "human": "Human",

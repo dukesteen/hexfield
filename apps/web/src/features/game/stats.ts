@@ -1,5 +1,4 @@
 import { RESOURCES, type GameEvent, type GameState, type Seat } from '@cp2p/engine';
-import type { GameSession } from '../../session';
 
 function record(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -32,7 +31,7 @@ export function productionBySeat(events: readonly GameEvent[], seat: Seat): numb
   return total;
 }
 
-export function victoryBreakdown(state: GameState, seat: Seat, session: GameSession | null) {
+export function victoryBreakdown(state: GameState, seat: Seat, hidden: number | null) {
   const buildings = state.board.buildings.reduce(
     (points, item) => points + (item.seat === seat ? (item.kind === 'city' ? 2 : 1) : 0),
     0,
@@ -42,10 +41,11 @@ export function victoryBreakdown(state: GameState, seat: Seat, session: GameSess
   const publicSeat = state.seats.find((item) => item.seat === seat);
   const revealed =
     publicSeat?.cardSlots.filter((slot) => slot.revealed === 'victoryPoint').length ?? 0;
-  const priv = session?.getPrivate(seat);
-  const hidden =
-    publicSeat?.cardSlots.filter(
-      (slot) => !slot.revealed && priv?.slots[slot.slotId] === 'victoryPoint',
-    ).length ?? 0;
-  return { buildings, awards, revealed, hidden, total: buildings + awards + revealed + hidden };
+  return {
+    buildings,
+    awards,
+    revealed,
+    hidden,
+    total: hidden === null ? null : buildings + awards + revealed + hidden,
+  };
 }

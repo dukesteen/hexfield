@@ -3,7 +3,7 @@ import { afterEach, beforeAll, describe, expect, test, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { createInstance } from 'i18next';
 import { I18nextProvider } from 'react-i18next';
-import { createBaseEngine, failure, success } from '@cp2p/engine';
+import { createBaseEngine, exactResourceBounds, failure, success } from '@cp2p/engine';
 import type { CommandShape, LegalCommandSet, PrivateState, ResourceCounts } from '@cp2p/engine';
 import rules from '../../i18n/locales/en/rules.json';
 import { DiscardDialog } from './DiscardDialog.js';
@@ -129,8 +129,21 @@ describe('rule-backed dialogs', () => {
 
     const steal = { type: 'STEAL', victim: 2 };
     const onSteal = vi.fn<(command: CommandShape) => void>();
-    mount(<StealDialog {...props({ commands: [steal], templates: [] }, onSteal)} />);
-    fireEvent.click(screen.getByRole('button', { name: 'Nia' }));
+    const bounds = exactResourceBounds({ brick: 3, lumber: 0, wool: 0, grain: 0, ore: 0 });
+    if (!bounds.ok) throw new Error(bounds.error.message);
+    const stealProps = props({ commands: [steal], templates: [] }, onSteal);
+    mount(
+      <StealDialog
+        {...stealProps}
+        state={{
+          ...state,
+          seats: state.seats.map((seat) =>
+            seat.seat === 2 ? { ...seat, resources: bounds.value } : seat,
+          ),
+        }}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Nia — 3 cards' }));
     expect(onSteal).toHaveBeenCalledWith(steal);
     expect(screen.queryByRole('button', { name: 'Player 2' })).toBeNull();
   });

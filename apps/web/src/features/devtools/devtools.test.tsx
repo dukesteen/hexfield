@@ -39,10 +39,23 @@ describe('development diagnostics', () => {
     const renderer: BoardRenderer = {
       render() {},
       setHighlights() {},
+      setFocusTarget() {},
       setAppearance() {},
       setReducedMotion() {},
+      playEffects() {},
+      skipAnimations() {},
+      getDiagnostics: () => ({
+        renderedFrames: 0,
+        rebuiltLayers: 0,
+        activeEffects: 0,
+        queuedDisposals: 0,
+      }),
       setHarborLabelFormatter() {},
       hitTest: () => null,
+      subscribeViewChange(listener) {
+        listener();
+        return () => undefined;
+      },
       getPixelPosition: () => ({ x: 18, y: 29 }),
       boardToScreen: (point) => point,
       screenToBoard: (point) => point,
