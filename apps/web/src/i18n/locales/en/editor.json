@@ -17,8 +17,8 @@
   "diceReady": "The next random dice result is set.",
   "exportSave": "Export authoritative save",
   "exportReplay": "Export replay JSON",
-  "importSave": "Authoritative save JSON",
-  "loadSave": "Load save",
+  "importSave": "Save or replay JSON",
+  "loadSave": "Load save or replay",
   "invalidCommand": "A command must be a JSON object.",
   "done": "Done.",
   "failed": "Failed"

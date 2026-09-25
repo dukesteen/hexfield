@@ -129,10 +129,10 @@ describe('development diagnostics', () => {
     fireEvent.click(screen.getByText('Export replay JSON'));
     await waitFor(() => expect(onExportReplay).toHaveBeenCalledOnce());
     expect(onExportReplay.mock.calls[0]?.[0]).toEqual(session.exportSave());
-    fireEvent.change(screen.getByLabelText('Authoritative save JSON'), {
+    fireEvent.change(screen.getByLabelText('Save or replay JSON'), {
       target: { value: JSON.stringify(session.exportSave()) },
     });
-    fireEvent.click(screen.getByText('Load save'));
+    fireEvent.click(screen.getByText('Load save or replay'));
     await waitFor(() => expect(onImportSave).toHaveBeenCalledOnce());
     expect(onImportSave.mock.calls[0]?.[0]).toEqual(session.exportSave());
 

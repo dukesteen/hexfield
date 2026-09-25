@@ -5,6 +5,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { DevHook } from '../src/features/devtools/hook.js';
+import { deriveVisualEffects } from '../src/features/game/visual-effects.js';
 import { saveBeforeGoldenInput } from './golden-save.js';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
@@ -128,6 +129,145 @@ async function capture(page: Page, name: string): Promise<void> {
   await writeFile(path, await page.screenshot());
 }
 
+test('a real production roll flies public gains from hexes to player panels', async ({
+  browser,
+  browserName,
+}) => {
+  test.skip(browserName !== 'chromium', 'Production flight geometry runs in Chromium');
+  for (const device of [
+    { name: 'desktop', mobile: false, width: 1280, height: 720 },
+    { name: 'phone', mobile: true, width: 390, height: 844 },
+  ]) {
+    const context = await browser.newContext({
+      viewport: { width: device.width, height: device.height },
+      isMobile: device.mobile,
+      hasTouch: device.mobile,
+    });
+    try {
+      const page = await context.newPage();
+      const errors: string[] = [];
+      page.on('pageerror', (error) => errors.push(error.message));
+      const beforeEvents = await openBeforeProductionRoll(page, `payout-flight-${device.name}`);
+      const before = await page.evaluate(() => {
+        const hook: DevHook | undefined = Reflect.get(window, '__cp2p');
+        return hook?.session.getState() ?? null;
+      });
+      if (!before) throw new Error('Production fixture has no public state');
+      // Hold only the test's visual at midflight so endpoints can be inspected reliably.
+      const pauseStyle = await page.addStyleTag({
+        content:
+          '.resource-flight { animation-delay: -250ms !important; animation-play-state: paused !important; }',
+      });
+      await rollForProduction(page, beforeEvents);
+      const after = await page.evaluate((index) => {
+        const hook: DevHook | undefined = Reflect.get(window, '__cp2p');
+        return hook
+          ? {
+              state: hook.session.getState(),
+              events: hook.session.getEvents().slice(index),
+              revision: hook.diagnostics().revision,
+            }
+          : null;
+      }, beforeEvents);
+      if (!after) throw new Error('Production roll has no public update');
+      const cues = deriveVisualEffects(before, after.state, after.events, after.revision).flights;
+      expect(cues.length).toBeGreaterThan(0);
+      const flightElements = page.locator('.resource-flight');
+      await expect(flightElements).toHaveCount(cues.length);
+      const expected = await page.evaluate((flights) => {
+        const hook: DevHook | undefined = Reflect.get(window, '__cp2p');
+        return flights.map((flight) => {
+          const from = hook?.pixelPosition({ kind: 'hex', id: flight.fromHex }) ?? null;
+          const panel = document.querySelector(`[data-seat-panel="${flight.seat}"]`);
+          const box = panel?.getBoundingClientRect();
+          return {
+            from,
+            to: box
+              ? {
+                  left: box.left,
+                  right: box.right,
+                  top: box.top,
+                  bottom: box.bottom,
+                }
+              : null,
+          };
+        });
+      }, cues);
+      const actual = await flightElements.evaluateAll((elements) =>
+        elements.map((element) => {
+          if (!(element instanceof HTMLElement)) throw new Error('Flight is not an element');
+          const rendered = element.getBoundingClientRect();
+          const image = element.querySelector('img');
+          return {
+            x: Number.parseFloat(element.style.left),
+            y: Number.parseFloat(element.style.top),
+            dx: Number.parseFloat(element.style.getPropertyValue('--flight-dx')),
+            dy: Number.parseFloat(element.style.getPropertyValue('--flight-dy')),
+            count: element.querySelector('b')?.textContent,
+            icon: image?.getAttribute('src'),
+            imageLoaded: (image?.naturalWidth ?? 0) > 0,
+            visible: rendered.width > 0 && rendered.height > 0,
+            renderedX: rendered.left + rendered.width / 2,
+            renderedY: rendered.top + rendered.height / 2,
+          };
+        }),
+      );
+      for (const [index, cue] of cues.entries()) {
+        const drawn = actual[index];
+        const anchors = expected[index];
+        if (!drawn || !anchors?.from || !anchors.to)
+          throw new Error(`${device.name} flight ${index} has no public anchors`);
+        expect(Math.hypot(drawn.x - anchors.from.x, drawn.y - anchors.from.y)).toBeLessThan(2);
+        // The receipt enters after launch and can shift the panel center; the endpoint remains
+        // inside the intended public seat panel.
+        const endX = drawn.x + drawn.dx;
+        const endY = drawn.y + drawn.dy;
+        expect(endX).toBeGreaterThanOrEqual(anchors.to.left - 2);
+        expect(endX).toBeLessThanOrEqual(anchors.to.right + 2);
+        expect(endY).toBeGreaterThanOrEqual(anchors.to.top - 2);
+        expect(endY).toBeLessThanOrEqual(anchors.to.bottom + 2);
+        const axisX = drawn.dx;
+        const axisY = drawn.dy;
+        const travelX = drawn.renderedX - anchors.from.x;
+        const travelY = drawn.renderedY - anchors.from.y;
+        const axisLength = Math.hypot(axisX, axisY);
+        const progress = (travelX * axisX + travelY * axisY) / (axisLength * axisLength);
+        const offPath = Math.abs(travelX * axisY - travelY * axisX) / axisLength;
+        expect(progress, `${device.name} flight is not between hex and player`).toBeGreaterThan(
+          0.05,
+        );
+        expect(progress).toBeLessThan(0.95);
+        expect(offPath, `${device.name} flight leaves its route`).toBeLessThan(3);
+        expect(drawn.visible).toBe(true);
+        expect(drawn.renderedX).toBeGreaterThan(0);
+        expect(drawn.renderedX).toBeLessThan(device.width);
+        expect(drawn.renderedY).toBeGreaterThan(0);
+        expect(drawn.renderedY).toBeLessThan(device.height);
+        expect(drawn.count).toBe(`+${cue.count}`);
+        expect(drawn.imageLoaded).toBe(true);
+        expect(new URL(drawn.icon ?? '', page.url()).pathname).toMatch(
+          new RegExp(`/${cue.resource}(?:-[^/]+)?\\.svg$`),
+        );
+      }
+      if (device.name === 'desktop') {
+        const path = join(repoRoot, 'reports/stage05/production-flight-desktop.png');
+        await mkdir(dirname(path), { recursive: true });
+        await writeFile(path, await page.screenshot({ animations: 'allow' }));
+      }
+      if (device.name === 'desktop')
+        await pauseStyle.evaluate((element) => element.parentNode?.removeChild(element));
+      else {
+        await page.getByLabel('Open game menu').click();
+        await page.getByRole('button', { name: 'Skip animations' }).click();
+      }
+      await expect(flightElements).toHaveCount(0);
+      expect(errors).toEqual([]);
+    } finally {
+      await context.close();
+    }
+  }
+});
+
 test('visible production receipts survive Skip animations and the next turn, then expire', async ({
   page,
 }) => {
@@ -201,6 +341,13 @@ test('reduced-motion phone keeps public payout receipts beside all paid seats', 
   }
   await expectVisibleReceipts(page, bySeat);
   await capture(page, 'payout-phone.png');
+  await page.evaluate(
+    () =>
+      new Promise<void>((finishFrames) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => finishFrames())),
+      ),
+  );
+  await expect(page.locator('.resource-flight')).toHaveCount(0);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   expect(errors).toEqual([]);
 });
