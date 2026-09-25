@@ -1,0 +1,48 @@
+{
+  "smallHandIndexCases": 7680,
+  "maximumBankHandCases": 120,
+  "sixBitsCompleteForTheseCases": true,
+  "argument": "For the true type branch, prefix <= idx < prefix+count. Both distances are in [0,count-1], regardless of prefix or total. With count<=24, both are <=23.",
+  "examples": [
+    {
+      "hand": [24, 24, 24, 24, 24],
+      "idx": 0,
+      "selectedType": 0,
+      "prefix": 0,
+      "lowerDistance": 0,
+      "upperDistance": 23
+    },
+    {
+      "hand": [24, 24, 24, 24, 24],
+      "idx": 63,
+      "selectedType": 2,
+      "prefix": 48,
+      "lowerDistance": 15,
+      "upperDistance": 8
+    },
+    {
+      "hand": [24, 24, 24, 24, 24],
+      "idx": 64,
+      "selectedType": 2,
+      "prefix": 48,
+      "lowerDistance": 16,
+      "upperDistance": 7
+    },
+    {
+      "hand": [24, 24, 24, 24, 24],
+      "idx": 100,
+      "selectedType": 4,
+      "prefix": 96,
+      "lowerDistance": 4,
+      "upperDistance": 19
+    },
+    {
+      "hand": [24, 24, 24, 24, 24],
+      "idx": 119,
+      "selectedType": 4,
+      "prefix": 96,
+      "lowerDistance": 23,
+      "upperDistance": 0
+    }
+  ]
+}

@@ -18,6 +18,7 @@ Every stage depends on this document. Read it before starting any stage.
 - Every peer runs the same **pure, deterministic** rules engine.
 - Game progress is an ordered, hash-chained **log of inputs**. An input is either a player command ("build road at edge 47") or a system input ("dice result = 3,4").
 - `state_N = fold(apply, genesisState, inputs[1..N])`. Two honest peers with the same log **always** produce byte-identical public state. Peers compare `SHA-256(canonical(publicState))` to catch desyncs.
+- Certified protocol-control and cryptographic entries can preserve engine state. Replay folds their typed metadata into protocol state alongside engine inputs; snapshot validation checks both. Stage 07 defines fixed operation contexts and the engine-owned resource effects used by commitment accounting.
 
 ### 2.2 The engine never produces its own randomness mid-game
 
@@ -154,7 +155,7 @@ Rules (enforced by dependency-cruiser in CI, stage 01):
 - **Command**: a signed intent from a seat (`BUILD_ROAD`).
 - **System input**: a non-player input (`DICE_RESULT`, `CARD_DEALT`, `TIMEOUT`), produced by the protocol from beacon/deck/timer rules and verifiable by every peer.
 - **Input**: command or system input. Engine function `apply(state, input)`.
-- **Entry**: an input wrapped with `seq`, `prevHash`, `term` and signatures in the replicated log.
+- **Entry**: a certified engine input or typed protocol control, bound to a sequence, parent hash, membership epoch and signatures in the replicated log.
 - **Genesis**: entry 0. It contains config, modules, seats and keys, the board seed and cryptographic commitments.
 - **Pending**: what the engine currently waits for.
 - **Bounds**: public min/max knowledge of a player's resource counts.

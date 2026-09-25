@@ -129,6 +129,8 @@ The approved [Claude implementation review](verification/stage06/implementation-
 
 Source: [07-fair-randomness-hidden-info.md](07-fair-randomness-hidden-info.md)
 
+Implementation has started after the Stage 06 CI gate. The [design review response](verification/stage07/design-review-response.md) records the accepted lifecycle, delivery, proof-composition and recovery corrections, as well as review claims rejected after checking the mathematics. Step 1 adds group/derivation helpers, hash chains, unbiased integer sampling, secret sharing, Schnorr/DLEQ proofs, sealing, composable bit/range proofs and compact shuffle proofs. [Local checks](verification/stage07/step1-local-checks.md) pass 586 tests across 107 files and the production build. The external implementation review awaits approval to send the unpublished source to Claude; Stage 07 is not accepted. Real WebRTC transport, lobby setup and durable browser recovery remain in stages 08–10.
+
 - [ ] P2P games over memnet with real crypto pass the stage-06 chaos suite (200 seeds per scenario in CI).
 - [ ] Every row in the cheat table is covered by a passing test that checks the cheat is caught at the listed time.
 - [ ] Every completed honest game has no `CHEAT_PROOF` entries and produces `AuditReport.ok === true` (1,000 simulated games).

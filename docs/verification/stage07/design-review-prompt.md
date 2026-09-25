@@ -1,3 +1,29 @@
+# Stage 07 preflight review
+
+Review the following published protocol design and proposed corrections. This is a read-only design consultation before implementation. Do not write code. No private keys or user data are included. No tools are available. The source document below is published at https://github.com/dukesteen/hexfield/blob/53c33a2593359171ae5a4dccf39cdcc7f1698860/docs/07-fair-randomness-hidden-info.md .
+
+Ordering guarantees: at most one Byzantine human voter, n=1..6 quorums 1,2,3,3,4,4, bots nonvoters hosted by humans. Agreement wins over availability. Two/three human games pause if a voter disappears. Membership changes require old-set certificates; recovery authorization first freezes/removes departed signer before share disclosure, then a second certificate activates a bot under fresh signing keys. Escrow is absent in games starting with fewer than four humans. Human game signing keys are distinct from escrowed master secrets.
+
+Please identify concrete security defects and assess these corrections:
+
+1. Genesis includes encrypted escrow shares, recipient ACKs, public keys and transcript roots. Deriving setup artifacts from the final genesis digest would be circular. Freeze a signed pre-genesis manifest with all seats/config/public game keys and a fresh ceremony nonce; ceremonyId=H(domain, canonical manifest). Bind setup contributions, keys/chain/board commitments, sealed shares and ACKs to ceremonyId+phase+sender/recipient+payload hash. Embed the ceremony transcript root in genesis; all human consent signatures cover full final genesis digest. Post-genesis operations bind full digest, certified membership epoch, certified parent hash, phase, operation ID, ordinal and participants. Is any additional consistency/replay attack left?
+
+2. Deck setup passes and CHEAT_PROOF records preserve engine state and need explicit certified protocol entries. Derive CryptoContext purely from genesis + certified history. Validation derives next crypto context alongside next engine state, never from mutable driver closures. Snapshots are replay-checked including metadata. A durable operation coordinator handles signed SYS_CONTRIB, retransmission, private deliveries, and preparation of command proofs before command signing. Every outgoing nonce/choice/transcript record is persisted before publication. What exact crash/idempotency requirements are essential?
+
+3. A steal's victim-signed contribution fixes T, beacon index and sealed opening. The thief verifies/decrypts provisionally before certification, then signs a receipt binding operation ID + contribution hash + ciphertext/T hashes + parent, NOT final entry hash. Validators require public one-hot/index proofs plus receipt before accepting STEAL_RESULT. A valid precommit DLEQ dispute blocks the candidate; invalid disputes are rejected. Refusing a receipt stalls the fixed operation, never changes victim contribution/beacon index. Recovery may finish that same operation only after authorization. The thief's private consequence publishes after certificate; an inconsistent local private state fails closed without rolling back committed public state. A malicious thief may ACK bad plaintext and harm its own future ability to prove a spend; one human may host both endpoints through bots. Does this meet proof-before-application without exposing the card, and how should voluntary bad ACK / selective refusal be described? Are first-contribution fixation and abort behavior safe across unrelated certified control entries and changing membership?
+
+4. Bot escrow uses the other original human devices excluding its host, not other seat numbers. All those holders are required, and bot/human signing keys are not escrowed. Human host can know all its bots' hands; disclosure is explicit. Is this threshold and authorized recovery consistent with single-Byzantine ordering?
+
+5. Single-key shuffle proof retains 64 rounds. Potential performance optimization for bit 1: verify R = inverse(u)*A and Y = inversePermutation(tau)(inverse(u)*out), algebraically equivalent to uR=A and out=tau(uY), so A/out are reusable precomputed points. Bound caches per operation. State any equivalence/zero scalar/canonical encoding pitfalls. Six 25-card shuffle proofs exceed 256KiB combined, so one bounded certified entry per pass. Do not claim timing budgets pass without benchmark evidence.
+
+6. Fiat-Shamir, proof randomness, derived secrets and sealing must be domain-separated and transcript-bound. Derive deterministic proof randomness from master+full statement+operation domain, never reuse a Schnorr nonce under different challenges. Master is a uniformly sampled nonzero canonical scalar; derived field values use wide reduction or deterministic rejection. Hash-to-group uses a standard hash-to-Ristretto suite with fixed DST. Reject noncanonical field/group encodings and identity points where keys/bases must be nonzero. Empty Pedersen hands legitimately use identity. Detail missing checks for the CDS OR-of-range-proofs hidden-steal design, especially simulator composition and proving same one-hot branch.
+
+7. Audit can be incomplete if final secrets are withheld, especially two/three-human games with no escrow. Do not report ok=true merely from per-move verification when secrets are missing. Distinguish verified moves from a completed omniscient audit.
+
+Return blocking issues first with concrete attacks, then a short corrected contract. Distinguish proven defects from questions needing implementation tests. This review is not a claim of security certification.
+
+--- Published Stage 07 design ---
+
 # 07 — Fair Randomness & Hidden Information
 
 ## Goal
@@ -8,8 +34,8 @@ Replace the stub randomness from stage 06 with cryptographic protocols so that n
 2. **Deck protocol** (mental poker with verifiable shuffles): hidden draws (dev cards; later progress cards, fog tiles, fish tokens…).
 3. **Committed hands**: every seat's hidden resources are held as public homomorphic commitments, so every spend, reveal and transfer is proven **on the move that makes it**.
 4. **Hidden transfers**: robber steals, with a proof that the right card moved and encrypted delivery through the log.
-5. **Key escrow**: an eligible departed player's secrets can be recovered after certified authorization, if all required share holders cooperate.
-6. **End-of-game reveal**: available secrets are published after the game for the omniscient replay and a defence-in-depth re-check. Missing secrets leave the audit incomplete.
+5. **Key escrow**: a permanently departed player's secrets can be recovered so the game can continue.
+6. **End-of-game reveal**: all secrets are published after the game for the omniscient replay and a defence-in-depth re-check. Fairness no longer depends on it.
 
 All code lives in `@cp2p/crypto` (primitives, pure and deterministic given inputs) and in `@cp2p/protocol` (orchestration/sub-protocols).
 
@@ -21,28 +47,18 @@ Stage 06 is complete.
 
 Honest-but-possibly-cheating players who may run modified clients. We guarantee:
 
-- **Unpredictability and unbiasability** of post-genesis public randomness, provided at least one independent human participant is honest. A refusal can stall a fixed outcome but cannot select a replacement. Public board selection happens before consent to genesis; aborted setup attempts can select among public layouts.
-- **Confidentiality** of hidden cards against the other independent human devices, unless all required escrow holders collude or certified recovery reveals a seat's secrets. A bot host already knows its bots' secrets; bot seats do not add independent privacy protection.
+- **Unpredictability and unbiasability** of public randomness, provided at least one participant is honest.
+- **Confidentiality** of hidden cards, unless _all_ other players collude (and via escrow recovery, which by definition needs all remaining players).
 - **Per-move detection** of lies about hidden information. Every input that touches hidden information carries a proof, and every peer verifies it before it votes for the entry. An input with a missing or bad proof is never applied, so a cheat can't change the game state; the cheater is identified on the move it tried (§6). Nobody has to wait for the end of the game to know whether it was fair.
 - The single exception is whether a seat's escrowed master secret matches the keys it actually used. That can only be checked by reconstructing the secret, which happens at takeover or at the end-of-game reveal (§8).
 
 Aborting (refusing to reveal or to prove) can't bias outcomes. It only stalls, which triggers timeout handling (stage 10).
 
-### Certified context and execution
-
-Before setup, all participants sign a frozen manifest containing config, roster, per-game public keys and a fresh ceremony nonce. Its hash is `ceremonyId`. Setup proofs bind this ID, their phase, actors and full statement. Final genesis commits to the complete ordered setup transcript, including encrypted shares and receipts. Setup artifacts cannot depend on the final genesis digest, because that digest includes those artifacts. An aborted attempt uses fresh secrets, voting keys and nonce.
-
-After genesis, proof contexts bind its full digest, the certified membership epoch, a fixed operation parent, operation kind and ordinal, participants, key versions and the exact public statement. The certified request freezes beacon participants and index, deck position and unlock order. An existing engine command creating a pending request can be this anchor; an extra empty entry is not required. Later controls or membership changes preserve the operation. Recovery supplies the missing contribution to that operation. No early beacon reveals, rerolls or reuse of a consumed round are allowed.
-
-Typed crypto and `CHEAT_PROOF` entries can preserve engine state while advancing protocol state. A pure `CryptoContext` is folded from certified history and included in replay-verified snapshots. Owner proofs are prepared before command signing. Certified evidence is available to private-state application; provisional decryption never changes the visible committed hand. Outgoing contributions, receipts and choices persist before transmission, and retries resend their exact bytes.
-
-Run the online protocol, engine and crypto together in a dedicated worker. The main thread bridges WebRTC bytes and exposes a `GameSession` proxy to Zustand. Verification stays synchronous inside the protocol worker; a peer cannot supply a trusted `verified` flag. Check signatures, context, shape and expected dimensions before expensive group work. Bound pending proof tasks and bytes so they cannot starve voting and heartbeat processing. Any verification cache keys the complete canonical context, statement and proof and has a size limit.
-
 ## 1. Per-seat master secret
 
-- At game creation, each seat samples `masterSecret` as a uniformly random nonzero ristretto255 scalar (CSPRNG rejection sampling, 32-byte canonical encoding) and publishes `masterPub = masterSecret·G` in its genesis commitments. Game cryptographic secrets are derived from it with HKDF-SHA256 using distinct labels and canonical context tuples: beacon chain seed, deck keys, Pedersen blindings, per-card lock keys and the in-log encryption key. Device identity and per-game voting keys are independent and are never escrowed.
+- At game creation, each seat samples `masterSecret` as a uniformly random ristretto255 scalar (CSPRNG, 32-byte canonical encoding) and publishes `masterPub = masterSecret·G` in its genesis commitments. **Every** other secret the seat uses in the game is derived from it with HKDF-SHA256 using distinct labels: beacon chain seed, deck keys, Pedersen blindings, per-card lock keys, the in-log encryption key.
 - This makes escrow (§7) a single scalar that can be shared verifiably, and makes the end-of-game reveal (§8) simple: reveal `masterSecret` and everyone can re-derive and check everything.
-- Each seat also publishes an **encryption public key** `E_i = deriveScalar(master, encryptionKey, context)·G`, used to seal private payloads inside public log entries (§5). Scalar derivation reduces 64 HKDF bytes modulo the group order and retries zero in a distinct counter domain. Wire scalars and group points have strict canonical encodings. Key scalars and key points must be nonzero; zero responses and identity Pedersen commitments are valid.
+- Each seat also publishes an **encryption public key** `E_i = HKDF(master, "enc")·G`, used to seal private payloads inside public log entries (§5).
 - Store the secret in the seat's private state (IndexedDB, stage 10).
 
 ## 2. Randomness beacon (hash chains)
@@ -55,13 +71,13 @@ Run the online protocol, engine and crypto together in a dedicated worker. The m
 ### Each beacon round k (k = 1, 2, …)
 
 - Each **participating** seat reveals `x_k` via `SYS_CONTRIB { round: "beacon:k", data: x_k }`. Anyone verifies `H(x_k) == x_{k-1}` (the previously revealed value, or the tip).
-- Output: `R_k = SHA-256(canonical(["cp2p/v1/beacon", operationContext, k, orderedReveals]))`, where each ordered reveal includes its participant ID. Use canonical tuples, never ambiguous concatenation. The operation context fixes the participant order and previous tips.
-- Participating seats are the human seats eligible when the request is certified. That set remains frozen for the round, including a later departed participant whose contribution must be recovered. Subsequent rounds use the certified updated set. Bot seats have no beacon chain and do not participate. One independent honest human participant is enough for unbiasability.
+- Output: `R_k = SHA-256("cp2p/beacon" ‖ gameId ‖ k ‖ x_k^{seat0} ‖ … ‖ x_k^{seatN})`, in seat order.
+- Participating seats = all human seats **not** marked as abandoned (stage 10). Bot seats have **no** beacon chain and don't participate. One honest human participant is enough for unbiasability.
 - Evidence for the `system` entry: the list of reveals. Every peer verifies each preimage and recomputes the output.
 
 ### Derivation of outcomes from `R_k`
 
-- `uniformInt(R, label, n, context)`: derive 8 bytes using the uniform-int HKDF domain and canonical label/context/counter tuple. Interpret them as an unsigned big-endian integer. Reject values at or above `2^64 - (2^64 mod n)`, then return the remainder modulo `n`; derive again with an incremented counter on rejection.
+- `uniformInt(R, label, n)`: HKDF-expand `R` with `label` to 8 bytes, then rejection-sample to avoid modulo bias (expand again with a counter if rejected).
 - Dice 2d6: `d1 = uniformInt(R, "d1", 6) + 1`, `d2 = uniformInt(R, "d2", 6) + 1`.
 - Starting seat, steal index, balanced dice: `uniformInt` with their own labels.
 - The engine's `random` pending names the request type. Map each request to a derivation function in a `randomDerivations` registry that modules can extend.
@@ -77,7 +93,7 @@ Use `@noble/curves` ristretto255 (prime-order group, no cofactor issues). Notati
 
 ### Card encoding
 
-- Each distinct card _identity_ (e.g. `knight#3`; every physical card gets a unique identity even if the types match) maps to `P_c = hashToPoint("card", { ceremonyId, deckId, deckEpoch, identity })`. Use the same canonical public mapping for every participant.
+- Each distinct card _identity_ (e.g. `knight#3`; every physical card gets a unique identity even if the types match) maps to a point `P_c = hashToRistretto("cp2p/card/" ‖ deckId ‖ identity)`.
 - The mapping table is public, and decoding is a lookup.
 
 ### Phase A — Shuffle (at genesis ceremony, or whenever a deck is created/reshuffled)
@@ -123,8 +139,6 @@ Positions are drawn in order `0, 1, 2…` (the deck is already jointly shuffled)
 
 - Using per-position lock keys prevents the linkage leak where a revealed card identifies other positions encrypted under the same key.
 - The shuffle and locking proofs close the substitution cheat (a seat applying different keys per position) at shuffle time, before any card is dealt.
-- All deck keys, permutations and proof randomness bind the deck creation operation and epoch, including reshuffles. Reusing one Sigma commitment under another challenge can reveal its witness. Derive nonce material from the complete statement, context, role and round; retransmissions reproduce the exact proof.
-- Encode the shuffle proof compactly as exactly eight challenge bytes, MSB first, and 64 scalar/permutation responses. With `(σX)_j = X_{σ⁻¹(j)}`, bit 0 reconstructs `R=rG`, `Y_j=r·in_{ρ⁻¹(j)}`. Bit 1 reconstructs `R=u⁻¹A`, `Y_j=u⁻¹·out_{τ(j)}`. Hash the complete reconstructed transcript and compare all eight challenge bytes. This is equivalent to transmitting the commitments and retains the 64-bit soundness bound. Reject noncanonical or zero response scalars, non-bijections and duplicate or identity deck points. Certify bounded passes separately; do not put six unbounded proofs in one wire message. Measure worker performance before claiming the target is met.
 
 ## 4. Committed hands
 
@@ -142,8 +156,6 @@ The engine keeps tracking public **bounds** (stage 02) and validates against the
 - **Public gains and losses** (production, bank and player trades, builds, dev-card purchases, public discards, Year of Plenty, monopoly payouts): every peer adds or subtracts `k·G` from the affected `C_r`. Blindings don't change, so this is free.
 - **Hidden transfers** (steals): the transfer is a vector of commitments with a proof (§5). Every peer subtracts it from the victim and adds it to the thief.
 
-Use deterministic engine-owned resource and card-slot effects, separate from UI events, to update these commitments. Preserve ordered gross debits and credits; normalized bounds and net deltas do not identify actual transfers. Effects include hook-adjusted build costs, bank-shortage-adjusted production, setup grants, trades, discards, development-card purchases and effects, slot deals and reveals. Count reveals require an opening proof even when the count is zero. For a player trade, check affordability for both owners at the current parent. Certified offer/acceptance authorizes the terms; collect an additional owner-signed proof only for a debit its current public minimum cannot establish. Bind that proof to the parent, offer, terms, both seats and commitments. A parent change requires reevaluation. Timeout discards with uncertain hands require the owner or recovered bot's valid input.
-
 ### Proofs attached to inputs
 
 | Situation                                                     | Proof, attached as input evidence by the owner                                         |
@@ -155,7 +167,7 @@ Use deterministic engine-owned resource and card-slot effects, separate from UI 
 - The engine already knows when bounds prove a loss is affordable (`min[r] ≥ k`). Only then is the range proof skipped. In a game with no hidden transfers, bounds are always exact and no range proofs are sent.
 - Range proofs: bit decomposition with `κ = 6` bits (per-type counts never exceed 24, even with 5–6 player bank sizes). The owner commits to each bit and proves each commits to 0 or 1 (a Cramer–Damgård–Schoenmakers OR proof); the verifier checks that the weighted bit commitments sum to the target. About 1 KB per range proof. Bulletproofs are unnecessary at this size.
 - Because the value is capped at `2^κ − 1`, an overspend (which would wrap around mod `ℓ`) can't pass.
-- All completed proofs are non-interactive, using Fiat–Shamir with SHA-256 and distinct proof domains. They bind the full certified context described above. Peer-supplied range widths and vector lengths cannot control verifier work; the validated module and operation determine them.
+- All proofs are non-interactive (Fiat–Shamir, SHA-256, domain `cp2p/hand/<kind>`), bound to `gameId`, `seq` and seat so they can't be replayed.
 
 ## 5. Hidden transfers: robber steal
 
@@ -166,11 +178,9 @@ Use deterministic engine-owned resource and card-slot effects, separate from UI 
    - **a one-hot proof**: an OR proof that each `T_r` commits to 0 or 1, plus a Schnorr proof that `Σ T_r − G` commits to 0,
    - **an index proof**: a CDS OR over the types `r` of the statement "`T` is one-hot at `r` **and** `idx − p_r ∈ [0, 2^κ)` **and** `p_r + n_r − 1 − idx ∈ [0, 2^κ)`". The range statements are on commitments every peer derives from `P_r`, `C_r` and the public `idx`. The victim proves the true branch and simulates the others, so the proof doesn't reveal `r*`. It shows that the card moved is exactly the one at the beacon-chosen index, and that the victim actually held it,
    - **a sealed opening** for the thief: `(r*, t_1 … t_m)` encrypted to the thief's key `E_thief` (ephemeral ristretto ECDH, key and keystream from HKDF, domain `cp2p/seal`). Integrity comes from the thief checking the opening against `T`, so no AEAD is needed.
-4. Every peer verifies both public proofs, then certifies an engine-state-preserving `STEAL_FIXED` entry containing the signed contribution. This fixes the beacon index, `T`, ciphertext and key versions even if the victim sent conflicting network messages. No resources move yet.
-5. The thief provisionally decrypts and checks that `(r*, t)` opens that exact `T`. It signs a receipt bound to the operation, fixed entry, contribution and ciphertext hashes. A receipt must not depend on the final result entry's hash. Only the public proofs plus a matching receipt permit certification of `STEAL_RESULT { thief, victim, resource: 'hidden' }`. At that point commitments and engine hands change, and both owners apply their private effects.
-6. **Bad delivery**: before the result commits, the thief can publish its ECDH shared point `K` with a DLEQ tying it to the certified ephemeral point and recipient key. Everyone decrypts and checks the opening. An authenticated bad opening is victim evidence and blocks the result. An invalid DLEQ, or a valid DLEQ revealing a good opening, is not a valid complaint. The dispute reveals the stolen type publicly. A refusing recipient stalls the fixed operation; recovery must continue it without choosing another index or transfer. A dishonest recipient can knowingly acknowledge unusable bytes, harming its own private state; public transfer proofs do not prove ciphertext correctness. A private-state failure after commitment halts that client and never rolls back certified history.
-
-For the index proof, derive `L_r = idx·G − P_r` and `U_r = P_r + C_r − (idx+1)·G`. A branch proves an opening of `T_r − G` to `H` and two bit-decomposed ranges. The opening and both ranges share the branch challenge; every bit OR splits that same challenge. Simulate false branches and make all branch challenges sum to one Fiat–Shamir challenge over the full statement and first messages. Do not nest independent Fiat–Shamir range proofs under an outer OR. The separate bit and sum proofs establish that the same `T` is one-hot. Bind both proofs to the identical commitments, index, context and sealed payload hash. Six bits suffice because each true-branch distance is at most `n_r−1`, even when the prefix or total exceeds 63.
+4. Every peer verifies both proofs before voting, then subtracts `T` from the victim's commitments and adds it to the thief's. The public log records `STEAL_RESULT { thief, victim, resource: 'hidden' }` with the beacon and contribution as evidence. The engine applies `loseHidden` / `gainHidden`.
+5. The thief decrypts, checks that `(r*, t)` opens `T`, and calls `applyPrivate` with the card. It now knows the blindings of what it received, so it can later prove spends of it. The victim calls `applyPrivate` too.
+6. **Bad delivery**: if the sealed opening doesn't open `T`, the thief broadcasts `DISPUTE { seq, K, proof }`, where `K` is its ECDH shared point and the proof is a DLEQ that `K` was computed with the secret behind `E_thief`. Every peer decrypts the payload itself and sees that it doesn't open `T`: a victim violation, detected on that move. A dispute with an invalid DLEQ is a violation by the thief. The dispute reveals the stolen type publicly; that's the accepted cost of resolving it. Because delivery goes through the log, "I never received it" isn't possible.
 
 The same pattern is used for any "look at hand / take specific cards" effect in expansions (e.g. Master Merchant, Wedding, Spy): the victim seals the relevant openings (or card identities, for deck cards) to the actor, and every hidden move comes with a one-hot transfer proof.
 
@@ -200,13 +210,12 @@ Every hidden action was already verified when it happened, so this step doesn't 
 1. When `result` is set, every seat broadcasts its `masterSecret` (`SYS_CONTRIB { round: 'reveal' }`). Escrow-recovered secrets are used for absent seats.
 2. Every peer checks each secret against `masterPub`, beacon tip, lock public keys and encryption key. This is the per-seat escrow-consistency check from §7, run for the seats that stayed.
 3. Every peer runs `audit(log, masterSecrets)` in a worker: it replays the full game in **omniscient mode** (`LocalGame`), with every hidden value reconstructed (dealt cards from the deck transcript, stolen cards from the sealed openings), and checks the private-hand invariants. This re-check should always pass. A violation it finds that the per-move checks missed is a bug in a verifier, so the audit report is filed as a diagnostic as well as shown.
-4. The result records completeness, missing secrets and `AuditReport { ok: boolean, violations: { seat, seq, kind, detail }[] }`, combined with any `CHEAT_PROOF` entries from the game. `ok` is true only for a complete successful audit. Withheld secrets without available authorized recovery leave the audit incomplete. The reveal/audit coordinator continues after the engine result is set.
+4. The result is `AuditReport { ok: boolean, violations: { seat, seq, kind, detail }[] }`, combined with any `CHEAT_PROOF` entries from the game.
 5. The reveal also enables the **full replay with all cards visible** after the game (stage 17).
 
 ## 9. Bots and secrets
 
 - A bot seat's master secret is generated by its host and follows the same escrow eligibility as humans. Recovery after host departure requires the same certified authorization and share threshold.
-- Bot masters are independent. Share holders are the other original human devices, excluding the bot host, and recovery needs all of them. Additional bot seats do not add holders. Multiple absent holders can prevent recovery even when ordering still has a quorum; pause in that case. Recovery authorization freezes and removes the old controller before disclosure, and a second certificate activates the recovered controller with fresh voting keys.
 - The bot's hand is known to its host's device, and after takeover to its recoverers. The host's UI must not display it; this is an honest-client guarantee only. Disclose in the lobby: "Bots are hosted by <name>" and disclose the additional exposure for recovered seats.
 - Bot inputs carry the same proofs as human inputs.
 
@@ -237,21 +246,21 @@ Every hidden action was already verified when it happened, so this step doesn't 
 
     Each must be rejected at the time listed in the table below, and never later.
 
-| Cheat                                    | Caught                                                        |
-| ---------------------------------------- | ------------------------------------------------------------- |
-| Wrong beacon preimage                    | Immediately                                                   |
-| Withheld reveal or proof                 | Stall; authorized recovery preserves outcome, otherwise pause |
-| Duplicate points in shuffle              | Immediately                                                   |
-| Substituted or re-keyed card in shuffle  | Immediately (shuffle proof / locking DLEQ)                    |
-| Wrong partial unlock                     | Immediately (DLEQ)                                            |
-| Claiming a card not held when playing    | Immediately (DLEQ)                                            |
-| Giving the wrong card in a steal         | Immediately (index proof)                                     |
-| Sealed steal opening doesn't match       | Recipient check and dispute before transfer commitment        |
-| False dispute                            | Immediately (shared-point DLEQ and decrypted opening)         |
-| Lying in count reveal                    | Immediately (Schnorr opening)                                 |
-| Spending unowned resources within bounds | Immediately (range proof)                                     |
-| Bad escrow share                         | In the genesis ceremony (Feldman)                             |
-| Escrowed secret doesn't match used keys  | At recovery, or at the end-of-game reveal                     |
+| Cheat                                    | Caught                                     |
+| ---------------------------------------- | ------------------------------------------ |
+| Wrong beacon preimage                    | Immediately                                |
+| Withheld reveal or proof                 | Stall → takeover → recovered, same outcome |
+| Duplicate points in shuffle              | Immediately                                |
+| Substituted or re-keyed card in shuffle  | Immediately (shuffle proof / locking DLEQ) |
+| Wrong partial unlock                     | Immediately (DLEQ)                         |
+| Claiming a card not held when playing    | Immediately (DLEQ)                         |
+| Giving the wrong card in a steal         | Immediately (index proof)                  |
+| Sealed steal opening doesn't match       | On the thief's dispute, same move          |
+| False dispute                            | Immediately (DLEQ on the shared point)     |
+| Lying in count reveal                    | Immediately (Schnorr opening)              |
+| Spending unowned resources within bounds | Immediately (range proof)                  |
+| Bad escrow share                         | In the genesis ceremony (Feldman)          |
+| Escrowed secret doesn't match used keys  | At recovery, or at the end-of-game reveal  |
 
 ## Acceptance criteria
 
