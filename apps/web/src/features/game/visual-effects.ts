@@ -34,6 +34,12 @@ export interface TradeCardFlight {
   readonly count: number;
 }
 
+export interface StealCardFlight {
+  readonly id: string;
+  readonly from: Seat;
+  readonly to: Seat;
+}
+
 export interface ProductionGain {
   readonly id: string;
   readonly seat: Seat;
@@ -51,6 +57,7 @@ export interface VisualEffects {
   readonly board: readonly BoardEffect[];
   readonly flights: readonly ResourceFlight[];
   readonly tradeFlights: readonly TradeCardFlight[];
+  readonly stealFlights: readonly StealCardFlight[];
   readonly productionGains: readonly ProductionGain[];
 }
 
@@ -120,10 +127,12 @@ export function deriveVisualEffects(
   events: readonly GameEvent[],
   revision: number,
 ): VisualEffects {
-  if (events.length === 0) return { board: [], flights: [], tradeFlights: [], productionGains: [] };
+  if (events.length === 0)
+    return { board: [], flights: [], tradeFlights: [], stealFlights: [], productionGains: [] };
   const board: BoardEffect[] = [];
   const flights: ResourceFlight[] = [];
   const tradeFlights: TradeCardFlight[] = [];
+  const stealFlights: StealCardFlight[] = [];
   const productionGains: ProductionGain[] = [];
   const rolled = events.find((event) => event.type === 'diceRolled');
   const roll = rolled && 'roll' in rolled && typeof rolled.roll === 'number' ? rolled.roll : null;
@@ -186,6 +195,13 @@ export function deriveVisualEffects(
           }
         }
       }
+    } else if (
+      event.type === 'resourceStolen' &&
+      isSeat(after, event.victim) &&
+      isSeat(after, event.thief) &&
+      event.victim !== event.thief
+    ) {
+      stealFlights.push({ id: `${id}:steal`, from: event.victim, to: event.thief });
     } else if (event.type === 'resourcesProduced' && record(event.bySeat)) {
       for (const seat of after.config.seats) {
         const gains = event.bySeat[String(seat)];
@@ -240,5 +256,5 @@ export function deriveVisualEffects(
       }
     }
   }
-  return { board, flights, tradeFlights, productionGains };
+  return { board, flights, tradeFlights, stealFlights, productionGains };
 }

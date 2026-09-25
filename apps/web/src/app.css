@@ -1410,6 +1410,108 @@ input[type='checkbox'] {
 .development-hand > :first-child {
   margin-left: auto;
 }
+.development-hand.is-fanned {
+  --fan-card-width: 46px;
+  --fan-caption-width: 90px;
+  --fan-step: 28px;
+  gap: 0;
+  padding-top: 12px;
+  overflow: visible;
+}
+.development-hand.is-fanned[data-card-count='4'] {
+  --fan-step: 22px;
+}
+.development-hand.is-fanned[data-card-count='5'] {
+  --fan-step: 18px;
+}
+.development-hand.is-fanned .development-card {
+  z-index: 1;
+  width: var(--fan-step);
+  padding-inline: 0;
+}
+.development-hand.is-fanned .development-card:first-child {
+  margin-left: auto;
+}
+.development-hand.is-fanned .development-card:last-child {
+  width: var(--fan-card-width);
+}
+.development-hand.is-fanned .development-card-main {
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr);
+  justify-items: start;
+}
+.development-hand.is-fanned .development-card-art,
+.development-hand.is-fanned .development-card-main strong {
+  max-width: none;
+  pointer-events: none;
+  transition: transform 160ms ease;
+}
+.development-hand.is-fanned .development-card-art {
+  width: var(--fan-card-width);
+  justify-items: start;
+}
+.development-hand.is-fanned .development-card-main strong {
+  width: var(--fan-caption-width);
+  left: calc((var(--fan-card-width) - var(--fan-caption-width)) / 2);
+}
+.development-hand.is-fanned .development-card:last-child .development-card-main strong {
+  left: calc(var(--fan-card-width) - var(--fan-caption-width));
+}
+.development-hand.is-fanned .knight-card-confirmation {
+  left: calc(var(--fan-card-width) / 2);
+  transition: transform 160ms ease;
+}
+.development-hand.is-fanned
+  .development-card:is(:hover, :has(.development-card-main:focus-visible)) {
+  z-index: 10;
+}
+.development-hand.is-fanned.has-knight-intent .development-card.has-knight-intent {
+  z-index: 20;
+}
+.development-hand.is-fanned
+  .development-card:is(:hover, :has(.development-card-main:focus-visible), .has-knight-intent)
+  .development-card-art,
+.development-hand.is-fanned
+  .development-card:is(:hover, :has(.development-card-main:focus-visible), .has-knight-intent)
+  .development-card-main
+  strong {
+  transform: translateY(-8px);
+}
+.development-hand.is-fanned
+  .development-card:is(:hover, :has(.development-card-main:focus-visible), .has-knight-intent)
+  .knight-card-confirmation {
+  transform: translate(-50%, -8px);
+}
+.development-hand.is-fanned .development-card-main strong {
+  position: relative;
+  z-index: 1;
+  padding: 2px 3px;
+  border-radius: 4px;
+  background: var(--surface);
+  box-shadow: 0 1px 3px #0003;
+  opacity: 0;
+  transition: opacity 160ms ease;
+}
+.development-hand.is-fanned
+  .development-card:is(:hover, :has(.development-card-main:focus-visible), .has-knight-intent)
+  .development-card-main
+  strong {
+  opacity: 1;
+}
+.development-hand.is-fanned:hover:not(:has(.development-card-main:focus-visible))
+  .development-card:not(:hover):not(.has-knight-intent)
+  .development-card-main
+  strong,
+.development-hand.is-fanned:has(.development-card-main:focus-visible)
+  .development-card:not(:has(.development-card-main:focus-visible)):not(.has-knight-intent)
+  .development-card-main
+  strong,
+.development-hand.is-fanned.has-knight-intent
+  .development-card:not(.has-knight-intent)
+  .development-card-main
+  strong {
+  opacity: 0;
+}
 .development-card {
   --dev-art-height: 64px;
   position: relative;
@@ -1760,10 +1862,50 @@ button.development-card-main:focus-visible img {
   .hand-dock .development-hand {
     gap: 4px;
   }
+  .hand-dock .development-hand.is-fanned {
+    --fan-card-width: 38px;
+    --fan-caption-width: 72px;
+    --fan-step: 24px;
+  }
+  .hand-dock .development-hand.is-fanned[data-card-count='5'] {
+    --fan-step: 16px;
+  }
 }
 @media (max-width: 1000px) {
   .hand-dock {
     display: block;
+  }
+}
+@media (min-width: 768px) and (max-width: 1000px) and (min-height: 501px) {
+  .game-bottom {
+    grid-template-columns: minmax(0, 1.3fr) minmax(0, 0.7fr);
+  }
+  .hand-dock {
+    display: grid;
+    grid-template-columns: minmax(0, 212px) minmax(0, 1fr);
+    column-gap: 8px;
+    padding: 8px;
+  }
+  .hand-dock .resource-hand {
+    grid-template-columns: repeat(5, minmax(0, 38px));
+    gap: 4px;
+  }
+  .hand-dock .resource-card[data-size='md'] img {
+    width: min(100%, 38px);
+    height: 52px;
+  }
+  .hand-dock .development-card {
+    --dev-art-height: 52px;
+    width: 68px;
+  }
+  .hand-dock .development-card img {
+    width: 38px;
+    height: 52px;
+  }
+  .hand-dock .development-hand.is-fanned {
+    --fan-card-width: 38px;
+    --fan-caption-width: 68px;
+    --fan-step: 20px;
   }
 }
 @media (max-width: 767px) {
@@ -2242,6 +2384,18 @@ button.development-card-main:focus-visible img {
 :root[data-motion='reduce'] .resource-flight {
   transition: none;
   animation: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .development-hand.is-fanned .development-card-art,
+  .development-hand.is-fanned .development-card-main strong,
+  .development-hand.is-fanned .knight-card-confirmation {
+    transition: none;
+  }
+}
+:root[data-motion='reduce'] .development-hand.is-fanned .development-card-art,
+:root[data-motion='reduce'] .development-hand.is-fanned .development-card-main strong,
+:root[data-motion='reduce'] .development-hand.is-fanned .knight-card-confirmation {
+  transition: none;
 }
 
 /* Compact cockpit: the board stays visible while the hand and next decision remain anchored. */

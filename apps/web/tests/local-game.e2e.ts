@@ -9,6 +9,7 @@ import { baseLongestRoadLength, type Seat } from '@cp2p/engine';
 import { buildBoardGraph } from '@cp2p/engine/geometry';
 import { standardFixedBoard } from '@cp2p/maps';
 import type { DevHook } from '../src/features/devtools/hook.js';
+import { LocalSession } from '../src/session/local-session.js';
 import { saveBeforeGoldenInput } from './golden-save.js';
 
 declare global {
@@ -131,8 +132,18 @@ async function openGoldenPrefix(
   page: Page,
   stopBefore: number,
   file = 'normal-completion.replay.json',
+  options: { humanSeats?: readonly Seat[]; botDelayMs?: number } = {},
 ): Promise<void> {
-  const save = await saveBeforeGoldenInput(file, stopBefore);
+  const verified = await saveBeforeGoldenInput(file, stopBefore);
+  const save = options.humanSeats
+    ? {
+        ...verified,
+        roles: {
+          humanSeats: [...options.humanSeats],
+          botSeats: verified.config.seats.filter((seat) => !options.humanSeats?.includes(seat)),
+        },
+      }
+    : verified;
   const id = `golden-prefix-${stopBefore}`;
   const revision =
     save.genesis.length + save.batches.reduce((sum, batch) => sum + 1 + batch.generated.length, 0);
@@ -150,7 +161,7 @@ async function openGoldenPrefix(
         color: colors[index] ?? 'blue',
         shape: shapes[index] ?? 'circle',
       })),
-      botDelayMs: 0,
+      botDelayMs: options.botDelayMs ?? 0,
     },
     save,
   };
@@ -1550,6 +1561,520 @@ test('two replay-backed development cards stay readable on desktop and phone', a
         ).toBe(true);
       }
       await capturePreview(page, testInfo, `${device.name}-two-development-cards`);
+      expect(pageErrors.get(page)).toEqual([]);
+    } finally {
+      await context.close();
+    }
+  }
+});
+
+test('three held development cards fan on desktop and keep the phone drawer', async ({
+  browser,
+  browserName,
+}, testInfo) => {
+  test.skip(browserName !== 'chromium', 'Development hand visuals run in Chromium');
+  test.setTimeout(90_000);
+  for (const device of [
+    { name: 'desktop', width: 1280, height: 720 },
+    { name: 'compact-desktop', width: 1024, height: 768 },
+    { name: 'narrow-desktop', width: 900, height: 768 },
+  ]) {
+    const context = await browser.newContext({ viewport: device });
+    try {
+      const page = await context.newPage();
+      page.setDefaultTimeout(10_000);
+      await page.emulateMedia({ colorScheme: 'dark' });
+      await openGoldenPrefix(page, 460, 'hidden-vp-win.replay.json');
+      const fan = page.locator('.hand-dock .development-hand.is-fanned');
+      const cards = fan.locator('.development-card');
+      await expect(cards).toHaveCount(3);
+      await expect(page.getByRole('button', { name: 'Development cards: 3' })).toHaveCount(0);
+      const revision = await observedRevision(page);
+      const geometry = await fan.evaluate((element) => {
+        const hand = element.closest('.hand-dock')?.getBoundingClientRect();
+        const cardBounds = [...element.querySelectorAll('.development-card')].map((card) => {
+          const box = card.getBoundingClientRect();
+          const art = card.querySelector('img')?.getBoundingClientRect();
+          return {
+            left: box.left,
+            right: box.right,
+            top: box.top,
+            artLeft: art?.left ?? -1,
+            artRight: art?.right ?? -1,
+            artTop: art?.top ?? -1,
+          };
+        });
+        return { handTop: hand?.top ?? Infinity, cards: cardBounds };
+      });
+      expect(geometry.cards).toHaveLength(3);
+      expect(geometry.cards[1]?.left).toBeGreaterThanOrEqual(
+        (geometry.cards[0]?.right ?? Infinity) - 1,
+      );
+      expect(geometry.cards[1]?.artLeft).toBeLessThan(geometry.cards[0]?.artRight ?? -Infinity);
+      for (const card of geometry.cards) {
+        expect(card.left).toBeGreaterThanOrEqual(0);
+        expect(card.right).toBeLessThanOrEqual(device.width);
+        expect(card.artTop).toBeGreaterThanOrEqual(geometry.handTop);
+      }
+      const assertRaised = async (card: Locator, label: string) => {
+        await expect
+          .poll(() =>
+            card.locator('strong').evaluate((caption) => Number(getComputedStyle(caption).opacity)),
+          )
+          .toBe(1);
+        const measured = await card.evaluate((element) => {
+          const caption = element.querySelector('strong');
+          const art = element.querySelector('img');
+          if (!caption || !art) return null;
+          const captionBox = caption.getBoundingClientRect();
+          const artBox = art.getBoundingClientRect();
+          return {
+            opacity: Number(getComputedStyle(caption).opacity),
+            caption: { left: captionBox.left, right: captionBox.right, bottom: captionBox.bottom },
+            artTop: artBox.top,
+            viewportWidth: window.innerWidth,
+            viewportHeight: window.innerHeight,
+          };
+        });
+        if (!measured) throw new Error(`${label} card art or caption is missing`);
+        expect(measured.opacity, `${label} caption is concealed`).toBe(1);
+        expect(measured.caption.left, `${label} caption leaves viewport`).toBeGreaterThanOrEqual(0);
+        expect(measured.caption.right, `${label} caption leaves viewport`).toBeLessThanOrEqual(
+          measured.viewportWidth,
+        );
+        expect(measured.caption.bottom, `${label} caption leaves viewport`).toBeLessThanOrEqual(
+          measured.viewportHeight,
+        );
+        expect(measured.artTop, `${label} art clips at hand top`).toBeGreaterThanOrEqual(
+          geometry.handTop,
+        );
+      };
+      const sweep = async () => {
+        for (const index of [0, 1, 2, 1, 0]) {
+          const card = cards.nth(index);
+          const box = await card.boundingBox();
+          const art = await card.locator('img').boundingBox();
+          if (!box || !art) throw new Error(`Development card ${index} has no visible face`);
+          const point = { x: box.x + box.width / 2, y: art.y + 12 };
+          expect(point.x).toBeGreaterThanOrEqual(art.x);
+          expect(point.x).toBeLessThanOrEqual(art.x + art.width);
+          await page.mouse.move(point.x, point.y);
+          await assertRaised(card, `Pointer-sweep card ${index}`);
+          for (const other of [0, 1, 2].filter((candidate) => candidate !== index))
+            await expect
+              .poll(() =>
+                cards
+                  .nth(other)
+                  .locator('strong')
+                  .evaluate((caption) => Number(getComputedStyle(caption).opacity)),
+              )
+              .toBe(0);
+        }
+        await page.mouse.move(10, 10);
+        for (const card of await cards.all())
+          await expect
+            .poll(() =>
+              card
+                .locator('strong')
+                .evaluate((caption) => Number(getComputedStyle(caption).opacity)),
+            )
+            .toBe(0);
+      };
+      await sweep();
+      const first = cards.first();
+      await first.hover({ position: { x: 4, y: 12 } });
+      await expect(first.locator('strong')).toHaveText('Victory point');
+      await assertRaised(first, 'Victory point');
+      await capturePreview(page, testInfo, `${device.name}-three-dev-hover`);
+      const knight = cards.filter({ hasText: 'Knight' }).first();
+      const knightButton = knight.getByRole('button', { name: 'Knight', exact: true });
+      await knightButton.focus();
+      await expect(knight.locator('strong')).toHaveText('Knight');
+      await assertRaised(knight, 'Focused Knight');
+      const last = cards.last();
+      await last.getByRole('button', { name: 'Knight', exact: true }).focus();
+      await assertRaised(last, 'Focused last Knight');
+      await knightButton.focus();
+      const knightBox = await knightButton.boundingBox();
+      if (!knightBox) throw new Error('Middle Knight has no visible art');
+      await knightButton.click({ position: { x: knightBox.width * 0.25, y: 18 } });
+      const confirmation = knight.getByRole('group', { name: 'Play Knight?' });
+      await expect(confirmation).toBeVisible();
+      await first.hover({ position: { x: 4, y: 12 } });
+      await expect
+        .poll(() =>
+          first.locator('strong').evaluate((caption) => Number(getComputedStyle(caption).opacity)),
+        )
+        .toBe(0);
+      await assertRaised(knight, 'Selected Knight');
+      const layers = await fan.evaluate((element) => {
+        const selected = element.querySelector('.development-card.has-knight-intent');
+        const other = element.querySelector('.development-card:hover:not(.has-knight-intent)');
+        const selectedLayer = selected ? Number(getComputedStyle(selected).zIndex) : -1;
+        const otherLayer = other ? Number(getComputedStyle(other).zIndex) : -1;
+        return { selectedLayer, otherLayer };
+      });
+      expect(layers.selectedLayer).toBeGreaterThan(layers.otherLayer);
+      await expect
+        .poll(() =>
+          knight
+            .locator('.development-card-art')
+            .evaluate((element) => new DOMMatrixReadOnly(getComputedStyle(element).transform).m42),
+        )
+        .toBeLessThan(-6);
+      expect(await observedRevision(page)).toBe(revision);
+      await capturePreview(page, testInfo, `${device.name}-three-dev-knight-intent`);
+      await confirmation.getByRole('button', { name: 'Cancel Knight' }).click();
+      await expect(confirmation).toBeHidden();
+      expect(await observedRevision(page)).toBe(revision);
+      await sweep();
+      await page.emulateMedia({ reducedMotion: 'reduce' });
+      await first.hover({ position: { x: 4, y: 12 } });
+      await expect(first.locator('strong')).toBeVisible();
+      const duration = await first.evaluate(
+        (element) => getComputedStyle(element).transitionDuration,
+      );
+      expect(Number.parseFloat(duration)).toBeLessThan(0.001);
+
+      if (device.width > 1000) {
+        // Layout probe only: the saved game still owns exactly three cards. These inert clones
+        // exercise the wider five-card CSS without inventing a private hand or game authority.
+        await page.evaluate(() => {
+          const domFan = document.querySelector('.hand-dock .development-hand.is-fanned');
+          if (!(domFan instanceof HTMLElement)) throw new Error('Development fan is missing');
+          const originals = [...domFan.querySelectorAll('.development-card')];
+          for (const source of originals.slice(0, 2)) {
+            const clone = source.cloneNode(true);
+            if (!(clone instanceof HTMLElement)) throw new Error('Development clone failed');
+            clone.dataset.layoutProbe = 'true';
+            domFan.append(clone);
+          }
+          domFan.dataset.cardCount = '5';
+        });
+        await expect(fan.locator('.development-card')).toHaveCount(5);
+        const probe = await fan.evaluate((element) => {
+          const hand = element.closest('.hand-dock')?.getBoundingClientRect();
+          const faces = [...element.querySelectorAll('.development-card img')].map((face) => {
+            const rect = face.getBoundingClientRect();
+            return { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom };
+          });
+          return { hand: hand ? { left: hand.left, right: hand.right } : null, faces };
+        });
+        if (!probe.hand) throw new Error('Five-card layout has no hand bounds');
+        for (const face of probe.faces) {
+          expect(face.left, 'Five-card face leaves the hand').toBeGreaterThanOrEqual(
+            probe.hand.left - 1,
+          );
+          expect(face.right, 'Five-card face leaves the hand').toBeLessThanOrEqual(
+            probe.hand.right + 1,
+          );
+          expect(face.left).toBeGreaterThanOrEqual(0);
+          expect(face.right).toBeLessThanOrEqual(device.width);
+          expect(face.top).toBeGreaterThanOrEqual(0);
+          expect(face.bottom).toBeLessThanOrEqual(device.height);
+        }
+        await capturePreview(page, testInfo, `${device.name}-five-dev-layout-only`);
+        await page.evaluate(() => {
+          const domFan = document.querySelector('.hand-dock .development-hand.is-fanned');
+          domFan?.querySelectorAll('[data-layout-probe]').forEach((clone) => clone.remove());
+          if (domFan instanceof HTMLElement) domFan.dataset.cardCount = '3';
+        });
+        await expect(fan.locator('.development-card')).toHaveCount(3);
+      }
+      expect(pageErrors.get(page)).toEqual([]);
+    } finally {
+      await context.close();
+    }
+  }
+
+  const context = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    isMobile: true,
+    hasTouch: true,
+  });
+  try {
+    const page = await context.newPage();
+    await openGoldenPrefix(page, 460, 'hidden-vp-win.replay.json');
+    await expect(page.locator('.hand-dock .development-hand.is-fanned')).toHaveCount(0);
+    await page.getByRole('button', { name: 'Development cards: 3' }).tap();
+    const drawer = page.getByRole('dialog', { name: 'Development cards: 3' });
+    await expect(drawer.locator('.development-card')).toHaveCount(3);
+    await capturePreview(page, testInfo, 'phone-three-dev-drawer');
+    expect(pageErrors.get(page)).toEqual([]);
+  } finally {
+    await context.close();
+  }
+
+  const tablet = await browser.newContext({
+    viewport: { width: 1024, height: 768 },
+    isMobile: true,
+    hasTouch: true,
+  });
+  try {
+    const page = await tablet.newPage();
+    await openGoldenPrefix(page, 460, 'hidden-vp-win.replay.json');
+    expect(await page.evaluate(() => matchMedia('(pointer: coarse)').matches)).toBe(true);
+    await expect(page.locator('.hand-dock .development-hand.is-fanned')).toHaveCount(0);
+    await page.getByRole('button', { name: 'Development cards: 3' }).tap();
+    await expect(
+      page.getByRole('dialog', { name: 'Development cards: 3' }).locator('.development-card'),
+    ).toHaveCount(3);
+    expect(pageErrors.get(page)).toEqual([]);
+  } finally {
+    await tablet.close();
+  }
+});
+
+test('real steals show only a neutral public card cue in both directions', async ({
+  browser,
+  browserName,
+}, testInfo) => {
+  test.skip(browserName !== 'chromium', 'Steal effects are checked in Chromium');
+  test.setTimeout(90_000);
+  for (const scenario of [
+    {
+      name: 'inbound-desktop',
+      file: 'normal-game-05.replay.json',
+      prefix: 92,
+      from: 3,
+      to: 0,
+      mobile: false,
+      pauseForCapture: true,
+      reducedMotion: false,
+    },
+    {
+      name: 'outbound-desktop',
+      file: 'normal-game-04.replay.json',
+      prefix: 65,
+      from: 0,
+      to: 2,
+      mobile: false,
+      pauseForCapture: false,
+      reducedMotion: false,
+    },
+    {
+      name: 'inbound-phone',
+      file: 'normal-game-05.replay.json',
+      prefix: 92,
+      from: 3,
+      to: 0,
+      mobile: true,
+      pauseForCapture: false,
+      reducedMotion: false,
+    },
+    {
+      name: 'outbound-phone',
+      file: 'normal-game-04.replay.json',
+      prefix: 65,
+      from: 0,
+      to: 2,
+      mobile: true,
+      pauseForCapture: false,
+      reducedMotion: false,
+    },
+    {
+      name: 'reduced-motion',
+      file: 'normal-game-05.replay.json',
+      prefix: 92,
+      from: 3,
+      to: 0,
+      mobile: false,
+      pauseForCapture: false,
+      reducedMotion: true,
+    },
+  ] as const) {
+    const saved = await saveBeforeGoldenInput(scenario.file, scenario.prefix);
+    const baseline = LocalSession.restore(saved, {
+      entropy: { randomBytes: (target) => target.fill(1) },
+    });
+    if (!baseline.ok) throw new Error(`Steal prefix failed to restore: ${baseline.error.code}`);
+    const baselineHand = baseline.value.getPrivate(0)?.hand;
+    if (!baselineHand) throw new Error('Steal fixture has no human private hand');
+    const beforeCount = Object.values(baselineHand).reduce((sum, count) => sum + count, 0);
+    const beforeEvents = baseline.value
+      .getEvents()
+      .filter((event) => event.type === 'resourceStolen').length;
+    baseline.value.dispose();
+
+    const context = await browser.newContext({
+      viewport: scenario.mobile ? { width: 390, height: 844 } : { width: 1280, height: 720 },
+      isMobile: scenario.mobile,
+      hasTouch: scenario.mobile,
+    });
+    try {
+      const page = await context.newPage();
+      page.setDefaultTimeout(10_000);
+      if (scenario.reducedMotion) await page.emulateMedia({ reducedMotion: 'reduce' });
+      await page.addInitScript(
+        ({ from, to, pause }) => {
+          const records: {
+            html: string;
+            x: number;
+            y: number;
+            dx: number;
+            dy: number;
+            source: { x: number; y: number } | null;
+            target: { x: number; y: number } | null;
+          }[] = [];
+          Reflect.set(window, '__stealCueRecords', records);
+          const seen = new WeakSet<Element>();
+          // This callback is serialized into the browser, where its DOM globals exist.
+          // eslint-disable-next-line unicorn/consistent-function-scoping
+          const center = (seat: number) => {
+            const hand = seat === 0 ? document.querySelector('.hand-dock .resource-hand') : null;
+            const panel = document.querySelector(`[data-seat-panel="${seat}"]`);
+            const element = hand ?? panel;
+            if (!element) return null;
+            const rect = element.getBoundingClientRect();
+            return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+          };
+          const observe = () => {
+            for (const node of document.querySelectorAll<HTMLElement>('.steal-card-flight')) {
+              if (seen.has(node)) continue;
+              seen.add(node);
+              if (pause) {
+                node.style.animationDelay = '-200ms';
+                node.style.animationPlayState = 'paused';
+              }
+              records.push({
+                html: node.outerHTML,
+                x: Number.parseFloat(node.style.left),
+                y: Number.parseFloat(node.style.top),
+                dx: Number.parseFloat(node.style.getPropertyValue('--flight-dx')),
+                dy: Number.parseFloat(node.style.getPropertyValue('--flight-dy')),
+                source: center(from),
+                target: center(to),
+              });
+            }
+          };
+          const start = () => {
+            new MutationObserver(observe).observe(document.body, {
+              childList: true,
+              subtree: true,
+            });
+            observe();
+          };
+          if (document.readyState === 'loading')
+            document.addEventListener('DOMContentLoaded', start, { once: true });
+          else start();
+        },
+        { from: scenario.from, to: scenario.to, pause: scenario.pauseForCapture },
+      );
+      await openGoldenPrefix(page, scenario.prefix, scenario.file, {
+        humanSeats: [0],
+        botDelayMs: 800,
+      });
+      if (scenario.to === 0) {
+        const dialog = page.getByRole('dialog', { name: 'Steal a card' });
+        await expect(dialog).toBeVisible();
+        const victim = dialog.getByRole('button', { name: /Player 4/ });
+        if (scenario.mobile) await victim.tap();
+        else await victim.click();
+      }
+      await expect
+        .poll(() =>
+          page.evaluate((previous) => {
+            const hook: DevHook | undefined = Reflect.get(window, '__cp2p');
+            return (
+              (hook?.session.getEvents().filter((event) => event.type === 'resourceStolen')
+                .length ?? 0) > previous
+            );
+          }, beforeEvents),
+        )
+        .toBe(true);
+      if (scenario.reducedMotion) {
+        await page.evaluate(
+          () =>
+            new Promise<void>((finishFrames) =>
+              requestAnimationFrame(() => requestAnimationFrame(() => finishFrames())),
+            ),
+        );
+      }
+      await expect
+        .poll(() =>
+          page.evaluate(() => {
+            const values: unknown = Reflect.get(window, '__stealCueRecords');
+            return Array.isArray(values) ? values.length : 0;
+          }),
+        )
+        .toBe(scenario.reducedMotion ? 0 : 1);
+      const afterCount = await page.evaluate(() => {
+        const hook: DevHook | undefined = Reflect.get(window, '__cp2p');
+        const hand = hook?.session.getPrivate(0)?.hand;
+        return hand ? Object.values(hand).reduce((sum, count) => sum + count, 0) : null;
+      });
+      expect(afterCount).toBe(beforeCount + (scenario.to === 0 ? 1 : -1));
+      if (!scenario.reducedMotion) {
+        const record = await page.evaluate(() => {
+          const values: unknown = Reflect.get(window, '__stealCueRecords');
+          if (!Array.isArray(values)) return null;
+          const first: unknown = values[0];
+          if (typeof first !== 'object' || first === null) return null;
+          const html: unknown = Reflect.get(first, 'html');
+          const x: unknown = Reflect.get(first, 'x');
+          const y: unknown = Reflect.get(first, 'y');
+          const dx: unknown = Reflect.get(first, 'dx');
+          const dy: unknown = Reflect.get(first, 'dy');
+          const source: unknown = Reflect.get(first, 'source');
+          const target: unknown = Reflect.get(first, 'target');
+          if (
+            typeof html !== 'string' ||
+            typeof x !== 'number' ||
+            typeof y !== 'number' ||
+            typeof dx !== 'number' ||
+            typeof dy !== 'number' ||
+            typeof source !== 'object' ||
+            source === null ||
+            typeof target !== 'object' ||
+            target === null
+          )
+            return null;
+          const sourceX: unknown = Reflect.get(source, 'x');
+          const sourceY: unknown = Reflect.get(source, 'y');
+          const targetX: unknown = Reflect.get(target, 'x');
+          const targetY: unknown = Reflect.get(target, 'y');
+          if (
+            typeof sourceX !== 'number' ||
+            typeof sourceY !== 'number' ||
+            typeof targetX !== 'number' ||
+            typeof targetY !== 'number'
+          )
+            return null;
+          return {
+            html,
+            x,
+            y,
+            dx,
+            dy,
+            source: { x: sourceX, y: sourceY },
+            target: { x: targetX, y: targetY },
+          };
+        });
+        if (!record) throw new Error(`${scenario.name} has no steal cue`);
+        expect(record.html).toContain('<svg');
+        expect(record.html).not.toMatch(/<img|data-resource|brick|lumber|wool|grain|ore/i);
+        expect(Math.hypot(record.x - record.source.x, record.y - record.source.y)).toBeLessThan(30);
+        expect(
+          Math.hypot(
+            record.x + record.dx - record.target.x,
+            record.y + record.dy - record.target.y,
+          ),
+        ).toBeLessThan(30);
+        if (scenario.pauseForCapture) {
+          await expect(page.locator('.steal-card-flight')).toBeVisible();
+          const screenshot = await page.screenshot({ animations: 'allow' });
+          await testInfo.attach(`${scenario.name}-steal-card`, {
+            body: screenshot,
+            contentType: 'image/png',
+          });
+          const folder = join(repoRoot, 'reports/stage05');
+          await mkdir(folder, { recursive: true });
+          await writeFile(join(folder, `${scenario.name}-steal-card.png`), screenshot);
+          await openGameMenu(page);
+          await page.getByRole('button', { name: 'Skip animations' }).click();
+        }
+        await expect(page.locator('.steal-card-flight')).toHaveCount(0);
+      } else await expect(page.locator('.steal-card-flight')).toHaveCount(0);
       expect(pageErrors.get(page)).toEqual([]);
     } finally {
       await context.close();

@@ -33,6 +33,9 @@ import { NextStepBar } from './NextStepBar.js';
 import { useCompactCockpit } from './use-compact-cockpit.js';
 import type { SaveStatus } from './save-coordinator';
 
+const MAX_INLINE_DEVELOPMENT_CARDS = 5;
+const MAX_NARROW_INLINE_DEVELOPMENT_CARDS = 3;
+
 function playerName(presentation: GamePresentation, seat: Seat): string {
   return presentation.players.find((player) => player.seat === seat)?.name ?? String(seat + 1);
 }
@@ -386,11 +389,20 @@ function HandDock({
   const developmentDialog = useRef<HTMLDialogElement>(null);
   const intentOpenedDialog = useRef(false);
   const [compactHand, setCompactHand] = useState(
-    () => window.matchMedia('(max-width: 1000px), (max-height: 500px)').matches,
+    () => window.matchMedia('(max-width: 767px), (max-height: 500px), (pointer: coarse)').matches,
+  );
+  const [narrowHand, setNarrowHand] = useState(
+    () => window.matchMedia('(min-width: 768px) and (max-width: 1000px)').matches,
   );
   useEffect(() => {
-    const media = window.matchMedia('(max-width: 1000px), (max-height: 500px)');
+    const media = window.matchMedia('(max-width: 767px), (max-height: 500px), (pointer: coarse)');
     const update = () => setCompactHand(media.matches);
+    media.addEventListener('change', update);
+    return () => media.removeEventListener('change', update);
+  }, []);
+  useEffect(() => {
+    const media = window.matchMedia('(min-width: 768px) and (max-width: 1000px)');
+    const update = () => setNarrowHand(media.matches);
     media.addEventListener('change', update);
     return () => media.removeEventListener('change', update);
   }, []);
@@ -398,6 +410,7 @@ function HandDock({
     developmentDialog.current?.close();
   }, [revealedSeat]);
   const seatState = state.seats.find((seat) => seat.seat === revealedSeat);
+  const unrevealedSlots = seatState?.cardSlots.filter((slot) => !slot.revealed) ?? [];
   const cardReason = (slotId: string, card: string, acquiredTurn: number): string | null => {
     if (card === 'Hidden') return t('game:cardUnavailable');
     if (acquiredTurn === state.turn.number && card !== 'victoryPoint') return t('game:newCard');
@@ -427,87 +440,91 @@ function HandDock({
       return t('game:cardNeedsChoices');
     return t('game:cardRuleUnavailable');
   };
-  const developmentCards =
-    seatState?.cardSlots
-      .filter((slot) => !slot.revealed)
-      .map((slot) => {
-        const card = privateState?.slots[slot.slotId] ?? 'Hidden';
-        const label = t(`game:dev${card}`);
-        const reason = cardReason(slot.slotId, card, slot.acquiredTurn);
-        const art = developmentCardArt(card);
-        const body = (
-          <>
-            <span className="development-card-art">
-              {art && <img src={art} alt="" aria-hidden="true" draggable={false} />}
-            </span>
-            <strong>{label}</strong>
-          </>
-        );
-        return (
-          <span
-            className={`development-card ${reason && card !== 'victoryPoint' ? 'is-disabled' : ''} ${knightIntent?.slotId === slot.slotId ? 'has-knight-intent' : ''}`}
-            key={slot.slotId}
+  const developmentCards = unrevealedSlots.map((slot) => {
+    const card = privateState?.slots[slot.slotId] ?? 'Hidden';
+    const label = t(`game:dev${card}`);
+    const reason = cardReason(slot.slotId, card, slot.acquiredTurn);
+    const art = developmentCardArt(card);
+    const body = (
+      <>
+        <span className="development-card-art">
+          {art && <img src={art} alt="" aria-hidden="true" draggable={false} />}
+        </span>
+        <strong>{label}</strong>
+      </>
+    );
+    return (
+      <span
+        className={`development-card ${reason && card !== 'victoryPoint' ? 'is-disabled' : ''} ${knightIntent?.slotId === slot.slotId ? 'has-knight-intent' : ''}`}
+        key={slot.slotId}
+      >
+        {card === 'knight' && reason === null ? (
+          <button
+            className="development-card-main"
+            type="button"
+            title={label}
+            aria-label={label}
+            aria-pressed={knightIntent?.slotId === slot.slotId}
+            onClick={() => toggleKnightIntent(slot.slotId)}
           >
-            {card === 'knight' && reason === null ? (
-              <button
-                className="development-card-main"
-                type="button"
-                title={label}
-                aria-label={label}
-                aria-pressed={knightIntent?.slotId === slot.slotId}
-                onClick={() => toggleKnightIntent(slot.slotId)}
-              >
-                {body}
-              </button>
-            ) : (
-              <span
-                className="development-card-main"
-                tabIndex={0}
-                title={reason ?? label}
-                aria-label={reason ? `${label}: ${reason}` : label}
-              >
-                {body}
-              </span>
-            )}
-            {card === 'knight' && knightIntent?.slotId === slot.slotId && (
-              <span
-                className="knight-card-confirmation"
-                role="group"
-                aria-label={t('game:knightPreview')}
-              >
-                <button
-                  className="knight-card-choice knight-card-cancel"
-                  type="button"
-                  aria-label={t('game:cancelKnight')}
-                  title={t('game:cancelKnight')}
-                  onClick={knightIntent.cancel}
-                >
-                  <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
-                    <path d="M5 5 15 15M15 5 5 15" />
-                  </svg>
-                </button>
-                <button
-                  className="knight-card-choice knight-card-confirm"
-                  type="button"
-                  aria-label={t('game:playCard', { card: t('game:devknight') })}
-                  title={t('game:playCard', { card: t('game:devknight') })}
-                  onClick={knightIntent.confirm}
-                >
-                  <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
-                    <path d="m4 10 4 4 8-8" />
-                  </svg>
-                </button>
-              </span>
-            )}
+            {body}
+          </button>
+        ) : (
+          <span
+            className="development-card-main"
+            tabIndex={0}
+            title={reason ?? label}
+            aria-label={reason ? `${label}: ${reason}` : label}
+          >
+            {body}
           </span>
-        );
-      }) ?? [];
-  const useDevelopmentDialog = compactHand || developmentCards.length > 2;
+        )}
+        {card === 'knight' && knightIntent?.slotId === slot.slotId && (
+          <span
+            className="knight-card-confirmation"
+            role="group"
+            aria-label={t('game:knightPreview')}
+          >
+            <button
+              className="knight-card-choice knight-card-cancel"
+              type="button"
+              aria-label={t('game:cancelKnight')}
+              title={t('game:cancelKnight')}
+              onClick={knightIntent.cancel}
+            >
+              <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+                <path d="M5 5 15 15M15 5 5 15" />
+              </svg>
+            </button>
+            <button
+              className="knight-card-choice knight-card-confirm"
+              type="button"
+              aria-label={t('game:playCard', { card: t('game:devknight') })}
+              title={t('game:playCard', { card: t('game:devknight') })}
+              onClick={knightIntent.confirm}
+            >
+              <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+                <path d="m4 10 4 4 8-8" />
+              </svg>
+            </button>
+          </span>
+        )}
+      </span>
+    );
+  });
+  const inlineCardLimit = narrowHand
+    ? MAX_NARROW_INLINE_DEVELOPMENT_CARDS
+    : MAX_INLINE_DEVELOPMENT_CARDS;
+  const useDevelopmentDialog = compactHand || developmentCards.length > inlineCardLimit;
+  const visibleDevelopmentCards = developmentCards.slice(0, inlineCardLimit);
   const activeKnightSlot = knightIntent?.slotId;
+  const activeKnightIsOverflow =
+    activeKnightSlot !== undefined &&
+    unrevealedSlots.findIndex((slot) => slot.slotId === activeKnightSlot) >= inlineCardLimit;
   useEffect(() => {
     const dialog = developmentDialog.current;
     if (!dialog || !useDevelopmentDialog) return;
-    if (activeKnightSlot) {
+    if (activeKnightSlot && (compactHand || activeKnightIsOverflow)) {
       if (!dialog.open) {
         dialog.showModal();
         intentOpenedDialog.current = true;
@@ -516,7 +533,7 @@ function HandDock({
       if (dialog.open) dialog.close();
       intentOpenedDialog.current = false;
     }
-  }, [activeKnightSlot, useDevelopmentDialog]);
+  }, [activeKnightSlot, activeKnightIsOverflow, compactHand, useDevelopmentDialog]);
   return (
     <section className="hand-dock" aria-label={t('game:yourHand')}>
       <div className="section-heading">
@@ -548,7 +565,7 @@ function HandDock({
                     developmentDialog.current.showModal();
                 }}
               >
-                {t('game:devCardsShort', { count: developmentCards.length })}
+                {t('game:developmentCards', { count: developmentCards.length })}
               </button>
             )}
             {!compact && optionalViewingSeat !== null && (
@@ -608,8 +625,13 @@ function HandDock({
               </div>
             ))}
           </div>
-          {!useDevelopmentDialog && developmentCards.length > 0 && (
-            <div className="development-hand">{developmentCards}</div>
+          {!compactHand && developmentCards.length > 0 && (
+            <div
+              className={`development-hand ${developmentCards.length > 2 ? 'is-fanned' : ''} ${knightIntent ? 'has-knight-intent' : ''}`}
+              data-card-count={visibleDevelopmentCards.length}
+            >
+              {visibleDevelopmentCards}
+            </div>
           )}
           {useDevelopmentDialog && developmentCards.length > 0 && (
             <dialog

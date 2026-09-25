@@ -209,3 +209,36 @@ test('only confirmed trades create grouped public card flights to the chosen rec
     made.value.dispose();
   }
 });
+
+test('a steal creates only a public victim-to-thief card-back cue', () => {
+  const made = LocalSession.create({
+    config: {
+      modules: [{ id: 'base', version: '1.0.0' }],
+      seats: [0, 1],
+      options: { base: { mapLayout: 'standard-fixed' } },
+      board: standardFixedBoard(),
+    },
+    humanSeats: [0, 1],
+    botSeats: [],
+    genesisSeed: new Uint8Array(32).fill(6),
+  });
+  if (!made.ok) throw new Error(made.error.message);
+  try {
+    const state = made.value.getState();
+    const effects = deriveVisualEffects(
+      state,
+      state,
+      [{ type: 'resourceStolen', thief: 0, victim: 1, known: false, resource: 'ore' }],
+      40,
+    );
+    expect(effects.stealFlights).toEqual([{ id: '40:0:steal', from: 1, to: 0 }]);
+    expect(JSON.stringify(effects.stealFlights)).not.toContain('ore');
+    expect(
+      deriveVisualEffects(state, state, [{ type: 'resourceStolen', thief: 0, victim: 9 }], 41)
+        .stealFlights,
+    ).toEqual([]);
+    expect(deriveVisualEffects(state, state, [], 42).stealFlights).toEqual([]);
+  } finally {
+    made.value.dispose();
+  }
+});

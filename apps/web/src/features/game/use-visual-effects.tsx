@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useState, type CSSProperties } from 'react';
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
 import { RESOURCES, type Resource, type Seat } from '@cp2p/engine';
 import type { BoardRenderer } from '@cp2p/renderer';
 import { getResourceCardUrl, getResourceIconUrl } from '@cp2p/renderer';
-import { sessionForActions } from '../../store/session-store';
+import { sessionForActions, useSessionStore } from '../../store/session-store';
 import { deriveVisualEffects, type ProductionGain } from './visual-effects';
 import './trade-card-flight.css';
+import './steal-card-flight.css';
 
 interface FlightView {
   id: string;
@@ -20,6 +21,14 @@ interface TradeFlightView {
   id: string;
   resource: Resource;
   count: number;
+  x: number;
+  y: number;
+  dx: number;
+  dy: number;
+}
+
+interface StealFlightView {
+  id: string;
   x: number;
   y: number;
   dx: number;
@@ -135,14 +144,28 @@ function visibleCenter(element: HTMLElement): { x: number; y: number } | null {
 export function useVisualEffects(renderer: BoardRenderer | null, reducedMotion: boolean) {
   const [flights, setFlights] = useState<FlightView[]>([]);
   const [tradeFlights, setTradeFlights] = useState<TradeFlightView[]>([]);
+  const [stealFlights, setStealFlights] = useState<StealFlightView[]>([]);
+  const pendingStealFrames = useRef<Set<number>>(new Set());
+  const cancelPendingSteals = useCallback(() => {
+    for (const frame of pendingStealFrames.current) window.cancelAnimationFrame(frame);
+    pendingStealFrames.current.clear();
+  }, []);
   const session = sessionForActions();
   const { receipts, add: addProductionGains } = useProductionReceipts(session);
   useEffect(() => {
+    setFlights([]);
+    setTradeFlights([]);
+    setStealFlights([]);
+    return cancelPendingSteals;
+  }, [cancelPendingSteals, session]);
+  useEffect(() => {
     if (reducedMotion) {
+      cancelPendingSteals();
       setFlights([]);
       setTradeFlights([]);
+      setStealFlights([]);
     }
-  }, [reducedMotion]);
+  }, [cancelPendingSteals, reducedMotion]);
   useEffect(() => {
     if (!session) return undefined;
     let before = session.getState();
@@ -195,14 +218,50 @@ export function useVisualEffects(renderer: BoardRenderer | null, reducedMotion: 
       if (nextTrade.length) {
         setTradeFlights((current) => [...current, ...nextTrade].slice(-16));
       }
+      if (cues.stealFlights.length) {
+        const frame = window.requestAnimationFrame(() => {
+          pendingStealFrames.current.delete(frame);
+          const revealedSeat = useSessionStore.getState().revealedSeat;
+          const hand =
+            revealedSeat === null
+              ? null
+              : document.querySelector<HTMLElement>('.hand-dock .resource-hand');
+          const centerForSeat = (seat: Seat) => {
+            if (seat === revealedSeat && hand) {
+              const center = visibleCenter(hand);
+              if (center) return center;
+            }
+            const panel = document.querySelector<HTMLElement>(`[data-seat-panel="${seat}"]`);
+            return panel ? visibleCenter(panel) : null;
+          };
+          const nextSteal = cues.stealFlights.flatMap((flight) => {
+            const from = centerForSeat(flight.from);
+            const to = centerForSeat(flight.to);
+            if (!from || !to) return [];
+            return [
+              {
+                id: flight.id,
+                x: from.x,
+                y: from.y,
+                dx: to.x - from.x,
+                dy: to.y - from.y,
+              },
+            ];
+          });
+          if (nextSteal.length) setStealFlights((current) => [...current, ...nextSteal].slice(-16));
+        });
+        pendingStealFrames.current.add(frame);
+      }
     });
   }, [addProductionGains, renderer, reducedMotion, session]);
 
   const skip = useCallback(() => {
     renderer?.skipAnimations();
+    cancelPendingSteals();
     setFlights([]);
     setTradeFlights([]);
-  }, [renderer]);
+    setStealFlights([]);
+  }, [cancelPendingSteals, renderer]);
   const overlay = (
     <>
       <div className="resource-flight-overlay" aria-hidden="true">
@@ -247,6 +306,33 @@ export function useVisualEffects(renderer: BoardRenderer | null, reducedMotion: 
             >
               <img src={getResourceCardUrl(flight.resource)} alt="" />
               {flight.count > 1 && <b>×{flight.count}</b>}
+            </span>
+          );
+        })}
+      </div>
+      <div className="steal-card-flight-overlay" aria-hidden="true">
+        {stealFlights.map((flight) => {
+          const style: CSSProperties & { '--flight-dx': string; '--flight-dy': string } = {
+            left: flight.x,
+            top: flight.y,
+            '--flight-dx': `${flight.dx}px`,
+            '--flight-dy': `${flight.dy}px`,
+          };
+          return (
+            <span
+              className="steal-card-flight"
+              key={flight.id}
+              style={style}
+              onAnimationEnd={() =>
+                setStealFlights((current) => current.filter((item) => item.id !== flight.id))
+              }
+            >
+              <svg viewBox="0 0 38 53" fill="none" focusable="false">
+                <rect x="1" y="1" width="36" height="51" rx="5" className="steal-card-shell" />
+                <rect x="5" y="5" width="28" height="43" rx="3" className="steal-card-inset" />
+                <path d="m19 14 10 12.5L19 39 9 26.5 19 14Z" className="steal-card-mark" />
+                <path d="M13 26.5h12M19 20v13" className="steal-card-lines" />
+              </svg>
             </span>
           );
         })}
