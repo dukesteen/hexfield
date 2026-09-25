@@ -1,1 +1,22 @@
-{}
+{
+  "roadBuilt": "{{player}} built a road.",
+  "settlementBuilt": "{{player}} built a settlement.",
+  "cityBuilt": "{{player}} upgraded to a city.",
+  "diceRolled": "Rolled {{count}}.",
+  "resourcesProduced": "Resources were produced.",
+  "resourcesProducedDetailed": "Production: {{details}}.",
+  "resourceGain": "+{{count}} {{resource}}",
+  "resourcesDiscarded": "{{player}} discarded {{count}} cards.",
+  "devCardBought": "{{player}} bought a development card.",
+  "devCardPlayed": "{{player}} played {{card}}.",
+  "robberMoved": "{{player}} moved the robber.",
+  "resourceStolen": "{{thief}} stole a card from {{victim}}.",
+  "turnStarted": "{{player}} started a turn.",
+  "tradeOffered": "A trade was offered.",
+  "tradeCompleted": "A trade was completed.",
+  "tradeCancelled": "A trade was cancelled.",
+  "monopolyCollected": "{{player}} collected {{count}} cards with Monopoly.",
+  "phaseChanged": "The next phase began.",
+  "gameEnded": "{{player}} won the game.",
+  "gameUpdated": "The game changed."
+}

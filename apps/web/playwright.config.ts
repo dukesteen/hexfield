@@ -1,11 +1,13 @@
 import { defineConfig, devices } from '@playwright/test';
 
 const allBrowsers = process.env.CI_BROWSER_SET !== 'chromium';
+const port = Number(process.env.PLAYWRIGHT_TEST_PORT ?? 5187);
+const baseURL = `http://127.0.0.1:${port}`;
 
 export default defineConfig({
   testDir: './tests',
   testMatch: '**/*.e2e.ts',
-  use: { baseURL: 'http://127.0.0.1:5187' },
+  use: { baseURL },
   projects: [
     { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
     ...(allBrowsers
@@ -17,8 +19,8 @@ export default defineConfig({
   ],
   reporter: [['list'], ['html', { open: 'never' }]],
   webServer: {
-    command: 'pnpm dev',
-    url: 'http://127.0.0.1:5187',
+    command: `pnpm dev --host 127.0.0.1 --port ${port} --strictPort`,
+    url: baseURL,
     reuseExistingServer: !process.env.CI,
     timeout: 60_000,
   },

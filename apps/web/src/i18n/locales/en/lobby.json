@@ -12,6 +12,7 @@
   "players": "Players",
   "playerCount": "Player count",
   "playerName": "Player {{number}} name",
+  "defaultPlayerName": "Player {{number}}",
   "playerRole": "Player {{number}} control",
   "human": "Human",
   "bot": "Bot",

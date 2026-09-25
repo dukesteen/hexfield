@@ -1,1 +1,56 @@
-{}
+{
+  "action": { "confirm": "Confirm", "cancel": "Cancel" },
+  "validation": {
+    "plenty": "These resource choices cannot be played right now.",
+    "trade": "These trade terms cannot be offered right now. Check your cards and recipients.",
+    "bank": "This bank trade cannot be made right now. Check the amounts and available cards."
+  },
+  "resource": {
+    "brick": "Brick",
+    "lumber": "Lumber",
+    "wool": "Wool",
+    "grain": "Grain",
+    "ore": "Ore"
+  },
+  "discard": {
+    "title": "Discard cards",
+    "selected": "Selected {{selected}} of {{count}}",
+    "cards": "Cards to discard"
+  },
+  "plenty": {
+    "title": "Year of Plenty",
+    "instruction": "Choose two resources. You may choose the same kind twice.",
+    "first": "First resource",
+    "second": "Second resource",
+    "bankHidden": "Bank counts are hidden. You may receive fewer cards if stock is short.",
+    "bankAvailable": "Bank stock for these choices: {{first}} and {{second}}"
+  },
+  "monopoly": { "title": "Monopoly", "instruction": "Choose the resource to collect." },
+  "steal": {
+    "title": "Steal a card",
+    "instruction": "Choose a player next to the robber.",
+    "seat": "{{player}}"
+  },
+  "trade": {
+    "title": "Player trade",
+    "give": "You give",
+    "want": "You receive",
+    "recipients": "Offer to",
+    "send": "Send offer",
+    "offers": "Trade offers",
+    "offerFrom": "Offer from {{player}}",
+    "offerTerms": "Give {{give}} for {{want}}",
+    "accept": "Accept",
+    "decline": "Decline",
+    "confirm": "Complete trade",
+    "withdraw": "Withdraw"
+  },
+  "bank": {
+    "title": "Bank trade",
+    "bestRates": "Available single-card trades",
+    "rate": "{{resource}}: {{rate}} for 1",
+    "shortcuts": "Quick bank trades",
+    "shortcut": "Give {{rate}} {{give}} for 1 {{get}}",
+    "get": "Bank gives"
+  }
+}

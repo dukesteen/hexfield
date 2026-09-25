@@ -4,7 +4,7 @@ import { browserStorage, type KeyValueStorage } from './storage';
 const SAVE_PREFIX = 'hexfield:save:v1:';
 
 const playerSchema = v.strictObject({
-  seat: v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(3)),
+  seat: v.picklist([0, 1, 2, 3]),
   name: v.pipe(v.string(), v.minLength(1), v.maxLength(40)),
   color: v.picklist(['blue', 'orange', 'green', 'magenta']),
   shape: v.picklist(['circle', 'triangle', 'square', 'diamond']),

@@ -1,4 +1,5 @@
 import { createFileRoute, notFound } from '@tanstack/react-router';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { standardFixedBoard } from '@cp2p/maps';
 import { buildBoardGraph } from '@cp2p/engine/geometry';
@@ -57,6 +58,7 @@ export const Route = createFileRoute('/dev/board')({
 
 function BoardDevelopmentPage() {
   const { t } = useTranslation('common');
+  const [rendererError, setRendererError] = useState<string | null>(null);
   const onRendererReady = (renderer: BoardRenderer) => {
     Reflect.set(window, '__cp2pBoard', { renderer, model });
   };
@@ -76,8 +78,14 @@ function BoardDevelopmentPage() {
           label={t('common:boardPreviewAriaLabel')}
           onSelect={selectBoardTarget}
           onRendererReady={onRendererReady}
+          onRendererError={(error) => {
+            setRendererError(
+              error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+            );
+          }}
           className="board-dev-board"
         />
+        {rendererError && <pre role="alert">{rendererError}</pre>}
         <aside className="board-dev-help">
           <h2>{t('common:boardPreviewControlsTitle')}</h2>
           <p>{t('common:boardPreviewControls')}</p>

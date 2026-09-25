@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import { createBoardRenderer } from '@cp2p/renderer';
@@ -14,6 +14,7 @@ export interface BoardViewProps {
   readonly model: RenderModel;
   readonly highlights?: BoardHighlights;
   readonly appearance?: BoardAppearance;
+  readonly reducedMotion?: boolean;
   readonly onSelect?: (hit: BoardHit) => void;
   readonly onHover?: (hit: BoardHit | null) => void;
   readonly onRendererReady?: (renderer: BoardRenderer) => void;
@@ -28,6 +29,7 @@ export function BoardView({
   model,
   highlights,
   appearance,
+  reducedMotion = false,
   onSelect,
   onHover,
   onRendererReady,
@@ -37,6 +39,7 @@ export function BoardView({
   targetLabel,
 }: BoardViewProps) {
   const { t } = useTranslation('common');
+  const targetSelectId = useId();
   const accessibleLabel = label ?? t('common:boardDefaultLabel');
   const formatHarborLabel = useCallback(
     (kind: string): string => {
@@ -60,12 +63,14 @@ export function BoardView({
     [t],
   );
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [selectedTargetKey, setSelectedTargetKey] = useState('');
   const hostRef = useRef<HTMLDivElement>(null);
   const rendererRef = useRef<BoardRenderer | null>(null);
   const propsRef = useRef({
     model,
     highlights,
     appearance,
+    reducedMotion,
     onSelect,
     onHover,
     onRendererReady,
@@ -77,6 +82,7 @@ export function BoardView({
     model,
     highlights,
     appearance,
+    reducedMotion,
     onSelect,
     onHover,
     onRendererReady,
@@ -93,6 +99,7 @@ export function BoardView({
       try {
         const renderer = await createBoardRenderer(host, {
           ...(propsRef.current.appearance ? { appearance: propsRef.current.appearance } : {}),
+          reducedMotion: propsRef.current.reducedMotion,
           accessibleLabel: propsRef.current.label,
           formatHarborLabel: (kind) => propsRef.current.formatHarborLabel(kind),
           onSelect: (hit) => propsRef.current.onSelect?.(hit),
@@ -109,9 +116,10 @@ export function BoardView({
           return;
         }
         rendererRef.current = renderer;
-        renderer.render(propsRef.current.model);
-        if (propsRef.current.highlights) renderer.setHighlights(propsRef.current.highlights);
         if (propsRef.current.appearance) renderer.setAppearance(propsRef.current.appearance);
+        renderer.render(propsRef.current.model);
+        renderer.setHighlights(propsRef.current.highlights ?? {});
+        renderer.setReducedMotion(propsRef.current.reducedMotion);
         setStatus('ready');
       } catch (error) {
         if (active) {
@@ -131,7 +139,7 @@ export function BoardView({
 
   useEffect(() => rendererRef.current?.render(model), [model]);
   useEffect(() => {
-    if (highlights) rendererRef.current?.setHighlights(highlights);
+    rendererRef.current?.setHighlights(highlights ?? {});
   }, [highlights]);
   useEffect(() => {
     if (appearance) rendererRef.current?.setAppearance(appearance);
@@ -140,18 +148,21 @@ export function BoardView({
     () => rendererRef.current?.setHarborLabelFormatter((kind) => formatHarborLabel(kind)),
     [formatHarborLabel],
   );
+  useEffect(() => rendererRef.current?.setReducedMotion(reducedMotion), [reducedMotion]);
 
   const keyboardTargets: BoardHit[] = [
     ...(highlights?.vertices ?? []).map((id) => ({ kind: 'vertex' as const, id })),
     ...(highlights?.edges ?? []).map((id) => ({ kind: 'edge' as const, id })),
     ...(highlights?.hexes ?? []).map((id) => ({ kind: 'hex' as const, id })),
   ];
+  const selectedTarget =
+    keyboardTargets.find((hit) => targetKey(hit) === selectedTargetKey) ?? keyboardTargets[0];
 
   return (
     <div
       className={['board-renderer-root', className].filter(Boolean).join(' ')}
       role="group"
-      aria-label={label}
+      aria-label={accessibleLabel}
       data-testid="board-renderer"
     >
       <div ref={hostRef} className="board-view-canvas" aria-hidden={status !== 'ready'} />
@@ -166,21 +177,35 @@ export function BoardView({
         </div>
       )}
       {keyboardTargets.length > 0 && (
-        <div className="board-keyboard-targets" aria-label={t('common:legalBoardTargets')}>
-          {keyboardTargets.map((hit) => (
-            <button
-              key={`${hit.kind}:${hit.id}`}
-              type="button"
-              aria-label={targetLabel?.(hit) ?? describeTarget(hit, t)}
-              onClick={() => onSelect?.(hit)}
-            >
-              {targetLabel?.(hit) ?? describeTarget(hit, t)}
-            </button>
-          ))}
-        </div>
+        <details className="board-keyboard-targets" data-testid="board-keyboard-targets">
+          <summary>{t('common:legalBoardTargets', { count: keyboardTargets.length })}</summary>
+          <label htmlFor={targetSelectId}>{t('common:boardTargetSelectLabel')}</label>
+          <select
+            id={targetSelectId}
+            value={selectedTarget ? targetKey(selectedTarget) : ''}
+            onChange={(event) => setSelectedTargetKey(event.currentTarget.value)}
+          >
+            {keyboardTargets.map((hit) => (
+              <option key={targetKey(hit)} value={targetKey(hit)}>
+                {targetLabel?.(hit) ?? describeTarget(hit, t)}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            disabled={!selectedTarget || !onSelect}
+            onClick={() => selectedTarget && onSelect?.(selectedTarget)}
+          >
+            {t('common:boardTargetChoose')}
+          </button>
+        </details>
       )}
     </div>
   );
+}
+
+function targetKey(hit: BoardHit): string {
+  return `${hit.kind}:${hit.id}`;
 }
 
 function describeTarget(hit: BoardHit, t: TFunction<'common'>): string {

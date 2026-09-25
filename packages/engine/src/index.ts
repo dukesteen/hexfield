@@ -2,6 +2,8 @@ export const PACKAGE_NAME = '@cp2p/engine';
 
 export { baseModule, createBaseEngine } from './modules/base/index.js';
 export { DEV_CARD_COUNTS } from './modules/base/constants.js';
+export { harborRate as baseHarborRate } from './modules/base/board/index.js';
+export { longestRoadLength as baseLongestRoadLength } from './modules/base/awards/index.js';
 export type { BaseOptions, TurnTimer, MapLayout, DiceMode } from './modules/base/config.js';
 export type { TradeOffer } from './modules/base/types.js';
 export { enumerateCommands } from './core/enumerate.js';

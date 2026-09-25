@@ -90,6 +90,7 @@ export class ReplayRandomSource implements LocalRandomSource {
     if (this.index !== this.expected.length)
       throw new Error('Saved batch has unused system outcomes');
     this.expected = [];
+    this.index = 0;
   }
 
   goLive(): void {

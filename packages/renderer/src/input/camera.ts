@@ -1,3 +1,20 @@
+export interface CameraPoint {
+  readonly x: number;
+  readonly y: number;
+}
+
+/** Place a world point at a screen point after changing zoom. */
+export function cameraPositionAtAnchor(
+  worldAnchor: CameraPoint,
+  screenAnchor: CameraPoint,
+  zoom: number,
+): CameraPoint {
+  return {
+    x: screenAnchor.x - worldAnchor.x * zoom,
+    y: screenAnchor.y - worldAnchor.y * zoom,
+  };
+}
+
 /** Clamp one camera axis so board bounds stay visible, or center a smaller board. */
 export function clampCameraAxis(
   cameraPosition: number,

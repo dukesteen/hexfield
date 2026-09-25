@@ -98,6 +98,39 @@ async function reachTimedTurn(session: LocalSession): Promise<void> {
 }
 
 describe('LocalSession', () => {
+  test('restores a genesis-only save and a final system-bearing batch', async () => {
+    const session = create(seats, [], { entropy: entropy(31) });
+    const original = session.exportSave();
+    const genesisOnly = LocalSession.restore(original, { entropy: entropy(32) });
+    if (!genesisOnly.ok) throw new Error(genesisOnly.error.message);
+    expect(genesisOnly.value.exportSave()).toEqual(original);
+    genesisOnly.value.dispose();
+    for (let step = 0; step < 30 && session.getState().turn.phase.at(-1)?.id === 'setup'; step++) {
+      const pending = session.getPending().find((item) => item.kind === 'player');
+      if (pending?.kind !== 'player') throw new Error('Setup has no player choice');
+      const command = session.getLegalCommands(pending.seat).commands[0];
+      if (!command) throw new Error('Setup has no legal choice');
+      // Setup decisions are sequential.
+      // eslint-disable-next-line no-await-in-loop
+      const applied = await session.submit(pending.seat, command);
+      if (!applied.ok) throw new Error(applied.error.message);
+    }
+    const active = session.getState().turn.activeSeat;
+    const rolled = await session.submit(active, { type: 'ROLL_DICE' });
+    if (!rolled.ok) throw new Error(rolled.error.message);
+    const save = session.exportSave();
+    expect(
+      save.batches
+        .at(-1)
+        ?.generated.some((input) => input.kind === 'system' && input.type === 'DICE_RESULT'),
+    ).toBe(true);
+    const restored = LocalSession.restore(save, { entropy: entropy(33) });
+    if (!restored.ok) throw new Error(restored.error.message);
+    expect(restored.value.exportSave()).toEqual(save);
+    restored.value.dispose();
+    session.dispose();
+  });
+
   test('submits a human command, records its batch, and restores an identical authority', async () => {
     const session = create(seats, [], { entropy: entropy() });
     const pending = session.getPending().find((item) => item.kind === 'player');

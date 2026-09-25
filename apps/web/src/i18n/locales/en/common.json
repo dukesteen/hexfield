@@ -21,9 +21,14 @@
   "harborOre": "Ore port",
   "harborUnknown": "Port",
   "boardDefaultLabel": "Game board",
-  "legalBoardTargets": "Legal board targets",
+  "legalBoardTargets": "Keyboard targets ({{count}})",
+  "boardTargetSelectLabel": "Board location",
+  "boardTargetChoose": "Select location",
   "targetLabel": "{{kind}} {{id}}",
   "targetKindVertex": "Vertex",
   "targetKindEdge": "Edge",
-  "targetKindHex": "Hex"
+  "targetKindHex": "Hex",
+  "pageMissing": "We couldn't find that page.",
+  "pageError": "This page couldn't load.",
+  "backHome": "Back to home"
 }

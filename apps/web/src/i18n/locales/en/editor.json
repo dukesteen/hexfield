@@ -1,1 +1,25 @@
-{}
+{
+  "title": "Developer tools",
+  "hash": "State hash: {{hash}}",
+  "revision": "Log revision: {{revision}}",
+  "public": "Public state JSON",
+  "private": "Private state by seat",
+  "seat": "Player {{seat}}",
+  "pending": "Pending inputs",
+  "legal": "Legal commands",
+  "actions": "Visible action diagnostics",
+  "commandSeat": "Command seat",
+  "rawCommand": "Raw command JSON",
+  "applyCommand": "Apply raw command",
+  "dieOne": "First die",
+  "dieTwo": "Second die",
+  "forceDice": "Force next dice",
+  "diceReady": "The next random dice result is set.",
+  "exportSave": "Export authoritative save",
+  "exportReplay": "Export replay JSON",
+  "importSave": "Authoritative save JSON",
+  "loadSave": "Load save",
+  "invalidCommand": "A command must be a JSON object.",
+  "done": "Done.",
+  "failed": "Failed"
+}

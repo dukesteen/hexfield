@@ -70,6 +70,7 @@ export interface BoardRenderer {
   render(model: RenderModel): void;
   setHighlights(highlights: BoardHighlights): void;
   setAppearance(appearance: BoardAppearance): void;
+  setReducedMotion(reduced: boolean): void;
   setHarborLabelFormatter(formatter: (kind: string) => string): void;
   /** Input coordinates are CSS client coordinates. */
   hitTest(clientPoint: ScreenPoint, mode?: HitMode): BoardHit | null;

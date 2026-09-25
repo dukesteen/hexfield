@@ -81,6 +81,8 @@ Implementation is in progress. The local-session foundation now supports CSPRNG 
 
 The static Pixi board is available at `#/dev/board`. A Chrome visual check confirmed the placeholder terrain, number tokens and pips, player markers, wheel zoom, drag pan, and background double-click refit. The check caught and resolved the strict-CSP initialization and stale-renderer lifecycle failures without changing the CSP. Camera bounds and legal-only target geometry have focused regression tests. This desktop inspection does not establish the later mobile performance or full-game acceptance criteria.
 
+The 2026-09-25 playable UI checkpoint passes `pnpm check`: 276 tests across 64 files, typechecks, lint, formatting, dependency boundaries, engine purity and the translation-key check. Setup, board actions, seven-flow and development-card forms, trading, save/resume, hotseat privacy, game-over statistics and DEV inspection are connected. Eighteen original SVG assets were generated, validated, optimized and inspected at 48 px and 256 px. A twenty-game browser pilot passed, along with desktop/phone bot completion and hotseat setup/roll/road scenarios. That pilot overlapped renderer edits and is not final acceptance evidence. Event animations, bounded renderer object disposal, card explanations, a full human-controlled phone game, performance evidence and the final frozen-source CI run remain in progress; the acceptance boxes above remain open.
+
 ## 06 — Protocol & Replicated Event Log
 
 Source: [06-protocol-event-log.md](06-protocol-event-log.md)

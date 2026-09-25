@@ -8,6 +8,7 @@ import { i18n } from './i18n';
 import { queryClient } from './queryClient';
 import { router } from './router';
 import './style.css';
+import './app.css';
 
 const root = document.getElementById('root');
 if (!root) throw new Error('Missing #root');

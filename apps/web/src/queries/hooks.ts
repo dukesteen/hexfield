@@ -55,11 +55,13 @@ export async function loadSavedGame(
   id: string,
   repository: SavedGameRepository = getWebRepositories().savedGames,
 ): Promise<SavedGameRecord | null> {
-  const persisted = await repository.get(id);
   const key = queryKeys.savedGame(id);
-  const newest = newerRecord(queryClient.getQueryData<SavedGameRecord | null>(key), persisted);
-  queryClient.setQueryData(key, newest);
-  return newest;
+  return queryClient.fetchQuery({
+    queryKey: key,
+    staleTime: 0,
+    queryFn: async () =>
+      newerRecord(queryClient.getQueryData<SavedGameRecord | null>(key), await repository.get(id)),
+  });
 }
 
 export function useSettings(repository: SettingsRepository = getWebRepositories().settings) {

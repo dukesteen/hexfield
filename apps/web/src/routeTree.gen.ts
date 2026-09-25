@@ -10,11 +10,19 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as DevBoardRouteImport } from './routes/dev/board'
+import { Route as LocalGameIdRouteImport } from './routes/local/$gameId'
+import { Route as LocalNewRouteImport } from './routes/local/new'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SettingsRoute = SettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DevBoardRoute = DevBoardRouteImport.update({
@@ -22,31 +30,59 @@ const DevBoardRoute = DevBoardRouteImport.update({
   path: '/dev/board',
   getParentRoute: () => rootRouteImport,
 } as any)
+const LocalGameIdRoute = LocalGameIdRouteImport.update({
+  id: '/local/$gameId',
+  path: '/local/$gameId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LocalNewRoute = LocalNewRouteImport.update({
+  id: '/local/new',
+  path: '/local/new',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/settings': typeof SettingsRoute
   '/dev/board': typeof DevBoardRoute
+  '/local/$gameId': typeof LocalGameIdRoute
+  '/local/new': typeof LocalNewRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/settings': typeof SettingsRoute
   '/dev/board': typeof DevBoardRoute
+  '/local/$gameId': typeof LocalGameIdRoute
+  '/local/new': typeof LocalNewRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/settings': typeof SettingsRoute
   '/dev/board': typeof DevBoardRoute
+  '/local/$gameId': typeof LocalGameIdRoute
+  '/local/new': typeof LocalNewRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/dev/board'
+  fullPaths: '/' | '/settings' | '/dev/board' | '/local/$gameId' | '/local/new'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/dev/board'
-  id: '__root__' | '/' | '/dev/board'
+  to: '/' | '/settings' | '/dev/board' | '/local/$gameId' | '/local/new'
+  id:
+    | '__root__'
+    | '/'
+    | '/settings'
+    | '/dev/board'
+    | '/local/$gameId'
+    | '/local/new'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  SettingsRoute: typeof SettingsRoute
   DevBoardRoute: typeof DevBoardRoute
+  LocalGameIdRoute: typeof LocalGameIdRoute
+  LocalNewRoute: typeof LocalNewRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -58,6 +94,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/settings': {
+      id: '/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof SettingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/dev/board': {
       id: '/dev/board'
       path: '/dev/board'
@@ -65,12 +108,29 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DevBoardRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/local/$gameId': {
+      id: '/local/$gameId'
+      path: '/local/$gameId'
+      fullPath: '/local/$gameId'
+      preLoaderRoute: typeof LocalGameIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/local/new': {
+      id: '/local/new'
+      path: '/local/new'
+      fullPath: '/local/new'
+      preLoaderRoute: typeof LocalNewRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  SettingsRoute: SettingsRoute,
   DevBoardRoute: DevBoardRoute,
+  LocalGameIdRoute: LocalGameIdRoute,
+  LocalNewRoute: LocalNewRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
