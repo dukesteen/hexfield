@@ -17,6 +17,7 @@
   "dependencies": {
     "@cp2p/bots": "workspace:*",
     "@cp2p/codec": "workspace:*",
+    "@cp2p/crypto": "workspace:*",
     "@cp2p/engine": "workspace:*",
     "@cp2p/maps": "workspace:*",
     "@cp2p/protocol": "workspace:*",

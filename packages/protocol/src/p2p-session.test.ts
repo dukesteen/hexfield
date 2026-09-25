@@ -1,18 +1,22 @@
-import { fromBase64Url, hashValue, toHex } from '@cp2p/codec';
+import { canonicalEncode, fromBase64Url, hashValue, toHex } from '@cp2p/codec';
 import { describe, expect, test } from 'vitest';
 import { success } from '@cp2p/engine';
 import type { CommandShape, Result, Seat } from '@cp2p/engine';
-import { genesisId, GENESIS_PREVIOUS_HASH, signEntry, signGenesis } from './genesis.js';
+import { createConsensusState } from './consensus.js';
+import { entryHash, genesisId, GENESIS_PREVIOUS_HASH, signEntry, signGenesis } from './genesis.js';
 import { MemoryProtocolJournal } from './journal.js';
 import { P2PSession } from './p2p-session.js';
 import type { P2PSessionOptions, SessionDriver } from './p2p-session.js';
 import type { ReplayPolicy } from './replay.js';
+import { replayCertifiedPrefix } from './replay.js';
+import { proposerFor } from './proposal.js';
 import { createMemnet } from './testing/memnet.js';
 import { protocolFixture } from './testing/fixtures.js';
 import { SimulationDriver } from './testing/simulation-driver.js';
 import { VirtualClock } from './testing/virtual-clock.js';
 import type { ProtocolClock } from './transport.js';
 import type { Genesis, GenesisBody, LogEntry } from './types.js';
+import { signVote } from './votes.js';
 
 const policy: ReplayPolicy = { genesis: { allowStub: true }, entry: { allowStub: true } };
 
@@ -227,64 +231,148 @@ describe('P2PSession', () => {
     net.dispose();
   });
 
-  test('restore replays certified private consequences to reconstruct the owner hand', async () => {
-    const fixture = twoHumanFixture(true);
-    const { clock, net, journals, sessions, peers } = await openTwoHumanSessions(fixture);
-    const maxInputs = 24;
-    for (let step = 0; step < maxInputs; step++) {
-      // oxlint-disable-next-line no-await-in-loop -- Each certified input determines the next legal setup command.
-      await settleNetwork(sessions, clock);
-      const state = sessions[0]?.getState();
-      if (!state) throw new Error('Missing public state');
-      const phase = state.turn.phase.at(-1)?.id;
-      if (phase === 'main') break;
-      const seat = state.turn.activeSeat;
-      const owner = sessions.find((session) => session.controllableSeats().includes(seat));
-      if (!owner) throw new Error(`Setup requested uncontrolled seat ${seat}`);
-      const command = owner
-        .getLegalCommands(seat)
-        .commands.find(
-          (candidate) =>
-            candidate.type === 'PLACE_SETTLEMENT' ||
-            candidate.type === 'PLACE_ROAD' ||
-            candidate.type === 'ROLL_DICE',
+  test.each([false, true])(
+    'restore reconstructs the owner hand, historical exclusion: %s',
+    async (withExclusion) => {
+      const fixture = twoHumanFixture(true);
+      const { clock, net, journals, sessions, peers } = await openTwoHumanSessions(fixture);
+      const maxInputs = 24;
+      for (let step = 0; step < maxInputs; step++) {
+        // oxlint-disable-next-line no-await-in-loop -- Each certified input determines the next legal setup command.
+        await settleNetwork(sessions, clock);
+        const state = sessions[0]?.getState();
+        if (!state) throw new Error('Missing public state');
+        const phase = state.turn.phase.at(-1)?.id;
+        if (phase === 'main') break;
+        const seat = state.turn.activeSeat;
+        const owner = sessions.find((session) => session.controllableSeats().includes(seat));
+        if (!owner) throw new Error(`Setup requested uncontrolled seat ${seat}`);
+        const command = owner
+          .getLegalCommands(seat)
+          .commands.find(
+            (candidate) =>
+              candidate.type === 'PLACE_SETTLEMENT' ||
+              candidate.type === 'PLACE_ROAD' ||
+              candidate.type === 'ROLL_DICE',
+          );
+        if (!command) throw new Error(`No legal setup command in ${phase}`);
+        const submitted = owner.submit(seat, command);
+        // oxlint-disable-next-line no-await-in-loop -- Later setup choices depend on this commit.
+        await settleNetwork(sessions, clock);
+        // oxlint-disable-next-line no-await-in-loop -- Await each committed placement before deriving the next.
+        const result = await submitted;
+        if (!result.ok) throw new Error(`Setup submit failed: ${result.error.code}`);
+      }
+      const first = sessions[0];
+      const journal = journals[0];
+      const peerId = peers[0];
+      if (!first || !journal || !peerId) throw new Error('Missing restore fixture parts');
+      expect(first.getState().turn.phase.at(-1)?.id).toBe('main');
+      const timers = first.getTimers();
+      expect(timers).toHaveLength(1);
+      expect(timers[0]).toMatchObject({ phase: 'main', remainingMs: 10_000, paused: false });
+      clock.advanceBy(1_250);
+      expect(first.getTimers()[0]?.remainingMs).toBe(8_750);
+      const privateBefore = first.getPrivate(0);
+      if (!privateBefore) throw new Error('Missing human private state');
+      expect(
+        Object.values(privateBefore.hand).reduce((total, count) => total + count, 0),
+      ).toBeGreaterThan(0);
+      first.dispose();
+      net.crash(peerId);
+      if (withExclusion) {
+        const saved = await journal.load();
+        if (!saved) throw new Error('Missing saved session');
+        const context = value(
+          replayCertifiedPrefix(saved.genesis, saved.entries, fixture.engine, policy),
+        ).context;
+        const offender = fixture.identities[1];
+        if (!offender) throw new Error('Missing offender identity');
+        const voteBody = {
+          genesisDigest: context.membership.genesisDigest,
+          epoch: 0,
+          seat: 1 as const,
+          seq: 1,
+          term: 1,
+          phase: 'prevote' as const,
+          valueHash: null,
+        };
+        const proposer = proposerFor(
+          saved.height,
+          1,
+          context.membership,
+          context.excludedProposers,
         );
-      if (!command) throw new Error(`No legal setup command in ${phase}`);
-      const submitted = owner.submit(seat, command);
-      // oxlint-disable-next-line no-await-in-loop -- Later setup choices depend on this commit.
-      await settleNetwork(sessions, clock);
-      // oxlint-disable-next-line no-await-in-loop -- Await each committed placement before deriving the next.
-      const result = await submitted;
-      if (!result.ok) throw new Error(`Setup submit failed: ${result.error.code}`);
-    }
-    const first = sessions[0];
-    const journal = journals[0];
-    const peerId = peers[0];
-    if (!first || !journal || !peerId) throw new Error('Missing restore fixture parts');
-    expect(first.getState().turn.phase.at(-1)?.id).toBe('main');
-    const timers = first.getTimers();
-    expect(timers).toHaveLength(1);
-    expect(timers[0]).toMatchObject({ phase: 'main', remainingMs: 10_000, paused: false });
-    clock.advanceBy(1_250);
-    expect(first.getTimers()[0]?.remainingMs).toBe(8_750);
-    const privateBefore = first.getPrivate(0);
-    if (!privateBefore) throw new Error('Missing human private state');
-    expect(
-      Object.values(privateBefore.hand).reduce((total, count) => total + count, 0),
-    ).toBeGreaterThan(0);
-    first.dispose();
-    net.crash(peerId);
-    const transport = net.restart(peerId);
-    const restored = value(
-      await P2PSession.restore(optionsFor(fixture, 0, transport, clock, journal)),
-    );
-    expect(restored.getState()).toEqual(sessions[1]?.getState());
-    expect(restored.getPrivate(0)).toEqual(privateBefore);
-    expect(restored.getPrivate(1)).toBeNull();
-    restored.dispose();
-    sessions[1]?.dispose();
-    net.dispose();
-  });
+        const signer = fixture.identities.find(
+          (identity) => identity.peerId === proposer.publicKey,
+        );
+        if (!signer) throw new Error('Missing exclusion proposer');
+        const exclusion = signEntry(
+          {
+            seq: saved.height,
+            term: 1,
+            prevHash: entryHash(context.log.head),
+            payload: {
+              kind: 'control',
+              action: 'exclude-proposer',
+              offender: 1,
+              evidence: {
+                kind: 'vote-equivocation',
+                first: signVote(voteBody, offender.secretKey),
+                second: signVote({ ...voteBody, valueHash: 'a'.repeat(64) }, offender.secretKey),
+              },
+            },
+            stateHash: context.log.head.stateHash,
+            sequencer: proposer.publicKey,
+          },
+          signer.secretKey,
+        );
+        const certified = {
+          entry: exclusion,
+          certificate: context.membership.voters.map((voter) => {
+            const identity = fixture.identities[voter.seat];
+            if (!identity) throw new Error('Missing certificate voter');
+            return signVote(
+              {
+                ...voteBody,
+                seat: voter.seat,
+                seq: exclusion.seq,
+                phase: 'precommit',
+                valueHash: entryHash(exclusion),
+              },
+              identity.secretKey,
+            );
+          }),
+        };
+        const next = value(
+          replayCertifiedPrefix(
+            saved.genesis,
+            [...saved.entries, certified],
+            fixture.engine,
+            policy,
+          ),
+        ).context;
+        const safety = value(createConsensusState(next, 0));
+        const committed = await journal.commit(
+          saved.height,
+          saved.safety.revision,
+          certified,
+          canonicalEncode(safety),
+        );
+        if (!committed) throw new Error('Could not append the historical exclusion fixture');
+      }
+      const transport = net.restart(peerId);
+      const restored = value(
+        await P2PSession.restore(optionsFor(fixture, 0, transport, clock, journal)),
+      );
+      expect(restored.getState()).toEqual(sessions[1]?.getState());
+      expect(restored.getPrivate(0)).toEqual(privateBefore);
+      expect(restored.getPrivate(1)).toBeNull();
+      restored.dispose();
+      sessions[1]?.dispose();
+      net.dispose();
+    },
+  );
 
   test('bot signing keys are accepted only by their certified host and are cleared on dispose', async () => {
     const fixture = protocolFixture();

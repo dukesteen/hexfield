@@ -10,6 +10,16 @@ on:
         type: boolean
         required: false
         default: false
+      network_seeds:
+        description: Full-game seeds per scenario (1–1000; default 20)
+        type: number
+        required: true
+        default: 20
+      network_start_index:
+        description: First deterministic game index for a manual run
+        type: number
+        required: true
+        default: 0
   schedule:
     - cron: '17 2 * * *'
 
@@ -96,9 +106,62 @@ jobs:
             failures/
           if-no-files-found: ignore
 
+  network-plan:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Validate network matrix planner
+        run: node --test .github/scripts/network-matrix.test.mjs
+      - name: Plan deterministic scenario shards
+        id: plan
+        run: node .github/scripts/network-matrix.mjs
+        env:
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          NETWORK_SEEDS: ${{ inputs.network_seeds }}
+          NETWORK_START_INDEX: ${{ inputs.network_start_index }}
+
+  network-simulation:
+    needs: [network-plan]
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.network-plan.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.7.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec tsc -b tools/sim
+      - name: Full P2P game simulation
+        run: >-
+          node tools/sim/dist/index.js net
+          --scenario ${{ matrix.scenario }}
+          --seeds ${{ matrix.seeds }}
+          --seed 42
+          --parallel 1
+          --start-index ${{ matrix.startIndex }}
+          > network-scenario-${{ matrix.scenario }}-start-${{ matrix.startIndex }}.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: network-scenario-${{ matrix.scenario }}-start-${{ matrix.startIndex }}
+          path: network-scenario-${{ matrix.scenario }}-start-${{ matrix.startIndex }}.json
+          if-no-files-found: ignore
+
   deploy:
     if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
-    needs: [check, simulation]
+    needs: [check, simulation, network-simulation]
     runs-on: ubuntu-latest
     permissions:
       contents: read

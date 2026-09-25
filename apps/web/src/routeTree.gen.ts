@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as DevBoardRouteImport } from './routes/dev/board'
+import { Route as DevNetworkRouteImport } from './routes/dev/network'
 import { Route as LocalGameIdRouteImport } from './routes/local/$gameId'
 import { Route as LocalNewRouteImport } from './routes/local/new'
 
@@ -30,6 +31,11 @@ const DevBoardRoute = DevBoardRouteImport.update({
   path: '/dev/board',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DevNetworkRoute = DevNetworkRouteImport.update({
+  id: '/dev/network',
+  path: '/dev/network',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LocalGameIdRoute = LocalGameIdRouteImport.update({
   id: '/local/$gameId',
   path: '/local/$gameId',
@@ -45,6 +51,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/settings': typeof SettingsRoute
   '/dev/board': typeof DevBoardRoute
+  '/dev/network': typeof DevNetworkRoute
   '/local/$gameId': typeof LocalGameIdRoute
   '/local/new': typeof LocalNewRoute
 }
@@ -52,6 +59,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/settings': typeof SettingsRoute
   '/dev/board': typeof DevBoardRoute
+  '/dev/network': typeof DevNetworkRoute
   '/local/$gameId': typeof LocalGameIdRoute
   '/local/new': typeof LocalNewRoute
 }
@@ -60,19 +68,33 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/settings': typeof SettingsRoute
   '/dev/board': typeof DevBoardRoute
+  '/dev/network': typeof DevNetworkRoute
   '/local/$gameId': typeof LocalGameIdRoute
   '/local/new': typeof LocalNewRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/settings' | '/dev/board' | '/local/$gameId' | '/local/new'
+  fullPaths:
+    | '/'
+    | '/settings'
+    | '/dev/board'
+    | '/dev/network'
+    | '/local/$gameId'
+    | '/local/new'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/settings' | '/dev/board' | '/local/$gameId' | '/local/new'
+  to:
+    | '/'
+    | '/settings'
+    | '/dev/board'
+    | '/dev/network'
+    | '/local/$gameId'
+    | '/local/new'
   id:
     | '__root__'
     | '/'
     | '/settings'
     | '/dev/board'
+    | '/dev/network'
     | '/local/$gameId'
     | '/local/new'
   fileRoutesById: FileRoutesById
@@ -81,6 +103,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   SettingsRoute: typeof SettingsRoute
   DevBoardRoute: typeof DevBoardRoute
+  DevNetworkRoute: typeof DevNetworkRoute
   LocalGameIdRoute: typeof LocalGameIdRoute
   LocalNewRoute: typeof LocalNewRoute
 }
@@ -108,6 +131,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DevBoardRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/dev/network': {
+      id: '/dev/network'
+      path: '/dev/network'
+      fullPath: '/dev/network'
+      preLoaderRoute: typeof DevNetworkRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/local/$gameId': {
       id: '/local/$gameId'
       path: '/local/$gameId'
@@ -129,6 +159,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   SettingsRoute: SettingsRoute,
   DevBoardRoute: DevBoardRoute,
+  DevNetworkRoute: DevNetworkRoute,
   LocalGameIdRoute: LocalGameIdRoute,
   LocalNewRoute: LocalNewRoute,
 }

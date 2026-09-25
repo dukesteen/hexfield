@@ -132,6 +132,32 @@ function setup() {
 }
 
 describe('one-height consensus core', () => {
+  test('retains at most two authenticated proposals from one equivocating proposer per round', () => {
+    const f = setup();
+    let state = value(createConsensusState(f.context, 3));
+    const first = f.proposal(1, 0);
+    const second = f.proposal(1, 1);
+    const third = f.proposal(1, 2);
+    state = value(receiveProposal(state, f.context, f.key(3), first)).state;
+    const equivocated = value(receiveProposal(state, f.context, f.key(3), second));
+    state = equivocated.state;
+    expect(state.proposals).toHaveLength(2);
+    expect(state.equivocations).toHaveLength(1);
+    expect(equivocated.effects.filter((effect) => effect.kind === 'equivocation')).toHaveLength(1);
+    const flooded = value(receiveProposal(state, f.context, f.key(3), third));
+    expect(flooded.state.proposals).toHaveLength(2);
+    expect(flooded.state.equivocations).toHaveLength(1);
+    expect(flooded.effects.filter((effect) => effect.kind === 'broadcast-vote')).toHaveLength(0);
+    expect(restoreConsensusState(flooded.state, f.context, 3).ok).toBe(true);
+    expect(
+      restoreConsensusState(
+        { ...flooded.state, proposals: [...flooded.state.proposals, third] },
+        f.context,
+        3,
+      ).ok,
+    ).toBe(false);
+  });
+
   test('four voters prevote, lock, precommit and commit only on quorum', () => {
     const f = setup();
     let state = value(createConsensusState(f.context, 0));
@@ -314,6 +340,30 @@ describe('one-height consensus core', () => {
       phase: 'propose',
       round: 2,
     });
+  });
+
+  test('recovery sends newest signed rounds before old votes when a peer can queue only eight', () => {
+    const f = setup();
+    let state = value(inputAvailable(value(createConsensusState(f.context, 0)), f.context)).state;
+    for (let round = 1; round <= 5; round++) {
+      state = value(timeout(state, f.context, f.key(0), 'propose', round)).state;
+      for (const seat of [1, 2, 3])
+        state = value(
+          receiveVote(state, f.context, f.key(0), f.vote(seat, round, 'prevote', null)),
+        ).state;
+      for (const seat of [1, 2, 3])
+        state = value(
+          receiveVote(state, f.context, f.key(0), f.vote(seat, round, 'precommit', null)),
+        ).state;
+      state = value(timeout(state, f.context, f.key(0), 'precommit', round)).state;
+    }
+    expect(state.round).toBe(6);
+    const signedRounds = value(recoverConsensusEffects(state, f.context))
+      .filter((effect) => effect.kind === 'broadcast-vote')
+      .map((effect) => effect.vote.body.term);
+    expect(signedRounds).toHaveLength(10);
+    expect(signedRounds).toEqual(signedRounds.toSorted((a, b) => b - a));
+    expect(signedRounds.slice(0, 8)).toEqual([5, 5, 4, 4, 3, 3, 2, 2]);
   });
 
   test('a buffered next-round proposal is prevoted immediately after two signed hints', () => {

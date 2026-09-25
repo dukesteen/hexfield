@@ -1,0 +1,221 @@
+{
+  "jobs": [
+    {
+      "scenario": 1,
+      "startIndex": 0,
+      "passed": true,
+      "completedGames": 5,
+      "failures": [],
+      "fingerprint": "418bf61ada23c07ac4e2557a2db0b97a8e59532892ae70606569c3021dcb993b",
+      "sourceUnchanged": true,
+      "elapsedSeconds": 272.4
+    },
+    {
+      "scenario": 3,
+      "startIndex": 0,
+      "passed": false,
+      "completedGames": 3,
+      "failures": [
+        {
+          "gameIndex": 1,
+          "message": "Crashed proposer was not replaced in a later round"
+        },
+        {
+          "gameIndex": 4,
+          "message": "Crashed proposer was not replaced in a later round"
+        }
+      ],
+      "fingerprint": "418bf61ada23c07ac4e2557a2db0b97a8e59532892ae70606569c3021dcb993b",
+      "sourceUnchanged": true,
+      "elapsedSeconds": 278.9
+    },
+    {
+      "scenario": 6,
+      "startIndex": 0,
+      "cancelled": true
+    },
+    {
+      "scenario": 7,
+      "startIndex": 0,
+      "cancelled": true
+    },
+    {
+      "scenario": 8,
+      "startIndex": 0,
+      "cancelled": true
+    },
+    {
+      "scenario": 9,
+      "startIndex": 0,
+      "cancelled": true
+    },
+    {
+      "scenario": 1,
+      "startIndex": 5,
+      "cancelled": true
+    },
+    {
+      "scenario": 2,
+      "startIndex": 5,
+      "cancelled": true
+    },
+    {
+      "scenario": 3,
+      "startIndex": 5,
+      "cancelled": true
+    },
+    {
+      "scenario": 4,
+      "startIndex": 5,
+      "cancelled": true
+    },
+    {
+      "scenario": 5,
+      "startIndex": 5,
+      "cancelled": true
+    },
+    {
+      "scenario": 6,
+      "startIndex": 5,
+      "cancelled": true
+    },
+    {
+      "scenario": 7,
+      "startIndex": 5,
+      "cancelled": true
+    },
+    {
+      "scenario": 8,
+      "startIndex": 5,
+      "cancelled": true
+    },
+    {
+      "scenario": 9,
+      "startIndex": 5,
+      "cancelled": true
+    },
+    {
+      "scenario": 1,
+      "startIndex": 10,
+      "cancelled": true
+    },
+    {
+      "scenario": 2,
+      "startIndex": 10,
+      "cancelled": true
+    },
+    {
+      "scenario": 3,
+      "startIndex": 10,
+      "cancelled": true
+    },
+    {
+      "scenario": 4,
+      "startIndex": 10,
+      "cancelled": true
+    },
+    {
+      "scenario": 5,
+      "startIndex": 10,
+      "cancelled": true
+    },
+    {
+      "scenario": 6,
+      "startIndex": 10,
+      "cancelled": true
+    },
+    {
+      "scenario": 7,
+      "startIndex": 10,
+      "cancelled": true
+    },
+    {
+      "scenario": 8,
+      "startIndex": 10,
+      "cancelled": true
+    },
+    {
+      "scenario": 9,
+      "startIndex": 10,
+      "cancelled": true
+    },
+    {
+      "scenario": 1,
+      "startIndex": 15,
+      "cancelled": true
+    },
+    {
+      "scenario": 2,
+      "startIndex": 15,
+      "cancelled": true
+    },
+    {
+      "scenario": 3,
+      "startIndex": 15,
+      "cancelled": true
+    },
+    {
+      "scenario": 4,
+      "startIndex": 15,
+      "cancelled": true
+    },
+    {
+      "scenario": 5,
+      "startIndex": 15,
+      "cancelled": true
+    },
+    {
+      "scenario": 6,
+      "startIndex": 15,
+      "cancelled": true
+    },
+    {
+      "scenario": 7,
+      "startIndex": 15,
+      "cancelled": true
+    },
+    {
+      "scenario": 8,
+      "startIndex": 15,
+      "cancelled": true
+    },
+    {
+      "scenario": 9,
+      "startIndex": 15,
+      "cancelled": true
+    },
+    {
+      "scenario": 4,
+      "startIndex": 0,
+      "passed": true,
+      "completedGames": 5,
+      "failures": [],
+      "fingerprint": "418bf61ada23c07ac4e2557a2db0b97a8e59532892ae70606569c3021dcb993b",
+      "sourceUnchanged": true,
+      "elapsedSeconds": 283.4
+    },
+    {
+      "scenario": 5,
+      "startIndex": 0,
+      "passed": true,
+      "completedGames": 5,
+      "failures": [],
+      "fingerprint": "418bf61ada23c07ac4e2557a2db0b97a8e59532892ae70606569c3021dcb993b",
+      "sourceUnchanged": true,
+      "elapsedSeconds": 528.4
+    },
+    {
+      "scenario": 2,
+      "startIndex": 0,
+      "passed": true,
+      "completedGames": 5,
+      "failures": [],
+      "fingerprint": "418bf61ada23c07ac4e2557a2db0b97a8e59532892ae70606569c3021dcb993b",
+      "sourceUnchanged": true,
+      "elapsedSeconds": 613.7
+    }
+  ],
+  "elapsedSeconds": 613.7,
+  "passed": false,
+  "note": "The batch stopped scheduling new work after scenario 3 failed for game indices 1 and 4. Already-running scenarios finished. This failed run is not acceptance evidence."
+}

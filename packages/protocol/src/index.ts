@@ -15,6 +15,8 @@ export {
 export type { GenesisPolicy, ValidatedGenesis } from './genesis.js';
 export { signCommand, stubEvidence, validateNextEntry, validateSignedCommand } from './log.js';
 export type { EntryPolicy, LogContext, ValidatedEntry } from './log.js';
+export { validateExcludeProposerControl, validateObjectiveAccusation } from './control.js';
+export type { ControlEvidenceContext } from './control.js';
 export {
   authenticateCertifiedEntry,
   proposerFor,
@@ -29,6 +31,7 @@ export type {
   SignedProposal,
   ValidatedProposal,
 } from './proposal.js';
+export { advanceContext } from './proposal.js';
 export { MemorySafetyStore } from './safety-store.js';
 export type { SafetyStore, StoredSafety } from './safety-store.js';
 export { MemoryProtocolJournal, journalSafetyStore } from './journal.js';
@@ -63,6 +66,8 @@ export type {
   CommandEvidence,
   EntryBody,
   EntryPayload,
+  ExcludeProposerControl,
+  ObjectiveEvidence,
   Genesis,
   GenesisBody,
   GenesisSeat,

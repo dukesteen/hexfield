@@ -25,6 +25,8 @@ export interface MemnetOptions {
 export interface Memnet {
   readonly clock: VirtualClock;
   peers(): PeerId[];
+  /** Number of additional duplicated packets actually delivered since creation. */
+  diagnostics(): MemnetDiagnostics;
   transport(peer: PeerId): Transport;
   setLinkOptions(from: PeerId, to: PeerId, options: MemnetLinkOptions): void;
   disconnect(from: PeerId, to: PeerId): void;
@@ -34,6 +36,10 @@ export interface Memnet {
   crash(peer: PeerId): void;
   restart(peer: PeerId): Transport;
   dispose(): void;
+}
+
+export interface MemnetDiagnostics {
+  readonly duplicateDeliveries: number;
 }
 
 interface DirectionOptions {
@@ -81,6 +87,7 @@ class MemnetNetwork implements Memnet {
   private readonly pairs = new Map<string, LinkPair>();
   private readonly defaultDirection: DirectionOptions;
   private readonly scheduled = new Set<unknown>();
+  private duplicateDeliveries = 0;
   private disposed = false;
 
   constructor(options: MemnetOptions) {
@@ -112,6 +119,10 @@ class MemnetNetwork implements Memnet {
       .filter((runtime) => runtime.alive)
       .map((runtime) => runtime.id)
       .toSorted();
+  }
+
+  diagnostics(): MemnetDiagnostics {
+    return { duplicateDeliveries: this.duplicateDeliveries };
   }
 
   getConnectedPeers(peer: PeerId, generation: number): PeerId[] {
@@ -238,6 +249,7 @@ class MemnetNetwork implements Memnet {
           !this.isConnected(from, to)
         )
           return;
+        if (copy > 0) this.duplicateDeliveries++;
         this.requireRuntime(to).transport?.deliver(from, bytes);
       });
     }

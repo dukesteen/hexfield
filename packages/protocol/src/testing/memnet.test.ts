@@ -84,6 +84,24 @@ describe('createMemnet', () => {
     bytes[0] = 88;
     network.clock.runUntil(() => received.length === 2);
     expect(received).toEqual([7, 7]);
+    expect(network.diagnostics().duplicateDeliveries).toBe(1);
+    network.dispose();
+  });
+
+  test('counts only duplicate copies that survive delivery guards', () => {
+    const network = createMemnet({
+      peers: ['a', 'b'],
+      defaultLink: { latencyMs: 5, duplicateProbability: 1 },
+    });
+    network.transport('a').send('b', encoded(1));
+    network.disconnect('a', 'b');
+    network.clock.advanceBy(5);
+    expect(network.diagnostics().duplicateDeliveries).toBe(0);
+
+    network.connect('a', 'b');
+    network.transport('a').send('b', encoded(2));
+    network.clock.advanceBy(5);
+    expect(network.diagnostics().duplicateDeliveries).toBe(1);
     network.dispose();
   });
 

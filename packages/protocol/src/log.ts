@@ -5,7 +5,14 @@ import type { Engine, GameEvent, GameState, Input, Result, Seat } from '@cp2p/en
 import { entryBody, entryHash, genesisDigest } from './genesis.js';
 import { logEntrySchema, signedCommandSchema } from './schemas.js';
 import type { PeerId } from './transport.js';
-import type { CommandBody, Genesis, LogEntry, SignedCommand, SystemEvidence } from './types.js';
+import type {
+  CommandBody,
+  ExcludeProposerControl,
+  Genesis,
+  LogEntry,
+  SignedCommand,
+  SystemEvidence,
+} from './types.js';
 import { parseCanonical } from './validation.js';
 
 export interface LogContext {
@@ -20,6 +27,7 @@ export interface EntryPolicy {
   /** Derived from the agreed height/round, never from an incoming entry. */
   term: number;
   sequencer: PeerId;
+  /** Simulation opt-in; stub evidence binds inputs but cannot prove hidden facts or deadlines. */
   allowStub?: boolean;
   verifyCommand?: (command: SignedCommand, context: LogContext) => Result<void>;
   verifySystem?: (
@@ -27,12 +35,13 @@ export interface EntryPolicy {
     evidence: SystemEvidence,
     context: LogContext,
   ) => Result<void>;
+  verifyControl?: (control: ExcludeProposerControl, context: LogContext) => Result<void>;
 }
 
 export interface ValidatedEntry {
   entry: LogEntry;
   hash: string;
-  input: Input;
+  input: Input | null;
   state: GameState;
   events: readonly GameEvent[];
   lastNonces: ReadonlyMap<Seat, number>;
@@ -89,6 +98,8 @@ function entryInput(entry: LogEntry, context: LogContext, policy: EntryPolicy): 
     return failure('duplicate-genesis', 'Genesis is only valid at sequence zero');
   if (payload.kind === 'membership')
     return failure('membership-unavailable', 'Membership changes need the membership verifier');
+  if (payload.kind === 'control')
+    return failure('control-unavailable', 'Control entries need the certified evidence verifier');
   if (payload.kind === 'command') {
     const command = validateSignedCommand(payload.signed, context);
     if (!command.ok) return command;
@@ -154,6 +165,29 @@ export function validateNextEntry(
   )
     return failure('sequencer-signature', 'Entry signature does not match the sequencer');
   try {
+    if (entry.payload.kind === 'control') {
+      if (!policy.verifyControl)
+        return failure(
+          'control-unavailable',
+          'Control entries need the certified evidence verifier',
+        );
+      const verified = policy.verifyControl(entry.payload, context);
+      if (!verified.ok) return verified;
+      const priorHash = toHex(hashValue(context.state));
+      if (priorHash !== context.head.stateHash || entry.stateHash !== priorHash)
+        return failure(
+          'control-state',
+          'Protocol control must preserve the certified public state',
+        );
+      return success({
+        entry,
+        hash: entryHash(entry),
+        input: null,
+        state: context.state,
+        events: [],
+        lastNonces: new Map(context.lastNonces),
+      });
+    }
     const input = entryInput(entry, context, policy);
     if (!input.ok) return input;
     const applied = context.engine.apply(context.state, input.value);

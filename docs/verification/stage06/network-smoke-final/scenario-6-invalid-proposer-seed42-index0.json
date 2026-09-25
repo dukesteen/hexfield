@@ -1,0 +1,34 @@
+{
+  "commit": "62ae4e01fa9e48d627f5efc4018de9ac9136c7f9",
+  "sourceFingerprint": "6d31a36edeeaaef524753d22b847db334063d55b5023166d689c923c688a4816",
+  "sourceScope": "SHA-256 of sorted SHA-256 lines for all files in packages/protocol/src and tools/sim/src",
+  "sourceUnchanged": true,
+  "node": "v22.23.3",
+  "invocation": "runNetworkGame({seed:42,gameIndex:0,scenario:6})",
+  "result": {
+    "seed": 42,
+    "gameIndex": 0,
+    "scenario": 6,
+    "turns": 74,
+    "inputs": 397,
+    "virtualMilliseconds": 3166,
+    "elapsedMilliseconds": 58534.403208,
+    "finalStateHash": "7090d4e9bfefe6f8dbfb27db180861b1204b6cbb70f6465fd47da5ef5569bfc1",
+    "finalLogHash": "6cf762e898c7d6c911a3e82c19f1454182dcd2f84b749ed62703a03f971c6ff4",
+    "faultInjected": true,
+    "faultRecovered": true,
+    "faultEvidence": {
+      "injectedAtRevision": 20,
+      "majorityCommitsDuringPartition": null,
+      "isolatedCommitsDuringPartition": null,
+      "pausedPeersDuringPartition": 0,
+      "replacementTerm": null,
+      "censoredCommandCommitted": false,
+      "snapshotRequests": 0,
+      "snapshotResponses": 0,
+      "duplicateDeliveries": 0,
+      "certifiedExclusionPeers": 3,
+      "byzantineCommandCommits": 65
+    }
+  }
+}

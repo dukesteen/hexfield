@@ -1,0 +1,94 @@
+{
+  "mode": "net",
+  "options": { "scenario": 3, "seeds": 5, "startIndex": 0, "seed": 42, "parallel": 1 },
+  "requestedSeeds": 5,
+  "completedGames": 3,
+  "averageTurns": 87.33333333333333,
+  "averageInputs": 499.6666666666667,
+  "averageVirtualMilliseconds": 23699,
+  "averageElapsedMilliseconds": 52188.81494433334,
+  "results": [
+    {
+      "seed": 42,
+      "gameIndex": 0,
+      "scenario": 3,
+      "turns": 78,
+      "inputs": 422,
+      "virtualMilliseconds": 23402,
+      "elapsedMilliseconds": 42057.917291,
+      "finalStateHash": "9b8b9ee9510e0ccc6936f511ac1ace3cbd26cb2f2a2d3027b8b3da164934ba0a",
+      "finalLogHash": "723a04f8196337c2a4b50eedce2eefb6faf4c1b24a52036c54c41e852ad836ec",
+      "faultInjected": true,
+      "faultRecovered": true,
+      "faultEvidence": {
+        "injectedAtRevision": 20,
+        "majorityCommitsDuringPartition": null,
+        "isolatedCommitsDuringPartition": null,
+        "pausedPeersDuringPartition": 0,
+        "replacementTerm": 2,
+        "censoredCommandCommitted": false,
+        "snapshotRequests": 0,
+        "snapshotResponses": 0,
+        "duplicateDeliveries": 0,
+        "certifiedExclusionPeers": 0
+      }
+    },
+    {
+      "seed": 42,
+      "gameIndex": 2,
+      "scenario": 3,
+      "turns": 64,
+      "inputs": 427,
+      "virtualMilliseconds": 23425,
+      "elapsedMilliseconds": 44833.83350000001,
+      "finalStateHash": "0e6400f4078ceee2b66864144853b61901193ed7ee67a7c0caba2a515ec34767",
+      "finalLogHash": "9ce8b708f4bd3703b4296a07257e11479149974f7d3a3833cab1375eef32b02c",
+      "faultInjected": true,
+      "faultRecovered": true,
+      "faultEvidence": {
+        "injectedAtRevision": 26,
+        "majorityCommitsDuringPartition": null,
+        "isolatedCommitsDuringPartition": null,
+        "pausedPeersDuringPartition": 0,
+        "replacementTerm": 2,
+        "censoredCommandCommitted": false,
+        "snapshotRequests": 0,
+        "snapshotResponses": 0,
+        "duplicateDeliveries": 0,
+        "certifiedExclusionPeers": 0
+      }
+    },
+    {
+      "seed": 42,
+      "gameIndex": 3,
+      "scenario": 3,
+      "turns": 120,
+      "inputs": 650,
+      "virtualMilliseconds": 24270,
+      "elapsedMilliseconds": 69674.69404200002,
+      "finalStateHash": "41aa2ebed62ca789a740612765746ce8a02ae75cb2b832bbb51e384914711ff2",
+      "finalLogHash": "2cbffb758c86dfd529f053dece5a94961caf056140e055c7754eb46f7b4179a1",
+      "faultInjected": true,
+      "faultRecovered": true,
+      "faultEvidence": {
+        "injectedAtRevision": 20,
+        "majorityCommitsDuringPartition": null,
+        "isolatedCommitsDuringPartition": null,
+        "pausedPeersDuringPartition": 0,
+        "replacementTerm": 2,
+        "censoredCommandCommitted": false,
+        "snapshotRequests": 0,
+        "snapshotResponses": 0,
+        "duplicateDeliveries": 0,
+        "certifiedExclusionPeers": 0
+      }
+    }
+  ],
+  "failures": [
+    { "gameIndex": 1, "message": "Crashed proposer was not replaced in a later round" },
+    { "gameIndex": 4, "message": "Crashed proposer was not replaced in a later round" }
+  ],
+  "parallel": 1,
+  "sourceFingerprint": "418bf61ada23c07ac4e2557a2db0b97a8e59532892ae70606569c3021dcb993b",
+  "sourceUnchanged": true
+}

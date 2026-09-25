@@ -1,6 +1,6 @@
 import { hashValue, toHex } from '@cp2p/codec';
 import { describe, expect, test } from 'vitest';
-import type { CommandShape, Input, SystemInput } from '@cp2p/engine';
+import type { CommandShape, Engine, Input, SystemInput } from '@cp2p/engine';
 import { entryHash, signEntry } from './genesis.js';
 import { signCommand, stubEvidence } from './log.js';
 import {
@@ -10,10 +10,10 @@ import {
   verifyReplaySnapshot,
 } from './replay.js';
 import type { ReplayPolicy } from './replay.js';
-import { proposerFor } from './proposal.js';
+import { objectiveProofParentHash, proposerFor } from './proposal.js';
 import type { CertifiedEntry, ProposalContext } from './proposal.js';
 import { protocolFixture } from './testing/fixtures.js';
-import type { EntryPayload, LogEntry } from './types.js';
+import type { EntryPayload, ExcludeProposerControl, LogEntry } from './types.js';
 import { signVote } from './votes.js';
 
 const policy: ReplayPolicy = { genesis: { allowStub: true }, entry: { allowStub: true } };
@@ -122,6 +122,61 @@ function commandEntry(
 }
 
 describe('certified protocol replay', () => {
+  test('alternating historical accusations reuse their certified parents', () => {
+    const { fixture, context } = setup();
+    const start = startEntry(fixture, context);
+    const afterStart = value(replayCertifiedPrefix(fixture.entry, [start], fixture.engine, policy));
+    const settlement = fixture.engine
+      .getLegalCommands(afterStart.context.log.state, 0)
+      .commands.find((command) => command.type === 'PLACE_SETTLEMENT');
+    if (!settlement) throw new Error('Missing setup settlement');
+    const placement = commandEntry(fixture, afterStart.context, settlement, 1);
+    let replays = 0;
+    const engine: Engine = {
+      ...fixture.engine,
+      createGame(config, seed) {
+        replays++;
+        return fixture.engine.createGame(config, seed);
+      },
+    };
+    const replayed = value(
+      replayCertifiedPrefix(fixture.entry, [start, placement], engine, policy),
+    );
+    const signer = fixture.identities[0];
+    if (!signer) throw new Error('Missing accused signer');
+    const proof = (seq: number): ExcludeProposerControl => {
+      const body = {
+        genesisDigest: context.membership.genesisDigest,
+        epoch: 0,
+        seat: 0 as const,
+        seq,
+        term: 1,
+        phase: 'prevote' as const,
+        valueHash: null,
+      };
+      return {
+        kind: 'control',
+        action: 'exclude-proposer',
+        offender: 0,
+        evidence: {
+          kind: 'vote-equivocation',
+          first: signVote(body, signer.secretKey),
+          second: signVote({ ...body, valueHash: 'a'.repeat(64) }, signer.secretKey),
+        },
+      };
+    };
+    const first = proof(1);
+    const second = proof(2);
+    expect(value(objectiveProofParentHash(first, replayed.context))).toBe(entryHash(fixture.entry));
+    expect(value(objectiveProofParentHash(second, replayed.context))).toBe(entryHash(start.entry));
+    const afterMisses = replays;
+    for (let pass = 0; pass < 3; pass++) {
+      expect(objectiveProofParentHash(first, replayed.context).ok).toBe(true);
+      expect(objectiveProofParentHash(second, replayed.context).ok).toBe(true);
+    }
+    expect(replays).toBe(afterMisses);
+  });
+
   test('validates signed certificates, parent links, command nonces and derives full state', () => {
     const { fixture, context } = setup();
     const start = startEntry(fixture, context);

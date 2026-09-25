@@ -3,6 +3,7 @@ import { identityFromSecret } from '@cp2p/crypto';
 import { failure, success } from '@cp2p/engine';
 import type { Result, Seat } from '@cp2p/engine';
 import {
+  clearStaleAccusation,
   createConsensusState,
   inputAvailable,
   propose,
@@ -12,6 +13,8 @@ import {
   recoverConsensusEffects,
   resumeAfterReplay,
   restoreConsensusState,
+  stageAccusation,
+  terminalHalt,
   timeout,
 } from './consensus.js';
 import type {
@@ -22,7 +25,7 @@ import type {
 } from './consensus.js';
 import type { ProposalContext } from './proposal.js';
 import type { SafetyStore, StoredSafety } from './safety-store.js';
-import type { LogEntry } from './types.js';
+import type { ExcludeProposerControl, LogEntry } from './types.js';
 
 export interface ConsensusControllerOptions {
   context: ProposalContext;
@@ -40,6 +43,9 @@ export type ConsensusEvent =
   | { kind: 'proposal'; proposal: unknown }
   | { kind: 'vote'; vote: unknown }
   | { kind: 'commit'; certified: unknown }
+  | { kind: 'stage-accusation'; control: ExcludeProposerControl }
+  | { kind: 'clear-stale-accusation' }
+  | { kind: 'terminal-halt'; reason: string }
   | { kind: 'resume-after-replay' }
   | { kind: 'timeout'; phase: TimeoutPhase; round: number };
 
@@ -98,23 +104,45 @@ export class ConsensusController {
       );
     if (!Number.isSafeInteger(record.revision) || record.revision < 0)
       return failure('consensus-storage', 'Stored voting revision is invalid');
+    let restored: Result<ConsensusState>;
     try {
-      const restored = restoreConsensusState(
+      restored = restoreConsensusState(
         canonicalDecode(record.bytes),
         options.context,
         options.seat,
       );
-      return restored.ok
-        ? success(new ConsensusController(options, restored.value, record.revision))
-        : restored;
     } catch {
       return failure('consensus-storage', 'Stored voting data is not valid canonical data');
     }
+    if (!restored.ok) return restored;
+    let revision = record.revision;
+    const normalized = canonicalEncode(restored.value);
+    if (!sameBytes(normalized, record.bytes)) {
+      if (restored.value.haltKind !== 'terminal')
+        return failure('consensus-restore', 'Voting record changed without a terminal proof');
+      try {
+        if (!(await options.store.save(revision, normalized)))
+          return failure('consensus-write-conflict', 'Voting record changed during terminal halt');
+      } catch {
+        return failure('consensus-storage', 'Could not persist the verified terminal halt');
+      }
+      revision++;
+    }
+    return success(new ConsensusController(options, restored.value, revision));
   }
 
   /** Returns a detached, verified snapshot, never the mutable internal record. */
   snapshot(): Result<ConsensusState> {
-    return restoreConsensusState(this.state, this.options.context, this.options.seat);
+    const snapshot = restoreConsensusState(this.state, this.options.context, this.options.seat);
+    if (!snapshot.ok) {
+      this.stopVoting();
+      return snapshot;
+    }
+    if (!sameBytes(canonicalEncode(snapshot.value), canonicalEncode(this.state))) {
+      this.stopVoting();
+      return failure('consensus-restore', 'Restore to persist newly verified terminal evidence');
+    }
+    return snapshot;
   }
 
   /** Expected CAS revision for atomically committing this controller's height. */
@@ -125,8 +153,13 @@ export class ConsensusController {
   /** Call after restoring to retransmit signed records and re-arm timers. */
   resume(): Promise<Result<void>> {
     return this.enqueue(async () => {
+      const snapshot = this.snapshot();
+      if (!snapshot.ok) return snapshot;
       const recovered = recoverConsensusEffects(this.state, this.options.context);
-      if (!recovered.ok) return recovered;
+      if (!recovered.ok) {
+        this.stopVoting();
+        return recovered;
+      }
       return this.emit(recovered.value);
     });
   }
@@ -134,7 +167,11 @@ export class ConsensusController {
   dispatch(event: ConsensusEvent): Promise<Result<void>> {
     return this.enqueue(async () => {
       const next = this.reduce(event);
-      if (!next.ok) return next;
+      if (!next.ok) {
+        if (next.error.code === 'consensus-restore' || next.error.code === 'consensus-context')
+          this.stopVoting();
+        return next;
+      }
       try {
         if (!(await this.options.store.save(this.revision, canonicalEncode(next.value.state)))) {
           this.stopped = true;
@@ -160,6 +197,10 @@ export class ConsensusController {
   }
 
   dispose(): void {
+    this.stopVoting();
+  }
+
+  private stopVoting(): void {
     this.stopped = true;
     this.secretKey.fill(0);
   }
@@ -192,6 +233,12 @@ export class ConsensusController {
         return receiveVote(this.state, context, this.secretKey, event.vote);
       case 'commit':
         return receiveCommit(this.state, context, event.certified);
+      case 'stage-accusation':
+        return stageAccusation(this.state, context, event.control);
+      case 'clear-stale-accusation':
+        return clearStaleAccusation(this.state, context);
+      case 'terminal-halt':
+        return terminalHalt(this.state, context, event.reason);
       case 'resume-after-replay':
         return resumeAfterReplay(this.state, context);
       case 'timeout':
@@ -214,6 +261,10 @@ export class ConsensusController {
       return failure('consensus-effects', 'Effect delivery failed; restore before retrying');
     }
   }
+}
+
+function sameBytes(a: Uint8Array, b: Uint8Array): boolean {
+  return a.length === b.length && a.every((byte, index) => byte === b[index]);
 }
 
 function checkLocalKey(options: ConsensusControllerOptions): Result<void> {

@@ -40,6 +40,8 @@ function copyPrivate(value: PrivateState): PrivateState {
  */
 export class SimulationDriver {
   private privates: Map<Seat, PrivateState>;
+  /** Dealt identities outlive the playable private slots consumed by dev-card actions. */
+  private readonly dealtCards = new Map<string, { seat: Seat; card: string }>();
   private readonly digest: string;
   private readonly timers = new Map<string, { seat: Seat; phase: string; expiresAt: number }>();
 
@@ -100,6 +102,7 @@ export class SimulationDriver {
   /** Apply private consequences only after the public entry is certified and persisted. */
   committed(before: LogContext, input: Input, after: GameState): Result<void> {
     let privateData: LocalRandomAnswer['privateData'];
+    let dealt: { slotId: string; seat: Seat; card: string } | null = null;
     if (
       input.kind === 'system' &&
       (input.type === 'CARD_DEALT' ||
@@ -117,6 +120,36 @@ export class SimulationDriver {
           'Committed private result differs from the simulation answer',
         );
       privateData = expected.privateData;
+      if (input.type === 'CARD_DEALT') {
+        const seat = before.state.config.seats.find((candidate) => candidate === input.seat);
+        const slotId = input.slotId;
+        if (seat === undefined || typeof slotId !== 'string')
+          return failure('simulation-deck', 'Committed draw has no valid seat or slot');
+        const card = privateData?.[seat]?.card;
+        if (
+          typeof card !== 'string' ||
+          !Object.hasOwn(DEV_CARD_COUNTS, card) ||
+          this.dealtCards.has(slotId)
+        )
+          return failure('simulation-deck', 'Committed draw has no unique private card identity');
+        const beforeDeck = before.state.decks.dev;
+        const afterDeck = after.decks.dev;
+        const appended = afterDeck?.drawn.at(-1);
+        if (
+          !beforeDeck ||
+          !afterDeck ||
+          afterDeck.drawn.length !== beforeDeck.drawn.length + 1 ||
+          !appended ||
+          appended.seat !== seat ||
+          appended.slotId !== slotId ||
+          afterDeck.remaining !== beforeDeck.remaining - 1
+        )
+          return failure(
+            'simulation-deck',
+            'Committed draw did not advance the public deck exactly once',
+          );
+        dealt = { slotId, seat, card };
+      }
     }
     const applied = this.engine.applyAllPrivates(this.privates, before.state, input, privateData);
     if (!applied.ok) return applied;
@@ -138,6 +171,7 @@ export class SimulationDriver {
     const violations = this.engine.checkPrivateInvariants(after, applied.value);
     if (violations.length) return failure('simulation-private', violations.join('; '));
     this.privates = applied.value;
+    if (dealt) this.dealtCards.set(dealt.slotId, { seat: dealt.seat, card: dealt.card });
     this.refreshTimers(after);
     return success(undefined);
   }
@@ -209,12 +243,22 @@ export class SimulationDriver {
         const remaining = new Map<string, number>(Object.entries(DEV_CARD_COUNTS));
         const deck = state.decks.dev;
         if (!deck) throw new Error('Development deck missing');
+        if (this.dealtCards.size !== deck.drawn.length)
+          throw new Error('Private deck history differs from public draw count');
+        const seen = new Set<string>();
         for (const ref of deck.drawn) {
-          const card = this.privates.get(ref.seat)?.slots[ref.slotId];
-          const count = card ? remaining.get(card) : undefined;
-          if (!card || count === undefined || count < 1)
+          const owned = this.dealtCards.get(ref.slotId);
+          const count = owned ? remaining.get(owned.card) : undefined;
+          if (
+            !owned ||
+            seen.has(ref.slotId) ||
+            owned.seat !== ref.seat ||
+            count === undefined ||
+            count < 1
+          )
             throw new Error('Private deck history is invalid');
-          remaining.set(card, count - 1);
+          seen.add(ref.slotId);
+          remaining.set(owned.card, count - 1);
         }
         const cards = [...remaining].flatMap(([card, count]) => Array<string>(count).fill(card));
         if (cards.length !== deck.remaining) throw new Error('Development deck count differs');

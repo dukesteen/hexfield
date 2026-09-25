@@ -19,7 +19,7 @@ import type { LogContext } from './log.js';
 import type { CertifiedEntry, ProposalContext } from './proposal.js';
 import { ReplicatedLog } from './replicated-log.js';
 import type { ReplicatedLogOptions, ReplicatedLogStatus } from './replicated-log.js';
-import { initialProposalContext } from './replay.js';
+import { initialProposalContext, replayCertifiedPrefix } from './replay.js';
 import type {
   GameSession,
   SessionStatus,
@@ -29,7 +29,6 @@ import type {
 } from './session-types.js';
 import type { ProtocolClock, Unsubscribe } from './transport.js';
 import type { Genesis, LogEntry, SystemEvidence } from './types.js';
-import { validateCertifiedEntry } from './proposal.js';
 import { logEntrySchema } from './schemas.js';
 import { parseCanonical } from './validation.js';
 
@@ -81,6 +80,11 @@ export class P2PSession implements GameSession<CertifiedHistory> {
     if (context.log.state.result) this.status = { kind: 'complete' };
   }
 
+  /**
+   * First activation of a newly established game key only. The key owner must
+   * retain it with this journal and use restore for every subsequent opening.
+   * An empty replacement journal does not authorize reuse of an old raw key.
+   */
   static create(options: P2PSessionOptions): Promise<Result<P2PSession>> {
     return P2PSession.open(options, false);
   }
@@ -93,6 +97,7 @@ export class P2PSession implements GameSession<CertifiedHistory> {
     options: P2PSessionOptions,
     restoring: boolean,
   ): Promise<Result<P2PSession>> {
+    let session: P2PSession | null = null;
     try {
       const initial = initialProposalContext(options.genesisEntry, options.engine, options.policy);
       if (!initial.ok) return initial;
@@ -113,51 +118,43 @@ export class P2PSession implements GameSession<CertifiedHistory> {
           return failure('session-bot-key', 'Bot key is not hosted by this human');
       }
       const driver = options.createDriver(options.engine, context.log.genesis, options.clock);
-      const session = new P2PSession(options, context, driver, context.log.head);
+      session = new P2PSession(options, context, driver, context.log.head);
+      const openedSession = session;
       if (restoring) {
         const saved = await options.journal.load();
         if (!saved || entryHash(saved.genesis) !== entryHash(context.log.head)) {
           session.dispose();
           return failure('session-save', 'Saved certified history does not match this genesis');
         }
-        for (const certified of saved.entries) {
-          const checked = validateCertifiedEntry(certified, session.context);
-          if (!checked.ok) {
-            session.dispose();
-            return checked;
-          }
-          const next = {
-            ...session.context,
-            log: {
-              ...session.context.log,
-              head: checked.value.entry,
-              state: checked.value.state,
-              lastNonces: checked.value.lastNonces,
-            },
-          };
-          const applied = session.applyCommit(checked.value.input, checked.value.events, next);
-          if (!applied.ok) {
-            session.dispose();
-            return applied;
-          }
+        const replayed = replayCertifiedPrefix(
+          saved.genesis,
+          saved.entries,
+          options.engine,
+          options.policy,
+          (validated, next) => openedSession.applyCommit(validated.input, validated.events, next),
+        );
+        if (!replayed.ok) {
+          session.dispose();
+          return replayed;
         }
       }
       const replicaOptions: ReplicatedLogOptions = {
         ...options,
         systemInput: (current) => driver.next(current.log),
         onCommit: (validated, _previous, next) => {
-          const applied = session.applyCommit(validated.input, validated.events, next);
+          const applied = openedSession.applyCommit(validated.input, validated.events, next);
           if (!applied.ok) {
-            session.status = { kind: 'error', message: applied.error.message };
+            openedSession.status = { kind: 'error', message: applied.error.message };
             throw new Error(`${applied.error.code}: ${applied.error.message}`);
           }
-          session.emit(validated.events);
-          session.maybeAutomatic();
+          openedSession.emit(validated.events);
+          openedSession.maybeAutomatic();
         },
         onStatus: (status) => {
-          session.protocolStatus = status;
-          if (status.kind === 'halted') session.status = { kind: 'error', message: status.code };
-          session.emit([]);
+          openedSession.protocolStatus = status;
+          if (status.kind === 'halted')
+            openedSession.status = { kind: 'error', message: status.code };
+          openedSession.emit([]);
         },
       };
       const replica = await (restoring
@@ -171,12 +168,16 @@ export class P2PSession implements GameSession<CertifiedHistory> {
       session.maybeAutomatic();
       return success(session);
     } catch (error) {
+      session?.dispose();
       return failure('session-open', String(error));
     }
   }
 
   getState(): GameState {
     return this.options.engine.project(this.context.log.state, this.options.seat).state;
+  }
+  getCommittedHead(): { seq: number; hash: string } {
+    return { seq: this.context.log.head.seq, hash: entryHash(this.context.log.head) };
   }
   getPrivate(seat: Seat): PrivateState | null {
     return this.status.kind === 'disposed' || !this.keys.has(seat)
@@ -286,6 +287,19 @@ export class P2PSession implements GameSession<CertifiedHistory> {
     await this.replica?.flush();
   }
 
+  /** Rebuilds a halted peer from its certified journal without discarding its votes. */
+  async repair(): Promise<Result<void>> {
+    if (!this.replica || this.status.kind === 'disposed')
+      return failure('session-inactive', 'Peer session is unavailable');
+    const repaired = await this.replica.repair();
+    if (repaired.ok) {
+      this.protocolStatus = null;
+      this.emit([]);
+      this.maybeAutomatic();
+    }
+    return repaired;
+  }
+
   dispose(): void {
     if (this.status.kind === 'disposed') return;
     this.replica?.dispose();
@@ -297,15 +311,17 @@ export class P2PSession implements GameSession<CertifiedHistory> {
   }
 
   private applyCommit(
-    input: Input,
+    input: Input | null,
     events: readonly GameEvent[],
     next: ProposalContext,
   ): Result<void> {
-    const applied = this.driver.committed(this.context.log, input, next.log.state);
-    if (!applied.ok) return applied;
+    if (input) {
+      const applied = this.driver.committed(this.context.log, input, next.log.state);
+      if (!applied.ok) return applied;
+    }
     this.context = next;
     this.events.push(...events);
-    if (next.log.state.result) this.status = { kind: 'complete' };
+    this.status = next.log.state.result ? { kind: 'complete' } : { kind: 'running' };
     return success(undefined);
   }
 

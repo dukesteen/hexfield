@@ -1,5 +1,6 @@
 import type { CommandShape, GameConfig, Seat, SystemInput } from '@cp2p/engine';
 import type { PeerId } from './transport.js';
+import type { SignedVote } from './votes.js';
 
 export const PROTOCOL_VERSION = 1;
 
@@ -72,10 +73,24 @@ export type SystemEvidence =
   | { kind: 'stub'; context: string }
   | { kind: 'proof'; protocol: string; data: unknown };
 
+/** Evidence is checked against the certified parent, never a sender-supplied state. */
+export type ObjectiveEvidence =
+  | { kind: 'vote-equivocation'; first: SignedVote; second: SignedVote }
+  | { kind: 'proposal-equivocation'; first: SignedProposal; second: SignedProposal }
+  | { kind: 'invalid-command'; proposal: SignedProposal };
+
+export interface ExcludeProposerControl {
+  kind: 'control';
+  action: 'exclude-proposer';
+  offender: Seat;
+  evidence: ObjectiveEvidence;
+}
+
 export type EntryPayload =
   | { kind: 'genesis'; genesis: Genesis }
   | { kind: 'command'; signed: SignedCommand }
   | { kind: 'system'; input: SystemInput; evidence: SystemEvidence }
+  | ExcludeProposerControl
   | { kind: 'membership'; change: unknown };
 
 export interface EntryBody {
@@ -88,5 +103,18 @@ export interface EntryBody {
 }
 
 export interface LogEntry extends EntryBody {
+  sig: string;
+}
+
+export interface ProposalBody {
+  genesisDigest: string;
+  epoch: number;
+  entry: LogEntry;
+  validRound: number | null;
+  prevotes: readonly SignedVote[];
+}
+
+export interface SignedProposal {
+  body: ProposalBody;
   sig: string;
 }

@@ -8,7 +8,7 @@ import {
   seatSchema,
   signature64Schema,
 } from './schema-values.js';
-import { signedCommandSchema } from './schemas.js';
+import { excludeProposerControlSchema, signedCommandSchema } from './schemas.js';
 import { signedVoteSchema } from './votes.js';
 import { decodeMessage, encodeMessage } from './wire.js';
 import type { Result } from '@cp2p/engine';
@@ -20,6 +20,10 @@ const proposalMessageSchema = v.strictObject({
 });
 const voteMessageSchema = v.strictObject({ t: v.literal('VOTE'), vote: signedVoteSchema });
 const commitSchema = v.strictObject({ t: v.literal('COMMIT'), certified: certifiedEntrySchema });
+const accuseSchema = v.strictObject({
+  t: v.literal('ACCUSE'),
+  control: excludeProposerControlSchema,
+});
 const syncRequestSchema = v.strictObject({
   t: v.literal('SYNC_REQ'),
   genesisDigest: key32Schema,
@@ -31,6 +35,17 @@ const syncResponseSchema = v.strictObject({
   genesisDigest: key32Schema,
   entries: v.pipe(v.array(certifiedEntrySchema), v.maxLength(200)),
   more: v.boolean(),
+});
+const snapshotRequestSchema = v.strictObject({
+  t: v.literal('SNAPSHOT_REQ'),
+  genesisDigest: key32Schema,
+  atSeq: nonnegativeIntegerSchema,
+});
+const snapshotResponseSchema = v.strictObject({
+  t: v.literal('SNAPSHOT_RES'),
+  genesisDigest: key32Schema,
+  atSeq: nonnegativeIntegerSchema,
+  snapshot: v.unknown(),
 });
 const proposalRequestSchema = v.strictObject({
   t: v.literal('PROPOSAL_REQ'),
@@ -60,8 +75,11 @@ export const protocolMessageSchema = v.variant('t', [
   proposalMessageSchema,
   voteMessageSchema,
   commitSchema,
+  accuseSchema,
   syncRequestSchema,
   syncResponseSchema,
+  snapshotRequestSchema,
+  snapshotResponseSchema,
   proposalRequestSchema,
   heartbeatSchema,
   pingSchema,

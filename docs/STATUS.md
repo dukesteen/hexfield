@@ -111,20 +111,30 @@ The published release `f9b7559` passes the complete local Chromium/Firefox/WebKi
 
 Source: [06-protocol-event-log.md](06-protocol-event-log.md)
 
-- [ ] All 9 chaos scenarios pass on 1,000 seeds each with zero divergence.
-- [ ] Forged signatures, replayed nonces, wrong prevHash and invalid commands are all rejected (unit tests).
-- [ ] A Byzantine sequencer is detected and replaced in scenarios 6 and 7.
-- [ ] The web app can run a "simulated P2P" dev mode: 4 `P2PSession`s over memnet in one tab, with 4 small game views. Useful for debugging.
+- [ ] All 9 chaos scenarios pass on 20 seeds each with zero divergence, alongside the targeted adversarial tests.
+- [x] Forged signatures, replayed nonces, wrong prevHash and invalid commands are all rejected (unit tests).
+- [x] A Byzantine sequencer is detected and replaced in scenarios 6 and 7.
+- [x] Adversarial vote, lock, persistence and small-population pause tests pass. No unavailable voter is removed without the required certificates.
+- [x] The web app can run a "simulated P2P" dev mode: 4 `P2PSession`s over memnet in one tab, with 4 small game views. Useful for debugging.
+
+Stage 06 is in progress. The user selected strict agreement when the original majority protocol could not guarantee both agreement and continued play after a disconnect. The [reviewed design](verification/stage06/strict-agreement-design.md) records the one-Byzantine-voter bound, quorum sizes, persistent locks and safe recovery policy. Commit `0dab4fb` adds the voting controller, atomic certified journal, replay validation, transport adapter and `P2PSession` with a simulation-only private-state driver. Voting records persist before messages are sent; private consequences appear after commitment.
+
+The current implementation also includes certified proposer exclusion without reducing voting weight, bounded ingress and replay-verified snapshot repair. Single-seed full games converge in all nine scenarios. Stronger checks confirm a 2|2 pause after both halves receive the proposal, 3|1 progress before healing, a later proposer committing the exact censored command, certified exclusion in the honest peers' histories, and snapshot request/response traffic during repair. The final local checkpoint on 2026-09-25 passes 534 tests across 98 files, plus typechecking, lint, formatting, dependency, purity and i18n checks. Build, coverage and the focused Chromium peer-view check pass. The [local verification report](verification/stage06/local-checks.md) records the source fingerprint, coverage and final crash/Byzantine smoke results.
+
+The dev-only `/#/dev/network` page displays four independent sessions and boards. A Chromium smoke test and a manual Chrome check confirm settlement and road placement advance all four peers to the same revision. A fresh production build excludes the simulation page and stub driver. The full browser rerun was interrupted at the user's request after macOS browser-launch failures caused crash dialogs; further local browser checks use targeted Chromium tests. Cross-browser CI remains enabled.
+
+The approved [Claude implementation review](verification/stage06/implementation-review.md) is complete. It found no conflicting-certificate trace under the stated fault model, but identified persistence and resource-limit gaps around the voting core. Regressions now cover unknown local signatures inside certificates, bounded conflicting proposals, and congestion without misconduct strikes. Durable accusations, historical evidence and replay limits have focused regressions. Later reviews identified session restore, repeated-accusation and additional safety and transport gaps; the [follow-up](verification/stage06/implementation-review-response.md) tracks their fixes. The first acceptance batch completed 23 games and failed two proposer-replacement assertions before cancelling the remaining jobs. The fault injector now requires surviving peers to know the pending input before the crash. Its five tested layouts certify a replacement while the original proposer is still offline. Acceptance remains pending. The user approved reducing initial acceptance to 20 full games per scenario, with the targeted security tests retained. CI runs five games per scenario, nightly runs use 20 rotating game indices, and larger manual runs remain available. These counts and their rationale are recorded in the [runtime policy](verification/stage06/ci-runtime-options.md). The final 180-game acceptance batch will run through manual GitHub Actions dispatch alongside the stage CI gate; both remain outstanding. Milestones C and D are not complete.
 
 ## 07 — Fair Randomness & Hidden Information
 
 Source: [07-fair-randomness-hidden-info.md](07-fair-randomness-hidden-info.md)
 
 - [ ] P2P games over memnet with real crypto pass the stage-06 chaos suite (200 seeds per scenario in CI).
-- [ ] Every row in the cheat table is covered by a passing test.
-- [ ] Every completed honest game produces `AuditReport.ok === true` (1,000 simulated games).
+- [ ] Every row in the cheat table is covered by a passing test that checks the cheat is caught at the listed time.
+- [ ] Every completed honest game has no `CHEAT_PROOF` entries and produces `AuditReport.ok === true` (1,000 simulated games).
 - [ ] Dice outcomes from the beacon pass a chi-square test over 100k rounds.
 - [ ] Escrow recovery works after a seat departs mid-game, and the recovered seat continues as a bot.
+- [ ] Shuffle and steal proofs meet the performance targets in Steps 3 and 5.
 
 ## 08 — WebRTC Networking & Signaling
 
@@ -152,8 +162,8 @@ Source: [10-persistence-reconnection.md](10-persistence-reconnection.md)
 
 - [ ] All chaos additions pass on 500 seeds each.
 - [ ] Refresh-resume takes < 3 s to be back in play on a typical laptop (measured).
-- [ ] Takeover works for 3-, 4- and 2-player games, and the audit passes afterwards.
-- [ ] A game can be exported from one browser and resumed in another as the same seat.
+- [ ] Four-human takeover and audit pass; two-/three-human departure pauses safely and resumes when the required voter returns.
+- [ ] A game can be exported and resumed in another browser as the same seat through a certified key transfer; a stale save cannot reactivate a retired key.
 
 ## 11 — Module Framework Hardening & 5–6 Players (`five-six`)
 
@@ -169,7 +179,7 @@ Source: [11-module-framework-5-6-players.md](11-module-framework-5-6-players.md)
 
 Source: [12-seafaring.md](12-seafaring.md)
 
-- [ ] All scenarios are playable locally and P2P; the audit covers fog draws.
+- [ ] All scenarios are playable locally and P2P; fog draws are verified on the move.
 - [ ] 20k simulated games per scenario pass the invariants (new invariants: ships ≤ 15, ships only on sea/coastal edges, pirate only at sea, robber only on land).
 - [ ] The trade-route fixtures pass, including the transition rules.
 - [ ] Fog contents are provably not derivable from genesis (a test: two games with the same genesis seed but different deck secrets reveal different fog tiles).
@@ -189,14 +199,14 @@ Source: [14-frontier-scenarios.md](14-frontier-scenarios.md)
 
 - [ ] F1–F4 shipped (each: rules doc, engine, UI, bot support, simulation, P2P).
 - [ ] F5–F6 shipped, or explicitly deferred in STATUS.md with the reason.
-- [ ] Every hidden or secret mechanic uses the deck protocol or commit-reveal and is audited.
+- [ ] Every hidden or secret mechanic uses the deck protocol or commit-reveal and is verified on the move.
 
 ## 15 — Explorers Module (`explorers`)
 
 Source: [15-explorers.md](15-explorers.md)
 
 - [ ] `docs/rules/explorers.md` is complete and sourced.
-- [ ] _Land Ho!_ and at least two missions are playable locally and P2P, with audited reveals.
+- [ ] _Land Ho!_ and at least two missions are playable locally and P2P, with reveals verified on the move.
 - [ ] The mid-move reveal pause/resume flow survives the sequencer failover chaos test.
 
 ## 16 — Bots

@@ -2920,7 +2920,8 @@ test('twenty complete ten-point games use only offered visible controls without 
   browserName,
 }, testInfo) => {
   test.skip(browserName !== 'chromium', 'The full UI acceptance run uses Chromium');
-  test.setTimeout(1_800_000);
+  // Hosted runners completed 18 games in 30 minutes; retain all twenty games.
+  test.setTimeout(process.env.CI ? 3_600_000 : 1_800_000);
   const sourceBefore = await sourceFingerprint();
   const games: { game: number; summary: Awaited<ReturnType<typeof completedGameSummary>> }[] = [];
   try {

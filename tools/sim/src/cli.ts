@@ -11,6 +11,7 @@ import { updateGoldens } from './golden.js';
 import { readReplay, verifyReplay } from './replay.js';
 import type { ReplayFile } from './replay.js';
 import { sourceFingerprint } from './provenance.js';
+import { parseNetBatchOptions, runNetworkBatch } from './net-batch.js';
 import {
   applyP99Milliseconds,
   diceChiSquare,
@@ -437,5 +438,21 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     );
     return;
   }
-  throw new Error('Usage: pnpm sim <run|bench|fuzz|replay|golden> [options]');
+  if (command === 'net') {
+    const options = parseNetBatchOptions(rest);
+    const fingerprint = sourceFingerprint();
+    const result = await runNetworkBatch(options);
+    console.log(
+      JSON.stringify({
+        mode: 'net',
+        ...result,
+        parallel: Math.min(options.parallel, options.seeds),
+        sourceFingerprint: fingerprint,
+        sourceUnchanged: sourceFingerprint() === fingerprint,
+      }),
+    );
+    if (result.failures.length) process.exitCode = 1;
+    return;
+  }
+  throw new Error('Usage: pnpm sim <run|bench|net|fuzz|replay|golden> [options]');
 }

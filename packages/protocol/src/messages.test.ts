@@ -60,9 +60,20 @@ const messages = [
   },
   { t: 'VOTE', vote: signedVote },
   { t: 'COMMIT', certified },
+  {
+    t: 'ACCUSE',
+    control: {
+      kind: 'control',
+      action: 'exclude-proposer',
+      offender: 0,
+      evidence: { kind: 'vote-equivocation', first: signedVote, second: signedVote },
+    },
+  },
   { t: 'SYNC_REQ', genesisDigest: key, fromSeq: 0 },
   { t: 'SYNC_REQ', genesisDigest: key, fromSeq: 1, toSeq: 10 },
   { t: 'SYNC_RES', genesisDigest: key, entries: [certified], more: true },
+  { t: 'SNAPSHOT_REQ', genesisDigest: key, atSeq: 0 },
+  { t: 'SNAPSHOT_RES', genesisDigest: key, atSeq: 0, snapshot: { seq: 0, hash } },
   {
     t: 'PROPOSAL_REQ',
     genesisDigest: key,
@@ -106,6 +117,18 @@ describe('Stage 06 protocol messages', () => {
         sig: signature,
       },
       { t: 'VOTE', vote: { ...signedVote, unexpected: true } },
+      {
+        t: 'ACCUSE',
+        control: {
+          kind: 'control',
+          action: 'exclude-proposer',
+          offender: 0,
+          evidence: { kind: 'vote-equivocation', first: signedVote, second: signedVote },
+          extra: true,
+        },
+      },
+      { t: 'SNAPSHOT_REQ', genesisDigest: key, atSeq: -1 },
+      { t: 'SNAPSHOT_RES', genesisDigest: key, atSeq: 0, snapshot: {}, extra: true },
     ];
     for (const message of invalid)
       expect(encodeProtocolMessage(message)).toMatchObject({ ok: false });

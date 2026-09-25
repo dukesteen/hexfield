@@ -33,7 +33,7 @@ This is the most important change from a naive design. If dice or deck order cam
 
 - **Public state** is replicated and hashed. Every peer has an identical copy. It contains everything all players are allowed to know: board, pieces, bank, card _counts_, resource _bounds_ per player, face-down card slots, awards, turn/phase.
 - **Private state** is per seat and held only by that seat's owner. It contains exact resource hand, identities of held dev/progress cards, secret keys, salts, and the private halves of commitments.
-- In the base game, resources only move secretly through **steals**. The public state therefore tracks each player's resources as **bounds** (`min[r]`, `max[r]`, exact `total`), and validates spends against the bounds. When no hidden transfers happened, `min == max`, so validation is exact. Anything the bounds can't prove is checked by the **end-of-game audit** (stage 07), where every secret is revealed and the whole game is re-verified.
+- In the base game, resources only move secretly through **steals**. The public state therefore tracks each player's resources as **bounds** (`min[r]`, `max[r]`, exact `total`), and validates spends against the bounds. When no hidden transfers happened, `min == max`, so validation is exact. In P2P mode, anything the bounds can't prove is proven **on the move itself**: each seat's hidden hand is also held as public Pedersen commitments, and spends, count reveals and steals carry zero-knowledge proofs that every peer checks before accepting the entry (stage 07). After the game, every secret is revealed for the omniscient replay and a defence-in-depth re-check.
 - In local/hotseat mode, secret inputs carry their values publicly (e.g. the steal result names the resource), so bounds are always exact.
 
 ### 2.4 Pending-input model
@@ -54,11 +54,12 @@ The UI, bots, the network layer and the simulator all drive the game off this on
 - The base game is itself a module (`base`). Expansions are modules that add state, commands, phases and hooks through a typed `GameModule` interface (defined in stage 02, hardened in stage 11).
 - The module list and options are part of the **genesis**, so they can't change mid-game.
 
-### 2.6 Replicated log ordering: sequencer + majority commit ("Raft-lite")
+### 2.6 Replicated log ordering and strict agreement
 
-- A **sequencer** (the lowest-ordered online seat, elected per _term_) orders the signed commands and system inputs into log entries.
-- The sequencer **cannot forge** commands (they're signed by the author seat) and **cannot slip in invalid ones** (every peer validates with the engine). It _can_ delay commands, which is detected and triggers re-election.
-- An entry is **committed** once a majority of seats acknowledge it. A minority partition pauses instead of forking.
+- A deterministic **sequencer** proposes signed commands and system inputs. Peers validate them and commit through signed prevote and precommit rounds with persistent locks, as specified in stage 06.
+- Ordering tolerates at most one Byzantine human voter. For one through six human voters, commitment requires 1, 2, 3, 3, 4, 4 votes respectively. Bots do not vote. Hidden-information privacy has a separate threshold in stage 07.
+- The voter set comes from the certified log, never a peer's online list. Two- and three-human games pause when one required voter is unavailable. Four-human games can continue with three cooperative voters when the pending input and cryptographic protocols permit it.
+- Votes, locks and committed entries survive restarts. The UI applies committed state only. Invalid proposals and censorship cause proposer rotation; membership changes need the agreed reconfiguration procedure.
 
 ## 3. Package map & dependency direction
 
@@ -133,18 +134,18 @@ Rules (enforced by dependency-cruiser in CI, stage 01):
 
 ## 6. Security model (what we protect against)
 
-| Threat                                                                    | Protection                                                                        |
-| ------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| Illegal move (build without resources, wrong turn, illegal placement)     | Every peer validates every input. Rejected immediately.                           |
-| Forged command from another player                                        | Ed25519 signatures per seat                                                       |
-| Predicting or biasing dice                                                | Hash-chain commit-reveal beacon (stage 07)                                        |
-| Knowing or biasing card draws                                             | Mental poker with per-card locking keys (stage 07)                                |
-| Lying about a hidden hand                                                 | Bounds validation right away; hand-commitment chain + end-of-game audit           |
-| Sequencer censorship or misbehaviour                                      | Broadcast submits, timeout, re-election, signed proof of misbehaviour             |
-| Player leaving permanently with secrets                                   | Threshold key escrow among the other players (stage 07/10)                        |
-| Collusion of all other players                                            | **Not protected** (inherent to P2P card games with escrow)                        |
-| Modified client reading its own private data (e.g. its own card-counting) | Out of scope: that information is legitimately available                          |
-| Last-revealer abort (refusing to reveal a beacon value)                   | Can't bias the outcome, only stall. Stalling triggers seat timeout → bot takeover |
+| Threat                                                                    | Protection                                                                                                 |
+| ------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| Illegal move (build without resources, wrong turn, illegal placement)     | Every peer validates every input. Rejected immediately.                                                    |
+| Forged command from another player                                        | Ed25519 signatures per seat                                                                                |
+| Predicting or biasing dice                                                | Hash-chain commit-reveal beacon (stage 07)                                                                 |
+| Knowing or biasing card draws                                             | Mental poker with per-card locking keys and verifiable shuffles (stage 07)                                 |
+| Lying about a hidden hand                                                 | Bounds validation plus per-move proofs over committed hands; caught on that move                           |
+| Sequencer censorship or misbehaviour                                      | Broadcast submits, timeout, re-election, signed proof of misbehaviour                                      |
+| Player leaving permanently with secrets                                   | Threshold key escrow among the other players (stage 07/10)                                                 |
+| Collusion of all other players                                            | **Not protected** (inherent to P2P card games with escrow)                                                 |
+| Modified client reading its own private data (e.g. its own card-counting) | Out of scope: that information is legitimately available                                                   |
+| Last-revealer abort (refusing to reveal a beacon value)                   | Cannot change the fixed outcome. Recovery needs authorized escrow and a safe quorum; otherwise play pauses |
 
 ## 7. Glossary
 
@@ -159,7 +160,8 @@ Rules (enforced by dependency-cruiser in CI, stage 01):
 - **Bounds**: public min/max knowledge of a player's resource counts.
 - **Beacon**: joint randomness from hash-chain reveals.
 - **Deck protocol**: mental-poker shuffle/deal/reveal for hidden draw piles.
-- **Audit**: end-of-game full verification after all secrets are revealed.
+- **Committed hand**: public Pedersen commitments to a seat's per-type card counts, updated every move and backed by per-move proofs.
+- **Audit**: end-of-game re-verification after all secrets are revealed. A safety net and the basis of the omniscient replay; fairness is already verified move by move.
 
 ## 8. Naming (non-infringing)
 

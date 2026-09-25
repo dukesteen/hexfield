@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { exactResourceBounds, RESOURCES } from '@cp2p/engine';
-import type { Engine, GameState, Pending, ResourceCounts, Seat } from '@cp2p/engine';
+import type { Engine, GameState, Input, Pending, ResourceCounts, Seat } from '@cp2p/engine';
 import type { LogContext } from '../log.js';
 import { protocolFixture } from './fixtures.js';
 import { SimulationDriver } from './simulation-driver.js';
@@ -134,6 +134,85 @@ describe('SimulationDriver', () => {
     expect(privateCard).toBeDefined();
     expect(peer.privateState(0)?.slots['dev:0']).toBe(privateCard);
     expect(first.privateState(1)?.slots).toEqual({});
+  });
+
+  test('played development-card identity remains in deck history for a later draw and replay', () => {
+    const fixture = protocolFixture();
+    const hands = new Map<Seat, ResourceCounts>([[0, resourceHand({ wool: 6, grain: 6, ore: 6 })]]);
+    const engine = engineWithHands(fixture.engine, hands);
+    const driver = new SimulationDriver(engine, fixture.genesis);
+    let state = stateWithHands(fixture.state, hands, { id: 'main', data: null });
+    const history: { before: LogContext; input: Input; after: GameState }[] = [];
+    const commit = (input: Parameters<Engine['apply']>[1]) => {
+      const before = contextFor(fixture.genesis, engine, fixture.entry, state);
+      const applied = engine.apply(state, input);
+      if (!applied.ok) {
+        const type = input.kind === 'command' ? input.command.type : input.type;
+        throw new Error(`Engine rejected ${type}: ${applied.error.code}`);
+      }
+      expect(driver.committed(before, input, applied.value.state)).toMatchObject({ ok: true });
+      history.push({ before, input, after: applied.value.state });
+      state = applied.value.state;
+    };
+    const buy = { kind: 'command' as const, seat: 0 as const, command: { type: 'BUY_DEV_CARD' } };
+    let playable: { slotId: string; card: string } | null = null;
+    let draws = 0;
+    while (!playable && draws < 5) {
+      commit(buy);
+      const answer = driver.next(contextFor(fixture.genesis, engine, fixture.entry, state));
+      if (!answer || answer.input.type !== 'CARD_DEALT') throw new Error('Expected card draw');
+      commit(answer.input);
+      const slotId = `dev:${draws}`;
+      const card = driver.privateState(0)?.slots[slotId];
+      if (card && card !== 'victoryPoint') playable = { slotId, card };
+      draws++;
+    }
+    if (!playable) throw new Error('Fixture did not draw a playable development card');
+
+    // Advance the fixture turn so the engine permits play; identities still come from committed draws.
+    state = { ...state, turn: { ...state.turn, number: state.turn.number + 1 } };
+    const params =
+      playable.card === 'yearOfPlenty'
+        ? { resources: resourceHand({ brick: 2 }) }
+        : playable.card === 'monopoly'
+          ? { resource: 'brick' }
+          : undefined;
+    commit({
+      kind: 'command',
+      seat: 0,
+      command: { type: 'PLAY_DEV_CARD', ...playable, ...(params ? { params } : {}) },
+    });
+    expect(driver.privateState(0)?.slots[playable.slotId]).toBeUndefined();
+    expect(state.decks.dev?.drawn).toHaveLength(draws);
+
+    while (state.turn.phase.at(-1)?.id !== 'main') {
+      const privateState = driver.privateState(0);
+      if (!privateState) throw new Error('Missing private fixture hand');
+      const commands = engine.getLegalCommands(state, 0, privateState).commands;
+      const command = commands.find((item) => item.type === 'SKIP' || item.type === 'MOVE_ROBBER');
+      if (!command) throw new Error(`Cannot finish ${String(state.turn.phase.at(-1)?.id)}`);
+      commit({ kind: 'command', seat: 0, command });
+    }
+    commit(buy);
+    const nextContext = contextFor(fixture.genesis, engine, fixture.entry, state);
+    const secondDraw = driver.next(nextContext);
+    expect(secondDraw?.input).toMatchObject({ type: 'CARD_DEALT', slotId: `dev:${draws}` });
+    const replay = new SimulationDriver(engine, fixture.genesis);
+    for (const entry of history)
+      expect(replay.committed(entry.before, entry.input, entry.after)).toMatchObject({ ok: true });
+    expect(replay.next(nextContext)).toEqual(secondDraw);
+    if (!secondDraw) throw new Error('Expected second draw');
+    commit(secondDraw.input);
+    const finalEntry = history.at(-1);
+    if (!finalEntry) throw new Error('Missing replay entry');
+    expect(replay.committed(finalEntry.before, finalEntry.input, finalEntry.after)).toMatchObject({
+      ok: true,
+    });
+    expect(state.decks.dev?.drawn).toHaveLength(draws + 1);
+    expect(state.decks.dev?.remaining).toBe(25 - draws - 1);
+    expect(driver.privateState(0)?.slots[playable.slotId]).toBeUndefined();
+    expect(driver.privateState(0)?.slots[`dev:${draws}`]).toBeDefined();
+    expect(replay.privateState(0)).toEqual(driver.privateState(0));
   });
 
   test('hidden STEAL_RESULT reveals the resource only in thief and victim private states', () => {

@@ -4,7 +4,14 @@ import { describe, expect, test } from 'vitest';
 import { ConsensusController } from './consensus-controller.js';
 import type { ConsensusControllerOptions } from './consensus-controller.js';
 import type { ConsensusEffect } from './consensus.js';
-import { entryHash, genesisDigest, signEntry } from './genesis.js';
+import {
+  entryBody,
+  entryHash,
+  genesisDigest,
+  genesisId,
+  signEntry,
+  signGenesis,
+} from './genesis.js';
 import { stubEvidence } from './log.js';
 import type { LogContext } from './log.js';
 import type { ProposalContext } from './proposal.js';
@@ -50,27 +57,52 @@ class PausableStore implements SafetyStore {
   }
 }
 
-function setup(store: SafetyStore = new MemorySafetyStore()) {
+function setup(store: SafetyStore = new MemorySafetyStore(), fourVoters = false) {
   const fixture = protocolFixture();
   const owner = fixtureAt(fixture.identities, 0);
-  const other = fixtureAt(fixture.identities, 1);
+  const roster: readonly (0 | 1 | 2 | 3)[] = fourVoters ? [0, 1, 2, 3] : [0, 1];
+  const body = {
+    ...fixture.body,
+    seats: fixture.body.seats.map((seat) => ({
+      seat: seat.seat,
+      kind: 'human' as const,
+      publicKey: seat.publicKey,
+      name: seat.name,
+      colour: seat.colour,
+    })),
+  };
+  const genesis = fourVoters
+    ? {
+        ...body,
+        gameId: genesisId(body),
+        signatures: roster.map((seat) =>
+          signGenesis(body, seat, fixtureAt(fixture.identities, seat).secretKey),
+        ),
+      }
+    : fixture.genesis;
+  const head = fourVoters
+    ? signEntry(
+        { ...entryBody(fixture.entry), payload: { kind: 'genesis', genesis } },
+        owner.secretKey,
+      )
+    : fixture.entry;
   const log: LogContext = {
-    genesis: fixture.genesis,
+    genesis,
     engine: fixture.engine,
-    head: fixture.entry,
+    head,
     state: fixture.state,
     lastNonces: new Map(),
   };
-  const digest = genesisDigest(fixture.genesis);
+  const digest = genesisDigest(genesis);
   const context: ProposalContext = {
     log,
     membership: {
       genesisDigest: digest,
       epoch: 0,
-      voters: [
-        { seat: 0, publicKey: owner.peerId },
-        { seat: 1, publicKey: other.peerId },
-      ],
+      voters: roster.map((seat) => ({
+        seat,
+        publicKey: fixtureAt(fixture.identities, seat).peerId,
+      })),
     },
     excludedProposers: [],
     policy: { allowStub: true },
@@ -99,18 +131,19 @@ function setup(store: SafetyStore = new MemorySafetyStore()) {
       emissions.push([...effects]);
     },
   };
-  const certificate = [owner, other].map((identity, seat) =>
+  const certificateSeats: readonly (0 | 1 | 2 | 3)[] = fourVoters ? [1, 2, 3] : [0, 1];
+  const certificate = certificateSeats.map((seat) =>
     signVote(
       {
         genesisDigest: digest,
         epoch: 0,
-        seat: seat === 0 ? 0 : 1,
+        seat,
         seq: 1,
         term: 1,
         phase: 'precommit',
         valueHash: entryHash(candidate),
       },
-      identity.secretKey,
+      fixtureAt(fixture.identities, seat).secretKey,
     ),
   );
   return { options, store, candidate, certificate, emissions };
@@ -307,8 +340,76 @@ describe('durable consensus controller', () => {
     expect((await store.load())?.revision).toBe(original?.revision);
   });
 
+  test('corrupt local derivation stops an active controller until certified-prefix replay', async () => {
+    const { options, candidate, store, emissions } = setup();
+    const controller = await create(options);
+    expect((await controller.dispatch({ kind: 'propose', candidate })).ok).toBe(true);
+    const saved = await store.load();
+    const freshContext: ProposalContext = {
+      ...options.context,
+      log: { ...options.context.log },
+    };
+    const corruptContext: ProposalContext = {
+      ...freshContext,
+      log: {
+        ...freshContext.log,
+        state: {
+          ...freshContext.log.state,
+          counters: {
+            ...freshContext.log.state.counters,
+            nextOfferId: freshContext.log.state.counters.nextOfferId + 1,
+          },
+        },
+      },
+    };
+    // The same persisted proposal can no longer be derived from corrupted local state.
+    options.context.log.state = corruptContext.log.state;
+    expect(errorCode(controller.snapshot())).toBe('consensus-restore');
+    expect(errorCode(await controller.dispatch({ kind: 'input-available' }))).toBe(
+      'consensus-stopped',
+    );
+    expect((await store.load())?.bytes).toEqual(saved?.bytes);
+    expect((await store.load())?.revision).toBe(saved?.revision);
+    expect(emissions.flat().filter((effect) => effect.kind === 'broadcast-vote')).toHaveLength(1);
+
+    const dispatchContext: ProposalContext = {
+      ...freshContext,
+      log: { ...freshContext.log },
+    };
+    const dispatchController = await restore({ ...options, context: dispatchContext });
+    dispatchContext.log.state = corruptContext.log.state;
+    expect(errorCode(await dispatchController.dispatch({ kind: 'input-available' }))).toBe(
+      'consensus-restore',
+    );
+    expect(errorCode(await dispatchController.resume())).toBe('consensus-stopped');
+
+    const resumeContext: ProposalContext = {
+      ...freshContext,
+      log: { ...freshContext.log },
+    };
+    const resumeController = await restore({ ...options, context: resumeContext });
+    resumeContext.log.state = corruptContext.log.state;
+    expect(errorCode(await resumeController.resume())).toBe('consensus-restore');
+    expect(errorCode(await resumeController.dispatch({ kind: 'input-available' }))).toBe(
+      'consensus-stopped',
+    );
+
+    // A fresh controller can only continue after the certified parent is reconstructed.
+    const retransmitted: ConsensusEffect[] = [];
+    const replayed = await restore({
+      ...options,
+      context: freshContext,
+      onEffects: (effects) => {
+        retransmitted.push(...effects);
+      },
+    });
+    expect((await replayed.resume()).ok).toBe(true);
+    expect(retransmitted.some((effect) => effect.kind === 'broadcast-proposal')).toBe(true);
+    expect(retransmitted.some((effect) => effect.kind === 'broadcast-vote')).toBe(true);
+  });
+
   test('a persisted commit replays after a delivery crash at the commit boundary', async () => {
-    const { options, candidate, certificate, store } = setup();
+    const { options, candidate, certificate, store } = setup(new MemorySafetyStore(), true);
     const controller = await create({
       ...options,
       onEffects: (effects) => {
@@ -316,11 +417,12 @@ describe('durable consensus controller', () => {
           throw new Error('crashed after saving the certificate');
       },
     });
+    expect((await controller.dispatch({ kind: 'propose', candidate })).ok).toBe(true);
     const certified = { entry: candidate, certificate };
     expect(errorCode(await controller.dispatch({ kind: 'commit', certified }))).toBe(
       'consensus-effects',
     );
-    expect((await store.load())?.revision).toBe(1);
+    expect((await store.load())?.revision).toBe(2);
     const replayed: ConsensusEffect[] = [];
     const restarted = await restore({
       ...options,

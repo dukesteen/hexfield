@@ -239,6 +239,9 @@ importers:
       '@cp2p/codec':
         specifier: workspace:*
         version: link:../../packages/codec
+      '@cp2p/crypto':
+        specifier: workspace:*
+        version: link:../../packages/crypto
       '@cp2p/engine':
         specifier: workspace:*
         version: link:../../packages/engine

@@ -3,13 +3,17 @@ import { parsePeerId } from '@cp2p/crypto';
 import { failure, success } from '@cp2p/engine';
 import type { Result, Seat } from '@cp2p/engine';
 import * as v from 'valibot';
+import { objectiveEvidenceSeq } from './control.js';
 import { entryBody, entryHash, genesisDigest, signEntry } from './genesis.js';
 import {
+  authenticateProposalControlEvidence,
   authenticateCertifiedEntry,
+  objectiveProofParentHash,
   proposerFor,
   signedProposalSchema,
   signProposal,
   validateCertifiedEntry,
+  validateObjectiveForProposal,
   validateProposal,
 } from './proposal.js';
 import type { CertifiedEntry, ProposalContext, SignedProposal } from './proposal.js';
@@ -20,7 +24,7 @@ import {
   positiveIntegerSchema,
   seatSchema,
 } from './schema-values.js';
-import { logEntrySchema } from './schemas.js';
+import { excludeProposerControlSchema, logEntrySchema } from './schemas.js';
 import type { PeerId } from './transport.js';
 import {
   quorumSize,
@@ -30,7 +34,7 @@ import {
   verifyCertificate,
 } from './votes.js';
 import type { SignedVote, VotePhase } from './votes.js';
-import type { LogEntry } from './types.js';
+import type { ExcludeProposerControl, LogEntry } from './types.js';
 
 export type ConsensusStep = 'propose' | 'prevote' | 'precommit';
 export type TimeoutPhase = ConsensusStep;
@@ -57,6 +61,13 @@ export type Equivocation =
       second: SignedVote;
     };
 
+/** One objective first-offender proof carried across certified heights. */
+export interface ProvenOffender {
+  control: ExcludeProposerControl;
+  atSeq: number;
+  parentHash: string;
+}
+
 /** All safety-relevant records for one height. Persist this whole value atomically. */
 export interface ConsensusState {
   version: 1;
@@ -75,6 +86,8 @@ export interface ConsensusState {
   votes: SignedVote[];
   hints: RoundHint[];
   equivocations: Equivocation[];
+  pendingAccusation: ExcludeProposerControl | null;
+  provenOffender: ProvenOffender | null;
   locked: QuorumValue | null;
   valid: QuorumValue | null;
   decision: CertifiedEntry | null;
@@ -157,6 +170,14 @@ const stateSchema = v.strictObject({
   votes: v.array(signedVoteSchema),
   hints: v.pipe(v.array(hintSchema), v.maxLength(6)),
   equivocations: v.array(equivocationSchema),
+  pendingAccusation: v.nullable(excludeProposerControlSchema),
+  provenOffender: v.nullable(
+    v.strictObject({
+      control: excludeProposerControlSchema,
+      atSeq: positiveIntegerSchema,
+      parentHash: hashSchema,
+    }),
+  ),
   locked: v.nullable(quorumValueSchema),
   valid: v.nullable(quorumValueSchema),
   decision: v.nullable(certifiedSchema),
@@ -195,6 +216,32 @@ function localPeer(state: ConsensusState): PeerId {
 
 function sameVote(a: SignedVote, b: SignedVote): boolean {
   return a.body.valueHash === b.body.valueHash;
+}
+
+function hasUnrecordedOwnVote(state: ConsensusState, proof: readonly SignedVote[]): boolean {
+  return proof.some(
+    (vote) =>
+      vote.body.seat === state.localSeat &&
+      vote.body.seq === state.height &&
+      !state.votes.some(
+        (stored) =>
+          stored.body.seat === vote.body.seat &&
+          stored.body.seq === vote.body.seq &&
+          stored.body.term === vote.body.term &&
+          stored.body.phase === vote.body.phase &&
+          stored.body.valueHash === vote.body.valueHash &&
+          stored.sig === vote.sig,
+      ),
+  );
+}
+
+function hasUnrecordedOwnEntry(state: ConsensusState, entry: LogEntry): boolean {
+  return (
+    entry.sequencer === state.localPublicKey &&
+    !state.proposals.some(
+      (stored) => proposalHash(stored) === entryHash(entry) && stored.body.entry.sig === entry.sig,
+    )
+  );
 }
 
 function proposalHash(proposal: SignedProposal): string {
@@ -336,6 +383,9 @@ function recordProposal(
     (item) => item.body.entry.term === proposal.body.entry.term,
   );
   if (sameRound.some((item) => proposalHash(item) === proposalHash(proposal))) return;
+  // Two signed conflicts are enough for objective equivocation evidence. Further
+  // variants cannot add safety information and must not grow the durable record.
+  if (sameRound.length >= 2) return;
   for (const first of sameRound) {
     if (
       proposalHash(first) !== proposalHash(proposal) &&
@@ -372,6 +422,45 @@ function halt(state: ConsensusState, reason: string, effects: ConsensusEffect[])
   effects.push({ kind: 'halt', reason });
 }
 
+function terminalFault(state: ConsensusState, reason: string, effects: ConsensusEffect[]): void {
+  if (state.haltKind === 'terminal') return;
+  state.halted = reason;
+  state.haltKind = 'terminal';
+  state.unappliedCertificate = null;
+  effects.push({ kind: 'halt', reason });
+}
+
+function haltForControlFault(
+  state: ConsensusState,
+  context: ProposalContext,
+  control: ExcludeProposerControl,
+  effects: ConsensusEffect[],
+): boolean {
+  if (control.offender === state.localSeat) {
+    terminalFault(state, 'Objective evidence implicates the local signing key', effects);
+    return true;
+  }
+  if (
+    (state.provenOffender && state.provenOffender.control.offender !== control.offender) ||
+    context.excludedProposers.some((seat) => seat !== control.offender)
+  ) {
+    terminalFault(state, 'Objective evidence proves a second Byzantine voter', effects);
+    return true;
+  }
+  return false;
+}
+
+function haltForEntryControlFault(
+  state: ConsensusState,
+  context: ProposalContext,
+  entry: LogEntry,
+  effects: ConsensusEffect[],
+): boolean {
+  return entry.payload.kind === 'control'
+    ? haltForControlFault(state, context, entry.payload, effects)
+    : false;
+}
+
 function haltForCertifiedValue(
   state: ConsensusState,
   certified: CertifiedEntry,
@@ -391,10 +480,18 @@ function haltIfFaultThresholdExceeded(
   context: ProposalContext,
   effects: ConsensusEffect[],
 ): void {
-  const equivocators = new Set(state.equivocations.map((item) => item.seat));
+  const equivocators = new Set<Seat>([
+    ...state.equivocations.map((item) => item.seat),
+    ...context.excludedProposers,
+  ]);
+  if (state.provenOffender) equivocators.add(state.provenOffender.control.offender);
+  if (equivocators.has(state.localSeat)) {
+    terminalFault(state, 'Objective evidence implicates the local signing key', effects);
+    return;
+  }
   const tolerated = context.membership.voters.length === 1 ? 0 : 1;
   if (equivocators.size > tolerated)
-    halt(state, 'Observed equivocations exceed the fault threshold', effects);
+    terminalFault(state, 'Objective evidence proves a second Byzantine voter', effects);
 }
 
 function enterRound(
@@ -461,9 +558,18 @@ function maybeCommit(
       const certified = { entry: proposal.body.entry, certificate };
       const checked = validateCertifiedEntry(certified, context);
       if (!checked.ok) {
-        halt(state, `Certified value failed validation: ${checked.error.code}`, effects);
+        const authenticated = authenticateCertifiedEntry(certified, context);
+        if (authenticated.ok)
+          haltForCertifiedValue(state, authenticated.value, checked.error.code, effects);
+        else
+          halt(
+            state,
+            `Certified proof failed authentication: ${authenticated.error.code}`,
+            effects,
+          );
         continue;
       }
+      if (haltForEntryControlFault(state, context, checked.value.entry, effects)) return;
       if (state.decision && entryHash(state.decision.entry) !== hash) {
         halt(state, 'Conflicting certified values', effects);
         continue;
@@ -537,6 +643,8 @@ function transition(
 export function createConsensusState(
   context: ProposalContext,
   localSeat: Seat,
+  provenOffender: ProvenOffender | null = null,
+  pendingAccusation: ExcludeProposerControl | null = null,
 ): Result<ConsensusState> {
   const member = context.membership.voters.find((voter) => voter.seat === localSeat);
   if (!member || context.membership.genesisDigest !== genesisDigest(context.log.genesis))
@@ -586,6 +694,8 @@ export function createConsensusState(
     votes: [],
     hints: [],
     equivocations: [],
+    pendingAccusation,
+    provenOffender,
     locked: null,
     valid: null,
     decision: null,
@@ -593,6 +703,20 @@ export function createConsensusState(
     haltKind: null,
     unappliedCertificate: null,
   };
+  if (provenOffender) {
+    const checked = objectiveProofParentHash(provenOffender.control, context);
+    if (!checked.ok || checked.value !== provenOffender.parentHash)
+      return failure('consensus-context', 'First-offender proof has no certified parent');
+    haltForControlFault(state, context, provenOffender.control, []);
+  }
+  if (
+    pendingAccusation &&
+    (!provenOffender ||
+      toHex(hashValue(pendingAccusation)) !== toHex(hashValue(provenOffender.control)))
+  )
+    return failure('consensus-context', 'Pending accusation has no matching first proof');
+  if (context.excludedProposers.includes(localSeat))
+    terminalFault(state, 'Certified prefix excludes the local signing key', []);
   return success(state);
 }
 
@@ -617,7 +741,13 @@ export function restoreConsensusState(
       'Safety record belongs to another height, parent, game, epoch or key',
     );
   try {
+    const proposalCounts = new Map<number, number>();
     for (const proposal of state.proposals) {
+      const round = proposal.body.entry.term;
+      const count = (proposalCounts.get(round) ?? 0) + 1;
+      if (count > 2)
+        return failure('consensus-restore', 'Safety record retains too many proposals per round');
+      proposalCounts.set(round, count);
       if (!validateProposal(proposal, context).ok)
         return failure('consensus-restore', 'Stored proposal is invalid');
     }
@@ -742,6 +872,11 @@ export function restoreConsensusState(
       return failure('consensus-restore', 'Precommit timer has no quorum');
     if (state.decision && !validateCertifiedEntry(state.decision, context).ok)
       return failure('consensus-restore', 'Stored decision certificate is invalid');
+    if (
+      (state.decision && hasUnrecordedOwnEntry(state, state.decision.entry)) ||
+      (state.unappliedCertificate && hasUnrecordedOwnEntry(state, state.unappliedCertificate.entry))
+    )
+      return failure('consensus-restore', 'Safety proof contains an unrecorded local entry');
     if ((state.halted === null) !== (state.haltKind === null))
       return failure('consensus-restore', 'Stored halt reason and kind disagree');
     if (state.haltKind === 'certified-validation') {
@@ -786,6 +921,79 @@ export function restoreConsensusState(
           return failure('consensus-restore', 'Stored equivocation evidence is invalid');
       }
     }
+    if (state.provenOffender) {
+      const proof = state.provenOffender;
+      if (
+        proof.atSeq > state.height ||
+        (proof.atSeq === state.height && proof.parentHash !== state.parentHash)
+      )
+        return failure(
+          'consensus-restore',
+          'First-offender proof has a different height or parent',
+        );
+      const checked = objectiveProofParentHash(proof.control, context);
+      if (!checked.ok || checked.value !== proof.parentHash)
+        return failure('consensus-restore', 'First-offender proof has no certified parent');
+    }
+    if (state.pendingAccusation) {
+      if (
+        !state.provenOffender ||
+        state.provenOffender.atSeq > state.height ||
+        toHex(hashValue(state.provenOffender.control)) !== toHex(hashValue(state.pendingAccusation))
+      )
+        return failure('consensus-restore', 'Pending accusation has no matching current proof');
+      const alreadyExcluded = context.excludedProposers.includes(state.pendingAccusation.offender);
+      if (!alreadyExcluded && !validateObjectiveForProposal(state.pendingAccusation, context).ok)
+        return failure('consensus-restore', 'Pending accusation is not objectively proven');
+    }
+    const referencedVotes = [
+      ...state.proposals.flatMap((proposal) => proposal.body.prevotes),
+      ...state.hints.flatMap((hint) =>
+        hint.kind === 'vote' ? [hint.vote] : hint.proposal.body.prevotes,
+      ),
+      ...(state.valid?.prevotes ?? []),
+      ...(state.locked?.prevotes ?? []),
+      ...(state.decision?.certificate ?? []),
+      ...(state.unappliedCertificate?.certificate ?? []),
+      ...state.equivocations.flatMap((evidence) =>
+        evidence.kind === 'vote'
+          ? [evidence.first, evidence.second]
+          : [...evidence.first.body.prevotes, ...evidence.second.body.prevotes],
+      ),
+    ];
+    if (hasUnrecordedOwnVote(state, referencedVotes))
+      return failure('consensus-restore', 'Safety proof contains an unrecorded local vote');
+    const controls: ExcludeProposerControl[] = [];
+    const includeControl = (entry: LogEntry): void => {
+      if (entry.payload.kind === 'control') controls.push(entry.payload);
+    };
+    for (const proposal of state.proposals) includeControl(proposal.body.entry);
+    for (const hint of state.hints)
+      if (hint.kind === 'proposal') includeControl(hint.proposal.body.entry);
+    if (state.valid) includeControl(state.valid.proposal.body.entry);
+    if (state.locked) includeControl(state.locked.proposal.body.entry);
+    if (state.decision) includeControl(state.decision.entry);
+    if (state.provenOffender) controls.push(state.provenOffender.control);
+    if (state.pendingAccusation) controls.push(state.pendingAccusation);
+    for (const evidence of state.equivocations)
+      controls.push({
+        kind: 'control',
+        action: 'exclude-proposer',
+        offender: evidence.seat,
+        evidence:
+          evidence.kind === 'vote'
+            ? { kind: 'vote-equivocation', first: evidence.first, second: evidence.second }
+            : { kind: 'proposal-equivocation', first: evidence.first, second: evidence.second },
+      });
+    let observedOffender: Seat | null = null;
+    for (const control of controls) {
+      if (observedOffender !== null && observedOffender !== control.offender)
+        terminalFault(state, 'Objective evidence proves a second Byzantine voter', []);
+      observedOffender ??= control.offender;
+      if (haltForControlFault(state, context, control, [])) break;
+    }
+    if (context.excludedProposers.includes(localSeat))
+      terminalFault(state, 'Certified prefix excludes the local signing key', []);
     return success(state);
   } catch {
     return failure('consensus-restore', 'Safety record could not be verified');
@@ -812,6 +1020,100 @@ export function inputAvailable(
         round: copy.round,
         validHash: copy.valid?.hash ?? null,
       });
+    return success(undefined);
+  });
+}
+
+function retainAccusation(
+  copy: ConsensusState,
+  context: ProposalContext,
+  control: ExcludeProposerControl,
+  effects: ConsensusEffect[],
+): Result<void> {
+  const checked = objectiveProofParentHash(control, context);
+  if (!checked.ok) return checked;
+  if (haltForControlFault(copy, context, control, effects)) return success(undefined);
+  if (context.excludedProposers.includes(control.offender) || copy.decision || copy.halted)
+    return success(undefined);
+  const evidence = control.evidence;
+  const proposals =
+    evidence.kind === 'proposal-equivocation'
+      ? [evidence.first, evidence.second]
+      : evidence.kind === 'invalid-command'
+        ? [evidence.proposal]
+        : [];
+  const votes =
+    evidence.kind === 'vote-equivocation'
+      ? [evidence.first, evidence.second]
+      : proposals.flatMap((proposal) => proposal.body.prevotes);
+  const retainedHistoricalProof =
+    copy.provenOffender !== null &&
+    copy.provenOffender.atSeq < copy.height &&
+    toHex(hashValue(copy.provenOffender.control)) === toHex(hashValue(control));
+  if (
+    !retainedHistoricalProof &&
+    (hasUnrecordedOwnVote(
+      copy,
+      votes.filter((vote) => validateVote(vote, context.membership).ok),
+    ) ||
+      proposals.some(
+        (proposal) =>
+          proposal.body.entry.sequencer === copy.localPublicKey &&
+          !copy.proposals.some(
+            (stored) =>
+              stored.sig === proposal.sig && proposalHash(stored) === proposalHash(proposal),
+          ),
+      ))
+  ) {
+    halt(copy, 'Accusation contains an unrecorded local signature', effects);
+    return success(undefined);
+  }
+  if (copy.pendingAccusation) return success(undefined);
+  copy.provenOffender ??= {
+    control,
+    atSeq: objectiveEvidenceSeq(control),
+    parentHash: checked.value,
+  };
+  copy.pendingAccusation = control;
+  return success(undefined);
+}
+
+/** Retain an authenticated accusation before the adapter can gossip it. */
+export function stageAccusation(
+  state: ConsensusState,
+  context: ProposalContext,
+  control: ExcludeProposerControl,
+): Result<ConsensusTransition> {
+  return transition(state, context, (copy, effects) =>
+    retainAccusation(copy, context, control, effects),
+  );
+}
+
+/** Remove only an accusation already represented by the certified exclusion. */
+export function clearStaleAccusation(
+  state: ConsensusState,
+  context: ProposalContext,
+): Result<ConsensusTransition> {
+  return transition(state, context, (copy) => {
+    if (
+      copy.pendingAccusation &&
+      copy.provenOffender &&
+      context.excludedProposers.includes(copy.pendingAccusation.offender) &&
+      toHex(hashValue(copy.pendingAccusation)) === toHex(hashValue(copy.provenOffender.control))
+    )
+      copy.pendingAccusation = null;
+    return success(undefined);
+  });
+}
+
+/** Caller may invoke only after authenticating a conflicting certified history. */
+export function terminalHalt(
+  state: ConsensusState,
+  context: ProposalContext,
+  reason: string,
+): Result<ConsensusTransition> {
+  return transition(state, context, (copy, effects) => {
+    halt(copy, reason, effects);
     return success(undefined);
   });
 }
@@ -860,6 +1162,15 @@ export function propose(
       );
       const checked = validateProposal(proposal, context);
       if (!checked.ok) return checked;
+      if (checked.value.proposal.body.entry.payload.kind === 'control') {
+        const retained = retainAccusation(
+          copy,
+          context,
+          checked.value.proposal.body.entry.payload,
+          effects,
+        );
+        if (!retained.ok || copy.halted) return retained;
+      }
       recordProposal(copy, context, checked.value.proposal, effects);
       effects.push({ kind: 'broadcast-proposal', proposal: checked.value.proposal });
       const voted = prevoteProposal(copy, context, secretKey, checked.value.proposal, effects);
@@ -899,8 +1210,25 @@ export function receiveProposal(
 ): Result<ConsensusTransition> {
   return transition(state, context, (copy, effects) => {
     const checked = validateProposal(value, context);
-    if (!checked.ok) return checked;
+    if (!checked.ok) {
+      const evidence = authenticateProposalControlEvidence(value, context);
+      if (evidence.ok && haltForControlFault(copy, context, evidence.value, effects))
+        return success(undefined);
+      return checked;
+    }
     const proposal = checked.value.proposal;
+    if (proposal.body.entry.payload.kind === 'control') {
+      const retained = retainAccusation(copy, context, proposal.body.entry.payload, effects);
+      if (!retained.ok || copy.halted) return retained;
+    }
+    if (hasUnrecordedOwnVote(copy, proposal.body.prevotes)) {
+      halt(
+        copy,
+        'Unrecorded local vote in proposal proof indicates a stale safety record',
+        effects,
+      );
+      return success(undefined);
+    }
     const seat = proposalSeat(proposal, context);
     if (seat === undefined) return failure('consensus-proposer', 'Proposal signer is not a voter');
     const round = proposal.body.entry.term;
@@ -932,6 +1260,13 @@ export function receiveProposal(
       if (round > copy.round) return success(undefined);
     }
     recordProposal(copy, context, proposal, effects);
+    if (
+      !copy.proposals.some(
+        (known) =>
+          known.body.entry.term === round && proposalHash(known) === proposalHash(proposal),
+      )
+    )
+      return success(undefined);
     haltIfFaultThresholdExceeded(copy, context, effects);
     if (copy.halted) return success(undefined);
     if (copy.decision) return drive(copy, context, secretKey, effects);
@@ -995,11 +1330,25 @@ export function receiveCommit(
       return failure('stale-entry', 'Entry was already superseded');
     if (entry.seq > context.log.head.seq + 1)
       return failure('missing-ancestor', 'Fetch missing log entries before validating this entry');
+    if (hasUnrecordedOwnVote(copy, authenticated.value.certificate)) {
+      halt(
+        copy,
+        'Unrecorded local vote in commit certificate indicates a stale safety record',
+        effects,
+      );
+      return success(undefined);
+    }
+    if (hasUnrecordedOwnEntry(copy, entry)) {
+      halt(copy, 'Unrecorded local entry indicates a stale safety record', effects);
+      return success(undefined);
+    }
     const checked = validateCertifiedEntry(authenticated.value, context);
     if (!checked.ok) {
       haltForCertifiedValue(copy, authenticated.value, checked.error.code, effects);
       return success(undefined);
     }
+    if (haltForEntryControlFault(copy, context, checked.value.entry, effects))
+      return success(undefined);
     const certified: CertifiedEntry = {
       entry: checked.value.entry,
       certificate: [...checked.value.certificate],
@@ -1027,6 +1376,9 @@ export function resumeAfterReplay(
   const checked = validateCertifiedEntry(copy.unappliedCertificate, freshContext);
   if (!checked.ok)
     return failure('consensus-repair-incomplete', 'Certified value still fails replay validation');
+  const effects: ConsensusEffect[] = [];
+  if (haltForEntryControlFault(copy, freshContext, checked.value.entry, effects))
+    return success({ state: copy, effects });
   const certified: CertifiedEntry = {
     entry: checked.value.entry,
     certificate: [...checked.value.certificate],
@@ -1080,13 +1432,23 @@ export function recoverConsensusEffects(
   const current = restored.value;
   if (current.halted) return success([{ kind: 'halt', reason: current.halted }]);
   const effects: ConsensusEffect[] = [];
-  for (const proposal of current.proposals) {
-    if (proposalSeat(proposal, context) === current.localSeat)
-      effects.push({ kind: 'broadcast-proposal', proposal });
-  }
-  for (const vote of current.votes) {
-    if (vote.body.seat === current.localSeat) effects.push({ kind: 'broadcast-vote', vote });
-  }
+  const signed = [
+    ...current.proposals
+      .filter((proposal) => proposalSeat(proposal, context) === current.localSeat)
+      .map((proposal) => ({
+        round: proposal.body.entry.term,
+        order: 0,
+        effect: { kind: 'broadcast-proposal' as const, proposal },
+      })),
+    ...current.votes
+      .filter((vote) => vote.body.seat === current.localSeat)
+      .map((vote) => ({
+        round: vote.body.term,
+        order: 1,
+        effect: { kind: 'broadcast-vote' as const, vote },
+      })),
+  ].toSorted((a, b) => b.round - a.round || a.order - b.order);
+  effects.push(...signed.map(({ effect }) => effect));
   if (current.decision) {
     effects.push({ kind: 'commit', certified: current.decision });
     return success(effects);

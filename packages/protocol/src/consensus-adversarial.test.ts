@@ -251,23 +251,43 @@ function shuffle<T>(items: readonly T[], seed: number): T[] {
 
 describe('adversarial multi-core traces', () => {
   test('a middle Byzantine proposer splits A/B across three voters without either pair committing', () => {
-    const f = setup([0, 1, 2], [0]);
+    const f = setup([0, 1, 2]);
     const trace = new Trace(f.context, honestKeys(f.fixture, [0, 2]));
-    const a = f.byzantineProposal(1, 0);
-    const b = f.byzantineProposal(1, 1);
+    // Seat 0 is the elected round-one proposer. A nil quorum moves both honest
+    // peers to round two, where seat 1 is legitimately elected proposer.
+    for (const seat of [0, 2] as const) {
+      trace.input(seat);
+      trace.timeout(seat, 'propose', 1);
+    }
+    for (const seat of [0, 2] as const) {
+      trace.deliver(trace.vote(seat === 0 ? 2 : 0, 1, 'prevote'), seat);
+      trace.injectVote(seat, f.byzantineVote(1, 1, 'prevote', null));
+    }
+    for (const seat of [0, 2] as const) {
+      trace.deliver(trace.vote(seat === 0 ? 2 : 0, 1, 'precommit'), seat);
+      trace.injectVote(seat, f.byzantineVote(1, 1, 'precommit', null));
+      trace.timeout(seat, 'precommit', 1);
+      expect(trace.state(seat).round).toBe(2);
+    }
+    const a = f.byzantineProposal(2, 0);
+    const b = f.byzantineProposal(2, 1);
     const hashA = entryHash(a.body.entry);
     const hashB = entryHash(b.body.entry);
     expect(hashA).not.toBe(hashB);
     trace.injectProposal(0, a);
     trace.injectProposal(2, b);
-    trace.injectVote(0, f.byzantineVote(1, 1, 'prevote', hashA));
-    trace.injectVote(2, f.byzantineVote(1, 1, 'prevote', hashB));
-    trace.deliver(trace.vote(0, 1, 'prevote'), 2);
-    trace.deliver(trace.vote(2, 1, 'prevote'), 0);
+    trace.injectVote(0, f.byzantineVote(1, 2, 'prevote', hashA));
+    trace.injectVote(2, f.byzantineVote(1, 2, 'prevote', hashB));
+    trace.deliver(trace.vote(0, 2, 'prevote'), 2);
+    trace.deliver(trace.vote(2, 2, 'prevote'), 0);
     for (const seat of [0, 2] as const) {
       expect(trace.state(seat).decision).toBeNull();
       expect(trace.state(seat).locked).toBeNull();
-      expect(trace.state(seat).votes.filter((vote) => vote.body.phase === 'precommit')).toEqual([]);
+      expect(
+        trace
+          .state(seat)
+          .votes.filter((vote) => vote.body.term === 2 && vote.body.phase === 'precommit'),
+      ).toEqual([]);
     }
     expect(trace.effects.filter(({ effect }) => effect.kind === 'commit')).toHaveLength(0);
   });

@@ -1,4 +1,6 @@
 import * as v from 'valibot';
+import type { SignedProposal } from './types.js';
+import { signedVoteSchema } from './votes.js';
 import {
   hashSchema as hash,
   key32Schema as key32,
@@ -102,6 +104,31 @@ const systemEvidenceSchema = v.variant('kind', [
   v.strictObject({ kind: v.literal('stub'), context: hash }),
   v.strictObject({ kind: v.literal('proof'), protocol: label, data: v.unknown() }),
 ]);
+// A proposal may itself contain a control entry. Its finite, canonical envelope is
+// checked here; the complete signed proposal is verified against the certified
+// parent by the control validator.
+const embeddedProposalSchema = v.custom<SignedProposal>(
+  (value): value is SignedProposal => typeof value === 'object' && value !== null,
+);
+export const objectiveEvidenceSchema = v.variant('kind', [
+  v.strictObject({
+    kind: v.literal('vote-equivocation'),
+    first: signedVoteSchema,
+    second: signedVoteSchema,
+  }),
+  v.strictObject({
+    kind: v.literal('proposal-equivocation'),
+    first: embeddedProposalSchema,
+    second: embeddedProposalSchema,
+  }),
+  v.strictObject({ kind: v.literal('invalid-command'), proposal: embeddedProposalSchema }),
+]);
+export const excludeProposerControlSchema = v.strictObject({
+  kind: v.literal('control'),
+  action: v.literal('exclude-proposer'),
+  offender: seatSchema,
+  evidence: objectiveEvidenceSchema,
+});
 const payloadSchema = v.variant('kind', [
   v.strictObject({ kind: v.literal('genesis'), genesis: genesisSchema }),
   v.strictObject({ kind: v.literal('command'), signed: signedCommandSchema }),
@@ -110,6 +137,7 @@ const payloadSchema = v.variant('kind', [
     input: systemInputSchema,
     evidence: systemEvidenceSchema,
   }),
+  excludeProposerControlSchema,
   // Membership is reserved for Stage 10. Its change is deliberately opaque here;
   // the entry validator must reject it until the membership adapter exists.
   v.strictObject({ kind: v.literal('membership'), change: v.unknown() }),
