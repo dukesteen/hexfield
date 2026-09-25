@@ -19,6 +19,8 @@ import woolUrl from './resources/wool.svg?no-inline';
 import woolCardUrl from './cards/wool.svg?no-inline';
 import harborUrl from './harbors/marker.svg?no-inline';
 import jettyUrl from './harbors/jetty.svg?no-inline';
+import ratioThreeUrl from './harbors/ratio-three.svg?no-inline';
+import ratioTwoUrl from './harbors/ratio-two.svg?no-inline';
 import cityUrl from './pieces/city.svg?no-inline';
 import roadUrl from './pieces/road.svg?no-inline';
 import robberUrl from './pieces/robber.svg?no-inline';
@@ -74,6 +76,7 @@ export interface BoardTextures {
   readonly numberToken: Texture;
   readonly harborMarker: Texture;
   readonly harborJetty: Texture;
+  readonly harborRatios: Readonly<Record<'2:1' | '3:1', Texture>>;
   readonly road: Texture;
   readonly settlement: Texture;
   readonly city: Texture;
@@ -161,6 +164,16 @@ export async function loadBoardTextures(
     128,
     112,
   );
+  const ratioResolution = assetResolution(
+    devicePixelRatio,
+    maxPixelRatio,
+    maxZoom,
+    hexSize,
+    0.5,
+    0.3,
+    40,
+    24,
+  );
   const pieceResolution = assetResolution(
     devicePixelRatio,
     maxPixelRatio,
@@ -201,6 +214,8 @@ export async function loadBoardTextures(
     numberToken,
     harborMarker,
     harborJetty,
+    ratioTwo,
+    ratioThree,
     road,
     settlement,
     city,
@@ -221,6 +236,8 @@ export async function loadBoardTextures(
     loadTexture('token-number', numberTokenUrl, 80, 80, tokenResolution),
     loadTexture('harbor-marker', harborUrl, SQUARE_ASSET_SIZE, SQUARE_ASSET_SIZE, harborResolution),
     loadTexture('harbor-jetty', jettyUrl, 128, 112, jettyResolution),
+    loadTexture('harbor-ratio-two', ratioTwoUrl, 40, 24, ratioResolution),
+    loadTexture('harbor-ratio-three', ratioThreeUrl, 40, 24, ratioResolution),
     loadTexture('piece-road', roadUrl, 96, 24, roadResolution),
     loadTexture(
       'piece-settlement',
@@ -261,6 +278,7 @@ export async function loadBoardTextures(
     numberToken,
     harborMarker,
     harborJetty,
+    harborRatios: { '2:1': ratioTwo, '3:1': ratioThree },
     road,
     settlement,
     city,

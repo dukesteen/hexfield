@@ -1148,16 +1148,25 @@ export class PixiBoardRenderer implements BoardRenderer {
       badge.addChild(icon);
     }
     const generic = kind === 'generic';
-    const label = new Text({
-      text: generic ? '3:1' : resource ? '2:1' : this.harborLabelFormatter(kind),
-      style: {
-        fontFamily: 'system-ui, sans-serif',
-        fontSize: this.hexSize * (generic ? 0.3 : 0.23),
-        fill: 0x18332b,
-        fontWeight: '700',
-      },
-      resolution: this.app.renderer.resolution * MAX_ZOOM,
-    });
+    // Fixed trade ratios use outlined artwork, independent of browser font metrics.
+    const ratio = generic ? '3:1' : resource ? '2:1' : null;
+    const label = ratio
+      ? new Sprite(this.textures.harborRatios[ratio])
+      : new Text({
+          text: this.harborLabelFormatter(kind),
+          style: {
+            fontFamily: 'system-ui, sans-serif',
+            fontSize: this.hexSize * 0.23,
+            fill: 0x18332b,
+            fontWeight: '700',
+            padding: 2,
+          },
+          resolution: this.app.renderer.resolution * MAX_ZOOM,
+        });
+    if (ratio) {
+      label.width = this.hexSize * (generic ? 0.5 : 0.39);
+      label.height = label.width * (24 / 40);
+    }
     label.anchor.set(0.5);
     label.position.set(0, this.hexSize * (generic ? -0.06 : 0.1));
     badge.addChild(label);
