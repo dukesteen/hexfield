@@ -1,0 +1,98 @@
+{
+  "kind": "physical-android-renderer-performance",
+  "capturedAtUtc": "2026-09-25T16:37:35.317Z",
+  "sourceCommit": "ce6bdd13bca7c4c18d717a368bee7af6562e1afc",
+  "productionBuild": {
+    "command": "GITHUB_PAGES=true pnpm --filter @cp2p/web build",
+    "path": "/hexfield/",
+    "distSha256": "a3c21e277d4751810f9d26886fb845fd60fe72ee77c31e38488fc16d55236cbf",
+    "indexSha256": "3400c3589096749ea1aca1aa2e1cd665b74c48777230fd0f7328ce974ab95df1"
+  },
+  "device": {
+    "model": "Google Pixel 7",
+    "androidVersion": "17",
+    "chromeVersion": "154.0.8037.57",
+    "cssViewport": {
+      "width": 411,
+      "height": 782
+    },
+    "devicePixelRatio": 2.625,
+    "physicalFramebuffer": {
+      "width": 1080,
+      "height": 2400
+    },
+    "maxTouchPoints": 5
+  },
+  "scenario": {
+    "game": "four-human local setup, production build, board at approximately 3x zoom",
+    "command": "node /private/tmp/hexfield-physical-final.mjs",
+    "input": "CDP two-finger zoom, then three trusted Android touchscreen swipes with adb shell input touchscreen swipe, 1800 ms each, alternating directions",
+    "measurements": "Android trusted pointermove count, browser requestAnimationFrame intervals, production renderer renderedFrames and camera coordinates sampled over active input",
+    "visualProof": "Android framebuffer captures before and after pan 1 show different terrain and token positions"
+  },
+  "zoom": {
+    "before": 0.6833491605530858,
+    "after": 3.0262604750647313
+  },
+  "pans": [
+    {
+      "index": 1,
+      "durationMs": 1793.3999999985099,
+      "trustedPointerMoves": 162,
+      "trustedPointerMovesPerSecond": 89.77361436385289,
+      "rendererFramesDuringInput": 162,
+      "rendererFramesPerSecondDuringInput": 90.33121445306936,
+      "cameraDeltaX": 145.8426513671875,
+      "cameraDeltaY": -58.48512268066406,
+      "rafP95IntervalMs": 11.100000000000364,
+      "rafP99IntervalMs": 11.199999999999818,
+      "rafIntervalsOver16_7Ms": 0,
+      "rebuiltLayersBefore": 9,
+      "rebuiltLayersAfter": 9,
+      "activeEffectsAfter": 0,
+      "queuedDisposalsAfter": 0
+    },
+    {
+      "index": 2,
+      "durationMs": 1782.4000000022352,
+      "trustedPointerMoves": 163,
+      "trustedPointerMovesPerSecond": 90.88868940742641,
+      "rendererFramesDuringInput": 162,
+      "rendererFramesPerSecondDuringInput": 90.88868940742641,
+      "cameraDeltaX": -145.8426513671875,
+      "cameraDeltaY": 58.48512268066406,
+      "rafP95IntervalMs": 11.100000000000364,
+      "rafP99IntervalMs": 11.200000000000728,
+      "rafIntervalsOver16_7Ms": 0,
+      "rebuiltLayersBefore": 9,
+      "rebuiltLayersAfter": 9,
+      "activeEffectsAfter": 0,
+      "queuedDisposalsAfter": 0
+    },
+    {
+      "index": 3,
+      "durationMs": 1786.199999999255,
+      "trustedPointerMoves": 163,
+      "trustedPointerMovesPerSecond": 90.69533087004119,
+      "rendererFramesDuringInput": 162,
+      "rendererFramesPerSecondDuringInput": 90.69533087004119,
+      "cameraDeltaX": 146.593017578125,
+      "cameraDeltaY": -58.78608703613281,
+      "rafP95IntervalMs": 11.100000000000364,
+      "rafP99IntervalMs": 11.200000000000728,
+      "rafIntervalsOver16_7Ms": 0,
+      "rebuiltLayersBefore": 9,
+      "rebuiltLayersAfter": 9,
+      "activeEffectsAfter": 0,
+      "queuedDisposalsAfter": 0
+    }
+  ],
+  "browserErrors": [],
+  "result": "All three swipes moved the camera while renderer frames exceeded 60 per second during active input; no sampled rAF interval exceeded 16.7 ms.",
+  "limitations": "Renderer frame counter and requestAnimationFrame cadence measure application/main-thread rendering, not independently captured display compositor frames. Device evidence is from this Pixel 7 and one zoomed setup-board scene; it does not prove the same rate on every device or game state.",
+  "evidenceFiles": [
+    "physical-phone-performance-raw.json",
+    "physical-phone-board-before.jpg",
+    "physical-phone-board-after.jpg"
+  ]
+}

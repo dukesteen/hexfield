@@ -15,4 +15,12 @@ pnpm dev
 
 Open <http://127.0.0.1:5187/>. Run `pnpm check` for the repository checks or `pnpm test:e2e` for browser tests.
 
-The `main` branch deploys to GitHub Pages only after CI checks, browser tests, and the simulation job pass. The Pages build uses `/hexfield/` as its asset base; local development and ordinary builds use `/`.
+The `main` branch deploys to GitHub Pages after CI checks and the simulation job pass. Browser tests run by default. The Pages build uses `/hexfield/` as its asset base; local development and ordinary builds use `/`.
+
+If `pnpm test:e2e` already passed locally on the exact commit being published, a maintainer can skip the hosted browser run with:
+
+```sh
+gh workflow run ci.yml -f skip_e2e=true
+```
+
+This manual option still runs repository checks, the build, coverage, and simulation before deployment. Pushes and ordinary manual runs keep the browser suite enabled.

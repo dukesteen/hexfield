@@ -296,3 +296,15 @@ Record decisions here as they are made. Keep earlier entries.
 - Request: Dismiss mobile player details with a downward swipe and omit the hide-hand icon when only one human is playing.
 - Decision: A downward touch gesture from the sheet header or the top of its scrollable body closes player details and restores focus to the player tile. Short, sideways, upward, and already-scrolled gestures preserve the sheet. The hand's privacy control appears only when the session has multiple controllable human seats; a single human's hand remains automatically visible.
 - Evidence: Both focused touch-browser tests pass, including scrolling, dismissal, focus restoration, multi-human privacy, and a solo hand after saved-game reload. The final `pnpm check` passes all 317 tests and the Pages production build passes. The coordinator inspected desktop and phone captures of the charcoal cockpit, player sheet, and build-cost dialog. Production route/reload checks report no failed asset requests or browser errors.
+
+## 2026-09-25: Landscape Game info panel
+
+- Request: Fix Game info in mobile landscape.
+- Finding: A later sidebar rule forced the expanded panel to the collapsed button's 44px width. The sidebar also constrained its stacking and overflow.
+- Decision: Give the open landscape panel its own width and raise its sidebar only while Game info is open.
+- Evidence: The regression reproduced the 44px panel before the fix. The corrected 844×390 touch check verifies panel bounds, visible bank cards, Event log expansion, and closing Game info. The coordinator inspected the screenshot. This change is limited to the short-landscape CSS rules; the renderer and portrait phone performance measurements remain applicable.
+
+## 2026-09-25: Optional local browser verification for releases
+
+- Request: Allow a release whose E2E tests passed locally to skip the slow GitHub browser run.
+- Decision: Manual workflow runs accept a boolean `skip_e2e`, defaulting to false. Enabling it skips Playwright installation and the E2E command. Repository checks, builds, coverage, simulation, and the Pages deployment prerequisites remain mandatory. Pushes and ordinary manual runs retain the full browser suite. Record local browser evidence for the source being released before using the flag.

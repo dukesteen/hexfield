@@ -2762,6 +2762,14 @@ button.development-card-main:focus-visible img {
     width: 44px;
     flex: 0 0 44px;
   }
+  .game-sidebar:has(.game-info[open]) {
+    z-index: 40;
+    overflow: visible;
+  }
+  .game-sidebar .game-info[open] {
+    width: min(300px, 100vw);
+    flex: 0 0 auto;
+  }
   .game-bottom {
     align-self: stretch;
     height: 100%;
