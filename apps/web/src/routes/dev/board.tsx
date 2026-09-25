@@ -59,7 +59,7 @@ export const Route = createFileRoute('/dev/board')({
   beforeLoad: () => {
     if (!import.meta.env.DEV) throw notFound();
   },
-  component: BoardDevelopmentPage,
+  component: import.meta.env.DEV ? BoardDevelopmentPage : () => null,
 });
 
 function BoardDevelopmentPage() {

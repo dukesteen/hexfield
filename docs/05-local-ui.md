@@ -65,14 +65,14 @@ interface GameSession {
 
 File-based routes in `apps/web/src/routes/`, using hash history (URLs look like `https://app/#/local`):
 
-| Route file          | URL            | Notes                                                                                              |
-| ------------------- | -------------- | -------------------------------------------------------------------------------------------------- |
-| `__root.tsx`        | —              | providers, app shell, error boundary, 404 (`notFoundComponent`)                                    |
-| `index.tsx`         | `#/`           | home                                                                                               |
-| `local/new.tsx`     | `#/local/new`  | new local game setup                                                                               |
-| `local/$gameId.tsx` | `#/local/<id>` | local game screen. The loader rehydrates a saved local game via TanStack Query (`ensureQueryData`) |
-| `dev/board.tsx`     | `#/dev/board`  | renderer test page; excluded from production builds (`import.meta.env.DEV` guard in `beforeLoad`)  |
-| `settings.tsx`      | `#/settings`   |                                                                                                    |
+| Route file          | URL            | Notes                                                                                                                                      |
+| ------------------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `__root.tsx`        | —              | providers, app shell, error boundary, 404 (`notFoundComponent`)                                                                            |
+| `index.tsx`         | `#/`           | home                                                                                                                                       |
+| `local/new.tsx`     | `#/local/new`  | new local game setup                                                                                                                       |
+| `local/$gameId.tsx` | `#/local/<id>` | local game screen. The loader rehydrates a saved local game via TanStack Query (`ensureQueryData`)                                         |
+| `dev/board.tsx`     | `#/dev/board`  | renderer test page; production returns Not Found. The preview and DEV hook are pruned, though an unloaded route stub remains in the build. |
+| `settings.tsx`      | `#/settings`   |                                                                                                                                            |
 
 Later stages add `online/create`, `join/$roomId` (stage 09), `game/$gameId` (stage 09/10), `history`, `replay/$gameId` (stage 10/17), `editor` (stage 17).
 

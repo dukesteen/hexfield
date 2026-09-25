@@ -197,7 +197,16 @@ test('four zero-delay bots finish a default ten-point game on the game screen', 
       { timeout: 150_000 },
     )
     .not.toBeNull();
-  await expect(page.getByRole('region', { name: 'Game over' })).toBeVisible();
+  const gameOver = page.getByRole('region', { name: 'Game over' });
+  await expect(gameOver).toBeVisible();
+  const winnerSeat = await page.evaluate(() => {
+    const hook: DevHook | undefined = Reflect.get(window, '__cp2p');
+    return hook?.session.getState().result?.winner ?? null;
+  });
+  if (winnerSeat === null) throw new Error('Completed game has no winner');
+  await expect(
+    gameOver.getByRole('heading', { name: `Player ${winnerSeat + 1} wins` }),
+  ).toBeVisible();
   const target = await page.evaluate(() => {
     const hook: DevHook | undefined = Reflect.get(window, '__cp2p');
     const base = hook?.session.getState().config.options.base;

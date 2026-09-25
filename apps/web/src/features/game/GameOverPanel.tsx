@@ -22,6 +22,7 @@ export function GameOverPanel({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(false);
   const finalHidden = useSessionStore((store) => store.finalHiddenVictoryPoints);
+  const winner = presentation.players.find((player) => player.seat === state.result?.winner)?.name;
   const dice = diceHistogram(events);
   const peak = Math.max(1, ...dice.map((entry) => entry.count));
   const run = async (action: () => Promise<void>) => {
@@ -37,7 +38,11 @@ export function GameOverPanel({
   };
   return (
     <section className="game-over-panel" aria-label={t('game:gameOver')}>
-      <h2>{t('game:gameOver')}</h2>
+      <h2>
+        {t('game:winner', {
+          player: winner ?? t('game:playerFallback', { number: (state.result?.winner ?? 0) + 1 }),
+        })}
+      </h2>
       <p>{t('game:finalScore')}</p>
       <div className="final-scores">
         {state.config.seats.map((seat) => {

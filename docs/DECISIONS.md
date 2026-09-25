@@ -204,6 +204,8 @@ Record decisions here as they are made. Keep earlier entries.
 - Consultation: At the user's request, Claude reviewed the crowded stock labels and floating decrement buttons. Adopt a neutral per-card stock count with a hand/bank key, a distinct selected-quantity badge, and a compact decrement tab with a 44px hit area. An explicit stock source distinguishes the player's hand from the bank; hidden bank counts remain omitted. Stock and rate descriptions are attached to accessible button labels. The prompt is saved in `packages/renderer/src/assets/prompts/trade-card-controls.md`.
 - Request: Use the same resource-card selector for discarding. Preserve the engine's exact required count and per-resource hand limits, show selected/required progress, and remove cards only after confirmation.
 - Request: Make Clear less bulky. Render it as borderless text while retaining a 44px touch target and visible keyboard focus. A browser check reproduced focus loss when a decrement control disappeared at zero; return focus to that card's Add control, and return focus to the first card after Clear.
+- Review: Collapsing the header moved the winner announcement into the game menu. The game-over panel now names the winner in its visible heading, while its accessible region label remains Game over.
+- Production check: The route loader already blocked the development board in production, but its preview component still appeared in an unused bundle. A DEV-only component reference removes the preview implementation and test hook from production JavaScript. The router still emits a small unloaded route stub.
 
 ## 2026-09-25: Readable public production payouts
 
