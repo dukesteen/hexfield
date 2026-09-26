@@ -3,6 +3,9 @@ import { parsePeerId, signObject, verifyObject } from '@cp2p/crypto';
 import { failure, success } from '@cp2p/engine';
 import type { Engine, GameEvent, GameState, Input, Result, Seat } from '@cp2p/engine';
 import { entryBody, entryHash, genesisDigest } from './genesis.js';
+import { captureCryptoPending, validateCryptoTransition } from './crypto-context.js';
+import type { CryptoContext } from './crypto-context.js';
+import type { BeaconDerivations } from './beacon-state.js';
 import { logEntrySchema, signedCommandSchema } from './schemas.js';
 import type { PeerId } from './transport.js';
 import type {
@@ -21,6 +24,7 @@ export interface LogContext {
   head: LogEntry;
   state: GameState;
   lastNonces: ReadonlyMap<Seat, number>;
+  crypto: CryptoContext | null;
 }
 
 export interface EntryPolicy {
@@ -29,6 +33,7 @@ export interface EntryPolicy {
   sequencer: PeerId;
   /** Simulation opt-in; stub evidence binds inputs but cannot prove hidden facts or deadlines. */
   allowStub?: boolean;
+  randomDerivations?: BeaconDerivations;
   verifyCommand?: (command: SignedCommand, context: LogContext) => Result<void>;
   verifySystem?: (
     input: Extract<Input, { kind: 'system' }>,
@@ -45,6 +50,7 @@ export interface ValidatedEntry {
   state: GameState;
   events: readonly GameEvent[];
   lastNonces: ReadonlyMap<Seat, number>;
+  crypto: CryptoContext | null;
 }
 
 export function signCommand(body: CommandBody, secretKey: Uint8Array): SignedCommand {
@@ -100,6 +106,8 @@ function entryInput(entry: LogEntry, context: LogContext, policy: EntryPolicy): 
     return failure('membership-unavailable', 'Membership changes need the membership verifier');
   if (payload.kind === 'control')
     return failure('control-unavailable', 'Control entries need the certified evidence verifier');
+  if (payload.kind === 'crypto')
+    return failure('crypto-unavailable', 'Crypto entries require built-in evidence verification');
   if (payload.kind === 'command') {
     const command = validateSignedCommand(payload.signed, context);
     if (!command.ok) return command;
@@ -165,6 +173,14 @@ export function validateNextEntry(
   )
     return failure('sequencer-signature', 'Entry signature does not match the sequencer');
   try {
+    const transition = validateCryptoTransition(
+      context.genesis,
+      context.crypto,
+      context.state,
+      entry,
+      policy.randomDerivations,
+    );
+    if (!transition.ok) return transition;
     if (entry.payload.kind === 'control') {
       if (!policy.verifyControl)
         return failure(
@@ -186,10 +202,27 @@ export function validateNextEntry(
         state: context.state,
         events: [],
         lastNonces: new Map(context.lastNonces),
+        crypto: transition.value.crypto,
       });
     }
-    const input = entryInput(entry, context, policy);
+    const input = transition.value.handled
+      ? success(transition.value.input)
+      : entryInput(entry, context, policy);
     if (!input.ok) return input;
+    if (input.value === null) {
+      const priorHash = toHex(hashValue(context.state));
+      if (priorHash !== context.head.stateHash || entry.stateHash !== priorHash)
+        return failure('crypto-state', 'Cryptographic entries must preserve engine state');
+      return success({
+        entry,
+        hash: entryHash(entry),
+        input: null,
+        state: context.state,
+        events: [],
+        lastNonces: new Map(context.lastNonces),
+        crypto: transition.value.crypto,
+      });
+    }
     const applied = context.engine.apply(context.state, input.value);
     if (!applied.ok) return applied;
     const violations = context.engine.checkInvariants(applied.value.state);
@@ -197,6 +230,17 @@ export function validateNextEntry(
       return failure('entry-state', 'Entry violates engine invariants', { violations });
     if (entry.stateHash !== toHex(hashValue(applied.value.state)))
       return failure('state-hash', 'Entry and locally derived public state hashes differ');
+    const captured =
+      transition.value.crypto === null
+        ? success(null)
+        : captureCryptoPending(
+            transition.value.crypto,
+            context.engine,
+            applied.value.state,
+            { seq: entry.seq, hash: entryHash(entry) },
+            policy.randomDerivations,
+          );
+    if (!captured.ok) return captured;
     const lastNonces = new Map(context.lastNonces);
     if (entry.payload.kind === 'command') {
       const { seat, nonce } = entry.payload.signed.body;
@@ -209,6 +253,7 @@ export function validateNextEntry(
       state: applied.value.state,
       events: applied.value.events,
       lastNonces,
+      crypto: captured.value,
     });
   } catch {
     return failure('entry-verification-failed', 'Entry proof or state derivation failed');

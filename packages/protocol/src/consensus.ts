@@ -206,6 +206,7 @@ function consensusContextHash(context: ProposalContext): string {
     hashValue({
       voters: context.membership.voters,
       excludedProposers: [...context.excludedProposers].toSorted((a, b) => a - b),
+      crypto: context.log.crypto,
     }),
   );
 }

@@ -1,0 +1,190 @@
+{
+  "bundleSha256": "d8514dbc3039e730796b5d93f32883aa8d8d3bab60b1e942e40d1b69519082dd",
+  "files": [
+    {
+      "path": "docs/verification/stage07/step2-review-prompt.md",
+      "sha256": "674ccb088f48a324c7c625172b626494b046e120a3b165c107d4a17045372f69",
+      "bytes": 3440
+    },
+    {
+      "path": "docs/07-fair-randomness-hidden-info.md",
+      "sha256": "baed5ad74bb69dc64c10be461fb3e1c5d19bf8ee9d55bbbe576c4393c642386d",
+      "bytes": 36314
+    },
+    {
+      "path": "packages/protocol/src/beacon-contributions.test.ts",
+      "sha256": "6b480376c97f5d8c15b773d167b493b830f5843b303dd3834d130e8a38fae27d",
+      "bytes": 10175
+    },
+    {
+      "path": "packages/protocol/src/beacon-contributions.ts",
+      "sha256": "5b0dc106387a55fb2e51c64dad5515ce8c84840878349dcc4c91c0eff0e2d85a",
+      "bytes": 6526
+    },
+    {
+      "path": "packages/protocol/src/beacon-extension.test.ts",
+      "sha256": "6315935e80a5f3ae357e0f9c8419a08f74611df4d97b3ea93c05ac75e9545e4a",
+      "bytes": 9486
+    },
+    {
+      "path": "packages/protocol/src/beacon-extension.ts",
+      "sha256": "ae8f7198c16d40f65c21040bf16f02c6902fc43b6ea8f6e473e4b482ab329a44",
+      "bytes": 6935
+    },
+    {
+      "path": "packages/protocol/src/beacon-inbox.ts",
+      "sha256": "9e02cd52c06b25cd14abfcda269d6a4a8c3c680ea81d1cf16af32f147e9f5e34",
+      "bytes": 4576
+    },
+    {
+      "path": "packages/protocol/src/beacon-log.test.ts",
+      "sha256": "73d7017844b107c28c44f8b8b2d46852ca5451c4d423bebb1a0637658aa381ca",
+      "bytes": 25395
+    },
+    {
+      "path": "packages/protocol/src/beacon-replica.test.ts",
+      "sha256": "353f1fb32feb4de8d3dd56f9eeb9e5d267bd891ba8bab101407bf937943fddf7",
+      "bytes": 19336
+    },
+    {
+      "path": "packages/protocol/src/beacon-state.test.ts",
+      "sha256": "4578911fe3cc3cf55e64dce69f1631f2c79af1678973d45e66d95fec8619873d",
+      "bytes": 11181
+    },
+    {
+      "path": "packages/protocol/src/beacon-state.ts",
+      "sha256": "a280956782550a92a1272bb3b34b87fac1c6016910b06ba3ba48e16272e27671",
+      "bytes": 14304
+    },
+    {
+      "path": "packages/protocol/src/beacon.test.ts",
+      "sha256": "a26c19a15c4f2da53d3c694df448734e64eba85311ff14060a715cca422ae3ff",
+      "bytes": 8499
+    },
+    {
+      "path": "packages/protocol/src/beacon.ts",
+      "sha256": "5d04d5861933dd7f05e6f450871287f491c94fbc1e3185e06a8bb5d39a6904e1",
+      "bytes": 7545
+    },
+    {
+      "path": "packages/protocol/src/random-derivations.ts",
+      "sha256": "95f1a75ecb94bb7d788e5dfa9eb5863815d987728f4a3fed1ef415e2fb3f5450",
+      "bytes": 15247
+    },
+    {
+      "path": "packages/protocol/src/random-derivations.test.ts",
+      "sha256": "c4a867a9f0e4117f97096114c90fbb99fd6afffa670105625a169b62c26aaa14",
+      "bytes": 12698
+    },
+    {
+      "path": "packages/protocol/src/crypto-context.ts",
+      "sha256": "c1ea67e73208b63e4faad7eaf2475a5b495a5c9ed872d791ac3f68ff6fcf1265",
+      "bytes": 6163
+    },
+    {
+      "path": "packages/protocol/src/log.ts",
+      "sha256": "e9a5fd56bb273508b5f57625609d6efefe51beb940a3cc4bf73d9b7998f27a23",
+      "bytes": 10780
+    },
+    {
+      "path": "packages/protocol/src/replay.ts",
+      "sha256": "c0e5555c77bc3c9976ce3c43589254fbd23308ddfc39b74d982bb75595a248a7",
+      "bytes": 5537
+    },
+    {
+      "path": "packages/protocol/src/proposal.ts",
+      "sha256": "64418b7aed439a482ba201caf36da8a21f76f735fbe2e85da9b03c5cf78d4873",
+      "bytes": 12026
+    },
+    {
+      "path": "packages/protocol/src/replicated-log.ts",
+      "sha256": "0f1f9ed028f120aa56bc8267d806b0f83ca54782a234afaecb8383cf9954aeb2",
+      "bytes": 56801
+    },
+    {
+      "path": "packages/protocol/src/p2p-session.ts",
+      "sha256": "63bf8aa52892c0ffc421214c7debd4f6d4c109cd87dda9d600ff77fdd9717109",
+      "bytes": 14998
+    },
+    {
+      "path": "packages/protocol/src/p2p-session.test.ts",
+      "sha256": "169fd92f9cea82aac005ef8f7187d78004b07a7ff6787672a8f33edcf4fa4232",
+      "bytes": 24989
+    },
+    {
+      "path": "packages/protocol/src/genesis.ts",
+      "sha256": "e151258e4a4730806c274c8d1725a2d318449aca9765e338eb12ed8d4fd4dd4a",
+      "bytes": 7490
+    },
+    {
+      "path": "packages/protocol/src/schemas.ts",
+      "sha256": "dcde46ca1f5ac5b9c70c7a9f86a58dcd53de3bf65aced9706d2a8b5958a3c0c7",
+      "bytes": 5438
+    },
+    {
+      "path": "packages/protocol/src/schema-values.ts",
+      "sha256": "5f42a01a0d5a59abc1b93a5462a010ec56609ec44c050edd57e85791f5f0ef96",
+      "bytes": 829
+    },
+    {
+      "path": "packages/protocol/src/types.ts",
+      "sha256": "b1c82708be9ed72f854a6f794774d2c8b60cbfa7008bbe8c1c3ebedad1b36a4e",
+      "bytes": 2923
+    },
+    {
+      "path": "packages/protocol/src/messages.ts",
+      "sha256": "cf710cdc553eeeb5f03021c9eea4d10119cade325bd820fd559e98b54aceb9ae",
+      "bytes": 3593
+    },
+    {
+      "path": "packages/protocol/src/validation.ts",
+      "sha256": "bb646520abbab0596ff5d99f1b7f6ffaeed264260c3030917725a050acef5f23",
+      "bytes": 887
+    },
+    {
+      "path": "packages/protocol/src/consensus.ts",
+      "sha256": "3e311c0a24bfea1305a9be7c8dae62d918845d2bccc6b314d2d8c6ab8ade14fb",
+      "bytes": 54886
+    },
+    {
+      "path": "packages/protocol/src/consensus-controller.ts",
+      "sha256": "f569308ba250d8ed9c0364f4d07860d9041362c33390d225cbcb148a4827e4f2",
+      "bytes": 10208
+    },
+    {
+      "path": "packages/protocol/src/journal.ts",
+      "sha256": "027bffef4385e0c983f407b3379984d256b5b25690813bd88134cf34473b8e1a",
+      "bytes": 4415
+    },
+    {
+      "path": "packages/crypto/src/hash-chain.ts",
+      "sha256": "27f704961bc6fc0a7fc8aeb215d46a8c7d5963e20a2cf2bfa33a61898e5f4735",
+      "bytes": 1599
+    },
+    {
+      "path": "packages/crypto/src/uniform.ts",
+      "sha256": "4259bdc4873e4267e05a96632c0f95cd52ef7b4273f807d083ef8cce7c9cec60",
+      "bytes": 1689
+    },
+    {
+      "path": "packages/crypto/src/derivation.ts",
+      "sha256": "76bfa6e36fb943a462bb09f7b0acb1786235837e6297d4a4275bdcfbff3db30a",
+      "bytes": 2526
+    },
+    {
+      "path": "packages/crypto/src/identity.ts",
+      "sha256": "a892b57073e7208f99c37480dde87662a6274236f5dc2ad18384a7bcc8c28688",
+      "bytes": 5106
+    },
+    {
+      "path": "packages/codec/src/canonical.ts",
+      "sha256": "bc51a4fa7022f6ed6af92b191672526ee91f357395a116e36b9c5c01076b5049",
+      "bytes": 7550
+    },
+    {
+      "path": "packages/codec/src/hash.ts",
+      "sha256": "e2d516f007606105f6a01e386329f1bdbf6ce3940255204690550f5bb1b64ae8",
+      "bytes": 625
+    }
+  ]
+}

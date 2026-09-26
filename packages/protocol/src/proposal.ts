@@ -170,6 +170,8 @@ export function signProposal(body: ProposalBody, secretKey: Uint8Array): SignedP
 function validateEntry(entry: LogEntry, context: ProposalContext): Result<ValidatedEntry> {
   if (context.membership.genesisDigest !== genesisDigest(context.log.genesis))
     return failure('proposal-context', 'Membership does not match the game genesis');
+  if (context.log.crypto && context.log.crypto.epoch !== context.membership.epoch)
+    return failure('proposal-context', 'Cryptographic state does not match the membership epoch');
   let proposer: VoteContext['voters'][number];
   try {
     proposer = proposerFor(entry.seq, entry.term, context.membership, context.excludedProposers);
@@ -211,6 +213,7 @@ export function advanceContext(
       head: validated.entry,
       state: validated.state,
       lastNonces: validated.lastNonces,
+      crypto: validated.crypto,
     },
     excludedProposers,
   });

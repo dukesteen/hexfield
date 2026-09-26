@@ -52,12 +52,42 @@ Run the online protocol, engine and crypto together in a dedicated worker. The m
 - Each seat derives a chain seed `x_L = HKDF(master, "beacon")` and computes `x_{i} = H(x_{i+1})` down to `x_0`, with `L = 4096` (enough for very long games; if a game ever exhausts it, run a "chain extension" round where each seat commits a fresh chain tip, signed and logged).
 - Genesis contains each seat's tip `x_0`.
 
+The source must reproduce the same chain after a crash, even if an extension tip
+was generated before its outgoing record was persisted. `createBeaconSecretSource`
+derives each seed from the retained canonical master scalar and
+`{ ceremonyId, seat, chainEpoch, length }`, using `beaconSeed` for epoch zero and
+`beaconExtension` thereafter. The ceremony, seat and configured length remain
+unchanged on restore. Its default length is 4,096; it retains at most two derived
+chains in memory. The master and chain buffers are cleared on disposal as a
+best-effort memory cleanup, not a guarantee about JavaScript memory copies.
+
 ### Each beacon round k (k = 1, 2, …)
 
-- Each **participating** seat reveals `x_k` via `SYS_CONTRIB { round: "beacon:k", data: x_k }`. Anyone verifies `H(x_k) == x_{k-1}` (the previously revealed value, or the tip).
+- Each **participating** seat reveals its next chain link through `SYS_CONTRIB { genesisDigest, contribution }`. A `beacon-reveal` contribution signs the operation ID, seat, chain index and preimage. Anyone verifies `H(x_k) == x_{k-1}` (the previously revealed value, or the tip).
 - Output: `R_k = SHA-256(canonical(["cp2p/v1/beacon", operationContext, k, orderedReveals]))`, where each ordered reveal includes its participant ID. Use canonical tuples, never ambiguous concatenation. The operation context fixes the participant order and previous tips.
 - Participating seats are the human seats eligible when the request is certified. That set remains frozen for the round, including a later departed participant whose contribution must be recovered. Subsequent rounds use the certified updated set. Bot seats have no beacon chain and do not participate. One independent honest human participant is enough for unbiasability.
 - Evidence for the `system` entry: the list of reveals. Every peer verifies each preimage and recomputes the output.
+
+The operation ID hashes the full frozen context, including each chain's epoch,
+length, next index and previous tip. The global beacon round advances once per
+completed request; an individual chain index restarts at one after extension.
+If any chain is exhausted, those participants first sign `beacon-extension`
+contributions containing their next chain epoch, length and tip. A certified
+`beacon-extend` entry installs the tips while preserving engine state and the
+original request anchor. No participant reveals the next round before that entry.
+
+`CryptoContext` is derived by certified replay. It is included in checked
+snapshots and the local voting context digest; `stateHash` continues to hash only
+engine state. The entry payload carries the ordered beacon evidence. Starting
+seat and dice results use proof protocol `beacon-v1` and built-in verification,
+so a generic system-proof callback cannot approve a different result. For a hidden
+steal, a state-preserving `beacon-fixed` entry records the index before the victim
+prepares the transfer proof described in §5.
+
+Each participant persists its signed outgoing contribution before transmission.
+Retries and restoration reuse that record. The delivery cache admits one verified
+contribution per expected seat for the current operation and does not replace it
+from a delayed, duplicate or future packet. Only a certificate advances chain tips.
 
 ### Derivation of outcomes from `R_k`
 

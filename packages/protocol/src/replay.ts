@@ -3,6 +3,7 @@ import { failure, success } from '@cp2p/engine';
 import type { Engine, GameEvent, Input, Result } from '@cp2p/engine';
 import { entryHash, genesisDigest, validateGenesisEntry } from './genesis.js';
 import { objectiveEvidenceSeq, validateObjectiveAccusation } from './control.js';
+import { initializeCryptoContext } from './crypto-context.js';
 import type { GenesisPolicy } from './genesis.js';
 import type { ValidatedEntry } from './log.js';
 import { advanceContext, proposerFor, validateCertifiedEntry } from './proposal.js';
@@ -31,8 +32,16 @@ export function initialProposalContext(
   const checked = validateGenesisEntry(genesisEntry, engine, policy.genesis);
   if (!checked.ok) return checked;
   const { genesis, state, entry } = checked.value;
+  const crypto = initializeCryptoContext(
+    genesis,
+    engine,
+    state,
+    entry,
+    policy.entry.randomDerivations,
+  );
+  if (!crypto.ok) return crypto;
   return success({
-    log: { genesis, engine, state, head: entry, lastNonces: new Map() },
+    log: { genesis, engine, state, head: entry, lastNonces: new Map(), crypto: crypto.value },
     membership: {
       genesisDigest: genesisDigest(genesis),
       epoch: 0,
@@ -118,6 +127,7 @@ export function snapshotFromContext(context: ProposalContext) {
       seq: context.log.head.seq,
       hash: entryHash(context.log.head),
       state: context.log.state,
+      crypto: context.log.crypto,
       lastNonces: [...context.log.lastNonces].toSorted(([a], [b]) => a - b),
       membership: context.membership,
       excludedProposers: context.excludedProposers,

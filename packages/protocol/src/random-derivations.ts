@@ -1,3 +1,4 @@
+import { canonicalDecode, canonicalEncode } from '@cp2p/codec';
 import { uniformInt } from '@cp2p/crypto';
 import { failure, success } from '@cp2p/engine';
 import type { GameState, Pending, Result, Seat, SystemInput } from '@cp2p/engine';
@@ -290,6 +291,11 @@ function readType(pending: unknown): string | null {
   }
 }
 
+function detached<T>(value: T): T {
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Canonical round-trip preserves the JSON protocol value's shape.
+  return canonicalDecode(canonicalEncode(value)) as T;
+}
+
 /** Creates a closed registry; extension handlers cannot replace a base request type. */
 export function createRandomDerivations(additional: readonly RandomDerivation[] = []): {
   supports(pending: unknown): boolean;
@@ -302,6 +308,7 @@ export function createRandomDerivations(additional: readonly RandomDerivation[] 
   ): Result<BeaconOutcome>;
 } {
   const entries = new Map<string, RandomDerivation>();
+  const extensions = new Set<string>();
   for (const type of BASE_TYPES) entries.set(type, baseDerivation(type));
   for (const candidate of additional) {
     if (
@@ -322,6 +329,7 @@ export function createRandomDerivations(additional: readonly RandomDerivation[] 
       derive,
     };
     entries.set(type, Object.freeze(registered));
+    extensions.add(type);
   }
   const registry = new Map(entries);
   return Object.freeze({
@@ -337,9 +345,11 @@ export function createRandomDerivations(additional: readonly RandomDerivation[] 
       try {
         const type = readType(pending);
         const entry = type === null ? undefined : registry.get(type);
-        return entry
-          ? entry.validate(state, pending)
-          : fail('unsupported-random-request', 'Random request type is not registered');
+        if (!entry)
+          return fail('unsupported-random-request', 'Random request type is not registered');
+        return type !== null && extensions.has(type)
+          ? entry.validate(detached(state), detached(pending))
+          : entry.validate(state, pending);
       } catch {
         return fail('invalid-random-request', 'Random request could not be validated');
       }
@@ -350,9 +360,29 @@ export function createRandomDerivations(additional: readonly RandomDerivation[] 
         const entry = type === null ? undefined : registry.get(type);
         if (!entry)
           return fail('unsupported-random-request', 'Random request type is not registered');
-        const valid = entry.validate(state, pending);
+        if (type === null || !extensions.has(type)) {
+          const valid = entry.validate(state, pending);
+          return valid.ok ? entry.derive(state, pending, seed, context) : valid;
+        }
+        if (!(seed instanceof Uint8Array) || seed.length !== 32)
+          return fail('random-derivation-failed', 'Beacon seed must be exactly 32 bytes');
+        const valid = entry.validate(detached(state), detached(pending));
         if (!valid.ok) return valid;
-        return entry.derive(state, pending, seed, context);
+        const result = entry.derive(
+          detached(state),
+          detached(pending),
+          seed.slice(),
+          detached(context),
+        );
+        if (!result.ok) return result;
+        const outcome = detached(result.value);
+        const systemType = outcome.kind === 'system' ? outcome.input.type : 'STEAL_RESULT';
+        if (systemType !== pending.systemType)
+          return fail(
+            'random-result-type',
+            'Random result must answer the frozen pending system type',
+          );
+        return success(outcome);
       } catch {
         return fail('random-derivation-failed', 'Random request could not be derived');
       }

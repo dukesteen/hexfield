@@ -62,6 +62,7 @@ function setup(voterSeats: readonly Seat[], excludedProposers: readonly Seat[] =
     engine: fixture.engine,
     head,
     state: fixture.state,
+    crypto: null,
     lastNonces: new Map(),
   };
   const digest = genesisDigest(genesis);

@@ -1,4 +1,4 @@
-import { createBaseEngine } from '@cp2p/engine';
+import { createBaseEngine, success } from '@cp2p/engine';
 import type { GameState, Result } from '@cp2p/engine';
 import { describe, expect, test } from 'vitest';
 import { createRandomDerivations, randomDerivations } from './random-derivations.js';
@@ -188,6 +188,33 @@ describe('base beacon random derivations', () => {
     expect(randomDerivations.derive(state, request, new Uint8Array(31), context).ok).toBe(false);
   });
 
+  test('rejects an extension result that answers a different pending system type', () => {
+    const registry = createRandomDerivations([
+      {
+        type: 'extensionChoice',
+        validate: () => success(undefined),
+        derive: () =>
+          success({ kind: 'system', input: { kind: 'system', type: 'DICE_RESULT', dice: [1, 1] } }),
+      },
+    ]);
+    expect(
+      registry.derive(state, pending('extensionChoice', {}, 'EXTENSION_RESULT'), seed, context),
+    ).toMatchObject({ ok: false, error: { code: 'random-result-type' } });
+  });
+
+  test('rejects a hidden steal index for an unrelated module request', () => {
+    const registry = createRandomDerivations([
+      {
+        type: 'extensionChoice',
+        validate: () => success(undefined),
+        derive: () => success({ kind: 'steal-index', thief: 0, victim: 1, handSize: 1, index: 0 }),
+      },
+    ]);
+    expect(
+      registry.derive(state, pending('extensionChoice', {}, 'EXTENSION_RESULT'), seed, context),
+    ).toMatchObject({ ok: false, error: { code: 'random-result-type' } });
+  });
+
   test('supports explicit module extensions while rejecting replacement and duplicate types', () => {
     let extensionCalls = 0;
     const extension: RandomDerivation = {
@@ -229,5 +256,73 @@ describe('base beacon random derivations', () => {
     expect(() => createRandomDerivations([extension, { ...extension }])).toThrow(
       /already registered/,
     );
+  });
+
+  test('a failing extension cannot mutate the certified inputs it inspected', () => {
+    const request = pending('extensionChoice', { marker: 'original' }, 'EXTENSION_RESULT');
+    const publicState = randomStateWithHandSize(3);
+    const operation = { ...context };
+    const registry = createRandomDerivations([
+      {
+        type: 'extensionChoice',
+        validate(candidateState, candidatePending) {
+          Object.assign(candidateState.config, { seats: [5] });
+          Object.assign(candidatePending.request, { marker: 'changed' });
+          return { ok: false, error: { code: 'extension-rejected', message: 'Rejected' } };
+        },
+        derive: () => {
+          throw new Error('Derivation must not run');
+        },
+      },
+    ]);
+    expect(registry.validate(publicState, request).ok).toBe(false);
+    expect(registry.derive(publicState, request, seed, operation).ok).toBe(false);
+    expect(publicState.config.seats).toEqual([0, 1]);
+    expect(request.request).toEqual({ marker: 'original', type: 'extensionChoice' });
+    expect(operation).toEqual(context);
+  });
+
+  test('a successful extension receives separate copies and returns a detached outcome', () => {
+    const request = pending('extensionChoice', { marker: 'original' }, 'EXTENSION_RESULT');
+    const publicState = randomStateWithHandSize(3);
+    const operation = { ...context };
+    const localSeed = seed.slice();
+    const outcome = {
+      kind: 'system' as const,
+      input: { kind: 'system' as const, type: 'EXTENSION_RESULT' as const, choice: 7 },
+    };
+    const registry = createRandomDerivations([
+      {
+        type: 'extensionChoice',
+        validate(candidateState, candidatePending) {
+          Object.assign(candidateState.config, { seats: [5] });
+          Object.assign(candidatePending.request, { marker: 'changed' });
+          return { ok: true, value: undefined };
+        },
+        derive(candidateState, candidatePending, candidateSeed, candidateContext) {
+          expect(candidateState.config.seats).toEqual([0, 1]);
+          expect(candidatePending.request).toEqual(request.request);
+          expect(candidateSeed).toEqual(seed);
+          expect(candidateContext).toEqual(context);
+          Object.assign(candidateState.config, { seats: [5] });
+          Object.assign(candidatePending.request, { marker: 'changed' });
+          candidateSeed.fill(0);
+          if (typeof candidateContext !== 'object' || candidateContext === null)
+            throw new Error('Expected object context');
+          Object.assign(candidateContext, { parent: -1 });
+          return { ok: true, value: outcome };
+        },
+      },
+    ]);
+    const result = value(registry.derive(publicState, request, localSeed, operation));
+    outcome.input.choice = 99;
+    expect(result).toEqual({
+      kind: 'system',
+      input: { kind: 'system', type: 'EXTENSION_RESULT', choice: 7 },
+    });
+    expect(publicState.config.seats).toEqual([0, 1]);
+    expect(request.request).toEqual({ marker: 'original', type: 'extensionChoice' });
+    expect(localSeed).toEqual(seed);
+    expect(operation).toEqual(context);
   });
 });

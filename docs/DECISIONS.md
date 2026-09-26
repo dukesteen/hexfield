@@ -369,3 +369,12 @@ Record decisions here as they are made. Keep earlier entries.
 - Review: The user approved the Step 1 source packet and future project reviews. The [Claude findings and response](verification/stage07/step1-review-response.md) record the completed read-only review and follow-up fixes.
 - Decision: Require expected escrow threshold, master key and recipient at the Feldman verification API. Separate proof nonce modes inside helpers, even when callers repeat a context. Provide one CDS verifier for shared opening/range branch challenges and the full outer Fiat-Shamir transcript.
 - Validation: Add independent RFC map/expansion vectors and malicious transcript regressions. Helper tests and review do not replace the later application-statement checks, worker benchmarks or full-game adversarial acceptance.
+
+## 2026-09-26: Certified beacon delivery and replay
+
+- Stage: 07, Step 2. The beacon uses signed `SYS_CONTRIB` envelopes bound to the complete frozen operation, replacing the earlier round-name-only wire shorthand in the stage document.
+- Decision: Keep engine `stateHash` unchanged in meaning. Fold public cryptographic metadata from certified evidence, include it in snapshots and the voting context digest, and verify random outcomes inside log validation. Generic system callbacks cannot override starting-seat or dice verification.
+- Decision: Persist each local outgoing contribution before sending. Derive initial and extended chains deterministically from the retained master, ceremony, seat, chain epoch and length, so a crash before writing cannot choose a different chain. On a storage conflict, reuse the verified winning record; on corrupt storage, halt. Network send failures leave the record available for periodic retry. Ignore duplicate or stale contributions without another consensus write.
+- Decision: Certify exhausted-chain extensions before releasing any next-round preimage. Preserve the original request anchor through extensions and proposer controls. Fix a hidden steal index in its own engine-state-preserving entry before later transfer proofs.
+- Decision: Give session drivers full certified evidence during live commits and restore. Detach callback inputs and custom random-derivation inputs so they cannot alter the authoritative replay state.
+- Boundary: Browser secret storage, certified membership changes, recovered contributions and the later private transfer path remain separate unfinished steps. A memory contribution store is only a test adapter.

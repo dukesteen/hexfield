@@ -1,4 +1,5 @@
 import * as v from 'valibot';
+import { beaconContributionSchema } from './beacon-contributions.js';
 import { certifiedEntrySchema, signedProposalSchema } from './proposal.js';
 import {
   hashSchema,
@@ -14,6 +15,11 @@ import { decodeMessage, encodeMessage } from './wire.js';
 import type { Result } from '@cp2p/engine';
 
 const submitSchema = v.strictObject({ t: v.literal('SUBMIT'), cmd: signedCommandSchema });
+const systemContributionSchema = v.strictObject({
+  t: v.literal('SYS_CONTRIB'),
+  genesisDigest: key32Schema,
+  contribution: beaconContributionSchema,
+});
 const proposalMessageSchema = v.strictObject({
   t: v.literal('PROPOSAL'),
   proposal: signedProposalSchema,
@@ -69,9 +75,10 @@ const heartbeatSchema = v.strictObject({
 const pingSchema = v.strictObject({ t: v.literal('PING'), n: nonnegativeIntegerSchema });
 const pongSchema = v.strictObject({ t: v.literal('PONG'), n: nonnegativeIntegerSchema });
 
-/** Strict Stage 06 message envelope; every payload is validated before use. */
+/** Strict message envelope; signatures and operation contexts are checked before use. */
 export const protocolMessageSchema = v.variant('t', [
   submitSchema,
+  systemContributionSchema,
   proposalMessageSchema,
   voteMessageSchema,
   commitSchema,
@@ -88,12 +95,12 @@ export const protocolMessageSchema = v.variant('t', [
 
 export type ProtocolMessage = v.InferOutput<typeof protocolMessageSchema>;
 
-/** Canonically encode one validated Stage 06 message. */
+/** Canonically encode one shape-validated protocol message. */
 export function encodeProtocolMessage(value: unknown): Result<Uint8Array> {
   return encodeMessage(value, protocolMessageSchema);
 }
 
-/** Decode and validate one canonical Stage 06 message. */
+/** Decode and shape-validate one canonical protocol message. */
 export function decodeProtocolMessage(bytes: Uint8Array): Result<ProtocolMessage> {
   return decodeMessage(bytes, protocolMessageSchema);
 }

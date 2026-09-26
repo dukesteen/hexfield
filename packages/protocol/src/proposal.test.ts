@@ -22,6 +22,7 @@ function setup() {
     engine: fixture.engine,
     head: fixture.entry,
     state: fixture.state,
+    crypto: null,
     lastNonces: new Map(),
   };
   const digest = genesisDigest(fixture.genesis);

@@ -138,6 +138,11 @@ const payloadSchema = v.variant('kind', [
     evidence: systemEvidenceSchema,
   }),
   excludeProposerControlSchema,
+  v.strictObject({
+    kind: v.literal('crypto'),
+    action: v.picklist(['beacon-extend', 'beacon-fixed']),
+    evidence: v.unknown(),
+  }),
   // Membership is reserved for Stage 10. Its change is deliberately opaque here;
   // the entry validator must reject it until the membership adapter exists.
   v.strictObject({ kind: v.literal('membership'), change: v.unknown() }),

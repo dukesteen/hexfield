@@ -1,4 +1,5 @@
 import { identityFromSecret } from '@cp2p/crypto';
+import { canonicalDecode, canonicalEncode } from '@cp2p/codec';
 import { failure, success } from '@cp2p/engine';
 import type {
   CommandShape,
@@ -15,7 +16,7 @@ import type {
 } from '@cp2p/engine';
 import { entryHash } from './genesis.js';
 import { signCommand } from './log.js';
-import type { LogContext } from './log.js';
+import type { LogContext, ValidatedEntry } from './log.js';
 import type { CertifiedEntry, ProposalContext } from './proposal.js';
 import { ReplicatedLog } from './replicated-log.js';
 import type { ReplicatedLogOptions, ReplicatedLogStatus } from './replicated-log.js';
@@ -35,6 +36,16 @@ import { parseCanonical } from './validation.js';
 /** Private state and system protocols are separate from the replicated public log. */
 export interface SessionDriver {
   next(context: LogContext): { input: SystemInput; evidence: SystemEvidence } | null;
+  /**
+   * Handles each certified entry, including protocol-only entries with no engine input.
+   * When present, this replaces `committed`; it owns engine and private consequences too.
+   */
+  committedEntry?(
+    entry: ValidatedEntry & CertifiedEntry,
+    before: LogContext,
+    after: LogContext,
+  ): Result<void>;
+  /** Legacy engine-input callback, used only when `committedEntry` is absent. */
   committed(before: LogContext, input: Input, after: GameState): Result<void>;
   privateState(seat: Seat): PrivateState | null;
   getTimers?(): readonly SessionTimer[];
@@ -131,7 +142,7 @@ export class P2PSession implements GameSession<CertifiedHistory> {
           saved.entries,
           options.engine,
           options.policy,
-          (validated, next) => openedSession.applyCommit(validated.input, validated.events, next),
+          (validated, next) => openedSession.applyCommit(validated, next),
         );
         if (!replayed.ok) {
           session.dispose();
@@ -141,8 +152,8 @@ export class P2PSession implements GameSession<CertifiedHistory> {
       const replicaOptions: ReplicatedLogOptions = {
         ...options,
         systemInput: (current) => driver.next(current.log),
-        onCommit: (validated, _previous, next) => {
-          const applied = openedSession.applyCommit(validated.input, validated.events, next);
+        onCommit: (validated, previous, next) => {
+          const applied = openedSession.applyCommit(validated, next, previous.log);
           if (!applied.ok) {
             openedSession.status = { kind: 'error', message: applied.error.message };
             throw new Error(`${applied.error.code}: ${applied.error.message}`);
@@ -311,16 +322,27 @@ export class P2PSession implements GameSession<CertifiedHistory> {
   }
 
   private applyCommit(
-    input: Input | null,
-    events: readonly GameEvent[],
+    entry: ValidatedEntry & CertifiedEntry,
     next: ProposalContext,
+    before: LogContext = this.context.log,
   ): Result<void> {
-    if (input) {
-      const applied = this.driver.committed(this.context.log, input, next.log.state);
+    if (this.driver.committedEntry) {
+      const applied = this.driver.committedEntry(
+        detachedValidated(entry),
+        detachedLogContext(before),
+        detachedLogContext(next.log),
+      );
+      if (!applied.ok) return applied;
+    } else if (entry.input) {
+      const applied = this.driver.committed(
+        detachedLogContext(before),
+        copyCanonical(entry.input),
+        copyCanonical(next.log.state),
+      );
       if (!applied.ok) return applied;
     }
     this.context = next;
-    this.events.push(...events);
+    this.events.push(...entry.events);
     this.status = next.log.state.result ? { kind: 'complete' } : { kind: 'running' };
     return success(undefined);
   }
@@ -357,4 +379,36 @@ export class P2PSession implements GameSession<CertifiedHistory> {
   private emit(events: readonly GameEvent[]): void {
     for (const listener of this.listeners) listener(this.update(events));
   }
+}
+
+function copyCanonical<T>(value: T): T {
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Only validated protocol values use this detached canonical clone.
+  return canonicalDecode(canonicalEncode(value)) as T;
+}
+
+function detachedLogContext(context: LogContext): LogContext {
+  return {
+    ...context,
+    engine: { ...context.engine },
+    genesis: copyCanonical(context.genesis),
+    head: copyCanonical(context.head),
+    state: copyCanonical(context.state),
+    lastNonces: new Map(context.lastNonces),
+    crypto: copyCanonical(context.crypto),
+  };
+}
+
+function detachedValidated(
+  entry: ValidatedEntry & CertifiedEntry,
+): ValidatedEntry & CertifiedEntry {
+  return {
+    ...entry,
+    entry: copyCanonical(entry.entry),
+    certificate: copyCanonical([...entry.certificate]),
+    input: copyCanonical(entry.input),
+    state: copyCanonical(entry.state),
+    events: copyCanonical([...entry.events]),
+    lastNonces: new Map(entry.lastNonces),
+    crypto: copyCanonical(entry.crypto),
+  };
 }

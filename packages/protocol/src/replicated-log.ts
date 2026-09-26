@@ -3,6 +3,9 @@ import { identityFromSecret, parsePeerId, signObject, verifyObject } from '@cp2p
 import { failure, success } from '@cp2p/engine';
 import type { Engine, Result, Seat, SystemInput } from '@cp2p/engine';
 import { ConsensusController } from './consensus-controller.js';
+import { prepareBeaconContribution } from './beacon-contributions.js';
+import type { BeaconContributionStore, BeaconSecretSource } from './beacon-contributions.js';
+import { BeaconInbox } from './beacon-inbox.js';
 import type { ConsensusEffect, ConsensusState, Equivocation, TimeoutPhase } from './consensus.js';
 import { createConsensusState } from './consensus.js';
 import { objectiveEvidenceSeq, validateObjectiveAccusation } from './control.js';
@@ -59,6 +62,10 @@ export interface ReplicatedLogOptions {
   transport: Transport;
   clock: ProtocolClock;
   journal: ProtocolJournal;
+  /** Required in verified sessions. Only this human's chain secrets are exposed here. */
+  beaconSource?: BeaconSecretSource;
+  /** Durable, immutable outgoing contributions, retained alongside the voting journal. */
+  beaconContributions?: BeaconContributionStore;
   systemInput?: (
     context: ProposalContext,
   ) => { input: SystemInput; evidence: SystemEvidence } | null;
@@ -86,6 +93,8 @@ export class ReplicatedLog {
   private readonly timers = new Map<string, unknown>();
   private readonly pending: PendingCommand[] = [];
   private readonly commands: SignedCommand[] = [];
+  private readonly beaconInbox = new BeaconInbox();
+  private sentBeaconOperation: string | null = null;
   private accusation: ExcludeProposerControl | null = null;
   private readonly unsubscribers: Unsubscribe[] = [];
   private readonly queuedByPeer = new Map<PeerId, number>();
@@ -428,6 +437,15 @@ export class ReplicatedLog {
     if (!decoded.ok) return decoded;
     const message = decoded.value;
     switch (message.t) {
+      case 'SYS_CONTRIB': {
+        if (message.genesisDigest !== this.context.membership.genesisDigest)
+          return failure('replica-beacon-genesis', 'Beacon contribution belongs to another game');
+        const refreshed = this.beaconInbox.refresh(this.context.log.crypto);
+        if (!refreshed.ok) return refreshed;
+        const remembered = this.beaconInbox.remember(message.contribution);
+        if (!remembered.ok) return remembered;
+        return remembered.value ? this.offerAvailableInput() : success(undefined);
+      }
       case 'SUBMIT': {
         const checked = validateSignedCommand(message.cmd, this.context.log);
         if (!checked.ok) return checked;
@@ -632,17 +650,23 @@ export class ReplicatedLog {
     return more ? this.requestSync(this.context.log.head.seq + 1) : success(undefined);
   }
 
-  private async offerAvailableInput(): Promise<Result<void>> {
+  private async offerAvailableInput(retransmitBeacon = false): Promise<Result<void>> {
     const state = this.activeController().snapshot();
     if (!state.ok) return state;
+    if (state.value.halted) return success(undefined);
+    const prepared = await this.prepareBeacon(retransmitBeacon);
+    if (!prepared.ok) return prepared;
     const available =
       this.accusation !== null ||
-      this.commands.length > 0 ||
+      (!this.beaconPending() && this.commands.length > 0) ||
+      this.beaconCandidate() !== null ||
       this.systemCandidate() !== null ||
       state.value.valid !== null;
     if (!available) return success(undefined);
-    const marked = await this.activeController().dispatch({ kind: 'input-available' });
-    if (!marked.ok) return marked;
+    if (!state.value.inputKnown) {
+      const marked = await this.activeController().dispatch({ kind: 'input-available' });
+      if (!marked.ok) return marked;
+    }
     return this.maybePropose();
   }
 
@@ -685,11 +709,23 @@ export class ReplicatedLog {
         },
         this.secretKey,
       );
-    const command = this.commands[0];
-    const payload = command
-      ? { kind: 'command' as const, signed: command }
-      : this.systemCandidate();
+    const command = this.beaconPending() ? undefined : this.commands[0];
+    const payload =
+      this.beaconCandidate() ??
+      (command ? { kind: 'command' as const, signed: command } : this.systemCandidate());
     if (!payload) return null;
+    if (payload.kind === 'crypto')
+      return signEntry(
+        {
+          seq: state.height,
+          term: state.round,
+          prevHash: entryHash(this.context.log.head),
+          payload,
+          stateHash: this.context.log.head.stateHash,
+          sequencer: this.self,
+        },
+        this.secretKey,
+      );
     const input =
       payload.kind === 'command'
         ? {
@@ -718,13 +754,69 @@ export class ReplicatedLog {
     input: SystemInput;
     evidence: SystemEvidence;
   } | null {
+    if (this.beaconPending()) return null;
     try {
-      const candidate = this.options.systemInput?.(this.context);
+      const candidate = this.options.systemInput?.(detachedContext(this.context));
       return candidate ? { kind: 'system', ...candidate } : null;
     } catch {
       this.status({ kind: 'rejected', code: 'system-input' });
       return null;
     }
+  }
+
+  private beaconCandidate() {
+    const candidate = this.beaconInbox.candidate(
+      this.context.log,
+      this.options.policy.entry.randomDerivations,
+    );
+    if (!candidate.ok) {
+      this.status({ kind: 'rejected', code: candidate.error.code });
+      return null;
+    }
+    return candidate.value;
+  }
+
+  private beaconPending(): boolean {
+    const beacon = this.context.log.crypto?.beacon;
+    return !!(beacon?.active || beacon?.fixed);
+  }
+
+  private async prepareBeacon(retransmit: boolean): Promise<Result<void>> {
+    const crypto = this.context.log.crypto;
+    const refreshed = this.beaconInbox.refresh(crypto);
+    if (!refreshed.ok) return this.failClosed(refreshed.error.code, refreshed.error.message);
+    if (!crypto?.beacon.active) return success(undefined);
+    const operationId = this.beaconInbox.operationId();
+    if (!retransmit && operationId === this.sentBeaconOperation) return success(undefined);
+    const { beaconSource, beaconContributions } = this.options;
+    if (!beaconSource || !beaconContributions)
+      return this.failClosed(
+        'replica-beacon-store',
+        'Verified sessions need durable beacon contributions',
+      );
+    const prepared = await prepareBeaconContribution(
+      crypto,
+      this.options.seat,
+      this.secretKey,
+      beaconSource,
+      beaconContributions,
+    );
+    if (this.disposed)
+      return failure('replica-disposed', 'Replica closed during beacon preparation');
+    if (!prepared.ok) return this.failClosed(prepared.error.code, prepared.error.message);
+    if (!prepared.value) return success(undefined);
+    const remembered = this.beaconInbox.remember(prepared.value);
+    if (!remembered.ok) return this.failClosed(remembered.error.code, remembered.error.message);
+    // Preparation persists before this first send; later pulses send the exact stored contribution.
+    const sent = this.broadcast({
+      t: 'SYS_CONTRIB',
+      genesisDigest: this.context.membership.genesisDigest,
+      contribution: prepared.value,
+    });
+    if (sent.ok) this.sentBeaconOperation = operationId;
+    else this.status({ kind: 'rejected', code: sent.error.code });
+    // A send failure does not undo persistence; the next pulse retries the same bytes.
+    return success(undefined);
   }
 
   private rememberCommand(command: SignedCommand): boolean {
@@ -1024,28 +1116,31 @@ export class ReplicatedLog {
   }
 
   private async pulse(): Promise<Result<void>> {
-    const snapshot = this.activeController().snapshot();
-    if (!snapshot.ok) return snapshot;
-    const body = {
-      genesisDigest: this.context.membership.genesisDigest,
-      epoch: this.context.membership.epoch,
-      seat: this.options.seat,
-      head: { seq: this.context.log.head.seq, hash: entryHash(this.context.log.head) },
-      term: snapshot.value.round,
-    };
-    const heartbeat = this.broadcast({
-      t: 'HEARTBEAT',
-      body,
-      sig: signObject('heartbeat', body, this.secretKey),
-    });
-    if (!heartbeat.ok) return heartbeat;
-    for (const pending of this.pending)
-      this.requireSend(this.broadcast({ t: 'SUBMIT', cmd: pending.signed }));
-    const recovered = await this.activeController().resume();
-    if (!recovered.ok) return recovered;
-    const offered = await this.offerAvailableInput();
-    this.schedulePulse();
-    return offered;
+    try {
+      const snapshot = this.activeController().snapshot();
+      if (!snapshot.ok) return snapshot;
+      const body = {
+        genesisDigest: this.context.membership.genesisDigest,
+        epoch: this.context.membership.epoch,
+        seat: this.options.seat,
+        head: { seq: this.context.log.head.seq, hash: entryHash(this.context.log.head) },
+        term: snapshot.value.round,
+      };
+      const heartbeat = this.broadcast({
+        t: 'HEARTBEAT',
+        body,
+        sig: signObject('heartbeat', body, this.secretKey),
+      });
+      if (!heartbeat.ok) return heartbeat;
+      for (const pending of this.pending)
+        this.requireSend(this.broadcast({ t: 'SUBMIT', cmd: pending.signed }));
+      const recovered = await this.activeController().resume();
+      if (!recovered.ok) return recovered;
+      const offered = await this.offerAvailableInput(true);
+      return offered;
+    } finally {
+      this.schedulePulse();
+    }
   }
 
   private receiveHeartbeat(
@@ -1290,6 +1385,11 @@ function authenticateSignedProposal(
 }
 
 function checkLocalKey(options: ReplicatedLogOptions, context: ProposalContext): Result<void> {
+  if (
+    context.log.genesis.security === 'verified' &&
+    (!options.beaconSource || !options.beaconContributions)
+  )
+    return failure('replica-beacon-store', 'Verified sessions need durable beacon contributions');
   try {
     const local = identityFromSecret(options.secretKey).peerId;
     const voter = context.membership.voters.find((member) => member.seat === options.seat);
@@ -1319,6 +1419,7 @@ function detachedContext(context: ProposalContext): ProposalContext {
       head: v.parse(logEntrySchema, canonicalDecode(canonicalEncode(context.log.head))),
       state: copyCanonical(context.log.state),
       lastNonces: new Map(context.log.lastNonces),
+      crypto: copyCanonical(context.log.crypto),
     },
     membership: {
       ...context.membership,
@@ -1340,6 +1441,7 @@ function detachedValidated(
     state: copyCanonical(value.state),
     events: copyCanonical([...value.events]),
     lastNonces: new Map(value.lastNonces),
+    crypto: copyCanonical(value.crypto),
   };
 }
 

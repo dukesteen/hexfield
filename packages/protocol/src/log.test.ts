@@ -30,6 +30,7 @@ function initial() {
     head: fixture.entry,
     state: fixture.state,
     lastNonces: new Map(),
+    crypto: null,
   };
   const policy: EntryPolicy = { term: 1, sequencer: sequencer.peerId, allowStub: true };
   return { ...fixture, sequencer, context, policy };
@@ -72,6 +73,7 @@ function started() {
     head: entry,
     state: accepted.value.state,
     lastNonces: accepted.value.lastNonces,
+    crypto: accepted.value.crypto,
   };
   return { ...fixture, context, entry };
 }
@@ -372,36 +374,18 @@ describe('signed commands and next log entries', () => {
           sequencer: original.sequencer.peerId,
         }),
       ),
-    ).toBe('system-proof-unavailable');
+    ).toBe('crypto-context-required');
     const verifySystem = vi.fn<() => Result<void>>(() => success(undefined));
     expect(
-      validateNextEntry(proofEntry, verifiedContext, {
-        term: 1,
-        sequencer: original.sequencer.peerId,
-        verifySystem,
-      }).ok,
-    ).toBe(true);
-    expect(verifySystem).toHaveBeenCalledOnce();
-    expect(
       errorCode(
         validateNextEntry(proofEntry, verifiedContext, {
           term: 1,
           sequencer: original.sequencer.peerId,
-          verifySystem: () => failure('bad-system-proof', 'Invalid proof'),
+          verifySystem,
         }),
       ),
-    ).toBe('bad-system-proof');
-    expect(
-      errorCode(
-        validateNextEntry(proofEntry, verifiedContext, {
-          term: 1,
-          sequencer: original.sequencer.peerId,
-          verifySystem: () => {
-            throw new Error('malformed proof');
-          },
-        }),
-      ),
-    ).toBe('entry-verification-failed');
+    ).toBe('crypto-context-required');
+    expect(verifySystem).not.toHaveBeenCalled();
     expect(signed.sig).not.toBe(withEvidence.sig);
   });
 

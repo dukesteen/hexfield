@@ -90,6 +90,7 @@ export type EntryPayload =
   | { kind: 'genesis'; genesis: Genesis }
   | { kind: 'command'; signed: SignedCommand }
   | { kind: 'system'; input: SystemInput; evidence: SystemEvidence }
+  | { kind: 'crypto'; action: 'beacon-extend' | 'beacon-fixed'; evidence: unknown }
   | ExcludeProposerControl
   | { kind: 'membership'; change: unknown };
 

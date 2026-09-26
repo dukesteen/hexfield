@@ -50,7 +50,7 @@ function contextFor(
   head: ReturnType<typeof protocolFixture>['entry'],
   state: GameState,
 ): LogContext {
-  return { genesis, engine, head, state, lastNonces: new Map() };
+  return { genesis, engine, head, state, crypto: null, lastNonces: new Map() };
 }
 
 function phaseData(

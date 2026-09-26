@@ -1,5 +1,18 @@
 export const PACKAGE_NAME = '@cp2p/protocol';
 
+export { createBeaconSecretSource } from './beacon-source.js';
+export type { BeaconSecretProvider, BeaconSecretSourceContext } from './beacon-source.js';
+
+export { MemoryBeaconContributionStore } from './beacon-contributions.js';
+export type {
+  BeaconContribution,
+  BeaconContributionStore,
+  BeaconSecretSource,
+} from './beacon-contributions.js';
+export type { CryptoContext } from './crypto-context.js';
+export { createRandomDerivations, randomDerivations } from './random-derivations.js';
+export type { RandomDerivation, RandomPending, BeaconOutcome } from './random-derivations.js';
+
 export {
   GENESIS_PREVIOUS_HASH,
   entryBody,

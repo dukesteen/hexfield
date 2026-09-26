@@ -1,0 +1,7 @@
+{
+  "guard": "BeaconInbox duplicate contribution guard",
+  "test": "repeated complete reveals do not recompute or write while votes are missing",
+  "exitCode": 1,
+  "sourceRestored": true,
+  "sourceSha256": "9e02cd52c06b25cd14abfcda269d6a4a8c3c680ea81d1cf16af32f147e9f5e34"
+}

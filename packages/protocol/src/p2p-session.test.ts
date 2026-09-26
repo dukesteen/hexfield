@@ -1,24 +1,37 @@
 import { canonicalEncode, fromBase64Url, hashValue, toHex } from '@cp2p/codec';
 import { describe, expect, test } from 'vitest';
-import { success } from '@cp2p/engine';
+import { failure, success } from '@cp2p/engine';
 import type { CommandShape, Result, Seat } from '@cp2p/engine';
 import { createConsensusState } from './consensus.js';
-import { entryHash, genesisId, GENESIS_PREVIOUS_HASH, signEntry, signGenesis } from './genesis.js';
+import {
+  entryHash,
+  genesisDigest,
+  genesisId,
+  GENESIS_PREVIOUS_HASH,
+  signEntry,
+  signGenesis,
+} from './genesis.js';
 import { MemoryProtocolJournal } from './journal.js';
 import { P2PSession } from './p2p-session.js';
 import type { P2PSessionOptions, SessionDriver } from './p2p-session.js';
 import type { ReplayPolicy } from './replay.js';
 import { replayCertifiedPrefix } from './replay.js';
 import { proposerFor } from './proposal.js';
+import type { CertifiedEntry } from './proposal.js';
 import { createMemnet } from './testing/memnet.js';
 import { protocolFixture } from './testing/fixtures.js';
 import { SimulationDriver } from './testing/simulation-driver.js';
 import { VirtualClock } from './testing/virtual-clock.js';
 import type { ProtocolClock } from './transport.js';
-import type { Genesis, GenesisBody, LogEntry } from './types.js';
+import type { ExcludeProposerControl, Genesis, GenesisBody, LogEntry } from './types.js';
 import { signVote } from './votes.js';
+import { encodeProtocolMessage } from './messages.js';
+import type { LogContext, ValidatedEntry } from './log.js';
 
 const policy: ReplayPolicy = { genesis: { allowStub: true }, entry: { allowStub: true } };
+type SessionFixture = Omit<ReturnType<typeof protocolFixture>, 'identities'> & {
+  identities: readonly ReturnType<typeof protocolFixture>['identities'][number][];
+};
 
 function value<T>(result: Result<T>): T {
   if (!result.ok) throw new Error(`${result.error.code}: ${result.error.message}`);
@@ -73,7 +86,50 @@ function twoHumanFixture(withTurnTimer = false) {
   return { ...fixture, identities, body, genesis, state, entry };
 }
 
-function createDriverFactory(committedBySeat?: Map<Seat, number>, clock?: ProtocolClock) {
+function fourHumanFixture() {
+  const fixture = protocolFixture();
+  const seats = fixture.body.seats.map(({ seat }, index) => {
+    const identity = fixture.identities[index];
+    if (!identity) throw new Error(`Missing identity for seat ${seat}`);
+    return {
+      seat,
+      kind: 'human' as const,
+      publicKey: identity.peerId,
+      name: `Human ${seat}`,
+      colour: fixture.body.seats[seat]?.colour ?? '#386b6d',
+    };
+  });
+  const body: GenesisBody = { ...fixture.body, seats };
+  const genesis: Genesis = {
+    ...body,
+    gameId: genesisId(body),
+    signatures: body.seats.map(({ seat }) => {
+      const identity = fixture.identities[seat];
+      if (!identity) throw new Error(`Missing identity for seat ${seat}`);
+      return signGenesis(body, seat, identity.secretKey);
+    }),
+  };
+  const sequencer = fixture.identities[0];
+  if (!sequencer) throw new Error('Missing initial sequencer');
+  const entry = signEntry(
+    {
+      seq: 0,
+      term: 1,
+      prevHash: GENESIS_PREVIOUS_HASH,
+      payload: { kind: 'genesis', genesis },
+      stateHash: toHex(hashValue(fixture.state)),
+      sequencer: sequencer.peerId,
+    },
+    sequencer.secretKey,
+  );
+  return { ...fixture, body, genesis, entry };
+}
+
+function createDriverFactory(
+  committedBySeat?: Map<Seat, number>,
+  clock?: ProtocolClock,
+  committedEntry?: SessionDriver['committedEntry'],
+) {
   return (
     engine: P2PSessionOptions['engine'],
     genesis: Genesis,
@@ -87,6 +143,15 @@ function createDriverFactory(committedBySeat?: Map<Seat, number>, clock?: Protoc
           committedBySeat.set(localSeat, (committedBySeat.get(localSeat) ?? 0) + 1);
         return driver.committed(before, input, after);
       },
+      ...(committedEntry
+        ? {
+            committedEntry: (
+              entry: ValidatedEntry & CertifiedEntry,
+              before: LogContext,
+              after: LogContext,
+            ) => committedEntry(entry, before, after),
+          }
+        : {}),
       privateState: (seat) => driver.privateState(seat),
       getTimers: () => driver.getTimers(),
     };
@@ -94,13 +159,14 @@ function createDriverFactory(committedBySeat?: Map<Seat, number>, clock?: Protoc
 }
 
 function optionsFor(
-  fixture: ReturnType<typeof protocolFixture> | ReturnType<typeof twoHumanFixture>,
+  fixture: SessionFixture,
   seat: Seat,
   transport: ReturnType<ReturnType<typeof createMemnet>['transport']>,
   clock: VirtualClock,
   journal: MemoryProtocolJournal,
   botKeys?: ReadonlyMap<Seat, Uint8Array>,
   committedBySeat?: Map<Seat, number>,
+  committedEntry?: SessionDriver['committedEntry'],
 ): P2PSessionOptions {
   const identity = fixture.identities[seat];
   if (!identity) throw new Error(`Missing identity for seat ${seat}`);
@@ -115,8 +181,43 @@ function optionsFor(
     journal,
     ...(botKeys ? { botKeys } : {}),
     createDriver: (engine, genesis, protocolClock) =>
-      createDriverFactory(committedBySeat, protocolClock)(engine, genesis, seat),
+      createDriverFactory(committedBySeat, protocolClock, committedEntry)(engine, genesis, seat),
   };
+}
+
+async function openHumanSessions(
+  fixture: ReturnType<typeof protocolFixture>,
+  entryHookForSeat?: (seat: Seat) => SessionDriver['committedEntry'],
+) {
+  const seats = fixture.body.seats.map(({ seat }) => seat);
+  const peers = fixture.identities.map((identity) => identity.peerId);
+  const clock = new VirtualClock();
+  const net = createMemnet({ peers, clock });
+  const journals = seats.map(() => new MemoryProtocolJournal());
+  const committed = new Map<Seat, number>();
+  const sessions = await Promise.all(
+    seats.map(async (seat) => {
+      const journal = journals[seat];
+      const peerId = peers[seat];
+      if (!journal || !peerId) throw new Error(`Missing fixture for seat ${seat}`);
+      return value(
+        await P2PSession.create(
+          optionsFor(
+            fixture,
+            seat,
+            net.transport(peerId),
+            clock,
+            journal,
+            undefined,
+            committed,
+            entryHookForSeat?.(seat),
+          ),
+        ),
+      );
+    }),
+  );
+  await settleNetwork(sessions, clock);
+  return { clock, net, journals, sessions, committed, peers };
 }
 
 async function settleNetwork(sessions: readonly P2PSession[], clock: VirtualClock): Promise<void> {
@@ -128,7 +229,10 @@ async function settleNetwork(sessions: readonly P2PSession[], clock: VirtualCloc
   await Promise.all(sessions.map((session) => session.flush()));
 }
 
-async function openTwoHumanSessions(fixture: ReturnType<typeof twoHumanFixture>) {
+async function openTwoHumanSessions(
+  fixture: ReturnType<typeof twoHumanFixture>,
+  entryHookForSeat?: (seat: Seat) => SessionDriver['committedEntry'],
+) {
   const peers = fixture.identities.map((identity) => identity.peerId);
   const clock = new VirtualClock();
   const net = createMemnet({ peers, clock });
@@ -148,6 +252,7 @@ async function openTwoHumanSessions(fixture: ReturnType<typeof twoHumanFixture>)
             journal,
             undefined,
             committed,
+            entryHookForSeat?.(seat),
           ),
         ),
       );
@@ -165,7 +270,143 @@ function placementCommand(session: P2PSession, seat: Seat): CommandShape {
   return command;
 }
 
+function voteEquivocationControl(fixture: SessionFixture, seq: number): ExcludeProposerControl {
+  const offender = fixture.identities[3];
+  if (!offender) throw new Error('Missing offender identity');
+  const body = {
+    genesisDigest: genesisDigest(fixture.genesis),
+    epoch: 0,
+    seat: 3 as const,
+    seq: seq - 1,
+    term: 1,
+    phase: 'prevote' as const,
+    valueHash: null,
+  };
+  return {
+    kind: 'control',
+    action: 'exclude-proposer',
+    offender: 3,
+    evidence: {
+      kind: 'vote-equivocation',
+      first: signVote(body, offender.secretKey),
+      second: signVote({ ...body, valueHash: 'a'.repeat(64) }, offender.secretKey),
+    },
+  };
+}
+
 describe('P2PSession', () => {
+  test('committedEntry sees input-null control entries live and during restore', async () => {
+    const fixture = fourHumanFixture();
+    const seen = new Map<Seat, (ValidatedEntry & CertifiedEntry)[]>();
+    const hookForSeat =
+      (seat: Seat): SessionDriver['committedEntry'] =>
+      (entry) => {
+        if (entry.entry.payload.kind === 'control') {
+          const entries = seen.get(seat) ?? [];
+          entries.push(entry);
+          seen.set(seat, entries);
+        }
+        return success(undefined);
+      };
+    const opened = await openHumanSessions(fixture, hookForSeat);
+    const first = opened.sessions[0];
+    if (!first) throw new Error('Missing first peer session');
+    const seq = first.getCommittedHead().seq + 1;
+    const control = voteEquivocationControl(fixture, seq);
+    const packet = value(encodeProtocolMessage({ t: 'ACCUSE', control }));
+    opened.net.transport(opened.peers[0] ?? '').broadcast(packet);
+    await settleNetwork(opened.sessions, opened.clock);
+
+    const certified = first
+      .exportSave()
+      .entries.find((item) => item.entry.payload.kind === 'control');
+    expect(certified).toBeDefined();
+    const expectedState = first.getState();
+    const expectedHistory = first.exportSave();
+    for (const seat of [0, 1, 2] as const) {
+      const controlEntry = seen.get(seat)?.find((entry) => entry.entry.payload.kind === 'control');
+      expect(controlEntry?.input).toBeNull();
+      expect(controlEntry?.entry.payload).toEqual(control);
+      expect(controlEntry?.certificate).toEqual(certified?.certificate);
+      expect(controlEntry?.entry.seq).toBe(seq);
+    }
+
+    first.dispose();
+    opened.sessions.forEach((session) => session.dispose());
+    const replaySeen: { input: ValidatedEntry['input']; payload: unknown; seq: number }[] = [];
+    const journal = opened.journals[0];
+    const peerId = opened.peers[0];
+    if (!journal || !peerId) throw new Error('Missing restore fixture');
+    const restored = value(
+      await P2PSession.restore(
+        optionsFor(
+          fixture,
+          0,
+          opened.net.transport(peerId),
+          opened.clock,
+          journal,
+          undefined,
+          undefined,
+          (entry, _before, after) => {
+            if (entry.entry.payload.kind === 'control')
+              replaySeen.push({
+                input: entry.input,
+                payload: { ...entry.entry.payload },
+                seq: entry.entry.seq,
+              });
+            Object.assign(entry.entry.payload, { offender: 2 });
+            Object.assign(entry, { crypto: { tampered: true } });
+            Object.assign(after, {
+              state: fixture.engine.createGame(
+                fixture.body.config,
+                fromBase64Url(fixture.body.genesisSeed),
+              ),
+              crypto: { tampered: true },
+            });
+            return success(undefined);
+          },
+        ),
+      ),
+    );
+    const replayedControl = replaySeen[0];
+    expect(replayedControl?.input).toBeNull();
+    expect(replayedControl?.payload).toEqual(control);
+    expect(replayedControl?.seq).toBe(seq);
+    expect(restored.getState()).toEqual(expectedState);
+    expect(restored.exportSave()).toEqual(expectedHistory);
+    restored.dispose();
+    opened.net.dispose();
+  });
+
+  test('committedEntry failure prevents legacy private updates and session publication', async () => {
+    const fixture = twoHumanFixture();
+    const opened = await openTwoHumanSessions(
+      fixture,
+      () => (entry) =>
+        entry.input?.kind === 'command'
+          ? failure('driver-entry-rejected', 'Driver rejected certified input')
+          : success(undefined),
+    );
+    const first = opened.sessions[0];
+    if (!first) throw new Error('Missing local session');
+    const seat = first.getState().turn.activeSeat;
+    const owner = opened.sessions[seat];
+    if (!owner) throw new Error(`Missing controller for seat ${seat}`);
+    const beforeHead = owner.getCommittedHead();
+    const beforeState = owner.getState();
+    const beforePrivate = owner.getPrivate(seat);
+    const submitted = owner.submit(seat, placementCommand(owner, seat)).catch(() => undefined);
+    await settleNetwork(opened.sessions, opened.clock);
+    await submitted;
+    expect(owner.getCommittedHead()).toEqual(beforeHead);
+    expect(owner.getState()).toEqual(beforeState);
+    expect(owner.getPrivate(seat)).toEqual(beforePrivate);
+    expect(owner.getProtocolStatus()?.kind).toBe('halted');
+    expect(opened.committed.size).toBe(0);
+    opened.sessions.forEach((session) => session.dispose());
+    opened.net.dispose();
+  });
+
   test('setup submission waits for quorum and publishes state/private effects only on commit', async () => {
     const fixture = twoHumanFixture();
     const { clock, net, sessions, committed, peers } = await openTwoHumanSessions(fixture);
