@@ -19,6 +19,7 @@ const ROUNDS = 64;
 const CHALLENGE_BYTES = ROUNDS / 8;
 const MAX_CARDS = 128;
 const MAX_CONTEXT_BYTES = 16_384;
+const POINT_WINDOW = 4;
 
 export interface ShuffleStatement {
   input: readonly string[];
@@ -184,6 +185,10 @@ export function proveShuffle(
   )
     throw new RangeError('Shuffle output does not match the witness.');
 
+  // These public deck points are multiplied in every round. Keep their window
+  // tables scoped to this one bounded proof; scalar multiplication stays secret-safe.
+  for (const point of parsed.input) point.precompute(POINT_WINDOW, false);
+
   const witnesses: { r: bigint; rho: number[] }[] = [];
   const commitments: RoundCommitment[] = [];
   for (let round = 0; round < ROUNDS; round += 1) {
@@ -239,6 +244,11 @@ export function verifyShuffle(
         permutation: parsePermutation(response.permutation, parsed.input.length),
       };
     });
+
+    // Response scalars are public, but retain the same multiplication path and
+    // reuse a small window table only for this bounded verification call.
+    for (const point of [...parsed.input, ...parsed.output, parsed.publicKey])
+      point.precompute(POINT_WINDOW, false);
 
     const commitments: RoundCommitment[] = responses.map((response, round) => {
       if (!challengeBit(challenge, round)) {

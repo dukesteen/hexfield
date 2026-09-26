@@ -1,0 +1,43 @@
+import { canonicalEncode, hashValue, toBase64Url, toHex } from '/Users/duke/Dev/Personal/colonist-p2p/packages/codec/src/index.ts';
+import { identityFromSecret, scalarToBytes } from '/Users/duke/Dev/Personal/colonist-p2p/packages/crypto/src/index.ts';
+import { applyDeckPass, initDeckSetup, signDeckShuffle, signDeckLock } from '/Users/duke/Dev/Personal/colonist-p2p/packages/protocol/src/deck-setup.ts';
+import { createDeckSecretSource } from '/Users/duke/Dev/Personal/colonist-p2p/packages/protocol/src/deck-source.ts';
+const must = result => { if(!result.ok) throw new Error(JSON.stringify(result)); return result.value; };
+self.onmessage = () => {
+  try {
+    const keys = Array.from({length:6}, (_,i) => identityFromSecret(new Uint8Array(32).fill(i+1)));
+    const definition = {
+      ceremonyId: toBase64Url(new Uint8Array(32).fill(8)), deckId:'dev', deckEpoch:0,
+      creation:{kind:'ceremony'},
+      cards: Object.entries({knight:14,victoryPoint:5,roadBuilding:2,yearOfPlenty:2,monopoly:2}).flatMap(([card,count])=>Array.from({length:count},(_,i)=>({identity:card+'#'+(i+1),card}))),
+      participants:keys.map((key,seat)=>({seat,publicKey:key.peerId})),
+    };
+    const sources = keys.map((_,i)=>createDeckSecretSource(scalarToBytes(BigInt(i+101)),definition,i));
+    const passes = [];
+    const times = [];
+    let state = must(initDeckSetup(definition));
+    const started = performance.now();
+    for(let seat=0;seat<6;seat++) {
+      const source=sources[seat];
+      const at=performance.now();
+      const pass=signDeckShuffle(state,source.shuffle(),source.permutation(),source.proofSeed('shuffle',state),keys[seat].secretKey);
+      const proved=performance.now();
+      state=must(applyDeckPass(state,pass));
+      times.push({phase:'shuffle',seat,proveMs:proved-at,verifyMs:performance.now()-proved,bytes:canonicalEncode(pass).length});
+      passes.push(pass);
+    }
+    const shuffleMs=performance.now()-started;
+    for(let seat=0;seat<6;seat++) {
+      const source=sources[seat];
+      const at=performance.now();
+      const pass=signDeckLock(state,source.shuffle(),state.points.map((_,j)=>source.lock(j)),source.proofSeed('lock',state),keys[seat].secretKey);
+      const proved=performance.now();
+      state=must(applyDeckPass(state,pass));
+      times.push({phase:'lock',seat,proveMs:proved-at,verifyMs:performance.now()-proved,bytes:canonicalEncode(pass).length});
+      passes.push(pass);
+    }
+    const totalMs=performance.now()-started;
+    sources.forEach(source=>source.dispose());
+    self.postMessage({ok:true,userAgent:navigator.userAgent,shuffleMs,totalMs,times,transcriptHash:toHex(hashValue(passes)),stateHash:toHex(hashValue(state))});
+  } catch(error) { self.postMessage({ok:false,error:String(error),stack:error.stack}); }
+};

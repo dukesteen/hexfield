@@ -1,0 +1,136 @@
+{
+  "bundleSha256": "3e215d844cc0d97d75f05eda0e376ed405a0122e68cd6247ab211aa85cbcd2b5",
+  "bytes": 241281,
+  "files": [
+    {
+      "path": "docs/verification/stage07/step3-foundation-followup-prompt.md",
+      "sha256": "7927668217c44501c9f1942f0fbb7c857a5ea07a4123453526d01d280cead7dd",
+      "bytes": 1426
+    },
+    {
+      "path": "docs/verification/stage07/step3-foundation-review.md",
+      "sha256": "1ad6f9567524df0681b609a93896373cc079e8f1cfba09399e0fa37521893c0b",
+      "bytes": 13643
+    },
+    {
+      "path": "docs/verification/stage07/step3-foundation-review-response.md",
+      "sha256": "6292c3ca42a5da2941351392dee5e68db6dff4455ee46732293721c19320cee1",
+      "bytes": 3256
+    },
+    {
+      "path": "docs/00-architecture.md",
+      "sha256": "7de4a4848ed7343a358b31c9b19a08e5c142cdbc5b327056dd71521a695eb86a",
+      "bytes": 25284
+    },
+    {
+      "path": "docs/07-fair-randomness-hidden-info.md",
+      "sha256": "92bbc982109dfa4affe2ba9c86433b0bc009c9b28278fb55b2d9819d1c94baf5",
+      "bytes": 38189
+    },
+    {
+      "path": "packages/protocol/src/deck-setup.ts",
+      "sha256": "c3e31837bcb3ede910a7698cc902c878428ea7198c567833783fc64d8036de16",
+      "bytes": 16248
+    },
+    {
+      "path": "packages/protocol/src/deck-setup.test.ts",
+      "sha256": "a69998b8228980688ce2fa4af705a4ee7d8f5046812d45889fe0a9cce2c56c39",
+      "bytes": 8677
+    },
+    {
+      "path": "packages/protocol/src/deck-source.ts",
+      "sha256": "acaba36fa4da021c49661aa664fa07f96a3c3dbbfc4b17662f714a60a2f6a98c",
+      "bytes": 3191
+    },
+    {
+      "path": "packages/protocol/src/deck-source.test.ts",
+      "sha256": "9600b4e1c217986d1ea85ad470f4a91d9d054d1d9d38dc53020cf6bbc23922ca",
+      "bytes": 4631
+    },
+    {
+      "path": "packages/protocol/src/deck-draw.ts",
+      "sha256": "36d515edc8e67a469f72652614376212a4ccf0517958856a82cc584a8939fcdc",
+      "bytes": 15758
+    },
+    {
+      "path": "packages/protocol/src/deck-draw.test.ts",
+      "sha256": "e5d081143775125969696cc7a126488cadb3b46d36fb64d4cc477fcc395b5dd1",
+      "bytes": 26314
+    },
+    {
+      "path": "packages/protocol/src/deck-draw-context.test.ts",
+      "sha256": "e6b7994039f7e36e0afa88df59fc2eaa4e9aaa95bd9d95aba801ad48db98c23e",
+      "bytes": 3745
+    },
+    {
+      "path": "packages/protocol/src/deck-outbox.ts",
+      "sha256": "e37f46ca15c8c39b44d5efe22c6b64b8eb561026c06a1148f922d0e0b0111c1e",
+      "bytes": 4506
+    },
+    {
+      "path": "packages/protocol/src/validation.ts",
+      "sha256": "bb646520abbab0596ff5d99f1b7f6ffaeed264260c3030917725a050acef5f23",
+      "bytes": 887
+    },
+    {
+      "path": "packages/protocol/src/schema-values.ts",
+      "sha256": "5f42a01a0d5a59abc1b93a5462a010ec56609ec44c050edd57e85791f5f0ef96",
+      "bytes": 829
+    },
+    {
+      "path": "packages/crypto/src/shuffle.ts",
+      "sha256": "9dc138197533798261ad90fdf013575efc114b35302e8280857c72b66da966ea",
+      "bytes": 9924
+    },
+    {
+      "path": "packages/crypto/src/shuffle.test.ts",
+      "sha256": "2daf124438dde57dfe73d9cd122bfc9b065e0e9f14706f488885cecb7692de51",
+      "bytes": 16864
+    },
+    {
+      "path": "packages/crypto/src/sigma.ts",
+      "sha256": "e04a49de15d73a54cc4191a4eed4b2dddab6c2e899636c2b7e8decbff3750ea8",
+      "bytes": 8091
+    },
+    {
+      "path": "packages/crypto/src/group.ts",
+      "sha256": "76081f91735476a2da74bf9ab9c85a94f6d5f70c86760e8f1986b6eb1ec2ad80",
+      "bytes": 4611
+    },
+    {
+      "path": "packages/crypto/src/proof-transcript.ts",
+      "sha256": "287c895b9ea527273411632be3a8e61a129f00f8e12272d5c28907344eaeb5c8",
+      "bytes": 3446
+    },
+    {
+      "path": "packages/crypto/src/derivation.ts",
+      "sha256": "76bfa6e36fb943a462bb09f7b0acb1786235837e6297d4a4275bdcfbff3db30a",
+      "bytes": 2526
+    },
+    {
+      "path": "packages/crypto/src/identity.ts",
+      "sha256": "a892b57073e7208f99c37480dde87662a6274236f5dc2ad18384a7bcc8c28688",
+      "bytes": 5106
+    },
+    {
+      "path": "packages/crypto/src/uniform.ts",
+      "sha256": "4259bdc4873e4267e05a96632c0f95cd52ef7b4273f807d083ef8cce7c9cec60",
+      "bytes": 1689
+    },
+    {
+      "path": "packages/codec/src/canonical.ts",
+      "sha256": "bc51a4fa7022f6ed6af92b191672526ee91f357395a116e36b9c5c01076b5049",
+      "bytes": 7550
+    },
+    {
+      "path": "packages/protocol/src/deck-setup-outbox.ts",
+      "sha256": "055af35edde312bab1934ddab60e4d0e668965fbce42aaaae441ee001ef1e8e0",
+      "bytes": 4348
+    },
+    {
+      "path": "packages/protocol/src/deck-setup-outbox.test.ts",
+      "sha256": "fcc83e76b4cada2fca849b3f02fa81cd30fd6c12a9ec90cbbf57369f17d42d2b",
+      "bytes": 9006
+    }
+  ]
+}

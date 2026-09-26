@@ -94,3 +94,39 @@ export { MAX_MESSAGE_BYTES } from './validation.js';
 export { quorumSize, signVote, validateVote, verifyCertificate } from './votes.js';
 export type { ExpectedVote, SignedVote, VoteBody, VoteContext, VotePhase } from './votes.js';
 export { decodeMessage, encodeMessage } from './wire.js';
+export {
+  initDeckSetup,
+  validateDeckSetupState,
+  deckSetupId,
+  deckPassOperationId,
+  applyDeckPass,
+  signDeckShuffle,
+  signDeckLock,
+  replayDeckSetup,
+} from './deck-setup.js';
+export type { DeckDefinition, DeckSetupState, SignedDeckPass } from './deck-setup.js';
+export { createDeckSecretSource } from './deck-source.js';
+export type { DeckSecretSource } from './deck-source.js';
+export {
+  freezeDeckDraw,
+  validateDeckDrawOperation,
+  deckDrawOperationId,
+  verifyDeckUnlockPrefix,
+  signDeckUnlock,
+  verifyDeckUnlock,
+  completeDeckDraw,
+  decodeDeckCard,
+  proveDeckReveal,
+  verifyDeckReveal,
+} from './deck-draw.js';
+export type {
+  DeckDrawRequest,
+  DeckDrawOperation,
+  SignedDeckUnlock,
+  DealtDeckCard,
+  DeckRevealContext,
+  DeckCardReveal,
+} from './deck-draw.js';
+export { prepareDeckUnlock } from './deck-outbox.js';
+export type { DeckContributionStore } from './deck-outbox.js';
+export { prepareDeckPass } from './deck-setup-outbox.js';

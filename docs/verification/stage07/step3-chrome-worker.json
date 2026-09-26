@@ -1,0 +1,98 @@
+{
+  "scope": "Local diagnostic, not Stage 07 acceptance",
+  "method": "Production Vite bundle, one fresh dedicated worker, six sequential signed 25-card shuffle passes followed by six locking passes; each pass is proved and verified once",
+  "shuffleSourceSha256": "9dc138197533798261ad90fdf013575efc114b35302e8280857c72b66da966ea",
+  "workerBundleSha256": "34b73dcfc234766203f158320db5122a6a63c0e9bb21c6d3b9b05ea9df931302",
+  "firstRun": { "shuffleMs": 16924, "totalMs": 19549.5 },
+  "repeatRun": {
+    "ok": true,
+    "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36",
+    "shuffleMs": 16532.599999904633,
+    "totalMs": 18990.799999952316,
+    "times": [
+      {
+        "phase": "shuffle",
+        "seat": 0,
+        "proveMs": 1637.2999999523163,
+        "verifyMs": 1334.2000000476837,
+        "bytes": 10314
+      },
+      {
+        "phase": "shuffle",
+        "seat": 1,
+        "proveMs": 1276.1999998092651,
+        "verifyMs": 1376.5,
+        "bytes": 10314
+      },
+      {
+        "phase": "shuffle",
+        "seat": 2,
+        "proveMs": 1238.8000001907349,
+        "verifyMs": 1013.5999999046326,
+        "bytes": 10314
+      },
+      {
+        "phase": "shuffle",
+        "seat": 3,
+        "proveMs": 1232.4000000953674,
+        "verifyMs": 1233.5999999046326,
+        "bytes": 10314
+      },
+      {
+        "phase": "shuffle",
+        "seat": 4,
+        "proveMs": 1667.5,
+        "verifyMs": 1307.4000000953674,
+        "bytes": 10314
+      },
+      {
+        "phase": "shuffle",
+        "seat": 5,
+        "proveMs": 1773.1999998092651,
+        "verifyMs": 1434.9000000953674,
+        "bytes": 10314
+      },
+      {
+        "phase": "lock",
+        "seat": 0,
+        "proveMs": 229.90000009536743,
+        "verifyMs": 123.39999985694885,
+        "bytes": 6720
+      },
+      {
+        "phase": "lock",
+        "seat": 1,
+        "proveMs": 211.79999995231628,
+        "verifyMs": 134.5,
+        "bytes": 6720
+      },
+      { "phase": "lock", "seat": 2, "proveMs": 204, "verifyMs": 169.79999995231628, "bytes": 6720 },
+      {
+        "phase": "lock",
+        "seat": 3,
+        "proveMs": 243.60000014305115,
+        "verifyMs": 203.79999995231628,
+        "bytes": 6720
+      },
+      {
+        "phase": "lock",
+        "seat": 4,
+        "proveMs": 223.5,
+        "verifyMs": 176.20000004768372,
+        "bytes": 6720
+      },
+      {
+        "phase": "lock",
+        "seat": 5,
+        "proveMs": 282.19999980926514,
+        "verifyMs": 254.10000014305115,
+        "bytes": 6720
+      }
+    ],
+    "transcriptHash": "095350931c3bc9e4e1a9f61cfa9c41165974a14746a61ad4b471fe4ebd2df936",
+    "stateHash": "32a925498953334b7ef70468a9c08bedabfb0f523ea146b38bc8f39d63291ac8"
+  },
+  "targetMs": 3000,
+  "targetMet": false,
+  "notes": "Observed via Chrome accessibility result text. Both runs produced the same transcript and state hashes. This measures the new signed-pass helpers with window-4 optimization, not a complete online ceremony or every peer's verification. No Firefox or WebKit process was launched."
+}

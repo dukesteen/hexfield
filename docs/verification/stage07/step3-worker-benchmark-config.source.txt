@@ -1,0 +1,6 @@
+import { defineConfig } from '/Users/duke/Dev/Personal/colonist-p2p/node_modules/vite/dist/node/index.js';
+const repo = '/Users/duke/Dev/Personal/colonist-p2p';
+export default defineConfig({
+  resolve:{alias:{'@cp2p/crypto':repo+'/packages/crypto/src/index.ts','@cp2p/codec':repo+'/packages/codec/src/index.ts','@cp2p/engine':repo+'/packages/engine/src/index.ts'}},
+  build:{outDir:'/private/tmp/hexfield-deck-worker-bench/site',emptyOutDir:true,lib:{entry:'/private/tmp/hexfield-deck-worker-bench/worker.ts',formats:['es'],fileName:()=> 'worker.js'}},
+});

@@ -1,0 +1,116 @@
+{
+  "bundleSha256": "5a2f1d1f87713226e517c144ba1dcd8dfee10b596933bf1a104bed909e80d58f",
+  "bytes": 200128,
+  "files": [
+    {
+      "path": "docs/verification/stage07/step3-foundation-review-prompt.md",
+      "sha256": "24a6dd0a8d54e3013ba15b49660a6c40fda2c20a418d97bc5205a2fddf30ddbf",
+      "bytes": 2938
+    },
+    {
+      "path": "docs/00-architecture.md",
+      "sha256": "7de4a4848ed7343a358b31c9b19a08e5c142cdbc5b327056dd71521a695eb86a",
+      "bytes": 25284
+    },
+    {
+      "path": "docs/07-fair-randomness-hidden-info.md",
+      "sha256": "91039cfdb47b1f403241e0127213288d5ca3367813d1d81b5e3362cfb4864900",
+      "bytes": 37612
+    },
+    {
+      "path": "packages/protocol/src/deck-setup.ts",
+      "sha256": "c3e31837bcb3ede910a7698cc902c878428ea7198c567833783fc64d8036de16",
+      "bytes": 16248
+    },
+    {
+      "path": "packages/protocol/src/deck-setup.test.ts",
+      "sha256": "5990d43faf177f6705c23f5abc94f82e1e8a80b28eda856aae6270c141bdd03d",
+      "bytes": 6695
+    },
+    {
+      "path": "packages/protocol/src/deck-source.ts",
+      "sha256": "acaba36fa4da021c49661aa664fa07f96a3c3dbbfc4b17662f714a60a2f6a98c",
+      "bytes": 3191
+    },
+    {
+      "path": "packages/protocol/src/deck-source.test.ts",
+      "sha256": "9600b4e1c217986d1ea85ad470f4a91d9d054d1d9d38dc53020cf6bbc23922ca",
+      "bytes": 4631
+    },
+    {
+      "path": "packages/protocol/src/deck-draw.ts",
+      "sha256": "116538f3192abe59e08ceb4a9e0a61e0519a0d7c47810ea3e0416de0733733c3",
+      "bytes": 15545
+    },
+    {
+      "path": "packages/protocol/src/deck-draw.test.ts",
+      "sha256": "9d1e2278655b8c1e7c8d5ec793808afa63f08557d1d0cfc778148e3d163030b4",
+      "bytes": 19581
+    },
+    {
+      "path": "packages/protocol/src/deck-draw-context.test.ts",
+      "sha256": "b21c5fca45f2bddc753882885f3cbc11a0b64a86c6c8e270022eb03d5951f6cc",
+      "bytes": 3546
+    },
+    {
+      "path": "packages/protocol/src/deck-outbox.ts",
+      "sha256": "ae67ef71daadcbda5d43408af184f7566f8432ed9313ab2a86195b164a2242fd",
+      "bytes": 3050
+    },
+    {
+      "path": "packages/protocol/src/validation.ts",
+      "sha256": "bb646520abbab0596ff5d99f1b7f6ffaeed264260c3030917725a050acef5f23",
+      "bytes": 887
+    },
+    {
+      "path": "packages/protocol/src/schema-values.ts",
+      "sha256": "5f42a01a0d5a59abc1b93a5462a010ec56609ec44c050edd57e85791f5f0ef96",
+      "bytes": 829
+    },
+    {
+      "path": "packages/crypto/src/shuffle.ts",
+      "sha256": "9dc138197533798261ad90fdf013575efc114b35302e8280857c72b66da966ea",
+      "bytes": 9924
+    },
+    {
+      "path": "packages/crypto/src/shuffle.test.ts",
+      "sha256": "67c7afc997f32c7b0afc4097e8f27dcfdf1fb016487dea4903861ea335f986db",
+      "bytes": 15971
+    },
+    {
+      "path": "packages/crypto/src/sigma.ts",
+      "sha256": "e04a49de15d73a54cc4191a4eed4b2dddab6c2e899636c2b7e8decbff3750ea8",
+      "bytes": 8091
+    },
+    {
+      "path": "packages/crypto/src/group.ts",
+      "sha256": "76081f91735476a2da74bf9ab9c85a94f6d5f70c86760e8f1986b6eb1ec2ad80",
+      "bytes": 4611
+    },
+    {
+      "path": "packages/crypto/src/proof-transcript.ts",
+      "sha256": "287c895b9ea527273411632be3a8e61a129f00f8e12272d5c28907344eaeb5c8",
+      "bytes": 3446
+    },
+    {
+      "path": "packages/crypto/src/derivation.ts",
+      "sha256": "76bfa6e36fb943a462bb09f7b0acb1786235837e6297d4a4275bdcfbff3db30a",
+      "bytes": 2526
+    },
+    {
+      "path": "packages/crypto/src/identity.ts",
+      "sha256": "a892b57073e7208f99c37480dde87662a6274236f5dc2ad18384a7bcc8c28688",
+      "bytes": 5106
+    },
+    {
+      "path": "packages/crypto/src/uniform.ts",
+      "sha256": "4259bdc4873e4267e05a96632c0f95cd52ef7b4273f807d083ef8cce7c9cec60",
+      "bytes": 1689
+    },
+    {
+      "path": "packages/codec/src/canonical.ts",
+      "sha256": "bc51a4fa7022f6ed6af92b191672526ee91f357395a116e36b9c5c01076b5049",
+      "bytes": 7550
+    }
+  ]
+}

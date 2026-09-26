@@ -1,4 +1,4 @@
-import { canonicalEncode, fromBase64Url, sha256, toBase64Url } from '@cp2p/codec';
+import { canonicalEncode, fromBase64Url, sha256, toBase64Url, toHex } from '@cp2p/codec';
 import { describe, expect, test } from 'vitest';
 import {
   G,
@@ -117,6 +117,59 @@ function independentExplicitProof(statement: ShuffleStatement) {
 }
 
 describe('compact single-key shuffle proof', () => {
+  test('keeps original proof bytes across deck sizes, keys, permutations, and contexts', () => {
+    const cases = [
+      {
+        multipliers: [1n],
+        permutation: [0],
+        secret: 7n,
+        seedByte: 11,
+        context: { deck: 'one', epoch: 0 },
+        digest: 'a0ddc2030ea2d47081cc359813e084969def4d59ced877f4548b3d95851c5554',
+      },
+      {
+        multipliers: [1n, 2n, 3n, 4n],
+        permutation: [2, 0, 3, 1],
+        secret: 11n,
+        seedByte: 37,
+        context: { deck: 'four', epoch: 2, seat: 1 },
+        digest: '22613673cc0220711b2e3918611ba577acaa308e5b7a343dd50261e9bb732966',
+      },
+      {
+        multipliers: [2n, 4n, 6n, 8n, 10n, 12n, 14n],
+        permutation: [1, 4, 0, 3, 6, 2, 5],
+        secret: 19n,
+        seedByte: 83,
+        context: { deck: 'seven', epoch: 3, parent: 'f'.repeat(64) },
+        digest: '0258fb62e689d51a3dfafaeb074080f1c487a0f642f45b34aed271eab824d24f',
+      },
+    ];
+    for (const item of cases) {
+      const input = item.multipliers.map((scalar) => encodePoint(scalePoint(G, scalar)));
+      const output = input.slice();
+      for (let oldIndex = 0; oldIndex < input.length; oldIndex += 1) {
+        const scalar = required(item.multipliers[oldIndex]);
+        output[required(item.permutation[oldIndex])] = encodePoint(
+          scalePoint(scalePoint(G, scalar), item.secret),
+        );
+      }
+      const statement = {
+        input,
+        output,
+        publicKey: encodePoint(scalePoint(G, item.secret)),
+      };
+      const proof = proveShuffle(
+        statement,
+        item.secret,
+        item.permutation,
+        new Uint8Array(32).fill(item.seedByte),
+        item.context,
+      );
+      expect(toHex(sha256(canonicalEncode(proof)))).toBe(item.digest);
+      expect(verifyShuffle(statement, proof, item.context)).toBe(true);
+    }
+  });
+
   test('verifies a non-involutive old→new permutation and explicit/compact transcript equivalence', () => {
     const statement = fixture();
     expect(statement.output).toEqual([
@@ -172,6 +225,44 @@ describe('compact single-key shuffle proof', () => {
     const { forwardRelations, compact } = independentExplicitProof(statement);
     expect(forwardRelations.every(Boolean)).toBe(true);
     expect(verifyShuffle(statement, compact, CONTEXT)).toBe(false);
+  });
+
+  test('rejects guessed challenge openings for an independently constructed false shuffle', () => {
+    const original = fixture();
+    const statement = { ...original, output: [...original.output] };
+    statement.output[0] = encodePoint(scalePoint(G, 99n));
+    // All bit-1 equations can be reconstructed for an arbitrary output. The
+    // Fiat-Shamir challenge must still match every guessed bit to accept it.
+    const guessedBits = new Uint8Array(8).fill(255);
+    const proof: ShuffleProof = {
+      challenge: toBase64Url(guessedBits),
+      responses: Array.from({ length: 64 }, (_, round) => ({
+        scalar: encodeScalar(BigInt(round + 2)),
+        permutation: [0, 1, 2, 3],
+      })),
+    };
+    const explicit = expandExplicit(statement, proof);
+    expect(explicit.challenge).not.toEqual(guessedBits);
+    // The first bit-1 opening fixes r = a/u through R = rG. No permutation
+    // of r·input can answer bit 0 for that same commitment and false output.
+    const [R, Y] = required(explicit.rounds[0]);
+    const r = modScalar(SECRET * invertScalar(2n));
+    expect(R).toBe(encodePoint(scalePoint(G, r)));
+    const expectedPoints = statement.input.map((point) =>
+      encodePoint(scalePoint(decodePoint(point), r)),
+    );
+    const indices = [0, 1, 2, 3];
+    let permutations: number[][] = [[]];
+    for (let length = 0; length < indices.length; length += 1)
+      permutations = permutations.flatMap((prefix) =>
+        indices.filter((index) => !prefix.includes(index)).map((index) => [...prefix, index]),
+      );
+    expect(permutations).toHaveLength(24);
+    for (const permutation of permutations)
+      expect(
+        expectedPoints.every((point, oldIndex) => Y[required(permutation[oldIndex])] === point),
+      ).toBe(false);
+    expect(verifyShuffle(statement, proof, CONTEXT)).toBe(false);
   });
 
   test('rejects a mathematically valid shuffle transcript with an identity card', () => {
