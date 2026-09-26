@@ -1,5 +1,6 @@
 import * as v from 'valibot';
 import { beaconContributionSchema } from './beacon-contributions.js';
+import { signedCountContributionSchema } from './count-reveal.js';
 import { deckUnlockContributionSchema } from './deck-inbox.js';
 import { certifiedEntrySchema, signedProposalSchema } from './proposal.js';
 import {
@@ -25,6 +26,11 @@ const deckContributionSchema = v.strictObject({
   t: v.literal('DECK_CONTRIB'),
   genesisDigest: key32Schema,
   contribution: deckUnlockContributionSchema,
+});
+const countContributionSchema = v.strictObject({
+  t: v.literal('COUNT_CONTRIB'),
+  genesisDigest: key32Schema,
+  contribution: signedCountContributionSchema,
 });
 const proposalMessageSchema = v.strictObject({
   t: v.literal('PROPOSAL'),
@@ -86,6 +92,7 @@ export const protocolMessageSchema = v.variant('t', [
   submitSchema,
   systemContributionSchema,
   deckContributionSchema,
+  countContributionSchema,
   proposalMessageSchema,
   voteMessageSchema,
   commitSchema,

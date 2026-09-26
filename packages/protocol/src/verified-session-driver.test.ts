@@ -12,6 +12,8 @@ import type { Genesis } from './types.js';
 import { VerifiedSessionDriver } from './verified-session-driver.js';
 import type { CryptoContext } from './crypto-context.js';
 import { emptyHandCommitments } from './hand-commitments.js';
+import type { CountOperation } from './count-reveal.js';
+import { signCountContribution, verifyCountContribution } from './count-reveal.js';
 
 function verifiedGenesis(): {
   engine: ReturnType<typeof protocolFixture>['engine'];
@@ -388,5 +390,131 @@ describe('VerifiedSessionDriver safety boundaries', () => {
       error: { code: 'hand-opening-mismatch' },
     });
     expect(driver.privateState(0)?.hand.brick).toBe(1);
+  });
+
+  test('produces an owned zero Monopoly count proof only for the frozen pending request', () => {
+    const fixture = verifiedGenesis();
+    const context = contextFor(fixture);
+    if (!context.crypto) throw new Error('Missing crypto fixture');
+    const uncertain = createResourceBounds(
+      1,
+      { brick: 0, lumber: 0, wool: 0, grain: 0, ore: 0 },
+      { brick: 1, lumber: 0, wool: 0, grain: 0, ore: 1 },
+    );
+    if (!uncertain.ok) throw new Error(uncertain.error.message);
+    context.state = {
+      ...context.state,
+      turn: {
+        ...context.state.turn,
+        activeSeat: 1,
+        phase: [
+          { module: 'base', id: 'main', data: null },
+          { module: 'base', id: 'monopoly', data: { seat: 1, resource: 'brick', remaining: [0] } },
+        ],
+      },
+      seats: context.state.seats.map((seat) =>
+        seat.seat === 0 ? { ...seat, resources: uncertain.value } : seat,
+      ),
+    };
+    context.crypto = {
+      ...context.crypto,
+      hands: context.crypto.hands.map((row) =>
+        row.seat === 0
+          ? { ...row, commitments: { ...row.commitments, ore: pedersenCommit(1n, 0n) } }
+          : row,
+      ),
+    };
+    const victim = fixture.genesis.seats.find((item) => item.seat === 0);
+    const hand = context.crypto.hands.find((item) => item.seat === 0);
+    if (!victim || !hand) throw new Error('Missing victim fixture');
+    const operation: CountOperation = {
+      protocol: 'monopoly-count-v1',
+      genesisDigest: genesisDigest(fixture.genesis),
+      epoch: 0,
+      anchor: { seq: context.head.seq, hash: entryHash(context.head) },
+      monopolist: 1,
+      resource: 'brick',
+      victims: [{ seat: 0, publicKey: victim.publicKey, commitment: hand.commitments.brick }],
+    };
+    context.crypto = { ...context.crypto, counts: { operation, remaining: [0] } };
+    const seed = new Uint8Array(32).fill(7);
+    const disposed = vi.fn<() => void>();
+    const source = vi.fn<(seat: Seat) => { proofSeed: () => Uint8Array; dispose: () => void }>(
+      () => ({ proofSeed: () => seed.slice(), dispose: disposed }),
+    );
+    const engine = {
+      ...fixture.engine,
+      createPrivateState: (seat: Seat) => ({
+        ...fixture.engine.createPrivateState(seat),
+        hand: { ...fixture.engine.createPrivateState(seat).hand, ore: seat === 0 ? 1 : 0 },
+      }),
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- only the owned starting hand differs in this synthetic pending fixture.
+    } as unknown as Engine;
+    const driver = new VerifiedSessionDriver(
+      engine,
+      fixture.genesis,
+      [0],
+      () => {
+        throw new Error('Count proof needs no deck source');
+      },
+      source,
+    );
+    const prepared = driver.produceCountProof(operation, 0, context);
+    expect(prepared).toMatchObject({ ok: true, value: { count: 0, proof: {} } });
+    if (!prepared.ok) throw new Error(prepared.error.message);
+    const signer = fixture.identities[0];
+    if (!signer) throw new Error('Missing victim signing key');
+    const signed = signCountContribution(
+      operation,
+      0,
+      prepared.value.count,
+      prepared.value.proof,
+      signer.secretKey,
+    );
+    expect(verifyCountContribution(signed, operation)).toEqual(success(signed));
+    expect(source).toHaveBeenCalledOnce();
+    expect(disposed).toHaveBeenCalledOnce();
+    const staleHead: LogContext = { ...context, head: { ...context.head, seq: 1 } };
+    expect(driver.produceCountProof(operation, 0, staleHead)).toMatchObject({
+      ok: false,
+      error: { code: 'verified-count-context' },
+    });
+    const wrongOpening: LogContext = {
+      ...context,
+      crypto: {
+        ...context.crypto,
+        hands: context.crypto.hands.map((row) =>
+          row.seat === 0
+            ? { ...row, commitments: { ...row.commitments, ore: pedersenCommit(0n, 0n) } }
+            : row,
+        ),
+      },
+    };
+    expect(driver.produceCountProof(operation, 0, wrongOpening)).toMatchObject({
+      ok: false,
+      error: { code: 'hand-opening-mismatch' },
+    });
+    expect(source).toHaveBeenCalledOnce();
+    expect(driver.produceCountProof(operation, 1, context)).toMatchObject({
+      ok: false,
+      error: { code: 'seat-not-controllable' },
+    });
+    expect(driver.produceCountProof({ ...operation, resource: 'ore' }, 0, context)).toMatchObject({
+      ok: false,
+      error: { code: 'verified-count-operation' },
+    });
+    const missingSource = new VerifiedSessionDriver(engine, fixture.genesis, [0], () => {
+      throw new Error('Count proof needs no deck source');
+    });
+    expect(missingSource.produceCountProof(operation, 0, context)).toMatchObject({
+      ok: false,
+      error: { code: 'hand-proof-source' },
+    });
+    const stale: LogContext = { ...context, crypto: { ...context.crypto, counts: null } };
+    expect(driver.produceCountProof(operation, 0, stale)).toMatchObject({
+      ok: false,
+      error: { code: 'count-context-required' },
+    });
+    driver.dispose();
   });
 });

@@ -69,6 +69,7 @@ function fixture(count: 2 | 3 = 3) {
     },
     decks: { genesisDigest: operation.genesisDigest, decks: [], active },
     hands: value(emptyHandCommitments(protocol.genesis.config.seats)),
+    counts: null,
   });
   const context = (active: DeckDrawOperation | null): LogContext => ({
     genesis: protocol.genesis,

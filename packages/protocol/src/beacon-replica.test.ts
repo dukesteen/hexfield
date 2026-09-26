@@ -10,6 +10,7 @@ import {
 } from './beacon-contributions.js';
 import { beaconOperationId, signBeaconReveal } from './beacon.js';
 import { getBeaconOperation } from './beacon-state.js';
+import { MemoryCountContributionStore } from './count-contributions.js';
 import {
   GENESIS_PREVIOUS_HASH,
   entryHash,
@@ -233,6 +234,9 @@ function optionsFor(
     journal,
     beaconSource: required(fixture.sources[position]),
     beaconContributions: store,
+    // This isolated beacon fixture never enters Monopoly.
+    countProof: () => failure('count-not-exercised', 'No count proof in the beacon fixture'),
+    countContributionStore: new MemoryCountContributionStore(),
     deckContributions: store,
     createDeckSource: (_deckId, ownerSeat) => fixture.deck.createSource(ownerSeat),
     botKeys: new Map(

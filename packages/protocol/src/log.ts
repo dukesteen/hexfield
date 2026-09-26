@@ -21,6 +21,7 @@ import { revealDeckCards } from './deck-ledger.js';
 import { DECK_REVEAL_PROTOCOL } from './deck-ledger.js';
 import { readCommandProofs } from './command-proofs.js';
 import { planHandTransition, verifyHandProofs } from './hand-transition.js';
+import { completeCountHandPlan, verifyCountInput } from './count-reveal.js';
 
 export interface LogContext {
   genesis: Genesis;
@@ -254,11 +255,11 @@ function entryInput(
     return failure('private-card-in-log', 'Dealt card identities must be delivered privately');
   if (payload.input.type === 'SEAT_STATUS')
     return failure('membership-required', 'Seat status may change only through membership entries');
-  if (context.genesis.security === 'verified' && payload.input.type === 'REVEAL_COUNT')
-    return failure(
-      'hand-count-delivery-pending',
-      'Certified count reveals need owner-signed delivery',
-    );
+  if (context.genesis.security === 'verified' && payload.input.type === 'REVEAL_COUNT') {
+    // The shared input path checks owner evidence even for built-in crypto results.
+    // A generic system callback never authorizes this input.
+    return success({ input: payload.input, crypto });
+  }
   if (context.genesis.security === 'verified' && payload.input.type === 'STEAL_RESULT')
     return failure(
       'hand-steal-unavailable',
@@ -366,6 +367,12 @@ export function validateNextEntry(
         crypto,
       });
     }
+    if (crypto && input.kind === 'system' && input.type === 'REVEAL_COUNT') {
+      if (entry.payload.kind !== 'system')
+        return failure('count-evidence', 'Count inputs require system evidence');
+      const checked = verifyCountInput(crypto.counts, input, entry.payload.evidence);
+      if (!checked.ok) return checked;
+    }
     const applied = selected.value.applied
       ? success(selected.value.applied)
       : context.engine.apply(context.state, input);
@@ -379,18 +386,21 @@ export function validateNextEntry(
         applied.value,
       );
       if (!planned.ok) return planned;
-      if (planned.value.effects.some((effect) => effect.type === 'resource-count-revealed'))
-        return failure(
-          'hand-count-delivery-pending',
-          'Certified count reveals need owner-signed delivery',
-        );
-      const verified = verifyHandProofs(planned.value, [], {
-        genesisDigest: genesisDigest(context.genesis),
-        epoch: committedCrypto.epoch,
-        anchor: { seq: context.head.seq, hash: entryHash(context.head) },
-        command: null,
-      });
-      if (!verified.ok) return verified;
+      if (input.kind === 'system' && input.type === 'REVEAL_COUNT') {
+        if (!committedCrypto.counts)
+          return failure('count-context-required', 'Count input has no frozen operation');
+        const completed = completeCountHandPlan(committedCrypto.counts, planned.value);
+        if (!completed.ok) return completed;
+        committedCrypto = { ...committedCrypto, counts: completed.value };
+      } else {
+        const verified = verifyHandProofs(planned.value, [], {
+          genesisDigest: genesisDigest(context.genesis),
+          epoch: committedCrypto.epoch,
+          anchor: { seq: context.head.seq, hash: entryHash(context.head) },
+          command: null,
+        });
+        if (!verified.ok) return verified;
+      }
       committedCrypto = { ...committedCrypto, hands: planned.value.hands };
     }
     if (entry.payload.kind !== 'command') {
@@ -405,6 +415,7 @@ export function validateNextEntry(
         ? success(null)
         : captureCryptoPending(
             committedCrypto,
+            context.genesis,
             context.engine,
             applied.value.state,
             { seq: entry.seq, hash: entryHash(entry) },

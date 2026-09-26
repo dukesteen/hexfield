@@ -6,6 +6,9 @@ import { ConsensusController } from './consensus-controller.js';
 import { prepareBeaconContribution } from './beacon-contributions.js';
 import type { BeaconContributionStore, BeaconSecretSource } from './beacon-contributions.js';
 import { BeaconInbox } from './beacon-inbox.js';
+import { prepareCountContribution } from './count-contributions.js';
+import type { CountContributionStore, CountProofProducer } from './count-contributions.js';
+import { CountInbox } from './count-inbox.js';
 import { deckPassHash } from './deck-genesis.js';
 import { DeckInbox } from './deck-inbox.js';
 import { decksReady } from './deck-ledger.js';
@@ -87,6 +90,10 @@ export interface ReplicatedLogOptions {
   createDeckSource?: DeckSourceFactory;
   /** Durable immutable position reservations and signed unlocks. */
   deckContributions?: DeckContributionStore;
+  /** Owner-only proof source for each locally hosted Monopoly victim. */
+  countProof?: CountProofProducer;
+  /** Immutable outgoing count reveals, retained across restarts. */
+  countContributionStore?: CountContributionStore;
   systemInput?: (
     context: ProposalContext,
   ) => { input: SystemInput; evidence: SystemEvidence } | null;
@@ -124,9 +131,13 @@ export class ReplicatedLog {
   private readonly rejectedProposals = new Set<string>();
   private readonly beaconInbox = new BeaconInbox();
   private readonly deckInbox = new DeckInbox();
+  private readonly countInbox = new CountInbox();
   private readonly deckSetupPasses: LocalConfiguration['passes'];
   private readonly deckKeys: LocalConfiguration['keys'];
   private readonly rejectedDeckContributions = new Set<string>();
+  private readonly rejectedCountContributions = new Set<string>();
+  private readonly sentCountContributions = new Set<Seat>();
+  private sentCountOperation: string | null = null;
   private preparedDeckPrefix: string | null = null;
   private sentDeckPrefix: string | null = null;
   private sentBeaconOperation: string | null = null;
@@ -523,6 +534,23 @@ export class ReplicatedLog {
         }
         return remembered.value ? this.offerAvailableInput() : success(undefined);
       }
+      case 'COUNT_CONTRIB': {
+        if (message.genesisDigest !== this.context.membership.genesisDigest)
+          return failure('replica-count-genesis', 'Count contribution belongs to another game');
+        const refreshed = this.countInbox.refresh(this.context.log.crypto);
+        if (!refreshed.ok) return refreshed;
+        if (message.contribution.body.operationId !== this.countInbox.operationId())
+          return success(undefined);
+        const hash = toHex(hashValue(message.contribution));
+        if (this.rejectedCountContributions.has(hash)) return success(undefined);
+        const remembered = this.countInbox.remember(message.contribution);
+        if (!remembered.ok) {
+          rememberRejection(this.rejectedCountContributions, hash);
+          this.strikePeer(from);
+          return failure('count-proof-invalid', 'Signed count contribution is invalid');
+        }
+        return remembered.value ? this.offerAvailableInput() : success(undefined);
+      }
       case 'SUBMIT': {
         const hash = commandHash(message.cmd);
         if (this.rejectedCommands.has(hash)) return success(undefined);
@@ -772,6 +800,8 @@ export class ReplicatedLog {
     if (state.value.halted) return success(undefined);
     const deckPrepared = await this.prepareDeck(retransmit);
     if (!deckPrepared.ok) return deckPrepared;
+    const countPrepared = await this.prepareCount(retransmit);
+    if (!countPrepared.ok) return countPrepared;
     const prepared = await this.prepareBeacon(retransmit);
     if (!prepared.ok) return prepared;
     const available =
@@ -779,6 +809,7 @@ export class ReplicatedLog {
       (!this.cryptoPending() && this.commands.length > 0) ||
       this.deckSetupCandidate() !== null ||
       this.deckDrawCandidate() !== null ||
+      this.countCandidate() !== null ||
       this.beaconCandidate() !== null ||
       this.systemCandidate() !== null ||
       state.value.valid !== null;
@@ -831,6 +862,11 @@ export class ReplicatedLog {
       );
     const crypto = this.deckSetupCandidate() ?? this.deckDrawCandidate() ?? this.beaconCandidate();
     if (crypto) return this.entryCandidate(state, crypto);
+    const count = this.countCandidate();
+    if (count) {
+      const candidate = this.entryCandidate(state, count);
+      if (candidate) return candidate;
+    }
     if (this.cryptoPending()) return null;
     while (this.commands.length > 0) {
       const command = this.commands[0];
@@ -942,6 +978,76 @@ export class ReplicatedLog {
       return null;
     }
     return candidate.value;
+  }
+
+  private countCandidate(): Extract<EntryPayload, { kind: 'system' }> | null {
+    const candidate = this.countInbox.candidate(this.context.log.crypto);
+    if (!candidate.ok) {
+      this.status({ kind: 'rejected', code: candidate.error.code });
+      return null;
+    }
+    return candidate.value;
+  }
+
+  private async prepareCount(retransmit: boolean): Promise<Result<void>> {
+    const refreshed = this.countInbox.refresh(this.context.log.crypto);
+    if (!refreshed.ok) return this.failClosed(refreshed.error.code, refreshed.error.message);
+    const active = this.context.log.crypto?.counts;
+    const operationId = this.countInbox.operationId();
+    if (!active || !operationId) {
+      this.sentCountOperation = null;
+      this.sentCountContributions.clear();
+      return success(undefined);
+    }
+    if (this.sentCountOperation !== operationId) {
+      this.sentCountOperation = operationId;
+      this.sentCountContributions.clear();
+    }
+    for (const seat of active.remaining) {
+      const key = this.deckKeys.get(seat);
+      if (!key) continue;
+      const { countProof, countContributionStore } = this.options;
+      if (!countProof || !countContributionStore)
+        return this.failClosed(
+          'replica-count-store',
+          'Verified count reveals need an owner proof source and durable store',
+        );
+      // Each hosted victim has an independent durable record for this frozen operation.
+      // oxlint-disable-next-line no-await-in-loop -- The store must settle before this contribution is sent.
+      const prepared = await prepareCountContribution(
+        active.operation,
+        seat,
+        key,
+        detachedContext(this.context).log,
+        countProof,
+        countContributionStore,
+      );
+      if (this.disposed)
+        return failure('replica-disposed', 'Replica closed during count preparation');
+      if (!prepared.ok) return this.failClosed(prepared.error.code, prepared.error.message);
+      const stillPending = this.countInbox.refresh(this.context.log.crypto);
+      if (!stillPending.ok)
+        return this.failClosed(stillPending.error.code, stillPending.error.message);
+      const current = this.context.log.crypto?.counts;
+      if (
+        !current ||
+        !current.remaining.includes(seat) ||
+        this.countInbox.operationId() !== operationId
+      )
+        return success(undefined);
+      const remembered = this.countInbox.remember(prepared.value);
+      if (!remembered.ok) return this.failClosed(remembered.error.code, remembered.error.message);
+      if (retransmit || !this.sentCountContributions.has(seat)) {
+        const sent = this.broadcast({
+          t: 'COUNT_CONTRIB',
+          genesisDigest: this.context.membership.genesisDigest,
+          contribution: prepared.value,
+        });
+        if (sent.ok) this.sentCountContributions.add(seat);
+        else this.status({ kind: 'rejected', code: sent.error.code });
+      }
+    }
+    return success(undefined);
   }
 
   private async prepareDeck(retransmit: boolean): Promise<Result<void>> {
@@ -1301,6 +1407,8 @@ export class ReplicatedLog {
     this.rejectedCommands.clear();
     this.rejectedProposals.clear();
     this.rejectedDeckContributions.clear();
+    this.rejectedCountContributions.clear();
+    this.sentCountContributions.clear();
     this.accusation = pendingAccusation;
     this.clearConsensusTimers();
     const opened = await this.openController();
@@ -1675,6 +1783,14 @@ function checkLocalKey(
     return failure(
       'replica-deck-store',
       'Verified decks need local sources and durable contributions',
+    );
+  if (
+    context.log.genesis.security === 'verified' &&
+    (!options.countProof || !options.countContributionStore)
+  )
+    return failure(
+      'replica-count-store',
+      'Verified sessions need an owner count proof source and durable contributions',
     );
   const keys = new Map<Seat, Uint8Array>();
   let retained = false;

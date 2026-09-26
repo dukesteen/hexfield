@@ -23,6 +23,8 @@ import {
 import type { DeckLedger } from './deck-ledger.js';
 import { emptyHandCommitments, validateHandCommitments } from './hand-commitments.js';
 import type { PublicHandCommitments } from './hand-commitments.js';
+import { captureCountPending, validateCountState } from './count-state.js';
+import type { CountState } from './count-reveal.js';
 
 /** Public cryptographic metadata, derived only by replaying the certified log. */
 export interface CryptoContext {
@@ -30,6 +32,7 @@ export interface CryptoContext {
   beacon: BeaconState;
   decks: DeckLedger;
   hands: PublicHandCommitments;
+  counts: CountState | null;
 }
 
 export const BEACON_EVIDENCE_PROTOCOL = 'beacon-v1';
@@ -41,6 +44,7 @@ function equalValue(left: unknown, right: unknown): boolean {
 /** Freeze newly created requests after their containing entry has a value hash. */
 export function captureCryptoPending(
   context: CryptoContext,
+  genesis: Genesis,
   engine: Engine,
   state: GameState,
   anchor: EntryRef,
@@ -55,7 +59,17 @@ export function captureCryptoPending(
   const pending = random[0];
   const decks = captureDeckPending(context.decks, state, pending ?? null, anchor, context.epoch);
   if (!decks.ok) return decks;
-  const next = { ...context, decks: decks.value };
+  const counts = captureCountPending(
+    context.counts,
+    genesis,
+    engine,
+    state,
+    context.hands,
+    context.epoch,
+    anchor,
+  );
+  if (!counts.ok) return counts;
+  const next = { ...context, decks: decks.value, counts: counts.value };
   const frozen = context.beacon.active?.pending ?? context.beacon.fixed?.operation.pending;
   if (frozen) {
     if (!pending || !equalValue(pending, frozen))
@@ -99,7 +113,8 @@ export function initializeCryptoContext(
   const hands = emptyHandCommitments(genesis.config.seats);
   if (!hands.ok) return hands;
   return captureCryptoPending(
-    { epoch: 0, beacon: beacon.value, decks: decks.value, hands: hands.value },
+    { epoch: 0, beacon: beacon.value, decks: decks.value, hands: hands.value, counts: null },
+    genesis,
     engine,
     state,
     { seq: head.seq, hash: entryHash(head) },
@@ -143,6 +158,17 @@ export function validateCryptoTransition(
   if (!decks.ok) return decks;
   const hands = validateHandCommitments(current.hands, genesis.config.seats);
   if (!hands.ok) return hands;
+  const counts = validateCountState(
+    current.counts,
+    genesis,
+    engine,
+    state,
+    hands.value,
+    current.epoch,
+  );
+  if (!counts.ok) return counts;
+  if (counts.value && counts.value.operation.anchor.seq >= entry.seq)
+    return failure('count-anchor', 'Count operation must already exist in the certified prefix');
   if (
     beacon.value.genesisDigest !== genesisDigest(genesis) ||
     decks.value.genesisDigest !== genesisDigest(genesis)
@@ -153,6 +179,7 @@ export function validateCryptoTransition(
     beacon: beacon.value,
     decks: decks.value,
     hands: hands.value,
+    counts: counts.value,
   };
   if (payload.kind === 'control') return success({ crypto, handled: false, input: null });
   if (payload.kind === 'crypto' && payload.action === 'deck-pass') {

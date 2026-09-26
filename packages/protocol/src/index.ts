@@ -10,6 +10,11 @@ export type {
   BeaconSecretSource,
 } from './beacon-contributions.js';
 export type { CryptoContext } from './crypto-context.js';
+export { MemoryCountContributionStore } from './count-contributions.js';
+export type { CountContributionStore, CountProofProducer } from './count-contributions.js';
+export type { CountOperation, CountState, SignedCountContribution } from './count-reveal.js';
+export { createHandSecretSource } from './hand-source.js';
+export type { HandSecretSource, HandSourceFactory } from './hand-source.js';
 export { createRandomDerivations, randomDerivations } from './random-derivations.js';
 export type { RandomDerivation, RandomPending, BeaconOutcome } from './random-derivations.js';
 

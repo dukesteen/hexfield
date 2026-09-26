@@ -1,5 +1,6 @@
 import { canonicalDecode, canonicalEncode } from '@cp2p/codec';
 import { encodeScalar } from '@cp2p/crypto';
+import type { SchnorrProof } from '@cp2p/crypto';
 import { DEV_CARD_COUNTS, RESOURCES, failure, success } from '@cp2p/engine';
 import type {
   Engine,
@@ -18,6 +19,9 @@ import type { HandSourceFactory } from './hand-source.js';
 import { verifyHandOpening } from './hand-commitments.js';
 import { handProofContext, planHandTransition, proveHandObligation } from './hand-transition.js';
 import { composeCommandProofs } from './command-proofs.js';
+import { countOperationId, countProofContext, proveCountOpening } from './count-reveal.js';
+import type { CountOperation } from './count-reveal.js';
+import { validateCountState } from './count-state.js';
 import type { CommandBody, Genesis, SystemEvidence } from './types.js';
 import type { CertifiedEntry } from './proposal.js';
 import { entryHash, genesisDigest } from './genesis.js';
@@ -129,6 +133,84 @@ export class VerifiedSessionDriver implements SessionDriver {
       if (!opened.ok) return opened;
     }
     return success(undefined);
+  }
+
+  /** Derive one owned, exact Monopoly count opening for the frozen public request. */
+  produceCountProof(
+    operation: CountOperation,
+    seat: Seat,
+    context: LogContext,
+  ): Result<{ count: number; proof: SchnorrProof }> {
+    if (this.disposed) return failure('verified-driver-disposed', 'Verified driver is disposed');
+    if (!this.owned.has(seat))
+      return failure('seat-not-controllable', 'Verified driver does not own this victim');
+    const crypto = context.crypto;
+    if (
+      genesisDigest(context.genesis) !== this.digest ||
+      context.genesis.gameId !== this.genesis.gameId ||
+      !crypto ||
+      (this.appliedHead === null
+        ? context.head.seq !== 0
+        : entryHash(context.head) !== this.appliedHead)
+    )
+      return failure('verified-count-context', 'Count proof has a stale or foreign parent');
+    const pending = crypto.counts;
+    const validPending = validateCountState(
+      pending,
+      this.genesis,
+      this.engine,
+      context.state,
+      crypto.hands,
+      crypto.epoch,
+    );
+    if (!validPending.ok) return validPending;
+    let sameOperation = false;
+    try {
+      sameOperation =
+        pending !== null && countOperationId(pending.operation) === countOperationId(operation);
+    } catch {
+      return failure('verified-count-operation', 'Count proof operation is malformed');
+    }
+    const victim = operation.victims.find((item) => item.seat === seat);
+    const hand = crypto.hands.find((item) => item.seat === seat);
+    if (
+      !pending ||
+      !sameOperation ||
+      !pending.remaining.includes(seat) ||
+      operation.genesisDigest !== this.digest ||
+      operation.epoch !== crypto.epoch ||
+      !victim ||
+      victim.commitment !== hand?.commitments[operation.resource]
+    )
+      return failure('verified-count-operation', 'Count proof is not the current victim request');
+    const opened = this.verifyOwnedOpenings(context);
+    if (!opened.ok) return opened;
+    const priv = this.privates.get(seat);
+    const blindings = this.blindings.get(seat);
+    if (!priv || !blindings)
+      return failure('verified-private-missing', 'Owned count opening is missing');
+    if (!this.createHandSource)
+      return failure('hand-proof-source', 'No hand proof source is configured');
+    const count = priv.hand[operation.resource];
+    if (count === undefined)
+      return failure('verified-private-missing', 'Owned count resource is missing');
+    const blinding = blindings[operation.resource];
+    let source: ReturnType<HandSourceFactory> | null = null;
+    try {
+      source = this.createHandSource(seat);
+      const proofContext = countProofContext(operation, seat, count);
+      const seed = source.proofSeed(proofContext);
+      try {
+        const proof = proveCountOpening(operation, seat, count, blinding, seed);
+        return proof.ok ? success({ count, proof: proof.value }) : proof;
+      } finally {
+        seed.fill(0);
+      }
+    } catch {
+      return failure('verified-count-proof', 'Could not derive owned count proof');
+    } finally {
+      source?.dispose();
+    }
   }
 
   /** Attach proof material before the caller signs this exact command body. */

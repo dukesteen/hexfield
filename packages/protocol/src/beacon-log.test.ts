@@ -508,10 +508,16 @@ describe('certified beacon log integration', () => {
       getPending: () => [pending, pending],
     };
     expect(
-      captureCryptoPending(data.initial.log.crypto, duplicatePendingEngine, data.state, {
-        seq: 0,
-        hash: entryHash(data.entry),
-      }),
+      captureCryptoPending(
+        data.initial.log.crypto,
+        data.genesis,
+        duplicatePendingEngine,
+        data.state,
+        {
+          seq: 0,
+          hash: entryHash(data.entry),
+        },
+      ),
     ).toMatchObject({ ok: false, error: { code: 'ambiguous-random-request' } });
     expect(snapshotFromContext(data.initial)).toEqual(before);
   });
@@ -729,6 +735,7 @@ describe('certified beacon log integration', () => {
           beacon: frozen.value,
           decks: deckLedger,
           hands: baseCrypto.hands,
+          counts: null,
         },
       },
     };

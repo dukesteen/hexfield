@@ -1,4 +1,5 @@
 import { identityFromSecret } from '@cp2p/crypto';
+import type { SchnorrProof } from '@cp2p/crypto';
 import { canonicalDecode, canonicalEncode } from '@cp2p/codec';
 import { failure, success } from '@cp2p/engine';
 import type {
@@ -32,6 +33,7 @@ import type { ProtocolClock, Unsubscribe } from './transport.js';
 import type { CommandBody, Genesis, LogEntry, SignedCommand, SystemEvidence } from './types.js';
 import { logEntrySchema } from './schemas.js';
 import { parseCanonical } from './validation.js';
+import type { CountOperation } from './count-reveal.js';
 
 /** Private state and system protocols are separate from the replicated public log. */
 export interface SessionDriver {
@@ -41,6 +43,12 @@ export interface SessionDriver {
     body: Omit<CommandBody, 'evidence'>,
     context: LogContext,
   ): Result<CommandBody['evidence']>;
+  /** Owner-only exact-count proof for a frozen Monopoly victim request. */
+  produceCountProof?(
+    operation: CountOperation,
+    seat: Seat,
+    context: LogContext,
+  ): Result<{ count: number; proof: SchnorrProof }>;
   /**
    * Handles each certified entry, including protocol-only entries with no engine input.
    * When present, this replaces `committed`; it owns engine and private consequences too.
@@ -59,7 +67,7 @@ export interface SessionDriver {
 
 export interface P2PSessionOptions extends Omit<
   ReplicatedLogOptions,
-  'systemInput' | 'onCommit' | 'onStatus'
+  'systemInput' | 'onCommit' | 'onStatus' | 'countProof'
 > {
   /** Fresh driver on both create and restore. Restore replays private consequences. */
   createDriver: (
@@ -180,9 +188,20 @@ export class P2PSession implements GameSession<CertifiedHistory> {
           return replayed;
         }
       }
+      // Runtime callers may still pass a raw countProof despite the public type.
+      // Only this session's owned private driver may supply that authority.
+      const safeOptions = { ...options };
+      Reflect.deleteProperty(safeOptions, 'countProof');
       const replicaOptions: ReplicatedLogOptions = {
-        ...options,
+        ...safeOptions,
         systemInput: (current) => driver.next(current.log),
+        ...(driver.produceCountProof
+          ? {
+              countProof: (operation: CountOperation, seat: Seat, current: LogContext) =>
+                driver.produceCountProof?.(operation, seat, detachedLogContext(current)) ??
+                failure('count-proof-source', 'Count proof driver is unavailable'),
+            }
+          : {}),
         onCommit: (validated, previous, next) => {
           const applied = openedSession.applyCommit(validated, next, previous.log);
           if (!applied.ok) {

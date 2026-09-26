@@ -1,5 +1,5 @@
 import { canonicalDecode } from '@cp2p/codec';
-import { BASE_DEV_CARD_CATALOGUE, RESOURCES } from '@cp2p/engine';
+import { BASE_DEV_CARD_CATALOGUE, RESOURCES, failure } from '@cp2p/engine';
 import type { CommandShape, GameState, Result, Seat } from '@cp2p/engine';
 import { writeFile } from 'node:fs/promises';
 import { Session as InspectorSession } from 'node:inspector';
@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, test, vi } from 'vitest';
 import { MemoryBeaconContributionStore } from './beacon-contributions.js';
+import { MemoryCountContributionStore } from './count-contributions.js';
 import type { DeckContributionStore } from './deck-outbox.js';
 import { decodeDeckCard } from './deck-draw.js';
 import { genesisDeckDefinitions } from './deck-genesis.js';
@@ -167,6 +168,9 @@ function optionsFor(
     journal,
     beaconSource: fixture.beaconSourceFor(seat),
     beaconContributions: new MemoryBeaconContributionStore(),
+    // These deck-only cases never enter a Monopoly count phase.
+    countProof: () => failure('count-not-exercised', 'No count proof in the deck fixture'),
+    countContributionStore: new MemoryCountContributionStore(),
     deckSetupPasses: fixture.deckSetupPasses,
     botKeys: fixture.botKeysFor(seat),
     createDeckSource: fixture.createDeckSourceFor(seat),
@@ -628,6 +632,26 @@ describe('live verified deck replication', () => {
       // oxlint-disable-next-line no-await-in-loop
       expect(await journal.load()).toBeNull();
     }
+    const untrustedRuntimeOption = {
+      countProof: () => failure('untrusted-count-proof', 'Raw callback must be ignored'),
+    };
+    const rawFallback = await P2PSession.create({
+      ...base,
+      // A raw runtime option cannot supply private count authority in place of the driver.
+      ...untrustedRuntimeOption,
+      createDriver: (engine, genesis, _clock, ownedSeats) => {
+        const driver = new VerifiedSessionDriver(
+          engine,
+          genesis,
+          ownedSeats,
+          required(base.createDeckSource),
+        );
+        Object.defineProperty(driver, 'produceCountProof', { value: undefined });
+        return driver;
+      },
+    });
+    expect(rawFallback).toMatchObject({ ok: false, error: { code: 'replica-count-store' } });
+    expect(await journal.load()).toBeNull();
     network.dispose();
   }, 30_000);
 
@@ -933,9 +957,15 @@ describe('live verified deck replication', () => {
     delete missingSource.createDeckSource;
     const missingStore = { ...firstOptions };
     delete missingStore.deckContributions;
+    const missingCountProof = { ...firstOptions };
+    delete missingCountProof.countProof;
+    const missingCountStore = { ...firstOptions };
+    delete missingCountStore.countContributionStore;
     const invalidOptions: ReplicatedLogOptions[] = [
       missingSource,
       missingStore,
+      missingCountProof,
+      missingCountStore,
       { ...firstOptions, botKeys: new Map() },
       { ...firstOptions, botKeys: new Map([[hostedBot[0], firstOptions.secretKey]]) },
     ];
@@ -945,10 +975,18 @@ describe('live verified deck replication', () => {
       expect(created.ok).toBe(false);
       expect(created).toMatchObject({
         ok: false,
-        error: { code: index < 2 ? 'replica-deck-store' : 'replica-bot-key' },
+        error: {
+          code:
+            index < 2
+              ? 'replica-deck-store'
+              : index < 4
+                ? 'replica-count-store'
+                : 'replica-bot-key',
+        },
       });
       // oxlint-disable-next-line no-await-in-loop
       expect(await required(journals[0]).load()).toBeNull();
+      expect(required(sent[0])).toHaveLength(0);
     }
     const first = value(await ReplicatedLog.create(firstOptions));
     const second = value(
