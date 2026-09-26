@@ -12,11 +12,21 @@ import type { BeaconDerivations, BeaconState, EntryRef } from './beacon-state.js
 import { entryHash, genesisDigest } from './genesis.js';
 import { randomDerivations } from './random-derivations.js';
 import type { Genesis, LogEntry } from './types.js';
+import {
+  applyDeckSetupEntry,
+  captureDeckPending,
+  completeDeckDeal,
+  decksReady,
+  initializeDeckLedger,
+  validateDeckLedger,
+} from './deck-ledger.js';
+import type { DeckLedger } from './deck-ledger.js';
 
 /** Public cryptographic metadata, derived only by replaying the certified log. */
 export interface CryptoContext {
   epoch: number;
   beacon: BeaconState;
+  decks: DeckLedger;
 }
 
 export const BEACON_EVIDENCE_PROTOCOL = 'beacon-v1';
@@ -40,13 +50,16 @@ export function captureCryptoPending(
       'Multiple simultaneous random requests are unsupported',
     );
   const pending = random[0];
+  const decks = captureDeckPending(context.decks, state, pending ?? null, anchor, context.epoch);
+  if (!decks.ok) return decks;
+  const next = { ...context, decks: decks.value };
   const frozen = context.beacon.active?.pending ?? context.beacon.fixed?.operation.pending;
   if (frozen) {
     if (!pending || !equalValue(pending, frozen))
       return failure('beacon-request-changed', 'An unfinished beacon request cannot change');
-    return success(context);
+    return success(next);
   }
-  if (!pending || pending.request.type === 'draw') return success(context);
+  if (!pending || pending.request.type === 'draw') return success(next);
   const captured = freezeBeaconRequest(
     context.beacon,
     pending,
@@ -55,7 +68,7 @@ export function captureCryptoPending(
     context.epoch,
     registry,
   );
-  return captured.ok ? success({ ...context, beacon: captured.value }) : captured;
+  return captured.ok ? success({ ...next, beacon: captured.value }) : captured;
 }
 
 export function initializeCryptoContext(
@@ -68,8 +81,10 @@ export function initializeCryptoContext(
   if (genesis.security === 'stub') return success(null);
   const beacon = initializeBeaconState(genesis);
   if (!beacon.ok) return beacon;
+  const decks = initializeDeckLedger(genesis, state);
+  if (!decks.ok) return decks;
   return captureCryptoPending(
-    { epoch: 0, beacon: beacon.value },
+    { epoch: 0, beacon: beacon.value, decks: decks.value },
     engine,
     state,
     { seq: head.seq, hash: entryHash(head) },
@@ -88,6 +103,7 @@ export interface CryptoTransition {
 export function validateCryptoTransition(
   genesis: Genesis,
   current: CryptoContext | null,
+  engine: Engine,
   state: GameState,
   entry: LogEntry,
   registry: BeaconDerivations = randomDerivations,
@@ -108,10 +124,47 @@ export function validateCryptoTransition(
     );
   const beacon = validateBeaconState(current.beacon);
   if (!beacon.ok) return beacon;
-  if (beacon.value.genesisDigest !== genesisDigest(genesis))
+  const decks = validateDeckLedger(current.decks);
+  if (!decks.ok) return decks;
+  if (
+    beacon.value.genesisDigest !== genesisDigest(genesis) ||
+    decks.value.genesisDigest !== genesisDigest(genesis)
+  )
     return failure('crypto-genesis', 'Cryptographic state belongs to another genesis');
-  const crypto: CryptoContext = { epoch: current.epoch, beacon: beacon.value };
+  const crypto: CryptoContext = { epoch: current.epoch, beacon: beacon.value, decks: decks.value };
   if (payload.kind === 'control') return success({ crypto, handled: false, input: null });
+  if (payload.kind === 'crypto' && payload.action === 'deck-pass') {
+    const applied = applyDeckSetupEntry(crypto.decks, payload.evidence);
+    return applied.ok
+      ? success({ crypto: { ...crypto, decks: applied.value }, handled: true, input: null })
+      : applied;
+  }
+  if (!decksReady(crypto.decks))
+    return failure('deck-setup-pending', 'Every committed deck pass must be replayed before play');
+  if (payload.kind === 'system' && payload.input.type === 'CARD_DEALT') {
+    if (crypto.beacon.active || crypto.beacon.fixed)
+      return failure('beacon-pending', 'A deck deal cannot answer a beacon request');
+    const pending = engine.getPending(state).filter((item) => item.kind === 'random');
+    if (pending.length !== 1)
+      return failure('deck-pending', 'A deal requires exactly one certified random pending');
+    const completed = completeDeckDeal(
+      crypto.decks,
+      state,
+      pending[0] ?? null,
+      payload.input,
+      payload.evidence,
+      { seq: entry.seq, hash: entryHash(entry) },
+    );
+    return completed.ok
+      ? success({
+          crypto: { ...crypto, decks: completed.value },
+          handled: true,
+          input: payload.input,
+        })
+      : completed;
+  }
+  if (crypto.decks.active)
+    return failure('deck-pending', 'The certified draw must complete before another input');
   if (payload.kind === 'crypto' && payload.action === 'beacon-extend') {
     const extended = extendBeaconState(crypto.beacon, payload.evidence);
     return extended.ok

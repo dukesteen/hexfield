@@ -4,8 +4,8 @@ import { failure, success } from '@cp2p/engine';
 import type { Result, Seat } from '@cp2p/engine';
 import * as v from 'valibot';
 import { entryBody, entryHash } from './genesis.js';
-import { validateSignedCommand } from './log.js';
-import type { LogContext } from './log.js';
+import { validateCommandForEntry } from './log.js';
+import type { EntryPolicy, LogContext } from './log.js';
 import {
   key32Schema,
   nonnegativeIntegerSchema,
@@ -35,11 +35,16 @@ const CONTEXTUAL_COMMAND_FAILURES = new Set([
   'future-head',
   'stale-head',
   'command-parent',
+  'crypto-context-required',
+  'command-proof-unavailable',
+  'entry-verification-failed',
 ]);
 
 export interface ControlEvidenceContext {
   /** Must be reconstructed from the certified prefix ending at the offending parent. */
   log: LogContext;
+  /** The same deterministic proof policy used for normal entry validation. */
+  commandPolicy: Pick<EntryPolicy, 'verifyCommand'>;
   membership: VoteContext;
   excludedProposers: readonly Seat[];
   proposerFor: (seq: number, term: number) => { seat: Seat; publicKey: string };
@@ -149,7 +154,11 @@ export function validateObjectiveAccusation(
     const proposer = context.proposerFor(entry.seq, entry.term);
     if (proposer.seat !== control.offender || entry.payload.kind !== 'command')
       return failure('control-unproven', 'Evidence is not this proposer’s signed command proposal');
-    const command = validateSignedCommand(entry.payload.signed, context.log);
+    const command = validateCommandForEntry(
+      entry.payload.signed,
+      context.log,
+      context.commandPolicy,
+    );
     return command.ok || CONTEXTUAL_COMMAND_FAILURES.has(command.error.code)
       ? failure('control-unproven', 'A stale or valid command is not objective proposer misconduct')
       : success(undefined);

@@ -1,4 +1,4 @@
-import { canonicalDecode, canonicalEncode } from '@cp2p/codec';
+import { canonicalDecode, canonicalEncode, sha256, toHex } from '@cp2p/codec';
 import { identityFromSecret } from '@cp2p/crypto';
 import { failure, success } from '@cp2p/engine';
 import type { Result, Seat } from '@cp2p/engine';
@@ -26,6 +26,7 @@ import type {
 import type { ProposalContext } from './proposal.js';
 import type { SafetyStore, StoredSafety } from './safety-store.js';
 import type { ExcludeProposerControl, LogEntry } from './types.js';
+import { MAX_MESSAGE_BYTES } from './validation.js';
 
 export interface ConsensusControllerOptions {
   context: ProposalContext;
@@ -57,6 +58,7 @@ export class ConsensusController {
   private queue: Promise<unknown> = Promise.resolve();
   private stopped = false;
   private readonly secretKey: Uint8Array;
+  private readonly rejectedProposals = new Map<string, { code: string; message: string }>();
 
   private constructor(
     private readonly options: ConsensusControllerOptions,
@@ -166,10 +168,36 @@ export class ConsensusController {
 
   dispatch(event: ConsensusEvent): Promise<Result<void>> {
     return this.enqueue(async () => {
+      if (event.kind === 'proposal' && this.isRecordedProposalReplay(event.proposal))
+        return success(undefined);
+      const proposalKey = event.kind === 'proposal' ? this.proposalKey(event.proposal) : null;
+      const rejected = proposalKey ? this.rejectedProposals.get(proposalKey) : undefined;
+      if (rejected)
+        return failure(rejected.code, rejected.message, {
+          proposalEntryRejected: true,
+          cached: true,
+        });
       const next = this.reduce(event);
       if (!next.ok) {
         if (next.error.code === 'consensus-restore' || next.error.code === 'consensus-context')
           this.stopVoting();
+        else if (
+          proposalKey &&
+          next.error.details?.proposalEntryRejected === true &&
+          next.error.details.proposalControl !== true
+        ) {
+          // Entry validation depends on this controller's fixed certified parent,
+          // not its current round/votes. Controls can discover a second offender
+          // after another proof is retained, so always reconsider them.
+          this.rejectedProposals.set(proposalKey, {
+            code: next.error.code,
+            message: next.error.message,
+          });
+          if (this.rejectedProposals.size > 16) {
+            const oldest = this.rejectedProposals.keys().next().value;
+            if (oldest !== undefined) this.rejectedProposals.delete(oldest);
+          }
+        }
         return next;
       }
       try {
@@ -203,6 +231,43 @@ export class ConsensusController {
   private stopVoting(): void {
     this.stopped = true;
     this.secretKey.fill(0);
+    this.rejectedProposals.clear();
+  }
+
+  private proposalKey(value: unknown): string | null {
+    try {
+      const bytes = canonicalEncode(value);
+      return bytes.length <= MAX_MESSAGE_BYTES ? toHex(sha256(bytes)) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /** Stored proposals were validated before persistence; exact replays need no transition. */
+  private isRecordedProposalReplay(value: unknown): boolean {
+    let bytes: Uint8Array;
+    try {
+      bytes = canonicalEncode(value);
+    } catch {
+      return false;
+    }
+    if (bytes.byteLength > MAX_MESSAGE_BYTES) return false;
+    const recorded = [
+      ...this.state.proposals,
+      ...this.state.hints.flatMap((hint) => (hint.kind === 'proposal' ? [hint.proposal] : [])),
+    ].find((proposal) => sameBytes(bytes, canonicalEncode(proposal)));
+    if (!recorded) return false;
+    // A proposal retained before entering its round may still need its first vote.
+    return !(
+      recorded.body.entry.term === this.state.round &&
+      this.state.step === 'propose' &&
+      !this.state.votes.some(
+        (vote) =>
+          vote.body.seat === this.state.localSeat &&
+          vote.body.term === this.state.round &&
+          vote.body.phase === 'prevote',
+      )
+    );
   }
 
   private enqueue(operation: () => Promise<Result<void>>): Promise<Result<void>> {

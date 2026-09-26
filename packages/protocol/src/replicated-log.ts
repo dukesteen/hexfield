@@ -6,13 +6,16 @@ import { ConsensusController } from './consensus-controller.js';
 import { prepareBeaconContribution } from './beacon-contributions.js';
 import type { BeaconContributionStore, BeaconSecretSource } from './beacon-contributions.js';
 import { BeaconInbox } from './beacon-inbox.js';
+import { deckPassHash } from './deck-genesis.js';
+import { decksReady } from './deck-ledger.js';
+import type { SignedDeckPass } from './deck-setup.js';
 import type { ConsensusEffect, ConsensusState, Equivocation, TimeoutPhase } from './consensus.js';
 import { createConsensusState } from './consensus.js';
 import { objectiveEvidenceSeq, validateObjectiveAccusation } from './control.js';
 import { entryBody, entryHash, signEntry } from './genesis.js';
 import { journalSafetyStore } from './journal.js';
 import type { ProtocolJournal } from './journal.js';
-import { validateSignedCommand } from './log.js';
+import { validateNextEntry, validateSignedCommand } from './log.js';
 import type { ValidatedEntry } from './log.js';
 import { decodeProtocolMessage, encodeProtocolMessage } from './messages.js';
 import type { ProtocolMessage } from './messages.js';
@@ -33,7 +36,13 @@ import {
 } from './replay.js';
 import type { ReplayPolicy } from './replay.js';
 import type { PeerId, ProtocolClock, Transport, Unsubscribe } from './transport.js';
-import type { ExcludeProposerControl, LogEntry, SignedCommand, SystemEvidence } from './types.js';
+import type {
+  EntryPayload,
+  ExcludeProposerControl,
+  LogEntry,
+  SignedCommand,
+  SystemEvidence,
+} from './types.js';
 import { genesisSchema, logEntrySchema } from './schemas.js';
 import { MAX_MESSAGE_BYTES, parseCanonical } from './validation.js';
 import { validateVote, verifyCertificate } from './votes.js';
@@ -66,6 +75,8 @@ export interface ReplicatedLogOptions {
   beaconSource?: BeaconSecretSource;
   /** Durable, immutable outgoing contributions, retained alongside the voting journal. */
   beaconContributions?: BeaconContributionStore;
+  /** Exact public ceremony passes fixed by genesis; never regenerated after consent. */
+  deckSetupPasses?: readonly { deckId: string; pass: SignedDeckPass }[];
   systemInput?: (
     context: ProposalContext,
   ) => { input: SystemInput; evidence: SystemEvidence } | null;
@@ -93,6 +104,8 @@ export class ReplicatedLog {
   private readonly timers = new Map<string, unknown>();
   private readonly pending: PendingCommand[] = [];
   private readonly commands: SignedCommand[] = [];
+  private readonly rejectedCommands = new Set<string>();
+  private readonly rejectedProposals = new Set<string>();
   private readonly beaconInbox = new BeaconInbox();
   private sentBeaconOperation: string | null = null;
   private accusation: ExcludeProposerControl | null = null;
@@ -111,6 +124,7 @@ export class ReplicatedLog {
     private readonly genesisEntry: LogEntry,
     private context: ProposalContext,
     private entries: CertifiedEntry[],
+    private readonly deckSetupPasses: ReadonlyMap<string, { deckId: string; pass: unknown }>,
   ) {
     this.secretKey = options.secretKey.slice();
     this.self = identityFromSecret(this.secretKey).peerId;
@@ -166,7 +180,13 @@ export class ReplicatedLog {
       return failure('replica-journal', 'Certified prefix and active safety height disagree');
     const key = checkLocalKey(options, context);
     if (!key.ok) return key;
-    const replica = new ReplicatedLog(options, record.genesis, context, replayed.value.entries);
+    const replica = new ReplicatedLog(
+      options,
+      record.genesis,
+      context,
+      replayed.value.entries,
+      key.value,
+    );
     const opened = await replica.openController();
     if (!opened.ok) {
       replica.dispose();
@@ -236,6 +256,8 @@ export class ReplicatedLog {
     this.activeController().dispose();
     this.controller = null;
     this.context = fresh;
+    this.rejectedCommands.clear();
+    this.rejectedProposals.clear();
     this.entries = replayed.value.entries;
     const opened = await this.openController();
     if (!opened.ok) return this.failClosed(opened.error.code, opened.error.message);
@@ -256,6 +278,11 @@ export class ReplicatedLog {
           );
         const checked = validateSignedCommand(signed, this.context.log);
         if (!checked.ok) return checked;
+        const candidate = this.deriveCandidate(state.value, {
+          kind: 'command',
+          signed: checked.value,
+        });
+        if (!candidate.ok) return candidate;
         if (!this.rememberCommand(checked.value))
           return failure('replica-command-cap', 'Too many pending commands for this seat');
         const hash = commandHash(checked.value);
@@ -382,6 +409,7 @@ export class ReplicatedLog {
             (result.error.code === 'invalid-envelope' ||
               result.error.code === 'invalid-encoding' ||
               result.error.code === 'message-too-large' ||
+              result.error.code === 'command-proof-invalid' ||
               result.error.code.endsWith('-signature'))
           )
             this.strikePeer(from);
@@ -447,9 +475,34 @@ export class ReplicatedLog {
         return remembered.value ? this.offerAvailableInput() : success(undefined);
       }
       case 'SUBMIT': {
-        const checked = validateSignedCommand(message.cmd, this.context.log);
-        if (!checked.ok) return checked;
-        if (!this.rememberCommand(checked.value)) return success(undefined);
+        const hash = commandHash(message.cmd);
+        if (this.rejectedCommands.has(hash)) return success(undefined);
+        if (this.commands.some((command) => commandHash(command) === hash))
+          return success(undefined);
+        const command = validateSignedCommand(message.cmd, this.context.log);
+        if (!command.ok) {
+          if (command.error.code === 'entry-verification-failed')
+            rememberRejection(this.rejectedCommands, hash);
+          return command.error.code === 'entry-verification-failed'
+            ? failure('command-proof-invalid', 'Signed command validation failed')
+            : command;
+        }
+        // Once this seat's queue is full, even valid proof variants must not force
+        // more verification work. Stale honest retries fail the cheap gates above.
+        if (!this.hasCommandCapacity(command.value.body.seat)) return success(undefined);
+        // This signed preview is never transmitted or retained. It runs the same
+        // engine, proof, invariant and pending-request checks as a real entry.
+        const checked = this.deriveCandidate(
+          { height: this.context.log.head.seq + 1, round: 1 },
+          { kind: 'command', signed: command.value },
+        );
+        if (!checked.ok) {
+          rememberRejection(this.rejectedCommands, hash);
+          return failure('command-proof-invalid', 'Command proof failed at its certified parent', {
+            cause: checked.error.code,
+          });
+        }
+        if (!this.rememberCommand(command.value)) return success(undefined);
         return this.offerAvailableInput();
       }
       case 'PROPOSAL': {
@@ -468,11 +521,25 @@ export class ReplicatedLog {
           )
             return success(undefined);
         }
-        const received = await this.activeController().dispatch({
+        let received = await this.activeController().dispatch({
           kind: 'proposal',
           proposal: message.proposal,
         });
         if (!received.ok) {
+          if (
+            received.error.details?.proposalEntryRejected === true &&
+            !FATAL_CONTROLLER_ERRORS.has(received.error.code) &&
+            entry.seq === this.context.log.head.seq + 1 &&
+            entry.prevHash === entryHash(this.context.log.head)
+          ) {
+            // A local fault can reject an honest value. Count each distinct
+            // failure once so retransmissions cannot isolate us before repair.
+            if (rememberRejection(this.rejectedProposals, toHex(hashValue(message.proposal))))
+              this.strikePeer(from);
+            received = failure('proposal-proof-invalid', 'Proposal entry verification failed', {
+              cause: received.error.code,
+            });
+          }
           if (entry.payload.kind !== 'command') return received;
           try {
             const offender = proposerFor(
@@ -658,7 +725,8 @@ export class ReplicatedLog {
     if (!prepared.ok) return prepared;
     const available =
       this.accusation !== null ||
-      (!this.beaconPending() && this.commands.length > 0) ||
+      (!this.cryptoPending() && this.commands.length > 0) ||
+      this.deckSetupCandidate() !== null ||
       this.beaconCandidate() !== null ||
       this.systemCandidate() !== null ||
       state.value.valid !== null;
@@ -709,44 +777,73 @@ export class ReplicatedLog {
         },
         this.secretKey,
       );
-    const command = this.beaconPending() ? undefined : this.commands[0];
-    const payload =
-      this.beaconCandidate() ??
-      (command ? { kind: 'command' as const, signed: command } : this.systemCandidate());
-    if (!payload) return null;
-    if (payload.kind === 'crypto')
-      return signEntry(
+    const crypto = this.deckSetupCandidate() ?? this.beaconCandidate();
+    if (crypto) return this.entryCandidate(state, crypto);
+    if (this.cryptoPending()) return null;
+    while (this.commands.length > 0) {
+      const command = this.commands[0];
+      if (!command) break;
+      const candidate = this.entryCandidate(state, { kind: 'command', signed: command });
+      if (candidate) return candidate;
+      this.commands.shift();
+      // The caller may have broadcast this signed intent elsewhere. Keep its pending
+      // promise until commitment or a new parent, but never let it block this queue.
+    }
+    const system = this.systemCandidate();
+    return system ? this.entryCandidate(state, system) : null;
+  }
+
+  private entryCandidate(
+    state: ConsensusState,
+    payload: Extract<EntryPayload, { kind: 'command' | 'system' | 'crypto' }>,
+  ): LogEntry | null {
+    const checked = this.deriveCandidate(state, payload);
+    if (!checked.ok) {
+      this.status({ kind: 'rejected', code: checked.error.code });
+      return null;
+    }
+    return checked.value;
+  }
+
+  private deriveCandidate(
+    state: Pick<ConsensusState, 'height' | 'round'>,
+    payload: Extract<EntryPayload, { kind: 'command' | 'system' | 'crypto' }>,
+  ): Result<LogEntry> {
+    try {
+      let stateHash = this.context.log.head.stateHash;
+      if (payload.kind !== 'crypto') {
+        const input =
+          payload.kind === 'command'
+            ? {
+                kind: 'command' as const,
+                seat: payload.signed.body.seat,
+                command: payload.signed.body.command,
+              }
+            : payload.input;
+        const applied = this.context.log.engine.apply(this.context.log.state, input);
+        if (!applied.ok) return applied;
+        stateHash = toHex(hashValue(applied.value.state));
+      }
+      const entry = signEntry(
         {
           seq: state.height,
           term: state.round,
           prevHash: entryHash(this.context.log.head),
           payload,
-          stateHash: this.context.log.head.stateHash,
+          stateHash,
           sequencer: this.self,
         },
         this.secretKey,
       );
-    const input =
-      payload.kind === 'command'
-        ? {
-            kind: 'command' as const,
-            seat: payload.signed.body.seat,
-            command: payload.signed.body.command,
-          }
-        : payload.input;
-    const applied = this.context.log.engine.apply(this.context.log.state, input);
-    if (!applied.ok) return null;
-    return signEntry(
-      {
-        seq: state.height,
+      const checked = validateNextEntry(entry, this.context.log, {
+        ...this.context.policy,
         term: state.round,
-        prevHash: entryHash(this.context.log.head),
-        payload,
-        stateHash: toHex(hashValue(applied.value.state)),
         sequencer: this.self,
-      },
-      this.secretKey,
-    );
+      });
+      return checked.ok ? success(entry) : checked;
+    } catch {
+      return failure('entry-verification-failed', 'Candidate derivation failed');
+    }
   }
 
   private systemCandidate(): {
@@ -754,7 +851,7 @@ export class ReplicatedLog {
     input: SystemInput;
     evidence: SystemEvidence;
   } | null {
-    if (this.beaconPending()) return null;
+    if (this.cryptoPending()) return null;
     try {
       const candidate = this.options.systemInput?.(detachedContext(this.context));
       return candidate ? { kind: 'system', ...candidate } : null;
@@ -776,16 +873,32 @@ export class ReplicatedLog {
     return candidate.value;
   }
 
-  private beaconPending(): boolean {
-    const beacon = this.context.log.crypto?.beacon;
-    return !!(beacon?.active || beacon?.fixed);
+  private deckSetupCandidate(): Extract<EntryPayload, { kind: 'crypto' }> | null {
+    const decks = this.context.log.crypto?.decks;
+    const next = decks?.decks.find((deck) => deck.nextPass < deck.commitment.passHashes.length);
+    const hash = next?.commitment.passHashes[next.nextPass];
+    const evidence = hash ? this.deckSetupPasses.get(hash) : undefined;
+    return evidence && next?.commitment.definition.deckId === evidence.deckId
+      ? { kind: 'crypto', action: 'deck-pass', evidence }
+      : null;
+  }
+
+  private cryptoPending(): boolean {
+    const crypto = this.context.log.crypto;
+    return !!(
+      crypto &&
+      (!decksReady(crypto.decks) ||
+        crypto.decks.active ||
+        crypto.beacon.active ||
+        crypto.beacon.fixed)
+    );
   }
 
   private async prepareBeacon(retransmit: boolean): Promise<Result<void>> {
     const crypto = this.context.log.crypto;
     const refreshed = this.beaconInbox.refresh(crypto);
     if (!refreshed.ok) return this.failClosed(refreshed.error.code, refreshed.error.message);
-    if (!crypto?.beacon.active) return success(undefined);
+    if (!crypto?.beacon.active || !decksReady(crypto.decks)) return success(undefined);
     const operationId = this.beaconInbox.operationId();
     if (!retransmit && operationId === this.sentBeaconOperation) return success(undefined);
     const { beaconSource, beaconContributions } = this.options;
@@ -822,14 +935,17 @@ export class ReplicatedLog {
   private rememberCommand(command: SignedCommand): boolean {
     const hash = commandHash(command);
     if (this.commands.some((known) => commandHash(known) === hash)) return true;
-    if (
-      this.commands.length >= MAX_PENDING_COMMANDS ||
-      this.commands.filter((known) => known.body.seat === command.body.seat).length >=
-        MAX_PENDING_COMMANDS_PER_SEAT
-    )
-      return false;
+    if (!this.hasCommandCapacity(command.body.seat)) return false;
     this.commands.push(command);
     return true;
+  }
+
+  private hasCommandCapacity(seat: Seat): boolean {
+    return (
+      this.commands.length < MAX_PENDING_COMMANDS &&
+      this.commands.filter((known) => known.body.seat === seat).length <
+        MAX_PENDING_COMMANDS_PER_SEAT
+    );
   }
 
   private async rememberAccusation(control: ExcludeProposerControl): Promise<Result<void>> {
@@ -902,6 +1018,7 @@ export class ReplicatedLog {
       const old = historical.value.context;
       const checked = validateObjectiveAccusation(proven.control, {
         log: old.log,
+        commandPolicy: old.policy,
         membership: old.membership,
         excludedProposers: old.excludedProposers,
         proposerFor: (seq, term) => proposerFor(seq, term, old.membership, old.excludedProposers),
@@ -1035,6 +1152,8 @@ export class ReplicatedLog {
     if (this.lastSyncRequest && next.log.head.seq >= this.lastSyncRequest.fromSeq)
       this.lastSyncRequest = null;
     this.commands.length = 0;
+    this.rejectedCommands.clear();
+    this.rejectedProposals.clear();
     this.accusation = pendingAccusation;
     this.clearConsensusTimers();
     const opened = await this.openController();
@@ -1302,6 +1421,17 @@ function commandHash(command: SignedCommand): string {
   return toHex(hashValue(command));
 }
 
+/** Exact retries stay cheap and cannot turn one local failure into repeated strikes. */
+function rememberRejection(rejected: Set<string>, hash: string): boolean {
+  if (rejected.has(hash)) return false;
+  rejected.add(hash);
+  if (rejected.size > 16) {
+    const oldest = rejected.keys().next().value;
+    if (oldest !== undefined) rejected.delete(oldest);
+  }
+  return true;
+}
+
 function controlForEquivocation(evidence: Equivocation): ExcludeProposerControl {
   return {
     kind: 'control',
@@ -1384,17 +1514,60 @@ function authenticateSignedProposal(
   }
 }
 
-function checkLocalKey(options: ReplicatedLogOptions, context: ProposalContext): Result<void> {
+function checkLocalKey(
+  options: ReplicatedLogOptions,
+  context: ProposalContext,
+): Result<ReadonlyMap<string, { deckId: string; pass: unknown }>> {
   if (
     context.log.genesis.security === 'verified' &&
     (!options.beaconSource || !options.beaconContributions)
   )
     return failure('replica-beacon-store', 'Verified sessions need durable beacon contributions');
   try {
+    const expected = new Map(
+      context.log.crypto?.decks.decks.flatMap((deck) =>
+        deck.commitment.passHashes.map(
+          (hash) => [hash, deck.commitment.definition.deckId] as const,
+        ),
+      ) ?? [],
+    );
+    const passes = new Map<string, { deckId: string; pass: unknown }>();
+    for (const raw of options.deckSetupPasses ?? []) {
+      const parsed = parseCanonical(
+        raw,
+        v.strictObject({
+          deckId: v.pipe(v.string(), v.minLength(1), v.maxLength(64)),
+          pass: v.unknown(),
+        }),
+      );
+      if (!parsed.ok)
+        return failure('replica-deck-transcript', 'Local deck transcript is malformed');
+      const item = parsed.value;
+      const hash = deckPassHash(item.pass);
+      if (
+        expected.get(hash) !== item.deckId ||
+        passes.has(hash) ||
+        canonicalEncode(item).length > MAX_MESSAGE_BYTES - 4096
+      )
+        return failure(
+          'replica-deck-transcript',
+          'Local deck transcript differs from genesis or exceeds the message bound',
+        );
+      passes.set(hash, { deckId: item.deckId, pass: item.pass });
+    }
+    if (
+      context.log.crypto?.decks.decks.some((deck) =>
+        deck.commitment.passHashes.slice(deck.nextPass).some((hash) => !passes.has(hash)),
+      )
+    )
+      return failure(
+        'replica-deck-transcript',
+        'Retain every uncommitted deck pass before starting or restoring',
+      );
     const local = identityFromSecret(options.secretKey).peerId;
     const voter = context.membership.voters.find((member) => member.seat === options.seat);
     return voter?.publicKey === local && options.transport.self === local
-      ? success(undefined)
+      ? success(passes)
       : failure(
           'replica-key',
           'Local key and authenticated transport do not match the certified voter',

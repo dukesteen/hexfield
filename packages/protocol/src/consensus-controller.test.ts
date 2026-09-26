@@ -15,6 +15,7 @@ import {
 import { stubEvidence } from './log.js';
 import type { LogContext } from './log.js';
 import type { ProposalContext } from './proposal.js';
+import { signProposal } from './proposal.js';
 import { MemorySafetyStore } from './safety-store.js';
 import type { SafetyStore } from './safety-store.js';
 import { fixtureAt, protocolFixture } from './testing/fixtures.js';
@@ -163,6 +164,144 @@ async function restore(options: ConsensusControllerOptions): Promise<ConsensusCo
 }
 
 describe('durable consensus controller', () => {
+  test('rejected proposal replays reuse a bounded cache without repeating entry derivation', async () => {
+    const { options, candidate, store } = setup();
+    let derivations = 0;
+    const original = options.context.log.engine;
+    options.context.log.engine = {
+      ...original,
+      apply(state, input) {
+        derivations++;
+        return original.apply(state, input);
+      },
+    };
+    const controller = await create(options);
+    const invalid = (variant: number) =>
+      signProposal(
+        {
+          genesisDigest: options.context.membership.genesisDigest,
+          epoch: 0,
+          entry: signEntry(
+            { ...entryBody(candidate), stateHash: variant.toString(16).padStart(64, '0') },
+            options.secretKey,
+          ),
+          validRound: null,
+          prevotes: [],
+        },
+        options.secretKey,
+      );
+    for (let variant = 0; variant < 17; variant++) {
+      // oxlint-disable-next-line no-await-in-loop -- Each unique failure fills the bounded cache in order.
+      const received = await controller.dispatch({ kind: 'proposal', proposal: invalid(variant) });
+      expect(errorCode(received)).toBe('state-hash');
+    }
+    expect(derivations).toBe(17);
+    expect(errorCode(await controller.dispatch({ kind: 'proposal', proposal: invalid(16) }))).toBe(
+      'state-hash',
+    );
+    expect(derivations).toBe(17);
+    expect(errorCode(await controller.dispatch({ kind: 'proposal', proposal: invalid(0) }))).toBe(
+      'state-hash',
+    );
+    expect(derivations).toBe(18);
+    expect((await store.load())?.revision).toBe(0);
+    expect((await controller.dispatch({ kind: 'propose', candidate })).ok).toBe(true);
+    controller.dispose();
+  });
+
+  test('rechecks a rejected control replay after proof of a different offender', async () => {
+    const { options, store, emissions } = setup(new MemorySafetyStore(), true);
+    const controller = await create(options);
+    const controlFor = (offender: 1 | 2) => {
+      const signer = fixtureAt(protocolFixture().identities, offender);
+      const body = {
+        genesisDigest: options.context.membership.genesisDigest,
+        epoch: 0,
+        seat: offender,
+        seq: 1,
+        term: 1,
+        phase: 'prevote' as const,
+        valueHash: null,
+      };
+      return {
+        kind: 'control' as const,
+        action: 'exclude-proposer' as const,
+        offender,
+        evidence: {
+          kind: 'vote-equivocation' as const,
+          first: signVote(body, signer.secretKey),
+          second: signVote({ ...body, valueHash: 'e'.repeat(64) }, signer.secretKey),
+        },
+      };
+    };
+    const rejectedControl = controlFor(2);
+    const entry = signEntry(
+      {
+        seq: 1,
+        term: 1,
+        prevHash: entryHash(options.context.log.head),
+        payload: rejectedControl,
+        stateHash: 'f'.repeat(64),
+        sequencer: fixtureAt(protocolFixture().identities, 0).peerId,
+      },
+      options.secretKey,
+    );
+    const rejectedProposal = signProposal(
+      {
+        genesisDigest: options.context.membership.genesisDigest,
+        epoch: 0,
+        entry,
+        validRound: null,
+        prevotes: [],
+      },
+      options.secretKey,
+    );
+
+    expect(
+      errorCode(await controller.dispatch({ kind: 'proposal', proposal: rejectedProposal })),
+    ).toBe('control-state');
+    expect((await store.load())?.revision).toBe(0);
+    expect(
+      (await controller.dispatch({ kind: 'stage-accusation', control: controlFor(1) })).ok,
+    ).toBe(true);
+    const staged = controller.snapshot();
+    if (!staged.ok) throw new Error(`Snapshot failed: ${staged.error.code}`);
+    expect(staged.value.provenOffender?.control.offender).toBe(1);
+    expect(staged.value.haltKind).toBeNull();
+
+    expect(
+      (await controller.dispatch({ kind: 'proposal', proposal: structuredClone(rejectedProposal) }))
+        .ok,
+    ).toBe(true);
+    const halted = controller.snapshot();
+    if (!halted.ok) throw new Error(`Snapshot failed: ${halted.error.code}`);
+    expect(halted.value.haltKind).toBe('terminal');
+    expect(halted.value.halted).toContain('second Byzantine voter');
+    expect(emissions.flat().filter((effect) => effect.kind === 'halt')).toHaveLength(1);
+    expect((await store.load())?.revision).toBe(2);
+    controller.dispose();
+  });
+
+  test('exact proposal replay skips proof work and leaves the persisted vote intact', async () => {
+    const { options, candidate, emissions, store } = setup();
+    const controller = await create(options);
+    expect((await controller.dispatch({ kind: 'propose', candidate })).ok).toBe(true);
+    const proposal = emissions.flat().find((effect) => effect.kind === 'broadcast-proposal');
+    if (!proposal || proposal.kind !== 'broadcast-proposal')
+      throw new Error('Expected a signed proposal');
+    const revision = (await store.load())?.revision;
+    expect(
+      (
+        await controller.dispatch({
+          kind: 'proposal',
+          proposal: structuredClone(proposal.proposal),
+        })
+      ).ok,
+    ).toBe(true);
+    expect((await store.load())?.revision).toBe(revision);
+    expect(emissions.flat().filter((effect) => effect.kind === 'broadcast-vote')).toHaveLength(1);
+  });
+
   test('holds signed effects until the new safety record is saved', async () => {
     const store = new PausableStore();
     const { options, candidate, emissions } = setup(store);

@@ -54,7 +54,11 @@ function fixture(exhausted = false) {
     },
     fixed: null,
   };
-  const crypto: CryptoContext = { epoch: 0, beacon };
+  const crypto: CryptoContext = {
+    epoch: 0,
+    beacon,
+    decks: { genesisDigest: beacon.genesisDigest, decks: [], active: null },
+  };
   const link = vi.fn<BeaconSecretSource['link']>((chainEpoch, index) => {
     if (chainEpoch !== 0 || index !== 1) throw new Error('Unexpected link request');
     return required(required(chains[0])[1]);

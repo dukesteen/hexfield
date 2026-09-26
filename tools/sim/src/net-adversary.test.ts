@@ -66,6 +66,7 @@ describe('network Byzantine fault helper', () => {
         },
         {
           log: context.log,
+          commandPolicy: context.policy,
           membership: context.membership,
           excludedProposers: context.excludedProposers,
           proposerFor: (seq, term) =>

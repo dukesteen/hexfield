@@ -83,6 +83,31 @@ const signedPassSchema = v.strictObject({
   sig: signature64Schema,
 });
 
+// A replay can validate the same certified pass many times. Cache only the
+// success of the expensive zero-knowledge proof, never a caller-owned state or
+// a failure. The hash binds the complete validated predecessor and signed pass.
+const VERIFIED_PROOF_LIMIT = 32;
+const verifiedProofs = new Set<string>();
+
+function proofMemoKey(state: DeckSetupState, pass: unknown): string {
+  return toHex(hashValue({ domain: 'cp2p/v1/deck-pass-proof-cache', state, pass }));
+}
+
+function hasVerifiedProof(key: string): boolean {
+  if (!verifiedProofs.delete(key)) return false;
+  verifiedProofs.add(key);
+  return true;
+}
+
+function rememberVerifiedProof(key: string): void {
+  verifiedProofs.delete(key);
+  verifiedProofs.add(key);
+  if (verifiedProofs.size > VERIFIED_PROOF_LIMIT) {
+    const oldest = verifiedProofs.values().next().value;
+    if (oldest !== undefined) verifiedProofs.delete(oldest);
+  }
+}
+
 export type DeckDefinition = v.InferOutput<typeof deckDefinitionSchema>;
 export type DeckSetupState = v.InferOutput<typeof deckStateSchema>;
 export type SignedDeckPass =
@@ -254,7 +279,9 @@ export function applyDeckPass(value: DeckSetupState, signed: unknown): Result<De
     } catch {
       return failure('deck-key', 'Shuffle public key is invalid');
     }
+    const memoKey = proofMemoKey(state, parsed.value);
     if (
+      !hasVerifiedProof(memoKey) &&
       !verifyShuffle(
         { input: state.points, output: body.output, publicKey: body.publicKey },
         body.proof,
@@ -262,37 +289,44 @@ export function applyDeckPass(value: DeckSetupState, signed: unknown): Result<De
       )
     )
       return failure('deck-shuffle-proof', 'Shuffle proof does not match the pass');
-    return validateDeckSetupState({
+    const result = validateDeckSetupState({
       ...state,
       points: body.output,
       shuffleKeys: [...state.shuffleKeys, body.publicKey],
     });
+    if (result.ok) rememberVerifiedProof(memoKey);
+    return result;
   }
   if (!checkedPoints(body.lockKeys, state.points.length))
     return failure('deck-key', 'Lock keys must be distinct nonidentity points');
   const shuffleKey = state.shuffleKeys[state.lockKeys.length];
   if (!shuffleKey) return failure('deck-state', 'Lock pass has no matching shuffle key');
-  for (let position = 0; position < state.points.length; position += 1) {
-    const input = state.points[position];
-    const output = body.output[position];
-    const lockKey = body.lockKeys[position];
-    if (
-      !input ||
-      !output ||
-      !lockKey ||
-      !verifyDleq(
-        { base1: input, point1: output, base2: shuffleKey, point2: lockKey },
-        body.proofs[position],
-        proofContext(body.operationId, body.phase, body.seat, position),
+  const memoKey = proofMemoKey(state, parsed.value);
+  if (!hasVerifiedProof(memoKey)) {
+    for (let position = 0; position < state.points.length; position += 1) {
+      const input = state.points[position];
+      const output = body.output[position];
+      const lockKey = body.lockKeys[position];
+      if (
+        !input ||
+        !output ||
+        !lockKey ||
+        !verifyDleq(
+          { base1: input, point1: output, base2: shuffleKey, point2: lockKey },
+          body.proofs[position],
+          proofContext(body.operationId, body.phase, body.seat, position),
+        )
       )
-    )
-      return failure('deck-lock-proof', 'Lock proof does not match its card position');
+        return failure('deck-lock-proof', 'Lock proof does not match its card position');
+    }
   }
-  return validateDeckSetupState({
+  const result = validateDeckSetupState({
     ...state,
     points: body.output,
     lockKeys: [...state.lockKeys, body.lockKeys],
   });
+  if (result.ok) rememberVerifiedProof(memoKey);
+  return result;
 }
 
 function checkedSigner(state: DeckSetupState, key: Uint8Array, phase: 'shuffle' | 'lock'): Seat {

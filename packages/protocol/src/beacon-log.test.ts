@@ -14,7 +14,7 @@ import {
   genesisBody,
   genesisId,
   signEntry,
-  signGenesis,
+  signVerifiedGenesis,
 } from './genesis.js';
 import { signCommand, validateNextEntry } from './log.js';
 import type { EntryPolicy } from './log.js';
@@ -27,8 +27,12 @@ import {
   verifyReplaySnapshot,
 } from './replay.js';
 import { createSimulationGenesis } from './testing/simulation-genesis.js';
+import { createGenesisDeckFixture } from './testing/deck-fixture.js';
 import type { EntryBody, Genesis, GenesisBody, LogEntry } from './types.js';
 import { signVote } from './votes.js';
+
+// The first fixture generation validates a complete 25-card multiparty shuffle.
+vi.setConfig({ testTimeout: 30_000 });
 
 function required<T>(value: T | undefined): T {
   if (value === undefined) throw new Error('Missing beacon log fixture');
@@ -39,13 +43,13 @@ function record(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function fixture(humanCount = 2, chainLength = 2) {
+function buildFixture(humanCount: number, chainLength: number) {
   const source = createSimulationGenesis({ seed: 91, humanCount });
   const humans = source.genesis.seats.filter((seat) => seat.kind === 'human');
   const chains = humans.map((_, index) =>
     createHashChain(new Uint8Array(32).fill(index + 29), chainLength),
   );
-  const body: GenesisBody = {
+  const initialBody: GenesisBody = {
     ...genesisBody(source.genesis),
     security: 'verified',
     commitments: {
@@ -56,13 +60,26 @@ function fixture(humanCount = 2, chainLength = 2) {
       })),
     },
   };
-  const genesis: Genesis = {
-    ...body,
-    gameId: genesisId(body),
-    signatures: humans.map((seat) =>
-      signGenesis(body, seat.seat, required(source.identities.get(seat.seat)).secretKey),
-    ),
+  const deck = createGenesisDeckFixture(initialBody, source.identities);
+  const body = deck.body;
+  const verifySystem = vi.fn<() => Result<void>>(() => success(undefined));
+  const verifyCommand = vi.fn<() => Result<void>>(() => success(undefined));
+  const policy = {
+    // Base deck proofs are checked by signVerifiedGenesis and each certified deck-pass fold.
+    genesis: { verifyCommitments: () => success(undefined) },
+    entry: { verifySystem, verifyCommand },
   };
+  const signatures = humans.map((seat) => {
+    const signed = signVerifiedGenesis(
+      body,
+      deck.transcripts,
+      seat.seat,
+      required(source.identities.get(seat.seat)).secretKey,
+    );
+    if (!signed.ok) throw new Error(`Verified genesis signing failed: ${signed.error.message}`);
+    return signed.value;
+  });
+  const genesis: Genesis = { ...body, gameId: genesisId(body), signatures };
   const state = source.engine.createGame(body.config, fromBase64Url(body.genesisSeed));
   const first = required(source.identities.get(0));
   const entry = signEntry(
@@ -76,20 +93,13 @@ function fixture(humanCount = 2, chainLength = 2) {
     },
     first.secretKey,
   );
-  // This stand-in covers later deck/escrow genesis checks only. Beacon tips and
-  // every result are verified by the built-in crypto path below.
-  const verifySystem = vi.fn<() => Result<void>>(() => success(undefined));
-  const verifyCommand = vi.fn<() => Result<void>>(() => success(undefined));
-  const policy = {
-    genesis: { verifyCommitments: () => success(undefined) },
-    entry: { verifySystem, verifyCommand },
-  };
   const initial = initialProposalContext(entry, source.engine, policy);
   if (!initial.ok) throw new Error(initial.error.message);
-  return {
+  const data = {
     source,
     humans,
     chains,
+    deck,
     genesis,
     state,
     entry,
@@ -97,7 +107,43 @@ function fixture(humanCount = 2, chainLength = 2) {
     verifySystem,
     verifyCommand,
     initial: initial.value,
+    setupEntries: [] as CertifiedEntry[],
   };
+  let context = initial.value;
+  for (const transcript of deck.transcripts) {
+    for (const pass of transcript.passes) {
+      const setupEntry = signAt(
+        data,
+        context,
+        { kind: 'crypto', action: 'deck-pass', evidence: { deckId: transcript.deckId, pass } },
+        context.log.head.stateHash,
+      );
+      const proof = certified(data, context, setupEntry);
+      const checked = validateCertifiedEntry(proof, context);
+      if (!checked.ok) throw new Error(`Deck setup entry failed: ${checked.error.message}`);
+      const advanced = advanceContext(context, checked.value);
+      if (!advanced.ok) throw new Error(`Deck setup advance failed: ${advanced.error.message}`);
+      data.setupEntries.push(proof);
+      context = advanced.value;
+    }
+  }
+  data.initial = context;
+  return data;
+}
+
+type BeaconFixture = ReturnType<typeof buildFixture>;
+const fixtureCache = new Map<string, BeaconFixture>();
+
+function fixture(humanCount = 2, chainLength = 2): BeaconFixture {
+  const key = `${humanCount}/${chainLength}`;
+  let value = fixtureCache.get(key);
+  if (!value) {
+    value = buildFixture(humanCount, chainLength);
+    fixtureCache.set(key, value);
+  }
+  value.verifySystem.mockClear();
+  value.verifyCommand.mockClear();
+  return value;
 }
 
 function revealsFor(data: ReturnType<typeof fixture>, context: ProposalContext, index = 1) {
@@ -242,7 +288,7 @@ function advanceToDice(
   const advanced = advanceContext(data.initial, checked.value);
   if (!advanced.ok) throw new Error(advanced.error.message);
   let context = advanced.value;
-  const history = [first];
+  const history = [...data.setupEntries, first];
   for (let step = 0; step < 32; step += 1) {
     const pendings = data.source.engine.getPending(context.log.state);
     if (pendings.some((pending) => pending.kind === 'random' && pending.request.type === 'dice'))
@@ -342,7 +388,12 @@ describe('certified beacon log integration', () => {
     if (!certifiedResult.ok) throw new Error(certifiedResult.error.message);
     const advanced = advanceContext(data.initial, certifiedResult.value);
     if (!advanced.ok) throw new Error(advanced.error.message);
-    const replayed = replayCertifiedPrefix(data.entry, [proof], data.source.engine, data.policy);
+    const replayed = replayCertifiedPrefix(
+      data.entry,
+      [...data.setupEntries, proof],
+      data.source.engine,
+      data.policy,
+    );
     if (!replayed.ok) throw new Error(replayed.error.message);
     expect(snapshotFromContext(replayed.value.context)).toEqual(
       snapshotFromContext(advanced.value),
@@ -472,7 +523,7 @@ describe('certified beacon log integration', () => {
     const entry = resultFor(data, data.initial, reveals);
     const replayed = replayCertifiedPrefix(
       data.entry,
-      [certified(data, data.initial, entry)],
+      [...data.setupEntries, certified(data, data.initial, entry)],
       data.source.engine,
       data.policy,
     );
@@ -492,7 +543,7 @@ describe('certified beacon log integration', () => {
           genesisDigest: data.initial.membership.genesisDigest,
           epoch: 0,
           seat: offender.seat,
-          seq: 1,
+          seq: data.initial.log.head.seq + 1,
           term: 1,
           phase: 'prevote',
           valueHash,
@@ -530,7 +581,7 @@ describe('certified beacon log integration', () => {
     const resultProof = certified(data, afterControl.value, result);
     const replayed = replayCertifiedPrefix(
       data.entry,
-      [controlProof, resultProof],
+      [...data.setupEntries, controlProof, resultProof],
       data.source.engine,
       data.policy,
     );
@@ -661,6 +712,8 @@ describe('certified beacon log integration', () => {
       0,
     );
     if (!frozen.ok) throw new Error(frozen.error.message);
+    const deckLedger = data.initial.log.crypto?.decks;
+    if (!deckLedger) throw new Error('Missing verified deck ledger');
     // The engine state and pending request come from legal engine inputs; this
     // focused validator fixture supplies the trusted head rather than replaying
     // the earlier public game through unrelated deck/hand protocols.
@@ -670,7 +723,7 @@ describe('certified beacon log integration', () => {
         ...data.initial.log,
         head,
         state: atSteal,
-        crypto: { epoch: 0, beacon: frozen.value },
+        crypto: { epoch: 0, beacon: frozen.value, decks: deckLedger },
       },
     };
     const reveals = revealsFor(data, context, 2);

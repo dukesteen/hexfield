@@ -17,6 +17,7 @@ import type {
   SystemEvidence,
 } from './types.js';
 import { parseCanonical } from './validation.js';
+import { revealDeckCards } from './deck-ledger.js';
 
 export interface LogContext {
   genesis: Genesis;
@@ -34,6 +35,10 @@ export interface EntryPolicy {
   /** Simulation opt-in; stub evidence binds inputs but cannot prove hidden facts or deadlines. */
   allowStub?: boolean;
   randomDerivations?: BeaconDerivations;
+  /** Pure, deterministic validation from the signed command and certified public context only.
+   * Never consult clocks, network state or private hands: the same verdict is used for
+   * admission, votes and objective accusations against an invalid proposer.
+   */
   verifyCommand?: (command: SignedCommand, context: LogContext) => Result<void>;
   verifySystem?: (
     input: Extract<Input, { kind: 'system' }>,
@@ -59,33 +64,73 @@ export function signCommand(body: CommandBody, secretKey: Uint8Array): SignedCom
 
 /** A delayed command cannot be applied to a different parent or later turn. */
 export function validateSignedCommand(value: unknown, context: LogContext): Result<SignedCommand> {
-  const parsed = parseCanonical(value, signedCommandSchema);
-  if (!parsed.ok) return parsed;
-  const signed = parsed.value;
-  const { body } = signed;
-  if (
-    body.gameId !== context.genesis.gameId ||
-    body.genesisDigest !== genesisDigest(context.genesis)
-  )
-    return failure('wrong-game', 'Command belongs to another game');
-  const owner = context.genesis.seats.find((seat) => seat.seat === body.seat);
-  if (!owner) return failure('unknown-seat', 'Command has no genesis seat');
-  if (!verifyObject('cmd', body, signed.sig, parsePeerId(owner.publicKey)))
-    return failure('command-signature', 'Command signature does not match its seat');
-  if (body.nonce <= (context.lastNonces.get(body.seat) ?? 0))
-    return failure('replayed-nonce', 'Command nonce has already been applied');
-  if (body.headSeq > context.head.seq)
-    return failure('future-head', 'Command refers to a log head not yet available');
-  if (body.headSeq < context.head.seq)
-    return failure('stale-head', 'Command must be confirmed again against the current state');
-  if (body.headHash !== entryHash(context.head))
-    return failure('command-parent', 'Command refers to a different log parent');
-  const valid = context.engine.validate(context.state, {
-    kind: 'command',
-    seat: body.seat,
-    command: body.command,
-  });
-  return valid.ok ? success(signed) : valid;
+  try {
+    const parsed = parseCanonical(value, signedCommandSchema);
+    if (!parsed.ok) return parsed;
+    const signed = parsed.value;
+    const { body } = signed;
+    if (
+      body.gameId !== context.genesis.gameId ||
+      body.genesisDigest !== genesisDigest(context.genesis)
+    )
+      return failure('wrong-game', 'Command belongs to another game');
+    const owner = context.genesis.seats.find((seat) => seat.seat === body.seat);
+    if (!owner) return failure('unknown-seat', 'Command has no genesis seat');
+    if (!verifyObject('cmd', body, signed.sig, parsePeerId(owner.publicKey)))
+      return failure('command-signature', 'Command signature does not match its seat');
+    if (body.nonce <= (context.lastNonces.get(body.seat) ?? 0))
+      return failure('replayed-nonce', 'Command nonce has already been applied');
+    if (body.headSeq > context.head.seq)
+      return failure('future-head', 'Command refers to a log head not yet available');
+    if (body.headSeq < context.head.seq)
+      return failure('stale-head', 'Command must be confirmed again against the current state');
+    if (body.headHash !== entryHash(context.head))
+      return failure('command-parent', 'Command refers to a different log parent');
+    const valid = context.engine.validate(context.state, {
+      kind: 'command',
+      seat: body.seat,
+      command: body.command,
+    });
+    return valid.ok ? success(signed) : valid;
+  } catch {
+    return failure('entry-verification-failed', 'Signed command validation failed');
+  }
+}
+
+/** Shared admission and entry checks; an engine-legal command can still carry a false proof. */
+export function validateCommandForEntry(
+  value: unknown,
+  context: LogContext,
+  policy: Pick<EntryPolicy, 'verifyCommand'>,
+): Result<{ signed: SignedCommand; crypto: CryptoContext | null }> {
+  try {
+    const command = validateSignedCommand(value, context);
+    if (!command.ok) return command;
+    let crypto = context.crypto;
+    if (context.genesis.security === 'verified' && !crypto)
+      return failure(
+        'crypto-context-required',
+        'Verified commands need replayed cryptographic state',
+      );
+    if (
+      crypto &&
+      (command.value.body.command.type === 'PLAY_DEV_CARD' ||
+        command.value.body.command.type === 'CLAIM_VICTORY')
+    ) {
+      const revealed = revealDeckCards(crypto.decks, context.state, command.value, crypto.epoch);
+      if (!revealed.ok) return revealed;
+      crypto = { ...crypto, decks: revealed.value };
+    }
+    if (context.genesis.security === 'verified' || command.value.body.evidence !== undefined) {
+      if (!policy.verifyCommand)
+        return failure('command-proof-unavailable', 'Command proof verification is unavailable');
+      const proof = policy.verifyCommand(command.value, context);
+      if (!proof.ok) return proof;
+    }
+    return success({ signed: command.value, crypto });
+  } catch {
+    return failure('entry-verification-failed', 'Command proof or state validation failed');
+  }
 }
 
 /** Binds simulation evidence to exactly one game, parent and system input. */
@@ -98,7 +143,12 @@ export function stubEvidence(context: LogContext, input: Input): SystemEvidence 
   };
 }
 
-function entryInput(entry: LogEntry, context: LogContext, policy: EntryPolicy): Result<Input> {
+function entryInput(
+  entry: LogEntry,
+  context: LogContext,
+  policy: EntryPolicy,
+  crypto: CryptoContext | null,
+): Result<{ input: Input; crypto: CryptoContext | null }> {
   const payload = entry.payload;
   if (payload.kind === 'genesis')
     return failure('duplicate-genesis', 'Genesis is only valid at sequence zero');
@@ -109,18 +159,15 @@ function entryInput(entry: LogEntry, context: LogContext, policy: EntryPolicy): 
   if (payload.kind === 'crypto')
     return failure('crypto-unavailable', 'Crypto entries require built-in evidence verification');
   if (payload.kind === 'command') {
-    const command = validateSignedCommand(payload.signed, context);
-    if (!command.ok) return command;
-    if (context.genesis.security === 'verified' || command.value.body.evidence !== undefined) {
-      if (!policy.verifyCommand)
-        return failure('command-proof-unavailable', 'Command proof verification is unavailable');
-      const proof = policy.verifyCommand(command.value, context);
-      if (!proof.ok) return proof;
-    }
+    const checked = validateCommandForEntry(payload.signed, { ...context, crypto }, policy);
+    if (!checked.ok) return checked;
     return success({
-      kind: 'command',
-      seat: command.value.body.seat,
-      command: command.value.body.command,
+      input: {
+        kind: 'command',
+        seat: checked.value.signed.body.seat,
+        command: checked.value.signed.body.command,
+      },
+      crypto: checked.value.crypto,
     });
   }
   if (payload.input.type === 'CARD_DEALT' && Object.hasOwn(payload.input, 'card'))
@@ -139,7 +186,7 @@ function entryInput(entry: LogEntry, context: LogContext, policy: EntryPolicy): 
     const proof = policy.verifySystem(payload.input, payload.evidence, context);
     if (!proof.ok) return proof;
   }
-  return success(payload.input);
+  return success({ input: payload.input, crypto });
 }
 
 /**
@@ -176,6 +223,7 @@ export function validateNextEntry(
     const transition = validateCryptoTransition(
       context.genesis,
       context.crypto,
+      context.engine,
       context.state,
       entry,
       policy.randomDerivations,
@@ -205,11 +253,12 @@ export function validateNextEntry(
         crypto: transition.value.crypto,
       });
     }
-    const input = transition.value.handled
-      ? success(transition.value.input)
-      : entryInput(entry, context, policy);
-    if (!input.ok) return input;
-    if (input.value === null) {
+    const selected = transition.value.handled
+      ? success({ input: transition.value.input, crypto: transition.value.crypto })
+      : entryInput(entry, context, policy, transition.value.crypto);
+    if (!selected.ok) return selected;
+    const { input, crypto } = selected.value;
+    if (input === null) {
       const priorHash = toHex(hashValue(context.state));
       if (priorHash !== context.head.stateHash || entry.stateHash !== priorHash)
         return failure('crypto-state', 'Cryptographic entries must preserve engine state');
@@ -220,10 +269,10 @@ export function validateNextEntry(
         state: context.state,
         events: [],
         lastNonces: new Map(context.lastNonces),
-        crypto: transition.value.crypto,
+        crypto,
       });
     }
-    const applied = context.engine.apply(context.state, input.value);
+    const applied = context.engine.apply(context.state, input);
     if (!applied.ok) return applied;
     const violations = context.engine.checkInvariants(applied.value.state);
     if (violations.length !== 0)
@@ -231,10 +280,10 @@ export function validateNextEntry(
     if (entry.stateHash !== toHex(hashValue(applied.value.state)))
       return failure('state-hash', 'Entry and locally derived public state hashes differ');
     const captured =
-      transition.value.crypto === null
+      crypto === null
         ? success(null)
         : captureCryptoPending(
-            transition.value.crypto,
+            crypto,
             context.engine,
             applied.value.state,
             { seq: entry.seq, hash: entryHash(entry) },
@@ -249,7 +298,7 @@ export function validateNextEntry(
     return success({
       entry,
       hash: entryHash(entry),
-      input: input.value,
+      input,
       state: applied.value.state,
       events: applied.value.events,
       lastNonces,

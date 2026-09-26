@@ -45,6 +45,7 @@ export function objectiveProofParentHash(
     );
   const checked = validateObjectiveAccusation(control, {
     log: context.log,
+    commandPolicy: context.policy,
     membership: context.membership,
     excludedProposers: context.excludedProposers,
     proposerFor: (seq, term) =>
@@ -233,10 +234,19 @@ export function validateProposal(
     body.epoch !== context.membership.epoch
   )
     return failure('proposal-context', 'Proposal belongs to another game or membership epoch');
+  try {
+    if (!verifyObject('proposal', body, proposal.sig, parsePeerId(body.entry.sequencer)))
+      return failure('proposal-signature', 'Proposal signature does not match its proposer');
+  } catch {
+    return failure('proposal-signature', 'Proposal signer is invalid');
+  }
   const derived = validateEntry(body.entry, context);
-  if (!derived.ok) return derived;
-  if (!verifyObject('proposal', body, proposal.sig, parsePeerId(body.entry.sequencer)))
-    return failure('proposal-signature', 'Proposal signature does not match its proposer');
+  if (!derived.ok)
+    return failure(derived.error.code, derived.error.message, {
+      ...derived.error.details,
+      proposalEntryRejected: true,
+      proposalControl: body.entry.payload.kind === 'control',
+    });
   if (body.validRound === null) {
     if (body.prevotes.length !== 0)
       return failure('proposal-justification', 'Initial proposal cannot claim prior prevotes');

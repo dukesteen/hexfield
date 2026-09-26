@@ -93,6 +93,7 @@ export function replayCertifiedPrefix(
       }
       const checked = validateObjectiveAccusation(control, {
         log: parent.log,
+        commandPolicy: parent.policy,
         membership: parent.membership,
         excludedProposers: parent.excludedProposers,
         proposerFor: (seq, term) =>

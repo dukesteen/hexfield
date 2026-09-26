@@ -1,0 +1,46 @@
+{
+  "bundleSha256": "92ede42e55556ebd3de4e3d5d9d24d51461b79954700dd65cbc4d4deb1cbac7a",
+  "bytes": 262014,
+  "files": [
+    {
+      "path": "docs/verification/stage07/step3-ledger-guards-review-prompt.md",
+      "sha256": "2547151994201349eae8c8e9a86c53aa833c38d3698d4c9ce3ec0d15dbd861c5",
+      "bytes": 2097
+    },
+    {
+      "path": "packages/protocol/src/log.ts",
+      "sha256": "3246b33342158174479b2bed87e2207b2173f99c1e2d502f7845dccd1a263c50",
+      "bytes": 12671
+    },
+    {
+      "path": "packages/protocol/src/proposal.ts",
+      "sha256": "922c7a2b6cd2a57e9d63fe45b8b799ed45d1e7ff2211aaf12f8d98fd9edeed12",
+      "bytes": 12284
+    },
+    {
+      "path": "packages/protocol/src/consensus-controller.ts",
+      "sha256": "da8a3fa428bc0d010ef500e44a93c8ade61f8957cc83c4becd141d7e4935266a",
+      "bytes": 12653
+    },
+    {
+      "path": "packages/protocol/src/consensus.ts",
+      "sha256": "3e311c0a24bfea1305a9be7c8dae62d918845d2bccc6b314d2d8c6ab8ade14fb",
+      "bytes": 54886
+    },
+    {
+      "path": "packages/protocol/src/replicated-log.ts",
+      "sha256": "8551e83d23b9d7d41685aa9fd395c1a6aae87e34f09451bb90dc1b6f189e68ce",
+      "bytes": 62816
+    },
+    {
+      "path": "packages/protocol/src/consensus-controller.test.ts",
+      "sha256": "d4157f0243c942aa60a1d17ce796378b3a0e7c0b909fc83690e6b98696b30ceb",
+      "bytes": 19378
+    },
+    {
+      "path": "packages/protocol/src/replicated-log.test.ts",
+      "sha256": "b9628209faaa9f50bccd97ba9511a4d0d4be9e29a9dcd7114b6b004fd8b4478b",
+      "bytes": 84766
+    }
+  ]
+}

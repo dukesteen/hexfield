@@ -1,0 +1,11 @@
+# Stage 07 deck ledger and genesis integration review
+
+Read-only security review. Do not edit or run anything; tools are disabled. The owner has approved all Claude reviews for this project. Use only the supplied source. Test keys are deterministic public fixtures; no live secrets are provided.
+
+Review the implementation connecting verified deck proofs to genesis and certified entry validation. This is an intermediate Stage 07 checkpoint, NOT a completed Stage 07 or P2P claim. Live unlock gossip, owner-only session decoding/reveal proof production, resource commitments, recovery and browser persistence remain pending. Do not report those disclosed incomplete steps as implementation bugs; do flag any interface/ordering choice here that would make their safe completion impossible.
+
+Threat model: Byzantine peers may sign malicious messages; honest local code supplies the replayed context. A permissive verifyCommitments/verifySystem/verifyCommand callback cannot authorize false deck data. Opaque snapshots are comparison caches only; the certified prefix is always replayed. Setup is fixed and proof-verified before honest genesis consent, then the exact pass blobs are certified as state-preserving crypto entries before START_SEAT. Controls may interleave and must preserve pending anchors. All seats including bots participate in decks; human seats only in beacon/consensus. Per-message cap 256KiB. Low-level signing helpers remain callable by malicious fixtures; honest ceremony API is signVerifiedGenesis.
+
+Focus on genesis catalogue/roster/domain binding; pre-sign transcript handling; proof verification before vote; input leaks in handled system paths; deal cursor/receipt binding; signed reveal owner/parent/nonce/type checks; unchanged state on rejection; interaction with controls and beacon readiness. Also check denial-of-service and repeated expensive verification where concrete.
+
+Provide concrete findings ranked by severity with file/function, attack preconditions and trace, impact, and a minimal correction. Distinguish exploitable issues from robustness/performance notes. If no concrete failure is found say so, while preserving the disclosed limits. Do not write implementation patches.

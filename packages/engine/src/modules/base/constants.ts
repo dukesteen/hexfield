@@ -18,6 +18,18 @@ export const DEV_CARD_COUNTS = Object.freeze({
 });
 export type DevCard = keyof typeof DEV_CARD_COUNTS;
 
+/** Canonical physical development cards; identities, types and order are game rules. */
+export const BASE_DEV_CARD_CATALOGUE: readonly Readonly<{
+  identity: string;
+  card: string;
+}>[] = Object.freeze(
+  Object.entries(DEV_CARD_COUNTS).flatMap(([card, count]) =>
+    Array.from({ length: count }, (_, index) =>
+      Object.freeze({ identity: `${card}#${index + 1}`, card }),
+    ),
+  ),
+);
+
 export const TERRAIN_RESOURCE: Readonly<Record<string, Resource | null>> = Object.freeze({
   hills: 'brick',
   forest: 'lumber',

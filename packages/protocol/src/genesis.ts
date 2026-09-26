@@ -1,11 +1,14 @@
 import { fromBase64Url, hashValue, toBase64Url, toHex } from '@cp2p/codec';
-import { parsePeerId, signObject, verifyObject } from '@cp2p/crypto';
+import { identityFromSecret, parsePeerId, signObject, verifyObject } from '@cp2p/crypto';
 import { ENGINE_VERSION, failure, success } from '@cp2p/engine';
 import type { Engine, GameState, Result } from '@cp2p/engine';
 import { genesisSchema, logEntrySchema } from './schemas.js';
 import { PROTOCOL_VERSION } from './types.js';
 import type { EntryBody, Genesis, GenesisBody, LogEntry, SeatSignature } from './types.js';
 import { parseCanonical } from './validation.js';
+import { validateDeckCeremony, validateDeckGenesisCommitments } from './deck-genesis.js';
+import type { SignedDeckPass } from './deck-setup.js';
+import * as v from 'valibot';
 
 export const GENESIS_PREVIOUS_HASH = '0'.repeat(64);
 
@@ -54,6 +57,32 @@ export function signGenesis(
     seat,
     sig: signObject('genesis', { genesisDigest: genesisDigest(body) }, secretKey),
   };
+}
+
+/** Pure signing helper after deck verification. Outgoing consent must use prepareGenesisConsent. */
+export function signVerifiedGenesis(
+  body: GenesisBody,
+  transcripts: readonly { deckId: string; passes: readonly SignedDeckPass[] }[],
+  seat: SeatSignature['seat'],
+  secretKey: Uint8Array,
+): Result<SeatSignature> {
+  const parsed = parseCanonical(body, v.omit(genesisSchema, ['gameId', 'signatures']));
+  if (!parsed.ok) return parsed;
+  if (parsed.value.security !== 'verified')
+    return failure('genesis-security', 'Verified consent requires verified genesis');
+  const decks = validateDeckCeremony(parsed.value, transcripts);
+  if (!decks.ok) return decks;
+  try {
+    const signer = identityFromSecret(secretKey);
+    const owner = parsed.value.seats.find((participant) => participant.seat === seat);
+    const matches = owner?.kind === 'human' && owner.publicKey === signer.peerId;
+    signer.secretKey.fill(0);
+    return matches
+      ? success(signGenesis(parsed.value, seat, secretKey))
+      : failure('genesis-signer', 'Only the matching human key can consent to genesis');
+  } catch {
+    return failure('genesis-signing', 'Could not sign the verified genesis');
+  }
 }
 
 export function validateGenesis(
@@ -126,6 +155,25 @@ export function validateGenesis(
     const violations = engine.checkInvariants(state);
     if (violations.length !== 0)
       return failure('genesis-state', 'Genesis violates engine invariants', { violations });
+    if (genesis.security === 'verified') {
+      const decks = validateDeckGenesisCommitments(genesis);
+      if (!decks.ok) return decks;
+      const expected = decks.value.map((deck) => deck.definition.deckId).toSorted();
+      const actual = Object.keys(state.decks).toSorted();
+      if (
+        actual.length !== expected.length ||
+        actual.some((id, index) => id !== expected[index]) ||
+        decks.value.some((deck) => {
+          const publicDeck = state.decks[deck.definition.deckId];
+          return (
+            !publicDeck ||
+            publicDeck.remaining !== deck.definition.cards.length ||
+            publicDeck.drawn.length !== 0
+          );
+        })
+      )
+        return failure('genesis-decks', 'Cryptographic catalogues must match every engine deck');
+    }
     return success({ genesis, state });
   } catch {
     return failure('genesis-config', 'Genesis configuration is not supported by the engine');

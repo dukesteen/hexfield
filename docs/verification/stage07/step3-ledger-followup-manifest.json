@@ -1,0 +1,151 @@
+{
+  "bundleSha256": "62f49a76f0ae305b3e2bd0bdcd3035b8a8e7ca33a5776d0257d84f00f6e3fca1",
+  "bytes": 386083,
+  "files": [
+    {
+      "path": "docs/verification/stage07/step3-ledger-followup-prompt.md",
+      "sha256": "301647479ded2c69acb8db35c6552f876a8a0f69bbf58dab7e9ec3045747dcff",
+      "bytes": 3711
+    },
+    {
+      "path": "docs/verification/stage07/step3-ledger-review.md",
+      "sha256": "b13835d8de22cf255b654845d82316b27ecc50de128ae189caf1f0c058a13159",
+      "bytes": 11253
+    },
+    {
+      "path": "packages/protocol/src/log.ts",
+      "sha256": "cbe29fb8ca090e358521df8f2cc7e8f6971a16e1ba9577df7c3d63a38b8e7d17",
+      "bytes": 12241
+    },
+    {
+      "path": "packages/protocol/src/replicated-log.ts",
+      "sha256": "4ad3dd0ebd8d29c5ae13fe7f4bc2c2113e00c28f9cd6080703f9ece05762860c",
+      "bytes": 60434
+    },
+    {
+      "path": "packages/protocol/src/replicated-log.test.ts",
+      "sha256": "0c5665a46c73d290a7345ee549a206c4ba286034950cfc022850f381f5c815e4",
+      "bytes": 78950
+    },
+    {
+      "path": "packages/protocol/src/proposal.ts",
+      "sha256": "6bdeccf8a046af0161073ec1bcb363ee61eab8d8d0db9521341e61c7d9cfc197",
+      "bytes": 12126
+    },
+    {
+      "path": "packages/protocol/src/consensus-controller.ts",
+      "sha256": "f569308ba250d8ed9c0364f4d07860d9041362c33390d225cbcb148a4827e4f2",
+      "bytes": 10208
+    },
+    {
+      "path": "packages/protocol/src/genesis.ts",
+      "sha256": "7628ede4fa4137acb14a8a8ad5efc74913477cefd93a5bb6953d65642969d8d3",
+      "bytes": 9673
+    },
+    {
+      "path": "packages/protocol/src/genesis-outbox.ts",
+      "sha256": "9c87c4b23787a25ef9348c69d9bad0140f647b060b28b45984ba1f06080346ff",
+      "bytes": 4162
+    },
+    {
+      "path": "packages/protocol/src/genesis-outbox.test.ts",
+      "sha256": "9a10fabb1f94ae96b371eab067654bc15a4feee14e87414120d10ae24138d750",
+      "bytes": 6566
+    },
+    {
+      "path": "packages/protocol/src/deck-genesis.ts",
+      "sha256": "bbcfce14ec8a5320bd49927818c1e40e6adee4029877e083e02470a640d917fb",
+      "bytes": 8959
+    },
+    {
+      "path": "packages/protocol/src/deck-genesis.test.ts",
+      "sha256": "7d82a2ca209bcc02f0a2eb92bf0ad6943114f22058785cc923467d2bcf7cb049",
+      "bytes": 10308
+    },
+    {
+      "path": "packages/protocol/src/deck-ledger.ts",
+      "sha256": "2c3e9778c88b790e9afbe42d5446c29caff44a77abf86655a583851174d82e8d",
+      "bytes": 19462
+    },
+    {
+      "path": "packages/protocol/src/deck-ledger.test.ts",
+      "sha256": "163abb414256e90b6e75898baefe5dec45beb39a4f4d58bbd537765767f8db35",
+      "bytes": 12230
+    },
+    {
+      "path": "packages/protocol/src/crypto-context.ts",
+      "sha256": "0c35c34b7121808a77543c24a0f887c6610306ea2a707ec53445e2aad4327f77",
+      "bytes": 8207
+    },
+    {
+      "path": "packages/protocol/src/deck-setup.ts",
+      "sha256": "c2124be2cee457088d9e7727674d31eab9d90b8011f3e5035e31790f31f04ffb",
+      "bytes": 17517
+    },
+    {
+      "path": "packages/protocol/src/deck-pass-cache.test.ts",
+      "sha256": "fb4a34da660288683fc883d55f1b3cf675fa0b48f2bc57c4bd6518ac5fb51a31",
+      "bytes": 4973
+    },
+    {
+      "path": "packages/protocol/src/deck-draw.ts",
+      "sha256": "36d515edc8e67a469f72652614376212a4ccf0517958856a82cc584a8939fcdc",
+      "bytes": 15758
+    },
+    {
+      "path": "packages/protocol/src/deck-inbox.ts",
+      "sha256": "9e8ced3c85f57565c6d8c93c04e606802c3b29c5a8d06880cb1f26eb0a0a619a",
+      "bytes": 3623
+    },
+    {
+      "path": "packages/protocol/src/deck-inbox.test.ts",
+      "sha256": "2aa4e67bc265610d41f91397f24f87687f2937d57ca794ca5c0b2582fecb75b9",
+      "bytes": 6732
+    },
+    {
+      "path": "packages/protocol/src/deck-log.test.ts",
+      "sha256": "44372a5384889c5daec459b904d5d71e876d6df0d06c144c95b784a07d67eb03",
+      "bytes": 26826
+    },
+    {
+      "path": "packages/protocol/src/beacon-contributions.ts",
+      "sha256": "46d310eda54fb640b36b157f74514a39d9189a5db0eceabfc0bfead6ff6bee53",
+      "bytes": 7198
+    },
+    {
+      "path": "packages/protocol/src/beacon-inbox.ts",
+      "sha256": "6266e87acdf58a1760d75f082551262758dffa52f9efde7205e35818f8d591c9",
+      "bytes": 4651
+    },
+    {
+      "path": "packages/protocol/src/replay.ts",
+      "sha256": "c0e5555c77bc3c9976ce3c43589254fbd23308ddfc39b74d982bb75595a248a7",
+      "bytes": 5537
+    },
+    {
+      "path": "packages/protocol/src/types.ts",
+      "sha256": "6666a2c57370888c7d5087b8d5c18a0ff0923ccf80824b2fddd9c4cd998d54bb",
+      "bytes": 2937
+    },
+    {
+      "path": "packages/protocol/src/schemas.ts",
+      "sha256": "b5e8493d67f4cd6b1bf4db04de023a69d6610c7751077bdd0117d7254570f944",
+      "bytes": 5451
+    },
+    {
+      "path": "packages/protocol/src/validation.ts",
+      "sha256": "bb646520abbab0596ff5d99f1b7f6ffaeed264260c3030917725a050acef5f23",
+      "bytes": 887
+    },
+    {
+      "path": "packages/engine/src/modules/base/victory.ts",
+      "sha256": "8622132500ae30aab426f7ac6c3b3b689eeb642cfe38cb852ee8600369b90e27",
+      "bytes": 3896
+    },
+    {
+      "path": "docs/09-lobby-and-game-setup.md",
+      "sha256": "14e8f9c8198fd3baf896e9a13c676ba6f0b09798d4fbc1143329a61f6cd60b93",
+      "bytes": 10086
+    }
+  ]
+}

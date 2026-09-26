@@ -21,7 +21,6 @@ export {
   genesisDigest,
   genesisId,
   signEntry,
-  signGenesis,
   validateGenesis,
   validateGenesisEntry,
 } from './genesis.js';
@@ -130,3 +129,18 @@ export type {
 export { prepareDeckUnlock } from './deck-outbox.js';
 export type { DeckContributionStore } from './deck-outbox.js';
 export { prepareDeckPass } from './deck-setup-outbox.js';
+
+export {
+  deckCeremonyId,
+  genesisDeckDefinitions,
+  deckPassHash,
+  createDeckGenesisCommitment,
+  validateDeckGenesisCommitments,
+  validateDeckCeremony,
+} from './deck-genesis.js';
+export type { DeckGenesisCommitment } from './deck-genesis.js';
+export { DECK_DRAW_PROTOCOL, DECK_REVEAL_PROTOCOL, decksReady } from './deck-ledger.js';
+export type { DeckLedger, LedgerDeck, LedgerSlot } from './deck-ledger.js';
+
+export { prepareGenesisConsent, MemoryGenesisConsentStore } from './genesis-outbox.js';
+export type { GenesisConsentStore } from './genesis-outbox.js';

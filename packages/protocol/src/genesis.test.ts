@@ -5,18 +5,52 @@ import type { Result } from '@cp2p/engine';
 import { describe, expect, test, vi } from 'vitest';
 import {
   entryHash,
+  genesisBody,
   genesisDigest,
   genesisId,
   signEntry,
   signGenesis,
+  signVerifiedGenesis,
   validateGenesis,
   validateGenesisEntry,
 } from './genesis.js';
+import { deckPassHash, validateDeckGenesisCommitments } from './deck-genesis.js';
+import { createGenesisDeckFixture } from './testing/deck-fixture.js';
 import { fixtureAt, protocolFixture } from './testing/fixtures.js';
+import { createSimulationGenesis } from './testing/simulation-genesis.js';
 import type { Genesis, GenesisBody } from './types.js';
 
 function errorCode(result: { ok: boolean; error?: { code: string } }): string | undefined {
   return result.ok ? undefined : result.error?.code;
+}
+
+function verifiedFixture() {
+  const simulation = createSimulationGenesis({
+    seed: 67,
+    humanCount: 1,
+    config: {
+      modules: [{ id: 'base', version: '1.0.0' }],
+      seats: [0, 1],
+      options: { base: { mapLayout: 'random' } },
+    },
+  });
+  const draft: GenesisBody = {
+    ...genesisBody(simulation.genesis),
+    security: 'verified',
+    commitments: {},
+  };
+  const ceremony = createGenesisDeckFixture(draft, simulation.identities);
+  const human = simulation.identities.get(0);
+  const bot = simulation.identities.get(1);
+  if (!human || !bot) throw new Error('Missing fixture signer');
+  const signature = signVerifiedGenesis(ceremony.body, ceremony.transcripts, 0, human.secretKey);
+  if (!signature.ok) throw new Error(`Verified consent failed: ${signature.error.message}`);
+  const genesis: Genesis = {
+    ...ceremony.body,
+    gameId: genesisId(ceremony.body),
+    signatures: [signature.value],
+  };
+  return { ...simulation, ceremony, human, bot, genesis };
 }
 
 describe('genesis validation', () => {
@@ -235,7 +269,7 @@ describe('genesis validation', () => {
     ).toBe('genesis-signatures');
   });
 
-  test('requires explicit verified-ceremony callback and forbids stub commitments', () => {
+  test('requires the canonical base deck despite a permissive callback and forbids stub commitments', () => {
     const { engine, body, genesis, identities } = protocolFixture();
     expect(
       errorCode(
@@ -255,40 +289,104 @@ describe('genesis validation', () => {
       'stub-commitments',
     );
 
-    const verifiedBody: GenesisBody = {
-      ...body,
-      security: 'verified',
-      commitments: { proof: 'opaque' },
-    };
-    const verified: Genesis = {
-      ...verifiedBody,
-      gameId: genesisId(verifiedBody),
-      signatures: [
-        signGenesis(verifiedBody, 0, fixtureAt(identities, 0).secretKey),
-        signGenesis(verifiedBody, 1, fixtureAt(identities, 1).secretKey),
-      ],
-    };
-    expect(errorCode(validateGenesis(verified, engine))).toBe('commitments-unavailable');
+    const verified = verifiedFixture();
+    expect(errorCode(validateGenesis(verified.genesis, verified.engine))).toBe(
+      'commitments-unavailable',
+    );
     const callback = vi.fn<() => Result<void>>(() => success(undefined));
-    expect(validateGenesis(verified, engine, { verifyCommitments: callback }).ok).toBe(true);
+    expect(
+      validateGenesis(verified.genesis, verified.engine, { verifyCommitments: callback }).ok,
+    ).toBe(true);
     expect(callback).toHaveBeenCalledOnce();
+    const noDeckBody: GenesisBody = { ...verified.ceremony.body, commitments: { decks: [] } };
+    const noDeck: Genesis = {
+      ...noDeckBody,
+      gameId: genesisId(noDeckBody),
+      signatures: [signGenesis(noDeckBody, 0, verified.human.secretKey)],
+    };
+    expect(
+      errorCode(validateGenesis(noDeck, verified.engine, { verifyCommitments: callback })),
+    ).toBe('deck-genesis-count');
     expect(
       errorCode(
-        validateGenesis(verified, engine, {
+        validateGenesis(verified.genesis, verified.engine, {
           verifyCommitments: () => failure('bad-commitment', 'Invalid commitment'),
         }),
       ),
     ).toBe('bad-commitment');
     expect(
       errorCode(
-        validateGenesis(verified, engine, {
+        validateGenesis(verified.genesis, verified.engine, {
           verifyCommitments: () => {
             throw new Error('bad proof');
           },
         }),
       ),
     ).toBe('commitments-invalid');
-  });
+  }, 15_000);
+
+  test('human consent signs only a fully replayed fixed-deck ceremony', () => {
+    const { ceremony, human, bot, genesis } = verifiedFixture();
+    const signed = signVerifiedGenesis(ceremony.body, ceremony.transcripts, 0, human.secretKey);
+    expect(signed).toMatchObject({ ok: true, value: genesis.signatures[0] });
+    expect(errorCode(signVerifiedGenesis(ceremony.body, [], 0, human.secretKey))).toBe(
+      'deck-ceremony-transcripts',
+    );
+    expect(
+      errorCode(signVerifiedGenesis(ceremony.body, ceremony.transcripts, 0, bot.secretKey)),
+    ).toBe('genesis-signer');
+    expect(
+      errorCode(signVerifiedGenesis(ceremony.body, ceremony.transcripts, 1, bot.secretKey)),
+    ).toBe('genesis-signer');
+    expect(
+      errorCode(
+        signVerifiedGenesis(
+          { ...ceremony.body, security: 'stub' },
+          ceremony.transcripts,
+          0,
+          human.secretKey,
+        ),
+      ),
+    ).toBe('genesis-security');
+
+    const transcript = fixtureAt(ceremony.transcripts, 0);
+    const first = fixtureAt(transcript.passes, 0);
+    if (first.body.phase !== 'shuffle') throw new Error('Expected first shuffle pass');
+    const changed = {
+      ...first,
+      body: {
+        ...first.body,
+        proof: {
+          ...first.body.proof,
+          challenge: 'f'.repeat(16),
+        },
+      },
+    };
+    const resigned = { ...changed, sig: signObject('deck-pass', changed.body, human.secretKey) };
+    const changedTranscripts = [
+      {
+        deckId: transcript.deckId,
+        passes: [resigned, ...transcript.passes.slice(1)],
+      },
+    ];
+    const commitments = validateDeckGenesisCommitments(ceremony.body);
+    if (!commitments.ok) throw new Error(commitments.error.message);
+    const original = fixtureAt(commitments.value, 0);
+    const changedBody: GenesisBody = {
+      ...ceremony.body,
+      commitments: {
+        decks: [
+          { ...original, passHashes: [deckPassHash(resigned), ...original.passHashes.slice(1)] },
+        ],
+      },
+    };
+    expect(
+      errorCode(signVerifiedGenesis(changedBody, changedTranscripts, 0, human.secretKey)),
+    ).toBe('deck-shuffle-proof');
+    expect(
+      errorCode(signVerifiedGenesis(ceremony.body, changedTranscripts, 0, human.secretKey)),
+    ).toBe('deck-ceremony-hash');
+  }, 15_000);
 
   test('rejects malformed canonical data and unsupported or invalid genesis state', () => {
     const { engine, genesis } = protocolFixture();

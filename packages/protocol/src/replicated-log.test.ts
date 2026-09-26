@@ -1,5 +1,5 @@
 import { canonicalDecode, canonicalEncode, hashValue, toHex } from '@cp2p/codec';
-import { failure } from '@cp2p/engine';
+import { failure, success } from '@cp2p/engine';
 import type { Engine, Result, Seat, SystemInput } from '@cp2p/engine';
 import { describe, expect, test } from 'vitest';
 import type { ConsensusState } from './consensus.js';
@@ -151,6 +151,368 @@ function fourHumanFixture(): ReturnType<typeof protocolFixture> {
 }
 
 describe('replicated certified log adapter', () => {
+  test('proposal retries after a local validator exception neither accuse nor disconnect the proposer', async () => {
+    const fixture = protocolFixture();
+    const proposer = fixtureAt(fixture.identities, 0);
+    const local = fixtureAt(fixture.identities, 1);
+    const transport = new CapturingTransport(local.peerId);
+    const replica = value(
+      await ReplicatedLog.create({
+        genesisEntry: fixture.entry,
+        engine: {
+          ...fixture.engine,
+          validate() {
+            throw new Error('Injected local validator failure');
+          },
+        },
+        policy: { genesis: { allowStub: true }, entry: { allowStub: true } },
+        seat: 1,
+        secretKey: local.secretKey,
+        transport,
+        clock: new ManualClock(),
+        journal: new MemoryProtocolJournal(),
+      }),
+    );
+    const context = replica.getContext();
+    // The signatures are authentic. A failed local validator cannot establish
+    // whether this command is illegal, so it cannot justify an accusation.
+    const signed = signCommand(
+      {
+        gameId: fixture.genesis.gameId,
+        genesisDigest: context.membership.genesisDigest,
+        seat: 0,
+        nonce: 1,
+        headSeq: 0,
+        headHash: entryHash(context.log.head),
+        command: { type: 'END_TURN' },
+      },
+      proposer.secretKey,
+    );
+    const entry = signEntry(
+      {
+        seq: 1,
+        term: 1,
+        prevHash: entryHash(context.log.head),
+        payload: { kind: 'command', signed },
+        stateHash: context.log.head.stateHash,
+        sequencer: proposer.peerId,
+      },
+      proposer.secretKey,
+    );
+    const proposal = signProposal(
+      {
+        genesisDigest: context.membership.genesisDigest,
+        epoch: 0,
+        entry,
+        validRound: null,
+        prevotes: [],
+      },
+      proposer.secretKey,
+    );
+    for (let retry = 0; retry < 8; retry++) {
+      transport.inject(proposer.peerId, { t: 'PROPOSAL', proposal });
+      // oxlint-disable-next-line no-await-in-loop -- Exercise actual transport retries after local validation fails.
+      await replica.flush();
+    }
+    expect(transport.disconnected).toEqual([]);
+    expect(transport.sent.some((message) => message.t === 'ACCUSE' || message.t === 'VOTE')).toBe(
+      false,
+    );
+    expect(replica.getContext().log.head.seq).toBe(0);
+    expect(replica.getContext().excludedProposers).toEqual([]);
+    expect(replica['disposed']).toBe(false);
+    const snapshot = value(replica['activeController']().snapshot());
+    expect(snapshot.halted).toBeNull();
+    expect(snapshot.provenOffender).toBeNull();
+    replica.dispose();
+  });
+
+  test('bounds fresh invalid proposal variants from an elected proposer before they starve votes', async () => {
+    const fixture = protocolFixture();
+    const proposer = fixtureAt(fixture.identities, 0);
+    const local = fixtureAt(fixture.identities, 1);
+    const transport = new CapturingTransport(local.peerId);
+    let derivations = 0;
+    const replica = value(
+      await ReplicatedLog.create({
+        genesisEntry: fixture.entry,
+        engine: {
+          ...fixture.engine,
+          apply(state, input) {
+            derivations++;
+            return fixture.engine.apply(state, input);
+          },
+        },
+        policy: { genesis: { allowStub: true }, entry: { allowStub: true } },
+        seat: 1,
+        secretKey: local.secretKey,
+        transport,
+        clock: new ManualClock(),
+        journal: new MemoryProtocolJournal(),
+      }),
+    );
+    const context = replica.getContext();
+    const input: SystemInput = { kind: 'system', type: 'START_SEAT', seat: 0 };
+    for (let variant = 0; variant < 8; variant++) {
+      const entry = signEntry(
+        {
+          seq: 1,
+          term: 1,
+          prevHash: entryHash(context.log.head),
+          payload: { kind: 'system', input, evidence: stubEvidence(context.log, input) },
+          stateHash: variant.toString(16).padStart(64, '0'),
+          sequencer: proposer.peerId,
+        },
+        proposer.secretKey,
+      );
+      transport.inject(proposer.peerId, {
+        t: 'PROPOSAL',
+        proposal: signProposal(
+          {
+            genesisDigest: context.membership.genesisDigest,
+            epoch: 0,
+            entry,
+            validRound: null,
+            prevotes: [],
+          },
+          proposer.secretKey,
+        ),
+      });
+      // oxlint-disable-next-line no-await-in-loop -- Model a sender refilling the queue after each invalid proposal.
+      await replica.flush();
+    }
+    expect(derivations).toBe(5);
+    expect(transport.disconnected).toEqual([proposer.peerId]);
+    expect(replica.getContext().log.head.seq).toBe(0);
+    expect(replica['disposed']).toBe(false);
+    expect(transport.sent.some((message) => message.t === 'VOTE')).toBe(false);
+    replica.dispose();
+  });
+
+  test('rejects bad command proofs before queueing and cannot let them block a valid command', async () => {
+    const fixture = protocolFixture();
+    const first = fixtureAt(fixture.identities, 0);
+    const second = fixtureAt(fixture.identities, 1);
+    const transport = new CapturingTransport(first.peerId);
+    let checks = 0;
+    let rejectAll = false;
+    let rejectApply = false;
+    let rejectInvariants = false;
+    let throwValidate = false;
+    let throwApply = false;
+    const engine: Engine = {
+      ...fixture.engine,
+      validate(state, input) {
+        if (throwValidate) throw new Error('Injected validator failure');
+        return fixture.engine.validate(state, input);
+      },
+      apply: (state, input) => {
+        if (throwApply) throw new Error('Injected reducer failure');
+        return rejectApply
+          ? failure('test-apply', 'Injected reducer rejection')
+          : fixture.engine.apply(state, input);
+      },
+      checkInvariants: (state) =>
+        rejectInvariants ? ['Injected invariant violation'] : fixture.engine.checkInvariants(state),
+    };
+    const replica = value(
+      await ReplicatedLog.create({
+        genesisEntry: fixture.entry,
+        engine,
+        policy: {
+          genesis: { allowStub: true },
+          entry: {
+            allowStub: true,
+            verifyCommand: (signed) => {
+              checks++;
+              return !rejectAll && signed.body.evidence?.data === true
+                ? success(undefined)
+                : failure('test-bad-proof', 'Invalid command proof');
+            },
+          },
+        },
+        seat: 0,
+        secretKey: first.secretKey,
+        transport,
+        clock: new ManualClock(),
+        journal: new MemoryProtocolJournal(),
+        systemInput: (context) => {
+          if (context.log.head.seq !== 0) return null;
+          const input: SystemInput = { kind: 'system', type: 'START_SEAT', seat: 0 };
+          return { input, evidence: stubEvidence(context.log, input) };
+        },
+      }),
+    );
+    const firstProposal = transport.sent.find((message) => message.t === 'PROPOSAL');
+    if (firstProposal?.t !== 'PROPOSAL') throw new Error('Expected initial system proposal');
+    const finishVotes = async (entry: typeof firstProposal.proposal.body.entry) => {
+      const vote = (phase: 'prevote' | 'precommit') =>
+        signVote(
+          {
+            genesisDigest: genesisDigest(fixture.genesis),
+            epoch: 0,
+            seat: 1,
+            seq: entry.seq,
+            term: entry.term,
+            phase,
+            valueHash: entryHash(entry),
+          },
+          second.secretKey,
+        );
+      transport.inject(second.peerId, { t: 'VOTE', vote: vote('prevote') });
+      await replica.flush();
+      transport.inject(second.peerId, { t: 'VOTE', vote: vote('precommit') });
+      await replica.flush();
+    };
+    await finishVotes(firstProposal.proposal.body.entry);
+    expect(replica.getContext().log.head.seq).toBe(1);
+    const context = replica.getContext();
+    const command = context.log.engine.getLegalCommands(context.log.state, 0).commands[0];
+    if (!command) throw new Error('Expected a real legal setup command');
+    const signed = (proof: boolean, nonce = 1) =>
+      signCommand(
+        {
+          gameId: fixture.genesis.gameId,
+          genesisDigest: context.membership.genesisDigest,
+          seat: 0,
+          nonce,
+          headSeq: context.log.head.seq,
+          headHash: entryHash(context.log.head),
+          command,
+          evidence: { protocol: 'test-proof', data: proof },
+        },
+        first.secretKey,
+      );
+    const bad = signed(false);
+    expect(await replica.submit(bad)).toMatchObject({
+      ok: false,
+      error: { code: 'test-bad-proof' },
+    });
+    transport.inject(second.peerId, { t: 'SUBMIT', cmd: bad });
+    await replica.flush();
+    expect(replica['commands']).toEqual([]);
+    expect(transport.sent.some((message) => message.t === 'ACCUSE')).toBe(false);
+    const good = signed(true, 4);
+    // Public command legality alone is insufficient. Admission must also run
+    // the reducer and invariants before followers mark an input as available.
+    rejectApply = true;
+    expect(await replica.submit(good)).toMatchObject({ ok: false, error: { code: 'test-apply' } });
+    rejectApply = false;
+    rejectInvariants = true;
+    expect(await replica.submit(good)).toMatchObject({ ok: false, error: { code: 'entry-state' } });
+    transport.inject(second.peerId, { t: 'SUBMIT', cmd: signed(true, 1) });
+    await replica.flush();
+    expect(replica['commands']).toEqual([]);
+    const afterInvariantFailure = checks;
+    for (let retry = 0; retry < 6; retry++) {
+      transport.inject(second.peerId, { t: 'SUBMIT', cmd: signed(true, 1) });
+      // oxlint-disable-next-line no-await-in-loop -- Retries after a local fault must not spend more strikes or proof work.
+      await replica.flush();
+    }
+    expect(checks).toBe(afterInvariantFailure);
+    expect(transport.disconnected).toEqual([]);
+    rejectInvariants = false;
+    throwApply = true;
+    expect(await replica.submit(good)).toMatchObject({
+      ok: false,
+      error: { code: 'entry-verification-failed' },
+    });
+    transport.inject(second.peerId, { t: 'SUBMIT', cmd: signed(true, 2) });
+    await replica.flush();
+    throwApply = false;
+    throwValidate = true;
+    expect(await replica.submit(good)).toMatchObject({
+      ok: false,
+      error: { code: 'entry-verification-failed' },
+    });
+    transport.inject(second.peerId, { t: 'SUBMIT', cmd: signed(true, 3) });
+    await replica.flush();
+    throwValidate = false;
+    expect(replica['disposed']).toBe(false);
+    expect(replica['commands']).toEqual([]);
+    transport.inject(second.peerId, { t: 'SUBMIT', cmd: good });
+    await replica.flush();
+    expect(replica['commands']).toEqual([good]);
+    const afterAdmission = checks;
+    transport.inject(second.peerId, { t: 'SUBMIT', cmd: good });
+    await replica.flush();
+    expect(checks).toBe(afterAdmission);
+    // Even a local policy change after admission cannot leave an invalid head item blocking the queue.
+    rejectAll = true;
+    expect(replica['candidate'](value(replica['activeController']().snapshot()))).toBeNull();
+    expect(replica['commands']).toEqual([]);
+    rejectAll = false;
+    transport.inject(second.peerId, { t: 'SUBMIT', cmd: good });
+    await replica.flush();
+    const applied = value(
+      fixture.engine.apply(context.log.state, { kind: 'command', seat: 0, command }),
+    );
+    const entry = signEntry(
+      {
+        seq: 2,
+        term: 1,
+        prevHash: entryHash(context.log.head),
+        payload: { kind: 'command', signed: good },
+        stateHash: toHex(hashValue(applied.state)),
+        sequencer: second.peerId,
+      },
+      second.secretKey,
+    );
+    transport.inject(second.peerId, {
+      t: 'PROPOSAL',
+      proposal: signProposal(
+        {
+          genesisDigest: genesisDigest(fixture.genesis),
+          epoch: 0,
+          entry,
+          validRound: null,
+          prevotes: [],
+        },
+        second.secretKey,
+      ),
+    });
+    await replica.flush();
+    await finishVotes(entry);
+    expect(replica.getContext().log.head.seq).toBe(2);
+    expect(replica.getContext().excludedProposers).toEqual([]);
+    // Honest retransmissions from the previous parent are cheap and are not strikes.
+    const afterCommit = checks;
+    for (let retry = 0; retry < 6; retry++) {
+      transport.inject(second.peerId, { t: 'SUBMIT', cmd: bad });
+      // oxlint-disable-next-line no-await-in-loop -- Model sequential retries, not queue overflow.
+      await replica.flush();
+    }
+    expect(checks).toBe(afterCommit);
+    expect(transport.disconnected).toEqual([]);
+    const current = replica.getContext();
+    const nextCommand = current.log.engine.getLegalCommands(current.log.state, 0).commands[0];
+    if (!nextCommand) throw new Error('Expected the road after the setup settlement');
+    const invalidProof = (nonce: number) =>
+      signCommand(
+        {
+          ...good.body,
+          nonce,
+          headSeq: current.log.head.seq,
+          headHash: entryHash(current.log.head),
+          command: nextCommand,
+          evidence: { protocol: 'test-proof', data: false },
+        },
+        first.secretKey,
+      );
+    // The bad proof, invariant and thrown validators used four strikes. One more failure
+    // disconnects the sender, including when the callback uses its own error code.
+    for (let retry = 0; retry < 8; retry++) {
+      transport.inject(second.peerId, { t: 'SUBMIT', cmd: invalidProof(5 + retry) });
+      // oxlint-disable-next-line no-await-in-loop -- Each fresh invalid value spends one strike before the next variant.
+      await replica.flush();
+    }
+    expect(checks - afterCommit).toBe(1);
+    expect(transport.disconnected).toEqual([second.peerId]);
+    expect(replica['commands']).toEqual([]);
+    expect(transport.sent.some((message) => message.t === 'ACCUSE')).toBe(false);
+    replica.dispose();
+  });
+
   test('one signed sender cannot evict another seat from pending command admission', async () => {
     const fixture = protocolFixture();
     const first = fixtureAt(fixture.identities, 0);

@@ -1,9 +1,10 @@
 import { hashValue, toHex } from '@cp2p/codec';
 import { describe, expect, test } from 'vitest';
+import { failure, success } from '@cp2p/engine';
 import type { Result, SystemInput } from '@cp2p/engine';
 import { validateExcludeProposerControl, validateObjectiveAccusation } from './control.js';
 import { entryHash, genesisId, signEntry, signGenesis } from './genesis.js';
-import { signCommand, stubEvidence } from './log.js';
+import { signCommand, stubEvidence, validateNextEntry } from './log.js';
 import { advanceContext, proposerFor, signProposal, validateCertifiedEntry } from './proposal.js';
 import { initialProposalContext, replayCertifiedPrefix } from './replay.js';
 import { fixtureAt, protocolFixture } from './testing/fixtures.js';
@@ -21,6 +22,7 @@ function setup() {
   const context = value(initialProposalContext(fixture.entry, fixture.engine, policy));
   const controlContext = {
     log: context.log,
+    commandPolicy: context.policy,
     membership: context.membership,
     excludedProposers: context.excludedProposers,
     proposerFor: (seq: number, term: number) =>
@@ -77,6 +79,105 @@ function setup() {
 }
 
 describe('certified proposer exclusion', () => {
+  test('an invalid command proof is objective only under the certified entry policy', () => {
+    const { fixture, context, signedEntry } = setup();
+    const input: SystemInput = { kind: 'system', type: 'START_SEAT', seat: 0 };
+    const applied = value(context.log.engine.apply(context.log.state, input));
+    const start = signedEntry(
+      { kind: 'system', input, evidence: stubEvidence(context.log, input) },
+      1,
+      toHex(hashValue(applied.state)),
+    );
+    const started = value(
+      advanceContext(
+        context,
+        value(
+          validateNextEntry(start, context.log, {
+            allowStub: true,
+            term: 1,
+            sequencer: start.sequencer,
+          }),
+        ),
+      ),
+    );
+    const command = started.log.engine.getLegalCommands(started.log.state, 0).commands[0];
+    if (!command) throw new Error('Expected a legal command after START_SEAT');
+    const signed = signCommand(
+      {
+        gameId: started.log.genesis.gameId,
+        genesisDigest: started.membership.genesisDigest,
+        seat: 0,
+        nonce: 1,
+        headSeq: started.log.head.seq,
+        headHash: entryHash(started.log.head),
+        command,
+        evidence: { protocol: 'test-proof', data: false },
+      },
+      fixtureAt(fixture.identities, 0).secretKey,
+    );
+    const entry = signEntry(
+      {
+        seq: started.log.head.seq + 1,
+        term: 1,
+        prevHash: entryHash(started.log.head),
+        payload: { kind: 'command', signed },
+        stateHash: 'f'.repeat(64),
+        sequencer: fixtureAt(fixture.identities, 1).peerId,
+      },
+      fixtureAt(fixture.identities, 1).secretKey,
+    );
+    const proposal = signProposal(
+      {
+        genesisDigest: started.membership.genesisDigest,
+        epoch: 0,
+        entry,
+        validRound: null,
+        prevotes: [],
+      },
+      fixtureAt(fixture.identities, 1).secretKey,
+    );
+    const control: ExcludeProposerControl = {
+      kind: 'control',
+      action: 'exclude-proposer',
+      offender: 1,
+      evidence: { kind: 'invalid-command', proposal },
+    };
+    const controlContext = {
+      log: started.log,
+      membership: started.membership,
+      excludedProposers: started.excludedProposers,
+      proposerFor: (seq: number, term: number) =>
+        proposerFor(seq, term, started.membership, started.excludedProposers),
+    };
+    const invalidProof = validateObjectiveAccusation(control, {
+      ...controlContext,
+      commandPolicy: { verifyCommand: () => failure('deck-reveal-proof', 'Bad proof') },
+    });
+    expect(invalidProof.ok).toBe(true);
+    expect(
+      validateObjectiveAccusation(control, {
+        ...controlContext,
+        commandPolicy: { verifyCommand: () => success(undefined) },
+      }).ok,
+    ).toBe(false);
+    expect(
+      validateObjectiveAccusation(control, {
+        ...controlContext,
+        commandPolicy: {},
+      }).ok,
+    ).toBe(false);
+    expect(
+      validateObjectiveAccusation(control, {
+        ...controlContext,
+        commandPolicy: {
+          verifyCommand: () => {
+            throw new Error('Local verifier unavailable');
+          },
+        },
+      }).ok,
+    ).toBe(false);
+  });
+
   test('cannot certify exclusion of the sole human proposer', () => {
     const fixture = protocolFixture();
     const first = fixtureAt(fixture.identities, 0);

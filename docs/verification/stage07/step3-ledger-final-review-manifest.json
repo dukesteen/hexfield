@@ -1,0 +1,101 @@
+{
+  "bundleSha256": "b6d95e7440a69800c27a88dce25eac318557f9a8e96b4b7f9b6639ca51dc0b79",
+  "bytes": 350466,
+  "files": [
+    {
+      "path": "docs/verification/stage07/step3-ledger-final-review-prompt.md",
+      "sha256": "bac9b225cb1821424b46063df97f68acfa0a877bb92799b44f2df1a29536abef",
+      "bytes": 3606
+    },
+    {
+      "path": "docs/verification/stage07/step3-ledger-followup-review.md",
+      "sha256": "604f40a44ee1a5309cd6ff3af3445ea8b38a9b6973c40202a5d4b6621c04dbff",
+      "bytes": 11471
+    },
+    {
+      "path": "docs/verification/stage07/step3-ledger-review-response.md",
+      "sha256": "e654b7fdaa9b173e09959676fb47e2b6e303434e5b7d8abd84fc22f79901b4b5",
+      "bytes": 7330
+    },
+    {
+      "path": "packages/protocol/src/log.ts",
+      "sha256": "7444586653b12f1d531f95bcdfe7849518eac9d93cb27e0578e9e70558e461d5",
+      "bytes": 12508
+    },
+    {
+      "path": "packages/protocol/src/replicated-log.ts",
+      "sha256": "2dbc8eefbbbfa20276da41f4d5d58ad8a22cb3979c88603e5a9c3b6c14cc512f",
+      "bytes": 61839
+    },
+    {
+      "path": "packages/protocol/src/replicated-log.test.ts",
+      "sha256": "8fe5dae35994aaeef642eddbe58c93330f265afa93106f234e339e7c573e04a7",
+      "bytes": 81610
+    },
+    {
+      "path": "packages/protocol/src/consensus-controller.ts",
+      "sha256": "5de8990118167dcce7a4a7c6b6e6c234ce1c650c1279e97a0a0a8c6a2b21a84f",
+      "bytes": 11371
+    },
+    {
+      "path": "packages/protocol/src/consensus-controller.test.ts",
+      "sha256": "de529603805f517721723deeaec3d2102204645920db931eb8171b3997cf1e54",
+      "bytes": 17619
+    },
+    {
+      "path": "packages/protocol/src/consensus.ts",
+      "sha256": "3e311c0a24bfea1305a9be7c8dae62d918845d2bccc6b314d2d8c6ab8ade14fb",
+      "bytes": 54886
+    },
+    {
+      "path": "packages/protocol/src/control.ts",
+      "sha256": "c16b96a3556b87f82319be862668e407f14f2a1b445a9c62c9775f5b854bbbe2",
+      "bytes": 7331
+    },
+    {
+      "path": "packages/protocol/src/control.test.ts",
+      "sha256": "6c4cecf907e30ef753340c5419b7c4c3dcaaf11aca59265ae8e46365d10ce4ce",
+      "bytes": 15066
+    },
+    {
+      "path": "packages/protocol/src/proposal.ts",
+      "sha256": "271890f7e33496200442ca9ad722aef3412c2d50c9504e24550da334948fcf7b",
+      "bytes": 12161
+    },
+    {
+      "path": "packages/protocol/src/replay.ts",
+      "sha256": "2e10221c0674704d5cd332795b46414e265f608ffaefb593968818ad9ccc29a2",
+      "bytes": 5575
+    },
+    {
+      "path": "packages/protocol/src/crypto-context.ts",
+      "sha256": "0c35c34b7121808a77543c24a0f887c6610306ea2a707ec53445e2aad4327f77",
+      "bytes": 8207
+    },
+    {
+      "path": "packages/protocol/src/deck-ledger.ts",
+      "sha256": "2c3e9778c88b790e9afbe42d5446c29caff44a77abf86655a583851174d82e8d",
+      "bytes": 19462
+    },
+    {
+      "path": "packages/protocol/src/deck-genesis.ts",
+      "sha256": "bbcfce14ec8a5320bd49927818c1e40e6adee4029877e083e02470a640d917fb",
+      "bytes": 8959
+    },
+    {
+      "path": "packages/protocol/src/genesis-outbox.ts",
+      "sha256": "2d4c7cb2747af910cfb0ee4a8b0e16d22ea70e4970f18f34b23b03c6d146691f",
+      "bytes": 4650
+    },
+    {
+      "path": "packages/protocol/src/index.ts",
+      "sha256": "85f14782f2282254e991116ffba3818dfe42d72579135dfb942df88e03eecf8a",
+      "bytes": 4860
+    },
+    {
+      "path": "packages/protocol/src/validation.ts",
+      "sha256": "bb646520abbab0596ff5d99f1b7f6ffaeed264260c3030917725a050acef5f23",
+      "bytes": 887
+    }
+  ]
+}

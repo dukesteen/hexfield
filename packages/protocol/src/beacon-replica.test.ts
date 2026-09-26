@@ -16,18 +16,19 @@ import {
   genesisBody,
   genesisId,
   signEntry,
-  signGenesis,
+  signVerifiedGenesis,
 } from './genesis.js';
 import { MemoryProtocolJournal } from './journal.js';
 import { signCommand } from './log.js';
 import { decodeProtocolMessage, encodeProtocolMessage } from './messages.js';
 import type { ProtocolMessage } from './messages.js';
 import { ReplicatedLog } from './replicated-log.js';
-import type { ReplicatedLogOptions } from './replicated-log.js';
+import type { ReplicatedLogOptions, ReplicatedLogStatus } from './replicated-log.js';
 import { randomDerivations } from './random-derivations.js';
 import { replayCertifiedPrefix, snapshotFromContext } from './replay.js';
 import type { ReplayPolicy } from './replay.js';
 import { createMemnet } from './testing/memnet.js';
+import { createGenesisDeckFixture } from './testing/deck-fixture.js';
 import { createSimulationGenesis } from './testing/simulation-genesis.js';
 import type { VirtualClock } from './testing/virtual-clock.js';
 import type { PeerId, Transport } from './transport.js';
@@ -43,17 +44,26 @@ function required<T>(item: T | undefined): T {
   return item;
 }
 
-const policy: ReplayPolicy = {
-  // Later deck/escrow commitments are outside this beacon integration fixture.
-  genesis: { verifyCommitments: () => success(undefined) },
-  entry: {
-    // Setup and roll commands are public; the engine still checks their exact legality.
-    verifyCommand: (signed) =>
-      ['PLACE_SETTLEMENT', 'PLACE_ROAD', 'ROLL_DICE'].includes(signed.body.command.type)
-        ? success(undefined)
-        : failure('fixture-command', 'This fixture only drives public setup and roll commands'),
-  },
-};
+function setupPassCount(fixture: ReturnType<typeof verifiedFixture>): number {
+  return fixture.deck.transcripts.reduce(
+    (count, transcript) => count + transcript.passes.length,
+    0,
+  );
+}
+
+function policyFor(): ReplayPolicy {
+  return {
+    // Base deck proofs are checked by signVerifiedGenesis and each certified deck-pass fold.
+    genesis: { verifyCommitments: () => success(undefined) },
+    entry: {
+      // Setup and roll commands are public; the engine still checks their exact legality.
+      verifyCommand: (signed) =>
+        ['PLACE_SETTLEMENT', 'PLACE_ROAD', 'ROLL_DICE'].includes(signed.body.command.type)
+          ? success(undefined)
+          : failure('fixture-command', 'This fixture only drives public setup and roll commands'),
+    },
+  };
+}
 
 function verifiedFixture(humanCount = 2, chainLength = 2) {
   const simulation = createSimulationGenesis({ seed: 91, humanCount });
@@ -64,7 +74,7 @@ function verifiedFixture(humanCount = 2, chainLength = 2) {
   const renewals = humans.map((_, index) =>
     createHashChain(new Uint8Array(32).fill(index + 49), chainLength),
   );
-  const body: GenesisBody = {
+  const initialBody: GenesisBody = {
     ...genesisBody(simulation.genesis),
     security: 'verified',
     commitments: {
@@ -75,13 +85,19 @@ function verifiedFixture(humanCount = 2, chainLength = 2) {
       })),
     },
   };
-  const genesis: Genesis = {
-    ...body,
-    gameId: genesisId(body),
-    signatures: humans.map((seat) =>
-      signGenesis(body, seat.seat, required(simulation.identities.get(seat.seat)).secretKey),
-    ),
-  };
+  const deck = createGenesisDeckFixture(initialBody, simulation.identities);
+  const body = deck.body;
+  const signatures = humans.map((seat) => {
+    const signed = signVerifiedGenesis(
+      body,
+      deck.transcripts,
+      seat.seat,
+      required(simulation.identities.get(seat.seat)).secretKey,
+    );
+    if (!signed.ok) throw new Error(`Verified genesis signing failed: ${signed.error.message}`);
+    return signed.value;
+  });
+  const genesis: Genesis = { ...body, gameId: genesisId(body), signatures };
   const state = simulation.engine.createGame(body.config, fromBase64Url(body.genesisSeed));
   const first = required(simulation.identities.get(required(humans[0]).seat));
   const entry = signEntry(
@@ -107,7 +123,7 @@ function verifiedFixture(humanCount = 2, chainLength = 2) {
       return { length: chainLength, tip: required(required(renewals[position])[0]) };
     },
   }));
-  return { simulation, humans, chains, renewals, entry, sources };
+  return { simulation, humans, chains, renewals, deck, entry, sources };
 }
 
 function observe(
@@ -143,6 +159,56 @@ function observe(
   };
 }
 
+function observeWithoutSystemContributions(
+  inner: Transport,
+  sent: ProtocolMessage[],
+): ReturnType<typeof observe> {
+  const observed = observe(inner, sent);
+  return {
+    ...observed,
+    broadcast(bytes) {
+      const message = value(decodeProtocolMessage(bytes));
+      if (message.t === 'SYS_CONTRIB') return;
+      observed.broadcast(bytes);
+    },
+  };
+}
+
+function observeWithheldBeaconVotes(
+  inner: Transport,
+  sent: ProtocolMessage[],
+  seq: number,
+  isWithheld: () => boolean,
+): ReturnType<typeof observe> {
+  const observed = observeWithoutSystemContributions(inner, sent);
+  return {
+    ...observed,
+    broadcast(bytes) {
+      const message = value(decodeProtocolMessage(bytes));
+      if (message.t === 'VOTE' && message.vote.body.seq === seq && isWithheld()) return;
+      observed.broadcast(bytes);
+    },
+  };
+}
+
+function deliverFirstProposal(
+  from: PeerId,
+  target: ReturnType<typeof observe>,
+  sent: ProtocolMessage[],
+) {
+  const proposal = sent.find((message) => message.t === 'PROPOSAL');
+  if (!proposal) throw new Error('Expected the initial deck setup proposal');
+  target.inject(from, proposal);
+  const prevote = sent.find(
+    (message) =>
+      message.t === 'VOTE' &&
+      message.vote.body.seq === proposal.proposal.body.entry.seq &&
+      message.vote.body.phase === 'prevote',
+  );
+  if (!prevote) throw new Error('Expected the initial deck setup prevote');
+  target.inject(from, prevote);
+}
+
 function optionsFor(
   fixture: ReturnType<typeof verifiedFixture>,
   position: number,
@@ -150,12 +216,16 @@ function optionsFor(
   clock: VirtualClock,
   journal: MemoryProtocolJournal,
   store: BeaconContributionStore,
+  onStatus?: ReplicatedLogOptions['onStatus'],
 ): ReplicatedLogOptions {
   const seat = required(fixture.humans[position]).seat;
   return {
     genesisEntry: fixture.entry,
     engine: fixture.simulation.engine,
-    policy,
+    policy: policyFor(),
+    deckSetupPasses: fixture.deck.transcripts.flatMap((transcript) =>
+      transcript.passes.map((pass) => ({ deckId: transcript.deckId, pass })),
+    ),
     seat,
     secretKey: required(fixture.simulation.identities.get(seat)).secretKey,
     transport,
@@ -163,14 +233,18 @@ function optionsFor(
     journal,
     beaconSource: required(fixture.sources[position]),
     beaconContributions: store,
+    ...(onStatus ? { onStatus } : {}),
   };
 }
 
 async function settle(replicas: readonly ReplicatedLog[], clock: VirtualClock) {
-  for (let pass = 0; pass < 16; pass += 1) {
+  for (let pass = 0; pass < 64; pass += 1) {
     // oxlint-disable-next-line no-await-in-loop -- Each pass drains packets scheduled by the previous pass.
     await Promise.all(replicas.map((replica) => replica.flush()));
     clock.advanceBy(0);
+    // Yield so packets enqueued by this flush are delivered before the next replica flush.
+    // oxlint-disable-next-line no-await-in-loop
+    await new Promise<void>((resolve) => setImmediate(resolve));
   }
   await Promise.all(replicas.map((replica) => replica.flush()));
 }
@@ -235,30 +309,30 @@ describe('verified beacon contribution replication', () => {
     );
     const journals = [new MemoryProtocolJournal(), new MemoryProtocolJournal()];
     const stores = [new MemoryBeaconContributionStore(), new MemoryBeaconContributionStore()];
-    const first = value(
-      await ReplicatedLog.create(
-        optionsFor(
-          fixture,
-          0,
-          required(transports[0]),
-          network.clock,
-          required(journals[0]),
-          required(stores[0]),
-        ),
-      ),
+    const firstOptions = optionsFor(
+      fixture,
+      0,
+      required(transports[0]),
+      network.clock,
+      required(journals[0]),
+      required(stores[0]),
     );
+    expect(await ReplicatedLog.create({ ...firstOptions, deckSetupPasses: [] })).toMatchObject({
+      ok: false,
+      error: { code: 'replica-deck-transcript' },
+    });
+    const changedPass = required(firstOptions.deckSetupPasses?.[0]);
+    expect(
+      await ReplicatedLog.create({
+        ...firstOptions,
+        deckSetupPasses: [{ ...changedPass, deckId: 'uncommitted-deck' }],
+      }),
+    ).toMatchObject({ ok: false, error: { code: 'replica-deck-transcript' } });
+    expect(await required(journals[0]).load()).toBeNull();
+    const first = value(await ReplicatedLog.create(firstOptions));
     await settle([first], network.clock);
     expect(first.getContext().log.head.seq).toBe(0);
-    expect(required(sent[0]).some((message) => message.t === 'SYS_CONTRIB')).toBe(true);
-    const duplicate = required(sent[0]).find((message) => message.t === 'SYS_CONTRIB');
-    if (!duplicate) throw new Error('Missing first signed contribution');
-    const safetyBefore = await required(journals[0]).loadSafety(1);
-    const outgoingBefore = required(sent[0]).length;
-    for (let repetition = 0; repetition < 3; repetition += 1)
-      required(transports[0]).inject(required(peers[0]), duplicate);
-    await settle([first], network.clock);
-    expect((await required(journals[0]).loadSafety(1))?.revision).toBe(safetyBefore?.revision);
-    expect(required(sent[0])).toHaveLength(outgoingBefore);
+    expect(required(sent[0]).some((message) => message.t === 'SYS_CONTRIB')).toBe(false);
     const second = value(
       await ReplicatedLog.create(
         optionsFor(
@@ -271,19 +345,35 @@ describe('verified beacon contribution replication', () => {
         ),
       ),
     );
-    network.clock.advanceBy(2_000);
+    deliverFirstProposal(required(peers[0]), required(transports[1]), required(sent[0]));
     await settle([first, second], network.clock);
-    expect(first.getContext().log.head.seq).toBe(1);
-    expect(second.getContext().log.head.seq).toBe(1);
+    const setupCount = setupPassCount(fixture);
+    expect(first.getContext().log.head.seq).toBe(setupCount + 1);
+    expect(second.getContext().log.head.seq).toBe(setupCount + 1);
     expect(first.getContext().log.head.stateHash).toBe(second.getContext().log.head.stateHash);
+    const duplicate = required(sent[0]).find((message) => message.t === 'SYS_CONTRIB');
+    if (!duplicate) throw new Error('Missing first signed beacon contribution');
+    const safetyBefore = await required(journals[0]).loadSafety(setupCount + 1);
+    const outgoingBefore = required(sent[0]).length;
+    for (let repetition = 0; repetition < 3; repetition += 1)
+      required(transports[0]).inject(required(peers[0]), duplicate);
+    await settle([first, second], network.clock);
+    expect((await required(journals[0]).loadSafety(setupCount + 1))?.revision).toBe(
+      safetyBefore?.revision,
+    );
+    expect(required(sent[0])).toHaveLength(outgoingBefore);
     for (const replica of [first, second]) {
-      expect(replica.getEntries()).toHaveLength(1);
-      expect(required(replica.getEntries()[0]).certificate).toHaveLength(2);
+      const entries = replica.getEntries();
+      expect(entries).toHaveLength(setupCount + 1);
+      const start = entries.find(
+        ({ entry }) => entry.payload.kind === 'system' && entry.payload.input.type === 'START_SEAT',
+      );
+      expect(start?.certificate).toHaveLength(2);
       expect(replica.getContext().log.crypto?.beacon.round).toBe(1);
       replica.dispose();
     }
     network.dispose();
-  });
+  }, 30_000);
 
   test('repeated complete reveals do not recompute or write while votes are missing', async () => {
     const fixture = verifiedFixture();
@@ -308,12 +398,38 @@ describe('verified beacon contribution replication', () => {
           new MemoryBeaconContributionStore(),
         ),
         policy: {
-          ...policy,
-          entry: { ...policy.entry, randomDerivations: { ...randomDerivations, derive } },
+          ...policyFor(),
+          entry: {
+            ...policyFor().entry,
+            randomDerivations: { ...randomDerivations, derive },
+          },
         },
       }),
     );
-    await settle([replica], network.clock);
+    const setupCount = setupPassCount(fixture);
+    let withholdStartVotes = true;
+    const otherSent: ProtocolMessage[] = [];
+    const otherTransport = observeWithheldBeaconVotes(
+      network.transport(required(peers[1])),
+      otherSent,
+      setupCount + 1,
+      () => withholdStartVotes,
+    );
+    const second = value(
+      await ReplicatedLog.create(
+        optionsFor(
+          fixture,
+          1,
+          otherTransport,
+          network.clock,
+          new MemoryProtocolJournal(),
+          new MemoryBeaconContributionStore(),
+        ),
+      ),
+    );
+    deliverFirstProposal(required(peers[0]), otherTransport, sent);
+    await settle([replica, second], network.clock);
+    expect(replica.getContext().log.head.seq).toBe(setupCount);
     const beacon = replica.getContext().log.crypto?.beacon;
     if (!beacon) throw new Error('Expected a frozen beacon operation');
     const operation = value(getBeaconOperation(beacon));
@@ -334,9 +450,9 @@ describe('verified beacon contribution replication', () => {
     };
     transport.inject(other.peerId, contribution);
     await settle([replica], network.clock);
-    expect(replica.getContext().log.head.seq).toBe(0);
+    expect(replica.getContext().log.head.seq).toBe(setupCount);
     expect(derive).toHaveBeenCalled();
-    const safetyRevision = (await journal.loadSafety(1))?.revision;
+    const safetyRevision = (await journal.loadSafety(setupCount + 1))?.revision;
     const sentCount = sent.length;
     const derivedCount = derive.mock.calls.length;
     for (let repetition = 0; repetition < 3; repetition += 1)
@@ -354,36 +470,25 @@ describe('verified beacon contribution replication', () => {
       },
     });
     await settle([replica], network.clock);
-    expect((await journal.loadSafety(1))?.revision).toBe(safetyRevision);
+    expect((await journal.loadSafety(setupCount + 1))?.revision).toBe(safetyRevision);
     expect(sent).toHaveLength(sentCount);
     expect(derive).toHaveBeenCalledTimes(derivedCount);
-    const second = value(
-      await ReplicatedLog.create(
-        optionsFor(
-          fixture,
-          1,
-          network.transport(other.peerId),
-          network.clock,
-          new MemoryProtocolJournal(),
-          new MemoryBeaconContributionStore(),
-        ),
-      ),
-    );
+    withholdStartVotes = false;
     network.clock.advanceBy(2_000);
     await settle([replica, second], network.clock);
-    expect(replica.getContext().log.head.seq).toBe(1);
-    const committedRevision = (await journal.loadSafety(2))?.revision;
+    expect(replica.getContext().log.head.seq).toBe(setupCount + 1);
+    const committedRevision = (await journal.loadSafety(setupCount + 2))?.revision;
     const committedSent = sent.length;
     const committedDerived = derive.mock.calls.length;
     transport.inject(other.peerId, contribution);
     await settle([replica, second], network.clock);
-    expect((await journal.loadSafety(2))?.revision).toBe(committedRevision);
+    expect((await journal.loadSafety(setupCount + 2))?.revision).toBe(committedRevision);
     expect(sent).toHaveLength(committedSent);
     expect(derive).toHaveBeenCalledTimes(committedDerived);
     replica.dispose();
     second.dispose();
     network.dispose();
-  });
+  }, 30_000);
 
   test('one human with bots certifies its START_SEAT from one real reveal', async () => {
     const fixture = verifiedFixture(1);
@@ -405,12 +510,18 @@ describe('verified beacon contribution replication', () => {
       ),
     );
     await settle([replica], network.clock);
-    expect(replica.getContext().log.head.seq).toBe(1);
-    expect(required(replica.getEntries()[0]).certificate).toHaveLength(1);
+    const setupCount = setupPassCount(fixture);
+    expect(replica.getContext().log.head.seq).toBe(setupCount + 1);
+    const start = replica
+      .getEntries()
+      .find(
+        ({ entry }) => entry.payload.kind === 'system' && entry.payload.input.type === 'START_SEAT',
+      );
+    expect(start?.certificate).toHaveLength(1);
     expect(replica.getContext().log.crypto?.beacon.chains.map((chain) => chain.index)).toEqual([1]);
     replica.dispose();
     network.dispose();
-  });
+  }, 30_000);
 
   test('certifies chain extension before the next reveal and dice result', async () => {
     const fixture = verifiedFixture(1, 1);
@@ -433,6 +544,8 @@ describe('verified beacon contribution replication', () => {
       ),
     );
     await settle([replica], network.clock);
+    const setupCount = setupPassCount(fixture);
+    expect(replica.getContext().log.head.seq).toBe(setupCount + 1);
     expect(replica.getContext().log.crypto?.beacon.chains[0]?.index).toBe(1);
     await playSetupThroughRoll(replica, network.clock, fixture);
     await settle([replica], network.clock);
@@ -443,7 +556,7 @@ describe('verified beacon contribution replication', () => {
     const diceIndex = entries.findIndex(
       ({ entry }) => entry.payload.kind === 'system' && entry.payload.input.type === 'DICE_RESULT',
     );
-    expect(extensionIndex).toBeGreaterThan(0);
+    expect(extensionIndex).toBeGreaterThan(setupCount);
     expect(diceIndex).toBeGreaterThan(extensionIndex);
     const extensionFrameIndex = sent.findIndex(
       (message) => message.t === 'SYS_CONTRIB' && message.contribution.kind === 'beacon-extension',
@@ -467,7 +580,7 @@ describe('verified beacon contribution replication', () => {
       fixture.entry,
       entries,
       fixture.simulation.engine,
-      policy,
+      policyFor(),
     );
     expect(replayed.ok).toBe(true);
     if (!replayed.ok) throw new Error(replayed.error.message);
@@ -476,16 +589,14 @@ describe('verified beacon contribution replication', () => {
     );
     replica.dispose();
     network.dispose();
-  });
+  }, 60_000);
 
   test('storage failure cannot broadcast a reveal or vote', async () => {
-    const fixture = verifiedFixture();
+    const fixture = verifiedFixture(1);
     const peer = required(
       fixture.simulation.identities.get(required(fixture.humans[0]).seat),
     ).peerId;
-    const network = createMemnet({
-      peers: [peer, required(fixture.simulation.identities.get(1)).peerId],
-    });
+    const network = createMemnet({ peers: [peer] });
     const sent: ProtocolMessage[] = [];
     const transport = observe(network.transport(peer), sent);
     const failing: BeaconContributionStore = {
@@ -496,17 +607,30 @@ describe('verified beacon contribution replication', () => {
         throw new Error('disk failure');
       },
     };
+    const statuses: ReplicatedLogStatus[] = [];
     const created = await ReplicatedLog.create(
-      optionsFor(fixture, 0, transport, network.clock, new MemoryProtocolJournal(), failing),
+      optionsFor(
+        fixture,
+        0,
+        transport,
+        network.clock,
+        new MemoryProtocolJournal(),
+        failing,
+        (status) => statuses.push(status),
+      ),
     );
-    expect(created).toMatchObject({
-      ok: false,
-      error: { code: 'beacon-contribution-prepare' },
-    });
+    const replica = value(created);
+    await settle([replica], network.clock);
+    const setupCount = setupPassCount(fixture);
+    expect(replica.getContext().log.head.seq).toBe(setupCount);
+    expect(statuses).toContainEqual({ kind: 'halted', code: 'beacon-contribution-prepare' });
     expect(sent.some((message) => message.t === 'SYS_CONTRIB')).toBe(false);
-    expect(sent.some((message) => message.t === 'VOTE')).toBe(false);
+    expect(sent.some((message) => message.t === 'VOTE' && message.vote.body.seq > setupCount)).toBe(
+      false,
+    );
+    replica.dispose();
     network.dispose();
-  });
+  }, 30_000);
 
   test('restore retransmits the exact durable local contribution', async () => {
     const fixture = verifiedFixture();
@@ -519,14 +643,31 @@ describe('verified beacon contribution replication', () => {
     const network = createMemnet({ peers: [peer, other] });
     const journal = new MemoryProtocolJournal();
     const store = new MemoryBeaconContributionStore();
+    const secondSent: ProtocolMessage[] = [];
     const before: ProtocolMessage[] = [];
     const firstTransport = observe(network.transport(peer), before);
+    const secondTransport = observeWithoutSystemContributions(network.transport(other), secondSent);
     const original = value(
       await ReplicatedLog.create(
         optionsFor(fixture, 0, firstTransport, network.clock, journal, store),
       ),
     );
-    await settle([original], network.clock);
+    const second = value(
+      await ReplicatedLog.create(
+        optionsFor(
+          fixture,
+          1,
+          secondTransport,
+          network.clock,
+          new MemoryProtocolJournal(),
+          new MemoryBeaconContributionStore(),
+        ),
+      ),
+    );
+    deliverFirstProposal(peer, secondTransport, before);
+    await settle([original, second], network.clock);
+    const setupCount = setupPassCount(fixture);
+    expect(original.getContext().log.head.seq).toBe(setupCount);
     const firstContribution = before.find((message) => message.t === 'SYS_CONTRIB');
     expect(firstContribution).toBeDefined();
     original.dispose();
@@ -538,12 +679,13 @@ describe('verified beacon contribution replication', () => {
         optionsFor(fixture, 0, restoredTransport, network.clock, journal, store),
       ),
     );
-    await settle([restored], network.clock);
+    await settle([second, restored], network.clock);
     expect(after.find((message) => message.t === 'SYS_CONTRIB')).toEqual(firstContribution);
-    expect(restored.getContext().log.head.seq).toBe(0);
+    expect(restored.getContext().log.head.seq).toBe(setupCount);
     restored.dispose();
+    second.dispose();
     network.dispose();
-  });
+  }, 30_000);
 
   test('retries persisted contribution after transient contribution and heartbeat send errors', async () => {
     const fixture = verifiedFixture();
@@ -555,6 +697,7 @@ describe('verified beacon contribution replication', () => {
     ).peerId;
     const network = createMemnet({ peers: [peer, other] });
     const sent: ProtocolMessage[] = [];
+    const otherSent: ProtocolMessage[] = [];
     const observed = observe(network.transport(peer), sent);
     let failedContribution = false;
     let failedHeartbeat = false;
@@ -579,7 +722,23 @@ describe('verified beacon contribution replication', () => {
         optionsFor(fixture, 0, transport, network.clock, new MemoryProtocolJournal(), store),
       ),
     );
-    await settle([replica], network.clock);
+    const secondTransport = observeWithoutSystemContributions(network.transport(other), otherSent);
+    const second = value(
+      await ReplicatedLog.create(
+        optionsFor(
+          fixture,
+          1,
+          secondTransport,
+          network.clock,
+          new MemoryProtocolJournal(),
+          new MemoryBeaconContributionStore(),
+        ),
+      ),
+    );
+    deliverFirstProposal(peer, secondTransport, sent);
+    await settle([replica, second], network.clock);
+    const setupCount = setupPassCount(fixture);
+    expect(replica.getContext().log.head.seq).toBe(setupCount);
     expect(failedContribution).toBe(true);
     expect(sent.some((message) => message.t === 'SYS_CONTRIB')).toBe(false);
     network.clock.advanceBy(2_000);
@@ -597,8 +756,9 @@ describe('verified beacon contribution replication', () => {
     expect(await store.load(beaconOperationId(operation.value))).toEqual(
       canonicalEncode(delivered.contribution),
     );
-    expect(replica.getContext().log.head.seq).toBe(0);
+    expect(replica.getContext().log.head.seq).toBe(setupCount);
     replica.dispose();
+    second.dispose();
     network.dispose();
-  });
+  }, 30_000);
 });
