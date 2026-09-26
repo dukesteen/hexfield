@@ -1,6 +1,6 @@
 import { fromBase64Url, hashValue, toBase64Url, toHex } from '@cp2p/codec';
 import { identityFromSecret, parsePeerId, signObject, verifyObject } from '@cp2p/crypto';
-import { ENGINE_VERSION, failure, success } from '@cp2p/engine';
+import { ENGINE_VERSION, RESOURCES, failure, success } from '@cp2p/engine';
 import type { Engine, GameState, Result } from '@cp2p/engine';
 import { genesisSchema, logEntrySchema } from './schemas.js';
 import { PROTOCOL_VERSION } from './types.js';
@@ -156,6 +156,16 @@ export function validateGenesis(
     if (violations.length !== 0)
       return failure('genesis-state', 'Genesis violates engine invariants', { violations });
     if (genesis.security === 'verified') {
+      if (
+        state.seats.some(
+          ({ resources }) =>
+            resources.total !== 0 ||
+            RESOURCES.some(
+              (resource) => resources.min[resource] !== 0 || resources.max[resource] !== 0,
+            ),
+        )
+      )
+        return failure('genesis-hands', 'Verified genesis must start with empty resource hands');
       const decks = validateDeckGenesisCommitments(genesis);
       if (!decks.ok) return decks;
       const expected = decks.value.map((deck) => deck.definition.deckId).toSorted();

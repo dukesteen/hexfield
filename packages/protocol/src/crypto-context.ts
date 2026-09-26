@@ -1,5 +1,5 @@
 import { hashValue, toHex } from '@cp2p/codec';
-import { failure, success } from '@cp2p/engine';
+import { RESOURCES, failure, success } from '@cp2p/engine';
 import type { Engine, GameState, Input, Result } from '@cp2p/engine';
 import {
   completeBeaconState,
@@ -21,12 +21,15 @@ import {
   validateDeckLedger,
 } from './deck-ledger.js';
 import type { DeckLedger } from './deck-ledger.js';
+import { emptyHandCommitments, validateHandCommitments } from './hand-commitments.js';
+import type { PublicHandCommitments } from './hand-commitments.js';
 
 /** Public cryptographic metadata, derived only by replaying the certified log. */
 export interface CryptoContext {
   epoch: number;
   beacon: BeaconState;
   decks: DeckLedger;
+  hands: PublicHandCommitments;
 }
 
 export const BEACON_EVIDENCE_PROTOCOL = 'beacon-v1';
@@ -83,8 +86,20 @@ export function initializeCryptoContext(
   if (!beacon.ok) return beacon;
   const decks = initializeDeckLedger(genesis, state);
   if (!decks.ok) return decks;
+  if (
+    state.seats.some(
+      ({ resources }) =>
+        resources.total !== 0 ||
+        RESOURCES.some(
+          (resource) => resources.min[resource] !== 0 || resources.max[resource] !== 0,
+        ),
+    )
+  )
+    return failure('crypto-genesis-hands', 'Verified genesis must start with empty resource hands');
+  const hands = emptyHandCommitments(genesis.config.seats);
+  if (!hands.ok) return hands;
   return captureCryptoPending(
-    { epoch: 0, beacon: beacon.value, decks: decks.value },
+    { epoch: 0, beacon: beacon.value, decks: decks.value, hands: hands.value },
     engine,
     state,
     { seq: head.seq, hash: entryHash(head) },
@@ -126,12 +141,19 @@ export function validateCryptoTransition(
   if (!beacon.ok) return beacon;
   const decks = validateDeckLedger(current.decks);
   if (!decks.ok) return decks;
+  const hands = validateHandCommitments(current.hands, genesis.config.seats);
+  if (!hands.ok) return hands;
   if (
     beacon.value.genesisDigest !== genesisDigest(genesis) ||
     decks.value.genesisDigest !== genesisDigest(genesis)
   )
     return failure('crypto-genesis', 'Cryptographic state belongs to another genesis');
-  const crypto: CryptoContext = { epoch: current.epoch, beacon: beacon.value, decks: decks.value };
+  const crypto: CryptoContext = {
+    epoch: current.epoch,
+    beacon: beacon.value,
+    decks: decks.value,
+    hands: hands.value,
+  };
   if (payload.kind === 'control') return success({ crypto, handled: false, input: null });
   if (payload.kind === 'crypto' && payload.action === 'deck-pass') {
     const applied = applyDeckSetupEntry(crypto.decks, payload.evidence);

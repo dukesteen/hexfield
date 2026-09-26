@@ -16,6 +16,7 @@ import type { DeckUnlockContribution } from './deck-inbox.js';
 import { DECK_DRAW_PROTOCOL } from './deck-ledger.js';
 import { protocolFixture } from './testing/fixtures.js';
 import type { CryptoContext } from './crypto-context.js';
+import { emptyHandCommitments } from './hand-commitments.js';
 import type { LogContext } from './log.js';
 
 function value<T>(result: Result<T>): T {
@@ -67,6 +68,7 @@ function fixture(count: 2 | 3 = 3) {
       fixed: null,
     },
     decks: { genesisDigest: operation.genesisDigest, decks: [], active },
+    hands: value(emptyHandCommitments(protocol.genesis.config.seats)),
   });
   const context = (active: DeckDrawOperation | null): LogContext => ({
     genesis: protocol.genesis,

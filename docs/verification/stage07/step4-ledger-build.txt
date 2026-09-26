@@ -1,0 +1,112 @@
+
+> hexfield@ build /Users/duke/Dev/Personal/colonist-p2p
+> pnpm -r --if-present build
+
+Scope: 12 of 13 workspace projects
+apps/signaling build$ tsc -b
+packages/codec build$ tsc -b
+apps/signaling build: Done
+packages/codec build: Done
+packages/crypto build$ tsc -b
+packages/engine build$ tsc -b
+packages/engine build: Done
+packages/crypto build: Done
+packages/bots build$ tsc -b
+packages/protocol build$ tsc -b
+packages/maps build$ tsc -b
+packages/renderer build$ tsc -b
+packages/bots build: Done
+packages/protocol build: Done
+packages/renderer build: Done
+packages/maps build: Done
+tools/sim build$ tsc -b
+packages/storage build$ tsc -b
+packages/p2p build$ tsc -b
+packages/storage build: Done
+packages/p2p build: Done
+tools/sim build: Done
+apps/web build$ vite build
+apps/web build: vite v8.3.1 building client environment for production...
+apps/web build: transforming...
+apps/web build: ✓ 1148 modules transformed.
+apps/web build: rendering chunks...
+apps/web build: computing gzip size...
+apps/web build: dist/assets/number-CHUuoW-b.svg                     0.30 kB │ gzip:   0.21 kB
+apps/web build: dist/assets/road-BBDScYiV.svg                       0.31 kB │ gzip:   0.20 kB
+apps/web build: dist/assets/settlement-CqT5nyb9.svg                 0.32 kB │ gzip:   0.22 kB
+apps/web build: dist/assets/ratio-two-BgrZ9Nle.svg                  0.38 kB │ gzip:   0.27 kB
+apps/web build: dist/assets/robber-IUPgv8DK.svg                     0.42 kB │ gzip:   0.28 kB
+apps/web build: dist/assets/ratio-three-BeSs6jh1.svg                0.47 kB │ gzip:   0.31 kB
+apps/web build: dist/assets/brick-Dlj-mOHk.svg                      0.49 kB │ gzip:   0.25 kB
+apps/web build: dist/assets/city-jA8PqsLy.svg                       0.60 kB │ gzip:   0.30 kB
+apps/web build: dist/assets/ore-CtqA2cvk.svg                        0.60 kB │ gzip:   0.27 kB
+apps/web build: dist/assets/sea-J7_3B71u.svg                        0.65 kB │ gzip:   0.33 kB
+apps/web build: dist/assets/marker-C23XwylE.svg                     0.67 kB │ gzip:   0.36 kB
+apps/web build: dist/assets/wool-DwoVf6qx.svg                       0.71 kB │ gzip:   0.29 kB
+apps/web build: dist/assets/lumber-Dc13R3cI.svg                     0.73 kB │ gzip:   0.33 kB
+apps/web build: dist/assets/jetty-wk_yzEFL.svg                      0.76 kB │ gzip:   0.32 kB
+apps/web build: dist/assets/grain-CkKbpsi9.svg                      0.77 kB │ gzip:   0.36 kB
+apps/web build: dist/assets/ore-d1OHLh2D.svg                        0.92 kB │ gzip:   0.38 kB
+apps/web build: dist/assets/brick-CvULz8IN.svg                      0.94 kB │ gzip:   0.39 kB
+apps/web build: dist/assets/desert-DKMx0z7r.svg                     0.96 kB │ gzip:   0.41 kB
+apps/web build: dist/assets/victoryPoint-B8PQ6gxn.svg               0.99 kB │ gzip:   0.45 kB
+apps/web build: dist/assets/knight-NVOeEoZp.svg                     1.05 kB │ gzip:   0.44 kB
+apps/web build: dist/assets/mountains-D-wRwlEW.svg                  1.07 kB │ gzip:   0.41 kB
+apps/web build: dist/assets/wool-CY-W50rV.svg                       1.14 kB │ gzip:   0.42 kB
+apps/web build: dist/assets/hills-DjQspuPz.svg                      1.15 kB │ gzip:   0.48 kB
+apps/web build: dist/index.html                                     1.17 kB │ gzip:   0.49 kB
+apps/web build: dist/assets/fields-DlVK-hiJ.svg                     1.18 kB │ gzip:   0.46 kB
+apps/web build: dist/assets/monopoly-71Q_kMh9.svg                   1.18 kB │ gzip:   0.49 kB
+apps/web build: dist/assets/roadBuilding-SX2jzGka.svg               1.21 kB │ gzip:   0.43 kB
+apps/web build: dist/assets/pasture-CU-X75Kt.svg                    1.35 kB │ gzip:   0.48 kB
+apps/web build: dist/assets/forest-BekcvEh7.svg                     1.35 kB │ gzip:   0.53 kB
+apps/web build: dist/assets/lumber-CvnTUkrY.svg                     1.36 kB │ gzip:   0.45 kB
+apps/web build: dist/assets/grain-DkMAuYFy.svg                      1.77 kB │ gzip:   0.51 kB
+apps/web build: dist/assets/yearOfPlenty-CLltK0Ix.svg               1.99 kB │ gzip:   0.60 kB
+apps/web build: dist/assets/_gameId-B7y4SCzG.css                   15.46 kB │ gzip:   3.52 kB
+apps/web build: dist/assets/index-V1em51Mh.css                     48.51 kB │ gzip:   9.31 kB
+apps/web build: dist/assets/webworkerAll-Bx_kROFc.js                0.05 kB │ gzip:   0.06 kB
+apps/web build: dist/assets/network-BHhvBYr8.js                     0.13 kB │ gzip:   0.13 kB
+apps/web build: dist/assets/getTextureBatchBindGroup-Dg6JN5h7.js    0.38 kB │ gzip:   0.28 kB
+apps/web build: dist/assets/_gameId-BrLweyRt.js                     0.40 kB │ gzip:   0.28 kB
+apps/web build: dist/assets/rolldown-runtime-hePW80VL.js            0.71 kB │ gzip:   0.42 kB
+apps/web build: dist/assets/board-DiVAC6cC.js                       0.74 kB │ gzip:   0.44 kB
+apps/web build: dist/assets/src-BPrgUbyw.js                         0.80 kB │ gzip:   0.42 kB
+apps/web build: dist/assets/editor-BZWTBm-N.js                      1.08 kB │ gzip:   0.56 kB
+apps/web build: dist/assets/Cache-DE6hnzI2.js                       1.09 kB │ gzip:   0.55 kB
+apps/web build: dist/assets/preload-helper-BZ1Pz5am.js              1.21 kB │ gzip:   0.69 kB
+apps/web build: dist/assets/ViewableBuffer-CMfOCaXc.js              1.31 kB │ gzip:   0.45 kB
+apps/web build: dist/assets/log-CwXOmg_q.js                         1.72 kB │ gzip:   0.71 kB
+apps/web build: dist/assets/routes-B7UB1VSL.js                      1.96 kB │ gzip:   0.76 kB
+apps/web build: dist/assets/geometry-Bv0B0seY.js                    2.45 kB │ gzip:   1.14 kB
+apps/web build: dist/assets/rules-Cfm3YbhZ.js                       2.59 kB │ gzip:   1.11 kB
+apps/web build: dist/assets/settings-VKb_WUYi.js                    2.75 kB │ gzip:   0.93 kB
+apps/web build: dist/assets/common-DNfhaGFa.js                      2.79 kB │ gzip:   1.20 kB
+apps/web build: dist/assets/GpuStencilModesToPixi-D5NJFDFs.js       3.25 kB │ gzip:   1.06 kB
+apps/web build: dist/assets/lobby-WDjDW26k.js                       3.71 kB │ gzip:   1.65 kB
+apps/web build: dist/assets/lazyRouteComponent-BuBWVI-T.js          4.49 kB │ gzip:   1.67 kB
+apps/web build: dist/assets/useTranslation-FzNzs4eM.js              5.27 kB │ gzip:   2.52 kB
+apps/web build: dist/assets/AbstractRenderer-BKiDpktY.js            5.27 kB │ gzip:   2.12 kB
+apps/web build: dist/assets/canvasUtils-Clz_Kb5o.js                 6.09 kB │ gzip:   2.06 kB
+apps/web build: dist/assets/new-Ba13ZXs4.js                         7.76 kB │ gzip:   2.38 kB
+apps/web build: dist/assets/BufferResource-CNrGGWYD.js              7.83 kB │ gzip:   1.90 kB
+apps/web build: dist/assets/jsx-runtime-BNakU3Ej.js                 8.24 kB │ gzip:   3.11 kB
+apps/web build: dist/assets/game-xado-V2F.js                        9.81 kB │ gzip:   3.90 kB
+apps/web build: dist/assets/link-9aXGfblY.js                       10.35 kB │ gzip:   4.67 kB
+apps/web build: dist/assets/Filter-BaDS9v1s.js                     11.05 kB │ gzip:   3.78 kB
+apps/web build: dist/assets/init-C8YHjS8_.js                       13.19 kB │ gzip:   3.37 kB
+apps/web build: dist/assets/CanvasPool-XG68QDq6.js                 13.59 kB │ gzip:   4.96 kB
+apps/web build: dist/assets/init-CtH0YXoI.js                       15.47 kB │ gzip:   4.81 kB
+apps/web build: dist/assets/GCManagedHash-BmkHEKpf.js              18.13 kB │ gzip:   6.03 kB
+apps/web build: dist/assets/Container-DATcC2lA.js                  31.05 kB │ gzip:   8.79 kB
+apps/web build: dist/assets/hooks-CyN59O1-.js                      41.45 kB │ gzip:  12.35 kB
+apps/web build: dist/assets/browserAll-D7DMADm6.js                 42.72 kB │ gzip:  11.18 kB
+apps/web build: dist/assets/RenderTargetSystem-Frkq_aKe.js         53.77 kB │ gzip:  14.79 kB
+apps/web build: dist/assets/Geometry-0sjLAXlx.js                   54.22 kB │ gzip:  17.54 kB
+apps/web build: dist/assets/GraphicsContext-DT44Nt6W.js            61.75 kB │ gzip:  20.65 kB
+apps/web build: dist/assets/_gameId-DgW1UhIb.js                    97.26 kB │ gzip:  27.19 kB
+apps/web build: dist/assets/session-BrUl0F7_.js                   120.80 kB │ gzip:  35.81 kB
+apps/web build: dist/assets/BoardView-DaqxLzfk.js                 287.91 kB │ gzip:  84.55 kB
+apps/web build: dist/assets/index-BdZGvQqN.js                     328.17 kB │ gzip: 104.67 kB
+apps/web build: ✓ built in 549ms
+apps/web build: Done

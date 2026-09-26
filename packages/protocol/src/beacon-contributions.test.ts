@@ -18,6 +18,7 @@ import {
 import type { BeaconState } from './beacon-state.js';
 import { createBeaconSecretSource } from './beacon-source.js';
 import type { CryptoContext } from './crypto-context.js';
+import { emptyHandCommitments } from './hand-commitments.js';
 
 function required<T>(value: T | undefined): T {
   if (value === undefined) throw new Error('Missing beacon contribution fixture element');
@@ -54,10 +55,13 @@ function fixture(exhausted = false) {
     },
     fixed: null,
   };
+  const emptyHands = emptyHandCommitments(seats);
+  if (!emptyHands.ok) throw new Error(emptyHands.error.message);
   const crypto: CryptoContext = {
     epoch: 0,
     beacon,
     decks: { genesisDigest: beacon.genesisDigest, decks: [], active: null },
+    hands: emptyHands.value,
   };
   const link = vi.fn<BeaconSecretSource['link']>((chainEpoch, index) => {
     if (chainEpoch !== 0 || index !== 1) throw new Error('Unexpected link request');

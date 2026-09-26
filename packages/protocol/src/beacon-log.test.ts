@@ -712,8 +712,9 @@ describe('certified beacon log integration', () => {
       0,
     );
     if (!frozen.ok) throw new Error(frozen.error.message);
-    const deckLedger = data.initial.log.crypto?.decks;
-    if (!deckLedger) throw new Error('Missing verified deck ledger');
+    const baseCrypto = data.initial.log.crypto;
+    if (!baseCrypto) throw new Error('Missing verified deck ledger');
+    const deckLedger = baseCrypto.decks;
     // The engine state and pending request come from legal engine inputs; this
     // focused validator fixture supplies the trusted head rather than replaying
     // the earlier public game through unrelated deck/hand protocols.
@@ -723,7 +724,12 @@ describe('certified beacon log integration', () => {
         ...data.initial.log,
         head,
         state: atSteal,
-        crypto: { epoch: 0, beacon: frozen.value, decks: deckLedger },
+        crypto: {
+          epoch: 0,
+          beacon: frozen.value,
+          decks: deckLedger,
+          hands: baseCrypto.hands,
+        },
       },
     };
     const reveals = revealsFor(data, context, 2);

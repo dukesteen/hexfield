@@ -1,11 +1,12 @@
 # Stage 07 Step 4 implementation proposal
 
 This proposal implements committed resource hands under Stage 07 section 4.
-It is not an acceptance report. The current verified driver has owned plaintext
-hands but no public commitment ledger, resource proofs or count-reveal delivery.
+It is not an acceptance report. The verified driver now has owned plaintext
+hands, a public commitment ledger and spending proofs. Count-reveal delivery
+remains unfinished.
 The [foundation checkpoint](step4-foundation-local-checks.md) adds engine effects,
-pure commitment arithmetic and accounting consistency checks. The ledger and
-mandatory proof checks described below remain to be wired into certified replay.
+pure commitment arithmetic and accounting consistency checks. The [ledger checkpoint](step4-ledger-local-checks.md) now wires the ledger and
+mandatory proof checks into certified replay. Frozen count delivery remains next.
 Some Step 3 delivery recovery cases also remain open.
 
 ## Engine accounting

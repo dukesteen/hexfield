@@ -1,20 +1,24 @@
 import { fromBase64Url, hashValue, toBase64Url, toHex } from '@cp2p/codec';
-import { createHashChain } from '@cp2p/crypto';
-import { success } from '@cp2p/engine';
+import { createHashChain, pedersenCommit } from '@cp2p/crypto';
+import { RESOURCES, createResourceBounds, success } from '@cp2p/engine';
 import type { CommandShape, Result, Seat, SystemInput } from '@cp2p/engine';
 import { beforeAll, describe, expect, test, vi } from 'vitest';
 import { completeBeaconState, getBeaconOperation } from './beacon-state.js';
 import { signBeaconReveal } from './beacon.js';
 import { BEACON_EVIDENCE_PROTOCOL, validateCryptoTransition } from './crypto-context.js';
+import { validateObjectiveAccusation } from './control.js';
 import {
   MemoryBeaconContributionStore,
   prepareBeaconContribution,
 } from './beacon-contributions.js';
 import { BeaconInbox } from './beacon-inbox.js';
 import { DECK_DRAW_PROTOCOL, DECK_REVEAL_PROTOCOL } from './deck-ledger.js';
+import { COMMAND_PROOFS_PROTOCOL } from './command-proofs.js';
+import { planHandTransition } from './hand-transition.js';
 import { decodeDeckCard, proveDeckReveal, signDeckUnlock } from './deck-draw.js';
 import {
   GENESIS_PREVIOUS_HASH,
+  entryBody,
   entryHash,
   genesisBody,
   genesisId,
@@ -279,11 +283,12 @@ function quietRobberMove(
 function driveToDraw(
   data: Fixture,
   start: ProposalContext,
-): { context: ProposalContext; history: CertifiedEntry[] } {
+): { context: ProposalContext; history: CertifiedEntry[]; purchaseParent: ProposalContext | null } {
   let context = start;
   const history: CertifiedEntry[] = [];
+  let purchaseParent: ProposalContext | null = null;
   for (let step = 0; step < 500; step += 1) {
-    if (context.log.crypto?.decks.active) return { context, history };
+    if (context.log.crypto?.decks.active) return { context, history, purchaseParent };
     const pending = data.source.engine.getPending(context.log.state);
     const random = pending.find((item) => item.kind === 'random');
     if (random?.kind === 'random') {
@@ -306,6 +311,7 @@ function driveToDraw(
       quietRobberMove(data, context, player.seat, legal) ??
       legal[0];
     if (!choice) throw new Error('No legal command on certified path');
+    if (choice.type === 'BUY_DEV_CARD') purchaseParent = context;
     const next = advance(data, context, commandEntry(data, context, player.seat, choice));
     context = next.context;
     history.push(next.proof);
@@ -501,7 +507,146 @@ describe('certified deck log', () => {
   test('real certified setup, beacon rolls and purchase produce one privately decodable public deal', () => {
     const data = shared;
     const started = advance(data, sharedReady.context, beaconResult(data, sharedReady.context, 1));
+    const pendingPlayer = data.source.engine
+      .getPending(started.context.log.state)
+      .find((item) => item.kind === 'player');
+    if (pendingPlayer?.kind !== 'player') throw new Error('Expected player after certified dice');
+    const legal = data.source.engine.getLegalCommands(
+      started.context.log.state,
+      pendingPlayer.seat,
+    );
+    const ordinary = need(legal.commands[0]);
+    const extraProof = commandEntry(data, started.context, pendingPlayer.seat, ordinary, {
+      protocol: COMMAND_PROOFS_PROTOCOL,
+      data: { deck: [], hands: [] },
+    });
+    data.verifyCommand.mockClear();
+    expect(
+      validateCommandForEntry(signedCommandFrom(extraProof), started.context.log, data.policy.entry)
+        .ok,
+    ).toBe(false);
+    expect(data.verifyCommand).not.toHaveBeenCalled();
     const beforeDraw = driveToDraw(data, started.context);
+    // Fixture-only uncertainty at a real certified BUY parent: public totals and
+    // commitments stay unchanged, but the owner may hold several feasible hands.
+    const purchaseParent = need(beforeDraw.purchaseParent);
+    const buyer = data.source.engine
+      .getPending(purchaseParent.log.state)
+      .find((item) => item.kind === 'player');
+    if (buyer?.kind !== 'player') throw new Error('Expected certified purchase parent');
+    const originalBuyer = need(
+      purchaseParent.log.state.seats.find((item) => item.seat === buyer.seat),
+    );
+    const total = originalBuyer.resources.total;
+    const uncertainBounds = checked(
+      createResourceBounds(
+        total,
+        { brick: 0, lumber: 0, wool: 0, grain: 0, ore: 0 },
+        { brick: total, lumber: total, wool: total, grain: total, ore: total },
+      ),
+    );
+    const syntheticState = {
+      ...purchaseParent.log.state,
+      seats: purchaseParent.log.state.seats.map((seat) =>
+        seat.seat === buyer.seat
+          ? {
+              ...seat,
+              resources: uncertainBounds,
+            }
+          : seat,
+      ),
+    };
+    // This parent is deliberately synthetic: preserve the engine-legal public
+    // state and commitment ledger while making uncertainty require a proof.
+    const syntheticPurchaseHead = signEntry(
+      {
+        ...entryBody(purchaseParent.log.head),
+        stateHash: toHex(hashValue(syntheticState)),
+      },
+      need(data.source.identities.get(0)).secretKey,
+    );
+    const purchaseContext = {
+      ...purchaseParent,
+      log: { ...purchaseParent.log, state: syntheticState, head: syntheticPurchaseHead },
+    };
+    const buyInput = {
+      kind: 'command' as const,
+      seat: buyer.seat,
+      command: { type: 'BUY_DEV_CARD' },
+    };
+    const buyApplied = checked(data.source.engine.apply(syntheticState, buyInput));
+    const buyPlan = checked(
+      planHandTransition(
+        need(purchaseContext.log.crypto).hands,
+        syntheticState,
+        buyInput,
+        buyApplied,
+      ),
+    );
+    expect(buyPlan.obligations.some((obligation) => obligation.kind === 'range')).toBe(true);
+    const missingHandProof = commandEntry(data, purchaseContext, buyer.seat, buyInput.command);
+    data.verifyCommand.mockClear();
+    expect(
+      validateCommandForEntry(
+        signedCommandFrom(missingHandProof),
+        purchaseContext.log,
+        data.policy.entry,
+      ),
+    ).toMatchObject({ ok: false, error: { code: 'command-proofs-required' } });
+    expect(
+      validateNextEntry(missingHandProof, purchaseContext.log, {
+        ...data.policy.entry,
+        term: 1,
+        sequencer: missingHandProof.sequencer,
+      }),
+    ).toMatchObject({
+      ok: false,
+      error: { code: 'command-proofs-required' },
+    });
+    expect(data.verifyCommand).not.toHaveBeenCalled();
+    const proposalFor = (entry: LogEntry) =>
+      signProposal(
+        {
+          genesisDigest: purchaseContext.membership.genesisDigest,
+          epoch: purchaseContext.membership.epoch,
+          entry,
+          validRound: null,
+          prevotes: [],
+        },
+        need(data.source.identities.get(0)).secretKey,
+      );
+    const accused = (entry: LogEntry) => ({
+      kind: 'control' as const,
+      action: 'exclude-proposer' as const,
+      offender: 0 as const,
+      evidence: { kind: 'invalid-command' as const, proposal: proposalFor(entry) },
+    });
+    const accusationContext = {
+      log: purchaseContext.log,
+      commandPolicy: data.policy.entry,
+      membership: purchaseContext.membership,
+      excludedProposers: purchaseContext.excludedProposers,
+      proposerFor: (seq: number, term: number) =>
+        proposerFor(seq, term, purchaseContext.membership, purchaseContext.excludedProposers),
+    };
+    expect(validateObjectiveAccusation(accused(missingHandProof), accusationContext)).toEqual(
+      success(undefined),
+    );
+    const staleSigned = signCommand(
+      {
+        ...signedCommandFrom(missingHandProof).body,
+        headHash: entryHash(purchaseParent.log.head),
+      },
+      need(data.source.identities.get(buyer.seat)).secretKey,
+    );
+    const staleEntry = signAt(data, purchaseContext, {
+      kind: 'command',
+      signed: staleSigned,
+    });
+    expect(validateObjectiveAccusation(accused(staleEntry), accusationContext)).toMatchObject({
+      ok: false,
+      error: { code: 'control-unproven' },
+    });
     const active = need(beforeDraw.context.log.crypto).decks.active;
     if (!active) throw new Error('Expected a certified frozen draw');
     expect(active.anchor).toEqual({
@@ -545,6 +690,26 @@ describe('certified deck log', () => {
     );
     expect(controlTransition.crypto?.decks.active?.anchor).toEqual(active.anchor);
     expect(controlTransition.crypto?.decks.active?.position).toBe(active.position);
+    const missingHands = { ...need(beforeDraw.context.log.crypto) };
+    Reflect.deleteProperty(missingHands, 'hands');
+    expect(
+      validateCryptoTransition(
+        data.genesis,
+        missingHands,
+        data.source.engine,
+        beforeDraw.context.log.state,
+        signAt(data, beforeDraw.context, {
+          kind: 'control',
+          action: 'exclude-proposer',
+          offender: 0,
+          evidence: {
+            kind: 'vote-equivocation',
+            first: conflictingVote('a'.repeat(64)),
+            second: conflictingVote('b'.repeat(64)),
+          },
+        }),
+      ).ok,
+    ).toBe(false);
     const prefix: ReturnType<typeof signDeckUnlock>[] = [];
     for (const participant of active.participants) {
       if (participant.seat === active.seat) continue;
@@ -583,6 +748,16 @@ describe('certified deck log', () => {
     );
     const result = advance(data, beforeDraw.context, deal);
     const ledger = need(result.context.log.crypto).decks;
+    const hands = need(result.context.log.crypto).hands;
+    for (const seat of result.context.log.state.seats) {
+      const committed = need(hands.find((item) => item.seat === seat.seat));
+      for (const resource of RESOURCES) {
+        expect(seat.resources.min[resource]).toBe(seat.resources.max[resource]);
+        expect(committed.commitments[resource]).toBe(
+          pedersenCommit(BigInt(seat.resources.min[resource]), 0n),
+        );
+      }
+    }
     const deck = need(ledger.decks[0]);
     const slot = need(deck.slots[0]);
     expect(deck.nextPosition).toBe(1);

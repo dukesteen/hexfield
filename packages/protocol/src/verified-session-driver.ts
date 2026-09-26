@@ -1,4 +1,5 @@
 import { canonicalDecode, canonicalEncode } from '@cp2p/codec';
+import { encodeScalar } from '@cp2p/crypto';
 import { DEV_CARD_COUNTS, RESOURCES, failure, success } from '@cp2p/engine';
 import type {
   Engine,
@@ -10,10 +11,13 @@ import type {
   SystemInput,
 } from '@cp2p/engine';
 import { decodeDeckCard, proveDeckReveal } from './deck-draw.js';
-import { DECK_REVEAL_PROTOCOL } from './deck-ledger.js';
 import type { LogContext, ValidatedEntry } from './log.js';
 import type { SessionDriver } from './p2p-session.js';
 import type { DeckSecretSource, DeckSourceFactory } from './deck-source.js';
+import type { HandSourceFactory } from './hand-source.js';
+import { verifyHandOpening } from './hand-commitments.js';
+import { handProofContext, planHandTransition, proveHandObligation } from './hand-transition.js';
+import { composeCommandProofs } from './command-proofs.js';
 import type { CommandBody, Genesis, SystemEvidence } from './types.js';
 import type { CertifiedEntry } from './proposal.js';
 import { entryHash, genesisDigest } from './genesis.js';
@@ -66,6 +70,7 @@ export class VerifiedSessionDriver implements SessionDriver {
   private readonly digest: string;
   private readonly owned = new Set<Seat>();
   private privates = new Map<Seat, PrivateState>();
+  private blindings = new Map<Seat, Record<(typeof RESOURCES)[number], string>>();
   private appliedHead: string | null = null;
   private disposed = false;
 
@@ -74,6 +79,7 @@ export class VerifiedSessionDriver implements SessionDriver {
     private readonly genesis: Genesis,
     ownedSeats: readonly Seat[],
     private readonly createDeckSource: DeckSourceFactory,
+    private readonly createHandSource?: HandSourceFactory,
   ) {
     if (genesis.security !== 'verified')
       throw new TypeError('Verified session driver requires verified genesis');
@@ -85,6 +91,8 @@ export class VerifiedSessionDriver implements SessionDriver {
       if (!configured.has(seat)) throw new RangeError('Owned seat is not configured in genesis');
       this.owned.add(seat);
       this.privates.set(seat, engine.createPrivateState(seat));
+      const zero = encodeScalar(0n);
+      this.blindings.set(seat, { brick: zero, lumber: zero, wool: zero, grain: zero, ore: zero });
     }
   }
 
@@ -96,6 +104,31 @@ export class VerifiedSessionDriver implements SessionDriver {
     if (this.disposed) return null;
     const state = this.privates.get(seat);
     return state ? copyPrivate(state) : null;
+  }
+
+  private verifyOwnedOpenings(
+    context: LogContext,
+    privates: ReadonlyMap<Seat, PrivateState> = this.privates,
+  ): Result<void> {
+    if (!context.crypto)
+      return failure('crypto-context-required', 'Verified hand needs replayed crypto state');
+    for (const seat of this.owned) {
+      const priv = privates.get(seat);
+      const blindings = this.blindings.get(seat);
+      if (!priv || !blindings)
+        return failure('verified-private-missing', 'Owned hand opening is missing');
+      const valid = validOwnedState(context.state, priv);
+      if (!valid.ok) return valid;
+      const opened = verifyHandOpening(
+        context.crypto.hands,
+        this.genesis.config.seats,
+        seat,
+        priv.hand,
+        blindings,
+      );
+      if (!opened.ok) return opened;
+    }
+    return success(undefined);
   }
 
   /** Attach proof material before the caller signs this exact command body. */
@@ -120,26 +153,59 @@ export class VerifiedSessionDriver implements SessionDriver {
         'verified-command-context',
         'Command body differs from current certified context',
       );
-    const ids =
-      body.command.type === 'PLAY_DEV_CARD'
-        ? [body.command.slotId]
-        : body.command.type === 'CLAIM_VICTORY'
-          ? body.command.slotIds
-          : null;
-    if (ids === null) return success(undefined);
-    if (!Array.isArray(ids) || ids.length === 0)
-      return failure('deck-reveal-slots', 'Command has invalid reveal slots');
-    const revealSlots: string[] = [];
-    for (const id of ids) {
-      if (typeof id !== 'string')
-        return failure('deck-reveal-slots', 'Command has invalid reveal slots');
-      revealSlots.push(id);
+    const openings = this.verifyOwnedOpenings(context);
+    if (!openings.ok) return openings;
+    const crypto = context.crypto;
+    if (!crypto) return failure('crypto-context-required', 'Verified command needs crypto state');
+    const input: Input = { kind: 'command', seat: body.seat, command: body.command };
+    const preview = this.engine.apply(context.state, input);
+    if (!preview.ok) return preview;
+    const plan = planHandTransition(crypto.hands, context.state, input, preview.value);
+    if (!plan.ok) return plan;
+    const binding = {
+      genesisDigest: this.digest,
+      epoch: crypto.epoch,
+      anchor: { seq: body.headSeq, hash: body.headHash },
+      command: body,
+    };
+    const handProofs: Parameters<typeof composeCommandProofs>[1][number][] = [];
+    for (let index = 0; index < plan.value.obligations.length; index++) {
+      const obligation = plan.value.obligations[index];
+      if (!obligation) throw new Error('Missing planned hand obligation');
+      const priv = this.privates.get(obligation.seat);
+      const blindings = this.blindings.get(obligation.seat);
+      if (!priv || !blindings)
+        return failure('hand-proof-owner', 'A hand proof from another owner is required');
+      if (!this.createHandSource)
+        return failure('hand-proof-source', 'No hand proof source is configured');
+      let source: ReturnType<HandSourceFactory> | null = null;
+      try {
+        source = this.createHandSource(obligation.seat);
+        const proofContext = handProofContext(plan.value, index, binding);
+        const seed = source.proofSeed(proofContext);
+        try {
+          const proof = proveHandObligation(plan.value, index, priv.hand, blindings, seed, binding);
+          if (!proof.ok) return proof;
+          handProofs.push(proof.value);
+        } finally {
+          seed.fill(0);
+        }
+      } catch {
+        return failure('hand-proof-generation', 'Could not derive the owned hand proof');
+      } finally {
+        source?.dispose();
+      }
     }
+
+    const revealSlots: string[] = [];
+    for (const effect of preview.value.effects)
+      if (effect.type === 'card-slot-revealed') {
+        if (effect.seat !== body.seat)
+          return failure('deck-reveal-owner', 'Command reveals another seat’s card slot');
+        revealSlots.push(effect.slotId);
+      }
     if (new Set(revealSlots).size !== revealSlots.length)
       return failure('deck-reveal-slots', 'Command has duplicate reveal slots');
-    const crypto = context.crypto;
-    if (!crypto)
-      return failure('crypto-context-required', 'Verified reveal needs replayed deck state');
 
     const data: {
       slotId: string;
@@ -203,7 +269,7 @@ export class VerifiedSessionDriver implements SessionDriver {
         source?.dispose();
       }
     }
-    return success({ protocol: DECK_REVEAL_PROTOCOL, data });
+    return success(composeCommandProofs(data, handProofs));
   }
 
   committedEntry(
@@ -223,11 +289,18 @@ export class VerifiedSessionDriver implements SessionDriver {
       entryHash(entry.entry) !== entryHash(after.head)
     )
       return failure('verified-entry-context', 'Private update differs from certified history');
+    const parentOpenings = this.verifyOwnedOpenings(before);
+    if (!parentOpenings.ok) return parentOpenings;
     const input = entry.input;
     if (!input) {
+      const afterOpenings = this.verifyOwnedOpenings(after);
+      if (!afterOpenings.ok) return afterOpenings;
       this.appliedHead = entryHash(after.head);
       return success(undefined);
     }
+
+    if (input.kind === 'system' && input.type === 'STEAL_RESULT')
+      return failure('verified-hidden-steal', 'Verified steal proofs are not implemented');
 
     const privateData: Partial<Record<Seat, { card?: string }>> = {};
     if (input.kind === 'system' && input.type === 'CARD_DEALT') {
@@ -259,21 +332,6 @@ export class VerifiedSessionDriver implements SessionDriver {
       }
     }
 
-    if (input.kind === 'system' && input.type === 'STEAL_RESULT' && input.resource === 'hidden') {
-      const thief = this.genesis.config.seats.find((seat) => seat === input.thief);
-      const victim = this.genesis.config.seats.find((seat) => seat === input.victim);
-      if (
-        thief === undefined ||
-        victim === undefined ||
-        this.owned.has(thief) ||
-        this.owned.has(victim)
-      )
-        return failure(
-          'verified-hidden-steal',
-          'Hidden transfer private result is not implemented',
-        );
-    }
-
     const next = new Map(this.privates);
     for (const seat of this.owned) {
       const prior = this.privates.get(seat);
@@ -286,6 +344,8 @@ export class VerifiedSessionDriver implements SessionDriver {
       if (!checked.ok) return checked;
       next.set(seat, applied.value);
     }
+    const afterOpenings = this.verifyOwnedOpenings(after, next);
+    if (!afterOpenings.ok) return afterOpenings;
     this.privates = next;
     this.appliedHead = entryHash(after.head);
     return success(undefined);
@@ -298,6 +358,7 @@ export class VerifiedSessionDriver implements SessionDriver {
   dispose(): void {
     this.disposed = true;
     this.privates.clear();
+    this.blindings.clear();
     this.owned.clear();
   }
 

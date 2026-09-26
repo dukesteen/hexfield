@@ -325,6 +325,40 @@ describe('genesis validation', () => {
     ).toBe('commitments-invalid');
   }, 15_000);
 
+  test('rejects verified genesis whose engine begins with a nonempty hand', () => {
+    const fixture = verifiedFixture();
+    const createGame = fixture.engine.createGame.bind(fixture.engine);
+    const alteredEngine = {
+      ...fixture.engine,
+      checkInvariants: () => [],
+      createGame(config: Parameters<typeof createGame>[0], seed: Parameters<typeof createGame>[1]) {
+        const state = createGame(config, seed);
+        return {
+          ...state,
+          seats: state.seats.map((seat, index) =>
+            index === 0
+              ? {
+                  ...seat,
+                  resources: {
+                    min: { ...seat.resources.min, brick: 1 },
+                    max: { ...seat.resources.max, brick: 1 },
+                    total: 1,
+                  },
+                }
+              : seat,
+          ),
+        };
+      },
+    };
+    expect(
+      errorCode(
+        validateGenesis(fixture.genesis, alteredEngine, {
+          verifyCommitments: () => success(undefined),
+        }),
+      ),
+    ).toBe('genesis-hands');
+  }, 15_000);
+
   test('human consent signs only a fully replayed fixed-deck ceremony', () => {
     const { ceremony, human, bot, genesis } = verifiedFixture();
     const signed = signVerifiedGenesis(ceremony.body, ceremony.transcripts, 0, human.secretKey);

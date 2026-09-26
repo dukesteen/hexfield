@@ -1,7 +1,7 @@
 import { hashValue, toHex } from '@cp2p/codec';
 import { parsePeerId, signObject, verifyObject } from '@cp2p/crypto';
 import { failure, success } from '@cp2p/engine';
-import type { Engine, GameEvent, GameState, Input, Result, Seat } from '@cp2p/engine';
+import type { Engine, GameEvent, GameState, Input, Result, Seat, Transition } from '@cp2p/engine';
 import { entryBody, entryHash, genesisDigest } from './genesis.js';
 import { captureCryptoPending, validateCryptoTransition } from './crypto-context.js';
 import type { CryptoContext } from './crypto-context.js';
@@ -18,6 +18,9 @@ import type {
 } from './types.js';
 import { parseCanonical } from './validation.js';
 import { revealDeckCards } from './deck-ledger.js';
+import { DECK_REVEAL_PROTOCOL } from './deck-ledger.js';
+import { readCommandProofs } from './command-proofs.js';
+import { planHandTransition, verifyHandProofs } from './hand-transition.js';
 
 export interface LogContext {
   genesis: Genesis;
@@ -102,32 +105,108 @@ export function validateCommandForEntry(
   value: unknown,
   context: LogContext,
   policy: Pick<EntryPolicy, 'verifyCommand'>,
-): Result<{ signed: SignedCommand; crypto: CryptoContext | null }> {
+): Result<{ signed: SignedCommand; crypto: CryptoContext | null; applied: Transition }> {
   try {
     const command = validateSignedCommand(value, context);
     if (!command.ok) return command;
+    const input: Input = {
+      kind: 'command',
+      seat: command.value.body.seat,
+      command: command.value.body.command,
+    };
+    const applied = context.engine.apply(context.state, input);
+    if (!applied.ok) return applied;
+    const violations = context.engine.checkInvariants(applied.value.state);
+    if (violations.length !== 0)
+      return failure('entry-state', 'Entry violates engine invariants', { violations });
     let crypto = context.crypto;
     if (context.genesis.security === 'verified' && !crypto)
       return failure(
         'crypto-context-required',
         'Verified commands need replayed cryptographic state',
       );
-    if (
-      crypto &&
-      (command.value.body.command.type === 'PLAY_DEV_CARD' ||
-        command.value.body.command.type === 'CLAIM_VICTORY')
-    ) {
-      const revealed = revealDeckCards(crypto.decks, context.state, command.value, crypto.epoch);
-      if (!revealed.ok) return revealed;
-      crypto = { ...crypto, decks: revealed.value };
+    if (crypto) {
+      const planned = planHandTransition(crypto.hands, context.state, input, applied.value);
+      if (!planned.ok) return planned;
+      const sections = readCommandProofs(command.value.body.evidence, planned.value);
+      if (!sections.ok) return sections;
+      const { evidence: _evidence, ...bareBody } = command.value.body;
+      const handProofs = verifyHandProofs(planned.value, sections.value.hands, {
+        genesisDigest: genesisDigest(context.genesis),
+        epoch: crypto.epoch,
+        anchor: { seq: context.head.seq, hash: entryHash(context.head) },
+        command: bareBody,
+      });
+      if (!handProofs.ok) return handProofs;
+      const reveals = planned.value.effects.filter(
+        (effect) => effect.type === 'card-slot-revealed',
+      );
+      const requested: unknown =
+        command.value.body.command.type === 'PLAY_DEV_CARD'
+          ? [command.value.body.command.slotId]
+          : command.value.body.command.type === 'CLAIM_VICTORY'
+            ? command.value.body.command.slotIds
+            : null;
+      if (
+        (requested !== null && !Array.isArray(requested)) ||
+        reveals.length !== (Array.isArray(requested) ? requested.length : 0)
+      )
+        return failure('deck-reveal-effect', 'Card reveal effects differ from the command');
+      if (reveals.length > 0) {
+        for (const [index, effect] of reveals.entries()) {
+          if (
+            !Array.isArray(requested) ||
+            effect.seat !== command.value.body.seat ||
+            effect.slotId !== requested[index] ||
+            effect.card !==
+              (command.value.body.command.type === 'PLAY_DEV_CARD'
+                ? command.value.body.command.card
+                : 'victoryPoint')
+          )
+            return failure(
+              'deck-reveal-effect',
+              'Card reveal effect differs from the signed command',
+            );
+          if (
+            !crypto.decks.decks.some(
+              (deck) =>
+                deck.commitment.definition.deckId === effect.deck &&
+                deck.slots.some(
+                  (slot) => slot.slotId === effect.slotId && slot.seat === effect.seat,
+                ),
+            )
+          )
+            return failure(
+              'deck-reveal-effect',
+              'Card reveal effect differs from the certified deck slot',
+            );
+        }
+        const revealed = revealDeckCards(
+          crypto.decks,
+          context.state,
+          {
+            ...command.value,
+            body: {
+              ...command.value.body,
+              evidence: { protocol: DECK_REVEAL_PROTOCOL, data: sections.value.deck },
+            },
+          },
+          crypto.epoch,
+        );
+        if (!revealed.ok) return revealed;
+        crypto = { ...crypto, decks: revealed.value, hands: planned.value.hands };
+      } else crypto = { ...crypto, hands: planned.value.hands };
     }
-    if (context.genesis.security === 'verified' || command.value.body.evidence !== undefined) {
-      if (!policy.verifyCommand)
-        return failure('command-proof-unavailable', 'Command proof verification is unavailable');
+    if (
+      policy.verifyCommand &&
+      (context.genesis.security === 'verified' || command.value.body.evidence !== undefined)
+    ) {
       const proof = policy.verifyCommand(command.value, context);
       if (!proof.ok) return proof;
+    } else if (context.genesis.security === 'stub' && command.value.body.evidence !== undefined) {
+      return failure('command-proof-unavailable', 'Command proof verification is unavailable');
     }
-    return success({ signed: command.value, crypto });
+    return success({ signed: command.value, crypto, applied: applied.value });
   } catch {
     return failure('entry-verification-failed', 'Command proof or state validation failed');
   }
@@ -148,7 +227,7 @@ function entryInput(
   context: LogContext,
   policy: EntryPolicy,
   crypto: CryptoContext | null,
-): Result<{ input: Input; crypto: CryptoContext | null }> {
+): Result<{ input: Input; crypto: CryptoContext | null; applied?: Transition }> {
   const payload = entry.payload;
   if (payload.kind === 'genesis')
     return failure('duplicate-genesis', 'Genesis is only valid at sequence zero');
@@ -168,12 +247,23 @@ function entryInput(
         command: checked.value.signed.body.command,
       },
       crypto: checked.value.crypto,
+      applied: checked.value.applied,
     });
   }
   if (payload.input.type === 'CARD_DEALT' && Object.hasOwn(payload.input, 'card'))
     return failure('private-card-in-log', 'Dealt card identities must be delivered privately');
   if (payload.input.type === 'SEAT_STATUS')
     return failure('membership-required', 'Seat status may change only through membership entries');
+  if (context.genesis.security === 'verified' && payload.input.type === 'REVEAL_COUNT')
+    return failure(
+      'hand-count-delivery-pending',
+      'Certified count reveals need owner-signed delivery',
+    );
+  if (context.genesis.security === 'verified' && payload.input.type === 'STEAL_RESULT')
+    return failure(
+      'hand-steal-unavailable',
+      'Verified steals require the sealed transfer protocol',
+    );
   if (payload.evidence.kind === 'stub') {
     if (context.genesis.security !== 'stub' || !policy.allowStub)
       return failure('stub-forbidden', 'Stub evidence is forbidden in this session');
@@ -253,7 +343,11 @@ export function validateNextEntry(
         crypto: transition.value.crypto,
       });
     }
-    const selected = transition.value.handled
+    const selected: Result<{
+      input: Input | null;
+      crypto: CryptoContext | null;
+      applied?: Transition;
+    }> = transition.value.handled
       ? success({ input: transition.value.input, crypto: transition.value.crypto })
       : entryInput(entry, context, policy, transition.value.crypto);
     if (!selected.ok) return selected;
@@ -272,18 +366,45 @@ export function validateNextEntry(
         crypto,
       });
     }
-    const applied = context.engine.apply(context.state, input);
+    const applied = selected.value.applied
+      ? success(selected.value.applied)
+      : context.engine.apply(context.state, input);
     if (!applied.ok) return applied;
-    const violations = context.engine.checkInvariants(applied.value.state);
-    if (violations.length !== 0)
-      return failure('entry-state', 'Entry violates engine invariants', { violations });
+    let committedCrypto = crypto;
+    if (committedCrypto && entry.payload.kind !== 'command') {
+      const planned = planHandTransition(
+        committedCrypto.hands,
+        context.state,
+        input,
+        applied.value,
+      );
+      if (!planned.ok) return planned;
+      if (planned.value.effects.some((effect) => effect.type === 'resource-count-revealed'))
+        return failure(
+          'hand-count-delivery-pending',
+          'Certified count reveals need owner-signed delivery',
+        );
+      const verified = verifyHandProofs(planned.value, [], {
+        genesisDigest: genesisDigest(context.genesis),
+        epoch: committedCrypto.epoch,
+        anchor: { seq: context.head.seq, hash: entryHash(context.head) },
+        command: null,
+      });
+      if (!verified.ok) return verified;
+      committedCrypto = { ...committedCrypto, hands: planned.value.hands };
+    }
+    if (entry.payload.kind !== 'command') {
+      const violations = context.engine.checkInvariants(applied.value.state);
+      if (violations.length !== 0)
+        return failure('entry-state', 'Entry violates engine invariants', { violations });
+    }
     if (entry.stateHash !== toHex(hashValue(applied.value.state)))
       return failure('state-hash', 'Entry and locally derived public state hashes differ');
     const captured =
-      crypto === null
+      committedCrypto === null
         ? success(null)
         : captureCryptoPending(
-            crypto,
+            committedCrypto,
             context.engine,
             applied.value.state,
             { seq: entry.seq, hash: entryHash(entry) },

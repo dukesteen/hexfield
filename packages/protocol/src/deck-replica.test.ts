@@ -10,7 +10,7 @@ import { MemoryBeaconContributionStore } from './beacon-contributions.js';
 import type { DeckContributionStore } from './deck-outbox.js';
 import { decodeDeckCard } from './deck-draw.js';
 import { genesisDeckDefinitions } from './deck-genesis.js';
-import { DECK_REVEAL_PROTOCOL } from './deck-ledger.js';
+import { COMMAND_PROOFS_PROTOCOL } from './command-proofs.js';
 import { entryHash } from './genesis.js';
 import { MemoryProtocolJournal } from './journal.js';
 import { signCommand } from './log.js';
@@ -585,7 +585,7 @@ describe('live verified deck replication', () => {
         type: 'CLAIM_VICTORY',
         slotIds: [slotId],
       });
-      expect(claim.entry.payload.signed.body.evidence?.protocol).toBe(DECK_REVEAL_PROTOCOL);
+      expect(claim.entry.payload.signed.body.evidence?.protocol).toBe(COMMAND_PROOFS_PROTOCOL);
     }
     expect(required(claims[0]).entry).toEqual(required(claims[1]).entry);
     expect(preparedReveals).toBe(1);
@@ -1163,7 +1163,7 @@ describe('live verified deck replication', () => {
     for (const certified of knightEntries) {
       expect(certified?.certificate).toHaveLength(2);
       if (certified?.entry.payload.kind !== 'command') throw new Error('Missing certified Knight');
-      expect(certified.entry.payload.signed.body.evidence?.protocol).toBe(DECK_REVEAL_PROTOCOL);
+      expect(certified.entry.payload.signed.body.evidence?.protocol).toBe(COMMAND_PROOFS_PROTOCOL);
     }
     expect(required(knightEntries[0]).entry).toEqual(required(knightEntries[1]).entry);
     expect(
