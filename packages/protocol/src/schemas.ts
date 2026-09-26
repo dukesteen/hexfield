@@ -142,7 +142,13 @@ const payloadSchema = v.variant('kind', [
   excludeProposerControlSchema,
   v.strictObject({
     kind: v.literal('crypto'),
-    action: v.picklist(['beacon-extend', 'beacon-fixed', 'deck-pass']),
+    action: v.picklist([
+      'beacon-extend',
+      'beacon-fixed',
+      'deck-pass',
+      'steal-fixed',
+      'steal-dispute',
+    ]),
     evidence: v.unknown(),
   }),
   // Membership is reserved for Stage 10. Its change is deliberately opaque here;

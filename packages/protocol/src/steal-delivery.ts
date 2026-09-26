@@ -15,13 +15,13 @@ import {
   proveDleq,
   proveHiddenTransfer,
   scalePoint,
-  seal,
+  sealWithEphemeralProof,
   signObject,
   verifyDleq,
-  verifyHiddenTransfer,
   verifyObject,
+  verifySealedEphemeralProof,
 } from '@cp2p/crypto';
-import type { DleqProof, SealedPayload } from '@cp2p/crypto';
+import type { DleqProof, SchnorrProof, SealedPayload } from '@cp2p/crypto';
 import { RESOURCES, failure, success } from '@cp2p/engine';
 import type { Resource, Result, Seat } from '@cp2p/engine';
 import * as v from 'valibot';
@@ -35,6 +35,7 @@ import {
   signature64Schema,
 } from './schema-values.js';
 import { parseCanonical } from './validation.js';
+import { verifyStealTransfer } from './steal-proof-cache.js';
 
 export const STEAL_EVIDENCE_PROTOCOL = 'hidden-steal-v1';
 
@@ -58,6 +59,7 @@ export interface SignedStealContribution {
     seat: Seat;
     transfer: readonly string[];
     sealed: SealedPayload;
+    ephemeralProof: SchnorrProof;
     proof: unknown;
   };
   sig: string;
@@ -165,6 +167,7 @@ export const signedStealContributionSchema = v.strictObject({
     seat: seatSchema,
     transfer: v.pipe(v.array(key32Schema), v.length(5)),
     sealed: sealedSchema,
+    ephemeralProof: v.strictObject({ commitment: key32Schema, response: key32Schema }),
     proof: v.unknown(),
   }),
   sig: signature64Schema,
@@ -244,6 +247,10 @@ function proofContext(operation: StealOperation) {
   return { protocol: 'steal-transfer-v1', operationId: stealOperationId(operation) };
 }
 
+function ephemeralContext(operation: StealOperation, transfer: readonly string[]) {
+  return { protocol: 'steal-ephemeral-v1', operationId: stealOperationId(operation), transfer };
+}
+
 function transferStatement(operation: StealOperation, body: SignedStealContribution['body']) {
   return {
     commitments: RESOURCES.map((resource) => operation.commitments[resource]),
@@ -293,12 +300,26 @@ export function createStealContribution(
     );
     const plaintext = canonicalEncode({ type, blindings: transferBlindings.map(encodeScalar) });
     let sealed: SealedPayload;
+    let ephemeralProof: SchnorrProof;
     try {
-      sealed = seal(plaintext, op.thief.encryptionKey, seed, sealContext(op, transfer));
+      ({ sealed, ephemeralProof } = sealWithEphemeralProof(
+        plaintext,
+        op.thief.encryptionKey,
+        seed,
+        sealContext(op, transfer),
+        ephemeralContext(op, transfer),
+      ));
     } finally {
       plaintext.fill(0);
     }
-    const partial = { operationId, seat: op.victim.seat, transfer, sealed, proof: null };
+    const partial = {
+      operationId,
+      seat: op.victim.seat,
+      transfer,
+      sealed,
+      ephemeralProof,
+      proof: null,
+    };
     const proof = proveHiddenTransfer(
       transferStatement(op, partial),
       {
@@ -319,6 +340,70 @@ export function createStealContribution(
   }
 }
 
+/** Rebuilds the victim's fixed transfer opening from its owned parent hand. */
+export function recoverStealTransferOpening(
+  operation: StealOperation,
+  contribution: SignedStealContribution,
+  counts: Readonly<Record<Resource, number>>,
+  blindings: Readonly<Record<Resource, string>>,
+  seed: Uint8Array,
+): Result<StealOpening> {
+  try {
+    const op = checked(validateStealOperation(operation));
+    const checkedContribution = checked(verifyStealContribution(contribution, op));
+    const opened = verifyHandOpening(
+      [{ seat: op.victim.seat, commitments: op.commitments }],
+      [op.victim.seat],
+      op.victim.seat,
+      counts,
+      blindings,
+    );
+    if (!opened.ok) return opened;
+    const values = RESOURCES.map((resource) => counts[resource]);
+    if (values.reduce((sum, count) => sum + count, 0) !== op.handSize)
+      return failure('steal-hand-size', 'Private hand differs from the frozen public total');
+    let prefix = 0;
+    const type = values.findIndex((count) => {
+      prefix += count;
+      return op.index < prefix;
+    });
+    if (type < 0) return failure('steal-index', 'Frozen index has no private resource');
+    const operationId = stealOperationId(op);
+    const transferBlindings = RESOURCES.map((resource) =>
+      deriveScalar(seed, DERIVATION_LABELS.transferBlind, { operationId, resource }),
+    );
+    for (const [index, blinding] of transferBlindings.entries())
+      if (
+        pedersenCommit(index === type ? 1n : 0n, blinding) !==
+        checkedContribution.body.transfer[index]
+      )
+        return failure('steal-transfer-opening', 'Fixed transfer differs from owned derivation');
+    const resource = RESOURCES[type];
+    const [brick, lumber, wool, grain, ore] = transferBlindings;
+    if (
+      !resource ||
+      brick === undefined ||
+      lumber === undefined ||
+      wool === undefined ||
+      grain === undefined ||
+      ore === undefined
+    )
+      throw new Error('Incomplete fixed transfer');
+    return success({
+      resource,
+      blindings: {
+        brick: encodeScalar(brick),
+        lumber: encodeScalar(lumber),
+        wool: encodeScalar(wool),
+        grain: encodeScalar(grain),
+        ore: encodeScalar(ore),
+      },
+    });
+  } catch {
+    return failure('steal-transfer-opening', 'Could not recover the fixed owned transfer');
+  }
+}
+
 export function verifyStealContribution(
   value: unknown,
   operation: StealOperation,
@@ -334,7 +419,20 @@ export function verifyStealContribution(
     )
       return failure('steal-contribution-signature', 'Victim signature is invalid');
     if (
-      !verifyHiddenTransfer(transferStatement(op, signed.body), signed.body.proof, proofContext(op))
+      !verifySealedEphemeralProof(
+        signed.body.sealed,
+        op.thief.encryptionKey,
+        signed.body.ephemeralProof,
+        sealContext(op, signed.body.transfer),
+        ephemeralContext(op, signed.body.transfer),
+      )
+    )
+      return failure(
+        'steal-ephemeral-proof',
+        'Victim does not prove ownership of the sealed ephemeral',
+      );
+    if (
+      !verifyStealTransfer(transferStatement(op, signed.body), signed.body.proof, proofContext(op))
     )
       return failure('steal-transfer-proof', 'Hidden transfer does not prove the frozen index');
     return success(signed);
@@ -431,7 +529,7 @@ function checkedFixed(value: FixedSteal): FixedSteal {
   return { ...fixed, contribution };
 }
 
-function receiptBody(fixed: FixedSteal): StealReceiptBody {
+export function stealReceiptBinding(fixed: FixedSteal): StealReceiptBody {
   return {
     operationId: stealOperationId(fixed.operation),
     fixed: fixed.entry,
@@ -453,7 +551,7 @@ export function createStealReceipt(
     assertSigner(signingKey, verified.operation.thief.publicKey);
     const opening = openChecked(verified.operation, verified.contribution, recipientSecret);
     if (!opening.ok) return opening;
-    const body = receiptBody(verified);
+    const body = stealReceiptBinding(verified);
     return success({ body, sig: signObject('steal-receipt', body, signingKey) });
   } catch {
     return failure('steal-receipt-production', 'Could not acknowledge the fixed transfer');
@@ -464,7 +562,7 @@ export function verifyStealReceipt(value: unknown, fixed: FixedSteal): Result<Si
   try {
     const signed = checked(parseCanonical(value, signedStealReceiptSchema));
     const verified = parseFixed(fixed);
-    if (toHex(hashValue(signed.body)) !== toHex(hashValue(receiptBody(verified))))
+    if (toHex(hashValue(signed.body)) !== toHex(hashValue(stealReceiptBinding(verified))))
       return failure(
         'steal-receipt-binding',
         'Receipt does not acknowledge this fixed contribution',
@@ -528,7 +626,7 @@ export function createStealDispute(
     );
     if (openDisputed(verified, sharedPoint).ok)
       return failure('steal-good-delivery', 'A valid opening is not evidence against the victim');
-    const binding = receiptBody(verified);
+    const binding = stealReceiptBinding(verified);
     const proof = proveDleq(
       disputeStatement(verified, sharedPoint),
       recipientSecret,
@@ -550,7 +648,7 @@ export function verifyStealDispute(value: unknown, fixed: FixedSteal): Result<Si
   try {
     const signed = checked(parseCanonical(value, signedStealDisputeSchema));
     const verified = parseFixed(fixed);
-    if (toHex(hashValue(signed.body.binding)) !== toHex(hashValue(receiptBody(verified))))
+    if (toHex(hashValue(signed.body.binding)) !== toHex(hashValue(stealReceiptBinding(verified))))
       return failure('steal-dispute-binding', 'Dispute belongs to another fixed contribution');
     if (
       !verifyObject(
@@ -570,11 +668,11 @@ export function verifyStealDispute(value: unknown, fixed: FixedSteal): Result<Si
       )
     )
       return failure('steal-dispute-proof', 'Disclosed shared point is not authenticated');
+    // A signed, DLEQ-authenticated good opening already disproves the complaint.
+    if (openDisputed(verified, signed.body.sharedPoint).ok)
+      return failure('steal-good-delivery', 'The authenticated opening is valid');
     const contribution = verifyStealContribution(verified.contribution, verified.operation);
-    if (!contribution.ok) return contribution;
-    return openDisputed(verified, signed.body.sharedPoint).ok
-      ? failure('steal-good-delivery', 'The authenticated opening is valid')
-      : success(signed);
+    return contribution.ok ? success(signed) : contribution;
   } catch {
     return failure('steal-dispute', 'Dispute could not be verified');
   }

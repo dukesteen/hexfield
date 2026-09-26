@@ -34,10 +34,13 @@ import type { CommandBody, Genesis, LogEntry, SignedCommand, SystemEvidence } fr
 import { logEntrySchema } from './schemas.js';
 import { parseCanonical } from './validation.js';
 import type { CountOperation } from './count-reveal.js';
+import type { StealContributionProducer, StealResponseProducer } from './steal-contributions.js';
 
 /** Private state and system protocols are separate from the replicated public log. */
 export interface SessionDriver {
   next(context: LogContext): { input: SystemInput; evidence: SystemEvidence } | null;
+  /** Check owned deterministic secret sources before journal replay or creation. */
+  validateSources?(): Result<void>;
   /** Produce owner evidence bound to this exact parent, nonce and complete command before signing. */
   prepareCommand?(
     body: Omit<CommandBody, 'evidence'>,
@@ -49,6 +52,8 @@ export interface SessionDriver {
     seat: Seat,
     context: LogContext,
   ): Result<{ count: number; proof: SchnorrProof }>;
+  produceStealContribution?: StealContributionProducer;
+  produceStealResponse?: StealResponseProducer;
   /**
    * Handles each certified entry, including protocol-only entries with no engine input.
    * When present, this replaces `committed`; it owns engine and private consequences too.
@@ -67,7 +72,7 @@ export interface SessionDriver {
 
 export interface P2PSessionOptions extends Omit<
   ReplicatedLogOptions,
-  'systemInput' | 'onCommit' | 'onStatus' | 'countProof'
+  'systemInput' | 'onCommit' | 'onStatus' | 'countProof' | 'stealContribution' | 'stealResponse'
 > {
   /** Fresh driver on both create and restore. Restore replays private consequences. */
   createDriver: (
@@ -169,6 +174,11 @@ export class P2PSession implements GameSession<CertifiedHistory> {
           );
         }
       }
+      const sources = driver.validateSources?.();
+      if (sources && !sources.ok) {
+        session.dispose();
+        return sources;
+      }
       const openedSession = session;
       if (restoring) {
         const saved = await options.journal.load();
@@ -188,10 +198,12 @@ export class P2PSession implements GameSession<CertifiedHistory> {
           return replayed;
         }
       }
-      // Runtime callers may still pass a raw countProof despite the public type.
+      // Runtime callers may still pass raw proof callbacks despite the public type.
       // Only this session's owned private driver may supply that authority.
       const safeOptions = { ...options };
       Reflect.deleteProperty(safeOptions, 'countProof');
+      Reflect.deleteProperty(safeOptions, 'stealContribution');
+      Reflect.deleteProperty(safeOptions, 'stealResponse');
       const replicaOptions: ReplicatedLogOptions = {
         ...safeOptions,
         systemInput: (current) => driver.next(current.log),
@@ -200,6 +212,28 @@ export class P2PSession implements GameSession<CertifiedHistory> {
               countProof: (operation: CountOperation, seat: Seat, current: LogContext) =>
                 driver.produceCountProof?.(operation, seat, detachedLogContext(current)) ??
                 failure('count-proof-source', 'Count proof driver is unavailable'),
+            }
+          : {}),
+        ...(driver.produceStealContribution
+          ? {
+              stealContribution: (...args: Parameters<StealContributionProducer>) =>
+                driver.produceStealContribution?.(
+                  args[0],
+                  args[1],
+                  detachedLogContext(args[2]),
+                  args[3],
+                ) ?? failure('steal-proof-source', 'Steal proof driver is unavailable'),
+            }
+          : {}),
+        ...(driver.produceStealResponse
+          ? {
+              stealResponse: (...args: Parameters<StealResponseProducer>) =>
+                driver.produceStealResponse?.(
+                  args[0],
+                  args[1],
+                  detachedLogContext(args[2]),
+                  args[3],
+                ) ?? failure('steal-response-source', 'Steal response driver is unavailable'),
             }
           : {}),
         onCommit: (validated, previous, next) => {

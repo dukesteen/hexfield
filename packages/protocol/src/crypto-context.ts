@@ -25,6 +25,13 @@ import { emptyHandCommitments, validateHandCommitments } from './hand-commitment
 import type { PublicHandCommitments } from './hand-commitments.js';
 import { captureCountPending, validateCountState } from './count-state.js';
 import type { CountState } from './count-reveal.js';
+import {
+  disputeStealContribution,
+  fixStealContribution,
+  freezeStealState,
+  validateStealState,
+} from './steal-state.js';
+import type { StealState } from './steal-state.js';
 
 /** Public cryptographic metadata, derived only by replaying the certified log. */
 export interface CryptoContext {
@@ -33,6 +40,7 @@ export interface CryptoContext {
   decks: DeckLedger;
   hands: PublicHandCommitments;
   counts: CountState | null;
+  steal: StealState | null;
 }
 
 export const BEACON_EVIDENCE_PROTOCOL = 'beacon-v1';
@@ -113,7 +121,14 @@ export function initializeCryptoContext(
   const hands = emptyHandCommitments(genesis.config.seats);
   if (!hands.ok) return hands;
   return captureCryptoPending(
-    { epoch: 0, beacon: beacon.value, decks: decks.value, hands: hands.value, counts: null },
+    {
+      epoch: 0,
+      beacon: beacon.value,
+      decks: decks.value,
+      hands: hands.value,
+      counts: null,
+      steal: null,
+    },
     genesis,
     engine,
     state,
@@ -124,7 +139,7 @@ export function initializeCryptoContext(
 
 export interface CryptoTransition {
   crypto: CryptoContext | null;
-  /** Handled inputs have built-in verification; other inputs still need their own policy. */
+  /** Input routing only; validateNextEntry applies mandatory proof and hand checks. */
   handled: boolean;
   input: Input | null;
 }
@@ -167,6 +182,15 @@ export function validateCryptoTransition(
     current.epoch,
   );
   if (!counts.ok) return counts;
+  const steal = validateStealState(
+    current.steal,
+    genesis,
+    beacon.value,
+    hands.value,
+    state,
+    current.epoch,
+  );
+  if (!steal.ok) return steal;
   if (counts.value && counts.value.operation.anchor.seq >= entry.seq)
     return failure('count-anchor', 'Count operation must already exist in the certified prefix');
   if (
@@ -180,6 +204,7 @@ export function validateCryptoTransition(
     decks: decks.value,
     hands: hands.value,
     counts: counts.value,
+    steal: steal.value,
   };
   if (payload.kind === 'control') return success({ crypto, handled: false, input: null });
   if (payload.kind === 'crypto' && payload.action === 'deck-pass') {
@@ -214,6 +239,28 @@ export function validateCryptoTransition(
   }
   if (crypto.decks.active)
     return failure('deck-pending', 'The certified draw must complete before another input');
+  if (payload.kind === 'crypto' && payload.action === 'steal-fixed') {
+    if (!crypto.steal)
+      return failure('steal-state-required', 'No certified steal operation is pending');
+    const fixed = fixStealContribution(crypto.steal, payload.evidence, {
+      seq: entry.seq,
+      hash: entryHash(entry),
+    });
+    return fixed.ok
+      ? success({ crypto: { ...crypto, steal: fixed.value }, handled: true, input: null })
+      : fixed;
+  }
+  if (payload.kind === 'crypto' && payload.action === 'steal-dispute') {
+    if (!crypto.steal)
+      return failure('steal-state-required', 'No certified steal operation is pending');
+    const disputed = disputeStealContribution(crypto.steal, payload.evidence);
+    return disputed.ok
+      ? success({ crypto: { ...crypto, steal: disputed.value }, handled: true, input: null })
+      : disputed;
+  }
+  if (payload.kind === 'system' && payload.input.type === 'STEAL_RESULT') {
+    return success({ crypto, handled: true, input: payload.input });
+  }
   if (payload.kind === 'crypto' && payload.action === 'beacon-extend') {
     const extended = extendBeaconState(crypto.beacon, payload.evidence);
     return extended.ok
@@ -226,7 +273,7 @@ export function validateCryptoTransition(
       payload.input.type === 'DICE_RESULT' ||
       (crypto.beacon.active !== null &&
         payload.input.type === crypto.beacon.active.pending.systemType));
-  if (beaconInput || payload.kind === 'crypto') {
+  if (beaconInput || (payload.kind === 'crypto' && payload.action === 'beacon-fixed')) {
     const evidence =
       payload.kind === 'crypto'
         ? payload.evidence
@@ -249,8 +296,16 @@ export function validateCryptoTransition(
     if (payload.kind === 'crypto') {
       if (outcome.kind !== 'steal-index')
         return failure('beacon-fixed-kind', 'Only a hidden steal index needs a fixed beacon entry');
+      const frozen = freezeStealState(
+        genesis,
+        completed.value.state,
+        crypto.hands,
+        state,
+        crypto.epoch,
+      );
+      if (!frozen.ok) return frozen;
       return success({
-        crypto: { ...crypto, beacon: completed.value.state },
+        crypto: { ...crypto, beacon: completed.value.state, steal: frozen.value },
         handled: true,
         input: null,
       });

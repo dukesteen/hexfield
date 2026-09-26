@@ -1,6 +1,11 @@
 import * as v from 'valibot';
 import { beaconContributionSchema } from './beacon-contributions.js';
 import { signedCountContributionSchema } from './count-reveal.js';
+import {
+  signedStealContributionSchema,
+  signedStealDisputeSchema,
+  signedStealReceiptSchema,
+} from './steal-delivery.js';
 import { deckUnlockContributionSchema } from './deck-inbox.js';
 import { certifiedEntrySchema, signedProposalSchema } from './proposal.js';
 import {
@@ -31,6 +36,19 @@ const countContributionSchema = v.strictObject({
   t: v.literal('COUNT_CONTRIB'),
   genesisDigest: key32Schema,
   contribution: signedCountContributionSchema,
+});
+const stealContributionSchema = v.strictObject({
+  t: v.literal('STEAL_CONTRIB'),
+  genesisDigest: key32Schema,
+  contribution: signedStealContributionSchema,
+});
+const stealResponseSchema = v.strictObject({
+  t: v.literal('STEAL_RESPONSE'),
+  genesisDigest: key32Schema,
+  response: v.variant('kind', [
+    v.strictObject({ kind: v.literal('receipt'), value: signedStealReceiptSchema }),
+    v.strictObject({ kind: v.literal('dispute'), value: signedStealDisputeSchema }),
+  ]),
 });
 const proposalMessageSchema = v.strictObject({
   t: v.literal('PROPOSAL'),
@@ -93,6 +111,8 @@ export const protocolMessageSchema = v.variant('t', [
   systemContributionSchema,
   deckContributionSchema,
   countContributionSchema,
+  stealContributionSchema,
+  stealResponseSchema,
   proposalMessageSchema,
   voteMessageSchema,
   commitSchema,

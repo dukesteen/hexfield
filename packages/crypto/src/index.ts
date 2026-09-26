@@ -78,7 +78,14 @@ export type {
   RangeProof,
   RangeStatement,
 } from './range.js';
-export { MAX_SEALED_BYTES, openSealed, openSealedWithSharedPoint, seal } from './seal.js';
+export {
+  MAX_SEALED_BYTES,
+  openSealed,
+  openSealedWithSharedPoint,
+  seal,
+  sealWithEphemeralProof,
+  verifySealedEphemeralProof,
+} from './seal.js';
 export type { SealedPayload } from './seal.js';
 export { proveShuffle, verifyShuffle } from './shuffle.js';
 export type { ShuffleProof, ShuffleResponse, ShuffleStatement } from './shuffle.js';

@@ -435,3 +435,19 @@ Record decisions here as they are made. Keep earlier entries.
 - Decision: Bind receipts and authenticated disputes to the certified contribution reference and body. Verify cheap context/signature checks before expensive transfer proofs. Failed untrusted messages are not automatically attributable cheating evidence.
 - Decision: Include each distinct nonidentity encryption key in the roster before the deck ceremony. Derive it from the fresh ceremony nonce, master and original seat signing identity. Recovery retains that derivation domain after voting-key changes.
 - Boundary: The [reviewed foundation](verification/stage07/step5-foundation-review-response.md) does not enable live steals. Certified ordering, durable delivery, hand updates, recovery and the browser performance target still need implementation and verification.
+
+## 2026-09-26: Certified hidden-steal delivery and hand replay
+
+- Decision: Freeze the transfer operation from the certified beacon and victim hand. Certify the victim's signed contribution before requesting the recipient's receipt. Require that receipt in the shared log validator before applying the exact local hidden-transfer effect and consuming the fixed outcome once.
+- Decision: A certified authenticated bad-opening dispute blocks completion while preserving both hands. Receipt/dispute conflicts follow certified ordering; a later complaint cannot roll back a completed transfer. Recovery and typed cheat consequences remain separate unfinished work.
+- Decision: Retain immutable victim contributions and one receipt-or-dispute response per fixed entry before sending. On restart, verify and resend the same bytes. The inbox is a bounded delivery cache, never authority for a hand update.
+- Decision: Reconstruct owned private transfer openings during replay. Publish private counts, all transfer blindings and the applied head together only after every owned post-state commitment matches. Verify each owned encryption source at session startup to catch missing or incorrect retained secrets before play.
+- Evidence: The [live checkpoint](verification/stage07/step5-live-local-checks.md) records a legal two-peer trace with dropped delivery, restart, exact retransmission and one resource movement. The remaining review and full local gate are recorded with that checkpoint; Stage 07 acceptance remains open.
+
+## 2026-09-27: Prevent a shared-secret disclosure through steal disputes
+
+- Finding: A signed garbage ciphertext could copy an earlier ephemeral point and induce a recipient dispute that exposed the earlier shared secret. The initial security review supplied this attack, and a regression reproduced it.
+- Decision: Require a Schnorr proof that the sender knows the ephemeral scalar. Bind the proof to the recipient, exact ciphertext, operation and transfer, and verify it before any shared-point disclosure. A copied proof fails under the new transcript. Anyone who knows the scalar can already derive the shared point, so a global ephemeral-point registry adds no protection for this attack.
+- Boundary: A source audit found no other implemented disclosure under the genesis encryption key. Deck unlocks use separate deck-lock secrets. Future encrypted recovery or delivery paths must verify the same knowledge condition before disclosing a shared point, or use separate keys. Seal seeds must remain private to the sender.
+- Performance: Cache only successful pure transfer checks by their complete statement, proof and context. Replay still authenticates the envelope and certified operation. Network retries reuse the exact already-persisted encoded contribution, while restore validates the durable record. The standalone crypto benchmark remains uncached.
+- Evidence: The [review response](verification/stage07/step5-live-review-response.md) records the reproduced attack, review verdict, rejected accessor-cache claim, state hardening and focused regressions.

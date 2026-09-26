@@ -2,8 +2,10 @@ import { canonicalEncode, fromBase64Url, sha256, toBase64Url } from '@cp2p/codec
 import { hkdf } from '@noble/hashes/hkdf.js';
 import { sha256 as sha256Hash } from '@noble/hashes/sha2.js';
 import { utf8ToBytes } from '@noble/hashes/utils.js';
-import { DERIVATION_LABELS, deriveScalar } from './derivation.js';
+import { DERIVATION_LABELS, deriveBytes, deriveScalar } from './derivation.js';
 import { G, decodePoint, encodePoint, pointToBytes, scalarToBytes, scalePoint } from './group.js';
+import { proveSchnorr, verifySchnorr } from './sigma.js';
+import type { SchnorrProof } from './sigma.js';
 
 export interface SealedPayload {
   readonly ephemeral: string;
@@ -12,6 +14,28 @@ export interface SealedPayload {
 
 export const MAX_SEALED_BYTES = 4096;
 const SALT = utf8ToBytes('cp2p/v1/seal/hkdf-sha256');
+
+function ephemeralSecret(
+  plaintext: Uint8Array,
+  recipient: string,
+  seed: Uint8Array,
+  context: unknown,
+): bigint {
+  return deriveScalar(seed, DERIVATION_LABELS.sealEphemeral, {
+    context,
+    recipient,
+    plaintextHash: toBase64Url(sha256(plaintext)),
+  });
+}
+
+function ephemeralProofContext(
+  sealed: SealedPayload,
+  recipient: string,
+  sealContext: unknown,
+  context: unknown,
+) {
+  return { protocol: 'sealed-ephemeral-v1', recipient, sealed, sealContext, context };
+}
 
 function readPayload(value: unknown): SealedPayload {
   if (typeof value !== 'object' || value === null || Array.isArray(value))
@@ -58,7 +82,9 @@ function applyKeystream(
 /**
  * Confidential delivery only: a signed protocol envelope and a checked opening
  * provide integrity. Never accept decrypted bytes as a valid card/share by themselves.
- * Context must identify the certified operation, participants and full statement.
+ * The seed must remain private to the sender; a public or shared seed reveals
+ * the ephemeral scalar and plaintext. Context must identify the sender,
+ * recipient, certified operation and full statement.
  */
 export function seal(
   plaintext: Uint8Array,
@@ -69,17 +95,66 @@ export function seal(
   if (!(plaintext instanceof Uint8Array) || plaintext.length > MAX_SEALED_BYTES)
     throw new TypeError('Plaintext must be at most 4096 bytes.');
   const recipientPoint = decodePoint(recipient, { nonIdentity: true });
-  const secret = deriveScalar(seed, DERIVATION_LABELS.sealEphemeral, {
-    context,
-    recipient,
-    plaintextHash: toBase64Url(sha256(plaintext)),
-  });
+  const secret = ephemeralSecret(plaintext, recipient, seed, context);
   const ephemeral = encodePoint(scalePoint(G, secret));
   const shared = encodePoint(scalePoint(recipientPoint, secret));
   return {
     ephemeral,
     ciphertext: toBase64Url(applyKeystream(plaintext, recipient, ephemeral, shared, context)),
   };
+}
+
+/**
+ * Seals and proves knowledge of the ephemeral scalar without exposing it to callers.
+ * Use a sender-private seed. Both contexts must bind the sender, recipient,
+ * certified operation and full statement; the verifier must authenticate that
+ * binding before any recipient shared point is disclosed in a dispute.
+ */
+export function sealWithEphemeralProof(
+  plaintext: Uint8Array,
+  recipient: string,
+  seed: Uint8Array,
+  sealContext: unknown,
+  context: unknown,
+): { sealed: SealedPayload; ephemeralProof: SchnorrProof } {
+  const sealed = seal(plaintext, recipient, seed, sealContext);
+  const secret = ephemeralSecret(plaintext, recipient, seed, sealContext);
+  const transcript = ephemeralProofContext(sealed, recipient, sealContext, context);
+  const entropy = deriveBytes(seed, DERIVATION_LABELS.proofRandomness, transcript, 32);
+  try {
+    return {
+      sealed,
+      ephemeralProof: proveSchnorr(
+        { base: encodePoint(G), publicPoint: sealed.ephemeral },
+        secret,
+        entropy,
+        transcript,
+      ),
+    };
+  } finally {
+    entropy.fill(0);
+  }
+}
+
+/** A dispute may reveal xR only after the sender proves it knew r for R = rG. */
+export function verifySealedEphemeralProof(
+  sealed: unknown,
+  recipient: string,
+  proof: unknown,
+  sealContext: unknown,
+  context: unknown,
+): boolean {
+  try {
+    const parsed = readPayload(sealed);
+    decodePoint(recipient, { nonIdentity: true });
+    return verifySchnorr(
+      { base: encodePoint(G), publicPoint: parsed.ephemeral },
+      proof,
+      ephemeralProofContext(parsed, recipient, sealContext, context),
+    );
+  } catch {
+    return false;
+  }
 }
 
 /** Returns untrusted plaintext. The caller must validate its claimed opening. */
@@ -96,7 +171,11 @@ export function openSealed(
   return openSealedWithSharedPoint(parsed, recipient, shared, context);
 }
 
-/** For public dispute verification, after a DLEQ authenticates the disclosed shared point. */
+/**
+ * For public dispute verification, after a DLEQ authenticates the disclosed
+ * shared point and an authenticated sender proof establishes knowledge of the
+ * ephemeral scalar for this exact sealed payload and operation.
+ */
 export function openSealedWithSharedPoint(
   payload: unknown,
   recipient: string,

@@ -83,6 +83,7 @@ function fixture() {
       epoch: 0,
       hands,
       counts,
+      steal: null,
       // Minimal replay metadata for this isolated hand validator. No deck or
       // random operation is exercised or substituted by these tests.
       decks: { genesisDigest: digest, decks: [], active: null },

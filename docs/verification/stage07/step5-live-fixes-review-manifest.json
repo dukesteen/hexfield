@@ -1,0 +1,72 @@
+{
+  "packetSha256": "1177db5015b8bf6d00634f0b713fc425a01d5211faa589164bb99328854ad1f7",
+  "packetBytes": 94217,
+  "prompt": "docs/verification/stage07/step5-live-fixes-review-prompt.md",
+  "files": [
+    {
+      "path": "packages/crypto/src/seal.ts",
+      "sha256": "18780a8d344cd8cef9d31621277a0ef5c7285cdae305efb81cf6ef67ec82b24d",
+      "bytes": 6453
+    },
+    {
+      "path": "packages/crypto/src/seal.test.ts",
+      "sha256": "e57c61447179d49015ef0e0c9f4b62f6f29bd39f77b319d5d433139388348061",
+      "bytes": 8140
+    },
+    {
+      "path": "packages/crypto/src/sigma.ts",
+      "sha256": "e04a49de15d73a54cc4191a4eed4b2dddab6c2e899636c2b7e8decbff3750ea8",
+      "bytes": 8091
+    },
+    {
+      "path": "packages/crypto/src/proof-transcript.ts",
+      "sha256": "287c895b9ea527273411632be3a8e61a129f00f8e12272d5c28907344eaeb5c8",
+      "bytes": 3446
+    },
+    {
+      "path": "packages/crypto/src/derivation.ts",
+      "sha256": "76bfa6e36fb943a462bb09f7b0acb1786235837e6297d4a4275bdcfbff3db30a",
+      "bytes": 2526
+    },
+    {
+      "path": "packages/crypto/src/group.ts",
+      "sha256": "76081f91735476a2da74bf9ab9c85a94f6d5f70c86760e8f1986b6eb1ec2ad80",
+      "bytes": 4611
+    },
+    {
+      "path": "packages/protocol/src/steal-delivery.ts",
+      "sha256": "57865cf44a366a2266120ada993237fe5e19b7e9734cea33abaa073da8b7e1b4",
+      "bytes": 23120
+    },
+    {
+      "path": "packages/protocol/src/steal-delivery.test.ts",
+      "sha256": "b108961999fce9b5578466d7175c5857685b988b7fb20e0c2668a3c8b5e8764c",
+      "bytes": 19386
+    },
+    {
+      "path": "packages/protocol/src/steal-proof-cache.ts",
+      "sha256": "aaa37c3be1c8577223e9e3b6ecdb84baf83e91ab2403c7bd2c7278590cdee4af",
+      "bytes": 1022
+    },
+    {
+      "path": "packages/protocol/src/steal-proof-cache.test.ts",
+      "sha256": "1ce64e17b5bf0d7e8a1a94b29e0cc4440732fa6b3ea104cd91533318ca09299a",
+      "bytes": 1766
+    },
+    {
+      "path": "packages/protocol/src/steal-state.ts",
+      "sha256": "840f4f845847c6dcae12e3b70e5d0c662b517b311aa4d77c3c69f6bfa0660f1f",
+      "bytes": 10963
+    },
+    {
+      "path": "packages/protocol/src/validation.ts",
+      "sha256": "bb646520abbab0596ff5d99f1b7f6ffaeed264260c3030917725a050acef5f23",
+      "bytes": 887
+    },
+    {
+      "path": "packages/protocol/src/schema-values.ts",
+      "sha256": "5f42a01a0d5a59abc1b93a5462a010ec56609ec44c050edd57e85791f5f0ef96",
+      "bytes": 829
+    }
+  ]
+}

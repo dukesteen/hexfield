@@ -1,5 +1,5 @@
-import { canonicalDecode, canonicalEncode } from '@cp2p/codec';
-import { encodeScalar } from '@cp2p/crypto';
+import { canonicalDecode, canonicalEncode, hashValue, toHex } from '@cp2p/codec';
+import { G, decodeScalar, encodePoint, encodeScalar, modScalar, scalePoint } from '@cp2p/crypto';
 import type { SchnorrProof } from '@cp2p/crypto';
 import { DEV_CARD_COUNTS, RESOURCES, failure, success } from '@cp2p/engine';
 import type {
@@ -9,6 +9,7 @@ import type {
   PrivateState,
   Result,
   Seat,
+  Resource,
   SystemInput,
 } from '@cp2p/engine';
 import { decodeDeckCard, proveDeckReveal } from './deck-draw.js';
@@ -25,6 +26,24 @@ import { validateCountState } from './count-state.js';
 import type { CommandBody, Genesis, SystemEvidence } from './types.js';
 import type { CertifiedEntry } from './proposal.js';
 import { entryHash, genesisDigest } from './genesis.js';
+import {
+  createStealContribution,
+  createStealDispute,
+  createStealReceipt,
+  openStealContribution,
+  recoverStealTransferOpening,
+  stealOperationId,
+} from './steal-delivery.js';
+import type {
+  FixedSteal,
+  SignedStealContribution,
+  SignedStealDispute,
+  SignedStealReceipt,
+  StealOpening,
+  StealOperation,
+} from './steal-delivery.js';
+import type { StealSecretSource, StealSourceFactory } from './steal-source.js';
+import { validateStealState, verifyStealResult } from './steal-state.js';
 
 type CommandWithoutEvidence = Omit<CommandBody, 'evidence'>;
 
@@ -39,6 +58,16 @@ function copyPrivate(state: PrivateState): PrivateState {
         canonicalDecode(canonicalEncode(value)),
       ]),
     ),
+  };
+}
+
+function resourceCounts(state: PrivateState): Record<Resource, number> {
+  return {
+    brick: state.hand.brick ?? -1,
+    lumber: state.hand.lumber ?? -1,
+    wool: state.hand.wool ?? -1,
+    grain: state.hand.grain ?? -1,
+    ore: state.hand.ore ?? -1,
   };
 }
 
@@ -84,6 +113,7 @@ export class VerifiedSessionDriver implements SessionDriver {
     ownedSeats: readonly Seat[],
     private readonly createDeckSource: DeckSourceFactory,
     private readonly createHandSource?: HandSourceFactory,
+    private readonly createStealSource?: StealSourceFactory,
   ) {
     if (genesis.security !== 'verified')
       throw new TypeError('Verified session driver requires verified genesis');
@@ -113,12 +143,13 @@ export class VerifiedSessionDriver implements SessionDriver {
   private verifyOwnedOpenings(
     context: LogContext,
     privates: ReadonlyMap<Seat, PrivateState> = this.privates,
+    blindingsBySeat: ReadonlyMap<Seat, Record<Resource, string>> = this.blindings,
   ): Result<void> {
     if (!context.crypto)
       return failure('crypto-context-required', 'Verified hand needs replayed crypto state');
     for (const seat of this.owned) {
       const priv = privates.get(seat);
-      const blindings = this.blindings.get(seat);
+      const blindings = blindingsBySeat.get(seat);
       if (!priv || !blindings)
         return failure('verified-private-missing', 'Owned hand opening is missing');
       const valid = validOwnedState(context.state, priv);
@@ -133,6 +164,193 @@ export class VerifiedSessionDriver implements SessionDriver {
       if (!opened.ok) return opened;
     }
     return success(undefined);
+  }
+
+  private currentStealContext(context: LogContext): Result<void> {
+    if (
+      genesisDigest(context.genesis) !== this.digest ||
+      context.genesis.gameId !== this.genesis.gameId ||
+      !context.crypto ||
+      (this.appliedHead === null
+        ? context.head.seq !== 0
+        : entryHash(context.head) !== this.appliedHead)
+    )
+      return failure('verified-steal-context', 'Steal request has a stale or foreign parent');
+    const openings = this.verifyOwnedOpenings(context);
+    if (!openings.ok) return openings;
+    const crypto = context.crypto;
+    if (!crypto) return failure('crypto-context-required', 'Verified steal needs crypto state');
+    const steal = validateStealState(
+      crypto.steal,
+      this.genesis,
+      crypto.beacon,
+      crypto.hands,
+      context.state,
+      crypto.epoch,
+    );
+    return steal.ok ? success(undefined) : steal;
+  }
+
+  private checkedStealSource(seat: Seat): Result<StealSecretSource> {
+    if (!this.createStealSource)
+      return failure('steal-source', 'No steal secret source is configured');
+    let source: StealSecretSource | null = null;
+    try {
+      source = this.createStealSource(seat);
+      const genesisKey = this.genesis.seats.find((item) => item.seat === seat)?.encryptionKey;
+      if (!genesisKey || encodePoint(scalePoint(G, source.encryptionSecret())) !== genesisKey) {
+        source.dispose();
+        return failure(
+          'steal-source-key',
+          'Owned steal source differs from the genesis encryption key',
+        );
+      }
+      return success(source);
+    } catch {
+      source?.dispose();
+      return failure('steal-source-key', 'Could not derive the original owned encryption key');
+    }
+  }
+
+  /** Fail before journal use if any locally owned seat cannot open its genesis key. */
+  validateSources(): Result<void> {
+    if (this.disposed) return failure('verified-driver-disposed', 'Verified driver is disposed');
+    for (const seat of this.owned) {
+      const checked = this.checkedStealSource(seat);
+      if (!checked.ok) return checked;
+      checked.value.dispose();
+    }
+    return success(undefined);
+  }
+
+  produceStealContribution(
+    operation: StealOperation,
+    seat: Seat,
+    context: LogContext,
+    signingKey: Uint8Array,
+  ): Result<SignedStealContribution> {
+    if (this.disposed) return failure('verified-driver-disposed', 'Verified driver is disposed');
+    if (!this.owned.has(seat))
+      return failure('seat-not-controllable', 'Verified driver does not own this steal victim');
+    const current = this.currentStealContext(context);
+    if (!current.ok) return current;
+    const pending = context.crypto?.steal;
+    try {
+      if (
+        !pending ||
+        pending.fixed ||
+        pending.dispute ||
+        pending.operation.victim.seat !== seat ||
+        stealOperationId(pending.operation) !== stealOperationId(operation) ||
+        operation.genesisDigest !== this.digest ||
+        operation.epoch !== context.crypto?.epoch ||
+        operation.victim.publicKey !==
+          this.genesis.seats.find((item) => item.seat === seat)?.publicKey ||
+        operation.thief.encryptionKey !==
+          this.genesis.seats.find((item) => item.seat === operation.thief.seat)?.encryptionKey
+      )
+        return failure(
+          'verified-steal-operation',
+          'Victim request is not the current frozen steal',
+        );
+    } catch {
+      return failure('verified-steal-operation', 'Victim request is malformed');
+    }
+    const priv = this.privates.get(seat);
+    const blindings = this.blindings.get(seat);
+    if (!priv || !blindings)
+      return failure('verified-private-missing', 'Owned steal opening is missing');
+    const sourceResult = this.checkedStealSource(seat);
+    if (!sourceResult.ok) return sourceResult;
+    const source = sourceResult.value;
+    try {
+      const seed = source.proofSeed('transfer', {
+        protocol: 'steal-transfer-source-v1',
+        operationId: stealOperationId(operation),
+      });
+      try {
+        return createStealContribution(
+          operation,
+          resourceCounts(priv),
+          blindings,
+          seed,
+          signingKey,
+        );
+      } finally {
+        seed.fill(0);
+      }
+    } catch {
+      return failure('verified-steal-contribution', 'Could not prepare owned steal contribution');
+    } finally {
+      source.dispose();
+    }
+  }
+
+  produceStealResponse(
+    fixed: FixedSteal,
+    seat: Seat,
+    context: LogContext,
+    signingKey: Uint8Array,
+  ): Result<
+    { kind: 'receipt'; value: SignedStealReceipt } | { kind: 'dispute'; value: SignedStealDispute }
+  > {
+    if (this.disposed) return failure('verified-driver-disposed', 'Verified driver is disposed');
+    if (!this.owned.has(seat))
+      return failure('seat-not-controllable', 'Verified driver does not own this steal recipient');
+    const current = this.currentStealContext(context);
+    if (!current.ok) return current;
+    const pending = context.crypto?.steal;
+    try {
+      if (
+        !pending?.fixed ||
+        pending.dispute ||
+        pending.operation.thief.seat !== seat ||
+        stealOperationId(pending.operation) !== stealOperationId(fixed.operation) ||
+        toHex(hashValue(pending.fixed)) !== toHex(hashValue(fixed)) ||
+        fixed.operation.genesisDigest !== this.digest ||
+        fixed.operation.epoch !== context.crypto?.epoch ||
+        fixed.operation.thief.encryptionKey !==
+          this.genesis.seats.find((item) => item.seat === seat)?.encryptionKey
+      )
+        return failure(
+          'verified-steal-fixed',
+          'Recipient request differs from the certified fixed steal',
+        );
+    } catch {
+      return failure('verified-steal-fixed', 'Recipient request is malformed');
+    }
+    const sourceResult = this.checkedStealSource(seat);
+    if (!sourceResult.ok) return sourceResult;
+    const source = sourceResult.value;
+    try {
+      const secret = source.encryptionSecret();
+      const receipt = createStealReceipt(fixed, secret, signingKey);
+      if (receipt.ok) return success({ kind: 'receipt', value: receipt.value });
+      if (
+        ![
+          'steal-opening-size',
+          'steal-opening-type',
+          'steal-opening-mismatch',
+          'steal-opening',
+        ].includes(receipt.error.code)
+      )
+        return receipt;
+      const seed = source.proofSeed('dispute', {
+        protocol: 'steal-dispute-source-v1',
+        operationId: stealOperationId(fixed.operation),
+        fixed: fixed.entry,
+      });
+      try {
+        const dispute = createStealDispute(fixed, secret, signingKey, seed);
+        return dispute.ok ? success({ kind: 'dispute', value: dispute.value }) : dispute;
+      } finally {
+        seed.fill(0);
+      }
+    } catch {
+      return failure('verified-steal-response', 'Could not prepare owned steal response');
+    } finally {
+      source.dispose();
+    }
   }
 
   /** Derive one owned, exact Monopoly count opening for the frozen public request. */
@@ -381,10 +599,110 @@ export class VerifiedSessionDriver implements SessionDriver {
       return success(undefined);
     }
 
-    if (input.kind === 'system' && input.type === 'STEAL_RESULT')
-      return failure('verified-hidden-steal', 'Verified steal proofs are not implemented');
-
-    const privateData: Partial<Record<Seat, { card?: string }>> = {};
+    const privateData: Partial<Record<Seat, { card?: string; resource?: Resource }>> = {};
+    const nextBlindings = new Map(this.blindings);
+    if (input.kind === 'system' && input.type === 'STEAL_RESULT') {
+      const steal = before.crypto?.steal;
+      const payload = entry.entry.payload;
+      if (
+        !steal?.fixed ||
+        steal.dispute ||
+        !after.crypto ||
+        after.crypto.steal !== null ||
+        payload.kind !== 'system'
+      )
+        return failure(
+          'verified-hidden-steal',
+          'Certified hidden steal is missing its fixed operation',
+        );
+      const receipt = verifyStealResult(steal, input, payload.evidence);
+      if (!receipt.ok) return receipt;
+      const { operation, fixed } = steal;
+      let victimOpening: StealOpening | null = null;
+      let thiefOpening: StealOpening | null = null;
+      if (this.owned.has(operation.victim.seat)) {
+        const seat = operation.victim.seat;
+        const priv = this.privates.get(seat);
+        const blindings = this.blindings.get(seat);
+        if (!priv || !blindings)
+          return failure('verified-private-missing', 'Victim private hand is missing');
+        const sourceResult = this.checkedStealSource(seat);
+        if (!sourceResult.ok) return sourceResult;
+        const source = sourceResult.value;
+        try {
+          const seed = source.proofSeed('transfer', {
+            protocol: 'steal-transfer-source-v1',
+            operationId: stealOperationId(operation),
+          });
+          try {
+            const recovered = recoverStealTransferOpening(
+              operation,
+              fixed.contribution,
+              resourceCounts(priv),
+              blindings,
+              seed,
+            );
+            if (!recovered.ok) return recovered;
+            victimOpening = recovered.value;
+          } finally {
+            seed.fill(0);
+          }
+        } catch {
+          return failure(
+            'verified-steal-victim',
+            'Could not recover the certified victim transfer',
+          );
+        } finally {
+          source.dispose();
+        }
+      }
+      if (this.owned.has(operation.thief.seat)) {
+        const sourceResult = this.checkedStealSource(operation.thief.seat);
+        if (!sourceResult.ok) return sourceResult;
+        const source = sourceResult.value;
+        try {
+          const opened = openStealContribution(
+            operation,
+            fixed.contribution,
+            source.encryptionSecret(),
+          );
+          if (!opened.ok) return opened;
+          thiefOpening = opened.value;
+        } catch {
+          return failure('verified-steal-thief', 'Could not open the certified thief transfer');
+        } finally {
+          source.dispose();
+        }
+      }
+      if (
+        victimOpening &&
+        thiefOpening &&
+        toHex(hashValue(victimOpening)) !== toHex(hashValue(thiefOpening))
+      )
+        return failure(
+          'verified-steal-opening',
+          'Owned endpoints disagree about the fixed transfer',
+        );
+      for (const [seat, direction, opening] of [
+        [operation.victim.seat, -1n, victimOpening],
+        [operation.thief.seat, 1n, thiefOpening],
+      ] as const) {
+        if (!opening) continue;
+        privateData[seat] = { resource: opening.resource };
+        const parent = this.blindings.get(seat);
+        if (!parent)
+          return failure('verified-private-missing', 'Owned steal blindings are missing');
+        const next = { ...parent };
+        for (const resource of RESOURCES)
+          next[resource] = encodeScalar(
+            modScalar(
+              decodeScalar(parent[resource]) +
+                direction * decodeScalar(opening.blindings[resource]),
+            ),
+          );
+        nextBlindings.set(seat, next);
+      }
+    }
     if (input.kind === 'system' && input.type === 'CARD_DEALT') {
       const owner = this.genesis.config.seats.find((seat) => seat === input.seat);
       if (owner === undefined || typeof input.deck !== 'string' || typeof input.slotId !== 'string')
@@ -426,9 +744,10 @@ export class VerifiedSessionDriver implements SessionDriver {
       if (!checked.ok) return checked;
       next.set(seat, applied.value);
     }
-    const afterOpenings = this.verifyOwnedOpenings(after, next);
+    const afterOpenings = this.verifyOwnedOpenings(after, next, nextBlindings);
     if (!afterOpenings.ok) return afterOpenings;
     this.privates = next;
+    this.blindings = nextBlindings;
     this.appliedHead = entryHash(after.head);
     return success(undefined);
   }

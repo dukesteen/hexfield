@@ -9,6 +9,13 @@ import { BeaconInbox } from './beacon-inbox.js';
 import { prepareCountContribution } from './count-contributions.js';
 import type { CountContributionStore, CountProofProducer } from './count-contributions.js';
 import { CountInbox } from './count-inbox.js';
+import { StealInbox } from './steal-inbox.js';
+import { prepareStealContribution, prepareStealResponse } from './steal-contributions.js';
+import type {
+  StealContributionProducer,
+  StealDeliveryStore,
+  StealResponseProducer,
+} from './steal-contributions.js';
 import { deckPassHash } from './deck-genesis.js';
 import { DeckInbox } from './deck-inbox.js';
 import { decksReady } from './deck-ledger.js';
@@ -94,6 +101,11 @@ export interface ReplicatedLogOptions {
   countProof?: CountProofProducer;
   /** Immutable outgoing count reveals, retained across restarts. */
   countContributionStore?: CountContributionStore;
+  /** Owned victim proof and recipient response, produced from replayed private state. */
+  stealContribution?: StealContributionProducer;
+  stealResponse?: StealResponseProducer;
+  /** Immutable outgoing contributions and responses retained across restarts. */
+  stealDeliveryStore?: StealDeliveryStore;
   systemInput?: (
     context: ProposalContext,
   ) => { input: SystemInput; evidence: SystemEvidence } | null;
@@ -132,10 +144,14 @@ export class ReplicatedLog {
   private readonly beaconInbox = new BeaconInbox();
   private readonly deckInbox = new DeckInbox();
   private readonly countInbox = new CountInbox();
+  private readonly stealInbox = new StealInbox();
   private readonly deckSetupPasses: LocalConfiguration['passes'];
   private readonly deckKeys: LocalConfiguration['keys'];
   private readonly rejectedDeckContributions = new Set<string>();
   private readonly rejectedCountContributions = new Set<string>();
+  private readonly rejectedStealMessages = new Set<string>();
+  private sentStealStage: string | null = null;
+  private preparedSteal: { readonly stage: string; readonly bytes: Uint8Array } | null = null;
   private readonly sentCountContributions = new Set<Seat>();
   private sentCountOperation: string | null = null;
   private preparedDeckPrefix: string | null = null;
@@ -361,6 +377,8 @@ export class ReplicatedLog {
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
+    this.preparedSteal = null;
+    this.sentStealStage = null;
     this.controller?.dispose();
     for (const key of this.deckKeys.values()) key.fill(0);
     for (const unsubscribe of this.unsubscribers) unsubscribe();
@@ -548,6 +566,25 @@ export class ReplicatedLog {
           rememberRejection(this.rejectedCountContributions, hash);
           this.strikePeer(from);
           return failure('count-proof-invalid', 'Signed count contribution is invalid');
+        }
+        return remembered.value ? this.offerAvailableInput() : success(undefined);
+      }
+      case 'STEAL_CONTRIB':
+      case 'STEAL_RESPONSE': {
+        if (message.genesisDigest !== this.context.membership.genesisDigest)
+          return failure('replica-steal-genesis', 'Steal delivery belongs to another game');
+        const refreshed = this.stealInbox.refresh(this.context.log.crypto);
+        if (!refreshed.ok) return refreshed;
+        const hash = toHex(hashValue(message));
+        if (this.rejectedStealMessages.has(hash)) return success(undefined);
+        const remembered =
+          message.t === 'STEAL_CONTRIB'
+            ? this.stealInbox.rememberContribution(message.contribution)
+            : this.stealInbox.rememberResponse(message.response);
+        if (!remembered.ok) {
+          rememberRejection(this.rejectedStealMessages, hash);
+          this.strikePeer(from);
+          return failure('steal-proof-invalid', 'Signed steal delivery is invalid');
         }
         return remembered.value ? this.offerAvailableInput() : success(undefined);
       }
@@ -802,6 +839,8 @@ export class ReplicatedLog {
     if (!deckPrepared.ok) return deckPrepared;
     const countPrepared = await this.prepareCount(retransmit);
     if (!countPrepared.ok) return countPrepared;
+    const stealPrepared = await this.prepareSteal(retransmit);
+    if (!stealPrepared.ok) return stealPrepared;
     const prepared = await this.prepareBeacon(retransmit);
     if (!prepared.ok) return prepared;
     const available =
@@ -810,6 +849,7 @@ export class ReplicatedLog {
       this.deckSetupCandidate() !== null ||
       this.deckDrawCandidate() !== null ||
       this.countCandidate() !== null ||
+      this.stealCandidate() !== null ||
       this.beaconCandidate() !== null ||
       this.systemCandidate() !== null ||
       state.value.valid !== null;
@@ -860,7 +900,11 @@ export class ReplicatedLog {
         },
         this.secretKey,
       );
-    const crypto = this.deckSetupCandidate() ?? this.deckDrawCandidate() ?? this.beaconCandidate();
+    const crypto =
+      this.deckSetupCandidate() ??
+      this.deckDrawCandidate() ??
+      this.stealCandidate() ??
+      this.beaconCandidate();
     if (crypto) return this.entryCandidate(state, crypto);
     const count = this.countCandidate();
     if (count) {
@@ -1048,6 +1092,102 @@ export class ReplicatedLog {
       }
     }
     return success(undefined);
+  }
+
+  private stealCandidate(): Extract<EntryPayload, { kind: 'crypto' | 'system' }> | null {
+    const candidate = this.stealInbox.candidate(this.context.log.crypto);
+    if (!candidate.ok) {
+      this.status({ kind: 'rejected', code: candidate.error.code });
+      return null;
+    }
+    return candidate.value;
+  }
+
+  private async prepareSteal(retransmit: boolean): Promise<Result<void>> {
+    const refreshed = this.stealInbox.refresh(this.context.log.crypto);
+    if (!refreshed.ok) return this.failClosed(refreshed.error.code, refreshed.error.message);
+    const active = this.context.log.crypto?.steal;
+    const stage = this.stealInbox.stageId();
+    if (!active || !stage) {
+      this.sentStealStage = null;
+      this.preparedSteal = null;
+      return success(undefined);
+    }
+    if (this.preparedSteal?.stage !== stage) this.preparedSteal = null;
+    if (!retransmit && this.sentStealStage === stage) return success(undefined);
+    const cached = this.preparedSteal;
+    if (cached?.stage === stage) {
+      const sent = this.broadcastBytes(cached.bytes);
+      if (sent.ok) this.sentStealStage = stage;
+      else this.status({ kind: 'rejected', code: sent.error.code });
+      return success(undefined);
+    }
+    const seat = active.fixed ? active.operation.thief.seat : active.operation.victim.seat;
+    const key = this.deckKeys.get(seat);
+    if (!key) return success(undefined);
+    const { stealContribution, stealResponse, stealDeliveryStore } = this.options;
+    if (!stealContribution || !stealResponse || !stealDeliveryStore)
+      return this.failClosed(
+        'replica-steal-store',
+        'Verified steals need owned proof sources and durable delivery',
+      );
+    const context = detachedContext(this.context).log;
+    const prepared = active.fixed
+      ? await prepareStealResponse(
+          active.fixed,
+          seat,
+          key,
+          context,
+          stealResponse,
+          stealDeliveryStore,
+        )
+      : await prepareStealContribution(
+          active.operation,
+          seat,
+          key,
+          context,
+          stealContribution,
+          stealDeliveryStore,
+        );
+    if (this.disposed)
+      return failure('replica-disposed', 'Replica closed during steal preparation');
+    if (!prepared.ok) return this.failClosed(prepared.error.code, prepared.error.message);
+    const current = this.stealInbox.refresh(this.context.log.crypto);
+    if (!current.ok) return this.failClosed(current.error.code, current.error.message);
+    if (this.stealInbox.stageId() !== stage) return success(undefined);
+    const outgoing = prepared.value;
+    const remembered =
+      'kind' in outgoing
+        ? this.stealInbox.rememberResponse(outgoing)
+        : this.stealInbox.rememberContribution(outgoing);
+    if (!remembered.ok) return this.failClosed(remembered.error.code, remembered.error.message);
+    const message =
+      'kind' in outgoing
+        ? {
+            t: 'STEAL_RESPONSE',
+            genesisDigest: this.context.membership.genesisDigest,
+            response: outgoing,
+          }
+        : {
+            t: 'STEAL_CONTRIB',
+            genesisDigest: this.context.membership.genesisDigest,
+            contribution: outgoing,
+          };
+    const encoded = encodeProtocolMessage(message);
+    if (!encoded.ok) return this.failClosed(encoded.error.code, encoded.error.message);
+    const cachedOutgoing = { stage, bytes: encoded.value.slice() };
+    this.preparedSteal = cachedOutgoing;
+    const sent = this.broadcastBytes(cachedOutgoing.bytes);
+    if (sent.ok) this.sentStealStage = stage;
+    else this.status({ kind: 'rejected', code: sent.error.code });
+    return success(undefined);
+  }
+
+  private refreshPreparedStealStage(): void {
+    const refreshed = this.stealInbox.refresh(this.context.log.crypto);
+    const stage = refreshed.ok ? this.stealInbox.stageId() : null;
+    if (this.preparedSteal?.stage !== stage) this.preparedSteal = null;
+    if (this.sentStealStage !== stage) this.sentStealStage = null;
   }
 
   private async prepareDeck(retransmit: boolean): Promise<Result<void>> {
@@ -1408,9 +1548,11 @@ export class ReplicatedLog {
     this.rejectedProposals.clear();
     this.rejectedDeckContributions.clear();
     this.rejectedCountContributions.clear();
+    this.rejectedStealMessages.clear();
     this.sentCountContributions.clear();
     this.accusation = pendingAccusation;
     this.clearConsensusTimers();
+    this.refreshPreparedStealStage();
     const opened = await this.openController();
     if (!opened.ok) throw new Error(`Next voting controller failed: ${opened.error.code}`);
     try {
@@ -1645,8 +1787,12 @@ export class ReplicatedLog {
   private broadcast(message: unknown): Result<void> {
     const encoded = encodeProtocolMessage(message);
     if (!encoded.ok) return encoded;
+    return this.broadcastBytes(encoded.value);
+  }
+
+  private broadcastBytes(bytes: Uint8Array): Result<void> {
     try {
-      this.options.transport.broadcast(encoded.value);
+      this.options.transport.broadcast(bytes.slice());
       return success(undefined);
     } catch {
       return failure('replica-transport', 'Could not broadcast protocol message');
@@ -1791,6 +1937,14 @@ function checkLocalKey(
     return failure(
       'replica-count-store',
       'Verified sessions need an owner count proof source and durable contributions',
+    );
+  if (
+    context.log.genesis.security === 'verified' &&
+    (!options.stealContribution || !options.stealResponse || !options.stealDeliveryStore)
+  )
+    return failure(
+      'replica-steal-store',
+      'Verified sessions need owned steal proof sources and durable delivery',
     );
   const keys = new Map<Seat, Uint8Array>();
   let retained = false;

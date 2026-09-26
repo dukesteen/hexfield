@@ -1,5 +1,6 @@
 import { canonicalDecode, fromBase64Url } from '@cp2p/codec';
 import { BASE_DEV_CARD_CATALOGUE, RESOURCES, failure } from '@cp2p/engine';
+import { scalarToBytes } from '@cp2p/crypto';
 import type { CommandShape, GameState, Result, Seat } from '@cp2p/engine';
 import { writeFile } from 'node:fs/promises';
 import { Session as InspectorSession } from 'node:inspector';
@@ -8,6 +9,8 @@ import { join } from 'node:path';
 import { describe, expect, test, vi } from 'vitest';
 import { MemoryBeaconContributionStore } from './beacon-contributions.js';
 import { MemoryCountContributionStore } from './count-contributions.js';
+import { MemoryStealDeliveryStore } from './steal-contributions.js';
+import { createStealSecretSource } from './steal-source.js';
 import type { DeckContributionStore } from './deck-outbox.js';
 import { decodeDeckCard } from './deck-draw.js';
 import { genesisDeckDefinitions } from './deck-genesis.js';
@@ -172,6 +175,9 @@ function optionsFor(
     // These deck-only cases never enter a Monopoly count phase.
     countProof: () => failure('count-not-exercised', 'No count proof in the deck fixture'),
     countContributionStore: new MemoryCountContributionStore(),
+    stealContribution: () => failure('steal-not-exercised', 'No steal in the deck fixture'),
+    stealResponse: () => failure('steal-not-exercised', 'No steal in the deck fixture'),
+    stealDeliveryStore: new MemoryStealDeliveryStore(),
     deckSetupPasses: fixture.deckSetupPasses,
     botKeys: fixture.botKeysFor(seat),
     createDeckSource: fixture.createDeckSourceFor(seat),
@@ -509,20 +515,27 @@ describe('live verified deck replication', () => {
       return P2PSession.create({
         ...base,
         createDriver: (engine, genesis, _clock, ownedSeats) =>
-          new VerifiedSessionDriver(engine, genesis, ownedSeats, (deckId, seat) => {
-            const source = original(deckId, seat);
-            return {
-              ...source,
-              proofSeed(role, context) {
-                if (role === 'reveal' && failedReveals === 0) {
-                  failedReveals += 1;
-                  throw new Error('Transient local reveal-source failure');
-                }
-                if (role === 'reveal') preparedReveals += 1;
-                return source.proofSeed(role, context);
-              },
-            };
-          }),
+          new VerifiedSessionDriver(
+            engine,
+            genesis,
+            ownedSeats,
+            (deckId, seat) => {
+              const source = original(deckId, seat);
+              return {
+                ...source,
+                proofSeed(role, context) {
+                  if (role === 'reveal' && failedReveals === 0) {
+                    failedReveals += 1;
+                    throw new Error('Transient local reveal-source failure');
+                  }
+                  if (role === 'reveal') preparedReveals += 1;
+                  return source.proofSeed(role, context);
+                },
+              };
+            },
+            undefined,
+            fixture.createStealSourceFor(base.seat),
+          ),
       });
     });
     const opened = await Promise.all(sessions);
@@ -634,7 +647,14 @@ describe('live verified deck replication', () => {
       const opened = await P2PSession.create({
         ...base,
         createDriver: (engine, genesis) =>
-          new VerifiedSessionDriver(engine, genesis, owned, required(base.createDeckSource)),
+          new VerifiedSessionDriver(
+            engine,
+            genesis,
+            owned,
+            required(base.createDeckSource),
+            undefined,
+            fixture.createStealSourceFor(base.seat),
+          ),
       });
       expect(opened).toMatchObject({ ok: false, error: { code: 'session-driver-seats' } });
       // oxlint-disable-next-line no-await-in-loop
@@ -653,6 +673,8 @@ describe('live verified deck replication', () => {
           genesis,
           ownedSeats,
           required(base.createDeckSource),
+          undefined,
+          fixture.createStealSourceFor(base.seat),
         );
         Object.defineProperty(driver, 'produceCountProof', { value: undefined });
         return driver;
@@ -660,6 +682,54 @@ describe('live verified deck replication', () => {
     });
     expect(rawFallback).toMatchObject({ ok: false, error: { code: 'replica-count-store' } });
     expect(await journal.load()).toBeNull();
+    const noSecretSource = await P2PSession.create({
+      ...base,
+      createDriver: (engine, genesis, _clock, ownedSeats) =>
+        new VerifiedSessionDriver(engine, genesis, ownedSeats, required(base.createDeckSource)),
+    });
+    expect(noSecretSource).toMatchObject({ ok: false, error: { code: 'steal-source' } });
+    expect(await journal.load()).toBeNull();
+    const wrongSecretSource = await P2PSession.create({
+      ...base,
+      createDriver: (engine, genesis, _clock, ownedSeats) =>
+        new VerifiedSessionDriver(
+          engine,
+          genesis,
+          ownedSeats,
+          required(base.createDeckSource),
+          undefined,
+          (seat) =>
+            createStealSecretSource(
+              scalarToBytes(99n),
+              genesis.ceremonyNonce,
+              seat,
+              required(genesis.seats.find((item) => item.seat === seat)).publicKey,
+            ),
+        ),
+    });
+    expect(wrongSecretSource).toMatchObject({ ok: false, error: { code: 'steal-source-key' } });
+    expect(await journal.load()).toBeNull();
+    for (const method of ['produceStealContribution', 'produceStealResponse'] as const) {
+      // oxlint-disable-next-line no-await-in-loop -- Each rejected open must leave the journal untouched.
+      const stealFallback = await P2PSession.create({
+        ...base,
+        createDriver: (engine, genesis, _clock, ownedSeats) => {
+          const driver = new VerifiedSessionDriver(
+            engine,
+            genesis,
+            ownedSeats,
+            required(base.createDeckSource),
+            undefined,
+            fixture.createStealSourceFor(base.seat),
+          );
+          Object.defineProperty(driver, method, { value: undefined });
+          return driver;
+        },
+      });
+      expect(stealFallback).toMatchObject({ ok: false, error: { code: 'replica-steal-store' } });
+      // oxlint-disable-next-line no-await-in-loop
+      expect(await journal.load()).toBeNull();
+    }
     network.dispose();
   }, 30_000);
 
@@ -784,6 +854,8 @@ describe('live verified deck replication', () => {
                 genesis,
                 ownedSeats,
                 required(base.createDeckSource),
+                undefined,
+                fixture.createStealSourceFor(base.seat),
               ),
           });
         }),
@@ -912,6 +984,8 @@ describe('live verified deck replication', () => {
                   genesis,
                   ownedSeats,
                   required(base.createDeckSource),
+                  undefined,
+                  fixture.createStealSourceFor(base.seat),
                 ),
             });
           }),
@@ -971,28 +1045,33 @@ describe('live verified deck replication', () => {
     delete missingCountProof.countProof;
     const missingCountStore = { ...firstOptions };
     delete missingCountStore.countContributionStore;
-    const invalidOptions: ReplicatedLogOptions[] = [
-      missingSource,
-      missingStore,
-      missingCountProof,
-      missingCountStore,
-      { ...firstOptions, botKeys: new Map() },
-      { ...firstOptions, botKeys: new Map([[hostedBot[0], firstOptions.secretKey]]) },
+    const missingStealContribution = { ...firstOptions };
+    delete missingStealContribution.stealContribution;
+    const missingStealResponse = { ...firstOptions };
+    delete missingStealResponse.stealResponse;
+    const missingStealStore = { ...firstOptions };
+    delete missingStealStore.stealDeliveryStore;
+    const invalidOptions: [ReplicatedLogOptions, string][] = [
+      [missingSource, 'replica-deck-store'],
+      [missingStore, 'replica-deck-store'],
+      [missingCountProof, 'replica-count-store'],
+      [missingCountStore, 'replica-count-store'],
+      [missingStealContribution, 'replica-steal-store'],
+      [missingStealResponse, 'replica-steal-store'],
+      [missingStealStore, 'replica-steal-store'],
+      [{ ...firstOptions, botKeys: new Map() }, 'replica-bot-key'],
+      [
+        { ...firstOptions, botKeys: new Map([[hostedBot[0], firstOptions.secretKey]]) },
+        'replica-bot-key',
+      ],
     ];
-    for (const [index, options] of invalidOptions.entries()) {
+    for (const [options, code] of invalidOptions) {
       // oxlint-disable-next-line no-await-in-loop -- Every rejected startup must leave the same journal empty.
       const created = await ReplicatedLog.create(options);
       expect(created.ok).toBe(false);
       expect(created).toMatchObject({
         ok: false,
-        error: {
-          code:
-            index < 2
-              ? 'replica-deck-store'
-              : index < 4
-                ? 'replica-count-store'
-                : 'replica-bot-key',
-        },
+        error: { code },
       });
       // oxlint-disable-next-line no-await-in-loop
       expect(await required(journals[0]).load()).toBeNull();
@@ -1166,7 +1245,14 @@ describe('live verified deck replication', () => {
           _clock: ProtocolClock,
           ownedSeats: readonly Seat[],
         ) =>
-          new VerifiedSessionDriver(engine, genesis, ownedSeats, required(base.createDeckSource)),
+          new VerifiedSessionDriver(
+            engine,
+            genesis,
+            ownedSeats,
+            required(base.createDeckSource),
+            undefined,
+            fixture.createStealSourceFor(base.seat),
+          ),
       };
     };
     const sessions = [

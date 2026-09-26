@@ -153,3 +153,11 @@ export type { GenesisConsentStore } from './genesis-outbox.js';
 
 export { createStealSecretSource } from './steal-source.js';
 export type { StealSecretSource, StealSourceFactory } from './steal-source.js';
+export type { StealState } from './steal-state.js';
+export { MemoryStealDeliveryStore } from './steal-contributions.js';
+export type {
+  StealContributionProducer,
+  StealDeliveryStore,
+  StealResponse,
+  StealResponseProducer,
+} from './steal-contributions.js';

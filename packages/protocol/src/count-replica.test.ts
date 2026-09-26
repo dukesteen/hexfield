@@ -5,6 +5,7 @@ import type { CommandShape, GameState, Result, Seat } from '@cp2p/engine';
 import { describe, expect, test } from 'vitest';
 import { MemoryBeaconContributionStore } from './beacon-contributions.js';
 import { MemoryCountContributionStore } from './count-contributions.js';
+import { MemoryStealDeliveryStore } from './steal-contributions.js';
 import type { SignedCountContribution } from './count-reveal.js';
 import type { DeckContributionStore } from './deck-outbox.js';
 import { createHandSecretSource } from './hand-source.js';
@@ -172,9 +173,15 @@ describe('live verified Monopoly count replication', () => {
         createDeckSource: deckSource,
         deckContributions: required(deckStores[index]),
         countContributionStore: required(countStores[index]),
+        stealDeliveryStore: new MemoryStealDeliveryStore(),
         createDriver: (engine, genesis, _clock, ownedSeats) =>
-          new VerifiedSessionDriver(engine, genesis, ownedSeats, deckSource, (owner) =>
-            createHandSecretSource(scalarToBytes(BigInt(71 + owner)), digest, owner),
+          new VerifiedSessionDriver(
+            engine,
+            genesis,
+            ownedSeats,
+            deckSource,
+            (owner) => createHandSecretSource(scalarToBytes(BigInt(71 + owner)), digest, owner),
+            fixture.createStealSourceFor(seat),
           ),
       };
     });

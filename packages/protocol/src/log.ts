@@ -22,6 +22,7 @@ import { DECK_REVEAL_PROTOCOL } from './deck-ledger.js';
 import { readCommandProofs } from './command-proofs.js';
 import { planHandTransition, verifyHandProofs } from './hand-transition.js';
 import { completeCountHandPlan, verifyCountInput } from './count-reveal.js';
+import { completeStealResult, verifyStealResult } from './steal-state.js';
 
 export interface LogContext {
   genesis: Genesis;
@@ -261,10 +262,7 @@ function entryInput(
     return success({ input: payload.input, crypto });
   }
   if (context.genesis.security === 'verified' && payload.input.type === 'STEAL_RESULT')
-    return failure(
-      'hand-steal-unavailable',
-      'Verified steals require the sealed transfer protocol',
-    );
+    return failure('steal-result-unverified', 'Verified steals require a certified signed receipt');
   if (payload.evidence.kind === 'stub') {
     if (context.genesis.security !== 'stub' || !policy.allowStub)
       return failure('stub-forbidden', 'Stub evidence is forbidden in this session');
@@ -373,12 +371,35 @@ export function validateNextEntry(
       const checked = verifyCountInput(crypto.counts, input, entry.payload.evidence);
       if (!checked.ok) return checked;
     }
+    if (
+      context.genesis.security === 'verified' &&
+      input.kind === 'system' &&
+      input.type === 'STEAL_RESULT'
+    ) {
+      if (entry.payload.kind !== 'system')
+        return failure('steal-result-evidence', 'Steal results require system evidence');
+      const checked = verifyStealResult(crypto?.steal ?? null, input, entry.payload.evidence);
+      if (!checked.ok) return checked;
+    }
     const applied = selected.value.applied
       ? success(selected.value.applied)
       : context.engine.apply(context.state, input);
     if (!applied.ok) return applied;
     let committedCrypto = crypto;
-    if (committedCrypto && entry.payload.kind !== 'command') {
+    if (committedCrypto && input.kind === 'system' && input.type === 'STEAL_RESULT') {
+      if (!committedCrypto.steal)
+        return failure('steal-state-required', 'Steal result has no frozen operation');
+      const completed = completeStealResult(
+        committedCrypto.steal,
+        committedCrypto.beacon,
+        committedCrypto.hands,
+        context.state,
+        applied.value.state,
+        applied.value.effects,
+      );
+      if (!completed.ok) return completed;
+      committedCrypto = { ...committedCrypto, ...completed.value };
+    } else if (committedCrypto && entry.payload.kind !== 'command') {
       const planned = planHandTransition(
         committedCrypto.hands,
         context.state,

@@ -63,6 +63,7 @@ function fixture(exhausted = false) {
     decks: { genesisDigest: beacon.genesisDigest, decks: [], active: null },
     hands: emptyHands.value,
     counts: null,
+    steal: null,
   };
   const link = vi.fn<BeaconSecretSource['link']>((chainEpoch, index) => {
     if (chainEpoch !== 0 || index !== 1) throw new Error('Unexpected link request');

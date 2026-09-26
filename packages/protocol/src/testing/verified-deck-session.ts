@@ -5,6 +5,8 @@ import type { Seat } from '@cp2p/engine';
 import type { BeaconSecretSource } from '../beacon-contributions.js';
 import type { DeckSecretSource } from '../deck-source.js';
 import { createDeckSecretSource } from '../deck-source.js';
+import { createStealSecretSource } from '../steal-source.js';
+import type { StealSourceFactory } from '../steal-source.js';
 import { genesisDeckDefinitions } from '../deck-genesis.js';
 import {
   GENESIS_PREVIOUS_HASH,
@@ -141,6 +143,21 @@ export function createVerifiedDeckSession(
     entry: { verifyCommand: () => success(undefined) },
   };
 
+  function createStealSourceFor(hostSeat: Seat): StealSourceFactory {
+    const host = required(humans.find((seat) => seat.seat === hostSeat));
+    return (seat) => {
+      const owner = required(genesis.seats.find((item) => item.seat === seat));
+      if (owner.seat !== hostSeat && (owner.kind !== 'bot' || owner.botHost !== host.publicKey))
+        throw new Error(`Seat ${seat} is not hosted by ${hostSeat}`);
+      return createStealSecretSource(
+        scalarToBytes(BigInt(17 + seat)),
+        genesis.ceremonyNonce,
+        seat,
+        owner.publicKey,
+      );
+    };
+  }
+
   return {
     simulation,
     humans,
@@ -152,6 +169,7 @@ export function createVerifiedDeckSession(
     beaconSourceFor,
     botKeysFor,
     createDeckSourceFor,
+    createStealSourceFor,
     deckSetupPasses: deck.transcripts.flatMap((transcript) =>
       transcript.passes.map((pass) => ({ deckId: transcript.deckId, pass })),
     ),

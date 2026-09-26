@@ -1,7 +1,18 @@
-import { fromBase64Url, hashValue, toBase64Url, toHex } from '@cp2p/codec';
-import { createHashChain, signObject } from '@cp2p/crypto';
-import { success } from '@cp2p/engine';
-import type { CommandShape, GameState, Result, Seat, SystemInput } from '@cp2p/engine';
+import { canonicalEncode, fromBase64Url, hashValue, toBase64Url, toHex } from '@cp2p/codec';
+import {
+  createHashChain,
+  decodeScalar,
+  DERIVATION_LABELS,
+  deriveScalar,
+  encodeScalar,
+  pedersenCommit,
+  proveHiddenTransfer,
+  scalarToBytes,
+  sealWithEphemeralProof,
+  signObject,
+} from '@cp2p/crypto';
+import { RESOURCES, success } from '@cp2p/engine';
+import type { CommandShape, GameState, Resource, Result, Seat, SystemInput } from '@cp2p/engine';
 import { describe, expect, test, vi } from 'vitest';
 import { completeBeaconState, freezeBeaconRequest, getBeaconOperation } from './beacon-state.js';
 import { signBeaconReveal } from './beacon.js';
@@ -28,6 +39,17 @@ import {
 } from './replay.js';
 import { createSimulationGenesis } from './testing/simulation-genesis.js';
 import { createGenesisDeckFixture } from './testing/deck-fixture.js';
+import {
+  createStealContribution,
+  createStealDispute,
+  createStealReceipt,
+  stealOperationId,
+  STEAL_EVIDENCE_PROTOCOL,
+  verifyStealReceipt,
+} from './steal-delivery.js';
+import type { SignedStealContribution, StealOperation } from './steal-delivery.js';
+import { createStealSecretSource } from './steal-source.js';
+import { validateStealState } from './steal-state.js';
 import type { EntryBody, Genesis, GenesisBody, LogEntry } from './types.js';
 import { signVote } from './votes.js';
 
@@ -37,6 +59,108 @@ vi.setConfig({ testTimeout: 30_000 });
 function required<T>(value: T | undefined): T {
   if (value === undefined) throw new Error('Missing beacon log fixture');
   return value;
+}
+
+function unwrap<T>(result: Result<T>): T {
+  if (!result.ok) throw new Error(`${result.error.code}: ${result.error.message}`);
+  return result.value;
+}
+
+function openedHands(state: GameState) {
+  const openings = new Map<
+    Seat,
+    { counts: Record<Resource, number>; blindings: Record<Resource, string> }
+  >();
+  const hands = state.seats.map((seat) => {
+    const counts = { ...seat.resources.min };
+    let remaining =
+      seat.resources.total - RESOURCES.reduce((sum, resource) => sum + counts[resource], 0);
+    for (const resource of RESOURCES) {
+      const added = Math.min(remaining, seat.resources.max[resource] - counts[resource]);
+      counts[resource] += added;
+      remaining -= added;
+    }
+    if (remaining !== 0) throw new Error('No private opening fits the legal public bounds');
+    const blindings: Record<Resource, string> = {
+      brick: '',
+      lumber: '',
+      wool: '',
+      grain: '',
+      ore: '',
+    };
+    const commitments: Record<Resource, string> = {
+      brick: '',
+      lumber: '',
+      wool: '',
+      grain: '',
+      ore: '',
+    };
+    for (const [index, resource] of RESOURCES.entries()) {
+      const blinding = BigInt(100 + seat.seat * 5 + index);
+      blindings[resource] = encodeScalar(blinding);
+      commitments[resource] = pedersenCommit(BigInt(counts[resource]), blinding);
+    }
+    openings.set(seat.seat, { counts, blindings });
+    return { seat: seat.seat, commitments };
+  });
+  return { hands, openings };
+}
+
+function badSealedContribution(
+  operation: StealOperation,
+  opening: { counts: Record<Resource, number>; blindings: Record<Resource, string> },
+  honest: SignedStealContribution,
+  signingKey: Uint8Array,
+  seed: Uint8Array,
+): SignedStealContribution {
+  const operationId = stealOperationId(operation);
+  const transfer = honest.body.transfer;
+  const transferBlindings = RESOURCES.map((resource) =>
+    deriveScalar(seed, DERIVATION_LABELS.transferBlind, { operationId, resource }),
+  );
+  let prefix = 0;
+  const selected = RESOURCES.findIndex((resource) => {
+    prefix += opening.counts[resource];
+    return operation.index < prefix;
+  });
+  if (selected < 0) throw new Error('Frozen index has no opened card');
+  const plaintext = canonicalEncode({
+    type: (selected + 1) % RESOURCES.length,
+    blindings: transferBlindings.map(encodeScalar),
+  });
+  const { sealed, ephemeralProof } = sealWithEphemeralProof(
+    plaintext,
+    operation.thief.encryptionKey,
+    seed,
+    { protocol: 'steal-seal-v1', operationId, transfer },
+    { protocol: 'steal-ephemeral-v1', operationId, transfer },
+  );
+  plaintext.fill(0);
+  const proof = proveHiddenTransfer(
+    {
+      commitments: RESOURCES.map((resource) => operation.commitments[resource]),
+      transfer,
+      handSize: operation.handSize,
+      index: operation.index,
+      payloadHash: toHex(hashValue(sealed)),
+    },
+    {
+      counts: RESOURCES.map((resource) => opening.counts[resource]),
+      blindings: RESOURCES.map((resource) => decodeScalar(opening.blindings[resource])),
+      transferBlindings,
+    },
+    seed,
+    { protocol: 'steal-transfer-v1', operationId },
+  );
+  const body = {
+    operationId,
+    seat: operation.victim.seat,
+    transfer,
+    sealed,
+    ephemeralProof,
+    proof,
+  };
+  return { body, sig: signObject('steal-contribution', body, signingKey) };
 }
 
 function record(value: unknown): value is Record<string, unknown> {
@@ -699,6 +823,7 @@ describe('certified beacon log integration', () => {
         .getPending(atSteal)
         .find((item) => item.kind === 'random' && item.request.type === 'stealIndex'),
     );
+    if (pending.kind !== 'random') throw new Error('Expected a random steal request');
     const head = signEntry(
       {
         seq: 39,
@@ -736,6 +861,7 @@ describe('certified beacon log integration', () => {
           decks: deckLedger,
           hands: baseCrypto.hands,
           counts: null,
+          steal: null,
         },
       },
     };
@@ -782,6 +908,298 @@ describe('certified beacon log integration', () => {
     const again = signAt(data, next.value, fixed.payload, next.value.log.head.stateHash);
     expect(validateNextEntry(again, next.value.log, directPolicy(data, next.value)).ok).toBe(false);
     expect(data.verifySystem).not.toHaveBeenCalled();
+  });
+
+  test('certifies a victim transfer and atomically folds the hidden result from its signed receipt', () => {
+    const data = fixture();
+    const first = resultFor(data, data.initial, revealsFor(data, data.initial));
+    const started = unwrap(
+      validateNextEntry(first, data.initial.log, directPolicy(data, data.initial)),
+    );
+    if (!started.crypto) throw new Error('Missing started crypto state');
+    const atSteal = driveToSteal(data, started.state);
+    const pending = required(
+      data.source.engine
+        .getPending(atSteal)
+        .find((item) => item.kind === 'random' && item.request.type === 'stealIndex'),
+    );
+    if (pending.kind !== 'random') throw new Error('Expected a random steal request');
+    const head = signEntry(
+      {
+        seq: 39,
+        term: 1,
+        prevHash: 'd'.repeat(64),
+        payload: first.payload,
+        stateHash: toHex(hashValue(atSteal)),
+        sequencer: required(data.source.identities.get(0)).peerId,
+      },
+      required(data.source.identities.get(0)).secretKey,
+    );
+    const beacon = unwrap(
+      freezeBeaconRequest(
+        started.crypto.beacon,
+        pending,
+        atSteal,
+        { seq: head.seq, hash: entryHash(head) },
+        0,
+      ),
+    );
+    const opened = openedHands(atSteal);
+    let context: ProposalContext = {
+      ...data.initial,
+      log: {
+        ...data.initial.log,
+        head,
+        state: atSteal,
+        crypto: {
+          epoch: 0,
+          beacon,
+          decks: started.crypto.decks,
+          hands: opened.hands,
+          counts: null,
+          steal: null,
+        },
+      },
+    };
+    const premature = signAt(
+      data,
+      context,
+      {
+        kind: 'system',
+        input: {
+          kind: 'system',
+          type: 'STEAL_RESULT',
+          thief: pending.request.thief,
+          victim: pending.request.victim,
+          resource: 'hidden',
+        },
+        evidence: { kind: 'proof', protocol: STEAL_EVIDENCE_PROTOCOL, data: {} },
+      },
+      context.log.head.stateHash,
+    );
+    expect(validateNextEntry(premature, context.log, directPolicy(data, context))).toMatchObject({
+      ok: false,
+      error: { code: 'steal-result-state' },
+    });
+    const fixedBeacon = signAt(
+      data,
+      context,
+      {
+        kind: 'crypto',
+        action: 'beacon-fixed',
+        evidence: revealsFor(data, context, 2),
+      },
+      head.stateHash,
+    );
+    const checkedBeacon = unwrap(
+      validateCertifiedEntry(certified(data, context, fixedBeacon), context),
+    );
+    context = unwrap(advanceContext(context, checkedBeacon));
+    const operation = context.log.crypto?.steal?.operation;
+    if (!operation) throw new Error('Steal operation was not frozen');
+    expect(operation.anchor).toEqual({ seq: fixedBeacon.seq, hash: entryHash(fixedBeacon) });
+    const opening = required(opened.openings.get(operation.victim.seat));
+    const victimKey = required(data.source.identities.get(operation.victim.seat)).secretKey;
+    const contribution = unwrap(
+      createStealContribution(
+        operation,
+        opening.counts,
+        opening.blindings,
+        new Uint8Array(32).fill(82),
+        victimKey,
+      ),
+    );
+    const unfixed = context;
+    const wrongBody = { ...contribution.body, operationId: '0'.repeat(64) };
+    const wrongFixed = signAt(
+      data,
+      unfixed,
+      {
+        kind: 'crypto',
+        action: 'steal-fixed',
+        evidence: {
+          body: wrongBody,
+          sig: signObject('steal-contribution', wrongBody, victimKey),
+        },
+      },
+      unfixed.log.head.stateHash,
+    );
+    expect(validateNextEntry(wrongFixed, unfixed.log, directPolicy(data, unfixed))).toMatchObject({
+      ok: false,
+      error: { code: 'steal-contribution-operation' },
+    });
+    const fixedEntry = signAt(
+      data,
+      context,
+      {
+        kind: 'crypto',
+        action: 'steal-fixed',
+        evidence: contribution,
+      },
+      context.log.head.stateHash,
+    );
+    const beforeHands = context.log.crypto?.hands;
+    const checkedFixed = unwrap(
+      validateCertifiedEntry(certified(data, context, fixedEntry), context),
+    );
+    context = unwrap(advanceContext(context, checkedFixed));
+    expect(context.log.crypto?.hands).toEqual(beforeHands);
+    const fixed = context.log.crypto?.steal?.fixed;
+    if (!fixed) throw new Error('Certified contribution was not fixed');
+    expect(fixed.entry).toEqual({ seq: fixedEntry.seq, hash: entryHash(fixedEntry) });
+    const stealState = context.log.crypto?.steal;
+    const certifiedCrypto = context.log.crypto;
+    if (!stealState || !certifiedCrypto) throw new Error('Certified steal state is missing');
+    const validateStored = (candidate: typeof stealState) =>
+      validateStealState(
+        candidate,
+        data.genesis,
+        certifiedCrypto.beacon,
+        certifiedCrypto.hands,
+        context.log.state,
+        certifiedCrypto.epoch,
+      );
+    const missingEntry = { ...fixed };
+    Reflect.deleteProperty(missingEntry, 'entry');
+    expect(() => validateStored({ ...stealState, fixed: missingEntry })).not.toThrow();
+    expect(validateStored({ ...stealState, fixed: missingEntry }).ok).toBe(false);
+    expect(
+      validateStored({ ...stealState, fixed: { ...fixed, entry: { ...fixed.entry, seq: -1 } } }).ok,
+    ).toBe(false);
+    const extraFields = { ...fixed, unexpected: 'discarded' };
+    const reconstructed = unwrap(
+      validateStored({
+        ...stealState,
+        fixed: extraFields,
+      }),
+    );
+    expect(reconstructed?.fixed).toEqual(fixed);
+    const thiefSeat = operation.thief.seat;
+    const thiefKey = required(data.source.identities.get(thiefSeat)).secretKey;
+    const secretSource = createStealSecretSource(
+      scalarToBytes(BigInt(17 + thiefSeat)),
+      data.genesis.ceremonyNonce,
+      thiefSeat,
+      operation.thief.publicKey,
+    );
+    const recipientSecret = secretSource.encryptionSecret();
+    const receipt = unwrap(createStealReceipt(fixed, recipientSecret, thiefKey));
+    if (!reconstructed?.fixed) throw new Error('Reconstructed fixed contribution is missing');
+    expect(verifyStealReceipt(receipt, reconstructed.fixed).ok).toBe(true);
+    secretSource.dispose();
+    const input = {
+      kind: 'system' as const,
+      type: 'STEAL_RESULT',
+      thief: operation.thief.seat,
+      victim: operation.victim.seat,
+      resource: 'hidden',
+    };
+    const applied = unwrap(data.source.engine.apply(context.log.state, input));
+    const payload = {
+      kind: 'system' as const,
+      input,
+      evidence: { kind: 'proof' as const, protocol: STEAL_EVIDENCE_PROTOCOL, data: receipt },
+    };
+    const stale = signAt(
+      data,
+      context,
+      {
+        ...payload,
+        evidence: {
+          ...payload.evidence,
+          data: { ...receipt, body: { ...receipt.body, fixed: operation.anchor } },
+        },
+      },
+      toHex(hashValue(applied.state)),
+    );
+    expect(validateNextEntry(stale, context.log, directPolicy(data, context))).toMatchObject({
+      ok: false,
+      error: { code: 'steal-receipt-binding' },
+    });
+    const wrongVictim = signAt(
+      data,
+      context,
+      {
+        ...payload,
+        input: { ...input, victim: operation.thief.seat },
+      },
+      toHex(hashValue(applied.state)),
+    );
+    expect(validateNextEntry(wrongVictim, context.log, directPolicy(data, context))).toMatchObject({
+      ok: false,
+      error: { code: 'steal-result-input' },
+    });
+    const result = signAt(data, context, payload, toHex(hashValue(applied.state)));
+    const checkedResult = unwrap(validateCertifiedEntry(certified(data, context, result), context));
+    const after = unwrap(advanceContext(context, checkedResult));
+    expect(after.log.crypto?.steal).toBeNull();
+    expect(after.log.crypto?.beacon.fixed).toBeNull();
+    expect(after.log.crypto?.hands).not.toEqual(beforeHands);
+    expect(after.log.state).toEqual(applied.state);
+    expect(data.verifySystem).not.toHaveBeenCalled();
+    const replay = signAt(data, after, payload, toHex(hashValue(applied.state)));
+    expect(validateNextEntry(replay, after.log, directPolicy(data, after)).ok).toBe(false);
+
+    // A bad sealed opening can still have a valid public transfer proof. Its
+    // recipient proves the defect from the certified ciphertext and then the
+    // unresolved dispute prevents a hidden result from moving either hand.
+    const malicious = badSealedContribution(
+      operation,
+      opening,
+      contribution,
+      victimKey,
+      new Uint8Array(32).fill(82),
+    );
+    const maliciousEntry = signAt(
+      data,
+      unfixed,
+      {
+        kind: 'crypto',
+        action: 'steal-fixed',
+        evidence: malicious,
+      },
+      unfixed.log.head.stateHash,
+    );
+    const maliciousChecked = unwrap(
+      validateCertifiedEntry(certified(data, unfixed, maliciousEntry), unfixed),
+    );
+    const maliciousContext = unwrap(advanceContext(unfixed, maliciousChecked));
+    const maliciousFixed = maliciousContext.log.crypto?.steal?.fixed;
+    if (!maliciousFixed) throw new Error('Malicious but publicly valid transfer did not fix');
+    const dispute = unwrap(
+      createStealDispute(maliciousFixed, recipientSecret, thiefKey, new Uint8Array(32).fill(83)),
+    );
+    const disputeEntry = signAt(
+      data,
+      maliciousContext,
+      {
+        kind: 'crypto',
+        action: 'steal-dispute',
+        evidence: dispute,
+      },
+      maliciousContext.log.head.stateHash,
+    );
+    const disputeChecked = unwrap(
+      validateCertifiedEntry(certified(data, maliciousContext, disputeEntry), maliciousContext),
+    );
+    const disputedContext = unwrap(advanceContext(maliciousContext, disputeChecked));
+    expect(disputedContext.log.crypto?.steal?.dispute).toEqual(dispute);
+    expect(disputedContext.log.crypto?.hands).toEqual(beforeHands);
+    const blockedResult = signAt(data, disputedContext, payload, toHex(hashValue(applied.state)));
+    expect(
+      validateNextEntry(blockedResult, disputedContext.log, directPolicy(data, disputedContext)),
+    ).toMatchObject({ ok: false, error: { code: 'steal-result-state' } });
+    expect(disputedContext.log.crypto?.beacon.fixed).not.toBeNull();
+    const misplacedContext = structuredClone(disputedContext.log.crypto);
+    if (!misplacedContext?.steal?.dispute) throw new Error('Missing certified dispute');
+    misplacedContext.steal.dispute.body.binding.fixed.hash = '9'.repeat(64);
+    expect(
+      validateNextEntry(
+        blockedResult,
+        { ...disputedContext.log, crypto: misplacedContext },
+        directPolicy(data, disputedContext),
+      ),
+    ).toMatchObject({ ok: false, error: { code: 'steal-state-dispute' } });
   });
 
   test('beacon-fixed evidence cannot be used to stand in for START_SEAT or dice results', () => {

@@ -11,12 +11,11 @@ import {
   proveDleq,
   proveHiddenTransfer,
   scalePoint,
-  seal,
+  sealWithEphemeralProof,
   signObject,
 } from '@cp2p/crypto';
 import { RESOURCES } from '@cp2p/engine';
 import type { Resource, Result } from '@cp2p/engine';
-import * as crypto from '@cp2p/crypto';
 import { describe, expect, test, vi } from 'vitest';
 import {
   STEAL_EVIDENCE_PROTOCOL,
@@ -31,6 +30,7 @@ import {
   verifyStealReceipt,
 } from './steal-delivery.js';
 import type { FixedSteal, SignedStealContribution, StealOperation } from './steal-delivery.js';
+import * as stealProofs from './steal-proof-cache.js';
 
 function value<T>(result: Result<T>): T {
   if (!result.ok) throw new Error(`${result.error.code}: ${result.error.message}`);
@@ -128,11 +128,13 @@ function maliciousContribution(data: ReturnType<typeof makeFixture>): SignedStea
     blindings: transferBlindings.map(encodeScalar),
   });
   expect(falseOpening).toHaveLength(STEAL_OPENING_BYTES);
-  const sealed = seal(falseOpening, operation.thief.encryptionKey, STEAL_SEED, {
-    protocol: 'steal-seal-v1',
-    operationId,
-    transfer,
-  });
+  const { sealed, ephemeralProof } = sealWithEphemeralProof(
+    falseOpening,
+    operation.thief.encryptionKey,
+    STEAL_SEED,
+    { protocol: 'steal-seal-v1', operationId, transfer },
+    { protocol: 'steal-ephemeral-v1', operationId, transfer },
+  );
   falseOpening.fill(0);
   const proof = proveHiddenTransfer(
     {
@@ -150,7 +152,14 @@ function maliciousContribution(data: ReturnType<typeof makeFixture>): SignedStea
     STEAL_SEED,
     { protocol: 'steal-transfer-v1', operationId },
   );
-  const body = { operationId, seat: operation.victim.seat, transfer, sealed, proof };
+  const body = {
+    operationId,
+    seat: operation.victim.seat,
+    transfer,
+    sealed,
+    ephemeralProof,
+    proof,
+  };
   return { body, sig: signObject('steal-contribution', body, victim.secretKey) };
 }
 
@@ -235,13 +244,117 @@ describe('signed hidden-steal delivery', () => {
   test('rejects a victim-resigned proof copied to a changed operation', () => {
     const { operation, contribution, victim } = fixture();
     const changed = { ...operation, epoch: operation.epoch + 1 };
-    const body = { ...contribution.body, operationId: stealOperationId(changed) };
+    const operationId = stealOperationId(changed);
+    const transferBlindings = RESOURCES.map((resource) =>
+      deriveScalar(STEAL_SEED, DERIVATION_LABELS.transferBlind, {
+        operationId: stealOperationId(operation),
+        resource,
+      }),
+    );
+    const plaintext = canonicalEncode({ type: 2, blindings: transferBlindings.map(encodeScalar) });
+    const { sealed, ephemeralProof } = sealWithEphemeralProof(
+      plaintext,
+      changed.thief.encryptionKey,
+      STEAL_SEED,
+      { protocol: 'steal-seal-v1', operationId, transfer: contribution.body.transfer },
+      { protocol: 'steal-ephemeral-v1', operationId, transfer: contribution.body.transfer },
+    );
+    plaintext.fill(0);
+    const body = { ...contribution.body, operationId, sealed, ephemeralProof };
     expect(
       verifyStealContribution(
         { body, sig: signObject('steal-contribution', body, victim.secretKey) },
         changed,
       ),
     ).toMatchObject({ ok: false, error: { code: 'steal-transfer-proof' } });
+  });
+
+  test('rejects a complete sealed payload and ephemeral proof copied into another operation', () => {
+    const { operation, contribution, victim } = fixture();
+    const changed = { ...operation, epoch: operation.epoch + 1 };
+    const body = { ...contribution.body, operationId: stealOperationId(changed) };
+    const copied = { body, sig: signObject('steal-contribution', body, victim.secretKey) };
+    expect(verifyStealContribution(copied, changed)).toMatchObject({
+      ok: false,
+      error: { code: 'steal-ephemeral-proof' },
+    });
+  });
+
+  test('rejects changed sealed bytes even with a valid new ephemeral proof and the old transfer proof', () => {
+    const { operation, contribution, victim } = fixture();
+    const operationId = stealOperationId(operation);
+    const plaintext = canonicalEncode({
+      type: 0,
+      blindings: RESOURCES.map(() => encodeScalar(0n)),
+    });
+    expect(plaintext).toHaveLength(STEAL_OPENING_BYTES);
+    const { sealed, ephemeralProof } = sealWithEphemeralProof(
+      plaintext,
+      operation.thief.encryptionKey,
+      new Uint8Array(32).fill(88),
+      { protocol: 'steal-seal-v1', operationId, transfer: contribution.body.transfer },
+      { protocol: 'steal-ephemeral-v1', operationId, transfer: contribution.body.transfer },
+    );
+    plaintext.fill(0);
+    const body = { ...contribution.body, sealed, ephemeralProof };
+    const altered = { body, sig: signObject('steal-contribution', body, victim.secretKey) };
+    expect(verifyStealContribution(altered, operation)).toMatchObject({
+      ok: false,
+      error: { code: 'steal-transfer-proof' },
+    });
+  });
+
+  test('rejects a copied earlier ephemeral even when the transfer proof binds forged ciphertext', () => {
+    const { operation, contribution, fixed, thief, victim } = fixture();
+    const operationId = stealOperationId(operation);
+    const earlier = sealWithEphemeralProof(
+      canonicalEncode({ type: 2, blindings: RESOURCES.map(() => encodeScalar(0n)) }),
+      operation.thief.encryptionKey,
+      new Uint8Array(32).fill(77),
+      { protocol: 'earlier-sealed-delivery', operationId: 'e'.repeat(64) },
+      {
+        protocol: 'steal-ephemeral-v1',
+        operationId: 'e'.repeat(64),
+        transfer: contribution.body.transfer,
+      },
+    );
+    const sealed = {
+      ephemeral: earlier.sealed.ephemeral,
+      ciphertext: toBase64Url(new Uint8Array(STEAL_OPENING_BYTES).fill(0)),
+    };
+    const transferBlindings = RESOURCES.map((resource) =>
+      deriveScalar(STEAL_SEED, DERIVATION_LABELS.transferBlind, { operationId, resource }),
+    );
+    const proof = proveHiddenTransfer(
+      {
+        commitments: RESOURCES.map((resource) => operation.commitments[resource]),
+        transfer: contribution.body.transfer,
+        handSize: operation.handSize,
+        index: operation.index,
+        payloadHash: toHex(hashValue(sealed)),
+      },
+      {
+        counts: RESOURCES.map((resource) => COUNTS[resource]),
+        blindings: RESOURCES.map((resource) => BLINDING_SCALARS[resource]),
+        transferBlindings,
+      },
+      STEAL_SEED,
+      { protocol: 'steal-transfer-v1', operationId },
+    );
+    const body = { ...contribution.body, sealed, ephemeralProof: earlier.ephemeralProof, proof };
+    const forged = { body, sig: signObject('steal-contribution', body, victim.secretKey) };
+    expect(verifyStealContribution(forged, operation)).toMatchObject({
+      ok: false,
+      error: { code: 'steal-ephemeral-proof' },
+    });
+    const dispute = createStealDispute(
+      { ...fixed, contribution: forged },
+      RECIPIENT_SECRET,
+      thief.secretKey,
+      DISPUTE_SEED,
+    );
+    expect(dispute).toMatchObject({ ok: false, error: { code: 'steal-dispute-production' } });
+    expect('value' in dispute).toBe(false);
   });
 
   test('rejects a correctly bound receipt signed by the wrong owner', () => {
@@ -422,7 +535,7 @@ describe('signed hidden-steal delivery', () => {
     const dispute = value(
       createStealDispute(badFixed, RECIPIENT_SECRET, thief.secretKey, DISPUTE_SEED),
     );
-    const verify = vi.spyOn(crypto, 'verifyHiddenTransfer');
+    const verify = vi.spyOn(stealProofs, 'verifyStealTransfer');
     try {
       expect(verifyStealReceipt({ nonsense: true }, fixed).ok).toBe(false);
       expect(

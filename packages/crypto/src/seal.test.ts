@@ -3,7 +3,14 @@ import { ristretto255 } from '@noble/curves/ed25519.js';
 import { hkdfSync } from 'node:crypto';
 import { utf8ToBytes } from '@noble/hashes/utils.js';
 import { describe, expect, test } from 'vitest';
-import { openSealed, openSealedWithSharedPoint, seal, MAX_SEALED_BYTES } from './seal.js';
+import {
+  openSealed,
+  openSealedWithSharedPoint,
+  seal,
+  sealWithEphemeralProof,
+  verifySealedEphemeralProof,
+  MAX_SEALED_BYTES,
+} from './seal.js';
 import { G, SCALAR_ORDER, decodePoint, encodePoint, pointToBytes, scalePoint } from './group.js';
 
 const SEED = Uint8Array.from({ length: 32 }, (_, index) => index);
@@ -17,6 +24,50 @@ function xor(left: Uint8Array, right: Uint8Array): Uint8Array {
 }
 
 describe('sealed confidential payloads', () => {
+  test('proves knowledge of the exact sealed ephemeral under the current operation and ciphertext', () => {
+    const plaintext = Uint8Array.of(4, 9, 16, 25);
+    const proofContext = { protocol: 'steal-ephemeral-v1', operationId: 'a'.repeat(64) };
+    const first = sealWithEphemeralProof(plaintext, RECIPIENT, SEED, CONTEXT, proofContext);
+    expect(first.sealed).toEqual(seal(plaintext, RECIPIENT, SEED, CONTEXT));
+    expect(sealWithEphemeralProof(plaintext, RECIPIENT, SEED, CONTEXT, proofContext)).toEqual(
+      first,
+    );
+    expect(
+      verifySealedEphemeralProof(
+        first.sealed,
+        RECIPIENT,
+        first.ephemeralProof,
+        CONTEXT,
+        proofContext,
+      ),
+    ).toBe(true);
+    const changed = fromBase64Url(first.sealed.ciphertext);
+    changed[0] = (changed[0] ?? 0) ^ 1;
+    expect(
+      verifySealedEphemeralProof(
+        { ...first.sealed, ciphertext: toBase64Url(changed) },
+        RECIPIENT,
+        first.ephemeralProof,
+        CONTEXT,
+        proofContext,
+      ),
+    ).toBe(false);
+    expect(
+      verifySealedEphemeralProof(first.sealed, RECIPIENT, first.ephemeralProof, CONTEXT, {
+        ...proofContext,
+        operationId: 'b'.repeat(64),
+      }),
+    ).toBe(false);
+    expect(
+      verifySealedEphemeralProof(
+        first.sealed,
+        encodePoint(scalePoint(G, 11n)),
+        first.ephemeralProof,
+        CONTEXT,
+        proofContext,
+      ),
+    ).toBe(false);
+  });
   test('matches a pinned deterministic fixture and independent Node HKDF transcript', () => {
     const plaintext = Uint8Array.of(0, 1, 127, 128, 255);
     const sealed = seal(plaintext, RECIPIENT, SEED, CONTEXT);

@@ -1,0 +1,137 @@
+{
+  "packetSha256": "11659f29c0e85a667f6012784c5b529d4f0adedc7ec6540437f1b6e1c35c39ee",
+  "packetBytes": 457287,
+  "prompt": "docs/verification/stage07/step5-live-review-prompt.md",
+  "files": [
+    {
+      "path": "docs/00-architecture.md",
+      "sha256": "7de4a4848ed7343a358b31c9b19a08e5c142cdbc5b327056dd71521a695eb86a",
+      "bytes": 25284
+    },
+    {
+      "path": "docs/07-fair-randomness-hidden-info.md",
+      "sha256": "92bbc982109dfa4affe2ba9c86433b0bc009c9b28278fb55b2d9819d1c94baf5",
+      "bytes": 38189
+    },
+    {
+      "path": "docs/verification/stage07/step5-foundation-review-response.md",
+      "sha256": "b10081c1a168b64f13e745347f873f35fc2f07aa134128d67f098ddd34d36ee0",
+      "bytes": 5011
+    },
+    {
+      "path": "packages/protocol/src/steal-state.ts",
+      "sha256": "361c9f474c499e4fb6d591d8c3c761b9d6b9283e4c46e187a8bbff3b363a8cbf",
+      "bytes": 10761
+    },
+    {
+      "path": "packages/protocol/src/steal-delivery.ts",
+      "sha256": "e6bb5bc3367d5219ca2fdf890e846b817cfc02c871e6533e92f18c1976f7b5ca",
+      "bytes": 21993
+    },
+    {
+      "path": "packages/protocol/src/steal-source.ts",
+      "sha256": "a40280be340b065ef079aab38fb9af8d51fd5c149fb9e447d2a615190f799a21",
+      "bytes": 2687
+    },
+    {
+      "path": "packages/protocol/src/steal-contributions.ts",
+      "sha256": "16b8718dab804c8e2c68507cb6d9a758ad1eab009766987afd8cd388757c6c2e",
+      "bytes": 10227
+    },
+    {
+      "path": "packages/protocol/src/steal-inbox.ts",
+      "sha256": "99a279806574394037b2e03f6ebe363d5e6804806a78d47edf08f993f21ffbe3",
+      "bytes": 4749
+    },
+    {
+      "path": "packages/protocol/src/crypto-context.ts",
+      "sha256": "fdb598f190b6b8fd59944d24493a06264553123ebd28f3ed0b58cd6f72cb39a0",
+      "bytes": 11456
+    },
+    {
+      "path": "packages/protocol/src/log.ts",
+      "sha256": "7b0f2dc6bdb8ba764116bef46fde8ac28c39a0a057c0942b1a7a4bd8b2f6e159",
+      "bytes": 19447
+    },
+    {
+      "path": "packages/protocol/src/verified-session-driver.ts",
+      "sha256": "eee8d45730b2209f278b534f39b173ebfb6fcb02f84da7307aec001b7087d953",
+      "bytes": 29956
+    },
+    {
+      "path": "packages/protocol/src/messages.ts",
+      "sha256": "1bc9f59b293726e97213a3f2cb90e2215c46560ac4e5f165b11cb4ed997ee6a0",
+      "bytes": 4762
+    },
+    {
+      "path": "packages/protocol/src/p2p-session.ts",
+      "sha256": "dde3473907a1e124ca2eb00099713120d45d2ae04c57302ff19934c0abb7a6bc",
+      "bytes": 23953
+    },
+    {
+      "path": "packages/protocol/src/replicated-log.ts",
+      "sha256": "550a4bbd93aa3de0a0775c2b10d294aff343e69ea73072aa0a5e658ec1bee755",
+      "bytes": 82236
+    },
+    {
+      "path": "packages/protocol/src/resource-accounting.ts",
+      "sha256": "4d3da5b5fad41083bcd76fbdcb2d95ea9699c6a3866308647660f7a29ca02bc2",
+      "bytes": 8120
+    },
+    {
+      "path": "packages/protocol/src/hand-commitments.ts",
+      "sha256": "9fec55a3bc63062245da7bcab499845516d36a32fcaed3aa7b36408075461edd",
+      "bytes": 7564
+    },
+    {
+      "path": "packages/protocol/src/hand-transition.ts",
+      "sha256": "03c42c7048d4b1c1899024a9b1c7c547e0dc83b968057cbd7591bfb7bca330f6",
+      "bytes": 13080
+    },
+    {
+      "path": "packages/protocol/src/types.ts",
+      "sha256": "6089515777d2ecab1c3c3520ff8a5faab8512c2ee92a5e177f38eea63f267a4f",
+      "bytes": 3189
+    },
+    {
+      "path": "packages/protocol/src/schemas.ts",
+      "sha256": "93ee541d905f0f0b1efbec666ffb5c40390b02f153c57b592bea202a6b9f1189",
+      "bytes": 5602
+    },
+    {
+      "path": "packages/protocol/src/genesis.ts",
+      "sha256": "13ad7bb25ac62bb06ea841a77f382e695a26e9475850545e9b100f4104d4f6b9",
+      "bytes": 10414
+    },
+    {
+      "path": "packages/protocol/src/validation.ts",
+      "sha256": "bb646520abbab0596ff5d99f1b7f6ffaeed264260c3030917725a050acef5f23",
+      "bytes": 887
+    },
+    {
+      "path": "packages/protocol/src/beacon-state.ts",
+      "sha256": "a280956782550a92a1272bb3b34b87fac1c6016910b06ba3ba48e16272e27671",
+      "bytes": 14304
+    },
+    {
+      "path": "packages/protocol/src/steal-replica.test.ts",
+      "sha256": "2ffd861fc2683c889db4e62ed6439577379af19d24f01c8c4cbce72299c308cf",
+      "bytes": 10518
+    },
+    {
+      "path": "packages/protocol/src/steal-contributions.test.ts",
+      "sha256": "0053a9e4fc972e1a3e16ca67faed682a0545779051e7a9176516e36080c85750",
+      "bytes": 10696
+    },
+    {
+      "path": "packages/protocol/src/verified-session-driver.test.ts",
+      "sha256": "e0a935e4de949895a57070fef9af548dd3087b47f07dbd0831b7f9e89b694a2f",
+      "bytes": 33456
+    },
+    {
+      "path": "packages/protocol/src/beacon-log.test.ts",
+      "sha256": "4ba0bfa7c2b4dc13fadac2ca33c9eca2ec1759f1a9525082b7721a50d8752ef8",
+      "bytes": 43640
+    }
+  ]
+}
