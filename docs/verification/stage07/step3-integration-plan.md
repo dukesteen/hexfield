@@ -69,10 +69,12 @@ Meaningful integration tests should reject wrong catalogue/roster/ceremony ID, a
 - The independent-peer draw benchmark now passes three isolated samples at
   965.1–991.5 ms. Preserve its complete purchase-to-certification interval and
   separate peer caches; remeasure after changes affecting that path.
-- Three-human relayed delivery and a second legal draw now pass. Cover the
-  remaining roster cases, consecutive unlockers hosted on one device and proposer
-  control during a draw. Include bounded handling of invalid live contributions
-  and unchanged handling of stale retries.
+- Three-human relayed delivery, a second legal draw, one-human/three-bot and
+  four-human rosters now pass. Tests also cover consecutive unlocks on one host
+  and bounded invalid, future and stale contributions at live ingress. Proposer
+  control during a draw still has only pure-log coverage; live excluded-unlocker
+  recovery depends on escrow. Six-seat proofs are separate because the current
+  base engine supports at most four seats.
 - Preserve 64 rounds and exact deterministic proof bytes when changing shuffle
   implementation. Two current headed Chrome worker runs pass the three-second
   target; retain those source fingerprints and remeasure after relevant changes.

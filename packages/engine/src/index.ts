@@ -58,6 +58,7 @@ export type {
   Transition,
 } from './core/modules/index.js';
 export type { GameEvent } from './core/events/index.js';
+export type { EngineEffect, ResourceEndpoint } from './core/effects/index.js';
 export type { ResourceBounds } from './core/resources/index.js';
 export {
   addCounts,

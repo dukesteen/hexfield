@@ -74,6 +74,7 @@ function withValue(state: GameState, value: number, events: { type: string }[] =
         : {}),
     },
     events,
+    effects: [],
   };
 }
 
@@ -181,6 +182,7 @@ export function testCounter(): GameModule {
               turn: { ...state.turn, activeSeat: next, number: state.turn.number + 1 },
             },
             events: [],
+            effects: [],
           };
         },
       },
@@ -198,6 +200,7 @@ export function testCounter(): GameModule {
             turn: { ...state.turn, activeSeat: inputSeat(state, input.seat) },
           },
           events: [],
+          effects: [],
         }),
       },
       BONUS_RESULT: {
@@ -241,7 +244,11 @@ export function testCounter(): GameModule {
         validate: () => success(undefined),
         apply: (state) => {
           const next = nextSeat(state);
-          return { state: { ...state, turn: { ...state.turn, activeSeat: next } }, events: [] };
+          return {
+            state: { ...state, turn: { ...state.turn, activeSeat: next } },
+            events: [],
+            effects: [],
+          };
         },
       },
     },

@@ -408,3 +408,9 @@ Record decisions here as they are made. Keep earlier entries.
 - Request: The user authorized reducing unnecessary test counts and stopping unexpectedly slow runs to investigate.
 - Decision: Prefer short legal traces and targeted fault cases for protocol delivery. A timeout is a diagnostic signal, not a reason to repeatedly increase the timeout or game count. Retain tests for distinct safety properties and reserve full-game batches for integration acceptance.
 - Correction: The relay test missed draws that completed during network settling. Observe certified deck progress as well as an active request, use a fixed legal setup trace, and cap the helper at 100 inputs. The corrected three-human test completes in 21.48 seconds.
+
+## 2026-09-26: Engine accounting for committed hands
+
+- Decision: Emit ordered typed accounting effects beside engine state and UI events. Derive them where handlers already compute amounts, including hook-adjusted costs, actual production and gross trade legs. Keep effects out of saved state and its hash.
+- Boundary: The consistency checker verifies hand bounds, bank, deck positions and slots. It cannot establish transfer order/endpoints or detect omitted net-zero gross movements. The protocol must derive effects from its own engine and derive debit obligations from parent bounds before incoming credits.
+- Review: The [foundation review response](verification/stage07/step4-foundation-review-response.md) records malformed-input and zero-transfer fixes, plus targeted tests and two retained golden histories. The full local check passes 772 tests. This is the accounting foundation, not completed consensus proof enforcement.

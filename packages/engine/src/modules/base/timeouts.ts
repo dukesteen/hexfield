@@ -143,7 +143,7 @@ export const timeout: SystemInputHandler = {
             : offer,
         ),
       }));
-      return { state: next, events: [{ type: 'tradeResponsesTimedOut', seat }] };
+      return { state: next, events: [{ type: 'tradeResponsesTimedOut', seat }], effects: [] };
     }
     throw new Error('Unsupported validated timeout');
   },

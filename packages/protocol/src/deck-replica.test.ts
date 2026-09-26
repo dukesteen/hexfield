@@ -1,3 +1,4 @@
+import { canonicalDecode } from '@cp2p/codec';
 import { BASE_DEV_CARD_CATALOGUE, RESOURCES } from '@cp2p/engine';
 import type { CommandShape, GameState, Result, Seat } from '@cp2p/engine';
 import { writeFile } from 'node:fs/promises';
@@ -34,6 +35,17 @@ function required<T>(item: T | null | undefined): T {
   if (item === null || item === undefined) throw new Error('Missing deck replica fixture value');
   return item;
 }
+
+const BOARD_50_SETTLEMENT_ORDER = [
+  'v:-1,-1,N',
+  'v:-1,-1,S',
+  'v:-1,0,S',
+  'v:-1,1,S',
+  'v:0,-1,S',
+  'v:0,0,S',
+  'v:0,2,N',
+  'v:1,1,N',
+] as const;
 
 class MemoryDeckContributionStore implements DeckContributionStore {
   readonly records = new Map<string, Uint8Array>();
@@ -672,16 +684,7 @@ describe('live verified deck replication', () => {
     await settle(replicas, network.clock);
     // Board seed 50 grants a development-card cost during legal second placements.
     const drawContext = await driveToDraw(fixture, replicas, network.clock, {
-      settlementOrder: [
-        'v:-1,-1,N',
-        'v:-1,-1,S',
-        'v:-1,0,S',
-        'v:-1,1,S',
-        'v:0,-1,S',
-        'v:0,0,S',
-        'v:0,2,N',
-        'v:1,1,N',
-      ],
+      settlementOrder: BOARD_50_SETTLEMENT_ORDER,
       minimumBuyerSeat: 2,
     });
     const decks = required(drawContext.log.crypto?.decks);
@@ -770,6 +773,136 @@ describe('live verified deck replication', () => {
     network.dispose();
   }, 60_000);
 
+  test.each([
+    { humanCount: 1, name: 'one human hosting three consecutive bot unlockers' },
+    { humanCount: 4, name: 'four human voters' },
+  ])(
+    'certifies a legal first draw with $name',
+    async ({ humanCount }) => {
+      const fixture = createVerifiedDeckSession(7, humanCount, 128, {
+        boardSeed: new Uint8Array(32).fill(50),
+      });
+      const peers = fixture.humans.map(
+        (seat) => required(fixture.simulation.identities.get(seat.seat)).peerId,
+      );
+      const network = createMemnet({ peers });
+      const journals = peers.map(() => new MemoryProtocolJournal());
+      const stores = peers.map(() => new MemoryDeckContributionStore());
+      const transports = peers.map((peer) => network.transport(peer));
+      const replicas = (
+        await Promise.all(
+          peers.map((_, position) =>
+            ReplicatedLog.create(
+              optionsFor(
+                fixture,
+                position,
+                required(transports[position]),
+                network.clock,
+                required(journals[position]),
+                required(stores[position]),
+              ),
+            ),
+          ),
+        )
+      ).map(value);
+      await settle(replicas, network.clock);
+      await driveToDraw(fixture, replicas, network.clock, {
+        settlementOrder: BOARD_50_SETTLEMENT_ORDER,
+        minimumBuyerSeat: 2,
+      });
+      await settle(replicas, network.clock, 64);
+      const first = required(replicas[0]);
+      const deals = first
+        .getEntries()
+        .filter(
+          ({ entry }) =>
+            entry.payload.kind === 'system' && entry.payload.input.type === 'CARD_DEALT',
+        );
+      expect(deals).toHaveLength(1);
+      const deal = required(deals[0]);
+      const signerSeats = deal.certificate.map((vote) => vote.body.seat);
+      expect(new Set(signerSeats).size).toBe(humanCount === 1 ? 1 : 3);
+      expect(signerSeats.every((seat) => fixture.humans.some((human) => human.seat === seat))).toBe(
+        true,
+      );
+      const deck = required(first.getContext().log.crypto?.decks.decks[0]);
+      expect(deck.nextPosition).toBe(1);
+      expect(deck.slots).toHaveLength(1);
+      const slot = required(deck.slots[0]);
+      const draw = slot.receipt.operation;
+      expect(draw.position).toBe(0);
+      expect(slot.seat).toBe(draw.seat);
+      expect(slot.slotId).toBe(draw.slotId);
+      const unlockSeats = slot.receipt.unlocks.map((unlock) => unlock.body.seat);
+      expect(unlockSeats).toEqual([0, 1, 2, 3].filter((seat) => seat !== draw.seat));
+      const headHash = entryHash(first.getContext().log.head);
+      for (const replica of replicas) {
+        expect(entryHash(replica.getContext().log.head)).toBe(headHash);
+        expect(
+          replica
+            .getEntries()
+            .filter(
+              ({ entry }) =>
+                entry.payload.kind === 'system' && entry.payload.input.type === 'CARD_DEALT',
+            ),
+        ).toHaveLength(1);
+      }
+      const botUnlockSeats = unlockSeats.filter((seat) => seat !== 0);
+      const durable = [...required(stores[0]).records.entries()]
+        .filter(([key]) => key.startsWith('deck-unlock/'))
+        .map(([, bytes]) => canonicalDecode(bytes));
+      expect(humanCount !== 1 || botUnlockSeats.length >= 2).toBe(true);
+      expect(
+        humanCount !== 1 ||
+          botUnlockSeats.every((seat) => fixture.genesis.seats[seat]?.kind === 'bot'),
+      ).toBe(true);
+      expect(humanCount !== 1 || durable.length === 3).toBe(true);
+      expect(humanCount === 1 ? durable : [...slot.receipt.unlocks]).toEqual(
+        expect.arrayContaining([...slot.receipt.unlocks]),
+      );
+      replicas.forEach((replica) => replica.dispose());
+      const sessions = (
+        await Promise.all(
+          peers.map((_, position) => {
+            const base = optionsFor(
+              fixture,
+              position,
+              required(transports[position]),
+              network.clock,
+              required(journals[position]),
+              required(stores[position]),
+            );
+            return P2PSession.restore({
+              ...base,
+              createDriver: (engine, genesis, _clock, ownedSeats) =>
+                new VerifiedSessionDriver(
+                  engine,
+                  genesis,
+                  ownedSeats,
+                  required(base.createDeckSource),
+                ),
+            });
+          }),
+        )
+      ).map(value);
+      const drawer = required(fixture.genesis.seats.find((seat) => seat.seat === draw.seat));
+      const ownerPeer = drawer.kind === 'bot' ? drawer.botHost : drawer.publicKey;
+      const ownerIndex = peers.indexOf(ownerPeer);
+      expect(ownerIndex).toBeGreaterThanOrEqual(0);
+      for (const [index, session] of sessions.entries()) {
+        const privateState = session.getPrivate(draw.seat);
+        expect(
+          index === ownerIndex
+            ? BASE_DEV_CARD_CATALOGUE.some((card) => card.card === privateState?.slots[draw.slotId])
+            : privateState === null,
+        ).toBe(true);
+      }
+      sessions.forEach((session) => session.dispose());
+      network.dispose();
+    },
+    60_000,
+  );
+
   test('gossips durable unlocks after a legal purchase and restores a dropped unlock', async () => {
     const fixture = createVerifiedDeckSession();
     expect(value(genesisDeckDefinitions(fixture.deck.body))[0]?.cards).toHaveLength(25);
@@ -848,6 +981,37 @@ describe('live verified deck replication', () => {
     await settle([first, second], network.clock);
     const dropped = required(sent[0]).find((message) => message.t === 'DECK_CONTRIB');
     expect(dropped).toBeDefined();
+    if (dropped?.t !== 'DECK_CONTRIB') throw new Error('Missing held deck prefix');
+    expect(dropped.contribution.unlocks).toHaveLength(2);
+    expect(
+      required(sent[1]).some(
+        (message) => message.t === 'DECK_CONTRIB' && message.contribution.unlocks.length === 1,
+      ),
+    ).toBe(true);
+    const lastUnlock = required(dropped.contribution.unlocks.at(-1));
+    const invalidPrefix: ProtocolMessage = {
+      ...dropped,
+      contribution: {
+        ...dropped.contribution,
+        unlocks: [
+          ...dropped.contribution.unlocks.slice(0, -1),
+          { ...lastUnlock, body: { ...lastUnlock.body, step: lastUnlock.body.step + 1 } },
+        ],
+      },
+    };
+    // One bad longer prefix spends one strike; exact retries and future operations do not.
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      required(transports[1]).inject(required(peers[0]), invalidPrefix);
+      required(transports[1]).inject(required(peers[0]), {
+        ...dropped,
+        contribution: {
+          ...dropped.contribution,
+          operationId: `${attempt + 1}`.repeat(64),
+        },
+      });
+    }
+    await settle([first, second], network.clock, 8);
+    expect(required(transports[1]).peers()).toContain(peers[0]);
     const headBeforeRestart = first.getContext().log.head.seq;
     expect(
       first
@@ -894,6 +1058,10 @@ describe('live verified deck replication', () => {
     await settle([restored, second], network.clock);
     expect(retransmitted.find((message) => message.t === 'DECK_CONTRIB')).toEqual(dropped);
     expect(restored.getContext().log.head.seq).toBeGreaterThan(headBeforeRestart);
+    for (let attempt = 0; attempt < 8; attempt += 1)
+      required(transports[1]).inject(required(peers[0]), dropped);
+    await settle([restored, second], network.clock, 8);
+    expect(required(transports[1]).peers()).toContain(peers[0]);
     expect(restored.getContext().log.head.stateHash).toBe(second.getContext().log.head.stateHash);
     const deal = required(
       restored

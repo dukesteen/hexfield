@@ -167,7 +167,7 @@ describe('declared input fields', () => {
     timeout.systemInputs.TIMEOUT = {
       keys: { allowed: ['seat'] },
       validate: () => ({ ok: true, value: undefined }),
-      apply: (state) => ({ state, events: [] }),
+      apply: (state) => ({ state, events: [], effects: [] }),
     };
     expect(() => createRegistry([timeout])).toThrow(/seat and phase/);
   });

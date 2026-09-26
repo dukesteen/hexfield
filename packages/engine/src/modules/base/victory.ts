@@ -43,6 +43,13 @@ export const claimVictory: CommandHandler = {
         result: { winner: input.seat, reason: 'claimed-vp', atTurn: state.turn.number },
       },
       events: [{ type: 'gameEnded', winner: input.seat, reason: 'claimed-vp' }],
+      effects: ids.map((slotId) => ({
+        type: 'card-slot-revealed',
+        seat: input.seat,
+        deck: 'dev',
+        slotId,
+        card: 'victoryPoint',
+      })),
     };
   },
   applyPrivate: (priv, _before, input) => {

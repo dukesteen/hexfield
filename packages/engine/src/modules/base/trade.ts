@@ -1,4 +1,5 @@
 import type { CommandHandler } from '../../core/modules/index.js';
+import type { EngineEffect } from '../../core/effects/index.js';
 import type { Pending } from '../../core/pipeline/index.js';
 import { gainKnown, loseKnown } from '../../core/resources/index.js';
 import type { GameState, PrivateState } from '../../core/state/index.js';
@@ -15,6 +16,7 @@ import {
   ownSeat,
   parseCounts,
   privateExchange,
+  resourceTransfers,
   timer,
   updateBase,
   updateSeat,
@@ -122,8 +124,12 @@ export const maritimeTrade: CommandHandler = {
     const sides = validatedSides(input.command.give, input.command.get);
     if (!sides.ok) throw new Error('Validated maritime trade missing');
     const afterGive = exchangeBank(state, input.seat, sides.value.give, false);
-    const afterGet = exchangeBank(afterGive, input.seat, sides.value.want, true);
-    return { state: afterGet, events: [{ type: 'maritimeTrade', seat: input.seat }] };
+    const afterGet = exchangeBank(afterGive.state, input.seat, sides.value.want, true);
+    return {
+      state: afterGet.state,
+      events: [{ type: 'maritimeTrade', seat: input.seat }],
+      effects: [...afterGive.effects, ...afterGet.effects],
+    };
   },
   applyPrivate: (priv, _before, input) => {
     if (priv.seat !== input.seat) return success(priv);
@@ -166,7 +172,7 @@ export const offerTrade: CommandHandler = {
         offers: [...old.offers.filter((item) => item.proposer !== input.seat), offer],
       }),
     );
-    return { state: next, events: [{ type: 'tradeOffered', offerId: id }] };
+    return { state: next, events: [{ type: 'tradeOffered', offerId: id }], effects: [] };
   },
 };
 
@@ -200,7 +206,11 @@ export const proposeTrade: CommandHandler = {
         offers: [...old.offers.filter((item) => item.proposer !== input.seat), offer],
       }),
     );
-    return { state: next, events: [{ type: 'tradeProposed', offerId: id, seat: input.seat }] };
+    return {
+      state: next,
+      events: [{ type: 'tradeProposed', offerId: id, seat: input.seat }],
+      effects: [],
+    };
   },
 };
 
@@ -239,6 +249,7 @@ export const respondTrade: CommandHandler = {
     return {
       state: next,
       events: [{ type: 'tradeResponded', offerId: id, seat: input.seat, accept }],
+      effects: [],
     };
   },
 };
@@ -251,13 +262,21 @@ function counterparty(state: GameState, offer: TradeOffer, withSeat: unknown): S
   return offer.proposer === seat && offer.to.includes(state.turn.activeSeat) ? seat : undefined;
 }
 
-function movedBounds(state: GameState, from: Seat, to: Seat, counts: ResourceCounts): GameState {
+function movedBounds(
+  state: GameState,
+  from: Seat,
+  to: Seat,
+  counts: ResourceCounts,
+): { state: GameState; effects: EngineEffect[] } {
   const outgoing = loseKnown(ownSeat(state, from).resources, counts);
   if (!outgoing.ok) throw new Error(`Validated trade debit failed: ${outgoing.error.code}`);
   const debited = updateSeat(state, from, (old) => ({ ...old, resources: outgoing.value }));
   const incoming = gainKnown(ownSeat(debited, to).resources, counts);
   if (!incoming.ok) throw new Error(`Validated trade credit failed: ${incoming.error.code}`);
-  return updateSeat(debited, to, (old) => ({ ...old, resources: incoming.value }));
+  return {
+    state: updateSeat(debited, to, (old) => ({ ...old, resources: incoming.value })),
+    effects: resourceTransfers({ kind: 'seat', seat: from }, { kind: 'seat', seat: to }, counts),
+  };
 }
 
 export const confirmTrade: CommandHandler = {
@@ -279,8 +298,9 @@ export const confirmTrade: CommandHandler = {
     const other = counterparty(state, offer, input.command.withSeat);
     if (other === undefined) throw new Error('Validated counterparty missing');
     const recipient = offer.proposer === state.turn.activeSeat ? other : state.turn.activeSeat;
-    let next = movedBounds(state, offer.proposer, recipient, offer.give);
-    next = movedBounds(next, recipient, offer.proposer, offer.want);
+    const given = movedBounds(state, offer.proposer, recipient, offer.give);
+    const received = movedBounds(given.state, recipient, offer.proposer, offer.want);
+    let next = received.state;
     next = updateBase(next, (old) => ({
       ...old,
       offers: old.offers.filter((item) => item.id !== offer.id),
@@ -288,6 +308,7 @@ export const confirmTrade: CommandHandler = {
     return {
       state: next,
       events: [{ type: 'tradeConfirmed', offerId: offer.id, withSeat: recipient }],
+      effects: [...given.effects, ...received.effects],
     };
   },
   applyPrivate: (priv, before, input): Result<PrivateState> => {
@@ -348,6 +369,7 @@ export const cancelTrade: CommandHandler = {
           seat: input.seat,
         },
       ],
+      effects: [],
     };
   },
 };

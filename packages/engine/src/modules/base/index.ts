@@ -103,6 +103,7 @@ function finalize(transition: Transition): Transition {
         ...transition.events,
         { type: 'gameEnded', winner: state.result.winner, reason: state.result.reason },
       ],
+      effects: transition.effects,
     };
   }
   return { ...transition, state };

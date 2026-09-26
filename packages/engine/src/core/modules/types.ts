@@ -1,4 +1,5 @@
 import type { GameEvent } from '../events/index.js';
+import type { EngineEffect } from '../effects/index.js';
 import type {
   CommandInput,
   Input,
@@ -69,6 +70,7 @@ export interface HandlerContext {
 export interface Transition {
   state: GameState;
   events: GameEvent[];
+  effects: EngineEffect[];
 }
 
 /** Declared payload fields. Missing fields remain the handler's validation concern. */

@@ -148,7 +148,7 @@ export const rollDice: CommandHandler = {
         diceDeck: Array.from({ length: 36 }, (_, index) => index),
       }));
     }
-    return { state: replaceTop(next, frame('dice')), events: [] };
+    return { state: replaceTop(next, frame('dice')), events: [], effects: [] };
   },
 };
 
@@ -175,9 +175,11 @@ export const diceResult: SystemInputHandler = {
     const roll = input.dice[0] + input.dice[1];
     let next = preparedDiceState(state, input, ctx);
     let productionEvent: GameEvent | null = null;
+    let effects: ReturnType<typeof applyProduction>['effects'] = [];
     if (roll !== 7) {
       const production = applyProduction(next, roll, ctx);
       next = production.state;
+      effects = production.effects;
       productionEvent = { type: 'resourcesProduced', bySeat: production.bySeat };
       next = replaceTop(next, frame('main'));
     } else {
@@ -203,6 +205,7 @@ export const diceResult: SystemInputHandler = {
         { type: 'diceRolled', dice: input.dice, roll },
         ...(productionEvent ? [productionEvent] : []),
       ],
+      effects,
     };
   },
   applyPrivate: (priv, before, input, _data, ctx): Result<PrivateState> => {
@@ -230,7 +233,8 @@ export const discard: CommandHandler = {
   apply: (state, input) => {
     const parsed = parseCounts(input.command.cards);
     if (!parsed.ok) throw new Error('Validated discard missing');
-    let next = exchangeBank(state, input.seat, parsed.value, false);
+    const spent = exchangeBank(state, input.seat, parsed.value, false);
+    let next = spent.state;
     const remaining = discardData(state).remaining.filter((seat) => seat !== input.seat);
     next = replaceTop(
       next,
@@ -241,6 +245,7 @@ export const discard: CommandHandler = {
     return {
       state: next,
       events: [{ type: 'resourcesDiscarded', seat: input.seat, count: countTotal(parsed.value) }],
+      effects: spent.effects,
     };
   },
   applyPrivate: (priv, _before, input) => {
@@ -260,6 +265,6 @@ export const endTurn: CommandHandler = {
     next = replaceTop(next, frame('preRoll'));
     next = { ...next, turn: { ...next.turn, activeSeat: upcoming, number: state.turn.number + 1 } };
     next = ctx.hooks.onTurnStart(next, upcoming);
-    return { state: next, events: [{ type: 'turnStarted', seat: upcoming }] };
+    return { state: next, events: [{ type: 'turnStarted', seat: upcoming }], effects: [] };
   },
 };

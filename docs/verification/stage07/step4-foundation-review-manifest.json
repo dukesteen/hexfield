@@ -1,0 +1,114 @@
+{
+  "bytes": 222284,
+  "sha256": "a804199d106db2a642b8dec2a49701c5679f0e35dab6d991b2261193d37ba4e6",
+  "files": [
+    {
+      "path": "docs/verification/stage07/step4-foundation-review-prompt.md",
+      "sha256": "cea510922ef95caa33e6dcda0ce01fbb3e2ce6f8a2ca858be9544c5e5b16987a"
+    },
+    {
+      "path": "docs/verification/stage07/step4-integration-plan.md",
+      "sha256": "82395b01fc0d5becb9c70bdf71b7d85191a342ba24673fc31d5ff4abf615162e"
+    },
+    {
+      "path": "docs/verification/stage07/step4-design-review-response.md",
+      "sha256": "d1ebd4a92c8817c69558bf67646f25e4188eeaa2de59fac9304919bd820f2eb4"
+    },
+    {
+      "path": "packages/engine/src/core/effects/index.ts",
+      "sha256": "4c8eb222948c6f1b7d9a19367a4d8fffdd8cd15e02c028b22170106a5b464afc"
+    },
+    {
+      "path": "packages/engine/src/core/modules/types.ts",
+      "sha256": "a57edfefd1e200743256c975b48c23210e6bf28cb896e12ca8a2deb4d6e81b3e"
+    },
+    {
+      "path": "packages/engine/src/core/pipeline/engine.ts",
+      "sha256": "777185a258d855d66f0ead7d7c5cac8e96ae47e29f01236aad0a8c6fad3b1025"
+    },
+    {
+      "path": "packages/engine/src/core/resources/bounds.ts",
+      "sha256": "9d8547ade54962f1ce002be9655c5a3d92def5cfe25d2228c158af46d1897774"
+    },
+    {
+      "path": "packages/engine/src/core/state/types.ts",
+      "sha256": "8593457c593bb424167a8734ccec512232daf7b6bd49d8e08649717c757ed9f9"
+    },
+    {
+      "path": "packages/engine/src/modules/base/index.ts",
+      "sha256": "7d4732896808369747e0ea9ec05a1b0e3aeb8b294d570acbfa2c505746194b13"
+    },
+    {
+      "path": "packages/engine/src/modules/base/shared.ts",
+      "sha256": "cc605a487fe07e790e54f2cdb3d5496166332d184a0577aa9050f1155094d923"
+    },
+    {
+      "path": "packages/engine/src/modules/base/builds.ts",
+      "sha256": "f6799b3498a44d94eec2ab0aa6dba2d5158c9c4bcde9cf6b3083e40a3fee6402"
+    },
+    {
+      "path": "packages/engine/src/modules/base/production.ts",
+      "sha256": "2cdb719a111b213db461918bfc42c83e540aa624f008de8835333044bdd55b7a"
+    },
+    {
+      "path": "packages/engine/src/modules/base/devcards.ts",
+      "sha256": "d13fe29f44c1b2b41050179e5dd7743df4b0b4f10579eb9d479d4b42d51d8f7b"
+    },
+    {
+      "path": "packages/engine/src/modules/base/trade.ts",
+      "sha256": "0946a8cd90f34b220de749d8d33cff1313dd9e584849f065d660b96958a86b69"
+    },
+    {
+      "path": "packages/engine/src/modules/base/robber.ts",
+      "sha256": "f591092d723572adc46a2e11798839565747fec3440591b9ea001bf8ebc54dab"
+    },
+    {
+      "path": "packages/engine/src/modules/base/victory.ts",
+      "sha256": "3cd2ba173c7ad133d42277d3c2345b11e5e892427b7b7c1fb74ba54c43f8112e"
+    },
+    {
+      "path": "packages/engine/src/modules/base/timeouts.ts",
+      "sha256": "0684257a1f7c6d449fddcfacf20a7f648ca22dee3eb0798ff2e6fc5399a51fcb"
+    },
+    {
+      "path": "packages/engine/src/modules/base/phases/setup.ts",
+      "sha256": "8c7981e9505500fb772888e86f788d289e6e094fe93a250d4f55bfb2031d8fa4"
+    },
+    {
+      "path": "packages/engine/src/modules/base/phases/turn.ts",
+      "sha256": "0315b13dbc144d0ff3de26a4283eb5f28e471ba2411376878e5e27d7c93fb645"
+    },
+    {
+      "path": "packages/engine/src/modules/base/effects.test.ts",
+      "sha256": "a5861ea6e368903c5b012ed7fbb23fc055063cd76d610e988a0e74bb709696b0"
+    },
+    {
+      "path": "packages/protocol/src/hand-commitments.ts",
+      "sha256": "f2e5a5730c60518186fe9444a03127ca3238fe7fecd14a50a561dfcd9168fd23"
+    },
+    {
+      "path": "packages/protocol/src/hand-commitments.test.ts",
+      "sha256": "6670530a5d141a2f6ae1cfec92b001164db3ba04be88312aa72a3a9115e49722"
+    },
+    {
+      "path": "packages/protocol/src/resource-accounting.ts",
+      "sha256": "0d32adf4da8c1fc85d488b0e47f82c86438a1c86a982f79fe953b5d9fe9cf55f"
+    },
+    {
+      "path": "packages/protocol/src/resource-accounting.test.ts",
+      "sha256": "ef509035247e82b25fbf8a8427f7b6eff5d99feea602ed92d065d1e0fde90fc1"
+    },
+    {
+      "path": "packages/crypto/src/group.ts",
+      "sha256": "76081f91735476a2da74bf9ab9c85a94f6d5f70c86760e8f1986b6eb1ec2ad80"
+    },
+    {
+      "path": "packages/crypto/src/range.ts",
+      "sha256": "c9c633f02a7da0c590de0bddf529edd2a0b000c60618fcc79812063996345bf7"
+    },
+    {
+      "path": "packages/crypto/src/sigma.ts",
+      "sha256": "e04a49de15d73a54cc4191a4eed4b2dddab6c2e899636c2b7e8decbff3750ea8"
+    }
+  ]
+}

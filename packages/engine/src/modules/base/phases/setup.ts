@@ -118,6 +118,7 @@ export const startSeatInput: SystemInputHandler = {
         frame('setup', data),
       ),
       events: [],
+      effects: [],
     };
   },
 };
@@ -157,11 +158,18 @@ export const placeSettlement: CommandHandler = {
       ...old,
       piecesLeft: { ...old.piecesLeft, settlement: (old.piecesLeft.settlement ?? 0) - 1 },
     }));
-    if (data.index >= state.seats.length)
-      next = exchangeBank(next, input.seat, startingResources(state, vertex), true);
+    const grant =
+      data.index >= state.seats.length
+        ? exchangeBank(next, input.seat, startingResources(state, vertex), true)
+        : null;
+    if (grant) next = grant.state;
     next = ctx.hooks.afterBuild(next, input.seat, 'settlement', vertex);
     next = replaceTop(next, frame('setup', { ...data, step: 'road', lastVertex: vertex }));
-    return { state: next, events: [{ type: 'settlementBuilt', seat: input.seat, vertex }] };
+    return {
+      state: next,
+      events: [{ type: 'settlementBuilt', seat: input.seat, vertex }],
+      effects: grant?.effects ?? [],
+    };
   },
   applyPrivate: (priv, before, input): Result<PrivateState> => {
     if (priv.seat !== input.seat || setup(before).index < before.seats.length) return success(priv);
@@ -220,6 +228,6 @@ export const placeRoad: CommandHandler = {
       );
       next = { ...next, turn: { ...next.turn, activeSeat: upcoming } };
     }
-    return { state: next, events: [{ type: 'roadBuilt', seat: input.seat, edge }] };
+    return { state: next, events: [{ type: 'roadBuilt', seat: input.seat, edge }], effects: [] };
   },
 };

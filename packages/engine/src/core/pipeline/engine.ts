@@ -190,6 +190,7 @@ function advance(state: GameState, transition: Transition): Transition {
       counters: { ...transition.state.counters, inputSeq: state.counters.inputSeq + 1 },
     },
     events: transition.events,
+    effects: transition.effects,
   };
 }
 
@@ -243,7 +244,7 @@ export function createEngine(modules: readonly GameModule[]): Engine {
           ? { ...seat, status: input.status }
           : seat,
       );
-      return success(advance(state, { state: { ...state, seats }, events: [] }));
+      return success(advance(state, { state: { ...state, seats }, events: [], effects: [] }));
     }
     if (input.kind === 'command') {
       const handler = registry.commands.get(input.command.type)?.handler;

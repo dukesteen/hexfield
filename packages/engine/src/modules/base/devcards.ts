@@ -1,4 +1,5 @@
 import type { CommandHandler, PhaseHandler, SystemInputHandler } from '../../core/modules/index.js';
+import type { EngineEffect } from '../../core/effects/index.js';
 import { gainKnown, loseKnown, revealExact } from '../../core/resources/index.js';
 import type { CardSlot, GameState, PrivateState } from '../../core/state/index.js';
 import { RESOURCES, failure, success } from '../../core/types/index.js';
@@ -20,6 +21,7 @@ import {
   playerPending,
   popPhase,
   privateExchange,
+  resourceTransfers,
   pushPhase,
   replaceTop,
   top,
@@ -114,10 +116,15 @@ export const buyDevCard: CommandHandler = {
     const cost = buildCost(state, 'devCard', DEV_COST, ctx);
     if (!cost.ok) throw new Error('Validated dev cost missing');
     const id = `dev:${state.counters.nextSlotId}`;
-    let next = exchangeBank(state, input.seat, cost.value, false);
+    const spent = exchangeBank(state, input.seat, cost.value, false);
+    let next = spent.state;
     next = { ...next, counters: { ...next.counters, nextSlotId: next.counters.nextSlotId + 1 } };
     next = pushPhase(next, frame('drawDev', { seat: input.seat, slotId: id }));
-    return { state: next, events: [{ type: 'devCardBought', seat: input.seat, slotId: id }] };
+    return {
+      state: next,
+      events: [{ type: 'devCardBought', seat: input.seat, slotId: id }],
+      effects: spent.effects,
+    };
   },
   applyPrivate: (priv, before, input, _data, ctx) => {
     if (priv.seat !== input.seat) return success(priv);
@@ -161,6 +168,7 @@ export const cardDealt: SystemInputHandler = {
     return {
       state: popPhase(next),
       events: [{ type: 'devCardDealt', seat: data.seat, slotId: data.slotId }],
+      effects: [{ type: 'card-slot-dealt', seat: data.seat, deck: 'dev', slotId: data.slotId }],
     };
   },
   applyPrivate: (priv, before, input, data) => {
@@ -222,6 +230,9 @@ export const playDevCard: CommandHandler = {
     const card = input.command.card;
     const id = input.command.slotId;
     if (!isDevCard(card) || typeof id !== 'string') throw new Error('Validated card play missing');
+    const effects: EngineEffect[] = [
+      { type: 'card-slot-revealed', seat: input.seat, deck: 'dev', slotId: id, card },
+    ];
     let next = updateSeat(state, input.seat, (old) => ({
       ...old,
       cardSlots: old.cardSlots.map((held) =>
@@ -249,7 +260,14 @@ export const playDevCard: CommandHandler = {
       const params = playParams(state, card, input.command.params);
       if (!params.ok || !params.value.requested)
         throw new Error('Validated plenty request missing');
-      next = exchangeBank(next, input.seat, plentyReceipt(next, params.value.requested), true);
+      const received = exchangeBank(
+        next,
+        input.seat,
+        plentyReceipt(next, params.value.requested),
+        true,
+      );
+      next = received.state;
+      effects.push(...received.effects);
     } else if (card === 'monopoly') {
       const params = playParams(state, card, input.command.params);
       if (!params.ok || !params.value.resource)
@@ -261,7 +279,7 @@ export const playDevCard: CommandHandler = {
       if (remaining.length)
         next = pushPhase(next, frame('monopoly', { seat: input.seat, resource, remaining }));
     }
-    return { state: next, events: [{ type: 'devCardPlayed', seat: input.seat, card }] };
+    return { state: next, events: [{ type: 'devCardPlayed', seat: input.seat, card }], effects };
   },
   applyPrivate: (priv, before, input) => {
     const id = input.command.slotId;
@@ -339,13 +357,17 @@ export const placeFreeRoad: CommandHandler = {
       legalRoadEdges(next, input.seat).length === 0
         ? popPhase(next)
         : replaceTop(next, frame('roadBuilding', { remaining }));
-    return { state: next, events: [{ type: 'roadBuilt', seat: input.seat, edge, free: true }] };
+    return {
+      state: next,
+      events: [{ type: 'roadBuilt', seat: input.seat, edge, free: true }],
+      effects: [],
+    };
   },
 };
 
 export const skipRoadBuilding: CommandHandler = {
   validate: () => success(undefined),
-  apply: (state) => ({ state: popPhase(state), events: [] }),
+  apply: (state) => ({ state: popPhase(state), events: [], effects: [] }),
 };
 
 export const monopolyPhase: PhaseHandler = {
@@ -414,6 +436,19 @@ export const revealCount: SystemInputHandler = {
           resource: data.resource,
           count: input.count,
         },
+      ],
+      effects: [
+        {
+          type: 'resource-count-revealed',
+          seat: victim,
+          resource: data.resource,
+          count: input.count,
+        },
+        ...resourceTransfers(
+          { kind: 'seat', seat: victim },
+          { kind: 'seat', seat: data.seat },
+          counts,
+        ),
       ],
     };
   },

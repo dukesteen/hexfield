@@ -1,0 +1,231 @@
+import {
+  decodePoint,
+  decodeScalar,
+  encodePoint,
+  encodeScalar,
+  G,
+  pedersenCommit,
+  scalePoint,
+} from '@cp2p/crypto';
+import type { Resource, Result, Seat } from '@cp2p/engine';
+import { failure, RESOURCES, success } from '@cp2p/engine';
+import * as v from 'valibot';
+import { seatSchema } from './schema-values.js';
+import { parseCanonical } from './validation.js';
+
+export const MAX_HAND_RESOURCE_COUNT = 63;
+
+export interface SeatHandCommitments {
+  seat: Seat;
+  commitments: Readonly<Record<Resource, string>>;
+}
+
+export type PublicHandCommitments = readonly SeatHandCommitments[];
+
+export interface PublicResourceEffect {
+  seat: Seat;
+  resource: Resource;
+  direction: 'credit' | 'debit';
+  count: number;
+}
+
+const resourceCommitmentsSchema = v.strictObject({
+  brick: v.string(),
+  lumber: v.string(),
+  wool: v.string(),
+  grain: v.string(),
+  ore: v.string(),
+});
+const handSchema = v.pipe(
+  v.array(
+    v.strictObject({
+      seat: v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(5)),
+      commitments: resourceCommitmentsSchema,
+    }),
+  ),
+  v.maxLength(6),
+);
+const effectSchema = v.strictObject({
+  seat: seatSchema,
+  resource: v.picklist(RESOURCES),
+  direction: v.picklist(['credit', 'debit']),
+  count: v.number(),
+});
+const resourceRecordSchema = v.strictObject({
+  brick: v.unknown(),
+  lumber: v.unknown(),
+  wool: v.unknown(),
+  grain: v.unknown(),
+  ore: v.unknown(),
+});
+
+function checkedSeats(value: readonly Seat[]): Result<readonly Seat[]> {
+  if (
+    !Array.isArray(value) ||
+    value.length < 1 ||
+    value.length > 6 ||
+    value.some(
+      (seat, index) =>
+        !Number.isInteger(seat) ||
+        seat < 0 ||
+        seat > 5 ||
+        (index > 0 && seat <= (value[index - 1] ?? -1)),
+    )
+  )
+    return failure('hand-seats', 'Expected unique seats in ascending canonical order');
+  return success([...value]);
+}
+
+/** Initializes one identity commitment per resource for each expected seat. */
+export function emptyHandCommitments(
+  expectedSeats: readonly Seat[],
+): Result<PublicHandCommitments> {
+  const seats = checkedSeats(expectedSeats);
+  if (!seats.ok) return seats;
+  return success(
+    seats.value.map((seat) => ({
+      seat,
+      commitments: emptyCommitmentMap(),
+    })),
+  );
+}
+
+/** Copies and validates exact seats/resources and canonical Ristretto commitments. */
+export function validateHandCommitments(
+  value: unknown,
+  expectedSeats: readonly Seat[],
+): Result<PublicHandCommitments> {
+  const seats = checkedSeats(expectedSeats);
+  if (!seats.ok) return seats;
+  const parsed = parseCanonical(value, handSchema);
+  if (!parsed.ok) return parsed;
+  if (parsed.value.length !== seats.value.length)
+    return failure('hand-seat-count', 'Hand commitments differ from the expected seat roster');
+  const copied: SeatHandCommitments[] = [];
+  for (let index = 0; index < seats.value.length; index++) {
+    const row = parsed.value[index];
+    const seat = seats.value[index];
+    if (!row || row.seat !== seat)
+      return failure('hand-seat-order', 'Hand commitments differ from the expected seat order');
+    const commitments: Record<Resource, string> = {
+      brick: '',
+      lumber: '',
+      wool: '',
+      grain: '',
+      ore: '',
+    };
+    for (const resource of RESOURCES) {
+      const commitment = row.commitments[resource];
+      try {
+        if (encodePoint(decodePoint(commitment)) !== commitment)
+          return failure('hand-commitment-point', 'Commitment point is not canonically encoded');
+      } catch {
+        return failure('hand-commitment-point', 'Commitment point is malformed');
+      }
+      commitments[resource] = commitment;
+    }
+    copied.push({ seat, commitments });
+  }
+  return success(copied);
+}
+
+/**
+ * Applies one public gross movement and returns a fresh commitment ledger.
+ * This arithmetic does not authorize a debit or prove that funds are available.
+ */
+export function applyPublicResourceEffect(
+  value: unknown,
+  expectedSeats: readonly Seat[],
+  effect: unknown,
+): Result<PublicHandCommitments> {
+  const checked = validateHandCommitments(value, expectedSeats);
+  if (!checked.ok) return checked;
+  const parsedEffect = parseCanonical(effect, effectSchema);
+  if (!parsedEffect.ok) return parsedEffect;
+  const movement = parsedEffect.value;
+  if (
+    !Number.isSafeInteger(movement.count) ||
+    movement.count < 0 ||
+    movement.count > MAX_HAND_RESOURCE_COUNT
+  )
+    return failure(
+      'hand-resource-count-range',
+      'Resource movement count is outside the six-bit proof bound',
+    );
+  const seatIndex = expectedSeats.indexOf(movement.seat);
+  if (seatIndex < 0)
+    return failure('hand-resource-seat', 'Resource movement targets an unknown seat');
+  const row = checked.value[seatIndex];
+  if (!row) return failure('hand-resource-seat', 'Resource movement seat is missing');
+  try {
+    const point = decodePoint(row.commitments[movement.resource]);
+    const delta = scalePoint(G, BigInt(movement.count));
+    const updated = movement.direction === 'credit' ? point.add(delta) : point.subtract(delta);
+    return success(
+      checked.value.map((seatRow, index) => ({
+        seat: seatRow.seat,
+        commitments:
+          index === seatIndex
+            ? { ...seatRow.commitments, [movement.resource]: encodePoint(updated) }
+            : { ...seatRow.commitments },
+      })),
+    );
+  } catch {
+    return failure('hand-resource-update', 'Could not update resource commitment');
+  }
+}
+
+/** Checks that one owner's counts and canonical blindings open their public commitments. */
+export function verifyHandOpening(
+  value: unknown,
+  expectedSeats: readonly Seat[],
+  seat: Seat,
+  counts: unknown,
+  blindings: unknown,
+): Result<void> {
+  const checked = validateHandCommitments(value, expectedSeats);
+  if (!checked.ok) return checked;
+  const row = checked.value.find((item) => item.seat === seat);
+  if (!row) return failure('hand-opening-seat', 'Opening seat is not in the expected roster');
+  const parsedCounts = parseCanonical(counts, resourceRecordSchema);
+  const parsedBlindings = parseCanonical(blindings, resourceRecordSchema);
+  if (!parsedCounts.ok || !parsedBlindings.ok)
+    return failure(
+      'hand-opening-shape',
+      'Opening counts and blindings must contain exactly five resources',
+    );
+  for (const resource of RESOURCES) {
+    const count = parsedCounts.value[resource];
+    const encodedBlinding = parsedBlindings.value[resource];
+    if (
+      typeof count !== 'number' ||
+      !Number.isSafeInteger(count) ||
+      count < 0 ||
+      count > MAX_HAND_RESOURCE_COUNT ||
+      typeof encodedBlinding !== 'string'
+    )
+      return failure(
+        'hand-opening-value',
+        'Opening count or blinding is outside its canonical bound',
+      );
+    try {
+      const blinding = decodeScalar(encodedBlinding);
+      if (encodeScalar(blinding) !== encodedBlinding)
+        return failure('hand-opening-scalar', 'Opening blinding is not canonically encoded');
+      const commitment = row.commitments[resource];
+      if (commitment !== pedersenCommit(BigInt(count), blinding))
+        return failure(
+          'hand-opening-mismatch',
+          'Private opening does not match its public commitment',
+        );
+    } catch {
+      return failure('hand-opening-scalar', 'Opening blinding is malformed');
+    }
+  }
+  return success(undefined);
+}
+
+function emptyCommitmentMap(): Record<Resource, string> {
+  const identity = pedersenCommit(0n, 0n);
+  return { brick: identity, lumber: identity, wool: identity, grain: identity, ore: identity };
+}

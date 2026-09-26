@@ -30,6 +30,7 @@ const module: GameModule = {
         return {
           state: { ...state, ext: { ...state.ext, 'replay-counter': { count: ext.count + 1 } } },
           events: [],
+          effects: [],
         };
       },
     },

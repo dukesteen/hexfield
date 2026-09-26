@@ -3,6 +3,7 @@ import type { ResourceBounds } from '../../core/resources/index.js';
 import type { GameState, PhaseFrame, PrivateState, SeatState } from '../../core/state/index.js';
 import type { Pending, TimerSpec } from '../../core/pipeline/index.js';
 import type { HandlerContext } from '../../core/modules/index.js';
+import type { EngineEffect, ResourceEndpoint } from '../../core/effects/index.js';
 import { RESOURCES, failure, success } from '../../core/types/index.js';
 import type { Resource, ResourceCounts, Result, Seat } from '../../core/types/index.js';
 import { emptyResources } from './constants.js';
@@ -112,23 +113,43 @@ function changedBounds(
   return result.value;
 }
 
+/** Record the gross movements used by the caller's resource update. */
+export function resourceTransfers(
+  from: ResourceEndpoint,
+  to: ResourceEndpoint,
+  counts: ResourceCounts,
+): EngineEffect[] {
+  return RESOURCES.flatMap((resource) => {
+    const count = counts[resource];
+    if (!Number.isSafeInteger(count) || count < 0)
+      throw new Error(`Invalid ${resource} transfer count`);
+    return count === 0 ? [] : [{ type: 'resource-transfer' as const, from, to, resource, count }];
+  });
+}
+
 /** Transfer publicly known cards between a seat and the bank. */
 export function exchangeBank(
   state: GameState,
   seat: Seat,
   counts: ResourceCounts,
   gain: boolean,
-): GameState {
+): { state: GameState; effects: EngineEffect[] } {
   const bank = { ...state.bank };
   for (const kind of RESOURCES) {
     const next = (bank[kind] ?? 0) + (gain ? -counts[kind] : counts[kind]);
     if (next < 0) throw new Error(`Bank lacks ${kind}`);
     bank[kind] = next;
   }
-  return updateSeat({ ...state, bank }, seat, (old) => ({
+  const next = updateSeat({ ...state, bank }, seat, (old) => ({
     ...old,
     resources: changedBounds(old.resources, counts, gain),
   }));
+  const owner: ResourceEndpoint = { kind: 'seat', seat };
+  const bankEndpoint: ResourceEndpoint = { kind: 'bank' };
+  return {
+    state: next,
+    effects: resourceTransfers(gain ? bankEndpoint : owner, gain ? owner : bankEndpoint, counts),
+  };
 }
 
 export function privateExchange(

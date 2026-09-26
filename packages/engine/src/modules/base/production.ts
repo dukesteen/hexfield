@@ -1,5 +1,6 @@
 import type { GameState, PrivateState } from '../../core/state/index.js';
 import type { HandlerContext } from '../../core/modules/index.js';
+import type { EngineEffect } from '../../core/effects/index.js';
 import { RESOURCES, success } from '../../core/types/index.js';
 import type { ResourceCounts, Result, Seat } from '../../core/types/index.js';
 import { verticesForHex } from './board/index.js';
@@ -55,14 +56,17 @@ export function applyProduction(
   state: GameState,
   roll: number,
   ctx: HandlerContext,
-): { state: GameState; bySeat: Record<string, ResourceCounts> } {
+): { state: GameState; bySeat: Record<string, ResourceCounts>; effects: EngineEffect[] } {
   let next = state;
   const bySeat: Record<string, ResourceCounts> = {};
+  const effects: EngineEffect[] = [];
   for (const [seat, counts] of productionPayments(state, roll, ctx)) {
-    next = exchangeBank(next, seat, counts, true);
+    const paid = exchangeBank(next, seat, counts, true);
+    next = paid.state;
+    effects.push(...paid.effects);
     if (RESOURCES.some((kind) => counts[kind] > 0)) bySeat[seat] = { ...counts };
   }
-  return { state: next, bySeat };
+  return { state: next, bySeat, effects };
 }
 
 export function applyPrivateProduction(

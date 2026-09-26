@@ -23,6 +23,7 @@ const noOp = {
   apply: (state: Parameters<NonNullable<GameModule['commands']['INC']>['apply']>[0]) => ({
     state,
     events: [],
+    effects: [],
   }),
 };
 

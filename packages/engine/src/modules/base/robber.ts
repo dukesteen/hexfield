@@ -20,6 +20,7 @@ import {
   playerPending,
   popPhase,
   privateExchange,
+  resourceTransfers,
   replaceTop,
   top,
   updateSeat,
@@ -131,7 +132,11 @@ export const moveRobber: CommandHandler = {
           frame('steal', { targets, thief: state.turn.activeSeat, returnTo: data.returnTo }),
         )
       : resume(next, data.returnTo);
-    return { state: next, events: [{ type: 'robberMoved', hex, seat: state.turn.activeSeat }] };
+    return {
+      state: next,
+      events: [{ type: 'robberMoved', hex, seat: state.turn.activeSeat }],
+      effects: [],
+    };
   },
 };
 
@@ -167,6 +172,7 @@ export const steal: CommandHandler = {
         frame('stealResult', { thief: data.thief, victim, returnTo: data.returnTo }),
       ),
       events: [],
+      effects: [],
     };
   },
 };
@@ -236,6 +242,14 @@ export const stealResult: SystemInputHandler = {
           known: card !== 'hidden',
         },
       ],
+      effects:
+        card === 'hidden'
+          ? [{ type: 'hidden-resource-transfer', from: data.victim, to: data.thief, count: 1 }]
+          : resourceTransfers(
+              { kind: 'seat', seat: data.victim },
+              { kind: 'seat', seat: data.thief },
+              oneResource(card, 1),
+            ),
     };
   },
   applyPrivate: (priv, before, input, data): Result<PrivateState> => {

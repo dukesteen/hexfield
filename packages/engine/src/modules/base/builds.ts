@@ -30,7 +30,8 @@ export const buildRoad: CommandHandler = {
     if (typeof edge !== 'string') throw new Error('Validated edge missing');
     const cost = buildCost(state, 'road', ROAD_COST, ctx);
     if (!cost.ok) throw new Error('Validated road cost missing');
-    let next = exchangeBank(state, input.seat, cost.value, false);
+    const spent = exchangeBank(state, input.seat, cost.value, false);
+    let next = spent.state;
     next = {
       ...next,
       board: { ...next.board, roads: [...next.board.roads, { edge, seat: input.seat }] },
@@ -41,7 +42,11 @@ export const buildRoad: CommandHandler = {
     }));
     next = ctx.hooks.afterBuild(next, input.seat, 'road', edge);
     next = recomputeLongestRoadAward(next);
-    return { state: next, events: [{ type: 'roadBuilt', seat: input.seat, edge }] };
+    return {
+      state: next,
+      events: [{ type: 'roadBuilt', seat: input.seat, edge }],
+      effects: spent.effects,
+    };
   },
   applyPrivate: (priv, before, input, _data, ctx) => {
     if (priv.seat !== input.seat) return success(priv);
@@ -73,7 +78,8 @@ export const buildSettlement: CommandHandler = {
     if (typeof vertex !== 'string') throw new Error('Validated vertex missing');
     const cost = buildCost(state, 'settlement', SETTLEMENT_COST, ctx);
     if (!cost.ok) throw new Error('Validated settlement cost missing');
-    let next = exchangeBank(state, input.seat, cost.value, false);
+    const spent = exchangeBank(state, input.seat, cost.value, false);
+    let next = spent.state;
     next = {
       ...next,
       board: {
@@ -87,7 +93,11 @@ export const buildSettlement: CommandHandler = {
     }));
     next = ctx.hooks.afterBuild(next, input.seat, 'settlement', vertex);
     next = recomputeLongestRoadAward(next);
-    return { state: next, events: [{ type: 'settlementBuilt', seat: input.seat, vertex }] };
+    return {
+      state: next,
+      events: [{ type: 'settlementBuilt', seat: input.seat, vertex }],
+      effects: spent.effects,
+    };
   },
   applyPrivate: (priv, before, input, _data, ctx) => {
     if (priv.seat !== input.seat) return success(priv);
@@ -119,7 +129,8 @@ export const buildCity: CommandHandler = {
     if (typeof vertex !== 'string') throw new Error('Validated vertex missing');
     const cost = buildCost(state, 'city', CITY_COST, ctx);
     if (!cost.ok) throw new Error('Validated city cost missing');
-    let next = exchangeBank(state, input.seat, cost.value, false);
+    const spent = exchangeBank(state, input.seat, cost.value, false);
+    let next = spent.state;
     next = {
       ...next,
       board: {
@@ -138,7 +149,11 @@ export const buildCity: CommandHandler = {
       },
     }));
     next = ctx.hooks.afterBuild(next, input.seat, 'city', vertex);
-    return { state: next, events: [{ type: 'cityBuilt', seat: input.seat, vertex }] };
+    return {
+      state: next,
+      events: [{ type: 'cityBuilt', seat: input.seat, vertex }],
+      effects: spent.effects,
+    };
   },
   applyPrivate: (priv, before, input, _data, ctx) => {
     if (priv.seat !== input.seat) return success(priv);
