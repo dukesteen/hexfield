@@ -1,4 +1,4 @@
-import { canonicalEncode } from '@cp2p/codec';
+import { canonicalEncode, fromBase64Url } from '@cp2p/codec';
 import { scalarToBytes } from '@cp2p/crypto';
 import { RESOURCES } from '@cp2p/engine';
 import type { CommandShape, GameState, Result, Seat } from '@cp2p/engine';
@@ -14,6 +14,7 @@ import { decodeProtocolMessage } from './messages.js';
 import { P2PSession } from './p2p-session.js';
 import type { P2PSessionOptions } from './p2p-session.js';
 import { createMemnet } from './testing/memnet.js';
+import { createSimulationGenesis } from './testing/simulation-genesis.js';
 import { createVerifiedDeckSession } from './testing/verified-deck-session.js';
 import type { VerifiedDeckSession } from './testing/verified-deck-session.js';
 import type { VirtualClock } from './testing/virtual-clock.js';
@@ -135,9 +136,13 @@ function quietRobber(
 
 describe('live verified Monopoly count replication', () => {
   test('certifies owner count contributions and folds private hands after a legal Monopoly', async () => {
-    // This seed has Monopoly as its first development card. The loop stops at
-    // that first purchase and never searches the full game or other seeds.
-    const fixture = createVerifiedDeckSession(14, 2, 128);
+    // Seed 16 puts Monopoly first under the encryption-key-bound ceremony.
+    // Keep the original board so this test still exercises the same legal path.
+    const fixture = createVerifiedDeckSession(16, 2, 128, {
+      boardSeed: fromBase64Url(
+        createSimulationGenesis({ seed: 14, humanCount: 2 }).genesis.genesisSeed,
+      ),
+    });
     const peers = fixture.humans.map(
       (human) => required(fixture.simulation.identities.get(human.seat)).peerId,
     );
@@ -205,7 +210,7 @@ describe('live verified Monopoly count replication', () => {
         } else if (slotId === null) {
           const slots = required(live[hostIndex(fixture, buyer)]).getPrivate(buyer)?.slots;
           if (Object.values(slots ?? {}).some((card) => card !== 'monopoly'))
-            throw new Error('Seed 14 first card was not Monopoly');
+            throw new Error('Seed 16 first card was not Monopoly');
           const ownedSlot = Object.entries(slots ?? {}).find(([, card]) => card === 'monopoly');
           if (ownedSlot) slotId = ownedSlot[0];
         }

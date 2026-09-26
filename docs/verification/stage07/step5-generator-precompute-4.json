@@ -1,0 +1,44 @@
+{
+  "node": "v22.23.3",
+  "platform": "darwin",
+  "arch": "arm64",
+  "windowSize": 4,
+  "precomputeMs": 4.496,
+  "rssAfterPrecompute": 55574528,
+  "counts": [10, 11, 12, 13, 14, 15, 16, 17],
+  "index": 107,
+  "samples": [
+    {
+      "phase": "warmup",
+      "proveMs": 353.112,
+      "verifyMs": 244.309,
+      "totalMs": 597.421,
+      "valid": true,
+      "rssBytes": 75448320
+    },
+    {
+      "phase": "sample",
+      "proveMs": 357.865,
+      "verifyMs": 253.562,
+      "totalMs": 611.426,
+      "valid": true,
+      "rssBytes": 76677120
+    },
+    {
+      "phase": "sample",
+      "proveMs": 333.326,
+      "verifyMs": 279.039,
+      "totalMs": 612.365,
+      "valid": true,
+      "rssBytes": 78954496
+    },
+    {
+      "phase": "sample",
+      "proveMs": 344.473,
+      "verifyMs": 243.006,
+      "totalMs": 587.48,
+      "valid": true,
+      "rssBytes": 79986688
+    }
+  ]
+}

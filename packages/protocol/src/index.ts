@@ -150,3 +150,6 @@ export type { DeckLedger, LedgerDeck, LedgerSlot } from './deck-ledger.js';
 
 export { prepareGenesisConsent, MemoryGenesisConsentStore } from './genesis-outbox.js';
 export type { GenesisConsentStore } from './genesis-outbox.js';
+
+export { createStealSecretSource } from './steal-source.js';
+export type { StealSecretSource, StealSourceFactory } from './steal-source.js';

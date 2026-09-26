@@ -1,5 +1,5 @@
 import { hashValue, toHex } from '@cp2p/codec';
-import { scalarToBytes } from '@cp2p/crypto';
+import { G, encodePoint, scalePoint, scalarToBytes } from '@cp2p/crypto';
 import type { Identity } from '@cp2p/crypto';
 import type { Seat } from '@cp2p/engine';
 import { createDeckGenesisCommitment, genesisDeckDefinitions } from '../deck-genesis.js';
@@ -15,6 +15,7 @@ import {
 } from '../deck-setup.js';
 import type { DeckDefinition, DeckSetupState, SignedDeckPass } from '../deck-setup.js';
 import type { GenesisBody } from '../types.js';
+import { createStealSecretSource } from '../steal-source.js';
 
 const CACHE_LIMIT = 4;
 const cache = new Map<string, CachedDeckFixture>();
@@ -197,7 +198,25 @@ export function createGenesisDeckFixture(
   body: GenesisBody,
   identities: ReadonlyMap<Seat, Identity>,
 ): GenesisDeckFixture {
-  const definitions = genesisDeckDefinitions(body);
+  // Encryption keys are part of the signed roster before any shuffle transcript.
+  const keyedBody: GenesisBody = {
+    ...body,
+    seats: body.seats.map((seat) => {
+      if (seat.encryptionKey !== undefined) return { ...seat };
+      const source = createStealSecretSource(
+        masterFor(seat.seat),
+        body.ceremonyNonce,
+        seat.seat,
+        seat.publicKey,
+      );
+      try {
+        return { ...seat, encryptionKey: encodePoint(scalePoint(G, source.encryptionSecret())) };
+      } finally {
+        source.dispose();
+      }
+    }),
+  };
+  const definitions = genesisDeckDefinitions(keyedBody);
   if (!definitions.ok) throw new Error(`Deck definitions failed: ${definitions.error.message}`);
   const generated = cachedFixture(definitions.value, identities);
   const decks = generated.commitments.map(copyCommitment);
@@ -207,8 +226,8 @@ export function createGenesisDeckFixture(
     return { deckId: definition.deckId, passes: passes.map(copyPass) };
   });
   const nextBody: GenesisBody = {
-    ...body,
-    commitments: { ...body.commitments, decks },
+    ...keyedBody,
+    commitments: { ...keyedBody.commitments, decks },
   };
   return {
     body: nextBody,

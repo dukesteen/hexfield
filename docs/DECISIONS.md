@@ -428,3 +428,10 @@ Record decisions here as they are made. Keep earlier entries.
 - Decision: Validate count evidence before generic system policy, match the local engine's sole count obligation and exact transfer, then consume that victim once. Preserve unconsumed commitments across proposer controls and earlier victims. A terminal certified game may close the remaining requests without fabricated transfers.
 - Decision: Persist each owner contribution before broadcast and reuse verified stored bytes after retry. Keep the inbox disposable and bounded by the frozen victim roster. Check the local lifecycle and remaining victim again after storage awaits.
 - Evidence: The bounded legal peer trace completes a real Monopoly exchange and restores both peers' certified heads and all hosted hands. Focused synthetic tests cover zero counts with nonzero blindings, malformed evidence, callback bypass and control continuity. The [checkpoint](verification/stage07/step4-count-local-checks.md) states the remaining recovery and acceptance boundaries.
+
+## 2026-09-26: Hidden-steal proof and private delivery foundation
+
+- Decision: Bind transfer bits, the sum opening and the composed index proof to the same frozen operation and sealed-payload hash. Use a fixed-size encrypted numeric resource index and scalar array to avoid leaking the card through ciphertext length.
+- Decision: Bind receipts and authenticated disputes to the certified contribution reference and body. Verify cheap context/signature checks before expensive transfer proofs. Failed untrusted messages are not automatically attributable cheating evidence.
+- Decision: Include each distinct nonidentity encryption key in the roster before the deck ceremony. Derive it from the fresh ceremony nonce, master and original seat signing identity. Recovery retains that derivation domain after voting-key changes.
+- Boundary: The [reviewed foundation](verification/stage07/step5-foundation-review-response.md) does not enable live steals. Certified ordering, durable delivery, hand updates, recovery and the browser performance target still need implementation and verification.

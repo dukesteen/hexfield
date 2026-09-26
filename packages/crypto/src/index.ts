@@ -82,3 +82,9 @@ export { MAX_SEALED_BYTES, openSealed, openSealedWithSharedPoint, seal } from '.
 export type { SealedPayload } from './seal.js';
 export { proveShuffle, verifyShuffle } from './shuffle.js';
 export type { ShuffleProof, ShuffleResponse, ShuffleStatement } from './shuffle.js';
+export { proveHiddenTransfer, verifyHiddenTransfer } from './hidden-transfer.js';
+export type {
+  HiddenTransferProof,
+  HiddenTransferStatement,
+  HiddenTransferWitness,
+} from './hidden-transfer.js';

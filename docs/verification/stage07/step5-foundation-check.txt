@@ -1,0 +1,332 @@
+
+> hexfield@ check /Users/duke/Dev/Personal/colonist-p2p
+> pnpm typecheck && pnpm lint && pnpm format:check && pnpm deps:check && pnpm purity:check && pnpm i18n:check && pnpm test
+
+
+> hexfield@ typecheck /Users/duke/Dev/Personal/colonist-p2p
+> pnpm --filter @cp2p/web routes:generate && tsc -b && pnpm typecheck:tests && pnpm typecheck:engine
+
+
+> @cp2p/web@0.0.0 routes:generate /Users/duke/Dev/Personal/colonist-p2p/apps/web
+> tsr generate
+
+(node:50881) Warning: Accessing non-existent property 'replaceRouteChunk' of module exports inside circular dependency
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+> hexfield@ typecheck:tests /Users/duke/Dev/Personal/colonist-p2p
+> tsc -p tsconfig.test.json --noEmit
+
+
+> hexfield@ typecheck:engine /Users/duke/Dev/Personal/colonist-p2p
+> node tools/check-engine-types.mjs
+
+Engine production types reject document and process.
+
+> hexfield@ lint /Users/duke/Dev/Personal/colonist-p2p
+> oxlint --type-aware --deny-warnings .
+
+
+> hexfield@ format:check /Users/duke/Dev/Personal/colonist-p2p
+> oxfmt --check .
+
+Checking formatting...
+
+All matched files use the correct format.
+Finished in 1075ms on 685 files using 12 threads.
+
+> hexfield@ deps:check /Users/duke/Dev/Personal/colonist-p2p
+> depcruise --config .dependency-cruiser.cjs apps packages tools && node tools/check-boundaries.mjs
+
+
+✔ no dependency violations found (462 modules, 2355 dependencies cruised)
+
+engine → react is rejected: passed.
+engine → node:fs is rejected: passed.
+package → app is rejected: passed.
+renderer runtime package import is rejected: passed.
+renderer engine type-only package import is allowed: passed.
+renderer geometry entry stays isolated from engine rules: passed.
+pipeline → genesis RNG is rejected: passed.
+pipeline → RNG type-only import is allowed: passed.
+undeclared sibling module import is rejected: passed.
+module setup → genesis RNG is allowed: passed.
+module entry → setup binding is allowed: passed.
+rule handler → RNG setup reexport is rejected: passed.
+rule handler → module entry reexport is rejected: passed.
+resolved React import outside web is rejected: passed.
+codec → @noble/hashes is allowed: passed.
+
+> hexfield@ purity:check /Users/duke/Dev/Personal/colonist-p2p
+> node tools/check-engine-purity.mjs
+
+Engine purity check passed.
+
+> hexfield@ i18n:check /Users/duke/Dev/Personal/colonist-p2p
+> node tools/check-i18n-keys.mjs
+
+Unused English translation: common:welcome
+Unused English translation: common:pageMissing
+Unused English translation: common:pageError
+Unused English translation: game:devCardsShort
+Unused English translation: game:victoryPoints
+Unused English translation: game:finalScore
+Unused English translation: game:piece.road
+Unused English translation: game:piece.settlement
+Unused English translation: game:piece.city
+Unused English translation: game:confirm.road
+Unused English translation: game:confirm.settlement
+Unused English translation: game:confirm.city
+Unused English translation: game:buildAction.settlement
+Unused English translation: game:buildAction.road
+Unused English translation: game:buildAction.city
+Unused English translation: game:buildAction.freeRoad
+Unused English translation: game:buildAction.robber
+Unused English translation: game:targetOption
+Unused English translation: game:terrain.hills
+Unused English translation: game:terrain.forest
+Unused English translation: game:terrain.pasture
+Unused English translation: game:terrain.fields
+Unused English translation: game:terrain.mountains
+Unused English translation: game:terrain.desert
+Unused English translation: game:command.SKIP
+Unused English translation: lobby:savedTurn
+Unused English translation: lobby:saveFailed
+Unused English translation: rules:plenty.first
+Unused English translation: rules:plenty.second
+Unused English translation: log:tradeAccepted
+Unused English translation: log:tradeDeclined
+Checked 380 translation keys across 6 namespaces.
+
+> hexfield@ test /Users/duke/Dev/Personal/colonist-p2p
+> vitest run
+
+ DEPRECATED  The workspace file is deprecated and will be removed in the next major. Please, use the `test.projects` field in /Users/duke/Dev/Personal/colonist-p2p/vitest.config.ts instead.
+
+ RUN  v3.2.7 /Users/duke/Dev/Personal/colonist-p2p
+
+ ✓ |@cp2p/protocol| src/beacon-replica.test.ts (7 tests) 31413ms
+   ✓ verified beacon contribution replication > needs both human tips before START_SEAT can be certified, then converges  9083ms
+   ✓ verified beacon contribution replication > repeated complete reveals do not recompute or write while votes are missing  3896ms
+   ✓ verified beacon contribution replication > one human with bots certifies its START_SEAT from one real reveal  6505ms
+   ✓ verified beacon contribution replication > certifies chain extension before the next reveal and dice result  3417ms
+   ✓ verified beacon contribution replication > storage failure cannot broadcast a reveal or vote  1312ms
+   ✓ verified beacon contribution replication > restore retransmits the exact durable local contribution  3643ms
+   ✓ verified beacon contribution replication > retries persisted contribution after transient contribution and heartbeat send errors  3556ms
+ ✓ |@cp2p/protocol| src/count-replica.test.ts (1 test) 30616ms
+   ✓ live verified Monopoly count replication > certifies owner count contributions and folds private hands after a legal Monopoly  30615ms
+ ✓ |@cp2p/protocol| src/beacon-log.test.ts (8 tests) 12260ms
+   ✓ certified beacon log integration > derives initial START_SEAT from signed reveals and replays the same crypto snapshot  5617ms
+   ✓ certified beacon log integration > one human with bots needs exactly that human reveal and certificate  5439ms
+   ✓ certified beacon log integration > certifies a state-preserving exhausted-chain extension before the next real dice result  772ms
+ ✓ |@cp2p/protocol| src/steal-delivery.test.ts (8 tests) 8752ms
+   ✓ signed hidden-steal delivery > opens a genuine signed transfer and binds the receipt to the fixed entry and body  1879ms
+   ✓ signed hidden-steal delivery > uses the same sealed ciphertext length for every resource index  2888ms
+   ✓ signed hidden-steal delivery > refuses an authenticated bad opening and accepts only its genuine recipient dispute  2225ms
+   ✓ signed hidden-steal delivery > rejects malformed, mismatched and unsigned acknowledgements before public proof verification  1264ms
+ ✓ |@cp2p/protocol| src/deck-log.test.ts (3 tests) 8113ms
+   ✓ certified deck log > real certified setup, beacon rolls and purchase produce one privately decodable public deal  2534ms
+ ✓ |@cp2p/engine| src/modules/base/setup/board/index.test.ts (6 tests) 6902ms
+   ✓ standard board generation > 10,000 balanced seeds with strictBalance=false  1071ms
+   ✓ standard board generation > 10,000 balanced seeds with strictBalance=true  5823ms
+ ✓ |@cp2p/crypto| src/range.test.ts (12 tests) 6373ms
+   ✓ range proof > proves every six-bit value and independently checks weighted sum and shared equations  5494ms
+ ✓ |@cp2p/crypto| src/shuffle.test.ts (10 tests) 4373ms
+   ✓ compact single-key shuffle proof > keeps original proof bytes across deck sizes, keys, permutations, and contexts  620ms
+   ✓ compact single-key shuffle proof > verifies a non-involutive old→new permutation and explicit/compact transcript equivalence  456ms
+   ✓ compact single-key shuffle proof > contracts an independently constructed explicit proof with forward equations  410ms
+   ✓ compact single-key shuffle proof > rejects a mathematically valid shuffle transcript over duplicate deck points  308ms
+   ✓ compact single-key shuffle proof > rejects guessed challenge openings for an independently constructed false shuffle  363ms
+   ✓ compact single-key shuffle proof > is deterministic for retransmission and changes nonce material with complete statement/context  809ms
+   ✓ compact single-key shuffle proof > rejects bit flips, response changes, round reordering and wrong key or deck  714ms
+   ✓ compact single-key shuffle proof > rejects substituted/re-keyed outputs, duplicate or identity points and false witnesses  306ms
+ ✓ |@cp2p/protocol| src/deck-genesis.test.ts (6 tests) 3725ms
+   ✓ deck genesis commitments > creates a full signed small-deck commitment and hashes each complete pass  402ms
+   ✓ deck genesis commitments > shape-only genesis validation and mandatory pre-sign proof replay remain distinct  609ms
+ ✓ |@cp2p/crypto| src/hidden-transfer.test.ts (11 tests) 3783ms
+   ✓ hidden card transfer proofs > proves index zero and the last index across zero-valued resource gaps  1163ms
+   ✓ hidden card transfer proofs > supports prefixes and total hands above 63 with each component six-bit bounded  449ms
+   ✓ hidden card transfer proofs > supports the maximum eight resource components  884ms
+ ✓ |@cp2p/protocol| src/genesis-outbox.test.ts (4 tests) 3243ms
+   ✓ durable verified genesis consent > persists consent before returning and retries exact bytes after restart  2832ms
+ ✓ |@cp2p/protocol| src/genesis.test.ts (10 tests) 3084ms
+   ✓ genesis validation > requires the canonical base deck despite a permissive callback and forbids stub commitments  2733ms
+ ✓ |@cp2p/protocol| src/p2p-session.test.ts (19 tests) 2495ms
+   ✓ P2PSession > restore reconstructs the owner hand, historical exclusion: false  458ms
+   ✓ P2PSession > restore reconstructs the owner hand, historical exclusion: true  389ms
+ ✓ |@cp2p/protocol| src/consensus-adversarial.test.ts (24 tests) 2416ms
+ ✓ |@cp2p/protocol| src/deck-setup-outbox.test.ts (5 tests) 1954ms
+   ✓ durable deck setup outbox > persists each real shuffle and lock before return and replays the complete setup  422ms
+   ✓ durable deck setup outbox > refuses a divergent valid prior history under the same immutable actor-phase key  397ms
+   ✓ durable deck setup outbox > does not return a new pass when persistence fails or a conflicting writer wins  752ms
+ ✓ |@cp2p/sim| src/golden.test.ts (7 tests) 1775ms
+   ✓ golden replay updates > generates and verifies the accepted bank-shortage prefix  733ms
+   ✓ golden replay updates > regenerates baselines from an older engine version  466ms
+ ✓ |@cp2p/engine| test/golden.test.ts (22 tests) 1901ms
+ ✓ |@cp2p/sim| src/run-game.test.ts (5 tests) 1665ms
+   ✓ simulation runner > every enumerated action validates in at least 2,000 real player states  1084ms
+   ✓ simulation runner > discrete placement enumeration matches brute-force validation across live states  532ms
+ ✓ |@cp2p/engine| src/core/resources/bounds.test.ts (14 tests) 1385ms
+   ✓ resource counts and bounds > preserves a hidden true hand over 10,000 operation sequences  1321ms
+ ✓ |@cp2p/protocol| src/deck-envelope.test.ts (1 test) 1143ms
+   ✓ six-seat base deck wire envelope bounds > a real 25-card shuffle proof fits full proposal, commit and two-proposal accusation envelopes  1142ms
+ ✓ |@cp2p/protocol| src/deck-pass-cache.test.ts (3 tests) 1133ms
+   ✓ bounded success-only deck pass proof memo > a warm shuffle/lock pass still returns detached validated state  383ms
+   ✓ bounded success-only deck pass proof memo > the same actor at a divergent validated predecessor cannot use a warmed result  479ms
+ ✓ |@cp2p/protocol| src/replicated-log.test.ts (22 tests) 1034ms
+ ✓ |@cp2p/protocol| src/deck-setup.test.ts (6 tests) 1025ms
+   ✓ signed deck setup > maps unique card identities and replays ordered shuffle and lock proofs  399ms
+   ✓ signed deck setup > rejects substituted points, re-keyed shuffles and altered lock proofs even when re-signed  445ms
+ ✓ |@cp2p/engine| src/core/geometry/index.test.ts (5 tests) 785ms
+   ✓ pointy-top board geometry > random connected sets have consistent incidence and symmetric neighbors  777ms
+ ✓ |@cp2p/crypto| src/cds.test.ts (6 tests) 656ms
+ ✓ |@cp2p/sim| src/fuzz.test.ts (3 tests) 666ms
+   ✓ seeded fuzz exercises balanced index, per-key omission, pending, and private audit paths  661ms
+ ✓ |@cp2p/protocol| src/deck-ledger.test.ts (6 tests) 578ms
+ ✓ |@cp2p/protocol| src/deck-draw.test.ts (17 tests) 504ms
+ ✓ |@cp2p/sim| src/cli.test.ts (7 tests) 448ms
+   ✓ failure replay > a local card deal uses its recorded private identity when the mutant omits it  355ms
+ ✓ |@cp2p/protocol| src/hand-transition.test.ts (7 tests) 428ms
+ ✓ |@cp2p/protocol| src/consensus-review.test.ts (23 tests) 420ms
+ ✓ |@cp2p/protocol| src/consensus.test.ts (13 tests) 473ms
+ ✓ |@cp2p/sim| src/resource-accounting.test.ts (2 tests) 287ms
+ ✓ |@cp2p/protocol| src/consensus-controller.test.ts (14 tests) 261ms
+ ✓ |@cp2p/engine| src/modules/base/test/scenario.test.ts (2 tests) 220ms
+ ✓ |@cp2p/sim| src/batch.test.ts (1 test) 183ms
+ ✓ |@cp2p/protocol| src/count-contributions.test.ts (8 tests) 203ms
+ ✓ |@cp2p/protocol| src/count-state.test.ts (4 tests) 193ms
+ ✓ |@cp2p/crypto| src/feldman.test.ts (7 tests) 199ms
+ ✓ |@cp2p/web| src/features/game/stats.test.ts (4 tests) 42ms
+ ✓ |@cp2p/protocol| src/verified-session-driver.test.ts (9 tests) 178ms
+ ✓ |@cp2p/protocol| src/hand-trade.test.ts (2 tests) 139ms
+ ✓ |@cp2p/protocol| src/count-reveal.test.ts (4 tests) 138ms
+ ✓ |@cp2p/protocol| src/deck-inbox.test.ts (4 tests) 139ms
+ ✓ |@cp2p/protocol| src/replay.test.ts (4 tests) 127ms
+ ✓ |@cp2p/protocol| src/proposal.test.ts (6 tests) 127ms
+ ✓ |@cp2p/protocol| src/control.test.ts (5 tests) 128ms
+ ✓ |@cp2p/protocol| src/log.test.ts (6 tests) 121ms
+ ✓ |@cp2p/protocol| src/beacon-state.test.ts (5 tests) 125ms
+ ✓ |@cp2p/protocol| src/genesis-encryption.test.ts (4 tests) 114ms
+ ✓ |@cp2p/protocol| src/deck-draw-context.test.ts (2 tests) 49ms
+ ✓ |@cp2p/crypto| src/sigma.test.ts (11 tests) 92ms
+ ✓ |@cp2p/protocol| src/testing/simulation-genesis.test.ts (10 tests) 76ms
+ ✓ |@cp2p/protocol| src/beacon-contributions.test.ts (7 tests) 77ms
+ ✓ |@cp2p/protocol| src/journal.test.ts (5 tests) 79ms
+ ✓ |@cp2p/protocol| src/beacon-extension.test.ts (5 tests) 69ms
+ ✓ |@cp2p/protocol| src/beacon.test.ts (4 tests) 65ms
+ ✓ |@cp2p/engine| src/modules/base/awards/index.test.ts (7 tests) 61ms
+ ✓ |@cp2p/sim| src/net-adversary.test.ts (1 test) 61ms
+ ✓ |@cp2p/protocol| src/hand-commitments.test.ts (4 tests) 58ms
+ ✓ |@cp2p/web| src/session/local-session.test.ts (7 tests) 58ms
+ ✓ |@cp2p/crypto| src/seal.test.ts (6 tests) 57ms
+ ✓ |@cp2p/protocol| src/testing/simulation-driver.test.ts (5 tests) 63ms
+ ✓ |@cp2p/crypto| src/identity.test.ts (6 tests) 56ms
+ ✓ |@cp2p/sim| src/replay.test.ts (8 tests) 38ms
+ ✓ |@cp2p/protocol| src/votes.test.ts (5 tests) 52ms
+ ✓ |@cp2p/engine| src/modules/base/placement/batch.test.ts (1 test) 49ms
+ ✓ |@cp2p/sim| src/provenance.test.ts (1 test) 72ms
+ ✓ |@cp2p/bots| src/random-bot.test.ts (5 tests) 44ms
+ ✓ |@cp2p/web| src/queries/transfers.test.ts (2 tests) 34ms
+ ✓ |@cp2p/web| src/store/session-store.test.ts (9 tests) 32ms
+ ✓ |@cp2p/protocol| src/deck-source.test.ts (4 tests) 28ms
+ ✓ |@cp2p/crypto| src/group.test.ts (8 tests) 30ms
+ ✓ |@cp2p/engine| src/modules/base/rules.test.ts (21 tests) 28ms
+ ✓ |@cp2p/engine| src/modules/base/effects.test.ts (10 tests) 21ms
+ ✓ |@cp2p/engine| src/modules/base/base.test.ts (2 tests) 21ms
+ ✓ |@cp2p/protocol| src/resource-accounting.test.ts (5 tests) 22ms
+ ✓ |@cp2p/engine| src/modules/base/test/robber-timeout.test.ts (17 tests) 20ms
+ ✓ |@cp2p/engine| src/core/rng/index.test.ts (5 tests) 18ms
+ ✓ |@cp2p/engine| src/core/pipeline/engine.test.ts (20 tests) 17ms
+ ✓ |@cp2p/engine| src/core/enumerate.test.ts (3 tests) 17ms
+ ✓ |@cp2p/protocol| src/messages.test.ts (17 tests) 18ms
+ ✓ |@cp2p/engine| src/modules/base/test/legal.test.ts (8 tests) 16ms
+ ✓ |@cp2p/engine| src/modules/base/test/options-invariants.test.ts (10 tests) 12ms
+ ✓ |@cp2p/protocol| src/wire.test.ts (7 tests) 10ms
+ ✓ |@cp2p/crypto| src/hash-chain.test.ts (3 tests) 13ms
+ ✓ |@cp2p/web| src/features/game/visual-effects.test.ts (3 tests) 12ms
+ ✓ |@cp2p/engine| src/modules/base/test/negative-rules.test.ts (4 tests) 13ms
+ ✓ |@cp2p/web| src/features/game/session-registry.test.ts (1 test) 11ms
+ ✓ |@cp2p/web| src/features/game/save-coordinator.test.ts (1 test) 12ms
+ ✓ |@cp2p/protocol| src/random-derivations.test.ts (11 tests) 11ms
+ ✓ |@cp2p/web| src/features/board/toRenderModel.test.ts (3 tests) 12ms
+ ✓ |@cp2p/protocol| src/beacon-source.test.ts (4 tests) 8ms
+stdout | src/features/game/event-format.test.ts
+🌐 i18next is made possible by our own product, Locize — consider powering your project with managed localization (AI, CDN, integrations): https://locize.com 💙
+
+ ✓ |@cp2p/web| src/features/game/event-format.test.ts (3 tests) 8ms
+ ✓ |@cp2p/protocol| src/schemas.test.ts (5 tests) 8ms
+ ✓ |@cp2p/protocol| src/steal-source.test.ts (4 tests) 11ms
+ ✓ |@cp2p/crypto| src/derivation.test.ts (4 tests) 9ms
+ ✓ |@cp2p/protocol| src/hand-source.test.ts (3 tests) 7ms
+ ✓ |@cp2p/engine| src/modules/base/placement/index.test.ts (4 tests) 8ms
+ ✓ |@cp2p/web| src/session/random.test.ts (3 tests) 7ms
+ ✓ |@cp2p/sim| src/random-source.test.ts (2 tests) 8ms
+ ✓ |@cp2p/protocol| src/deck-replica.test.ts (7 tests | 1 skipped) 170120ms
+   ✓ live verified deck replication > automatically certifies an owned victory card after a transient reveal-source failure  54134ms
+   ✓ live verified deck replication > rejects a verified driver with missing hosted or extra foreign private seats before opening a journal  5720ms
+   ✓ live verified deck replication > relays a certified draw through a third human without its direct first prefix  27809ms
+   ✓ live verified deck replication > certifies a legal first draw with 'one human hosting three consecutive b…'  10749ms
+   ✓ live verified deck replication > certifies a legal first draw with 'four human voters'  38691ms
+   ✓ live verified deck replication > gossips durable unlocks after a legal purchase and restores a dropped unlock  33014ms
+ ✓ |@cp2p/maps| src/index.test.ts (2 tests) 6ms
+ ✓ |@cp2p/engine| src/core/pipeline/input-keys.test.ts (5 tests) 6ms
+ ✓ |@cp2p/protocol| src/testing/memnet.test.ts (10 tests) 5ms
+ ✓ |@cp2p/protocol| src/engine-codec.test.ts (1 test) 5ms
+ ✓ |@cp2p/crypto| src/uniform.test.ts (3 tests) 5ms
+ ✓ |@cp2p/codec| src/canonical.test.ts (8 tests) 5ms
+ ✓ |@cp2p/renderer| src/harborLayout.test.ts (3 tests) 4ms
+ ✓ |@cp2p/web| src/features/actions/availability.test.ts (3 tests) 4ms
+ ✓ |@cp2p/engine| src/core/modules/registry.test.ts (4 tests) 4ms
+ ✓ |@cp2p/renderer| src/tokenLayout.test.ts (3 tests) 3ms
+ ✓ |@cp2p/engine| src/modules/base/board/index.test.ts (2 tests) 5ms
+ ✓ |@cp2p/sim| src/net-batch.test.ts (14 tests) 4ms
+ ✓ |@cp2p/protocol| src/safety-store.test.ts (5 tests) 3ms
+ ✓ |@cp2p/protocol| src/testing/virtual-clock.test.ts (5 tests) 3ms
+ ✓ |@cp2p/web| src/queries/hooks.test.ts (1 test) 3ms
+ ✓ |@cp2p/engine| src/core/state/json.test.ts (3 tests) 2ms
+ ✓ |@cp2p/renderer| src/input/hitTest.test.ts (4 tests) 2ms
+ ✓ |@cp2p/engine| src/core/resources/counts-cache.test.ts (1 test) 2ms
+ ✓ |@cp2p/engine| src/core/state/json-validation.test.ts (1 test) 2ms
+ ✓ |@cp2p/renderer| src/effectMotion.test.ts (2 tests) 2ms
+ ✓ |@cp2p/web| src/session/scheduling.test.ts (2 tests) 2ms
+ ✓ |@cp2p/renderer| src/assets/terrainTextures.test.ts (4 tests) 2ms
+ ✓ |@cp2p/web| src/features/game/placement-confirmation-layout.test.ts (1 test) 2ms
+ ✓ |@cp2p/renderer| src/appearance.test.ts (2 tests) 1ms
+ ✓ |@cp2p/renderer| src/input/camera.test.ts (3 tests) 1ms
+ ✓ |@cp2p/storage| src/index.test.ts (1 test) 1ms
+ ✓ |@cp2p/protocol| src/index.test.ts (1 test) 1ms
+ ✓ |@cp2p/p2p| src/index.test.ts (1 test) 1ms
+ ✓ |@cp2p/codec| src/index.test.ts (1 test) 1ms
+ ✓ |@cp2p/renderer| src/index.test.ts (1 test) 1ms
+ ✓ |@cp2p/signaling| src/index.test.ts (1 test) 1ms
+ ✓ |@cp2p/bots| src/index.test.ts (1 test) 1ms
+ ✓ |@cp2p/engine| src/index.test.ts (1 test) 1ms
+ ✓ |@cp2p/crypto| src/index.test.ts (1 test) 1ms
+stdout | src/features/board/BoardView.test.tsx
+🌐 i18next is made possible by our own product, Locize — consider powering your project with managed localization (AI, CDN, integrations): https://locize.com 💙
+
+stdout | src/features/trade/trade.test.tsx
+🌐 i18next is made possible by our own product, Locize — consider powering your project with managed localization (AI, CDN, integrations): https://locize.com 💙
+
+ ✓ |@cp2p/web| src/features/board/BoardView.test.tsx (3 tests) 147ms
+ ✓ |@cp2p/web| src/features/trade/trade.test.tsx (6 tests) 116ms
+stdout | src/features/dialogs/forms.test.tsx
+🌐 i18next is made possible by our own product, Locize — consider powering your project with managed localization (AI, CDN, integrations): https://locize.com 💙
+
+ ✓ |@cp2p/web| src/features/dialogs/forms.test.tsx (4 tests) 86ms
+stdout | src/features/devtools/devtools.test.tsx
+🌐 i18next is made possible by our own product, Locize — consider powering your project with managed localization (AI, CDN, integrations): https://locize.com 💙
+
+ ✓ |@cp2p/web| src/features/devtools/devtools.test.tsx (2 tests) 71ms
+ ✓ |@cp2p/web| src/queries/replay-query.test.tsx (1 test) 69ms
+stdout | src/features/game/DiceRollReadout.test.tsx
+🌐 i18next is made possible by our own product, Locize — consider powering your project with managed localization (AI, CDN, integrations): https://locize.com 💙
+
+ ✓ |@cp2p/web| src/features/game/DiceRollReadout.test.tsx (2 tests) 21ms
+ ✓ |@cp2p/web| src/queries/repositories/repositories.test.ts (5 tests) 4ms
+ ✓ |@cp2p/web| src/features/game/production-receipts.test.tsx (3 tests) 18ms
+ ✓ |@cp2p/web| src/config.test.ts (1 test) 1ms
+
+ Test Files  145 passed (145)
+      Tests  832 passed | 1 skipped (833)
+   Start at  23:25:10
+   Duration  175.89s (transform 3.19s, setup 0ms, collect 12.45s, tests 320.87s, environment 1.11s, prepare 4.83s)

@@ -9,6 +9,7 @@ import { parseCanonical } from './validation.js';
 import { validateDeckCeremony, validateDeckGenesisCommitments } from './deck-genesis.js';
 import type { SignedDeckPass } from './deck-setup.js';
 import * as v from 'valibot';
+import { validateGenesisEncryption } from './genesis-encryption.js';
 
 export const GENESIS_PREVIOUS_HASH = '0'.repeat(64);
 
@@ -70,6 +71,8 @@ export function signVerifiedGenesis(
   if (!parsed.ok) return parsed;
   if (parsed.value.security !== 'verified')
     return failure('genesis-security', 'Verified consent requires verified genesis');
+  const encryption = validateGenesisEncryption(parsed.value);
+  if (!encryption.ok) return encryption;
   const decks = validateDeckCeremony(parsed.value, transcripts);
   if (!decks.ok) return decks;
   try {
@@ -137,12 +140,16 @@ export function validateGenesis(
       return failure('stub-forbidden', 'Stub randomness is only available in explicit simulations');
     if (Object.keys(genesis.commitments).length !== 0)
       return failure('stub-commitments', 'Stub genesis must not claim cryptographic commitments');
+    const encryption = validateGenesisEncryption(genesis);
+    if (!encryption.ok) return encryption;
   } else {
     if (!policy.verifyCommitments)
       return failure(
         'commitments-unavailable',
         'Cryptographic genesis verification is unavailable',
       );
+    const encryption = validateGenesisEncryption(genesis);
+    if (!encryption.ok) return encryption;
     try {
       const verified = policy.verifyCommitments(genesis);
       if (!verified.ok) return verified;

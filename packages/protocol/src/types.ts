@@ -8,6 +8,8 @@ export interface HumanSeat {
   seat: Seat;
   kind: 'human';
   publicKey: PeerId;
+  /** Required in verified games; frozen before the deck ceremony. */
+  encryptionKey?: string;
   name: string;
   colour: string;
 }
@@ -16,6 +18,8 @@ export interface BotSeat {
   seat: Seat;
   kind: 'bot';
   publicKey: PeerId;
+  /** Required in verified games; retained if this seat is recovered. */
+  encryptionKey?: string;
   botHost: PeerId;
   name: string;
   colour: string;

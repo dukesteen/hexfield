@@ -54,6 +54,7 @@ const humanSeatSchema = v.strictObject({
   seat: seatSchema,
   kind: v.literal('human'),
   publicKey: key32,
+  encryptionKey: v.exactOptional(key32),
   name: label,
   colour: label,
 });
@@ -61,6 +62,7 @@ const botSeatSchema = v.strictObject({
   seat: seatSchema,
   kind: v.literal('bot'),
   publicKey: key32,
+  encryptionKey: v.exactOptional(key32),
   botHost: key32,
   name: label,
   colour: label,

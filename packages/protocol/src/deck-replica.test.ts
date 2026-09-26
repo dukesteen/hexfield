@@ -1,4 +1,4 @@
-import { canonicalDecode } from '@cp2p/codec';
+import { canonicalDecode, fromBase64Url } from '@cp2p/codec';
 import { BASE_DEV_CARD_CATALOGUE, RESOURCES, failure } from '@cp2p/engine';
 import type { CommandShape, GameState, Result, Seat } from '@cp2p/engine';
 import { writeFile } from 'node:fs/promises';
@@ -21,6 +21,7 @@ import { P2PSession } from './p2p-session.js';
 import { ReplicatedLog } from './replicated-log.js';
 import type { ReplicatedLogOptions } from './replicated-log.js';
 import { createMemnet } from './testing/memnet.js';
+import { createSimulationGenesis } from './testing/simulation-genesis.js';
 import { createVerifiedDeckSession } from './testing/verified-deck-session.js';
 import type { VerifiedDeckSession } from './testing/verified-deck-session.js';
 import type { VirtualClock } from './testing/virtual-clock.js';
@@ -269,6 +270,7 @@ async function driveToDraw(
     stopBeforePurchase?: boolean;
     settlementOrder?: readonly string[];
     minimumBuyerSeat?: number;
+    buyerSeat?: Seat;
   } = {},
 ) {
   const initialPosition = required(replicas[0]).getContext().log.crypto?.decks.decks[0]
@@ -302,7 +304,8 @@ async function driveToDraw(
       );
     }
     const choice =
-      (player.seat >= (options.minimumBuyerSeat ?? 0)
+      (player.seat >= (options.minimumBuyerSeat ?? 0) &&
+      (options.buyerSeat === undefined || player.seat === options.buyerSeat)
         ? legal.find((item) => item.type === 'BUY_DEV_CARD')
         : undefined) ??
       legal.find((item) => item.type === 'ROLL_DICE') ??
@@ -479,7 +482,12 @@ async function driveSessionToFirstPurchase(
 
 describe('live verified deck replication', () => {
   test('automatically certifies an owned victory card after a transient reveal-source failure', async () => {
-    const fixture = createVerifiedDeckSession(0, 2, 128, { vpTarget: 3 });
+    const fixture = createVerifiedDeckSession(3, 2, 128, {
+      vpTarget: 3,
+      boardSeed: fromBase64Url(
+        createSimulationGenesis({ seed: 0, humanCount: 2 }).genesis.genesisSeed,
+      ),
+    });
     const peers = fixture.humans.map(
       (seat) => required(fixture.simulation.identities.get(seat.seat)).peerId,
     );
@@ -928,7 +936,9 @@ describe('live verified deck replication', () => {
   );
 
   test('gossips durable unlocks after a legal purchase and restores a dropped unlock', async () => {
-    const fixture = createVerifiedDeckSession();
+    const fixture = createVerifiedDeckSession(3, 2, 128, {
+      boardSeed: new Uint8Array(32).fill(50),
+    });
     expect(value(genesisDeckDefinitions(fixture.deck.body))[0]?.cards).toHaveLength(25);
     const peers = fixture.humans.map(
       (seat) => required(fixture.simulation.identities.get(seat.seat)).peerId,
@@ -1013,9 +1023,13 @@ describe('live verified deck replication', () => {
       if (firstPrevote) required(transports[1]).inject(required(peers[0]), firstPrevote);
     }
     await settle([first, second], network.clock);
-    const beforeDraw = await driveToDraw(fixture, [first, second], network.clock);
+    const beforeDraw = await driveToDraw(fixture, [first, second], network.clock, {
+      settlementOrder: BOARD_50_SETTLEMENT_ORDER,
+      buyerSeat: required(fixture.humans[0]).seat,
+    });
     const draw = required(beforeDraw.log.crypto?.decks.active);
     expect(draw.position).toBe(0);
+    expect(draw.seat).toBe(required(fixture.humans[0]).seat);
     await settle([first, second], network.clock);
     const dropped = required(sent[0]).find((message) => message.t === 'DECK_CONTRIB');
     expect(dropped).toBeDefined();
