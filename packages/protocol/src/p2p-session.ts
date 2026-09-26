@@ -35,6 +35,16 @@ import { logEntrySchema } from './schemas.js';
 import { parseCanonical } from './validation.js';
 import type { CountOperation } from './count-reveal.js';
 import type { StealContributionProducer, StealResponseProducer } from './steal-contributions.js';
+import {
+  planTradeProof,
+  signTradeProofRequest,
+  tradeProofRequestId,
+} from './trade-proof-delivery.js';
+import type {
+  IndexedHandProof,
+  SignedTradeProofRequest,
+  SignedTradeProofResponse,
+} from './trade-proof-delivery.js';
 
 /** Private state and system protocols are separate from the replicated public log. */
 export interface SessionDriver {
@@ -45,7 +55,13 @@ export interface SessionDriver {
   prepareCommand?(
     body: Omit<CommandBody, 'evidence'>,
     context: LogContext,
+    external?: readonly IndexedHandProof[],
   ): Result<CommandBody['evidence']>;
+  /** Proofs for the owned counterparty of an authenticated, accepted trade. */
+  produceTradeProofs?(
+    request: SignedTradeProofRequest,
+    context: LogContext,
+  ): Result<readonly IndexedHandProof[]>;
   /** Owner-only exact-count proof for a frozen Monopoly victim request. */
   produceCountProof?(
     operation: CountOperation,
@@ -72,7 +88,14 @@ export interface SessionDriver {
 
 export interface P2PSessionOptions extends Omit<
   ReplicatedLogOptions,
-  'systemInput' | 'onCommit' | 'onStatus' | 'countProof' | 'stealContribution' | 'stealResponse'
+  | 'systemInput'
+  | 'onCommit'
+  | 'onStatus'
+  | 'countProof'
+  | 'stealContribution'
+  | 'stealResponse'
+  | 'tradeProof'
+  | 'onTradeProofResponse'
 > {
   /** Fresh driver on both create and restore. Restore replays private consequences. */
   createDriver: (
@@ -92,6 +115,20 @@ export interface CertifiedHistory {
   entries: readonly CertifiedEntry[];
 }
 
+interface TradeIntent {
+  seat: Seat;
+  termsHash: string;
+  deadline: number;
+  cancelled: boolean;
+  request: SignedTradeProofRequest | null;
+  finishWait: ((result: Result<readonly IndexedHandProof[]>) => void) | null;
+  retryTimer: unknown;
+}
+
+const TRADE_WAIT_MS = 10_000;
+const TRADE_RETRY_MS = 250;
+const TRADE_PARENT_RETRIES = 3;
+
 /** GameSession publishes only persisted certified effects, never speculative proposals. */
 export class P2PSession implements GameSession<CertifiedHistory> {
   readonly mode = 'p2p' as const;
@@ -106,6 +143,7 @@ export class P2PSession implements GameSession<CertifiedHistory> {
   private automaticRetryTimer: unknown = null;
   private automaticRetryDelay = 250;
   private readonly inflight = new Set<Seat>();
+  private readonly tradeIntents = new Map<Seat, TradeIntent>();
 
   private constructor(
     private readonly options: P2PSessionOptions,
@@ -204,6 +242,8 @@ export class P2PSession implements GameSession<CertifiedHistory> {
       Reflect.deleteProperty(safeOptions, 'countProof');
       Reflect.deleteProperty(safeOptions, 'stealContribution');
       Reflect.deleteProperty(safeOptions, 'stealResponse');
+      Reflect.deleteProperty(safeOptions, 'tradeProof');
+      Reflect.deleteProperty(safeOptions, 'onTradeProofResponse');
       const replicaOptions: ReplicatedLogOptions = {
         ...safeOptions,
         systemInput: (current) => driver.next(current.log),
@@ -236,10 +276,19 @@ export class P2PSession implements GameSession<CertifiedHistory> {
                 ) ?? failure('steal-response-source', 'Steal response driver is unavailable'),
             }
           : {}),
+        ...(driver.produceTradeProofs
+          ? {
+              tradeProof: (request: SignedTradeProofRequest, current: LogContext) =>
+                driver.produceTradeProofs?.(copyCanonical(request), detachedLogContext(current)) ??
+                failure('trade-proof-source', 'Trade proof driver is unavailable'),
+            }
+          : {}),
+        onTradeProofResponse: (response) => openedSession.receiveTradeProof(response),
         onCommit: (validated, previous, next) => {
           const applied = openedSession.applyCommit(validated, next, previous.log);
           if (!applied.ok) {
             openedSession.status = { kind: 'error', message: applied.error.message };
+            for (const seat of openedSession.tradeIntents.keys()) openedSession.cancelPending(seat);
             throw new Error(`${applied.error.code}: ${applied.error.message}`);
           }
           openedSession.emit(validated.events);
@@ -247,8 +296,10 @@ export class P2PSession implements GameSession<CertifiedHistory> {
         },
         onStatus: (status) => {
           openedSession.protocolStatus = status;
-          if (status.kind === 'halted')
+          if (status.kind === 'halted') {
             openedSession.status = { kind: 'error', message: status.code };
+            for (const seat of openedSession.tradeIntents.keys()) openedSession.cancelPending(seat);
+          }
           openedSession.emit([]);
         },
       };
@@ -343,7 +394,7 @@ export class P2PSession implements GameSession<CertifiedHistory> {
       options.expectedRevision !== this.context.log.head.seq
     )
       return failure('stale-revision', 'Board changed; choose the action again');
-    if (this.inflight.has(seat))
+    if (this.inflight.has(seat) || this.tradeIntents.has(seat))
       return failure('command-pending', 'This seat already has an uncommitted command');
     let prepared: Result<SignedCommand>;
     try {
@@ -352,7 +403,11 @@ export class P2PSession implements GameSession<CertifiedHistory> {
       // No command has reached the replica yet, so an automatic caller may safely retry.
       return failure('session-command-preparation', 'Could not prepare the local command');
     }
-    if (!prepared.ok) return prepared;
+    if (!prepared.ok) {
+      if (prepared.error.code === 'hand-proof-owner' && command.type === 'CONFIRM_TRADE')
+        return this.submitTrade(seat, command);
+      return prepared;
+    }
     this.inflight.add(seat);
     try {
       return await replica.submit(prepared.value);
@@ -362,13 +417,9 @@ export class P2PSession implements GameSession<CertifiedHistory> {
     }
   }
 
-  private prepareSubmission(seat: Seat, command: CommandShape): Result<SignedCommand> {
-    const valid = this.validate(seat, command);
-    if (!valid.ok) return valid;
-    const key = this.keys.get(seat);
-    if (!key) return failure('session-key', 'Seat key is unavailable');
+  private commandBody(seat: Seat, command: CommandShape): Omit<CommandBody, 'evidence'> {
     const { log } = this.context;
-    const body: Omit<CommandBody, 'evidence'> = {
+    return {
       gameId: log.genesis.gameId,
       genesisDigest: this.context.membership.genesisDigest,
       seat,
@@ -377,15 +428,218 @@ export class P2PSession implements GameSession<CertifiedHistory> {
       headHash: entryHash(log.head),
       command,
     };
+  }
+
+  private prepareSubmission(
+    seat: Seat,
+    command: CommandShape,
+    external?: readonly IndexedHandProof[],
+  ): Result<SignedCommand> {
+    const valid = this.validate(seat, command);
+    if (!valid.ok) return valid;
+    const key = this.keys.get(seat);
+    if (!key) return failure('session-key', 'Seat key is unavailable');
+    const { log } = this.context;
+    const body = this.commandBody(seat, command);
     let evidence: CommandBody['evidence'];
     try {
-      const prepared = this.driver.prepareCommand?.(copyCanonical(body), detachedLogContext(log));
+      const prepared = this.driver.prepareCommand?.(
+        copyCanonical(body),
+        detachedLogContext(log),
+        external === undefined ? undefined : copyCanonical(external),
+      );
       if (prepared && !prepared.ok) return prepared;
       evidence = prepared?.value;
     } catch {
       return failure('session-command-proof', "Could not prepare this command's private proof");
     }
     return success(signCommand(evidence === undefined ? body : { ...body, evidence }, key));
+  }
+
+  /** Cancels only pre-admission proof preparation, never an accepted command. */
+  cancelPending(seat: Seat): boolean {
+    const intent = this.tradeIntents.get(seat);
+    if (!intent) return false;
+    intent.cancelled = true;
+    this.tradeIntents.delete(seat);
+    intent.finishWait?.(failure('trade-proof-cancelled', 'Trade preparation was cancelled'));
+    this.maybeAutomatic();
+    return true;
+  }
+
+  private async submitTrade(seat: Seat, command: CommandShape): Promise<Result<void>> {
+    const replica = this.replica;
+    const key = this.keys.get(seat);
+    if (!replica || !key || !this.driver.prepareCommand)
+      return failure('trade-proof-unavailable', 'Trade proof delivery is unavailable');
+    const initial = planTradeProof(this.commandBody(seat, command), this.context.log);
+    if (!initial.ok) return initial;
+    const intent: TradeIntent = {
+      seat,
+      termsHash: initial.value.termsHash,
+      deadline: this.options.clock.now() + TRADE_WAIT_MS,
+      cancelled: false,
+      request: null,
+      finishWait: null,
+      retryTimer: null,
+    };
+    this.tradeIntents.set(seat, intent);
+    let admitted = false;
+    try {
+      for (let attempt = 0; attempt <= TRADE_PARENT_RETRIES; attempt++) {
+        if (intent.cancelled || this.status.kind !== 'running')
+          return failure('trade-proof-cancelled', 'Trade preparation is no longer active');
+        if (this.options.clock.now() >= intent.deadline)
+          return failure('trade-proof-timeout', 'The other player did not provide a trade proof');
+        const valid = this.validate(seat, initial.value.body.command);
+        if (!valid.ok) return valid;
+        const plan = planTradeProof(
+          this.commandBody(seat, initial.value.body.command),
+          this.context.log,
+        );
+        if (!plan.ok) return plan;
+        if (plan.value.termsHash !== intent.termsHash)
+          return failure('trade-proof-terms-changed', 'The selected trade terms changed');
+        let proofs: readonly IndexedHandProof[] | undefined;
+        if (plan.value.indices.length > 0 && !this.keys.has(plan.value.owner)) {
+          const request = signTradeProofRequest(plan.value.body, key);
+          // oxlint-disable-next-line no-await-in-loop -- Every fresh-parent attempt requires its own bound response.
+          const received = await this.waitForTradeProof(intent, request);
+          if (!received.ok) {
+            if (received.error.code === 'trade-proof-parent') continue;
+            return received;
+          }
+          proofs = received.value;
+        }
+        if (intent.cancelled || this.status.kind !== 'running')
+          return failure('trade-proof-cancelled', 'Trade preparation is no longer active');
+        if (entryHash(this.context.log.head) !== plan.value.body.headHash) continue;
+        if (this.options.clock.now() >= intent.deadline)
+          return failure('trade-proof-timeout', 'The trade proof arrived too late');
+        const uninterrupted = this.checkTradePriority(seat);
+        if (!uninterrupted.ok) return uninterrupted;
+        const prepared = this.prepareSubmission(seat, initial.value.body.command, proofs);
+        if (!prepared.ok) return prepared;
+        const ready = this.checkTradePriority(seat);
+        if (!ready.ok) return ready;
+        if (this.options.clock.now() >= intent.deadline)
+          return failure('trade-proof-timeout', 'Trade preparation took too long');
+        // Move the reservation atomically. Cancellation stops being safe at admission.
+        this.tradeIntents.delete(seat);
+        this.inflight.add(seat);
+        admitted = true;
+        // oxlint-disable-next-line no-await-in-loop -- Only the final command is submitted; keep its reservation until completion.
+        return await replica.submit(prepared.value);
+      }
+      return failure('trade-proof-stale', 'The board kept changing; confirm the trade again');
+    } catch {
+      return admitted
+        ? failure(
+            'replica-outcome-unknown',
+            'The trade may have committed; restore and check the certified log before retrying',
+          )
+        : failure('trade-proof-preparation', 'Could not prepare this trade');
+    } finally {
+      intent.finishWait?.(failure('trade-proof-cancelled', 'Trade preparation ended'));
+      if (this.tradeIntents.get(seat) === intent) this.tradeIntents.delete(seat);
+      if (admitted) this.inflight.delete(seat);
+      this.maybeAutomatic();
+    }
+  }
+
+  private checkTradePriority(seat: Seat): Result<void> {
+    try {
+      const own = this.getPrivate(seat);
+      const automatic = own ? this.automaticCommand(own) : null;
+      const expired = this.getTimers().some(
+        (timer) =>
+          timer.seat === seat &&
+          !timer.paused &&
+          (timer.remainingMs <= 0 ||
+            (timer.expiresAt !== null && timer.expiresAt <= this.options.clock.now())),
+      );
+      return !own || !automatic?.ok || automatic.value || expired
+        ? failure('trade-proof-interrupted', 'An automatic action or timer takes priority')
+        : success(undefined);
+    } catch {
+      return failure('trade-proof-preparation', 'Could not check the current trade priority');
+    }
+  }
+
+  private waitForTradeProof(
+    intent: TradeIntent,
+    request: SignedTradeProofRequest,
+  ): Promise<Result<readonly IndexedHandProof[]>> {
+    return new Promise((resolve) => {
+      const requestId = tradeProofRequestId(request.body);
+      let finished = false;
+      const finish = (result: Result<readonly IndexedHandProof[]>) => {
+        if (finished) return;
+        finished = true;
+        if (intent.retryTimer !== null) this.options.clock.clearTimeout(intent.retryTimer);
+        intent.retryTimer = null;
+        intent.request = null;
+        intent.finishWait = null;
+        this.replica?.cancelTradeProofRequest(requestId);
+        resolve(result);
+      };
+      intent.request = request;
+      intent.finishWait = finish;
+      const retry = () => {
+        intent.retryTimer = null;
+        if (intent.cancelled || this.status.kind !== 'running' || !this.replica) {
+          finish(failure('trade-proof-cancelled', 'Trade preparation is no longer active'));
+          return;
+        }
+        if (this.options.clock.now() >= intent.deadline) {
+          finish(failure('trade-proof-timeout', 'The other player did not provide a trade proof'));
+          return;
+        }
+        if (entryHash(this.context.log.head) !== request.body.headHash) {
+          finish(failure('trade-proof-parent', 'The certified parent changed'));
+          return;
+        }
+        try {
+          const priority = this.checkTradePriority(intent.seat);
+          if (!priority.ok) {
+            finish(priority);
+            return;
+          }
+          const sent = this.replica.requestTradeProof(request);
+          if (
+            !sent.ok &&
+            sent.error.code !== 'replica-transport' &&
+            sent.error.code !== 'trade-proof-stale-head' &&
+            sent.error.code !== 'trade-proof-parent'
+          ) {
+            finish(sent);
+            return;
+          }
+          // The replica advances its head before asynchronous journal/controller
+          // work publishes the session head. Wait for that publication instead
+          // of spending fresh-parent attempts on the same stale body.
+        } catch {
+          finish(failure('trade-proof-preparation', 'Could not request the other player’s proof'));
+          return;
+        }
+        if (!finished)
+          intent.retryTimer = this.options.clock.setTimeout(
+            retry,
+            Math.max(0, Math.min(TRADE_RETRY_MS, intent.deadline - this.options.clock.now())),
+          );
+      };
+      retry();
+    });
+  }
+
+  private receiveTradeProof(response: SignedTradeProofResponse): void {
+    for (const intent of this.tradeIntents.values()) {
+      const request = intent.request;
+      if (request && tradeProofRequestId(request.body) === response.body.requestId) {
+        intent.finishWait?.(success(copyCanonical(response.body.proofs)));
+        return;
+      }
+    }
   }
 
   subscribe(listener: (update: SessionUpdate) => void): Unsubscribe {
@@ -424,6 +678,7 @@ export class P2PSession implements GameSession<CertifiedHistory> {
 
   dispose(): void {
     if (this.status.kind === 'disposed') return;
+    for (const seat of this.tradeIntents.keys()) this.cancelPending(seat);
     this.clearAutomaticRetry();
     this.replica?.dispose();
     this.status = { kind: 'disposed' };
@@ -465,6 +720,8 @@ export class P2PSession implements GameSession<CertifiedHistory> {
       if (!applied.ok) return applied;
     }
     this.context = next;
+    for (const intent of this.tradeIntents.values())
+      intent.finishWait?.(failure('trade-proof-parent', 'The certified parent changed'));
     this.clearAutomaticRetry();
     this.automaticParent = null;
     this.automaticRetryDelay = 250;
@@ -515,6 +772,7 @@ export class P2PSession implements GameSession<CertifiedHistory> {
     }
     const input = this.options.engine.getAutomaticInput(this.context.log.state, privates);
     if (input?.kind !== 'command' || !this.keys.has(input.seat)) return;
+    this.cancelPending(input.seat);
     if (this.inflight.has(input.seat)) return;
     this.automaticParent = parent;
     void this.submit(input.seat, input.command)

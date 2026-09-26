@@ -51,6 +51,8 @@ export interface GameSession<Save = unknown> {
   getEvents(): readonly GameEvent[];
   controllableSeats(): Seat[];
   submit(seat: Seat, command: CommandShape, options?: SubmitOptions): Promise<Result<void>>;
+  /** Cancel preparation that has not entered consensus; accepted commands cannot be cancelled. */
+  cancelPending?(seat: Seat): boolean;
   subscribe(listener: (update: SessionUpdate) => void): Unsubscribe;
   exportSave(): Save;
   setPaused?(paused: boolean): void;

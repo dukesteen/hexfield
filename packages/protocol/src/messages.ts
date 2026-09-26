@@ -6,6 +6,10 @@ import {
   signedStealDisputeSchema,
   signedStealReceiptSchema,
 } from './steal-delivery.js';
+import {
+  signedTradeProofRequestSchema,
+  signedTradeProofResponseSchema,
+} from './trade-proof-delivery.js';
 import { deckUnlockContributionSchema } from './deck-inbox.js';
 import { certifiedEntrySchema, signedProposalSchema } from './proposal.js';
 import {
@@ -49,6 +53,14 @@ const stealResponseSchema = v.strictObject({
     v.strictObject({ kind: v.literal('receipt'), value: signedStealReceiptSchema }),
     v.strictObject({ kind: v.literal('dispute'), value: signedStealDisputeSchema }),
   ]),
+});
+const tradeProofRequestMessageSchema = v.strictObject({
+  t: v.literal('TRADE_PROOF_REQUEST'),
+  request: signedTradeProofRequestSchema,
+});
+const tradeProofResponseMessageSchema = v.strictObject({
+  t: v.literal('TRADE_PROOF_RESPONSE'),
+  response: signedTradeProofResponseSchema,
 });
 const proposalMessageSchema = v.strictObject({
   t: v.literal('PROPOSAL'),
@@ -113,6 +125,8 @@ export const protocolMessageSchema = v.variant('t', [
   countContributionSchema,
   stealContributionSchema,
   stealResponseSchema,
+  tradeProofRequestMessageSchema,
+  tradeProofResponseMessageSchema,
   proposalMessageSchema,
   voteMessageSchema,
   commitSchema,

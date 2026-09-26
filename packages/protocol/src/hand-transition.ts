@@ -75,26 +75,22 @@ const bitProofSchema = v.strictObject({
   responses: v.tuple([key32Schema, key32Schema]),
 });
 const proofFields = { seat: seatSchema, resource: v.picklist(RESOURCES), count: countSchema };
-export const handProofsSchema = v.pipe(
-  v.array(
-    v.variant('kind', [
-      v.strictObject({
-        ...proofFields,
-        kind: v.literal('range'),
-        proof: v.strictObject({
-          commitments: v.pipe(v.array(key32Schema), v.length(6)),
-          proofs: v.pipe(v.array(bitProofSchema), v.length(6)),
-        }),
-      }),
-      v.strictObject({
-        ...proofFields,
-        kind: v.literal('count'),
-        proof: v.strictObject({ commitment: key32Schema, response: key32Schema }),
-      }),
-    ]),
-  ),
-  v.maxLength(30),
-);
+const handProofSchema = v.variant('kind', [
+  v.strictObject({
+    ...proofFields,
+    kind: v.literal('range'),
+    proof: v.strictObject({
+      commitments: v.pipe(v.array(key32Schema), v.length(6)),
+      proofs: v.pipe(v.array(bitProofSchema), v.length(6)),
+    }),
+  }),
+  v.strictObject({
+    ...proofFields,
+    kind: v.literal('count'),
+    proof: v.strictObject({ commitment: key32Schema, response: key32Schema }),
+  }),
+]);
+export const handProofsSchema = v.pipe(v.array(handProofSchema), v.maxLength(30));
 const bindingSchema = v.strictObject({
   genesisDigest: key32Schema,
   epoch: nonnegativeIntegerSchema,
@@ -280,35 +276,34 @@ function adjustedPoint(obligation: HandObligation): string {
   );
 }
 
-/** Verify exactly the derived obligations; extra, omitted or reordered proofs fail. */
-export function verifyHandProofs(
+/** Verify one locally derived obligation at its canonical index. */
+export function verifyHandProof(
   plan: HandTransitionPlan,
-  proofs: unknown,
+  index: number,
+  proof: unknown,
   binding: HandProofBinding,
 ): Result<void> {
   try {
-    const parsed = parseCanonical(proofs, handProofsSchema);
+    const parsed = parseCanonical(proof, handProofSchema);
     if (!parsed.ok) return parsed;
-    if (parsed.value.length !== plan.obligations.length)
-      return failure('hand-proof-count', 'Evidence must cover exactly the required hand proofs');
-    for (const [index, proof] of parsed.value.entries()) {
-      const obligation = plan.obligations[index];
-      if (
-        !obligation ||
-        proof.kind !== obligation.kind ||
-        proof.seat !== obligation.seat ||
-        proof.resource !== obligation.resource ||
-        proof.count !== obligation.count
-      )
-        return failure('hand-proof-obligation', 'Hand proof differs from the required obligation');
-      const context = handProofContext(plan, index, binding);
-      const point = adjustedPoint(obligation);
-      const valid =
-        proof.kind === 'range'
-          ? verifyRange({ commitment: point, bits: 6 }, proof.proof, context)
-          : verifySchnorr({ base: encodePoint(H), publicPoint: point }, proof.proof, context);
-      if (!valid) return failure('hand-proof-invalid', 'Committed hand proof is invalid');
-    }
+    const obligation = plan.obligations[index];
+    if (
+      !Number.isSafeInteger(index) ||
+      index < 0 ||
+      !obligation ||
+      parsed.value.kind !== obligation.kind ||
+      parsed.value.seat !== obligation.seat ||
+      parsed.value.resource !== obligation.resource ||
+      parsed.value.count !== obligation.count
+    )
+      return failure('hand-proof-obligation', 'Hand proof differs from the required obligation');
+    const context = handProofContext(plan, index, binding);
+    const point = adjustedPoint(obligation);
+    const valid =
+      parsed.value.kind === 'range'
+        ? verifyRange({ commitment: point, bits: 6 }, parsed.value.proof, context)
+        : verifySchnorr({ base: encodePoint(H), publicPoint: point }, parsed.value.proof, context);
+    if (!valid) return failure('hand-proof-invalid', 'Committed hand proof is invalid');
     return success(undefined);
   } catch {
     return failure(
@@ -316,6 +311,23 @@ export function verifyHandProofs(
       'Committed hand proof is malformed or has the wrong context',
     );
   }
+}
+
+/** Verify exactly the derived obligations; extra, omitted or reordered proofs fail. */
+export function verifyHandProofs(
+  plan: HandTransitionPlan,
+  proofs: unknown,
+  binding: HandProofBinding,
+): Result<void> {
+  const parsed = parseCanonical(proofs, handProofsSchema);
+  if (!parsed.ok) return parsed;
+  if (parsed.value.length !== plan.obligations.length)
+    return failure('hand-proof-count', 'Evidence must cover exactly the required hand proofs');
+  for (const [index, proof] of parsed.value.entries()) {
+    const verified = verifyHandProof(plan, index, proof, binding);
+    if (!verified.ok) return verified;
+  }
+  return success(undefined);
 }
 
 /** Owner-only proof production. The caller supplies a separate master-derived seed. */

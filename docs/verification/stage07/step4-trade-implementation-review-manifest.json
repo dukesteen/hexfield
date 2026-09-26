@@ -1,0 +1,137 @@
+{
+  "packetSha256": "a75c350329646a12fdb3be07b53c533c4354db7a64c0d4367f68cc66ff889144",
+  "packetBytes": 351298,
+  "prompt": "docs/verification/stage07/step4-trade-implementation-review-prompt.md",
+  "files": [
+    {
+      "path": "docs/verification/stage07/step4-trade-delivery-design.md",
+      "sha256": "64763824055759b7e90153e7316d0f4989d3c1ea9d92d32c862a7e8d7726244a",
+      "bytes": 10689
+    },
+    {
+      "path": "docs/verification/stage07/step4-trade-design-review-response.md",
+      "sha256": "c40fa0cd6187998f41e3487d9af6bee782a89fa79527f68b54d57e8b7f173dfe",
+      "bytes": 3919
+    },
+    {
+      "path": "packages/protocol/src/trade-proof-delivery.ts",
+      "sha256": "fbc8dfcbfbfab4343f2c9e545efef23405dc96de6eb3acba9c84f0be7f326f12",
+      "bytes": 11164
+    },
+    {
+      "path": "packages/protocol/src/p2p-session.ts",
+      "sha256": "f20c0e4fdbd97f41418607de3db2348345261a78a1c3d99d7031443ad33072e2",
+      "bytes": 33778
+    },
+    {
+      "path": "packages/protocol/src/session-types.ts",
+      "sha256": "56f5bcac45748702d302a643846c595fb0bcc176307767b7efd48d5f231428fd",
+      "bytes": 1885
+    },
+    {
+      "path": "packages/protocol/src/replicated-log.ts",
+      "sha256": "1093b8665fbc9cfddfb10c2dca77c78abbea703fd71e34301a7e7f68f5ebb703",
+      "bytes": 91170
+    },
+    {
+      "path": "packages/protocol/src/messages.ts",
+      "sha256": "61c7788366af430342f55e80253b58f6c7d28c96dbc15f8dd03af465b80365ac",
+      "bytes": 5229
+    },
+    {
+      "path": "packages/protocol/src/verified-session-driver.ts",
+      "sha256": "69ef0ed0d1b2eb8fdd8b1a89c82330cdf499508af4c0fdbfc47be85cd838f24a",
+      "bytes": 34229
+    },
+    {
+      "path": "packages/protocol/src/hand-transition.ts",
+      "sha256": "ecf804c47dc2b75483df54b1a61acd334ce17a338aa0dfaee6485201584d147a",
+      "bytes": 13555
+    },
+    {
+      "path": "packages/protocol/src/hand-source.ts",
+      "sha256": "8dc8c6fcc7c51500db3bc5321275a7740dab3e453234d2b2987a481cc2eeb575",
+      "bytes": 1868
+    },
+    {
+      "path": "packages/protocol/src/hand-commitments.ts",
+      "sha256": "9fec55a3bc63062245da7bcab499845516d36a32fcaed3aa7b36408075461edd",
+      "bytes": 7564
+    },
+    {
+      "path": "packages/protocol/src/resource-accounting.ts",
+      "sha256": "4d3da5b5fad41083bcd76fbdcb2d95ea9699c6a3866308647660f7a29ca02bc2",
+      "bytes": 8120
+    },
+    {
+      "path": "packages/protocol/src/command-proofs.ts",
+      "sha256": "22cbc03bb2341ffb22eb1bac418466fcd8b8268f711e818ea8cb50774b28d230",
+      "bytes": 2597
+    },
+    {
+      "path": "packages/protocol/src/log.ts",
+      "sha256": "d4476a7dc16285c422f62db197b110d99409093c3230d392f24c1fed91c8a434",
+      "bytes": 19406
+    },
+    {
+      "path": "packages/protocol/src/types.ts",
+      "sha256": "6089515777d2ecab1c3c3520ff8a5faab8512c2ee92a5e177f38eea63f267a4f",
+      "bytes": 3189
+    },
+    {
+      "path": "packages/protocol/src/schemas.ts",
+      "sha256": "93ee541d905f0f0b1efbec666ffb5c40390b02f153c57b592bea202a6b9f1189",
+      "bytes": 5602
+    },
+    {
+      "path": "packages/protocol/src/genesis.ts",
+      "sha256": "13ad7bb25ac62bb06ea841a77f382e695a26e9475850545e9b100f4104d4f6b9",
+      "bytes": 10414
+    },
+    {
+      "path": "packages/protocol/src/validation.ts",
+      "sha256": "bb646520abbab0596ff5d99f1b7f6ffaeed264260c3030917725a050acef5f23",
+      "bytes": 887
+    },
+    {
+      "path": "packages/protocol/src/proposal.ts",
+      "sha256": "422aeaff082ca6918ee31cd4ee921b85c13a2e1b716d21ca4c7eef08f26e15db",
+      "bytes": 12346
+    },
+    {
+      "path": "packages/protocol/src/transport.ts",
+      "sha256": "a55c1b12c23dc32339557ef38c1abcf03395f2cac106af7d72e1445716bbc48b",
+      "bytes": 807
+    },
+    {
+      "path": "packages/protocol/src/trade-proof-delivery.test.ts",
+      "sha256": "6e76a1520697af2a35cc19aef497be2419a23955046324e99f2798c6ea76f245",
+      "bytes": 7334
+    },
+    {
+      "path": "packages/protocol/src/trade-proof-network.test.ts",
+      "sha256": "72154b4a7eec604cfb676fe062272a9b62dc33803c788860ecbef4ead2e44e00",
+      "bytes": 5926
+    },
+    {
+      "path": "packages/protocol/src/trade-session.test.ts",
+      "sha256": "fe7d75945cf6e1cf3556c29b01d1dd0eac2fc26d3b1c017d7f1f1464b71452d0",
+      "bytes": 14224
+    },
+    {
+      "path": "packages/protocol/src/trade-replica.test.ts",
+      "sha256": "c604795791343e4c48160cc844fa6c4cf6d8359387a7c0863a526116c3532c79",
+      "bytes": 16339
+    },
+    {
+      "path": "packages/protocol/src/hand-trade.test.ts",
+      "sha256": "04f20aae685dbf875690f650bd5141294f1bffb2b4a5a75818b6efacdb6521ea",
+      "bytes": 9228
+    },
+    {
+      "path": "packages/protocol/src/hand-transition.test.ts",
+      "sha256": "6fced293f394b105bd2f6f02086d62703cae44786be41ad01cd5c7efefe1730b",
+      "bytes": 15280
+    }
+  ]
+}

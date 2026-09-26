@@ -16,6 +16,18 @@ import type {
   StealDeliveryStore,
   StealResponseProducer,
 } from './steal-contributions.js';
+import {
+  signTradeProofResponse,
+  tradeProofHost,
+  tradeProofRequestId,
+  verifyTradeProofRequest,
+  verifyTradeProofResponse,
+} from './trade-proof-delivery.js';
+import type {
+  IndexedHandProof,
+  SignedTradeProofRequest,
+  SignedTradeProofResponse,
+} from './trade-proof-delivery.js';
 import { deckPassHash } from './deck-genesis.js';
 import { DeckInbox } from './deck-inbox.js';
 import { decksReady } from './deck-ledger.js';
@@ -30,7 +42,7 @@ import { entryBody, entryHash, signEntry } from './genesis.js';
 import { journalSafetyStore } from './journal.js';
 import type { ProtocolJournal } from './journal.js';
 import { validateNextEntry, validateSignedCommand } from './log.js';
-import type { ValidatedEntry } from './log.js';
+import type { LogContext, ValidatedEntry } from './log.js';
 import { decodeProtocolMessage, encodeProtocolMessage } from './messages.js';
 import type { ProtocolMessage } from './messages.js';
 import {
@@ -67,8 +79,11 @@ const MAX_QUEUED_MESSAGES_TOTAL = 32;
 const INVALID_MESSAGE_LIMIT = 5;
 const EXPENSIVE_REQUEST_WINDOW_MS = 10_000;
 const EXPENSIVE_REQUESTS_PER_WINDOW = 3;
+const TRADE_PROOF_REQUESTS_PER_WINDOW = 4;
 const MAX_PENDING_COMMANDS = 32;
 const MAX_PENDING_COMMANDS_PER_SEAT = 4;
+const MAX_TRADE_PROOF_CACHE = 16;
+const MAX_TRADE_PROOF_REQUESTS_PER_FINALIZER = 3;
 
 export type ReplicatedLogStatus =
   | { kind: 'pending'; commandHash: string }
@@ -106,6 +121,13 @@ export interface ReplicatedLogOptions {
   stealResponse?: StealResponseProducer;
   /** Immutable outgoing contributions and responses retained across restarts. */
   stealDeliveryStore?: StealDeliveryStore;
+  /** Owner-only trade obligation proofs, produced after request authorization. */
+  tradeProof?: (
+    request: SignedTradeProofRequest,
+    context: LogContext,
+  ) => Result<readonly IndexedHandProof[]>;
+  /** Verified remote trade proofs are delivered to the pre-admission coordinator. */
+  onTradeProofResponse?: (response: SignedTradeProofResponse) => void;
   systemInput?: (
     context: ProposalContext,
   ) => { input: SystemInput; evidence: SystemEvidence } | null;
@@ -150,6 +172,19 @@ export class ReplicatedLog {
   private readonly rejectedDeckContributions = new Set<string>();
   private readonly rejectedCountContributions = new Set<string>();
   private readonly rejectedStealMessages = new Set<string>();
+  private readonly pendingTradeProofs = new Map<
+    string,
+    { request: SignedTradeProofRequest; ownerHost: PeerId }
+  >();
+  private readonly tradeProofResponses = new Map<
+    string,
+    { requestBytes: Uint8Array; responseBytes: Uint8Array; requester: PeerId }
+  >();
+  private readonly tradeProofRequestsByFinalizer = new Map<Seat, Set<string>>();
+  private readonly tradeProofWorkByPeer = new Map<
+    PeerId,
+    { startedAt: number; seen: Set<string> }
+  >();
   private sentStealStage: string | null = null;
   private preparedSteal: { readonly stage: string; readonly bytes: Uint8Array } | null = null;
   private readonly sentCountContributions = new Set<Seat>();
@@ -377,6 +412,10 @@ export class ReplicatedLog {
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
+    this.pendingTradeProofs.clear();
+    this.tradeProofResponses.clear();
+    this.tradeProofRequestsByFinalizer.clear();
+    this.tradeProofWorkByPeer.clear();
     this.preparedSteal = null;
     this.sentStealStage = null;
     this.controller?.dispose();
@@ -395,6 +434,36 @@ export class ReplicatedLog {
       );
     }
     this.secretKey.fill(0);
+  }
+
+  /** Send one authorized trade-proof request directly to its counterparty host. */
+  requestTradeProof(value: SignedTradeProofRequest): Result<void> {
+    if (this.disposed) return failure('replica-disposed', 'Replica has been disposed');
+    const checked = verifyTradeProofRequest(value, this.context.log);
+    if (!checked.ok) return checked;
+    const request = checked.value;
+    const finalizerHost = tradeProofHost(this.context.log.genesis, request.body.seat);
+    const ownerHost = tradeProofHost(this.context.log.genesis, request.body.command.withSeat);
+    if (
+      !this.deckKeys.has(request.body.seat) ||
+      finalizerHost !== this.self ||
+      !ownerHost ||
+      ownerHost === this.self
+    )
+      return failure('trade-proof-route', 'Request is not for a remotely hosted trade owner');
+    const requestId = tradeProofRequestId(request.body);
+    const existing = this.pendingTradeProofs.get(requestId);
+    if (existing && !sameBytes(canonicalEncode(existing.request), canonicalEncode(request)))
+      return failure('trade-proof-request-id', 'Request identifier is already reserved');
+    if (!existing && this.pendingTradeProofs.size >= MAX_TRADE_PROOF_CACHE)
+      return failure('trade-proof-capacity', 'Too many trade-proof requests are pending');
+    this.pendingTradeProofs.set(requestId, { request, ownerHost });
+    return this.send(ownerHost, { t: 'TRADE_PROOF_REQUEST', request });
+  }
+
+  /** Cancel a pre-admission proof wait; late responses are then ignored. */
+  cancelTradeProofRequest(requestId: string): void {
+    this.pendingTradeProofs.delete(requestId);
   }
 
   private activeController(): ConsensusController {
@@ -500,21 +569,143 @@ export class ReplicatedLog {
     }
   }
 
-  /** Duplicate or excessive requests cannot repeatedly replay the full certified prefix. */
-  private admitExpensiveRequest(peer: PeerId, key: string): boolean {
+  /** Bound repeated work without allowing trade preparation to consume repair capacity. */
+  private admitExpensiveRequest(
+    peer: PeerId,
+    key: string,
+    category: 'repair' | 'trade' = 'repair',
+  ): boolean {
     const now = this.options.clock.now();
-    let budget = this.expensiveByPeer.get(peer);
+    const budgets = category === 'trade' ? this.tradeProofWorkByPeer : this.expensiveByPeer;
+    const limit =
+      category === 'trade' ? TRADE_PROOF_REQUESTS_PER_WINDOW : EXPENSIVE_REQUESTS_PER_WINDOW;
+    let budget = budgets.get(peer);
     if (
       !budget ||
       now < budget.startedAt ||
       now - budget.startedAt >= EXPENSIVE_REQUEST_WINDOW_MS
     ) {
       budget = { startedAt: now, seen: new Set() };
-      this.expensiveByPeer.set(peer, budget);
+      budgets.set(peer, budget);
     }
-    if (budget.seen.has(key) || budget.seen.size >= EXPENSIVE_REQUESTS_PER_WINDOW) return false;
+    if (budget.seen.has(key) || budget.seen.size >= limit) return false;
     budget.seen.add(key);
     return true;
+  }
+
+  private receiveTradeProofRequest(from: PeerId, value: SignedTradeProofRequest): Result<void> {
+    const body = value.body;
+    const finalizerHost = tradeProofHost(this.context.log.genesis, body.seat);
+    if (finalizerHost !== from) return success(undefined);
+    if (body.headSeq < this.context.log.head.seq) return success(undefined);
+    if (body.headSeq > this.context.log.head.seq) return success(undefined);
+
+    let requestId: string;
+    let requestBytes: Uint8Array;
+    try {
+      requestId = tradeProofRequestId(body);
+      requestBytes = canonicalEncode(value);
+    } catch {
+      this.strikePeer(from);
+      return failure('trade-proof-request', 'Trade-proof request is malformed');
+    }
+    const cached = this.tradeProofResponses.get(requestId);
+    if (cached && cached.requester === from && sameBytes(cached.requestBytes, requestBytes)) {
+      try {
+        this.options.transport.send(from, cached.responseBytes.slice());
+        return success(undefined);
+      } catch {
+        return failure('replica-transport', 'Could not resend trade-proof response');
+      }
+    }
+
+    const verified = verifyTradeProofRequest(value, this.context.log);
+    if (!verified.ok) {
+      if (
+        verified.error.code !== 'trade-proof-stale-head' &&
+        verified.error.code !== 'trade-proof-future-head' &&
+        verified.error.code !== 'trade-proof-unavailable'
+      )
+        this.strikePeer(from);
+      return success(undefined);
+    }
+    const request = verified.value;
+    const owner = request.body.command.withSeat;
+    const ownerHost = tradeProofHost(this.context.log.genesis, owner);
+    const key = this.deckKeys.get(owner);
+    if (!key || ownerHost !== this.self || !this.options.tradeProof) return success(undefined);
+
+    const seen = this.tradeProofRequestsByFinalizer.get(request.body.seat) ?? new Set<string>();
+    if (!seen.has(requestId) && seen.size >= MAX_TRADE_PROOF_REQUESTS_PER_FINALIZER)
+      return success(undefined);
+    // A trade allows the initial parent plus three fresh-parent attempts. Keep
+    // its work budget separate so proof preparation cannot starve log repair.
+    if (!this.admitExpensiveRequest(from, requestId, 'trade')) return success(undefined);
+    seen.add(requestId);
+    this.tradeProofRequestsByFinalizer.set(request.body.seat, seen);
+
+    let produced: Result<readonly IndexedHandProof[]>;
+    try {
+      produced = this.options.tradeProof(request, detachedContext(this.context).log);
+    } catch {
+      // Cannot-pay and private-source failures intentionally produce no response.
+      return success(undefined);
+    }
+    if (!produced.ok) return success(undefined);
+    let response: SignedTradeProofResponse;
+    try {
+      response = signTradeProofResponse(request, owner, produced.value, key);
+    } catch {
+      return success(undefined);
+    }
+    const checked = verifyTradeProofResponse(response, request, this.context.log);
+    if (!checked.ok) return success(undefined);
+    const encoded = encodeProtocolMessage({ t: 'TRADE_PROOF_RESPONSE', response });
+    if (!encoded.ok) return success(undefined);
+    this.tradeProofResponses.set(requestId, {
+      requestBytes,
+      responseBytes: encoded.value.slice(),
+      requester: from,
+    });
+    while (this.tradeProofResponses.size > MAX_TRADE_PROOF_CACHE) {
+      const oldest = this.tradeProofResponses.keys().next().value;
+      if (oldest === undefined) break;
+      this.tradeProofResponses.delete(oldest);
+    }
+    try {
+      this.options.transport.send(from, encoded.value.slice());
+      return success(undefined);
+    } catch {
+      return failure('replica-transport', 'Could not send trade-proof response');
+    }
+  }
+
+  private receiveTradeProofResponse(
+    from: PeerId,
+    response: SignedTradeProofResponse,
+  ): Result<void> {
+    const pending = this.pendingTradeProofs.get(response.body.requestId);
+    if (!pending) return success(undefined);
+    const { request, ownerHost } = pending;
+    if (
+      ownerHost !== from ||
+      response.body.seat !== request.body.command.withSeat ||
+      request.body.headSeq !== this.context.log.head.seq ||
+      request.body.headHash !== entryHash(this.context.log.head)
+    )
+      return success(undefined);
+    const checked = verifyTradeProofResponse(response, request, this.context.log);
+    if (!checked.ok) {
+      if (checked.error.code !== 'trade-proof-unavailable') this.strikePeer(from);
+      return success(undefined);
+    }
+    this.pendingTradeProofs.delete(response.body.requestId);
+    try {
+      this.options.onTradeProofResponse?.(checked.value);
+    } catch {
+      // A coordinator callback has no authority over replicated-log progress.
+    }
+    return success(undefined);
   }
 
   private async receive(from: PeerId, bytes: Uint8Array): Promise<Result<void>> {
@@ -588,6 +779,10 @@ export class ReplicatedLog {
         }
         return remembered.value ? this.offerAvailableInput() : success(undefined);
       }
+      case 'TRADE_PROOF_REQUEST':
+        return this.receiveTradeProofRequest(from, message.request);
+      case 'TRADE_PROOF_RESPONSE':
+        return this.receiveTradeProofResponse(from, message.response);
       case 'SUBMIT': {
         const hash = commandHash(message.cmd);
         if (this.rejectedCommands.has(hash)) return success(undefined);
@@ -1540,6 +1735,9 @@ export class ReplicatedLog {
       throw new Error('Certified journal commit lost its safety CAS');
     this.activeController().dispose();
     this.context = next;
+    this.pendingTradeProofs.clear();
+    this.tradeProofResponses.clear();
+    this.tradeProofRequestsByFinalizer.clear();
     this.entries.push({ entry: checked.value.entry, certificate: [...checked.value.certificate] });
     if (this.lastSyncRequest && next.log.head.seq >= this.lastSyncRequest.fromSeq)
       this.lastSyncRequest = null;

@@ -161,3 +161,9 @@ export type {
   StealResponse,
   StealResponseProducer,
 } from './steal-contributions.js';
+export type {
+  IndexedHandProof,
+  SignedTradeProofRequest,
+  SignedTradeProofResponse,
+  TradeProofBody,
+} from './trade-proof-delivery.js';

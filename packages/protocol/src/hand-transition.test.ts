@@ -28,6 +28,7 @@ import {
   handProofContext,
   planHandTransition,
   proveHandObligation,
+  verifyHandProof,
   verifyHandProofs,
 } from './hand-transition.js';
 import type { HandProofBinding, HandTransitionPlan } from './hand-transition.js';
@@ -171,6 +172,9 @@ describe('committed hand transition obligations', () => {
     ]);
     expect(plan.hands[0]?.commitments.brick).toBe(pedersenCommit(0n, 7n));
     const proof = value(proveHandObligation(plan, 0, counts, blindings, seed, binding));
+    expect(verifyHandProof(plan, 0, proof, binding).ok).toBe(true);
+    expect(verifyHandProof(plan, 1, proof, binding).ok).toBe(false);
+    expect(verifyHandProof(plan, 0, proof, { ...binding, epoch: 1 }).ok).toBe(false);
     expect(verifyHandProofs(plan, [proof], binding).ok).toBe(true);
     expect(verifyHandProofs(plan, [], binding).ok).toBe(false);
     expect(verifyHandProofs(plan, [proof, proof], binding).ok).toBe(false);

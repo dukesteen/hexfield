@@ -1,11 +1,12 @@
-import { pedersenCommit } from '@cp2p/crypto';
+import { pedersenCommit, signObject } from '@cp2p/crypto';
 import { createResourceBounds, RESOURCES, zeroCounts } from '@cp2p/engine';
 import type { CommandInput, Engine, GameState, Input, Result, Seat } from '@cp2p/engine';
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test, vi } from 'vitest';
 import type { CryptoContext } from './crypto-context.js';
+import { readCommandProofs } from './command-proofs.js';
 import { entryHash, genesisDigest } from './genesis.js';
 import { emptyHandCommitments } from './hand-commitments.js';
-import { planHandTransition } from './hand-transition.js';
+import { planHandTransition, verifyHandProofs } from './hand-transition.js';
 import type { LogContext } from './log.js';
 import { protocolFixture } from './testing/fixtures.js';
 import { VerifiedSessionDriver } from './verified-session-driver.js';
@@ -109,7 +110,7 @@ describe('verified gross player trades', () => {
       ...engine,
       createPrivateState: (seat: Seat) => ({
         ...engine.createPrivateState(seat),
-        hand: { ...zero, brick: seat === 0 ? 1 : 0 },
+        hand: { ...zero, brick: seat === 0 ? 1 : 0, ore: seat === 1 ? 1 : 0 },
       }),
       // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- only the owned private initialization differs from the real engine.
     } as Engine;
@@ -122,20 +123,107 @@ describe('verified gross player trades', () => {
       },
       () => ({ proofSeed: () => new Uint8Array(32).fill(7), dispose: () => undefined }),
     );
+    const body = {
+      gameId: genesis.gameId,
+      genesisDigest: genesisDigest(genesis),
+      seat: 0 as Seat,
+      nonce: 1,
+      headSeq: context.head.seq,
+      headHash: entryHash(context.head),
+      command: { type: 'CONFIRM_TRADE' as const, offerId: 0, withSeat: 1 as Seat },
+    };
+    expect(driver.prepareCommand(body, context)).toMatchObject({
+      ok: false,
+      error: { code: 'hand-proof-owner' },
+    });
+    const signer = fixture.identities[0];
+    if (!signer) throw new Error('Missing trade finalizer key');
+    const request = { body, sig: signObject('trade-proof-request', body, signer.secretKey) };
+    const source = vi.fn<(seat: Seat) => { proofSeed: () => Uint8Array; dispose: () => void }>(
+      () => ({
+        proofSeed: () => new Uint8Array(32).fill(8),
+        dispose: () => undefined,
+      }),
+    );
+    const owner = new VerifiedSessionDriver(
+      ownedEngine,
+      genesis,
+      [1],
+      () => {
+        throw new Error('Trade needs no deck source');
+      },
+      source,
+    );
+    const external = value(owner.produceTradeProofs(request, context));
+    const remoteProof = external[0];
+    if (!remoteProof) throw new Error('Missing remote trade proof');
+    expect(external.map((item) => item.index)).toEqual([1]);
+    expect(source).toHaveBeenCalledOnce();
+    const evidence = value(driver.prepareCommand(body, context, external));
+    const assembledHands = value(readCommandProofs(evidence, plan)).hands;
+    expect(assembledHands).toHaveLength(2);
     expect(
-      driver.prepareCommand(
-        {
-          gameId: genesis.gameId,
-          genesisDigest: genesisDigest(genesis),
-          seat: 0,
-          nonce: 1,
-          headSeq: context.head.seq,
-          headHash: entryHash(context.head),
-          command: confirm.command,
-        },
-        context,
-      ),
-    ).toMatchObject({ ok: false, error: { code: 'hand-proof-owner' } });
+      verifyHandProofs(plan, assembledHands, {
+        genesisDigest: body.genesisDigest,
+        epoch: 0,
+        anchor: { seq: body.headSeq, hash: body.headHash },
+        command: body,
+      }),
+    ).toMatchObject({ ok: true });
+    expect(driver.prepareCommand(body, context, [...external, ...external])).toMatchObject({
+      ok: false,
+      error: { code: 'hand-proof-external' },
+    });
+    expect(driver.prepareCommand(body, context, [{ ...remoteProof, index: 0 }])).toMatchObject({
+      ok: false,
+      error: { code: 'hand-proof-external' },
+    });
+    expect(driver.prepareCommand(body, context, [{ ...remoteProof, index: 99 }])).toMatchObject({
+      ok: false,
+      error: { code: 'hand-proof-external' },
+    });
+    expect(
+      driver.prepareCommand(body, context, [
+        { ...remoteProof, proof: { ...remoteProof.proof, resource: 'wool' } },
+      ]),
+    ).toMatchObject({ ok: false });
+    const both = new VerifiedSessionDriver(
+      ownedEngine,
+      genesis,
+      [0, 1],
+      () => {
+        throw new Error('Trade needs no deck source');
+      },
+      () => ({ proofSeed: () => new Uint8Array(32).fill(7), dispose: () => undefined }),
+    );
+    expect(both.prepareCommand(body, context)).toMatchObject({
+      ok: true,
+      value: { protocol: 'command-proofs-v1', data: { hands: [{}, {}] } },
+    });
+    const wrongSigner = fixture.identities[1];
+    if (!wrongSigner) throw new Error('Missing wrong trade signer');
+    const forged = { body, sig: signObject('trade-proof-request', body, wrongSigner.secretKey) };
+    expect(owner.produceTradeProofs(forged, context).ok).toBe(false);
+    expect(source).toHaveBeenCalledOnce();
+    for (const changedBody of [
+      { ...body, nonce: 2 },
+      { ...body, command: { ...body.command, withSeat: 2 as Seat } },
+      { ...body, command: { ...body.command, offerId: 99 } },
+      { ...body, command: { ...body.command, extra: true } },
+    ]) {
+      const changed = {
+        body: changedBody,
+        sig: signObject('trade-proof-request', changedBody, signer.secretKey),
+      };
+      expect(owner.produceTradeProofs(changed, context).ok).toBe(false);
+      expect(source).toHaveBeenCalledOnce();
+    }
+    expect(
+      owner.produceTradeProofs(request, { ...context, head: { ...context.head, seq: 1 } }).ok,
+    ).toBe(false);
+    expect(source).toHaveBeenCalledOnce();
+    both.dispose();
+    owner.dispose();
     expect(driver.privateState(0)?.hand.brick).toBe(1);
     driver.dispose();
   });

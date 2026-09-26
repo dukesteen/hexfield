@@ -18,7 +18,16 @@ import type { SessionDriver } from './p2p-session.js';
 import type { DeckSecretSource, DeckSourceFactory } from './deck-source.js';
 import type { HandSourceFactory } from './hand-source.js';
 import { verifyHandOpening } from './hand-commitments.js';
-import { handProofContext, planHandTransition, proveHandObligation } from './hand-transition.js';
+import {
+  handProofContext,
+  planHandTransition,
+  proveHandObligation,
+  verifyHandProof,
+  verifyHandProofs,
+} from './hand-transition.js';
+import type { HandProof, HandProofBinding, HandTransitionPlan } from './hand-transition.js';
+import { authorizeTradeProof, verifyTradeProofRequest } from './trade-proof-delivery.js';
+import type { IndexedHandProof, SignedTradeProofRequest } from './trade-proof-delivery.js';
 import { composeCommandProofs } from './command-proofs.js';
 import { countOperationId, countProofContext, proveCountOpening } from './count-reveal.js';
 import type { CountOperation } from './count-reveal.js';
@@ -431,10 +440,76 @@ export class VerifiedSessionDriver implements SessionDriver {
     }
   }
 
+  private proveOwnedHand(
+    plan: HandTransitionPlan,
+    index: number,
+    binding: HandProofBinding,
+  ): Result<HandProof> {
+    const obligation = plan.obligations[index];
+    if (!obligation || !this.owned.has(obligation.seat))
+      return failure('hand-proof-owner', 'A hand proof from another owner is required');
+    const priv = this.privates.get(obligation.seat);
+    const blindings = this.blindings.get(obligation.seat);
+    if (!priv || !blindings)
+      return failure('verified-private-missing', 'Owned hand opening is missing');
+    if (!this.createHandSource)
+      return failure('hand-proof-source', 'No hand proof source is configured');
+    let source: ReturnType<HandSourceFactory> | null = null;
+    try {
+      source = this.createHandSource(obligation.seat);
+      const seed = source.proofSeed(handProofContext(plan, index, binding));
+      try {
+        return proveHandObligation(plan, index, priv.hand, blindings, seed, binding);
+      } finally {
+        seed.fill(0);
+      }
+    } catch {
+      return failure('hand-proof-generation', 'Could not derive the owned hand proof');
+    } finally {
+      source?.dispose();
+    }
+  }
+
+  /** Return only the current trade counterparty's exact indexed obligations. */
+  produceTradeProofs(
+    request: SignedTradeProofRequest,
+    context: LogContext,
+  ): Result<readonly IndexedHandProof[]> {
+    if (this.disposed) return failure('verified-driver-disposed', 'Verified driver is disposed');
+    const verified = verifyTradeProofRequest(request, context);
+    if (!verified.ok) return verified;
+    const owner = verified.value.body.command.withSeat;
+    if (!this.owned.has(owner))
+      return failure(
+        'seat-not-controllable',
+        'Verified driver does not own this trade counterparty',
+      );
+    if (
+      genesisDigest(context.genesis) !== this.digest ||
+      context.genesis.gameId !== this.genesis.gameId ||
+      (this.appliedHead === null
+        ? context.head.seq !== 0
+        : entryHash(context.head) !== this.appliedHead)
+    )
+      return failure('verified-trade-context', 'Trade proof has a stale or foreign parent');
+    const authorized = authorizeTradeProof(verified.value.body, owner, context);
+    if (!authorized.ok) return authorized;
+    const opened = this.verifyOwnedOpenings(context);
+    if (!opened.ok) return opened;
+    const proofs: IndexedHandProof[] = [];
+    for (const index of authorized.value.indices) {
+      const proof = this.proveOwnedHand(authorized.value.plan, index, authorized.value.binding);
+      if (!proof.ok) return proof;
+      proofs.push({ index, proof: proof.value });
+    }
+    return success(proofs);
+  }
+
   /** Attach proof material before the caller signs this exact command body. */
   prepareCommand(
     body: CommandWithoutEvidence,
     context: LogContext,
+    external?: readonly IndexedHandProof[],
   ): Result<CommandBody['evidence']> {
     if (this.disposed) return failure('verified-driver-disposed', 'Verified driver is disposed');
     if (!this.owned.has(body.seat))
@@ -468,34 +543,50 @@ export class VerifiedSessionDriver implements SessionDriver {
       anchor: { seq: body.headSeq, hash: body.headHash },
       command: body,
     };
-    const handProofs: Parameters<typeof composeCommandProofs>[1][number][] = [];
+    if (external !== undefined && body.command.type !== 'CONFIRM_TRADE')
+      return failure('hand-proof-external', 'External hand proofs require trade confirmation');
+    const supplied = new Map<number, HandProof>();
+    if (external !== undefined) {
+      if (!Array.isArray(external))
+        return failure('hand-proof-external', 'External trade proofs must be indexed');
+      for (const item of external) {
+        const obligation =
+          item && Number.isSafeInteger(item.index) ? plan.value.obligations[item.index] : undefined;
+        if (
+          !item ||
+          !Number.isSafeInteger(item.index) ||
+          item.index < 0 ||
+          supplied.has(item.index) ||
+          !obligation ||
+          (body.command.type === 'CONFIRM_TRADE' && obligation.seat !== body.command.withSeat) ||
+          this.owned.has(obligation.seat)
+        )
+          return failure('hand-proof-external', 'External trade proof index is invalid');
+        const verified = verifyHandProof(plan.value, item.index, item.proof, binding);
+        if (!verified.ok) return verified;
+        supplied.set(item.index, item.proof);
+      }
+    }
+    for (const [index, obligation] of plan.value.obligations.entries())
+      if (!this.owned.has(obligation.seat) && !supplied.has(index))
+        return failure('hand-proof-owner', 'A hand proof from another owner is required');
+    const handProofs: HandProof[] = [];
     for (let index = 0; index < plan.value.obligations.length; index++) {
       const obligation = plan.value.obligations[index];
       if (!obligation) throw new Error('Missing planned hand obligation');
-      const priv = this.privates.get(obligation.seat);
-      const blindings = this.blindings.get(obligation.seat);
-      if (!priv || !blindings)
-        return failure('hand-proof-owner', 'A hand proof from another owner is required');
-      if (!this.createHandSource)
-        return failure('hand-proof-source', 'No hand proof source is configured');
-      let source: ReturnType<HandSourceFactory> | null = null;
-      try {
-        source = this.createHandSource(obligation.seat);
-        const proofContext = handProofContext(plan.value, index, binding);
-        const seed = source.proofSeed(proofContext);
-        try {
-          const proof = proveHandObligation(plan.value, index, priv.hand, blindings, seed, binding);
-          if (!proof.ok) return proof;
-          handProofs.push(proof.value);
-        } finally {
-          seed.fill(0);
-        }
-      } catch {
-        return failure('hand-proof-generation', 'Could not derive the owned hand proof');
-      } finally {
-        source?.dispose();
+      if (!this.owned.has(obligation.seat)) {
+        const proof = supplied.get(index);
+        if (!proof)
+          return failure('hand-proof-owner', 'A hand proof from another owner is required');
+        handProofs.push(proof);
+        continue;
       }
+      const proof = this.proveOwnedHand(plan.value, index, binding);
+      if (!proof.ok) return proof;
+      handProofs.push(proof.value);
     }
+    const complete = verifyHandProofs(plan.value, handProofs, binding);
+    if (!complete.ok) return complete;
 
     const revealSlots: string[] = [];
     for (const effect of preview.value.effects)

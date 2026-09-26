@@ -1,0 +1,57 @@
+{
+  "packetSha256": "e05ad7afeac4c21432bddc8461a93275e7e04eefa51449786eccad8eedae44d3",
+  "packetBytes": 213771,
+  "prompt": "docs/verification/stage07/step4-trade-followup-review-prompt.md",
+  "files": [
+    {
+      "path": "docs/verification/stage07/step4-trade-implementation-review.md",
+      "sha256": "78fe1be26883c73a5a527d958fb2c60241eed7ab9c552e864ea648c3e4cea6b8",
+      "bytes": 11330
+    },
+    {
+      "path": "docs/verification/stage07/step4-trade-implementation-review-response.md",
+      "sha256": "7c3495864a07bba6f3b5079275c271b824cd2e2fc88988c18189ad75ae3ed162",
+      "bytes": 2902
+    },
+    {
+      "path": "docs/verification/stage07/step4-trade-delivery-design.md",
+      "sha256": "64763824055759b7e90153e7316d0f4989d3c1ea9d92d32c862a7e8d7726244a",
+      "bytes": 10689
+    },
+    {
+      "path": "packages/protocol/src/replicated-log.ts",
+      "sha256": "6be9b01144d9403ffd3ce84a218edd5249244c564b52c76d1098961a92e9c73a",
+      "bytes": 91845
+    },
+    {
+      "path": "packages/protocol/src/p2p-session.ts",
+      "sha256": "5988c6f03ee63aa9ea89a776ec4973eba5de3e42d037bbf994e07a67286eb0b9",
+      "bytes": 34756
+    },
+    {
+      "path": "packages/protocol/src/trade-proof-delivery.ts",
+      "sha256": "05397deec2262001f62c8571d889a1e0a6ead09c88c411edb1886cf0759c5bb5",
+      "bytes": 11510
+    },
+    {
+      "path": "packages/protocol/src/trade-session.test.ts",
+      "sha256": "2213479e5b0e84ce2f4a7e55c1347ebfe5aa1b85782d9e79de7e0ae291cf2569",
+      "bytes": 16070
+    },
+    {
+      "path": "packages/protocol/src/trade-proof-delivery.test.ts",
+      "sha256": "5857cf09ee8cf4458658026b9d476a2641930b9a9dc9db3d5cb09ca7851e4621",
+      "bytes": 8232
+    },
+    {
+      "path": "packages/engine/src/modules/base/trade.ts",
+      "sha256": "0946a8cd90f34b220de749d8d33cff1313dd9e584849f065d660b96958a86b69",
+      "bytes": 14767
+    },
+    {
+      "path": "packages/engine/src/modules/base/shared.ts",
+      "sha256": "cc605a487fe07e790e54f2cdb3d5496166332d184a0577aa9050f1155094d923",
+      "bytes": 9322
+    }
+  ]
+}
