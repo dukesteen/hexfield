@@ -1,0 +1,62 @@
+{
+  "packetSha256": "57cb75c12ffeda7fa6d8bb2749f82e1be1f2a5447ec9cdf87d65fbc04a771fa3",
+  "packetBytes": 209804,
+  "prompt": "docs/verification/stage07/step4-trade-design-review-prompt.md",
+  "files": [
+    {
+      "path": "docs/verification/stage07/step4-trade-delivery-design.md",
+      "sha256": "a2e1fcfdeffebc6a40dcfe06c57a4c7331bada687e02f639c8ac9cdac23bed73",
+      "bytes": 8940
+    },
+    {
+      "path": "packages/engine/src/modules/base/trade.ts",
+      "sha256": "0946a8cd90f34b220de749d8d33cff1313dd9e584849f065d660b96958a86b69",
+      "bytes": 14767
+    },
+    {
+      "path": "packages/protocol/src/hand-transition.ts",
+      "sha256": "03c42c7048d4b1c1899024a9b1c7c547e0dc83b968057cbd7591bfb7bca330f6",
+      "bytes": 13080
+    },
+    {
+      "path": "packages/protocol/src/hand-trade.test.ts",
+      "sha256": "602a245a587a4633db751d12707b7fd94aae50d75f871f4f8f3398915f537b75",
+      "bytes": 5577
+    },
+    {
+      "path": "packages/protocol/src/command-proofs.ts",
+      "sha256": "22cbc03bb2341ffb22eb1bac418466fcd8b8268f711e818ea8cb50774b28d230",
+      "bytes": 2597
+    },
+    {
+      "path": "packages/protocol/src/log.ts",
+      "sha256": "d4476a7dc16285c422f62db197b110d99409093c3230d392f24c1fed91c8a434",
+      "bytes": 19406
+    },
+    {
+      "path": "packages/protocol/src/verified-session-driver.ts",
+      "sha256": "89224c19e8a39c9ddbe86536537dad203079d76bba437b56d303e51664076498",
+      "bytes": 30380
+    },
+    {
+      "path": "packages/protocol/src/p2p-session.ts",
+      "sha256": "22001c0e9dbf5beff38e6c1b1463e731303bfb757e7cdcdd7e856fefa1f8a476",
+      "bytes": 24219
+    },
+    {
+      "path": "packages/protocol/src/types.ts",
+      "sha256": "6089515777d2ecab1c3c3520ff8a5faab8512c2ee92a5e177f38eea63f267a4f",
+      "bytes": 3189
+    },
+    {
+      "path": "packages/protocol/src/replicated-log.ts",
+      "sha256": "baa882790642ee0f8c70ffec883db919c7b902db2c550e9de189c66b48def2df",
+      "bytes": 83551
+    },
+    {
+      "path": "packages/protocol/src/session-types.ts",
+      "sha256": "4a1c311d4b5de86e887585c83384282e5486780affa59e12780a288f38670201",
+      "bytes": 1747
+    }
+  ]
+}

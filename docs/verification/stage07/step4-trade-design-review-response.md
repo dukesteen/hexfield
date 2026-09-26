@@ -1,0 +1,19 @@
+# Trade proof delivery review response
+
+The [review](step4-trade-design-review.md) found the consent model sound and identified a simpler delivery path. The [revised design](step4-trade-delivery-design.md) keeps `command-proofs-v1` and the existing mandatory hand-proof verdict. Certified offers, acceptances, and counter-offers authorize the exact trade terms. The finalizer's signed command and each hand proof bind the current parent and complete command body. A signed peer response authenticates the transient exchange but does not enter certified evidence.
+
+The design resolves the mandatory findings as follows:
+
+- **M1.** Trade preparation is a cancellable pre-admission intent. `cancelPending(seat)` or its equivalent releases it. An automatic input or timer for the reserved seat cancels first. The overall wait is 10 seconds, so an offline owner cannot block the turn.
+- **M2.** Requests go only to the proof owner's genesis host; responses go only to the authenticated finalizer host. Both sides verify `from` against the claimed seat's human key or bot host. Neither message uses broadcast. The review's request-routing sentence names the finalizer host, but the proof owner host is the intended recipient.
+- **M3.** A pure owner-side `authorizeTradeProof` runs beside the driver's `appliedHead` check before any private source. It requires the exact `CONFIRM_TRADE` shape, next nonce, active finalizer, current parent, legal certified offer and consent, correct owner debit side, and locally derived obligation indices. The inbox check alone is insufficient.
+- **M4 and M5.** These apply only to the rejected v2 envelope. V1 has one ordered hand-proof list. The wire request ID hashes the evidence-free body, and the final command does not need the wire request signature to verify its proofs.
+- **M6.** Stale and future trade messages do not strike peers. A bounded future buffer or live-intent retransmission lets a catching-up owner answer. Authenticated invalid requests at the matching parent use the normal abuse budget, keyed by body hash.
+
+For **L1 and D3**, the finalizer may make at most three fresh-parent attempts after the initial request, within 10 seconds. It does so only while the user's chosen offer, counterparty, terms, and certified consent remain unchanged. Each attempt gets a new parent-bound body and proofs. Old proofs never move to a new parent. Timer, automatic input, cancellation, changed terms, or disposal stops the intent.
+
+For **D1**, the response signature remains on the wire for sender authentication, while consensus keeps the current `command-proofs-v1` envelope. `readCommandProofs` and `verifyHandProofs` already check the exact number, order and statement of proofs, including proofs made by another owner. For **D2**, deterministic proof seeds and certified private replay replace new durable request and response stores. Bounded in-memory deduplication gives identical retries at one parent. Restart drops a pre-admission intent; a new user submit can regenerate it. The existing post-submit outcome rules remain unchanged.
+
+We do not adopt **D4**'s proposed "one bit per hidden change" limit. Public gains or debits can change whether the owner can pay the accepted terms without another hidden change. A positive proof still reveals current affordability to the authorized finalizer. The owner sends no distinguishable cannot-pay response, though timing may leak. Standing consent covers these exact terms until withdrawal, cancellation, or invalidation. A stricter privacy rule would have to change when trade consent expires.
+
+The suggested split between owner-only proof production and final assembly is useful. Implementation tests will check all M1, M2, M3, and M6 rejection paths before source use, unchanged v1 admission and replay, bounded retries and cancellation, and one legal trade after a hidden steal with no third-party proof-message delivery.
