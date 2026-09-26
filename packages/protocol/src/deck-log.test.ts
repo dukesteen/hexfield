@@ -36,6 +36,7 @@ import { createSimulationGenesis } from './testing/simulation-genesis.js';
 import type { CommandBody, EntryBody, Genesis, GenesisBody, LogEntry } from './types.js';
 import { MAX_MESSAGE_BYTES } from './validation.js';
 import { signVote } from './votes.js';
+import { VerifiedSessionDriver } from './verified-session-driver.js';
 
 function need<T>(value: T | undefined | null): T {
   if (value === undefined || value === null) throw new Error('Missing deck log fixture value');
@@ -613,10 +614,6 @@ describe('certified deck log', () => {
         command: playCommand,
       },
     );
-    const revealEvidence = {
-      protocol: DECK_REVEAL_PROTOCOL,
-      data: [{ slotId: active.slotId, ...reveal }],
-    };
     const omitted = commandEntry(data, playable.context, active.seat, playCommand);
     expect(
       validateCommandForEntry(signedCommandFrom(omitted), playable.context.log, data.policy.entry)
@@ -711,12 +708,49 @@ describe('certified deck log', () => {
       ok: false,
       error: { code: 'deck-reveal-kind' },
     });
+    const historyBeforePlay = [
+      ...sharedReady.history,
+      started.proof,
+      ...beforeDraw.history,
+      result.proof,
+      ...playable.history,
+    ];
+    const driver = new VerifiedSessionDriver(
+      data.source.engine,
+      data.genesis,
+      [active.seat],
+      (_deckId, seat) => data.deck.createSource(seat),
+    );
+    let privateParent = data.initial.log;
+    checked(
+      replayCertifiedPrefix(
+        data.entry,
+        historyBeforePlay,
+        data.source.engine,
+        data.policy,
+        (certified, next) => {
+          const privateApplied = driver.committedEntry(certified, privateParent, next.log);
+          if (privateApplied.ok) privateParent = next.log;
+          return privateApplied;
+        },
+      ),
+    );
+    expect(driver.privateState(active.seat)?.slots[active.slotId]).toBe('knight');
+    expect(driver.privateState(active.seat === 0 ? 1 : 0)).toBeNull();
+    const body = signedCommandFrom(omitted).body;
+    expect(
+      driver.prepareCommand({ ...body, headHash: 'f'.repeat(64) }, playable.context.log),
+    ).toMatchObject({
+      ok: false,
+      error: { code: 'verified-command-context' },
+    });
+    const preparedEvidence = checked(driver.prepareCommand(body, playable.context.log));
     const validKnight = commandEntry(
       data,
       playable.context,
       active.seat,
       playCommand,
-      revealEvidence,
+      preparedEvidence,
     );
     expect(
       validateCommandForEntry(
@@ -726,15 +760,18 @@ describe('certified deck log', () => {
       ).ok,
     ).toBe(true);
     const playedKnight = advance(data, playable.context, validKnight);
+    checked(
+      driver.committedEntry(
+        checked(validateCertifiedEntry(playedKnight.proof, playable.context)),
+        playable.context.log,
+        playedKnight.context.log,
+      ),
+    );
+    expect(driver.privateState(active.seat)?.slots).toEqual({});
+    driver.dispose();
+    expect(driver.privateState(active.seat)).toBeNull();
     expect(need(playedKnight.context.log.crypto).decks.decks[0]?.slots).toEqual([]);
-    const history = [
-      ...sharedReady.history,
-      started.proof,
-      ...beforeDraw.history,
-      result.proof,
-      ...playable.history,
-      playedKnight.proof,
-    ];
+    const history = [...historyBeforePlay, playedKnight.proof];
     const replayed = checked(
       replayCertifiedPrefix(data.entry, history, data.source.engine, data.policy),
     );

@@ -1,6 +1,6 @@
 # Stage 07 Step 3 deck integration plan
 
-This plan connects shuffle, lock, draw, reveal and durable-outbox helpers to the certified game log. It is **not an acceptance report**. Genesis commitments, a replayed deck ledger, mandatory deal/reveal checks, command admission and setup-pass delivery are implemented in the current checkpoint. Live unlock gossip and private session application remain to be connected. A permissive `verifyCommitments`, `verifySystem` or `verifyCommand` callback must never stand in for the mandatory deck checks below.
+This plan connects shuffle, lock, draw, reveal and durable-outbox helpers to the certified game log. It is **not an acceptance report**. Genesis commitments, a replayed deck ledger, mandatory deal/reveal checks, command admission and setup-pass delivery are implemented. The current integration also connects live unlock delivery, durable restart retries, owned private-card replay and command reveal-proof production. Browser persistence, the lobby ceremony and the Step 3 performance gates remain pending. A permissive `verifyCommitments`, `verifySystem` or `verifyCommand` callback must never stand in for the mandatory deck checks below.
 
 ## Ceremony and genesis boundary
 
@@ -54,7 +54,7 @@ For `PLAY_DEV_CARD` and `CLAIM_VICTORY`, first run `validateSignedCommand` (sign
 
 `types.ts`/`schemas.ts` need the bounded `crypto/deck-pass` payload and fixed proof protocol identifiers. `replicated-log.ts` needs a deck contribution inbox and candidate priority while setup/draw is pending, alongside its beacon inbox. The source of an operation is the local certified ledger and engine pending, never a peer packet. Setup passes use `prepareDeckPass`; draw unlocks use `prepareDeckUnlock`, which reserves a setup/position/seat before returning signed bytes. Both stores must survive restart and copy stored bytes. The setup pass cursor must complete before ordinary command candidates or beacon results are proposed; authenticated control entries can intervene without resetting it. `prepareBeacon` must defer outbound START_SEAT reveals until deck readiness despite the request already being frozen. If a contribution is unavailable, the fixed operation waits or follows the separately certified recovery path; it never chooses a new card.
 
-`P2PSession.submit` currently signs evidence-less commands. Its verified private driver needs a **producer** method that builds reveal evidence from the local slot receipt, deterministic deck secret source and exact command parent/nonce before `signCommand`. This method is not a verifier and cannot authorize a peer command. The automatic CLAIM_VICTORY path must use the same producer. On a certified CARD_DEALT, `SessionDriver.committedEntry` decodes the card only for its owning local/hosted-bot seat with `decodeDeckCard`, then updates private slots. On restore, `P2PSession.open` replays certified entries through that same callback and deterministic source; no provisional hand is published. `ReplicatedLog.persistCommit` already journals the certificate before invoking `onCommit`; a private decode failure must halt that client without rolling back certified public history.
+`P2PSession.submit` calls the driver's synchronous `prepareCommand` before signing. `VerifiedSessionDriver` builds reveal evidence from the local slot receipt, deterministic deck secret source and exact command parent/nonce. This producer cannot authorize a peer command. The automatic CLAIM_VICTORY path uses the same submission method. On a certified CARD_DEALT, `SessionDriver.committedEntry` decodes the card only for its owning local/hosted-bot seat with `decodeDeckCard`, then updates private slots. On restore, `P2PSession.open` replays certified entries through that same callback and deterministic source; no provisional hand is published. `ReplicatedLog.persistCommit` journals the certificate before invoking `onCommit`; a private decode failure halts that client without rolling back certified public history.
 
 ## Files and compatibility checks
 
@@ -63,3 +63,22 @@ Expected existing-file changes: `genesis.ts` (built-in signed definition/hash-li
 Existing verified-base fixtures in `beacon-log.test.ts`, `beacon-replica.test.ts`, `genesis.test.ts` and `log.test.ts` currently use beacon-only or opaque commitments. They must migrate to a valid base deck definition and signed pass commitment/fold, or use a genuinely deck-free test engine. Do not add a `skipDeck` flag to verified base sessions. `beacon-state.test.ts` can continue testing its pure state helper without claiming full genesis acceptance. Stub simulation and local hotseat retain their existing plaintext draw path.
 
 Meaningful integration tests should reject wrong catalogue/roster/ceremony ID, absent or reordered committed passes, gameplay before setup completion, wrong pending or repeated position, duplicate slot, forged or missing CARD_DEALT chain, callback-approved false PLAY_DEV_CARD/CLAIM_VICTORY proofs, and a control between draw request and result. Replayed certified history must produce the same ledger and owner-only card identity; snapshots cannot supply a different one. A six-seat 25-card worker benchmark should verify the documented setup latency target separately; repeated full proof-fold verification on every vote would miss it.
+
+## Remaining Step 3 evidence
+
+- Exercise automatic victory claims through a real verified session. A configured
+  three-point target allows a legal two-building setup plus a privately dealt
+  victory point to trigger the existing automatic path. Prove the reveal evidence,
+  result and private-slot consumption on both peers. Cover a transient proof-source
+  failure and same-parent retry without busy looping.
+- Measure the complete draw with 50 ms links, from buying the card to both peers
+  certifying the deal. Build the legal pre-purchase prefix outside the measured
+  interval. Include cryptographic work, durable preparation and consensus in the
+  timing. Virtual network time alone cannot establish elapsed performance.
+- Cover a larger roster, consecutive unlockers hosted on one device, relayed
+  prefixes, a second draw and proposer control during a draw. Include bounded
+  handling of invalid live contributions and unchanged handling of stale retries.
+- Profile the retained Chrome worker before changing shuffle implementation.
+  Preserve 64 rounds and exact deterministic proof bytes. Node microbenchmarks
+  do not establish the browser target. Public window-table tuning alone has not
+  shown the speedup needed to reach three seconds.

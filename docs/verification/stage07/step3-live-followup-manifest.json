@@ -1,0 +1,67 @@
+{
+  "checkpoint": "f64ac4a",
+  "bundleBytes": 255652,
+  "bundleSha256": "a07a2a261a5c97e5f3ab64074fbfea056967b85d5bdac16e51c51bc2864cfc64",
+  "files": [
+    {
+      "path": "docs/verification/stage07/step3-live-followup-prompt.md",
+      "sha256": "326392df889d420b0443da63917989d49d7c9c141bbc83d98cbaa476f8b240b3"
+    },
+    {
+      "path": "docs/verification/stage07/step3-live-review.md",
+      "sha256": "43ee47b14ab7c76daafaf9a72fde3a5a691c40823f0952db71f0628fd48f41c0"
+    },
+    {
+      "path": "docs/verification/stage07/step3-live-review-response.md",
+      "sha256": "9875b0f8959cb637ab5a80eaf29804df771ede7d4b3918448f204e527e2f7c95"
+    },
+    {
+      "path": "packages/protocol/src/p2p-session.ts",
+      "sha256": "2a396dc74ef40b5af85bf70bf5c84c6ad08730871b559fc87701e186f9709313"
+    },
+    {
+      "path": "packages/protocol/src/verified-session-driver.ts",
+      "sha256": "bf5d91e482d8788903780dff891641e572cfe5871e99bdb878ebf72043fa1441"
+    },
+    {
+      "path": "packages/protocol/src/deck-inbox.ts",
+      "sha256": "5f756803e8605db7914041d61e10851d057a39156ceea10ac498ecfbc444417b"
+    },
+    {
+      "path": "packages/protocol/src/replicated-log.ts",
+      "sha256": "fc6b9f1e380183579685bc5238906ec88e87395c70916f33d43779e3b8a8f430"
+    },
+    {
+      "path": "packages/protocol/src/deck-draw.ts",
+      "sha256": "36d515edc8e67a469f72652614376212a4ccf0517958856a82cc584a8939fcdc"
+    },
+    {
+      "path": "packages/protocol/src/deck-ledger.ts",
+      "sha256": "2c3e9778c88b790e9afbe42d5446c29caff44a77abf86655a583851174d82e8d"
+    },
+    {
+      "path": "packages/protocol/src/log.ts",
+      "sha256": "3246b33342158174479b2bed87e2207b2173f99c1e2d502f7845dccd1a263c50"
+    },
+    {
+      "path": "packages/protocol/src/replay.ts",
+      "sha256": "2e10221c0674704d5cd332795b46414e265f608ffaefb593968818ad9ccc29a2"
+    },
+    {
+      "path": "packages/protocol/src/p2p-session.test.ts",
+      "sha256": "2e03db0102f185e96f002f04effe5f9a1b8e481ef06eb5ba7624643a53690a2b"
+    },
+    {
+      "path": "packages/protocol/src/verified-session-driver.test.ts",
+      "sha256": "ae163dc20b8802f41645cb548f8158855da41ed9b00b2a471a3bbc33e1d60641"
+    },
+    {
+      "path": "packages/protocol/src/deck-inbox.test.ts",
+      "sha256": "2aa4e67bc265610d41f91397f24f87687f2937d57ca794ca5c0b2582fecb75b9"
+    },
+    {
+      "path": "packages/protocol/src/deck-log.test.ts",
+      "sha256": "3e2d8d416e70389fb8bb077be13dbbc562d97f9dc318100caad6cee585a11c63"
+    }
+  ]
+}

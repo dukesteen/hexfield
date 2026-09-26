@@ -1,5 +1,6 @@
 import * as v from 'valibot';
 import { beaconContributionSchema } from './beacon-contributions.js';
+import { deckUnlockContributionSchema } from './deck-inbox.js';
 import { certifiedEntrySchema, signedProposalSchema } from './proposal.js';
 import {
   hashSchema,
@@ -19,6 +20,11 @@ const systemContributionSchema = v.strictObject({
   t: v.literal('SYS_CONTRIB'),
   genesisDigest: key32Schema,
   contribution: beaconContributionSchema,
+});
+const deckContributionSchema = v.strictObject({
+  t: v.literal('DECK_CONTRIB'),
+  genesisDigest: key32Schema,
+  contribution: deckUnlockContributionSchema,
 });
 const proposalMessageSchema = v.strictObject({
   t: v.literal('PROPOSAL'),
@@ -79,6 +85,7 @@ const pongSchema = v.strictObject({ t: v.literal('PONG'), n: nonnegativeIntegerS
 export const protocolMessageSchema = v.variant('t', [
   submitSchema,
   systemContributionSchema,
+  deckContributionSchema,
   proposalMessageSchema,
   voteMessageSchema,
   commitSchema,

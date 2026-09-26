@@ -1,7 +1,7 @@
 import { canonicalEncode, fromBase64Url, hashValue, toHex } from '@cp2p/codec';
 import { describe, expect, test } from 'vitest';
 import { failure, success } from '@cp2p/engine';
-import type { CommandShape, Result, Seat } from '@cp2p/engine';
+import type { CommandShape, Engine, Result, Seat, SystemInput } from '@cp2p/engine';
 import { createConsensusState } from './consensus.js';
 import {
   entryHash,
@@ -12,10 +12,12 @@ import {
   signGenesis,
 } from './genesis.js';
 import { MemoryProtocolJournal } from './journal.js';
+import type { JournalRecord, ProtocolJournal } from './journal.js';
 import { P2PSession } from './p2p-session.js';
 import type { P2PSessionOptions, SessionDriver } from './p2p-session.js';
 import type { ReplayPolicy } from './replay.js';
 import { replayCertifiedPrefix } from './replay.js';
+import { initialProposalContext, snapshotFromContext } from './replay.js';
 import { proposerFor } from './proposal.js';
 import type { CertifiedEntry } from './proposal.js';
 import { createMemnet } from './testing/memnet.js';
@@ -25,10 +27,29 @@ import { VirtualClock } from './testing/virtual-clock.js';
 import type { ProtocolClock } from './transport.js';
 import type { ExcludeProposerControl, Genesis, GenesisBody, LogEntry } from './types.js';
 import { signVote } from './votes.js';
+import { stubEvidence } from './log.js';
 import { encodeProtocolMessage } from './messages.js';
 import type { LogContext, ValidatedEntry } from './log.js';
 
-const policy: ReplayPolicy = { genesis: { allowStub: true }, entry: { allowStub: true } };
+const policy: ReplayPolicy = {
+  genesis: { allowStub: true },
+  entry: {
+    allowStub: true,
+    verifyCommand(signed) {
+      const expected = {
+        protocol: 'test-owner-proof',
+        data: {
+          headHash: signed.body.headHash,
+          nonce: signed.body.nonce,
+          command: signed.body.command.type,
+        },
+      };
+      return toHex(hashValue(signed.body.evidence)) === toHex(hashValue(expected))
+        ? success(undefined)
+        : failure('test-evidence', 'Owner evidence differs from the signed intent');
+    },
+  },
+};
 type SessionFixture = Omit<ReturnType<typeof protocolFixture>, 'identities'> & {
   identities: readonly ReturnType<typeof protocolFixture>['identities'][number][];
 };
@@ -129,6 +150,10 @@ function createDriverFactory(
   committedBySeat?: Map<Seat, number>,
   clock?: ProtocolClock,
   committedEntry?: SessionDriver['committedEntry'],
+  nextOverride?: (
+    context: LogContext,
+    defaultNext: SessionDriver['next'],
+  ) => ReturnType<SessionDriver['next']>,
 ) {
   return (
     engine: P2PSessionOptions['engine'],
@@ -137,7 +162,10 @@ function createDriverFactory(
   ): SessionDriver => {
     const driver = new SimulationDriver(engine, genesis, clock);
     return {
-      next: (context) => driver.next(context),
+      next: (context) =>
+        nextOverride
+          ? nextOverride(context, (current) => driver.next(current))
+          : driver.next(context),
       committed: (before, input, after) => {
         if (committedBySeat)
           committedBySeat.set(localSeat, (committedBySeat.get(localSeat) ?? 0) + 1);
@@ -163,10 +191,18 @@ function optionsFor(
   seat: Seat,
   transport: ReturnType<ReturnType<typeof createMemnet>['transport']>,
   clock: VirtualClock,
-  journal: MemoryProtocolJournal,
+  journal: ProtocolJournal,
   botKeys?: ReadonlyMap<Seat, Uint8Array>,
   committedBySeat?: Map<Seat, number>,
   committedEntry?: SessionDriver['committedEntry'],
+  driverHooks: Partial<
+    Pick<SessionDriver, 'prepareCommand' | 'dispose' | 'privateState' | 'getTimers'>
+  > = {},
+  ownedSeatsSeen?: Seat[][],
+  nextOverride?: (
+    context: LogContext,
+    defaultNext: SessionDriver['next'],
+  ) => ReturnType<SessionDriver['next']>,
 ): P2PSessionOptions {
   const identity = fixture.identities[seat];
   if (!identity) throw new Error(`Missing identity for seat ${seat}`);
@@ -180,8 +216,18 @@ function optionsFor(
     clock,
     journal,
     ...(botKeys ? { botKeys } : {}),
-    createDriver: (engine, genesis, protocolClock) =>
-      createDriverFactory(committedBySeat, protocolClock, committedEntry)(engine, genesis, seat),
+    createDriver: (engine, genesis, protocolClock, ownedSeats) => {
+      ownedSeatsSeen?.push([...ownedSeats]);
+      return {
+        ...createDriverFactory(
+          committedBySeat,
+          protocolClock,
+          committedEntry,
+          nextOverride,
+        )(engine, genesis, seat),
+        ...driverHooks,
+      };
+    },
   };
 }
 
@@ -232,6 +278,13 @@ async function settleNetwork(sessions: readonly P2PSession[], clock: VirtualCloc
 async function openTwoHumanSessions(
   fixture: ReturnType<typeof twoHumanFixture>,
   entryHookForSeat?: (seat: Seat) => SessionDriver['committedEntry'],
+  driverHooks: Partial<
+    Pick<SessionDriver, 'prepareCommand' | 'dispose' | 'privateState' | 'getTimers'>
+  > = {},
+  nextOverride?: (
+    context: LogContext,
+    defaultNext: SessionDriver['next'],
+  ) => ReturnType<SessionDriver['next']>,
 ) {
   const peers = fixture.identities.map((identity) => identity.peerId);
   const clock = new VirtualClock();
@@ -253,6 +306,9 @@ async function openTwoHumanSessions(
             undefined,
             committed,
             entryHookForSeat?.(seat),
+            driverHooks,
+            undefined,
+            nextOverride,
           ),
         ),
       );
@@ -295,6 +351,341 @@ function voteEquivocationControl(fixture: SessionFixture, seq: number): ExcludeP
 }
 
 describe('P2PSession', () => {
+  test('contains subscriber exceptions so later subscribers receive commits and consensus continues', async () => {
+    const fixture = twoHumanFixture();
+    const opened = await openTwoHumanSessions(fixture);
+    const first = opened.sessions[0];
+    if (!first) throw new Error('Missing first session');
+    const seat = first.getState().turn.activeSeat;
+    const owner = opened.sessions[seat];
+    if (!owner) throw new Error(`Missing owner for seat ${seat}`);
+    const startingRevision = owner.getCommittedHead().seq;
+    const throwingUnsubscribe = owner.subscribe((update) => {
+      if (update.revision > startingRevision) throw new Error('Injected subscriber failure');
+    });
+    const laterUpdates: number[] = [];
+    const laterUnsubscribe = owner.subscribe((update) => laterUpdates.push(update.revision));
+    laterUpdates.length = 0;
+
+    const submitted = owner.submit(seat, placementCommand(owner, seat)).catch(() => undefined);
+    await settleNetwork(opened.sessions, opened.clock);
+    expect(await submitted).toEqual(success(undefined));
+
+    expect(owner.getCommittedHead().seq).toBeGreaterThan(startingRevision);
+    expect(laterUpdates).toContain(owner.getCommittedHead().seq);
+    expect(owner.getProtocolStatus()?.kind).not.toBe('halted');
+    const nextSeat = owner.getState().turn.activeSeat;
+    const nextOwner = opened.sessions[nextSeat];
+    if (!nextOwner) throw new Error(`Missing next owner for seat ${nextSeat}`);
+    const nextCommand = nextOwner.getLegalCommands(nextSeat).commands[0];
+    if (!nextCommand) throw new Error(`No legal command for seat ${nextSeat}`);
+    const nextRevision = owner.getCommittedHead().seq;
+    const nextSubmitted = nextOwner.submit(nextSeat, nextCommand);
+    await settleNetwork(opened.sessions, opened.clock);
+    expect(await nextSubmitted).toEqual(success(undefined));
+    expect(owner.getCommittedHead().seq).toBe(nextRevision + 1);
+    expect(laterUpdates).toContain(owner.getCommittedHead().seq);
+    expect(opened.sessions.map((session) => session.getCommittedHead())).toEqual([
+      owner.getCommittedHead(),
+      owner.getCommittedHead(),
+    ]);
+    expect(owner.getProtocolStatus()?.kind).not.toBe('halted');
+    throwingUnsubscribe();
+    laterUnsubscribe();
+    opened.sessions.forEach((session) => session.dispose());
+    opened.net.dispose();
+  });
+
+  test('contains automatic-input exceptions after applying a certified commit', async () => {
+    const fixture = twoHumanFixture();
+    const engine = fixture.engine;
+    const getAutomaticInput = engine.getAutomaticInput.bind(engine);
+    let throwOnAutomaticInput = false;
+    let automaticInputCalls = 0;
+    fixture.engine = {
+      ...engine,
+      getAutomaticInput: (...args) => {
+        automaticInputCalls++;
+        if (throwOnAutomaticInput) throw new Error('Injected automatic-input failure');
+        return getAutomaticInput(...args);
+      },
+    };
+    const opened = await openTwoHumanSessions(fixture, undefined, {}, (_context, defaultNext) =>
+      throwOnAutomaticInput ? null : defaultNext(_context),
+    );
+    const first = opened.sessions[0];
+    if (!first) throw new Error('Missing first session');
+    const seat = first.getState().turn.activeSeat;
+    const owner = opened.sessions[seat];
+    if (!owner) throw new Error(`Missing owner for seat ${seat}`);
+    const startingRevision = owner.getCommittedHead().seq;
+    throwOnAutomaticInput = true;
+
+    const submitted = owner.submit(seat, placementCommand(owner, seat)).catch(() => undefined);
+    await settleNetwork(opened.sessions, opened.clock);
+    await submitted;
+
+    expect(owner.getCommittedHead().seq).toBeGreaterThan(startingRevision);
+    expect(owner.getState().board.buildings).toHaveLength(1);
+    expect(owner.getProtocolStatus()?.kind).not.toBe('halted');
+    expect(owner.getProtocolStatus()).toMatchObject({
+      kind: 'rejected',
+      code: 'session-automatic-input',
+    });
+    expect(automaticInputCalls).toBeGreaterThan(0);
+    const other = opened.sessions.find((session) => session !== owner);
+    expect(other?.getCommittedHead()).toEqual(owner.getCommittedHead());
+    opened.sessions.forEach((session) => session.dispose());
+    opened.net.dispose();
+  });
+
+  test('contains timer projection exceptions after applying a certified commit', async () => {
+    const fixture = twoHumanFixture();
+    let throwOnTimerProjection = false;
+    const opened = await openTwoHumanSessions(fixture, undefined, {
+      getTimers() {
+        if (throwOnTimerProjection) throw new Error('Injected timer projection failure');
+        return [];
+      },
+    });
+    const first = opened.sessions[0];
+    if (!first) throw new Error('Missing first session');
+    const seat = first.getState().turn.activeSeat;
+    const owner = opened.sessions[seat];
+    if (!owner) throw new Error(`Missing owner for seat ${seat}`);
+    const unsubscribe = opened.sessions.map((session) => session.subscribe(() => undefined));
+    throwOnTimerProjection = true;
+
+    const submitted = owner.submit(seat, placementCommand(owner, seat));
+    await settleNetwork(opened.sessions, opened.clock);
+    expect(await submitted).toEqual(success(undefined));
+
+    expect(opened.sessions.map((session) => session.getCommittedHead())).toEqual([
+      owner.getCommittedHead(),
+      owner.getCommittedHead(),
+    ]);
+    expect(owner.getState().board.buildings).toHaveLength(1);
+    expect(owner.getProtocolStatus()?.kind).not.toBe('halted');
+    unsubscribe.forEach((stop) => stop());
+    opened.sessions.forEach((session) => session.dispose());
+    opened.net.dispose();
+  });
+
+  test.each(['explicit repair', 'snapshot repair'] as const)(
+    'successful %s clears the session error after replaying a retained certificate',
+    async (path) => {
+      const fixture = fourHumanFixture();
+      const baseEngine = fixture.engine;
+      let broken = true;
+      const engine: Engine = {
+        ...baseEngine,
+        apply: (state, input) =>
+          broken
+            ? failure('test-engine-failure', 'Engine cannot derive the certified value')
+            : baseEngine.apply(state, input),
+      };
+      fixture.engine = engine;
+      const identities = fixture.identities;
+      const local = identities[3];
+      const sequencer = identities[0];
+      const snapshotPeer = identities[1];
+      if (!local || !sequencer || !snapshotPeer) throw new Error('Missing repair identities');
+      const clock = new VirtualClock();
+      const net = createMemnet({ peers: identities.map(({ peerId }) => peerId), clock });
+      const journal = new MemoryProtocolJournal();
+      const session = value(
+        await P2PSession.create(
+          optionsFor(fixture, 3, net.transport(local.peerId), clock, journal),
+        ),
+      );
+      const initial = value(initialProposalContext(fixture.entry, baseEngine, policy));
+      const input: SystemInput = { kind: 'system', type: 'START_SEAT', seat: 3 };
+      const applied = value(baseEngine.apply(initial.log.state, input));
+      const entry = signEntry(
+        {
+          seq: 1,
+          term: 1,
+          prevHash: entryHash(initial.log.head),
+          payload: { kind: 'system', input, evidence: stubEvidence(initial.log, input) },
+          stateHash: toHex(hashValue(applied.state)),
+          sequencer: sequencer.peerId,
+        },
+        sequencer.secretKey,
+      );
+      const hash = entryHash(entry);
+      const certificate = ([0, 1, 2] as const).map((seat) => {
+        const identity = identities[seat];
+        if (!identity) throw new Error(`Missing certificate voter ${seat}`);
+        return signVote(
+          {
+            genesisDigest: genesisDigest(fixture.genesis),
+            epoch: 0,
+            seat,
+            seq: 1,
+            term: 1,
+            phase: 'precommit',
+            valueHash: hash,
+          },
+          identity.secretKey,
+        );
+      });
+      net
+        .transport(snapshotPeer.peerId)
+        .broadcast(
+          value(encodeProtocolMessage({ t: 'COMMIT', certified: { entry, certificate } })),
+        );
+      await settleNetwork([session], clock);
+      expect(session.getProtocolStatus()?.kind).toBe('halted');
+      expect((await journal.load())?.height).toBe(1);
+      broken = false;
+
+      let repaired: Result<void>;
+      if (path === 'explicit repair') {
+        repaired = await session.repair();
+      } else {
+        net.transport(snapshotPeer.peerId).broadcast(
+          value(
+            encodeProtocolMessage({
+              t: 'SNAPSHOT_RES',
+              genesisDigest: initial.membership.genesisDigest,
+              atSeq: 0,
+              snapshot: snapshotFromContext(initial),
+            }),
+          ),
+        );
+        await settleNetwork([session], clock);
+        repaired = success(undefined);
+      }
+      expect(repaired).toEqual(success(undefined));
+
+      expect(session.getCommittedHead().seq).toBe(1);
+      expect(session.getProtocolStatus()?.kind).not.toBe('halted');
+      expect(session.getPending()).toEqual(engine.getPending(session.getState()));
+      const localPrivate = session.getPrivate(3);
+      if (!localPrivate) throw new Error('Missing local private state after repair');
+      expect(session.getLegalCommands(3)).toEqual(
+        engine.getLegalCommands(session.getState(), 3, localPrivate),
+      );
+      expect(session.getLegalCommands(3).commands.length).toBeGreaterThan(0);
+      session.dispose();
+      net.dispose();
+    },
+  );
+
+  test('rejects restore when private replay and replica restore observe different certified prefixes', async () => {
+    const fixture = twoHumanFixture();
+    const opened = await openTwoHumanSessions(fixture);
+    const session = opened.sessions[0];
+    const sourceJournal = opened.journals[0];
+    const peerId = opened.peers[0];
+    if (!session || !sourceJournal || !peerId) throw new Error('Missing restore fixture');
+
+    const firstSeat = session.getState().turn.activeSeat;
+    const firstOwner = opened.sessions[firstSeat];
+    if (!firstOwner) throw new Error(`Missing first setup owner ${firstSeat}`);
+    const firstSubmit = firstOwner.submit(firstSeat, placementCommand(firstOwner, firstSeat));
+    await settleNetwork(opened.sessions, opened.clock);
+    expect(await firstSubmit).toEqual(success(undefined));
+    const prefix = await sourceJournal.load();
+    if (!prefix) throw new Error('Missing certified prefix snapshot');
+
+    const nextSeat = session.getState().turn.activeSeat;
+    const nextOwner = opened.sessions[nextSeat];
+    if (!nextOwner) throw new Error(`Missing next setup owner ${nextSeat}`);
+    const nextCommand = nextOwner.getLegalCommands(nextSeat).commands[0];
+    if (!nextCommand) throw new Error(`Missing second setup command for seat ${nextSeat}`);
+    const nextSubmit = nextOwner.submit(nextSeat, nextCommand);
+    await settleNetwork(opened.sessions, opened.clock);
+    expect(await nextSubmit).toEqual(success(undefined));
+    const latest = await sourceJournal.load();
+    if (!latest) throw new Error('Missing latest certified history');
+    expect(latest.entries).toHaveLength(prefix.entries.length + 1);
+
+    let loads = 0;
+    const splitJournal: ProtocolJournal = {
+      load: async (): Promise<JournalRecord | null> => {
+        loads += 1;
+        return loads === 1 ? prefix : sourceJournal.load();
+      },
+      initialize: (...args) => sourceJournal.initialize(...args),
+      loadSafety: (...args) => sourceJournal.loadSafety(...args),
+      saveSafety: (...args) => sourceJournal.saveSafety(...args),
+      commit: (...args) => sourceJournal.commit(...args),
+    };
+    opened.sessions.forEach((peer) => peer.dispose());
+    const restored = await P2PSession.restore(
+      optionsFor(fixture, 0, opened.net.transport(peerId), opened.clock, splitJournal),
+    );
+    if (restored.ok) restored.value.dispose();
+    expect(loads).toBeGreaterThanOrEqual(2);
+    expect(restored).toMatchObject({
+      ok: false,
+      error: { code: 'session-replay-head' },
+    });
+    opened.net.dispose();
+  });
+
+  test('prepares owner evidence before signing and contains failed or mutating proof hooks', async () => {
+    const fixture = twoHumanFixture();
+    let mode: 'reject' | 'throw' | 'prepare' = 'reject';
+    let disposed = 0;
+    const opened = await openTwoHumanSessions(fixture, undefined, {
+      prepareCommand(body, context) {
+        if (mode === 'reject') return failure('test-proof', 'Owner proof unavailable');
+        if (mode === 'throw') throw new Error('Injected proof-source failure');
+        const evidence = {
+          protocol: 'test-owner-proof',
+          data: { headHash: body.headHash, nonce: body.nonce, command: body.command.type },
+        };
+        // Hooks receive snapshots, so they cannot rewrite the pending signed intent.
+        Object.assign(body, { nonce: 900 });
+        Object.assign(context.head, { stateHash: 'a'.repeat(64) });
+        return success(evidence);
+      },
+      dispose() {
+        disposed++;
+      },
+    });
+    const first = opened.sessions[0];
+    if (!first) throw new Error('Missing first session');
+    const pending = first.getPending().find((item) => item.kind === 'player');
+    if (!pending || pending.kind !== 'player') throw new Error('Expected setup placement');
+    const session = opened.sessions[pending.seat];
+    if (!session) throw new Error('Missing placement owner');
+    const command = placementCommand(session, pending.seat);
+    const before = session.getCommittedHead();
+    const privateBefore = session.getPrivate(pending.seat);
+    expect(await session.submit(pending.seat, command)).toMatchObject({
+      ok: false,
+      error: { code: 'test-proof' },
+    });
+    mode = 'throw';
+    expect(await session.submit(pending.seat, command)).toMatchObject({
+      ok: false,
+      error: { code: 'session-command-proof' },
+    });
+    expect(session.getCommittedHead()).toEqual(before);
+    expect(session.getPrivate(pending.seat)).toEqual(privateBefore);
+    mode = 'prepare';
+    const submitted = session.submit(pending.seat, command);
+    await settleNetwork(opened.sessions, opened.clock);
+    expect(await submitted).toEqual(success(undefined));
+    const last = session.exportSave().entries.at(-1)?.entry;
+    if (last?.payload.kind !== 'command') throw new Error('Expected certified command');
+    expect(last.payload.signed.body).toMatchObject({
+      headSeq: before.seq,
+      headHash: before.hash,
+      nonce: 1,
+      evidence: {
+        protocol: 'test-owner-proof',
+        data: { headHash: before.hash, nonce: 1, command: command.type },
+      },
+    });
+    opened.sessions.forEach((peer) => peer.dispose());
+    expect(disposed).toBe(2);
+    opened.net.dispose();
+  });
+
   test('committedEntry sees input-null control entries live and during restore', async () => {
     const fixture = fourHumanFixture();
     const seen = new Map<Seat, (ValidatedEntry & CertifiedEntry)[]>();
@@ -395,6 +786,9 @@ describe('P2PSession', () => {
     const beforeHead = owner.getCommittedHead();
     const beforeState = owner.getState();
     const beforePrivate = owner.getPrivate(seat);
+    const journal = opened.journals[seat];
+    const peerId = opened.peers[seat];
+    if (!journal || !peerId) throw new Error('Missing owner journal');
     const submitted = owner.submit(seat, placementCommand(owner, seat)).catch(() => undefined);
     await settleNetwork(opened.sessions, opened.clock);
     await submitted;
@@ -403,7 +797,28 @@ describe('P2PSession', () => {
     expect(owner.getPrivate(seat)).toEqual(beforePrivate);
     expect(owner.getProtocolStatus()?.kind).toBe('halted');
     expect(opened.committed.size).toBe(0);
+    const saved = await journal.load();
+    expect(saved?.entries.at(-1)?.entry.payload.kind).toBe('command');
     opened.sessions.forEach((session) => session.dispose());
+    const restored = await P2PSession.restore(
+      optionsFor(
+        fixture,
+        seat,
+        opened.net.transport(peerId),
+        opened.clock,
+        journal,
+        undefined,
+        undefined,
+        (entry) =>
+          entry.input?.kind === 'command'
+            ? failure('driver-entry-rejected', 'Driver rejected certified input')
+            : success(undefined),
+      ),
+    );
+    expect(restored).toMatchObject({
+      ok: false,
+      error: { code: 'driver-entry-rejected' },
+    });
     opened.net.dispose();
   });
 
@@ -625,6 +1040,7 @@ describe('P2PSession', () => {
     const hostedBot = fixture.identities[2];
     const foreignBot = fixture.identities[3];
     if (!first || !second || !hostedBot || !foreignBot) throw new Error('Missing identities');
+    const ownedSeatsSeen: Seat[][] = [];
     const session = value(
       await P2PSession.create(
         optionsFor(
@@ -634,9 +1050,14 @@ describe('P2PSession', () => {
           clock,
           new MemoryProtocolJournal(),
           new Map([[2, hostedBot.secretKey]]),
+          undefined,
+          undefined,
+          {},
+          ownedSeatsSeen,
         ),
       ),
     );
+    expect(ownedSeatsSeen).toEqual([[0, 2]]);
     expect(session.getPrivate(2)).not.toBeNull();
     expect(session.getPrivate(3)).toBeNull();
 
@@ -651,6 +1072,26 @@ describe('P2PSession', () => {
       ),
     );
     expect(invalid).toMatchObject({ ok: false, error: { code: 'session-bot-key' } });
+
+    const missingStateJournal = new MemoryProtocolJournal();
+    const missingState = await P2PSession.create(
+      optionsFor(
+        fixture,
+        0,
+        net.transport(first.peerId),
+        clock,
+        missingStateJournal,
+        new Map([[2, hostedBot.secretKey]]),
+        undefined,
+        undefined,
+        { privateState: (seat) => (seat === 0 ? null : null) },
+      ),
+    );
+    expect(missingState).toMatchObject({
+      ok: false,
+      error: { code: 'session-driver-seats' },
+    });
+    expect(await missingStateJournal.load()).toBeNull();
     session.dispose();
     expect(session.getPrivate(0)).toBeNull();
     expect(session.getPrivate(2)).toBeNull();

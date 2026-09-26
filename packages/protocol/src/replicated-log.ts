@@ -7,7 +7,11 @@ import { prepareBeaconContribution } from './beacon-contributions.js';
 import type { BeaconContributionStore, BeaconSecretSource } from './beacon-contributions.js';
 import { BeaconInbox } from './beacon-inbox.js';
 import { deckPassHash } from './deck-genesis.js';
+import { DeckInbox } from './deck-inbox.js';
 import { decksReady } from './deck-ledger.js';
+import { prepareDeckUnlock } from './deck-outbox.js';
+import type { DeckContributionStore } from './deck-outbox.js';
+import type { DeckSourceFactory } from './deck-source.js';
 import type { SignedDeckPass } from './deck-setup.js';
 import type { ConsensusEffect, ConsensusState, Equivocation, TimeoutPhase } from './consensus.js';
 import { createConsensusState } from './consensus.js';
@@ -68,6 +72,8 @@ export interface ReplicatedLogOptions {
   policy: ReplayPolicy;
   seat: Seat;
   secretKey: Uint8Array;
+  /** Keys for bots assigned to this human by the signed genesis. */
+  botKeys?: ReadonlyMap<Seat, Uint8Array>;
   transport: Transport;
   clock: ProtocolClock;
   journal: ProtocolJournal;
@@ -77,6 +83,10 @@ export interface ReplicatedLogOptions {
   beaconContributions?: BeaconContributionStore;
   /** Exact public ceremony passes fixed by genesis; never regenerated after consent. */
   deckSetupPasses?: readonly { deckId: string; pass: SignedDeckPass }[];
+  /** Fresh deterministic source for each owned seat/deck; each invocation is disposed after use. */
+  createDeckSource?: DeckSourceFactory;
+  /** Durable immutable position reservations and signed unlocks. */
+  deckContributions?: DeckContributionStore;
   systemInput?: (
     context: ProposalContext,
   ) => { input: SystemInput; evidence: SystemEvidence } | null;
@@ -95,6 +105,12 @@ interface PendingCommand {
   pendingTimer: unknown;
 }
 
+interface LocalConfiguration {
+  passes: ReadonlyMap<string, { deckId: string; pass: unknown }>;
+  keys: ReadonlyMap<Seat, Uint8Array>;
+  signingKey: Uint8Array;
+}
+
 /** Certified history plus one active, durable consensus height. */
 export class ReplicatedLog {
   private controller: ConsensusController | null = null;
@@ -107,6 +123,12 @@ export class ReplicatedLog {
   private readonly rejectedCommands = new Set<string>();
   private readonly rejectedProposals = new Set<string>();
   private readonly beaconInbox = new BeaconInbox();
+  private readonly deckInbox = new DeckInbox();
+  private readonly deckSetupPasses: LocalConfiguration['passes'];
+  private readonly deckKeys: LocalConfiguration['keys'];
+  private readonly rejectedDeckContributions = new Set<string>();
+  private preparedDeckPrefix: string | null = null;
+  private sentDeckPrefix: string | null = null;
   private sentBeaconOperation: string | null = null;
   private accusation: ExcludeProposerControl | null = null;
   private readonly unsubscribers: Unsubscribe[] = [];
@@ -124,10 +146,14 @@ export class ReplicatedLog {
     private readonly genesisEntry: LogEntry,
     private context: ProposalContext,
     private entries: CertifiedEntry[],
-    private readonly deckSetupPasses: ReadonlyMap<string, { deckId: string; pass: unknown }>,
+    local: LocalConfiguration,
   ) {
-    this.secretKey = options.secretKey.slice();
-    this.self = identityFromSecret(this.secretKey).peerId;
+    this.secretKey = local.signingKey;
+    this.deckKeys = local.keys;
+    this.deckSetupPasses = local.passes;
+    const identity = identityFromSecret(this.secretKey);
+    this.self = identity.peerId;
+    identity.secretKey.fill(0);
   }
 
   static async create(options: ReplicatedLogOptions): Promise<Result<ReplicatedLog>> {
@@ -135,6 +161,7 @@ export class ReplicatedLog {
     if (!initial.ok) return initial;
     const key = checkLocalKey(options, initial.value);
     if (!key.ok) return key;
+    for (const keyBytes of key.value.keys.values()) keyBytes.fill(0);
     const safety = createConsensusState(initial.value, options.seat);
     if (!safety.ok) return safety;
     try {
@@ -258,6 +285,9 @@ export class ReplicatedLog {
     this.context = fresh;
     this.rejectedCommands.clear();
     this.rejectedProposals.clear();
+    this.rejectedDeckContributions.clear();
+    this.preparedDeckPrefix = null;
+    this.sentDeckPrefix = null;
     this.entries = replayed.value.entries;
     const opened = await this.openController();
     if (!opened.ok) return this.failClosed(opened.error.code, opened.error.message);
@@ -321,6 +351,7 @@ export class ReplicatedLog {
     if (this.disposed) return;
     this.disposed = true;
     this.controller?.dispose();
+    for (const key of this.deckKeys.values()) key.fill(0);
     for (const unsubscribe of this.unsubscribers) unsubscribe();
     for (const handle of this.timers.values()) this.options.clock.clearTimeout(handle);
     this.timers.clear();
@@ -472,6 +503,24 @@ export class ReplicatedLog {
         if (!refreshed.ok) return refreshed;
         const remembered = this.beaconInbox.remember(message.contribution);
         if (!remembered.ok) return remembered;
+        return remembered.value ? this.offerAvailableInput() : success(undefined);
+      }
+      case 'DECK_CONTRIB': {
+        if (message.genesisDigest !== this.context.membership.genesisDigest)
+          return failure('replica-deck-genesis', 'Deck contribution belongs to another game');
+        const refreshed = this.deckInbox.refresh(this.context.log.crypto);
+        if (!refreshed.ok) return refreshed;
+        // Old operation retries cannot alter the certified request or spend proof work.
+        if (message.contribution.operationId !== this.deckInbox.operationId())
+          return success(undefined);
+        const hash = toHex(hashValue(message.contribution));
+        if (this.rejectedDeckContributions.has(hash)) return success(undefined);
+        const remembered = this.deckInbox.remember(message.contribution);
+        if (!remembered.ok) {
+          rememberRejection(this.rejectedDeckContributions, hash);
+          this.strikePeer(from);
+          return failure('deck-proof-invalid', 'Deck unlock prefix is invalid');
+        }
         return remembered.value ? this.offerAvailableInput() : success(undefined);
       }
       case 'SUBMIT': {
@@ -717,16 +766,19 @@ export class ReplicatedLog {
     return more ? this.requestSync(this.context.log.head.seq + 1) : success(undefined);
   }
 
-  private async offerAvailableInput(retransmitBeacon = false): Promise<Result<void>> {
+  private async offerAvailableInput(retransmit = false): Promise<Result<void>> {
     const state = this.activeController().snapshot();
     if (!state.ok) return state;
     if (state.value.halted) return success(undefined);
-    const prepared = await this.prepareBeacon(retransmitBeacon);
+    const deckPrepared = await this.prepareDeck(retransmit);
+    if (!deckPrepared.ok) return deckPrepared;
+    const prepared = await this.prepareBeacon(retransmit);
     if (!prepared.ok) return prepared;
     const available =
       this.accusation !== null ||
       (!this.cryptoPending() && this.commands.length > 0) ||
       this.deckSetupCandidate() !== null ||
+      this.deckDrawCandidate() !== null ||
       this.beaconCandidate() !== null ||
       this.systemCandidate() !== null ||
       state.value.valid !== null;
@@ -777,7 +829,7 @@ export class ReplicatedLog {
         },
         this.secretKey,
       );
-    const crypto = this.deckSetupCandidate() ?? this.beaconCandidate();
+    const crypto = this.deckSetupCandidate() ?? this.deckDrawCandidate() ?? this.beaconCandidate();
     if (crypto) return this.entryCandidate(state, crypto);
     if (this.cryptoPending()) return null;
     while (this.commands.length > 0) {
@@ -881,6 +933,100 @@ export class ReplicatedLog {
     return evidence && next?.commitment.definition.deckId === evidence.deckId
       ? { kind: 'crypto', action: 'deck-pass', evidence }
       : null;
+  }
+
+  private deckDrawCandidate(): Extract<EntryPayload, { kind: 'system' }> | null {
+    const candidate = this.deckInbox.candidate(this.context.log);
+    if (!candidate.ok) {
+      this.status({ kind: 'rejected', code: candidate.error.code });
+      return null;
+    }
+    return candidate.value;
+  }
+
+  private async prepareDeck(retransmit: boolean): Promise<Result<void>> {
+    const crypto = this.context.log.crypto;
+    const refreshed = this.deckInbox.refresh(crypto);
+    if (!refreshed.ok) return this.failClosed(refreshed.error.code, refreshed.error.message);
+    const active = crypto?.decks.active;
+    const operationId = this.deckInbox.operationId();
+    if (!active || !operationId) {
+      this.preparedDeckPrefix = null;
+      this.sentDeckPrefix = null;
+      return success(undefined);
+    }
+    const setup = crypto.decks.decks.find(
+      (deck) => deck.commitment.definition.deckId === active.deckId,
+    )?.setup;
+    const { createDeckSource, deckContributions } = this.options;
+    if (!setup || !createDeckSource || !deckContributions)
+      return this.failClosed(
+        'replica-deck-store',
+        'Verified draws need local sources and durable contributions',
+      );
+    const prefixKey = () => `${operationId}/${this.deckInbox.prefix().length}`;
+    if (this.preparedDeckPrefix !== prefixKey()) {
+      const request = {
+        genesisDigest: active.genesisDigest,
+        epoch: active.epoch,
+        anchor: active.anchor,
+        position: active.position,
+        seat: active.seat,
+        slotId: active.slotId,
+      };
+      // Seat order matches the unlock chain. One host may append several bot
+      // unlocks. Even the drawer reserves the certified position before returning.
+      for (const participant of active.participants) {
+        const key = this.deckKeys.get(participant.seat);
+        if (!key) continue;
+        let source: ReturnType<DeckSourceFactory> | undefined;
+        try {
+          source = createDeckSource(active.deckId, participant.seat);
+          // oxlint-disable-next-line no-await-in-loop -- Each durable unlock consumes the previously verified ordered prefix.
+          const prepared = await prepareDeckUnlock(
+            setup,
+            request,
+            this.deckInbox.prefix(),
+            participant.seat,
+            key,
+            source,
+            deckContributions,
+          );
+          if (this.disposed)
+            return failure('replica-disposed', 'Replica closed during deck preparation');
+          if (!prepared.ok) return this.failClosed(prepared.error.code, prepared.error.message);
+          if (prepared.value) {
+            const remembered = this.deckInbox.remember({
+              kind: 'deck-unlock',
+              operationId,
+              unlocks: [...this.deckInbox.prefix(), prepared.value],
+            });
+            if (!remembered.ok)
+              return this.failClosed(remembered.error.code, remembered.error.message);
+          }
+        } catch {
+          return this.failClosed(
+            'replica-deck-source',
+            'Could not reconstruct the certified deck source',
+          );
+        } finally {
+          source?.dispose();
+        }
+      }
+      this.preparedDeckPrefix = prefixKey();
+    }
+    const unlocks = this.deckInbox.prefix();
+    const latest = prefixKey();
+    if (unlocks.length > 0 && (retransmit || latest !== this.sentDeckPrefix)) {
+      const sent = this.broadcast({
+        t: 'DECK_CONTRIB',
+        genesisDigest: this.context.membership.genesisDigest,
+        contribution: { kind: 'deck-unlock', operationId, unlocks },
+      });
+      if (sent.ok) this.sentDeckPrefix = latest;
+      else this.status({ kind: 'rejected', code: sent.error.code });
+    }
+    return success(undefined);
   }
 
   private cryptoPending(): boolean {
@@ -1154,6 +1300,7 @@ export class ReplicatedLog {
     this.commands.length = 0;
     this.rejectedCommands.clear();
     this.rejectedProposals.clear();
+    this.rejectedDeckContributions.clear();
     this.accusation = pendingAccusation;
     this.clearConsensusTimers();
     const opened = await this.openController();
@@ -1517,12 +1664,20 @@ function authenticateSignedProposal(
 function checkLocalKey(
   options: ReplicatedLogOptions,
   context: ProposalContext,
-): Result<ReadonlyMap<string, { deckId: string; pass: unknown }>> {
+): Result<LocalConfiguration> {
   if (
     context.log.genesis.security === 'verified' &&
     (!options.beaconSource || !options.beaconContributions)
   )
     return failure('replica-beacon-store', 'Verified sessions need durable beacon contributions');
+  const needsDeck = (context.log.crypto?.decks.decks.length ?? 0) > 0;
+  if (needsDeck && (!options.createDeckSource || !options.deckContributions))
+    return failure(
+      'replica-deck-store',
+      'Verified decks need local sources and durable contributions',
+    );
+  const keys = new Map<Seat, Uint8Array>();
+  let retained = false;
   try {
     const expected = new Map(
       context.log.crypto?.decks.decks.flatMap((deck) =>
@@ -1564,16 +1719,41 @@ function checkLocalKey(
         'replica-deck-transcript',
         'Retain every uncommitted deck pass before starting or restoring',
       );
-    const local = identityFromSecret(options.secretKey).peerId;
+    const signingKey = options.secretKey.slice();
+    keys.set(options.seat, signingKey);
+    const identity = identityFromSecret(signingKey);
+    const local = identity.peerId;
+    identity.secretKey.fill(0);
     const voter = context.membership.voters.find((member) => member.seat === options.seat);
-    return voter?.publicKey === local && options.transport.self === local
-      ? success(passes)
-      : failure(
-          'replica-key',
-          'Local key and authenticated transport do not match the certified voter',
-        );
+    if (voter?.publicKey !== local || options.transport.self !== local)
+      return failure(
+        'replica-key',
+        'Local key and authenticated transport do not match the certified voter',
+      );
+    for (const [seat, rawKey] of options.botKeys ?? []) {
+      const bot = context.log.genesis.seats.find((item) => item.seat === seat);
+      if (bot?.kind !== 'bot' || bot.botHost !== local || keys.has(seat))
+        return failure('replica-bot-key', 'Bot key is not hosted by this human');
+      const key = rawKey.slice();
+      keys.set(seat, key);
+      const botIdentity = identityFromSecret(key);
+      const matches = botIdentity.peerId === bot.publicKey;
+      botIdentity.secretKey.fill(0);
+      if (!matches) return failure('replica-bot-key', 'Bot key does not match genesis');
+    }
+    if (
+      needsDeck &&
+      context.log.genesis.seats.some(
+        (seat) => seat.kind === 'bot' && seat.botHost === local && !keys.has(seat.seat),
+      )
+    )
+      return failure('replica-bot-key', 'Verified decks require keys for every locally hosted bot');
+    retained = true;
+    return success({ passes, keys, signingKey });
   } catch {
     return failure('replica-key', 'Local voting key is invalid');
+  } finally {
+    if (!retained) for (const key of keys.values()) key.fill(0);
   }
 }
 

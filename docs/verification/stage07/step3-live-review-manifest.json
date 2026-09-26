@@ -1,0 +1,119 @@
+{
+  "checkpoint": "f64ac4a",
+  "bundleBytes": 373442,
+  "bundleSha256": "f04b2c9bc8e909deeb3d84dde983d875264044cc296862a0f01fff6f22931081",
+  "files": [
+    {
+      "path": "docs/verification/stage07/step3-live-review-prompt.md",
+      "sha256": "bf6a3445ecedcf493fd83965cee3ee20f85c2953b2f0448c07cd22424a1e2330"
+    },
+    {
+      "path": "docs/verification/stage07/step3-integration-plan.md",
+      "sha256": "6dd4b00406dc5fa32f5022647635ec40ef7b533c59198c433af7115046c1c2e0"
+    },
+    {
+      "path": "docs/verification/stage07/step3-ledger-review-response.md",
+      "sha256": "76dfbcac258da25733b026c1639a3cba23152909b12cf11403d17c95462b1d0b"
+    },
+    {
+      "path": "packages/protocol/src/replicated-log.ts",
+      "sha256": "fc6b9f1e380183579685bc5238906ec88e87395c70916f33d43779e3b8a8f430"
+    },
+    {
+      "path": "packages/protocol/src/p2p-session.ts",
+      "sha256": "bb8c6df6d67d893e76eea656a7aea26f10c94c8c32036f4f2a58fe26ea5b02cc"
+    },
+    {
+      "path": "packages/protocol/src/verified-session-driver.ts",
+      "sha256": "c51f4d004185dfc4f6319946f15869c1007403a2408f1c69ce4558430756a6ef"
+    },
+    {
+      "path": "packages/protocol/src/deck-inbox.ts",
+      "sha256": "9e8ced3c85f57565c6d8c93c04e606802c3b29c5a8d06880cb1f26eb0a0a619a"
+    },
+    {
+      "path": "packages/protocol/src/deck-outbox.ts",
+      "sha256": "af6664dcdaf9d9acd0ab4cb017bf6bf409ca66276c177adbd9c5821ca462e2d8"
+    },
+    {
+      "path": "packages/protocol/src/deck-draw.ts",
+      "sha256": "36d515edc8e67a469f72652614376212a4ccf0517958856a82cc584a8939fcdc"
+    },
+    {
+      "path": "packages/protocol/src/deck-source.ts",
+      "sha256": "5b27e8a399fdd0124759c5d253a7dd216ce569d3ef3ba0c2eb670575e8cce1eb"
+    },
+    {
+      "path": "packages/protocol/src/deck-ledger.ts",
+      "sha256": "2c3e9778c88b790e9afbe42d5446c29caff44a77abf86655a583851174d82e8d"
+    },
+    {
+      "path": "packages/protocol/src/crypto-context.ts",
+      "sha256": "0c35c34b7121808a77543c24a0f887c6610306ea2a707ec53445e2aad4327f77"
+    },
+    {
+      "path": "packages/protocol/src/log.ts",
+      "sha256": "3246b33342158174479b2bed87e2207b2173f99c1e2d502f7845dccd1a263c50"
+    },
+    {
+      "path": "packages/protocol/src/replay.ts",
+      "sha256": "2e10221c0674704d5cd332795b46414e265f608ffaefb593968818ad9ccc29a2"
+    },
+    {
+      "path": "packages/protocol/src/consensus-controller.ts",
+      "sha256": "ab5188c0a6045d61be803fe2e1125d5e04c7bdcd4b56eb91c68b89425b6b71ea"
+    },
+    {
+      "path": "packages/protocol/src/proposal.ts",
+      "sha256": "422aeaff082ca6918ee31cd4ee921b85c13a2e1b716d21ca4c7eef08f26e15db"
+    },
+    {
+      "path": "packages/protocol/src/genesis.ts",
+      "sha256": "7628ede4fa4137acb14a8a8ad5efc74913477cefd93a5bb6953d65642969d8d3"
+    },
+    {
+      "path": "packages/protocol/src/schemas.ts",
+      "sha256": "b5e8493d67f4cd6b1bf4db04de023a69d6610c7751077bdd0117d7254570f944"
+    },
+    {
+      "path": "packages/protocol/src/types.ts",
+      "sha256": "6666a2c57370888c7d5087b8d5c18a0ff0923ccf80824b2fddd9c4cd998d54bb"
+    },
+    {
+      "path": "packages/protocol/src/messages.ts",
+      "sha256": "2f356cb30251b5f1626236d38b8feb685bdc9dbbda468a4110f560bf7be52486"
+    },
+    {
+      "path": "packages/protocol/src/p2p-session.test.ts",
+      "sha256": "4661e8131ff117420641cb48f06279bd52b4a3a7a56235f09babb45f6b06ddab"
+    },
+    {
+      "path": "packages/protocol/src/deck-log.test.ts",
+      "sha256": "a5ffdbd678f3e78d3a2cc42d04aa3dbd2c22c2ad678a35bd4f5bde6deb2dc2c0"
+    },
+    {
+      "path": "packages/protocol/src/deck-replica.test.ts",
+      "sha256": "3a2251e22e67d47bde7c402812c4123a04015a6c6ec6955acb08525bb10f384e"
+    },
+    {
+      "path": "packages/protocol/src/testing/verified-deck-session.ts",
+      "sha256": "2ecfb712ed34c936f65827fb1e2d5bef930c1f75db58d2b161eb3fad90625ba1"
+    },
+    {
+      "path": "packages/engine/src/core/pipeline/engine.ts",
+      "sha256": "c3a8ef09117a1eec369881b61f8a87cedef796ac7815beb1607d1bd9c78533de"
+    },
+    {
+      "path": "packages/engine/src/modules/base/devcards.ts",
+      "sha256": "6036b167008ab04a91894787768445e2d412ca5a976d0241d3d9182876d2e9a9"
+    },
+    {
+      "path": "packages/engine/src/modules/base/robber.ts",
+      "sha256": "62774785bdd53a5a13ef8845a3443205d63cae1aad7ad6f47c6317f9b57a8b49"
+    },
+    {
+      "path": "packages/engine/src/modules/base/victory.ts",
+      "sha256": "8622132500ae30aab426f7ac6c3b3b689eeb642cfe38cb852ee8600369b90e27"
+    }
+  ]
+}

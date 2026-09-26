@@ -49,6 +49,7 @@ export type { SafetyStore, StoredSafety } from './safety-store.js';
 export { MemoryProtocolJournal, journalSafetyStore } from './journal.js';
 export type { JournalRecord, ProtocolJournal } from './journal.js';
 export { P2PSession } from './p2p-session.js';
+export { VerifiedSessionDriver } from './verified-session-driver.js';
 export type { CertifiedHistory, P2PSessionOptions, SessionDriver } from './p2p-session.js';
 export { ReplicatedLog } from './replicated-log.js';
 export type { ReplicatedLogOptions, ReplicatedLogStatus } from './replicated-log.js';
@@ -105,7 +106,7 @@ export {
 } from './deck-setup.js';
 export type { DeckDefinition, DeckSetupState, SignedDeckPass } from './deck-setup.js';
 export { createDeckSecretSource } from './deck-source.js';
-export type { DeckSecretSource } from './deck-source.js';
+export type { DeckSecretSource, DeckSourceFactory } from './deck-source.js';
 export {
   freezeDeckDraw,
   validateDeckDrawOperation,

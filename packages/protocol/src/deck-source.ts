@@ -20,6 +20,9 @@ export interface DeckSecretSource {
   dispose(): void;
 }
 
+/** Returns a fresh source reconstructed from retained owner secrets. The caller disposes it. */
+export type DeckSourceFactory = (deckId: string, seat: Seat) => DeckSecretSource;
+
 /** Deterministic per-deck secrets; a fresh factory reproduces an interrupted pass. */
 export function createDeckSecretSource(
   master: Uint8Array,

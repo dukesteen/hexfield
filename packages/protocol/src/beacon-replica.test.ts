@@ -233,6 +233,19 @@ function optionsFor(
     journal,
     beaconSource: required(fixture.sources[position]),
     beaconContributions: store,
+    deckContributions: store,
+    createDeckSource: (_deckId, ownerSeat) => fixture.deck.createSource(ownerSeat),
+    botKeys: new Map(
+      fixture.simulation.genesis.seats
+        .filter(
+          (item) =>
+            item.kind === 'bot' && item.botHost === required(fixture.humans[position]).publicKey,
+        )
+        .map((item) => [
+          item.seat,
+          required(fixture.simulation.identities.get(item.seat)).secretKey,
+        ]),
+    ),
     ...(onStatus ? { onStatus } : {}),
   };
 }

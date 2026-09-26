@@ -2,7 +2,6 @@ import { success } from '@cp2p/engine';
 import type { Result } from '@cp2p/engine';
 import * as v from 'valibot';
 import {
-  completeDeckDraw,
   deckDrawOperationId,
   deckUnlockSchema,
   validateDeckDrawOperation,
@@ -96,8 +95,8 @@ export class DeckInbox {
     const operation = this.operation;
     if (!operation || this.unlocks.length !== operation.participants.length - 1)
       return success(null);
-    const complete = completeDeckDraw(operation, this.unlocks);
-    if (!complete.ok) return complete;
+    // remember() already verified this entire prefix for the same operation ID.
+    // Proposal validation independently checks the final evidence before voting.
     return success({
       kind: 'system',
       input: {

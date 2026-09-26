@@ -17,7 +17,10 @@ import { MAX_MESSAGE_BYTES } from './validation.js';
 
 export interface DeckContributionStore {
   load(id: string): Promise<Uint8Array | null>;
-  /** Atomic, immutable insert. A losing writer must read and verify the winner. */
+  /**
+   * Atomic, immutable insert. Return true only after the transaction is durable.
+   * A losing writer must read and verify the winner. Retain records across restarts.
+   */
   putIfAbsent(id: string, bytes: Uint8Array): Promise<boolean>;
 }
 

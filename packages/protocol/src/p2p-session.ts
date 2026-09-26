@@ -29,13 +29,18 @@ import type {
   SubmitOptions,
 } from './session-types.js';
 import type { ProtocolClock, Unsubscribe } from './transport.js';
-import type { Genesis, LogEntry, SystemEvidence } from './types.js';
+import type { CommandBody, Genesis, LogEntry, SystemEvidence } from './types.js';
 import { logEntrySchema } from './schemas.js';
 import { parseCanonical } from './validation.js';
 
 /** Private state and system protocols are separate from the replicated public log. */
 export interface SessionDriver {
   next(context: LogContext): { input: SystemInput; evidence: SystemEvidence } | null;
+  /** Produce owner evidence bound to this exact parent, nonce and complete command before signing. */
+  prepareCommand?(
+    body: Omit<CommandBody, 'evidence'>,
+    context: LogContext,
+  ): Result<CommandBody['evidence']>;
   /**
    * Handles each certified entry, including protocol-only entries with no engine input.
    * When present, this replaces `committed`; it owns engine and private consequences too.
@@ -49,6 +54,7 @@ export interface SessionDriver {
   committed(before: LogContext, input: Input, after: GameState): Result<void>;
   privateState(seat: Seat): PrivateState | null;
   getTimers?(): readonly SessionTimer[];
+  dispose?(): void;
 }
 
 export interface P2PSessionOptions extends Omit<
@@ -56,7 +62,12 @@ export interface P2PSessionOptions extends Omit<
   'systemInput' | 'onCommit' | 'onStatus'
 > {
   /** Fresh driver on both create and restore. Restore replays private consequences. */
-  createDriver: (engine: Engine, genesis: Genesis, clock: ProtocolClock) => SessionDriver;
+  createDriver: (
+    engine: Engine,
+    genesis: Genesis,
+    clock: ProtocolClock,
+    ownedSeats: readonly Seat[],
+  ) => SessionDriver;
   /** Bot keys only for bots hosted by this human. The human key is secretKey above. */
   botKeys?: ReadonlyMap<Seat, Uint8Array>;
 }
@@ -78,6 +89,7 @@ export class P2PSession implements GameSession<CertifiedHistory> {
   private status: SessionStatus = { kind: 'running' };
   private protocolStatus: ReplicatedLogStatus | null = null;
   private automaticParent: string | null = null;
+  private automaticScheduled = false;
   private readonly inflight = new Set<Seat>();
 
   private constructor(
@@ -114,22 +126,39 @@ export class P2PSession implements GameSession<CertifiedHistory> {
       if (!initial.ok) return initial;
       const context = initial.value;
       const human = context.log.genesis.seats.find((seat) => seat.seat === options.seat);
-      if (
-        human?.kind !== 'human' ||
-        identityFromSecret(options.secretKey).peerId !== human.publicKey
-      )
+      if (human?.kind !== 'human' || !keyMatches(options.secretKey, human.publicKey))
         return failure('session-key', 'The local human key does not match genesis');
       for (const [seat, key] of options.botKeys ?? []) {
         const bot = context.log.genesis.seats.find((item) => item.seat === seat);
         if (
           bot?.kind !== 'bot' ||
           bot.botHost !== human.publicKey ||
-          identityFromSecret(key).peerId !== bot.publicKey
+          !keyMatches(key, bot.publicKey)
         )
           return failure('session-bot-key', 'Bot key is not hosted by this human');
       }
-      const driver = options.createDriver(options.engine, context.log.genesis, options.clock);
+      const ownedSeats = [options.seat, ...(options.botKeys?.keys() ?? [])];
+      const driver = options.createDriver(
+        options.engine,
+        context.log.genesis,
+        options.clock,
+        ownedSeats,
+      );
       session = new P2PSession(options, context, driver, context.log.head);
+      for (const { seat } of context.log.genesis.seats) {
+        const privateState = driver.privateState(seat);
+        const owned = session.keys.has(seat);
+        if (
+          (owned && (!privateState || privateState.seat !== seat)) ||
+          (!owned && context.log.genesis.security === 'verified' && privateState !== null)
+        ) {
+          session.dispose();
+          return failure(
+            'session-driver-seats',
+            'Private driver ownership differs from local keys',
+          );
+        }
+      }
       const openedSession = session;
       if (restoring) {
         const saved = await options.journal.load();
@@ -176,6 +205,10 @@ export class P2PSession implements GameSession<CertifiedHistory> {
         return replica;
       }
       session.replica = replica.value;
+      if (entryHash(replica.value.getContext().log.head) !== entryHash(session.context.log.head)) {
+        session.dispose();
+        return failure('session-replay-head', 'Certified journal changed during private replay');
+      }
       session.maybeAutomatic();
       return success(session);
     } catch (error) {
@@ -256,18 +289,24 @@ export class P2PSession implements GameSession<CertifiedHistory> {
     const key = this.keys.get(seat);
     if (!key) return failure('session-key', 'Seat key is unavailable');
     const { log } = this.context;
-    const signed = signCommand(
-      {
-        gameId: log.genesis.gameId,
-        genesisDigest: this.context.membership.genesisDigest,
-        seat,
-        nonce: (log.lastNonces.get(seat) ?? 0) + 1,
-        headSeq: log.head.seq,
-        headHash: entryHash(log.head),
-        command,
-      },
-      key,
-    );
+    const body: Omit<CommandBody, 'evidence'> = {
+      gameId: log.genesis.gameId,
+      genesisDigest: this.context.membership.genesisDigest,
+      seat,
+      nonce: (log.lastNonces.get(seat) ?? 0) + 1,
+      headSeq: log.head.seq,
+      headHash: entryHash(log.head),
+      command,
+    };
+    let evidence: CommandBody['evidence'];
+    try {
+      const prepared = this.driver.prepareCommand?.(copyCanonical(body), detachedLogContext(log));
+      if (prepared && !prepared.ok) return prepared;
+      evidence = prepared?.value;
+    } catch {
+      return failure('session-command-proof', "Could not prepare this command's private proof");
+    }
+    const signed = signCommand(evidence === undefined ? body : { ...body, evidence }, key);
     this.inflight.add(seat);
     try {
       return await replica.submit(signed);
@@ -280,7 +319,7 @@ export class P2PSession implements GameSession<CertifiedHistory> {
   subscribe(listener: (update: SessionUpdate) => void): Unsubscribe {
     if (this.status.kind === 'disposed') return () => {};
     this.listeners.add(listener);
-    listener(this.update([]));
+    this.notify(listener, []);
     return () => {
       this.listeners.delete(listener);
     };
@@ -317,6 +356,11 @@ export class P2PSession implements GameSession<CertifiedHistory> {
     this.status = { kind: 'disposed' };
     for (const key of this.keys.values()) key.fill(0);
     this.keys.clear();
+    try {
+      this.driver.dispose?.();
+    } catch {
+      // Session keys and public lifecycle must still close if private cleanup fails.
+    }
     this.emit([]);
     this.listeners.clear();
   }
@@ -326,6 +370,12 @@ export class P2PSession implements GameSession<CertifiedHistory> {
     next: ProposalContext,
     before: LogContext = this.context.log,
   ): Result<void> {
+    if (
+      entryHash(before.head) !== entryHash(this.context.log.head) ||
+      entry.entry.prevHash !== entryHash(before.head) ||
+      entry.entry.seq !== before.head.seq + 1
+    )
+      return failure('session-replay-head', 'Private state does not match the committed parent');
     if (this.driver.committedEntry) {
       const applied = this.driver.committedEntry(
         detachedValidated(entry),
@@ -342,12 +392,28 @@ export class P2PSession implements GameSession<CertifiedHistory> {
       if (!applied.ok) return applied;
     }
     this.context = next;
+    if (this.protocolStatus?.kind === 'halted') this.protocolStatus = null;
     this.events.push(...entry.events);
     this.status = next.log.state.result ? { kind: 'complete' } : { kind: 'running' };
     return success(undefined);
   }
 
   private maybeAutomatic(): void {
+    if (this.automaticScheduled || !this.replica || this.status.kind !== 'running') return;
+    this.automaticScheduled = true;
+    void Promise.resolve().then(() => {
+      this.automaticScheduled = false;
+      try {
+        this.submitAutomatic();
+      } catch {
+        this.automaticParent = entryHash(this.context.log.head);
+        this.protocolStatus = { kind: 'rejected', code: 'session-automatic-input' };
+      }
+      return undefined;
+    });
+  }
+
+  private submitAutomatic(): void {
     if (!this.replica || this.status.kind !== 'running') return;
     const parent = entryHash(this.context.log.head);
     if (this.automaticParent === parent) return;
@@ -360,10 +426,14 @@ export class P2PSession implements GameSession<CertifiedHistory> {
     if (input?.kind !== 'command' || !this.keys.has(input.seat)) return;
     if (this.inflight.has(input.seat)) return;
     this.automaticParent = parent;
-    void this.submit(input.seat, input.command).then(() => {
-      if (entryHash(this.context.log.head) !== parent) this.maybeAutomatic();
-      return undefined;
-    });
+    void this.submit(input.seat, input.command)
+      .then(() => {
+        if (entryHash(this.context.log.head) !== parent) this.maybeAutomatic();
+        return undefined;
+      })
+      .catch(() => {
+        this.protocolStatus = { kind: 'rejected', code: 'session-automatic-input' };
+      });
   }
 
   private update(events: readonly GameEvent[]): SessionUpdate {
@@ -377,7 +447,26 @@ export class P2PSession implements GameSession<CertifiedHistory> {
     };
   }
   private emit(events: readonly GameEvent[]): void {
-    for (const listener of this.listeners) listener(this.update(events));
+    for (const listener of this.listeners) this.notify(listener, events);
+  }
+
+  private notify(listener: (update: SessionUpdate) => void, events: readonly GameEvent[]): void {
+    try {
+      const update = this.update(events);
+      listener(update);
+    } catch {
+      // A view callback cannot undo a durable commit or stop the other subscribers.
+      this.protocolStatus = { kind: 'rejected', code: 'session-listener' };
+    }
+  }
+}
+
+function keyMatches(key: Uint8Array, publicKey: string): boolean {
+  const identity = identityFromSecret(key);
+  try {
+    return identity.peerId === publicKey;
+  } finally {
+    identity.secretKey.fill(0);
   }
 }
 
