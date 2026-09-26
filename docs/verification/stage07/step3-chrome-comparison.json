@@ -1,0 +1,50 @@
+{
+  "scope": "Read-only diagnostic with unchanged retained worker bundle; not isolated acceptance",
+  "runs": [
+    {
+      "mode": "shell",
+      "index": 0,
+      "version": "153.0.8010.12",
+      "ok": true,
+      "shuffleMs": 2231.7000000476837,
+      "totalMs": 2609.2999999523163,
+      "transcriptHash": "095350931c3bc9e4e1a9f61cfa9c41165974a14746a61ad4b471fe4ebd2df936",
+      "stateHash": "32a925498953334b7ef70468a9c08bedabfb0f523ea146b38bc8f39d63291ac8",
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36"
+    },
+    {
+      "mode": "shell",
+      "index": 1,
+      "version": "153.0.8010.12",
+      "ok": true,
+      "shuffleMs": 2354,
+      "totalMs": 2816.0999999046326,
+      "transcriptHash": "095350931c3bc9e4e1a9f61cfa9c41165974a14746a61ad4b471fe4ebd2df936",
+      "stateHash": "32a925498953334b7ef70468a9c08bedabfb0f523ea146b38bc8f39d63291ac8",
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36"
+    },
+    {
+      "mode": "chrome",
+      "index": 0,
+      "version": "153.0.8010.12",
+      "ok": true,
+      "shuffleMs": 2223.2000000476837,
+      "totalMs": 2593.4000000953674,
+      "transcriptHash": "095350931c3bc9e4e1a9f61cfa9c41165974a14746a61ad4b471fe4ebd2df936",
+      "stateHash": "32a925498953334b7ef70468a9c08bedabfb0f523ea146b38bc8f39d63291ac8",
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.0.0 Safari/537.36"
+    },
+    {
+      "mode": "chrome",
+      "index": 1,
+      "version": "153.0.8010.12",
+      "ok": true,
+      "shuffleMs": 2220.100000143051,
+      "totalMs": 2598.5,
+      "transcriptHash": "095350931c3bc9e4e1a9f61cfa9c41165974a14746a61ad4b471fe4ebd2df936",
+      "stateHash": "32a925498953334b7ef70468a9c08bedabfb0f523ea146b38bc8f39d63291ac8",
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.0.0 Safari/537.36"
+    }
+  ],
+  "limitation": "A separate focused crypto test may have overlapped the timing window. These fresh-worker results are diagnostic and are not an isolated Stage 07 acceptance measurement. Both browser modes were headless."
+}

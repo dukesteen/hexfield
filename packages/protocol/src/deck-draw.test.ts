@@ -1,6 +1,7 @@
 import { canonicalEncode, toBase64Url } from '@cp2p/codec';
+import * as crypto from '@cp2p/crypto';
 import { identityFromSecret, signObject } from '@cp2p/crypto';
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test, vi } from 'vitest';
 import {
   completeDeckDraw,
   deckDrawOperationId,
@@ -152,6 +153,33 @@ function keyAt(fixture: Fixture, seatIndex: number): Uint8Array {
 }
 
 describe('private deck draw', () => {
+  test('reuses an unlock proof during replay while still rejecting a changed signature', () => {
+    const frozen = freezeDeckDraw(FIXTURE.setup, {
+      ...FIXTURE.request,
+      slotId: 'proof-replay-cache',
+    });
+    if (!frozen.ok) throw new Error(frozen.error.code);
+    const unlock = signDeckUnlock(
+      frozen.value,
+      [],
+      lockAt(FIXTURE, 0, FIXTURE.request.position),
+      bytes(91),
+      keyAt(FIXTURE, 0),
+    );
+    const verify = vi.spyOn(crypto, 'verifyDleq');
+    try {
+      expect(verifyDeckUnlockPrefix(frozen.value, [unlock]).ok).toBe(true);
+      expect(verify).toHaveBeenCalledTimes(1);
+      expect(verifyDeckUnlockPrefix(frozen.value, [structuredClone(unlock)]).ok).toBe(true);
+      expect(verify).toHaveBeenCalledTimes(1);
+      expect(
+        verifyDeckUnlockPrefix(frozen.value, [{ ...unlock, sig: 'A'.repeat(86) }]),
+      ).toMatchObject({ ok: false, error: { code: 'deck-unlock-signature' } });
+    } finally {
+      verify.mockRestore();
+    }
+  });
+
   test('unlocks every non-owner in order, keeps identity private, then decodes and proves a public reveal', () => {
     const fixture = FIXTURE;
     const receipts = [0, 1, 2].map((position) => draw(fixture, { ...fixture.request, position }));
@@ -258,12 +286,30 @@ describe('private deck draw', () => {
       bytes(75),
       keyAt(fixture, 0),
     );
+    expect(verifyDeckUnlockPrefix(frozen.value, [original]).ok).toBe(true);
     const body = { ...original.body, point: frozen.value.initialPoint };
     const resigned: SignedDeckUnlock = {
       body,
       sig: signObject('deck-unlock', body, keyAt(fixture, 0)),
     };
     expect(errorCode(completeDeckDraw(frozen.value, [resigned]))).toBe('deck-unlock-proof');
+  });
+
+  test('a cached unlock proof does not accept an altered response with a fresh signature', () => {
+    const receipt = draw(FIXTURE);
+    const original = receipt.unlocks[0];
+    if (!original) throw new Error('missing unlock');
+    expect(verifyDeckUnlockPrefix(receipt.operation, [original]).ok).toBe(true);
+    const body = {
+      ...original.body,
+      proof: { ...original.body.proof, response: toBase64Url(new Uint8Array(32)) },
+    };
+    expect(body.proof.response).not.toBe(original.body.proof.response);
+    const changed = { body, sig: signObject('deck-unlock', body, keyAt(FIXTURE, 0)) };
+    expect(errorCode(verifyDeckUnlockPrefix(receipt.operation, [changed]))).toBe(
+      'deck-unlock-proof',
+    );
+    expect(verifyDeckUnlockPrefix(receipt.operation, [original]).ok).toBe(true);
   });
 
   test('an actor cannot move an existing DLEQ proof to a new operation by re-signing it', () => {

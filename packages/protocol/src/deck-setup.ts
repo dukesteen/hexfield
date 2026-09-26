@@ -88,6 +88,8 @@ const signedPassSchema = v.strictObject({
 // a failure. The hash binds the complete validated predecessor and signed pass.
 const VERIFIED_PROOF_LIMIT = 32;
 const verifiedProofs = new Set<string>();
+const VALIDATED_SETUP_LIMIT = 32;
+const validatedSetups = new Set<string>();
 
 function proofMemoKey(state: DeckSetupState, pass: unknown): string {
   return toHex(hashValue({ domain: 'cp2p/v1/deck-pass-proof-cache', state, pass }));
@@ -160,6 +162,14 @@ export function validateDeckSetupState(value: unknown): Result<DeckSetupState> {
   const parsed = parseCanonical(value, deckStateSchema);
   if (!parsed.ok) return parsed;
   const state = parsed.value;
+  // Certified-log validation revisits the same public deck on every vote.
+  // Cache only a successful pure shape/point check of these exact bytes. Return
+  // the freshly parsed copy, never a retained object or replay authority.
+  const memoKey = toHex(hashValue({ domain: 'cp2p/v1/deck-setup-validation', state }));
+  if (validatedSetups.delete(memoKey)) {
+    validatedSetups.add(memoKey);
+    return success(state);
+  }
   const definition = validatedDefinition(state.definition);
   if (!definition.ok) return definition;
   const size = definition.value.cards.length;
@@ -192,6 +202,11 @@ export function validateDeckSetupState(value: unknown): Result<DeckSetupState> {
     );
     if (initial.some((point, index) => state.points[index] !== point))
       return failure('deck-state', 'Unshuffled points differ from the canonical cards');
+  }
+  validatedSetups.add(memoKey);
+  if (validatedSetups.size > VALIDATED_SETUP_LIMIT) {
+    const oldest = validatedSetups.values().next().value;
+    if (oldest !== undefined) validatedSetups.delete(oldest);
   }
   return success(state);
 }

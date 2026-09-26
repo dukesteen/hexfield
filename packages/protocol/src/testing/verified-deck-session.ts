@@ -24,14 +24,33 @@ function required<T>(value: T | null | undefined): T {
 }
 
 /** Real 25-card ceremony with deterministic private sources for replica tests. */
-export function createVerifiedDeckSession(seed = 317, humanCount = 2, chainLength = 128) {
-  const simulation = createSimulationGenesis({ seed, humanCount });
+export function createVerifiedDeckSession(
+  seed = 317,
+  humanCount = 2,
+  chainLength = 128,
+  options: { vpTarget?: number; boardSeed?: Uint8Array } = {},
+) {
+  const { vpTarget, boardSeed } = options;
+  const simulation = createSimulationGenesis({
+    seed,
+    humanCount,
+    ...(vpTarget === undefined
+      ? {}
+      : {
+          config: {
+            modules: [{ id: 'base', version: '1.0.0' }],
+            seats: [0, 1, 2, 3],
+            options: { base: { mapLayout: 'random', vpTarget } },
+          },
+        }),
+  });
   const humans = simulation.genesis.seats.filter((seat) => seat.kind === 'human');
   const chains = humans.map((_, index) =>
     createHashChain(new Uint8Array(32).fill(index + 84), chainLength),
   );
   const bodyBeforeDeck: GenesisBody = {
     ...genesisBody(simulation.genesis),
+    ...(boardSeed === undefined ? {} : { genesisSeed: toBase64Url(boardSeed) }),
     security: 'verified',
     commitments: {
       beaconChains: humans.map((seat, index) => ({

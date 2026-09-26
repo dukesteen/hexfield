@@ -1,0 +1,199 @@
+{
+  "mode": "headed",
+  "runs": [
+    {
+      "mode": "headed",
+      "index": 0,
+      "version": "153.0.8010.12",
+      "ok": true,
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36",
+      "shuffleMs": 2298.2999999523163,
+      "totalMs": 2641,
+      "times": [
+        {
+          "phase": "shuffle",
+          "seat": 0,
+          "proveMs": 278.5,
+          "verifyMs": 186.19999980926514,
+          "bytes": 10314
+        },
+        {
+          "phase": "shuffle",
+          "seat": 1,
+          "proveMs": 206.89999985694885,
+          "verifyMs": 176.40000009536743,
+          "bytes": 10314
+        },
+        {
+          "phase": "shuffle",
+          "seat": 2,
+          "proveMs": 191.19999980926514,
+          "verifyMs": 169.10000014305115,
+          "bytes": 10314
+        },
+        {
+          "phase": "shuffle",
+          "seat": 3,
+          "proveMs": 199.79999995231628,
+          "verifyMs": 168.79999995231628,
+          "bytes": 10314
+        },
+        {
+          "phase": "shuffle",
+          "seat": 4,
+          "proveMs": 187,
+          "verifyMs": 170.09999990463257,
+          "bytes": 10314
+        },
+        {
+          "phase": "shuffle",
+          "seat": 5,
+          "proveMs": 196.20000004768372,
+          "verifyMs": 166.79999995231628,
+          "bytes": 10314
+        },
+        {
+          "phase": "lock",
+          "seat": 0,
+          "proveMs": 32.5,
+          "verifyMs": 23,
+          "bytes": 6720
+        },
+        {
+          "phase": "lock",
+          "seat": 1,
+          "proveMs": 32.200000047683716,
+          "verifyMs": 23.699999809265137,
+          "bytes": 6720
+        },
+        {
+          "phase": "lock",
+          "seat": 2,
+          "proveMs": 32.299999952316284,
+          "verifyMs": 24.300000190734863,
+          "bytes": 6720
+        },
+        {
+          "phase": "lock",
+          "seat": 3,
+          "proveMs": 32.39999985694885,
+          "verifyMs": 24.40000009536743,
+          "bytes": 6720
+        },
+        {
+          "phase": "lock",
+          "seat": 4,
+          "proveMs": 32.59999990463257,
+          "verifyMs": 26.100000143051147,
+          "bytes": 6720
+        },
+        {
+          "phase": "lock",
+          "seat": 5,
+          "proveMs": 33,
+          "verifyMs": 26,
+          "bytes": 6720
+        }
+      ],
+      "transcriptHash": "095350931c3bc9e4e1a9f61cfa9c41165974a14746a61ad4b471fe4ebd2df936",
+      "stateHash": "32a925498953334b7ef70468a9c08bedabfb0f523ea146b38bc8f39d63291ac8"
+    },
+    {
+      "mode": "headed",
+      "index": 1,
+      "version": "153.0.8010.12",
+      "ok": true,
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36",
+      "shuffleMs": 2173.7999999523163,
+      "totalMs": 2538.5,
+      "times": [
+        {
+          "phase": "shuffle",
+          "seat": 0,
+          "proveMs": 203.09999990463257,
+          "verifyMs": 188.70000004768372,
+          "bytes": 10314
+        },
+        {
+          "phase": "shuffle",
+          "seat": 1,
+          "proveMs": 194.5,
+          "verifyMs": 169.40000009536743,
+          "bytes": 10314
+        },
+        {
+          "phase": "shuffle",
+          "seat": 2,
+          "proveMs": 185.5,
+          "verifyMs": 163.09999990463257,
+          "bytes": 10314
+        },
+        {
+          "phase": "shuffle",
+          "seat": 3,
+          "proveMs": 186.59999990463257,
+          "verifyMs": 169.30000019073486,
+          "bytes": 10314
+        },
+        {
+          "phase": "shuffle",
+          "seat": 4,
+          "proveMs": 184,
+          "verifyMs": 164,
+          "bytes": 10314
+        },
+        {
+          "phase": "shuffle",
+          "seat": 5,
+          "proveMs": 189.60000014305115,
+          "verifyMs": 174.69999980926514,
+          "bytes": 10314
+        },
+        {
+          "phase": "lock",
+          "seat": 0,
+          "proveMs": 34.59999990463257,
+          "verifyMs": 24.100000143051147,
+          "bytes": 6720
+        },
+        {
+          "phase": "lock",
+          "seat": 1,
+          "proveMs": 32.5,
+          "verifyMs": 23.899999856948853,
+          "bytes": 6720
+        },
+        {
+          "phase": "lock",
+          "seat": 2,
+          "proveMs": 32.40000009536743,
+          "verifyMs": 24.5,
+          "bytes": 6720
+        },
+        {
+          "phase": "lock",
+          "seat": 3,
+          "proveMs": 33.40000009536743,
+          "verifyMs": 25.299999952316284,
+          "bytes": 6720
+        },
+        {
+          "phase": "lock",
+          "seat": 4,
+          "proveMs": 33.5,
+          "verifyMs": 34.5,
+          "bytes": 6720
+        },
+        {
+          "phase": "lock",
+          "seat": 5,
+          "proveMs": 38.700000047683716,
+          "verifyMs": 27.100000143051147,
+          "bytes": 6720
+        }
+      ],
+      "transcriptHash": "095350931c3bc9e4e1a9f61cfa9c41165974a14746a61ad4b471fe4ebd2df936",
+      "stateHash": "32a925498953334b7ef70468a9c08bedabfb0f523ea146b38bc8f39d63291ac8"
+    }
+  ]
+}

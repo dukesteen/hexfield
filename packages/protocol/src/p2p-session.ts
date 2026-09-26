@@ -29,7 +29,7 @@ import type {
   SubmitOptions,
 } from './session-types.js';
 import type { ProtocolClock, Unsubscribe } from './transport.js';
-import type { CommandBody, Genesis, LogEntry, SystemEvidence } from './types.js';
+import type { CommandBody, Genesis, LogEntry, SignedCommand, SystemEvidence } from './types.js';
 import { logEntrySchema } from './schemas.js';
 import { parseCanonical } from './validation.js';
 
@@ -90,6 +90,8 @@ export class P2PSession implements GameSession<CertifiedHistory> {
   private protocolStatus: ReplicatedLogStatus | null = null;
   private automaticParent: string | null = null;
   private automaticScheduled = false;
+  private automaticRetryTimer: unknown = null;
+  private automaticRetryDelay = 250;
   private readonly inflight = new Set<Seat>();
 
   private constructor(
@@ -248,7 +250,9 @@ export class P2PSession implements GameSession<CertifiedHistory> {
 
   getLegalCommands(seat: Seat): LegalCommandSet {
     const privateState = this.getPrivate(seat);
-    return this.status.kind !== 'running' || !privateState
+    if (this.status.kind !== 'running' || !privateState) return { commands: [], templates: [] };
+    const automatic = this.automaticCommand(privateState);
+    return !automatic.ok || automatic.value
       ? { commands: [], templates: [] }
       : this.options.engine.getLegalCommands(this.context.log.state, seat, privateState);
   }
@@ -259,6 +263,10 @@ export class P2PSession implements GameSession<CertifiedHistory> {
     const privateState = this.getPrivate(seat);
     if (!privateState)
       return failure('seat-not-controllable', 'This peer does not control the seat');
+    const automatic = this.automaticCommand(privateState);
+    if (!automatic.ok) return automatic;
+    if (automatic.value && !sameCommand(automatic.value, command))
+      return failure('automatic-input-pending', 'An automatic action must finish first');
     const input: Input = { kind: 'command', seat, command };
     const publicCheck = this.options.engine.validate(this.context.log.state, input);
     if (!publicCheck.ok) return publicCheck;
@@ -284,6 +292,24 @@ export class P2PSession implements GameSession<CertifiedHistory> {
       return failure('stale-revision', 'Board changed; choose the action again');
     if (this.inflight.has(seat))
       return failure('command-pending', 'This seat already has an uncommitted command');
+    let prepared: Result<SignedCommand>;
+    try {
+      prepared = this.prepareSubmission(seat, command);
+    } catch {
+      // No command has reached the replica yet, so an automatic caller may safely retry.
+      return failure('session-command-preparation', 'Could not prepare the local command');
+    }
+    if (!prepared.ok) return prepared;
+    this.inflight.add(seat);
+    try {
+      return await replica.submit(prepared.value);
+    } finally {
+      this.inflight.delete(seat);
+      this.maybeAutomatic();
+    }
+  }
+
+  private prepareSubmission(seat: Seat, command: CommandShape): Result<SignedCommand> {
     const valid = this.validate(seat, command);
     if (!valid.ok) return valid;
     const key = this.keys.get(seat);
@@ -306,14 +332,7 @@ export class P2PSession implements GameSession<CertifiedHistory> {
     } catch {
       return failure('session-command-proof', "Could not prepare this command's private proof");
     }
-    const signed = signCommand(evidence === undefined ? body : { ...body, evidence }, key);
-    this.inflight.add(seat);
-    try {
-      return await replica.submit(signed);
-    } finally {
-      this.inflight.delete(seat);
-      this.maybeAutomatic();
-    }
+    return success(signCommand(evidence === undefined ? body : { ...body, evidence }, key));
   }
 
   subscribe(listener: (update: SessionUpdate) => void): Unsubscribe {
@@ -352,6 +371,7 @@ export class P2PSession implements GameSession<CertifiedHistory> {
 
   dispose(): void {
     if (this.status.kind === 'disposed') return;
+    this.clearAutomaticRetry();
     this.replica?.dispose();
     this.status = { kind: 'disposed' };
     for (const key of this.keys.values()) key.fill(0);
@@ -392,7 +412,11 @@ export class P2PSession implements GameSession<CertifiedHistory> {
       if (!applied.ok) return applied;
     }
     this.context = next;
-    if (this.protocolStatus?.kind === 'halted') this.protocolStatus = null;
+    this.clearAutomaticRetry();
+    this.automaticParent = null;
+    this.automaticRetryDelay = 250;
+    if (this.protocolStatus?.kind === 'halted' || this.protocolStatus?.kind === 'rejected')
+      this.protocolStatus = null;
     this.events.push(...entry.events);
     this.status = next.log.state.result ? { kind: 'complete' } : { kind: 'running' };
     return success(undefined);
@@ -403,14 +427,28 @@ export class P2PSession implements GameSession<CertifiedHistory> {
     this.automaticScheduled = true;
     void Promise.resolve().then(() => {
       this.automaticScheduled = false;
+      const parent = entryHash(this.context.log.head);
       try {
         this.submitAutomatic();
       } catch {
-        this.automaticParent = entryHash(this.context.log.head);
-        this.protocolStatus = { kind: 'rejected', code: 'session-automatic-input' };
+        this.retryAutomatic(parent, 'session-automatic-input');
       }
       return undefined;
     });
+  }
+
+  private automaticCommand(privateState: PrivateState): Result<CommandShape | null> {
+    try {
+      const input = this.options.engine.getAutomaticInput(
+        this.context.log.state,
+        new Map([[privateState.seat, privateState]]),
+      );
+      return success(
+        input?.kind === 'command' && input.seat === privateState.seat ? input.command : null,
+      );
+    } catch {
+      return failure('automatic-input-unavailable', 'Could not determine the automatic action');
+    }
   }
 
   private submitAutomatic(): void {
@@ -427,13 +465,47 @@ export class P2PSession implements GameSession<CertifiedHistory> {
     if (this.inflight.has(input.seat)) return;
     this.automaticParent = parent;
     void this.submit(input.seat, input.command)
-      .then(() => {
+      .then((result) => {
         if (entryHash(this.context.log.head) !== parent) this.maybeAutomatic();
+        else if (!result.ok) this.retryAutomatic(parent, result.error.code);
         return undefined;
       })
       .catch(() => {
-        this.protocolStatus = { kind: 'rejected', code: 'session-automatic-input' };
+        // Includes failures while scheduling recovery; allow later activity to try again.
+        if (this.status.kind === 'running' && entryHash(this.context.log.head) === parent) {
+          this.automaticParent = null;
+          this.protocolStatus = { kind: 'rejected', code: 'session-automatic-input' };
+          this.emit([]);
+        }
       });
+  }
+
+  private retryAutomatic(parent: string, code: string): void {
+    if (this.status.kind !== 'running' || entryHash(this.context.log.head) !== parent) return;
+    this.automaticParent = parent;
+    this.protocolStatus = { kind: 'rejected', code };
+    this.emit([]);
+    if (
+      this.automaticRetryTimer !== null ||
+      this.status.kind !== 'running' ||
+      entryHash(this.context.log.head) !== parent
+    )
+      return;
+    // Resolved submission failures are pre-admission rejections at this parent.
+    // Accepted commands remain pending in ReplicatedLog and are never resubmitted here.
+    this.automaticRetryTimer = this.options.clock.setTimeout(() => {
+      this.automaticRetryTimer = null;
+      if (this.status.kind !== 'running' || entryHash(this.context.log.head) !== parent) return;
+      this.automaticParent = null;
+      this.maybeAutomatic();
+    }, this.automaticRetryDelay);
+    this.automaticRetryDelay = Math.min(this.automaticRetryDelay * 2, 4_000);
+  }
+
+  private clearAutomaticRetry(): void {
+    if (this.automaticRetryTimer === null) return;
+    this.options.clock.clearTimeout(this.automaticRetryTimer);
+    this.automaticRetryTimer = null;
   }
 
   private update(events: readonly GameEvent[]): SessionUpdate {
@@ -456,9 +528,16 @@ export class P2PSession implements GameSession<CertifiedHistory> {
       listener(update);
     } catch {
       // A view callback cannot undo a durable commit or stop the other subscribers.
-      this.protocolStatus = { kind: 'rejected', code: 'session-listener' };
+      if (this.protocolStatus?.kind !== 'rejected' && this.protocolStatus?.kind !== 'halted')
+        this.protocolStatus = { kind: 'rejected', code: 'session-listener' };
     }
   }
+}
+
+function sameCommand(left: CommandShape, right: CommandShape): boolean {
+  const a = canonicalEncode(left);
+  const b = canonicalEncode(right);
+  return a.length === b.length && a.every((byte, index) => byte === b[index]);
 }
 
 function keyMatches(key: Uint8Array, publicKey: string): boolean {

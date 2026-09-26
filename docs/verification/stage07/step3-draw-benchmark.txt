@@ -1,0 +1,53 @@
+ DEPRECATED  The workspace file is deprecated and will be removed in the next major. Please, use the `test.projects` field in /Users/duke/Dev/Personal/colonist-p2p/vitest.config.ts instead.
+
+ RUN  v3.2.7 /Users/duke/Dev/Personal/colonist-p2p
+
+verified draw with 50 ms links: 987.9 ms
+draw timeline:
+8.5 p0 send SUBMIT BUY_DEV_CARD
+24.8 p0 send PROPOSAL seq=81
+24.9 p0 send VOTE prevote seq=81
+57.8 p1 receive SUBMIT BUY_DEV_CARD
+74.7 p1 receive PROPOSAL seq=81
+82.6 p1 send VOTE prevote seq=81
+82.6 p1 receive VOTE prevote seq=81
+90.6 p1 send VOTE precommit seq=81
+132.8 p0 receive VOTE prevote seq=81
+141.9 p0 send VOTE precommit seq=81
+143.4 p0 receive VOTE precommit seq=81
+218.8 p0 certified command seq=81
+218.9 p0 send COMMIT seq=81
+238.5 p1 receive VOTE precommit seq=81
+318.6 p1 certified command seq=81
+318.7 p1 send COMMIT seq=81
+350.0 p1 send DECK_CONTRIB prefix=1
+351.3 p1 receive COMMIT seq=81
+367.9 p0 receive COMMIT seq=81
+399.5 p0 receive DECK_CONTRIB prefix=1
+432.4 p0 send DECK_CONTRIB prefix=2
+481.7 p1 receive DECK_CONTRIB prefix=2
+514.1 p1 send DECK_CONTRIB prefix=3
+544.4 p1 send PROPOSAL seq=82
+544.4 p1 send VOTE prevote seq=82
+563.0 p0 receive DECK_CONTRIB prefix=3
+584.8 p0 send DECK_CONTRIB prefix=3
+593.0 p0 receive PROPOSAL seq=82
+605.9 p0 send VOTE prevote seq=82
+607.3 p0 receive VOTE prevote seq=82
+620.3 p0 send VOTE precommit seq=82
+634.6 p1 receive DECK_CONTRIB prefix=3
+654.7 p1 receive VOTE prevote seq=82
+668.6 p1 send VOTE precommit seq=82
+668.7 p1 receive VOTE precommit seq=82
+822.4 p1 certified system seq=82
+822.5 p1 send COMMIT seq=82
+823.3 p0 receive VOTE precommit seq=82
+987.3 p0 certified system seq=82
+987.4 p0 send COMMIT seq=82
+ ✓ |@cp2p/protocol| src/deck-replica.test.ts (4 tests | 3 skipped) 18232ms
+   ✓ live verified deck replication > certifies a full draw within one second across real 50 ms links  18231ms
+
+ Test Files  1 passed (1)
+      Tests  1 passed | 3 skipped (4)
+   Start at  20:32:23
+   Duration  19.02s (transform 356ms, setup 0ms, collect 516ms, tests 18.23s, environment 0ms, prepare 73ms)

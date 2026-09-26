@@ -1,0 +1,59 @@
+{
+  "checkpoint": "07f4106",
+  "bundleBytes": 302416,
+  "bundleSha256": "c442270cc5ca4f446de06fb09836f238b453b47fbd3e5ad8016cbfd394ab311c",
+  "files": [
+    {
+      "path": "docs/verification/stage07/step3-victory-followup-prompt.md",
+      "sha256": "6b69e0d575bc664c904faed2219cf3fbccfb108a8c09f67e193e74858fc5dece"
+    },
+    {
+      "path": "docs/verification/stage07/step3-victory-review.md",
+      "sha256": "4a525576be603be492616db1baf09e8542f74b32687301ba78b45ece1df69676"
+    },
+    {
+      "path": "packages/protocol/src/p2p-session.ts",
+      "sha256": "9384ccb8735b208a65dc8fde941a82d721a8f0c85d277c63dc234535470e3d0c"
+    },
+    {
+      "path": "packages/protocol/src/p2p-session.test.ts",
+      "sha256": "028a2594b65f53be1bee331b1dbeb1251f37700e5c1c3edb2e363569527728f0"
+    },
+    {
+      "path": "packages/protocol/src/replicated-log.ts",
+      "sha256": "fc6b9f1e380183579685bc5238906ec88e87395c70916f33d43779e3b8a8f430"
+    },
+    {
+      "path": "packages/protocol/src/deck-setup.ts",
+      "sha256": "2b836901748302678c4e927a87d293d17be73e65223132a34a2e19cdfe7cd840"
+    },
+    {
+      "path": "packages/protocol/src/deck-setup.test.ts",
+      "sha256": "129c9ea9f972a59c19915bfaf1ca1da2ff42ff117011a142eb9c7cba09423f15"
+    },
+    {
+      "path": "packages/protocol/src/deck-draw.ts",
+      "sha256": "c4f382015d96bb28d432199d2fda07356859a330e1ac5f78a4a7e05d15962495"
+    },
+    {
+      "path": "packages/protocol/src/deck-draw.test.ts",
+      "sha256": "b16c1cfab97502b6abd66db9055b9f345e2897cc442f14e15b46fa9d0003e374"
+    },
+    {
+      "path": "packages/protocol/src/deck-ledger.ts",
+      "sha256": "2c3e9778c88b790e9afbe42d5446c29caff44a77abf86655a583851174d82e8d"
+    },
+    {
+      "path": "packages/protocol/src/deck-replica.test.ts",
+      "sha256": "220f027823434c929b9bab39d5698667c635a6581bb05cd7b9dfbca17f0198e6"
+    },
+    {
+      "path": "packages/protocol/src/validation.ts",
+      "sha256": "bb646520abbab0596ff5d99f1b7f6ffaeed264260c3030917725a050acef5f23"
+    },
+    {
+      "path": "packages/engine/src/modules/base/victory.ts",
+      "sha256": "8622132500ae30aab426f7ac6c3b3b689eeb642cfe38cb852ee8600369b90e27"
+    }
+  ]
+}

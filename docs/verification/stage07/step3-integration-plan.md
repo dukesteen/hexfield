@@ -1,6 +1,6 @@
 # Stage 07 Step 3 deck integration plan
 
-This plan connects shuffle, lock, draw, reveal and durable-outbox helpers to the certified game log. It is **not an acceptance report**. Genesis commitments, a replayed deck ledger, mandatory deal/reveal checks, command admission and setup-pass delivery are implemented. The current integration also connects live unlock delivery, durable restart retries, owned private-card replay and command reveal-proof production. Browser persistence, the lobby ceremony and the Step 3 performance gates remain pending. A permissive `verifyCommitments`, `verifySystem` or `verifyCommand` callback must never stand in for the mandatory deck checks below.
+This plan connects shuffle, lock, draw, reveal and durable-outbox helpers to the certified game log. It is **not an acceptance report**. Genesis commitments, a replayed deck ledger, mandatory deal/reveal checks, command admission and setup-pass delivery are implemented. The current integration also connects live unlock delivery, durable restart retries, owned private-card replay and command reveal-proof production. Automatic victory recovery and current Chrome shuffle measurements are recorded in the [victory checkpoint](step3-victory-local-checks.md). Browser persistence, the lobby ceremony and remaining adversarial delivery cases are pending. A permissive `verifyCommitments`, `verifySystem` or `verifyCommand` callback must never stand in for the mandatory deck checks below.
 
 ## Ceremony and genesis boundary
 
@@ -66,19 +66,13 @@ Meaningful integration tests should reject wrong catalogue/roster/ceremony ID, a
 
 ## Remaining Step 3 evidence
 
-- Exercise automatic victory claims through a real verified session. A configured
-  three-point target allows a legal two-building setup plus a privately dealt
-  victory point to trigger the existing automatic path. Prove the reveal evidence,
-  result and private-slot consumption on both peers. Cover a transient proof-source
-  failure and same-parent retry without busy looping.
-- Measure the complete draw with 50 ms links, from buying the card to both peers
-  certifying the deal. Build the legal pre-purchase prefix outside the measured
-  interval. Include cryptographic work, durable preparation and consensus in the
-  timing. Virtual network time alone cannot establish elapsed performance.
-- Cover a larger roster, consecutive unlockers hosted on one device, relayed
-  prefixes, a second draw and proposer control during a draw. Include bounded
-  handling of invalid live contributions and unchanged handling of stale retries.
-- Profile the retained Chrome worker before changing shuffle implementation.
-  Preserve 64 rounds and exact deterministic proof bytes. Node microbenchmarks
-  do not establish the browser target. Public window-table tuning alone has not
-  shown the speedup needed to reach three seconds.
+- The independent-peer draw benchmark now passes three isolated samples at
+  965.1–991.5 ms. Preserve its complete purchase-to-certification interval and
+  separate peer caches; remeasure after changes affecting that path.
+- Three-human relayed delivery and a second legal draw now pass. Cover the
+  remaining roster cases, consecutive unlockers hosted on one device and proposer
+  control during a draw. Include bounded handling of invalid live contributions
+  and unchanged handling of stale retries.
+- Preserve 64 rounds and exact deterministic proof bytes when changing shuffle
+  implementation. Two current headed Chrome worker runs pass the three-second
+  target; retain those source fingerprints and remeasure after relevant changes.

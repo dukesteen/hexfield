@@ -1,0 +1,50 @@
+{
+  "scope": "Read-only Chrome worker CPU profile of unchanged retained production Vite bundle",
+  "profilePath": "/private/tmp/hexfield-deck-worker-bench/chrome-profile.json",
+  "profileScriptPath": "/private/tmp/hexfield-deck-worker-bench/profile.mjs",
+  "comparisonScriptPath": "/private/tmp/hexfield-deck-worker-bench/compare.mjs",
+  "comparisonResultsPath": "/private/tmp/hexfield-deck-worker-bench/chrome-comparison.json",
+  "sourceSha256": {
+    "packages/crypto/src/shuffle.ts": "9dc138197533798261ad90fdf013575efc114b35302e8280857c72b66da966ea",
+    "/private/tmp/hexfield-deck-worker-bench/site/worker.js": "34b73dcfc234766203f158320db5122a6a63c0e9bb21c6d3b9b05ea9df931302",
+    "/private/tmp/hexfield-deck-worker-bench/worker.ts": "79a226edf1dc8e7db444684f09cdae6ce53afb48b8e64cba5a8fa27bddae17c6",
+    "docs/verification/stage07/step3-worker-benchmark.source.txt": "79a226edf1dc8e7db444684f09cdae6ce53afb48b8e64cba5a8fa27bddae17c6"
+  },
+  "profiledRun": {
+    "browserMode": "Chromium headless shell",
+    "ok": true,
+    "shuffleMs": 2241.600000143051,
+    "totalMs": 2620.7000000476837,
+    "transcriptHash": "095350931c3bc9e4e1a9f61cfa9c41165974a14746a61ad4b471fe4ebd2df936",
+    "stateHash": "32a925498953334b7ef70468a9c08bedabfb0f523ea146b38bc8f39d63291ac8",
+    "samples": 1826,
+    "nodes": 1272
+  },
+  "cpuSamples": {
+    "total": 1826,
+    "underProveShuffle": 737,
+    "underVerifyShuffle": 651,
+    "underShuffleEither": 1388,
+    "underScalePointWithinShuffle": 829,
+    "underEncodePointWithinShuffle": 186,
+    "underRoundPermutationWithinShuffle": 104,
+    "underChallengeForWithinShuffle": 17,
+    "underInvertScalarWithinShuffle": 5,
+    "otherWithinShuffle": 247
+  },
+  "interpretation": "ScalePoint accounts for 829/1388 = 59.7% of shuffle samples; point encoding accounts for 13.4%, and round permutation for 7.5%. These stack-based categories are mutually exclusive by nearest listed operation, and sampling is approximate. The 64-round proof protocol and byte transcript were unchanged. No multiplyUnsafe was introduced or used in prover code.",
+  "limitations": [
+    "A separate focused VP crypto test may have overlapped the timing runs, so no run is claimed as isolated acceptance.",
+    "The original 16.5 s diagnostic was a headed Chrome run. The new headless results do not explain its environment or browser-mode difference.",
+    "CPU sampling adds profiling overhead; use the four profiler-disabled comparison runs for timing."
+  ],
+  "toolRunStatus": {
+    "profileExitCode": 0,
+    "comparisonExitCode": 0,
+    "allWorkerResultsOk": true,
+    "profileTargetDetached": true,
+    "browserClosedInFinally": true,
+    "localHttpServerClosedInFinally": true,
+    "repositoryFilesEdited": false
+  }
+}

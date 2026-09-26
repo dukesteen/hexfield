@@ -1,4 +1,4 @@
-import type { PeerId, Transport, Unsubscribe } from '../transport.js';
+import type { PeerId, ProtocolClock, Transport, Unsubscribe } from '../transport.js';
 import { VirtualClock } from './virtual-clock.js';
 
 const DEFAULT_SEED = 0x6d2b79f5;
@@ -13,17 +13,17 @@ export interface MemnetLinkOptions {
   readonly reorder?: boolean;
 }
 
-/** Configuration for a deterministic, authenticated in-memory peer mesh. */
-export interface MemnetOptions {
+/** Authenticated in-memory peer mesh; defaults to a deterministic virtual clock. */
+export interface MemnetOptions<Clock extends ProtocolClock = VirtualClock> {
   readonly peers: readonly PeerId[];
   readonly seed?: number;
-  readonly clock?: VirtualClock;
+  readonly clock?: Clock;
   readonly defaultLink?: MemnetLinkOptions;
 }
 
 /** In-memory network controls shared by the transports it creates. */
-export interface Memnet {
-  readonly clock: VirtualClock;
+export interface Memnet<Clock extends ProtocolClock = VirtualClock> {
+  readonly clock: Clock;
   peers(): PeerId[];
   /** Number of additional duplicated packets actually delivered since creation. */
   diagnostics(): MemnetDiagnostics;
@@ -76,12 +76,15 @@ interface PeerChangeListener {
  * A seeded network simulator for protocol tests. It has no runtime game or
  * cryptographic dependencies; peer IDs are the pre-authenticated test roster.
  */
-export function createMemnet(options: MemnetOptions): Memnet {
-  return new MemnetNetwork(options);
+export function createMemnet<Clock extends ProtocolClock>(
+  options: MemnetOptions<Clock> & { readonly clock: Clock },
+): Memnet<Clock>;
+export function createMemnet(options: MemnetOptions): Memnet;
+export function createMemnet(options: MemnetOptions<ProtocolClock>): Memnet<ProtocolClock> {
+  return new MemnetNetwork(options, options.clock ?? new VirtualClock());
 }
 
-class MemnetNetwork implements Memnet {
-  readonly clock: VirtualClock;
+class MemnetNetwork<Clock extends ProtocolClock> implements Memnet<Clock> {
   private readonly random: SeededRandom;
   private readonly runtimes = new Map<PeerId, PeerRuntime>();
   private readonly pairs = new Map<string, LinkPair>();
@@ -90,7 +93,10 @@ class MemnetNetwork implements Memnet {
   private duplicateDeliveries = 0;
   private disposed = false;
 
-  constructor(options: MemnetOptions) {
+  constructor(
+    options: MemnetOptions<Clock>,
+    readonly clock: Clock,
+  ) {
     if (options.peers.length === 0) throw new RangeError('memnet requires at least one peer');
     const uniquePeers = new Set<PeerId>();
     for (const peer of options.peers) {
@@ -100,7 +106,6 @@ class MemnetNetwork implements Memnet {
       uniquePeers.add(peer);
       this.runtimes.set(peer, { id: peer, alive: true, generation: 0, transport: null });
     }
-    this.clock = options.clock ?? new VirtualClock();
     this.random = new SeededRandom(options.seed ?? DEFAULT_SEED);
     this.defaultDirection = normalizeDirectionOptions(options.defaultLink ?? {});
     for (let leftIndex = 0; leftIndex < options.peers.length; leftIndex++) {
@@ -354,7 +359,7 @@ class MemnetTransport implements Transport {
   private active = true;
 
   constructor(
-    private readonly network: MemnetNetwork,
+    private readonly network: MemnetNetwork<ProtocolClock>,
     readonly self: PeerId,
     private readonly generation: number,
   ) {}

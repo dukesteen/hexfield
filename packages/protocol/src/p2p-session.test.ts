@@ -1,5 +1,5 @@
 import { canonicalEncode, fromBase64Url, hashValue, toHex } from '@cp2p/codec';
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test, vi } from 'vitest';
 import { failure, success } from '@cp2p/engine';
 import type { CommandShape, Engine, Result, Seat, SystemInput } from '@cp2p/engine';
 import { createConsensusState } from './consensus.js';
@@ -218,13 +218,14 @@ function optionsFor(
     ...(botKeys ? { botKeys } : {}),
     createDriver: (engine, genesis, protocolClock, ownedSeats) => {
       ownedSeatsSeen?.push([...ownedSeats]);
+      const driver = createDriverFactory(
+        committedBySeat,
+        protocolClock,
+        committedEntry,
+        nextOverride,
+      )(engine, genesis, seat);
       return {
-        ...createDriverFactory(
-          committedBySeat,
-          protocolClock,
-          committedEntry,
-          nextOverride,
-        )(engine, genesis, seat),
+        ...driver,
         ...driverHooks,
       };
     },
@@ -326,6 +327,39 @@ function placementCommand(session: P2PSession, seat: Seat): CommandShape {
   return command;
 }
 
+function automaticCommandFixture() {
+  const fixture = twoHumanFixture();
+  const engine = fixture.engine;
+  let enabled = false;
+  fixture.engine = {
+    ...engine,
+    getAutomaticInput(state, privates) {
+      if (!enabled) return engine.getAutomaticInput(state, privates);
+      const seat = state.turn.activeSeat;
+      const privateState = privates.get(seat);
+      if (!privateState) return null;
+      const command = engine.getLegalCommands(state, seat, privateState).commands[0];
+      return command ? { kind: 'command', seat, command } : null;
+    },
+  };
+  return {
+    fixture,
+    enable: () => {
+      enabled = true;
+    },
+    disable: () => {
+      enabled = false;
+    },
+  };
+}
+
+function ownerEvidence(body: { headHash: string; nonce: number; command: CommandShape }) {
+  return success({
+    protocol: 'test-owner-proof',
+    data: { headHash: body.headHash, nonce: body.nonce, command: body.command.type },
+  });
+}
+
 function voteEquivocationControl(fixture: SessionFixture, seq: number): ExcludeProposerControl {
   const offender = fixture.identities[3];
   if (!offender) throw new Error('Missing offender identity');
@@ -419,9 +453,12 @@ describe('P2PSession', () => {
     const owner = opened.sessions[seat];
     if (!owner) throw new Error(`Missing owner for seat ${seat}`);
     const startingRevision = owner.getCommittedHead().seq;
-    throwOnAutomaticInput = true;
+    const command = placementCommand(owner, seat);
+    const unsubscribe = owner.subscribe(() => {
+      if (owner.getCommittedHead().seq > startingRevision) throwOnAutomaticInput = true;
+    });
 
-    const submitted = owner.submit(seat, placementCommand(owner, seat)).catch(() => undefined);
+    const submitted = owner.submit(seat, command).catch(() => undefined);
     await settleNetwork(opened.sessions, opened.clock);
     await submitted;
 
@@ -433,7 +470,27 @@ describe('P2PSession', () => {
       code: 'session-automatic-input',
     });
     expect(automaticInputCalls).toBeGreaterThan(0);
+    const faultedHead = owner.getCommittedHead();
+    expect(owner.getLegalCommands(seat)).toEqual({ commands: [], templates: [] });
+    expect(owner.validate(seat, command)).toMatchObject({
+      ok: false,
+      error: { code: 'automatic-input-unavailable' },
+    });
+    expect(await owner.submit(seat, command)).toMatchObject({
+      ok: false,
+      error: { code: 'automatic-input-unavailable' },
+    });
+    expect(owner.getCommittedHead()).toEqual(faultedHead);
+    unsubscribe();
     const other = opened.sessions.find((session) => session !== owner);
+    expect(other?.getCommittedHead()).toEqual(owner.getCommittedHead());
+    throwOnAutomaticInput = false;
+    const road = owner.getLegalCommands(seat).commands.find((item) => item.type === 'PLACE_ROAD');
+    if (!road) throw new Error('Expected road placement after getter recovery');
+    const recovered = owner.submit(seat, road);
+    await settleNetwork(opened.sessions, opened.clock);
+    expect(await recovered).toEqual(success(undefined));
+    expect(owner.getCommittedHead().seq).toBeGreaterThan(faultedHead.seq);
     expect(other?.getCommittedHead()).toEqual(owner.getCommittedHead());
     opened.sessions.forEach((session) => session.dispose());
     opened.net.dispose();
@@ -468,6 +525,272 @@ describe('P2PSession', () => {
     expect(owner.getProtocolStatus()?.kind).not.toBe('halted');
     unsubscribe.forEach((stop) => stop());
     opened.sessions.forEach((session) => session.dispose());
+    opened.net.dispose();
+  });
+
+  test('retries an automatic command after a transient proof rejection without an immediate loop', async () => {
+    const automatic = automaticCommandFixture();
+    let attempts = 0;
+    let automaticEnabled = false;
+    const opened = await openTwoHumanSessions(automatic.fixture, undefined, {
+      prepareCommand(body) {
+        if (automaticEnabled) {
+          attempts++;
+          if (attempts === 1) return failure('proof-temporary', 'Proof source is busy');
+        }
+        return ownerEvidence(body);
+      },
+    });
+    const session = opened.sessions[0];
+    if (!session) throw new Error('Missing first session');
+    const seat = session.getState().turn.activeSeat;
+    const owner = opened.sessions[seat];
+    if (!owner) throw new Error(`Missing owner for seat ${seat}`);
+    const before = owner.getCommittedHead().seq;
+    const submitted = owner.submit(seat, placementCommand(owner, seat));
+    automaticEnabled = true;
+    automatic.enable();
+    await settleNetwork(opened.sessions, opened.clock);
+    expect(await submitted).toEqual(success(undefined));
+    expect(attempts).toBe(1);
+    expect(owner.getCommittedHead().seq).toBe(before + 1);
+
+    opened.clock.advanceBy(249);
+    await settleNetwork(opened.sessions, opened.clock);
+    expect(attempts).toBe(1);
+    const localPeer = opened.peers[seat];
+    const otherPeer = opened.peers.find((peer) => peer !== localPeer);
+    if (!localPeer || !otherPeer) throw new Error('Missing automatic retry peers');
+    opened.net.disconnect(localPeer, otherPeer);
+    opened.clock.advanceBy(1);
+    await settleNetwork(opened.sessions, opened.clock);
+    expect(attempts).toBe(2);
+    expect(owner.getCommittedHead().seq).toBe(before + 1);
+    expect(owner.getLegalCommands(seat)).toEqual({ commands: [], templates: [] });
+    opened.clock.advanceBy(8_000);
+    await settleNetwork(opened.sessions, opened.clock);
+    expect(attempts).toBe(2);
+    expect(owner.getCommittedHead().seq).toBe(before + 1);
+    opened.sessions.forEach((peer) => peer.dispose());
+    opened.net.dispose();
+  });
+
+  test('retries after validation throws before automatic command admission', async () => {
+    const automatic = automaticCommandFixture();
+    let automaticEnabled = false;
+    let ownerSeat: Seat | null = null;
+    let proofAttempts = 0;
+    const opened = await openTwoHumanSessions(automatic.fixture, undefined, {
+      prepareCommand(body) {
+        if (automaticEnabled) {
+          proofAttempts++;
+          automaticEnabled = false;
+          automatic.disable();
+        }
+        return ownerEvidence(body);
+      },
+    });
+    const session = opened.sessions[0];
+    if (!session) throw new Error('Missing first session');
+    ownerSeat = session.getState().turn.activeSeat;
+    const owner = opened.sessions[ownerSeat];
+    if (!owner) throw new Error(`Missing owner for seat ${ownerSeat}`);
+    const originalValidate = owner.validate.bind(owner);
+    let throwNextValidation = false;
+    let validationThrows = 0;
+    const validationSpy = vi.spyOn(owner, 'validate').mockImplementation((seat, command) => {
+      if (throwNextValidation) {
+        throwNextValidation = false;
+        validationThrows++;
+        throw new Error('Injected automatic validation failure');
+      }
+      return originalValidate(seat, command);
+    });
+    const before = owner.getCommittedHead().seq;
+    const submitted = owner.submit(ownerSeat, placementCommand(owner, ownerSeat));
+    throwNextValidation = true;
+    automaticEnabled = true;
+    automatic.enable();
+    await settleNetwork(opened.sessions, opened.clock);
+    expect(await submitted).toEqual(success(undefined));
+    expect(validationThrows).toBe(1);
+    expect(proofAttempts).toBe(0);
+    expect(owner.getProtocolStatus()).toMatchObject({
+      kind: 'rejected',
+      code: 'session-command-preparation',
+    });
+    expect(owner.getCommittedHead().seq).toBe(before + 1);
+
+    opened.clock.advanceBy(249);
+    await settleNetwork(opened.sessions, opened.clock);
+    expect(proofAttempts).toBe(0);
+    opened.clock.advanceBy(1);
+    await settleNetwork(opened.sessions, opened.clock);
+    expect(proofAttempts).toBe(1);
+    expect(owner.getCommittedHead().seq).toBe(before + 2);
+    validationSpy.mockRestore();
+    opened.sessions.forEach((peer) => peer.dispose());
+    opened.net.dispose();
+  });
+
+  test('does not arm an automatic retry when its diagnostic listener disposes the session', async () => {
+    const automatic = automaticCommandFixture();
+    let automaticEnabled = false;
+    let attempts = 0;
+    const opened = await openTwoHumanSessions(automatic.fixture, undefined, {
+      prepareCommand(body) {
+        if (automaticEnabled) {
+          attempts++;
+          return failure('proof-temporary', 'Proof source is busy');
+        }
+        return ownerEvidence(body);
+      },
+    });
+    const session = opened.sessions[0];
+    if (!session) throw new Error('Missing first session');
+    const seat = session.getState().turn.activeSeat;
+    const owner = opened.sessions[seat];
+    if (!owner) throw new Error(`Missing owner for seat ${seat}`);
+    const unsubscribe = owner.subscribe(() => {
+      const status = owner.getProtocolStatus();
+      if (status?.kind === 'rejected' && status.code === 'proof-temporary') owner.dispose();
+    });
+    const submitted = owner.submit(seat, placementCommand(owner, seat));
+    automaticEnabled = true;
+    automatic.enable();
+    await settleNetwork(opened.sessions, opened.clock);
+    expect(await submitted).toEqual(success(undefined));
+    expect(attempts).toBe(1);
+    expect(owner.getProtocolStatus()).toMatchObject({ kind: 'rejected', code: 'proof-temporary' });
+    unsubscribe();
+    opened.sessions.filter((peer) => peer !== owner).forEach((peer) => peer.dispose());
+    opened.net.dispose();
+    expect(opened.clock.pendingTimerCount()).toBe(0);
+  });
+
+  test('keeps the automatic proof rejection diagnostic when a subscriber throws', async () => {
+    const automatic = automaticCommandFixture();
+    let automaticEnabled = false;
+    let attempts = 0;
+    const opened = await openTwoHumanSessions(automatic.fixture, undefined, {
+      prepareCommand(body) {
+        if (automaticEnabled) {
+          attempts++;
+          return failure('proof-temporary', 'Proof source is busy');
+        }
+        return ownerEvidence(body);
+      },
+    });
+    const session = opened.sessions[0];
+    if (!session) throw new Error('Missing first session');
+    const seat = session.getState().turn.activeSeat;
+    const owner = opened.sessions[seat];
+    if (!owner) throw new Error(`Missing owner for seat ${seat}`);
+    const unsubscribe = owner.subscribe(() => {
+      if (owner.getProtocolStatus()?.kind === 'rejected')
+        throw new Error('Injected listener failure');
+    });
+    const submitted = owner.submit(seat, placementCommand(owner, seat));
+    automaticEnabled = true;
+    automatic.enable();
+    await settleNetwork(opened.sessions, opened.clock);
+    expect(await submitted).toEqual(success(undefined));
+    expect(attempts).toBe(1);
+    expect(owner.getProtocolStatus()).toMatchObject({ kind: 'rejected', code: 'proof-temporary' });
+    unsubscribe();
+    opened.sessions.forEach((peer) => peer.dispose());
+    opened.net.dispose();
+  });
+
+  test('bounds repeated automatic proof failures and cancels its retry on dispose', async () => {
+    const automatic = automaticCommandFixture();
+    let automaticEnabled = false;
+    let attempts = 0;
+    const opened = await openTwoHumanSessions(automatic.fixture, undefined, {
+      prepareCommand(body) {
+        if (automaticEnabled) {
+          attempts++;
+          return failure('proof-permanent', 'Proof source remains unavailable');
+        }
+        return ownerEvidence(body);
+      },
+    });
+    const session = opened.sessions[0];
+    if (!session) throw new Error('Missing first session');
+    const seat = session.getState().turn.activeSeat;
+    const owner = opened.sessions[seat];
+    if (!owner) throw new Error(`Missing owner for seat ${seat}`);
+    const submitted = owner.submit(seat, placementCommand(owner, seat));
+    automaticEnabled = true;
+    automatic.enable();
+    await settleNetwork(opened.sessions, opened.clock);
+    expect(await submitted).toEqual(success(undefined));
+    expect(attempts).toBe(1);
+
+    for (const [index, delay] of [250, 500, 1_000, 2_000, 4_000, 4_000].entries()) {
+      opened.clock.advanceBy(delay - 1);
+      // oxlint-disable-next-line no-await-in-loop -- The retry attempt must settle before asserting its count.
+      await settleNetwork(opened.sessions, opened.clock);
+      expect(attempts).toBe(index + 1);
+      opened.clock.advanceBy(1);
+      // oxlint-disable-next-line no-await-in-loop -- The retry attempt must settle before asserting its count.
+      await settleNetwork(opened.sessions, opened.clock);
+      expect(attempts).toBe(index + 2);
+    }
+
+    opened.sessions.forEach((peer) => peer.dispose());
+    opened.net.dispose();
+    expect(opened.clock.pendingTimerCount()).toBe(0);
+    opened.clock.advanceBy(8_000);
+    expect(attempts).toBe(7);
+  });
+
+  test('a fresh certified parent cancels the old retry and starts with the initial backoff', async () => {
+    const automatic = automaticCommandFixture();
+    let automaticEnabled = false;
+    let attempts = 0;
+    const opened = await openTwoHumanSessions(automatic.fixture, undefined, {
+      prepareCommand(body) {
+        if (automaticEnabled) {
+          attempts++;
+          return failure('proof-temporary', 'Proof source is busy');
+        }
+        return ownerEvidence(body);
+      },
+    });
+    const session = opened.sessions[0];
+    if (!session) throw new Error('Missing first session');
+    let seat = session.getState().turn.activeSeat;
+    let owner = opened.sessions[seat];
+    if (!owner) throw new Error(`Missing owner for seat ${seat}`);
+    const initialSubmit = owner.submit(seat, placementCommand(owner, seat));
+    automaticEnabled = true;
+    automatic.enable();
+    await settleNetwork(opened.sessions, opened.clock);
+    expect(await initialSubmit).toEqual(success(undefined));
+    expect(attempts).toBe(1);
+
+    automatic.disable();
+    seat = owner.getState().turn.activeSeat;
+    const nextCommand = owner.getLegalCommands(seat).commands[0];
+    if (!nextCommand) throw new Error(`Missing command for next parent seat ${seat}`);
+    const beforeParentChange = owner.getCommittedHead().seq;
+    automaticEnabled = false;
+    const parentChangingSubmit = owner.submit(seat, nextCommand);
+    automaticEnabled = true;
+    automatic.enable();
+    await settleNetwork(opened.sessions, opened.clock);
+    expect(await parentChangingSubmit).toEqual(success(undefined));
+    expect(owner.getCommittedHead().seq).toBe(beforeParentChange + 1);
+    expect(attempts).toBe(2);
+
+    opened.clock.advanceBy(249);
+    await settleNetwork(opened.sessions, opened.clock);
+    expect(attempts).toBe(2);
+    opened.clock.advanceBy(1);
+    await settleNetwork(opened.sessions, opened.clock);
+    expect(attempts).toBe(3);
+    opened.sessions.forEach((peer) => peer.dispose());
     opened.net.dispose();
   });
 

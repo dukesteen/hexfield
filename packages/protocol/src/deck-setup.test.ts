@@ -1,4 +1,5 @@
 import { toBase64Url } from '@cp2p/codec';
+import * as crypto from '@cp2p/crypto';
 import {
   G,
   hashToPoint,
@@ -8,7 +9,7 @@ import {
   signObject,
 } from '@cp2p/crypto';
 import type { Result } from '@cp2p/engine';
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test, vi } from 'vitest';
 import {
   applyDeckPass,
   deckPassOperationId,
@@ -73,6 +74,45 @@ function completed(): { state: DeckSetupState; passes: SignedDeckPass[] } {
 }
 
 describe('signed deck setup', () => {
+  test('reuses point validation when the same public setup is replayed', () => {
+    const decode = vi.spyOn(crypto, 'decodePoint');
+    try {
+      const initial = value(initDeckSetup({ ...definition, deckEpoch: 991 }));
+      const firstPassCalls = decode.mock.calls.length;
+      expect(firstPassCalls).toBeGreaterThan(0);
+      expect(value(validateDeckSetupState(structuredClone(initial)))).toEqual(initial);
+      expect(decode).toHaveBeenCalledTimes(firstPassCalls);
+    } finally {
+      decode.mockRestore();
+    }
+  });
+
+  test('cached setup validation stays detached and rejects changed points or definitions', () => {
+    const initial = value(initDeckSetup(definition));
+    const expected = structuredClone(initial);
+    const returned = value(validateDeckSetupState(initial));
+    returned.points[0] = encodePoint(scalePoint(G, 0n));
+    returned.definition.deckEpoch++;
+    returned.definition.participants.reverse();
+    expect(initial).toEqual(expected);
+    expect(value(validateDeckSetupState(initial))).toEqual(expected);
+    expect(validateDeckSetupState(returned).ok).toBe(false);
+
+    const changedPoint = structuredClone(expected);
+    changedPoint.points[0] = encodePoint(G);
+    expect(validateDeckSetupState(changedPoint)).toMatchObject({
+      ok: false,
+      error: { code: 'deck-state' },
+    });
+    expect(
+      validateDeckSetupState({
+        ...expected,
+        definition: { ...expected.definition, deckEpoch: expected.definition.deckEpoch + 1 },
+      }),
+    ).toMatchObject({ ok: false, error: { code: 'deck-state' } });
+    expect(value(validateDeckSetupState(expected))).toEqual(expected);
+  });
+
   test('maps unique card identities and replays ordered shuffle and lock proofs', () => {
     const initial = value(initDeckSetup(definition));
     expect(initial.points[0]).toBe(

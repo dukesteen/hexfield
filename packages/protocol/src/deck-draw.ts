@@ -206,6 +206,32 @@ function unlockContext(operationId: string, step: number, seat: Seat) {
   return { domain: 'cp2p/v1/deck-unlock', operationId, step, seat };
 }
 
+const VERIFIED_UNLOCK_PROOF_LIMIT = 64;
+const verifiedUnlockProofs = new Set<string>();
+
+function verifiedUnlockProof(
+  statement: ReturnType<typeof unlockStatement>,
+  proof: DleqProof,
+  context: ReturnType<typeof unlockContext>,
+): boolean {
+  const key = toHex(
+    hashValue({ domain: 'cp2p/v1/deck-unlock-proof-cache', statement, proof, context }),
+  );
+  if (verifiedUnlockProofs.delete(key)) {
+    verifiedUnlockProofs.add(key);
+    return true;
+  }
+  if (!verifyDleq(statement, proof, context)) return false;
+  // Repeated proposals and growing prefixes reuse this exact public proof.
+  // Retain only its success hash; signatures, order and operation checks still run.
+  verifiedUnlockProofs.add(key);
+  if (verifiedUnlockProofs.size > VERIFIED_UNLOCK_PROOF_LIMIT) {
+    const oldest = verifiedUnlockProofs.values().next().value;
+    if (oldest !== undefined) verifiedUnlockProofs.delete(oldest);
+  }
+  return true;
+}
+
 export function verifyDeckUnlockPrefix(
   operation: DeckDrawOperation,
   value: unknown,
@@ -238,7 +264,7 @@ export function verifyDeckUnlockPrefix(
       return failure('deck-unlock-point', 'The partial unlock point is invalid');
     }
     if (
-      !verifyDleq(
+      !verifiedUnlockProof(
         unlockStatement(point, unlock.body.point, participant.lockKey),
         unlock.body.proof,
         unlockContext(operationId, step, participant.seat),

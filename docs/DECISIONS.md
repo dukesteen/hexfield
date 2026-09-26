@@ -395,3 +395,16 @@ Record decisions here as they are made. Keep earlier entries.
 - Review: The [live review response](verification/stage07/step3-live-review-response.md) records reproduced listener and restore failures. A subscriber exception is isolated from consensus. Automatic input selection runs in a guarded microtask. The session and private driver both enforce continuity of applied certified heads; differing journal reads cannot silently skip private effects.
 - Decision: Keep storage errors fail-closed and resume through restore with the retained journal and outbox. This matches the beacon policy and avoids volatile fallbacks. Stage 10 will supply the browser lifecycle around that recovery.
 - Boundary: This integration does not complete resource commitments, sealed steals, escrow or final audit. The verified driver remains outside the production online UI until those paths and the later lobby are ready. Shuffle and draw performance gates remain open.
+
+## 2026-09-26: Automatic victory recovery and repeated public verification
+
+- Decision: An automatic claim rejected before admission retries at the same certified parent after 250 ms, doubling to a four-second cap. An admitted command stays pending without another submission. A commit resets the retry, and disposal cancels it. Ordinary commands for that seat wait for the winning claim, so a transient proof-source failure cannot let end turn preempt victory.
+- Decision: Lookup failures in the legal-action interface return a distinct failure and no actions. Subscriber exceptions do not replace an existing protocol rejection or halt. The [review response](verification/stage07/step3-victory-review-response.md) records these recovery boundaries.
+- Performance: Cache only successful pure validation of the complete parsed public deck setup and successful DLEQ verification of the exact statement, proof and context. Each bounded cache retains hashes only. Canonical parsing, signatures, operation ordering, certified-ledger authority and policy checks still run. This avoids repeating public point work during proposal and snapshot validation.
+- Evidence: Two fresh headed Chrome workers meet the shuffle target with unchanged 64-round proofs and transcript hashes. Three isolated full-draw samples use independent peer caches and pass the one-second target at 965.1–991.5 ms. The narrow margin remains a performance risk; these Node measurements do not establish browser latency.
+
+## 2026-09-26: Bound test work to the behavior under review
+
+- Request: The user authorized reducing unnecessary test counts and stopping unexpectedly slow runs to investigate.
+- Decision: Prefer short legal traces and targeted fault cases for protocol delivery. A timeout is a diagnostic signal, not a reason to repeatedly increase the timeout or game count. Retain tests for distinct safety properties and reserve full-game batches for integration acceptance.
+- Correction: The relay test missed draws that completed during network settling. Observe certified deck progress as well as an active request, use a fixed legal setup trace, and cap the helper at 100 inputs. The corrected three-human test completes in 21.48 seconds.

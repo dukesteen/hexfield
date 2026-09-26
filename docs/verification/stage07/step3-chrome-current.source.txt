@@ -1,0 +1,29 @@
+import { createServer } from 'node:http';
+import { readFile, writeFile } from 'node:fs/promises';
+import { chromium } from '/Users/duke/Dev/Personal/colonist-p2p/node_modules/.pnpm/playwright@1.63.0/node_modules/playwright/index.mjs';
+const root='/private/tmp/hexfield-deck-worker-bench/site';
+const executablePath='/private/tmp/hexfield-playwright/chromium-1243/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing';
+const server=createServer(async(req,res)=>{try{const p=req.url?.startsWith('/worker.js')?'worker.js':'index.html';res.setHeader('Content-Type',p.endsWith('.js')?'text/javascript':'text/html');res.end(await readFile(`${root}/${p}`));}catch(e){res.writeHead(404).end(String(e));}});
+await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
+let browser;
+const runs=[];
+const mode=process.argv[2]??'headed';
+try {
+ browser=await chromium.launch({headless:mode==='headless',executablePath});
+ for(let index=0;index<2;index++) {
+  const page=await browser.newPage();
+  try {
+   await page.goto(`http://127.0.0.1:${server.address().port}/`);
+   const result=await page.evaluate(()=>new Promise((resolve,reject)=>{const worker=new Worker('/worker.js?after-cache',{type:'module'});worker.onmessage=e=>{worker.terminate();resolve(e.data)};worker.onerror=e=>{worker.terminate();reject(new Error(e.message))};worker.postMessage({});}));
+   const record={mode,index,version:browser.version(),...result};
+   runs.push(record);
+   console.log(JSON.stringify(record));
+   if(!result.ok) throw new Error(`Worker returned ${result.error}`);
+  } finally {await page.close();}
+ }
+} catch(e){console.error(`${mode}: ${e.stack??e}`);process.exitCode=1;}
+finally{
+ await writeFile(`/private/tmp/hexfield-deck-worker-bench/chrome-after-cache-${mode}.json`,JSON.stringify({mode,runs},null,2)+'\n');
+ await browser?.close();
+ await new Promise(resolve=>server.close(resolve));
+}
