@@ -1,0 +1,90 @@
+{
+  "bytes": 240444,
+  "sha256": "a705d0466eb5ced08d0f54105607a78172e092e23250e6bcbef457fd8b0f49ce",
+  "files": [
+    {
+      "path": "docs/verification/stage07/step4-design-review-prompt.md",
+      "sha256": "f6076739f2eb467f630d3fac760c62ccfc56b845f7fb9a31b98b744d3b260583"
+    },
+    {
+      "path": "docs/verification/stage07/step4-integration-plan.md",
+      "sha256": "a3dfd1e083aca12407c41eca4d0bd03d6fde648fe997a3590b6473ddfc8a4ec7"
+    },
+    {
+      "path": "docs/07-fair-randomness-hidden-info.md",
+      "sha256": "92bbc982109dfa4affe2ba9c86433b0bc009c9b28278fb55b2d9819d1c94baf5"
+    },
+    {
+      "path": "docs/verification/stage07/design-review-response.md",
+      "sha256": "05b2c2e8e8380aacf4f950985a5ba6fc27d9eaf6a789e34e0ff8c91d01e21d31"
+    },
+    {
+      "path": "packages/engine/src/core/modules/types.ts",
+      "sha256": "404938369a7d090e0ed8385534b3139d5b0d8e970573c11287d99ec1a4088700"
+    },
+    {
+      "path": "packages/engine/src/core/pipeline/engine.ts",
+      "sha256": "c3a8ef09117a1eec369881b61f8a87cedef796ac7815beb1607d1bd9c78533de"
+    },
+    {
+      "path": "packages/engine/src/modules/base/shared.ts",
+      "sha256": "4321b8bb124405bac92beac2e6d6da2c2ffe2f4cedf01fa75e8247f79eb97f23"
+    },
+    {
+      "path": "packages/engine/src/modules/base/production.ts",
+      "sha256": "00cc575298d79a0c2833b54596cd6bf3f28a015e46c48a5ef603f04847956047"
+    },
+    {
+      "path": "packages/engine/src/modules/base/builds.ts",
+      "sha256": "b2bc7508b8c070d2274181cc865abac35f2ce39e6f265dc761b6a1831ef9ccfa"
+    },
+    {
+      "path": "packages/engine/src/modules/base/trade.ts",
+      "sha256": "1730b7506c1d06ec36dd5514e079c4d830e28204841c90770e67af12f4631b09"
+    },
+    {
+      "path": "packages/engine/src/modules/base/devcards.ts",
+      "sha256": "6036b167008ab04a91894787768445e2d412ca5a976d0241d3d9182876d2e9a9"
+    },
+    {
+      "path": "packages/engine/src/modules/base/timeouts.ts",
+      "sha256": "a57500b365ac24387f142c101b909888dacc4b38c1db1e39f97993bfdd388f08"
+    },
+    {
+      "path": "packages/engine/src/modules/base/phases/setup.ts",
+      "sha256": "39b95274d4ff39a9a45ce61f83e367ffe8afb0619ee8ecf5dfa6012b31fb324c"
+    },
+    {
+      "path": "packages/protocol/src/crypto-context.ts",
+      "sha256": "0c35c34b7121808a77543c24a0f887c6610306ea2a707ec53445e2aad4327f77"
+    },
+    {
+      "path": "packages/protocol/src/log.ts",
+      "sha256": "3246b33342158174479b2bed87e2207b2173f99c1e2d502f7845dccd1a263c50"
+    },
+    {
+      "path": "packages/protocol/src/verified-session-driver.ts",
+      "sha256": "bf5d91e482d8788903780dff891641e572cfe5871e99bdb878ebf72043fa1441"
+    },
+    {
+      "path": "packages/protocol/src/p2p-session.ts",
+      "sha256": "c4f0c8e56f5565c0deb49edf0dbe4b59bb22e71223ab90a8f61100c4160c1bee"
+    },
+    {
+      "path": "packages/protocol/src/deck-ledger.ts",
+      "sha256": "2c3e9778c88b790e9afbe42d5446c29caff44a77abf86655a583851174d82e8d"
+    },
+    {
+      "path": "packages/protocol/src/types.ts",
+      "sha256": "6666a2c57370888c7d5087b8d5c18a0ff0923ccf80824b2fddd9c4cd998d54bb"
+    },
+    {
+      "path": "packages/crypto/src/range.ts",
+      "sha256": "c9c633f02a7da0c590de0bddf529edd2a0b000c60618fcc79812063996345bf7"
+    },
+    {
+      "path": "packages/crypto/src/sigma.ts",
+      "sha256": "e04a49de15d73a54cc4191a4eed4b2dddab6c2e899636c2b7e8decbff3750ea8"
+    }
+  ]
+}
