@@ -69,6 +69,53 @@ function expandExplicit(statement: ShuffleStatement, proof: ShuffleProof) {
   };
 }
 
+/** Builds an explicit transcript from fixed round witnesses, without calling the prover. */
+function independentExplicitProof(statement: ShuffleStatement) {
+  const rho = [1, 3, 0, 2];
+  const explicit = Array.from({ length: 64 }, (_, round) => {
+    const r = BigInt(round + 2);
+    const y = statement.input.slice();
+    for (let oldIndex = 0; oldIndex < statement.input.length; oldIndex += 1)
+      y[required(rho[oldIndex])] = encodePoint(
+        scalePoint(decodePoint(required(statement.input[oldIndex])), r),
+      );
+    return { r, R: encodePoint(scalePoint(G, r)), Y: y };
+  });
+  const transcript = explicit.map(({ R, Y }) => [R, Y]);
+  const challenge = sha256(
+    canonicalEncode(['cp2p/v1/shuffle', CONTEXT, statement, transcript]),
+  ).slice(0, 8);
+  const forwardRelations: boolean[] = [];
+  const responses = explicit.map(({ r, R, Y }, round) => {
+    const bit = ((challenge[Math.floor(round / 8)] ?? 0) & (0x80 >> (round % 8))) !== 0;
+    if (!bit) {
+      for (let oldIndex = 0; oldIndex < statement.input.length; oldIndex += 1)
+        forwardRelations.push(
+          required(Y[required(rho[oldIndex])]) ===
+            encodePoint(scalePoint(decodePoint(required(statement.input[oldIndex])), r)),
+        );
+      return { scalar: encodeScalar(r), permutation: rho };
+    }
+    const u = modScalar(SECRET * invertScalar(r));
+    forwardRelations.push(scalePoint(decodePoint(R), u).equals(decodePoint(statement.publicKey)));
+    const tau = rho.slice();
+    for (let oldIndex = 0; oldIndex < rho.length; oldIndex += 1)
+      tau[required(rho[oldIndex])] = required(PI[oldIndex]);
+    for (let yIndex = 0; yIndex < Y.length; yIndex += 1)
+      forwardRelations.push(
+        scalePoint(decodePoint(required(Y[yIndex])), u).equals(
+          decodePoint(required(statement.output[required(tau[yIndex])])),
+        ),
+      );
+    return { scalar: encodeScalar(u), permutation: tau };
+  });
+  return {
+    challenge,
+    forwardRelations,
+    compact: { challenge: toBase64Url(challenge), responses } satisfies ShuffleProof,
+  };
+}
+
 describe('compact single-key shuffle proof', () => {
   test('verifies a non-involutive old→new permutation and explicit/compact transcript equivalence', () => {
     const statement = fixture();
@@ -103,57 +150,38 @@ describe('compact single-key shuffle proof', () => {
   test('contracts an independently constructed explicit proof with forward equations', () => {
     const statement = fixture();
     // Four-cycle distinct from π; both directions matter to τ = π ∘ ρ⁻¹.
-    const rho = [1, 3, 0, 2];
-    const explicit = Array.from({ length: 64 }, (_, round) => {
-      const r = BigInt(round + 2);
-      const y = statement.input.slice();
-      for (let oldIndex = 0; oldIndex < statement.input.length; oldIndex += 1)
-        y[required(rho[oldIndex])] = encodePoint(
-          scalePoint(decodePoint(required(statement.input[oldIndex])), r),
-        );
-      return { r, R: encodePoint(scalePoint(G, r)), Y: y };
-    });
-    const transcript = explicit.map(({ R, Y }) => [R, Y]);
-    const challenge = sha256(
-      canonicalEncode(['cp2p/v1/shuffle', CONTEXT, statement, transcript]),
-    ).slice(0, 8);
-    const forwardRelations: boolean[] = [];
-    const responses = explicit.map(({ r, R, Y }, round) => {
-      const bit = ((challenge[Math.floor(round / 8)] ?? 0) & (0x80 >> (round % 8))) !== 0;
-      if (!bit) {
-        for (let oldIndex = 0; oldIndex < statement.input.length; oldIndex += 1)
-          forwardRelations.push(
-            required(Y[required(rho[oldIndex])]) ===
-              encodePoint(scalePoint(decodePoint(required(statement.input[oldIndex])), r)),
-          );
-        return { scalar: encodeScalar(r), permutation: rho };
-      }
-      const u = modScalar(SECRET * invertScalar(r));
-      forwardRelations.push(scalePoint(decodePoint(R), u).equals(decodePoint(statement.publicKey)));
-      const tau = rho.slice();
-      for (let oldIndex = 0; oldIndex < rho.length; oldIndex += 1)
-        tau[required(rho[oldIndex])] = required(PI[oldIndex]);
-      for (let yIndex = 0; yIndex < Y.length; yIndex += 1)
-        forwardRelations.push(
-          scalePoint(decodePoint(required(Y[yIndex])), u).equals(
-            decodePoint(required(statement.output[required(tau[yIndex])])),
-          ),
-        );
-      return { scalar: encodeScalar(u), permutation: tau };
-    });
+    const { challenge, forwardRelations, compact } = independentExplicitProof(statement);
     expect(
-      responses.some(
+      compact.responses.some(
         (_, round) => ((challenge[Math.floor(round / 8)] ?? 0) & (0x80 >> (round % 8))) !== 0,
       ),
     ).toBe(true);
     expect(
-      responses.some(
+      compact.responses.some(
         (_, round) => ((challenge[Math.floor(round / 8)] ?? 0) & (0x80 >> (round % 8))) === 0,
       ),
     ).toBe(true);
     expect(forwardRelations.every(Boolean)).toBe(true);
-    const compact: ShuffleProof = { challenge: toBase64Url(challenge), responses };
     expect(verifyShuffle(statement, compact, CONTEXT)).toBe(true);
+  });
+
+  test('rejects a mathematically valid shuffle transcript over duplicate deck points', () => {
+    const statement = fixture(PI, [1n, 1n, 3n, 4n]);
+    expect(new Set(statement.input).size).toBe(3);
+    expect(new Set(statement.output).size).toBe(3);
+    const { forwardRelations, compact } = independentExplicitProof(statement);
+    expect(forwardRelations.every(Boolean)).toBe(true);
+    expect(verifyShuffle(statement, compact, CONTEXT)).toBe(false);
+  });
+
+  test('rejects a mathematically valid shuffle transcript with an identity card', () => {
+    const statement = fixture(PI, [0n, 2n, 3n, 4n]);
+    const identity = encodePoint(scalePoint(G, 0n));
+    expect(statement.input).toContain(identity);
+    expect(statement.output).toContain(identity);
+    const { forwardRelations, compact } = independentExplicitProof(statement);
+    expect(forwardRelations.every(Boolean)).toBe(true);
+    expect(verifyShuffle(statement, compact, CONTEXT)).toBe(false);
   });
 
   test('is deterministic for retransmission and changes nonce material with complete statement/context', () => {
@@ -198,55 +226,71 @@ describe('compact single-key shuffle proof', () => {
 
   test('rejects substituted/re-keyed outputs, duplicate or identity points and false witnesses', () => {
     const statement = fixture();
+    const validProof = proveShuffle(statement, SECRET, PI, SEED, CONTEXT);
     const substituted = { ...statement, output: [...statement.output] };
     substituted.output[0] = encodePoint(scalePoint(G, 99n));
     expect(() => proveShuffle(substituted, SECRET, PI, SEED, CONTEXT)).toThrow(/output/);
-    expect(
-      verifyShuffle(substituted, proveShuffle(statement, SECRET, PI, SEED, CONTEXT), CONTEXT),
-    ).toBe(false);
+    expect(verifyShuffle(substituted, validProof, CONTEXT)).toBe(false);
     const rekeyed = {
       ...statement,
       output: statement.output.map((point) => encodePoint(scalePoint(decodePoint(point), 2n))),
     };
     expect(() => proveShuffle(rekeyed, SECRET, PI, SEED, CONTEXT)).toThrow(/output/);
-    expect(
-      verifyShuffle(rekeyed, proveShuffle(statement, SECRET, PI, SEED, CONTEXT), CONTEXT),
-    ).toBe(false);
+    expect(verifyShuffle(rekeyed, validProof, CONTEXT)).toBe(false);
     expect(() => proveShuffle(statement, 0n, PI, SEED, CONTEXT)).toThrow(/secret/);
     expect(() => proveShuffle(statement, 8n, PI, SEED, CONTEXT)).toThrow(/secret/);
     expect(() => proveShuffle(statement, SECRET, [0, 0, 2, 3], SEED, CONTEXT)).toThrow(/bijection/);
-    expect(() =>
-      proveShuffle(
-        {
-          ...statement,
-          input: [
-            required(statement.input[0]),
-            required(statement.input[0]),
-            ...statement.input.slice(2),
-          ],
-        },
-        SECRET,
-        PI,
-        SEED,
-        CONTEXT,
-      ),
-    ).toThrow(/distinct/);
+    const duplicateInput = {
+      ...statement,
+      input: [
+        required(statement.input[0]),
+        required(statement.input[0]),
+        ...statement.input.slice(2),
+      ],
+    };
+    expect(() => proveShuffle(duplicateInput, SECRET, PI, SEED, CONTEXT)).toThrow(/distinct/);
+    expect(verifyShuffle(duplicateInput, validProof, CONTEXT)).toBe(false);
+    const duplicateOutput = {
+      ...statement,
+      output: [
+        required(statement.output[0]),
+        required(statement.output[0]),
+        ...statement.output.slice(2),
+      ],
+    };
+    expect(verifyShuffle(duplicateOutput, validProof, CONTEXT)).toBe(false);
+    const identity = encodePoint(scalePoint(G, 0n));
     expect(
       verifyShuffle(
-        { ...statement, output: [encodePoint(scalePoint(G, 0n)), ...statement.output.slice(1)] },
-        {},
+        { ...statement, input: [identity, ...statement.input.slice(1)] },
+        validProof,
         CONTEXT,
       ),
     ).toBe(false);
     expect(
-      verifyShuffle({ ...statement, publicKey: encodePoint(scalePoint(G, 0n)) }, {}, CONTEXT),
+      verifyShuffle(
+        { ...statement, output: [identity, ...statement.output.slice(1)] },
+        validProof,
+        CONTEXT,
+      ),
     ).toBe(false);
+    expect(verifyShuffle({ ...statement, publicKey: identity }, validProof, CONTEXT)).toBe(false);
   });
 
   test('fails closed on malformed proof shape, scalar, permutation, and oversized inputs', () => {
     const statement = fixture();
     const proof = proveShuffle(statement, SECRET, PI, SEED, CONTEXT);
     expect(verifyShuffle(statement, { ...proof, extra: 1 }, CONTEXT)).toBe(false);
+    let statementReads = 0;
+    const observedStatement = new Proxy(statement, {
+      ownKeys(target) {
+        statementReads += 1;
+        return Reflect.ownKeys(target);
+      },
+    });
+    expect(verifyShuffle(observedStatement, { ...proof, challenge: 'x' }, CONTEXT)).toBe(false);
+    expect(verifyShuffle(observedStatement, { ...proof, responses: [] }, CONTEXT)).toBe(false);
+    expect(statementReads).toBe(0);
     expect(verifyShuffle(statement, { ...proof, challenge: `${proof.challenge}=` }, CONTEXT)).toBe(
       false,
     );

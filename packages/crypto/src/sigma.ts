@@ -20,6 +20,12 @@ export interface SchnorrProof {
   readonly response: string;
 }
 
+export interface PreparedSchnorrProof {
+  readonly commitment: string;
+  /** Call once. The enclosing context must identify this statement and branch. */
+  respond(challenge: bigint): SchnorrProof;
+}
+
 export interface DleqStatement {
   readonly base1: string;
   readonly point1: string;
@@ -122,6 +128,65 @@ export function verifySchnorr(
   } catch {
     return false;
   }
+}
+
+/** Schnorr first message for a shared AND/OR challenge, separate from standalone nonces. */
+export function prepareSchnorrProof(
+  statement: SchnorrStatement,
+  secret: bigint,
+  seed: Uint8Array,
+  context: unknown,
+): PreparedSchnorrProof {
+  const { body, base, point } = schnorrStatement(statement);
+  canonicalSecret(secret);
+  if (!scalePoint(base, secret).equals(point))
+    throw new RangeError('Schnorr witness does not match the statement.');
+  const nonce = proofNonce(seed, 'schnorr-composed', context, body, 'commitment');
+  const commitment = encodePoint(scalePoint(base, nonce));
+  let answered = false;
+  return {
+    commitment,
+    respond(challenge) {
+      canonicalSecret(challenge);
+      if (answered) throw new Error('A Sigma commitment must only answer one challenge.');
+      answered = true;
+      return { commitment, response: encodeScalar(modScalar(nonce + challenge * secret)) };
+    },
+  };
+}
+
+/** Simulates the opening in a false OR branch at its chosen challenge. */
+export function simulateSchnorrProof(
+  statement: SchnorrStatement,
+  challenge: bigint,
+  seed: Uint8Array,
+  context: unknown,
+): SchnorrProof {
+  const { body, base, point } = schnorrStatement(statement);
+  canonicalSecret(challenge);
+  const response = proofNonce(seed, 'schnorr-simulation', context, body, encodeScalar(challenge));
+  return {
+    commitment: encodePoint(scalePoint(base, response).subtract(scalePoint(point, challenge))),
+    response: encodeScalar(response),
+  };
+}
+
+/** Checks the opening equation at the enclosing challenge and returns its first message. */
+export function inspectSchnorrProof(
+  statement: SchnorrStatement,
+  proof: unknown,
+  challenge: bigint,
+): string {
+  canonicalSecret(challenge);
+  const { base, point } = schnorrStatement(statement);
+  const record = readProofRecord(proof, ['commitment', 'response']);
+  if (typeof record.commitment !== 'string' || typeof record.response !== 'string')
+    throw new TypeError('Schnorr proof must contain encoded group elements.');
+  const commitment = decodePoint(record.commitment);
+  const response = decodeScalar(record.response);
+  if (!scalePoint(base, response).equals(commitment.add(scalePoint(point, challenge))))
+    throw new TypeError('Schnorr proof does not share the enclosing challenge.');
+  return record.commitment;
 }
 
 export function proveDleq(

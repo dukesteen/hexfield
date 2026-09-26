@@ -34,10 +34,32 @@ export type { DerivationLabel } from './derivation.js';
 export { createHashChain, verifyHashChainLink } from './hash-chain.js';
 export { uniformInt } from './uniform.js';
 export { createFeldmanShares, recoverSecret, verifyFeldmanShare } from './feldman.js';
-export type { FeldmanDistribution, FeldmanShare } from './feldman.js';
+export type { FeldmanDistribution, FeldmanShare, FeldmanShareExpectation } from './feldman.js';
 export { proofChallenge, proofNonce } from './proof-transcript.js';
-export { proveDleq, proveSchnorr, verifyDleq, verifySchnorr } from './sigma.js';
-export type { DleqProof, DleqStatement, SchnorrProof, SchnorrStatement } from './sigma.js';
+export {
+  inspectSchnorrProof,
+  prepareSchnorrProof,
+  simulateSchnorrProof,
+  proveDleq,
+  proveSchnorr,
+  verifyDleq,
+  verifySchnorr,
+} from './sigma.js';
+export type {
+  PreparedSchnorrProof,
+  DleqProof,
+  DleqStatement,
+  SchnorrProof,
+  SchnorrStatement,
+} from './sigma.js';
+export { proveCdsOr, verifyCdsOr } from './cds.js';
+export type {
+  CdsOrStatement,
+  CdsOrProof,
+  CdsBranchStatement,
+  CdsBranchProof,
+  CdsBranchWitness,
+} from './cds.js';
 export {
   inspectBitProof,
   inspectRangeProof,

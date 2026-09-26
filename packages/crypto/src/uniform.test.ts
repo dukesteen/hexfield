@@ -6,7 +6,7 @@ import { uniformInt } from './uniform.js';
 const SEED = Uint8Array.from({ length: 32 }, (_, index) => index);
 
 describe('uniform integer derivation', () => {
-  test('pins big-endian sampling and binds label, bound, and context', () => {
+  test('pins big-endian sampling for different bounds and binds label and context', () => {
     const context = { game: 'kat', round: 3 };
     expect(uniformInt(SEED, 'dice', 6, context)).toBe(2);
     expect(uniformInt(SEED, 'dice', Number.MAX_SAFE_INTEGER, context)).toBe(7_465_448_900_385_618);

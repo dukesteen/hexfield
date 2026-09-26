@@ -1,0 +1,20 @@
+[
+  {
+    "check": "cds-range-challenge",
+    "exitCode": 1,
+    "restoredSha256": "01de053528ab6f217d26aa2d7b8904a2c3133b24b7a595b06b3eb3df736404a9",
+    "assertionFailed": true
+  },
+  {
+    "check": "range-weighted-sum",
+    "exitCode": 1,
+    "restoredSha256": "c9c633f02a7da0c590de0bddf529edd2a0b000c60618fcc79812063996345bf7",
+    "assertionFailed": true
+  },
+  {
+    "check": "shuffle-identity-card",
+    "exitCode": 1,
+    "restoredSha256": "bc7ebef94a42fcb5758f34d5b7d8ebab3e978af7826ae727dc662ab51a79398a",
+    "assertionFailed": true
+  }
+]

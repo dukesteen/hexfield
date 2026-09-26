@@ -225,12 +225,12 @@ export function verifyShuffle(
 ): boolean {
   try {
     checkContext(context);
-    const parsed = parseStatement(statement);
     const record = readProofRecord(proof, ['challenge', 'responses']);
-    if (typeof record.challenge !== 'string') return false;
+    if (typeof record.challenge !== 'string' || record.challenge.length !== 11) return false;
     const challenge = fromBase64Url(record.challenge);
     if (challenge.length !== CHALLENGE_BYTES) return false;
     const rawResponses = readProofArray(record.responses, ROUNDS);
+    const parsed = parseStatement(statement);
     const responses = rawResponses.map((item) => {
       const response = readProofRecord(item, ['scalar', 'permutation']);
       if (typeof response.scalar !== 'string') throw new TypeError('Shuffle scalar missing.');

@@ -1,9 +1,10 @@
 # Stage 07 Step 1 local checks
 
 The cryptographic helpers are implemented and pass local checks. This checkpoint
-does not complete Stage 07 or provide playable online multiplayer. The external
-implementation review is pending specific approval to send the unpublished
-source to Claude.
+does not complete Stage 07 or provide playable online multiplayer. The approved
+[external implementation review](step1-review.md) is complete. Its
+[response](step1-review-response.md) records the changes and the completed
+read-only follow-up review.
 
 ## Scope
 
@@ -14,10 +15,10 @@ ECDH/HKDF sealed delivery and a compact 64-round shuffle proof. They accept
 explicit inputs and contain no platform randomness or game-session state.
 
 The [review manifest](step1-review-manifest.json) records SHA-256 hashes of 24
-source, test and design files. The files were unchanged through the final local
-check and build. The review input hash is
+source, test and design files from the initial checkpoint. The review input hash is
 `cbf974e779f003eb3b19a5e5a70504e496d970dc130e3569b2a7c0ed264db3da`.
-This records the prepared review payload, not a completed external review.
+This records the exact input of the completed first review. The follow-up has its
+own [manifest](step1-followup-review-manifest.json).
 
 ## Results
 
@@ -46,10 +47,17 @@ throw. Point and scalar strings are length-checked before base64 decoding.
 
 ## Remaining work
 
-The [read-only Claude review brief](step1-review-prompt.md) is ready. Automatic
-approval review declined the upload because the source is unpublished and
-cryptographic, and requested specific user approval for this payload. No source
-was sent by that attempt.
+After both reviews and their fixes, `pnpm check` passed **623 tests in 112 files**,
+plus all type, lint, format, dependency, purity and i18n checks. `pnpm build`
+passed every workspace package and the production web build. The coordinator
+checked both exit codes. This working-tree check also includes the in-progress
+beacon state, extension and derivation helpers for Step 2.
+
+The final regressions include mathematically valid shuffle transcripts containing
+duplicate or identity cards, and independently constructed false range/AND proofs.
+The [mutation checks](step1-mutation-checks.json) show that removing the relevant
+guards makes the targeted assertions fail. Source files were restored before the
+final check and build. No browser was launched.
 
 Game-session evidence verification, frozen operation state, deck/hand/steal
 orchestration, escrow distribution, audit and replacement of the simulation driver

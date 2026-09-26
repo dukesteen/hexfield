@@ -144,7 +144,7 @@ export function proveBit(
   context: unknown,
 ): BitProof {
   if (bit !== 0 && bit !== 1) throw new RangeError('Bit must be zero or one.');
-  const prepared = prepareBit(commitment, bit, blinding, seed, context);
+  const prepared = prepareBit(commitment, bit, blinding, seed, { mode: 'standalone-bit', context });
   return prepared.respond(proofChallenge('bit', context, commitment, prepared.announcements));
 }
 
@@ -164,6 +164,16 @@ export function verifyBit(commitment: string, proof: unknown, context: unknown):
  * the whole enclosing statement and branch in context and use one shared challenge.
  */
 export function prepareRangeProof(
+  statement: RangeStatement,
+  value: bigint,
+  blinding: bigint,
+  seed: Uint8Array,
+  context: unknown,
+): PreparedRangeProof {
+  return prepareRange(statement, value, blinding, seed, { mode: 'composed-range', context });
+}
+
+function prepareRange(
   statement: RangeStatement,
   value: bigint,
   blinding: bigint,
@@ -194,6 +204,7 @@ export function prepareRangeProof(
     if (blind === undefined) throw new Error('Missing bit blinding.');
     const bit = ((value >> BigInt(index)) & 1n) === 0n ? 0 : 1;
     return prepareBit(commitment, bit, blind, seed, {
+      mode: 'range-bit',
       context,
       statement: parsed,
       commitments,
@@ -288,7 +299,10 @@ export function proveRange(
   context: unknown,
 ): RangeProof {
   const parsed = readStatement(statement);
-  const prepared = prepareRangeProof(parsed, value, blinding, seed, context);
+  const prepared = prepareRange(parsed, value, blinding, seed, {
+    mode: 'standalone-range',
+    context,
+  });
   const challenge = proofChallenge('range', context, parsed, {
     commitments: prepared.commitments,
     announcements: prepared.announcements,

@@ -1,0 +1,150 @@
+{
+  "bundleSha256": "6f5de68aab2ad5a50107ba74b19e5f7272281f27614652e698f9f4fe93549dc8",
+  "files": [
+    {
+      "path": "docs/verification/stage07/step1-review.md",
+      "sha256": "e7663709a2b38af4e49d095b770a09f6b83c83f63057a5e33c10a4c8291a3d54",
+      "bytes": 11135
+    },
+    {
+      "path": "docs/verification/stage07/step1-review-response.md",
+      "sha256": "be18140c54e0f5305a07a5f0dc10632805270bc41ac6a727a7aaac67bd329f09",
+      "bytes": 5884
+    },
+    {
+      "path": "packages/crypto/src/cds.test.ts",
+      "sha256": "fe826eab6eabaca9cb42c3bf1af001fe5313d5f3a440956257d2236417b472fb",
+      "bytes": 7962
+    },
+    {
+      "path": "packages/crypto/src/cds.ts",
+      "sha256": "1241638362f9c4e0cc8c8c1aa8cddf456c33ca61ebff8f5de58f4b424a70316f",
+      "bytes": 6790
+    },
+    {
+      "path": "packages/crypto/src/derivation.test.ts",
+      "sha256": "4871e34b4581936c5d32f3760c2db7e43cd1c281d9c782f6ed14c5ce022859fb",
+      "bytes": 3619
+    },
+    {
+      "path": "packages/crypto/src/derivation.ts",
+      "sha256": "76bfa6e36fb943a462bb09f7b0acb1786235837e6297d4a4275bdcfbff3db30a",
+      "bytes": 2526
+    },
+    {
+      "path": "packages/crypto/src/feldman.test.ts",
+      "sha256": "6af53c4eac260fe18c769682fc12a4a326985139f708af949a9877f9e862e46d",
+      "bytes": 9745
+    },
+    {
+      "path": "packages/crypto/src/feldman.ts",
+      "sha256": "9579d6b4b0ff4f8be57afc3d4f76dd3ec993571098a656e7f95b5915f0ad7dcd",
+      "bytes": 6333
+    },
+    {
+      "path": "packages/crypto/src/group.test.ts",
+      "sha256": "7b6b93bfb50548e1a72466485de321dfd2fa57e34236255288bb29054414fc3a",
+      "bytes": 7449
+    },
+    {
+      "path": "packages/crypto/src/group.ts",
+      "sha256": "76081f91735476a2da74bf9ab9c85a94f6d5f70c86760e8f1986b6eb1ec2ad80",
+      "bytes": 4611
+    },
+    {
+      "path": "packages/crypto/src/hash-chain.test.ts",
+      "sha256": "4af9370134b5127ac4d40715c96fc855b0f133bdb1d6691ea328decb3b773001",
+      "bytes": 2620
+    },
+    {
+      "path": "packages/crypto/src/hash-chain.ts",
+      "sha256": "27f704961bc6fc0a7fc8aeb215d46a8c7d5963e20a2cf2bfa33a61898e5f4735",
+      "bytes": 1599
+    },
+    {
+      "path": "packages/crypto/src/identity.test.ts",
+      "sha256": "ba28c5e5bc8227349b6a83c4f8d1584e4a7a7fe0ebcdfee267d563b07aec98c0",
+      "bytes": 6338
+    },
+    {
+      "path": "packages/crypto/src/identity.ts",
+      "sha256": "a892b57073e7208f99c37480dde87662a6274236f5dc2ad18384a7bcc8c28688",
+      "bytes": 5106
+    },
+    {
+      "path": "packages/crypto/src/index.test.ts",
+      "sha256": "3ff3e1c9745f4c8989af63c4e4a999e75006c845ac505386c607a7a6c26231bd",
+      "bytes": 169
+    },
+    {
+      "path": "packages/crypto/src/index.ts",
+      "sha256": "c7e32f2d49b3d74a72b8c06c7dd198aeb9c9535340b2617406a689e89180c471",
+      "bytes": 2081
+    },
+    {
+      "path": "packages/crypto/src/proof-transcript.ts",
+      "sha256": "287c895b9ea527273411632be3a8e61a129f00f8e12272d5c28907344eaeb5c8",
+      "bytes": 3446
+    },
+    {
+      "path": "packages/crypto/src/range.test.ts",
+      "sha256": "47d92e76a5e5a9295f950c8244308f2297f77d57f4176be47a933711f5526d60",
+      "bytes": 15424
+    },
+    {
+      "path": "packages/crypto/src/range.ts",
+      "sha256": "c9c633f02a7da0c590de0bddf529edd2a0b000c60618fcc79812063996345bf7",
+      "bytes": 11745
+    },
+    {
+      "path": "packages/crypto/src/seal.test.ts",
+      "sha256": "c41f213e47f129befaa7768c37ea932a53be482baad8b115c9d3712d0b1a0e46",
+      "bytes": 6627
+    },
+    {
+      "path": "packages/crypto/src/seal.ts",
+      "sha256": "1fab30886ed1cf42186f28b4ac77c16704e9cad916c1a77955e8e204b420cc91",
+      "bytes": 4512
+    },
+    {
+      "path": "packages/crypto/src/shuffle.test.ts",
+      "sha256": "657fce75b4cb8da071d4a9ec6e5c68c6545acde12ad9c79e346032ed31637d38",
+      "bytes": 13615
+    },
+    {
+      "path": "packages/crypto/src/shuffle.ts",
+      "sha256": "bc7ebef94a42fcb5758f34d5b7d8ebab3e978af7826ae727dc662ab51a79398a",
+      "bytes": 9378
+    },
+    {
+      "path": "packages/crypto/src/sigma.test.ts",
+      "sha256": "cb185aa48fac42ab3472ba3637f69085ad8f76f0caa6f6ef9f01d4a2197cf27b",
+      "bytes": 12227
+    },
+    {
+      "path": "packages/crypto/src/sigma.ts",
+      "sha256": "e04a49de15d73a54cc4191a4eed4b2dddab6c2e899636c2b7e8decbff3750ea8",
+      "bytes": 8091
+    },
+    {
+      "path": "packages/crypto/src/uniform.test.ts",
+      "sha256": "048659f2317da2eeb2a594ef1b1be0f67b00ee223a12e5f54cbd4f2e03eac880",
+      "bytes": 2865
+    },
+    {
+      "path": "packages/crypto/src/uniform.ts",
+      "sha256": "4259bdc4873e4267e05a96632c0f95cd52ef7b4273f807d083ef8cce7c9cec60",
+      "bytes": 1689
+    },
+    {
+      "path": "packages/codec/src/canonical.ts",
+      "sha256": "bc51a4fa7022f6ed6af92b191672526ee91f357395a116e36b9c5c01076b5049",
+      "bytes": 7550
+    },
+    {
+      "path": "packages/codec/src/hash.ts",
+      "sha256": "e2d516f007606105f6a01e386329f1bdbf6ce3940255204690550f5bb1b64ae8",
+      "bytes": 625
+    }
+  ]
+}

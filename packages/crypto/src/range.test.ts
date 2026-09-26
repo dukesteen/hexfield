@@ -114,6 +114,95 @@ describe('Pedersen and bit proofs', () => {
 });
 
 describe('range proof', () => {
+  test('separates standalone and composed nonces even when a caller repeats the same context', () => {
+    const claim = statement(23n, 17n);
+    const standalone = proveRange(claim, 23n, 17n, SEED, CONTEXT);
+    const prepared = prepareRangeProof(claim, 23n, 17n, SEED, CONTEXT);
+    const inspected = inspectRangeProof(claim, standalone);
+    expect(prepared.commitments).not.toEqual(inspected.commitments);
+    expect(prepared.announcements).not.toEqual(inspected.announcements);
+    const composed = prepared.respond(modScalar(inspected.challenge + 1n));
+    expect(verifyRange(claim, composed, CONTEXT)).toBe(false);
+
+    const bitClaim = statement(1n, 17n, 1);
+    const bit = proveBit(bitClaim.commitment, 1, 17n, SEED, CONTEXT);
+    const range = proveRange(bitClaim, 1n, 17n, SEED, CONTEXT);
+    const first = range.proofs[0];
+    if (!first) throw new Error('Missing one-bit range proof');
+    const bitFirst = inspectBitProof(bitClaim.commitment, bit);
+    const rangeFirst = inspectBitProof(bitClaim.commitment, first);
+    expect(bitFirst.announcements).not.toEqual(rangeFirst.announcements);
+    const composedBit = prepareRangeProof(bitClaim, 1n, 17n, SEED, CONTEXT).respond(
+      modScalar(rangeFirst.challenge + 1n),
+    ).proofs[0];
+    if (!composedBit) throw new Error('Missing composed one-bit range proof');
+    // Before mode separation, subtracting these standalone/composed range responses
+    // exposed blinding 17 because they answered different challenges with one nonce.
+    const delta = modScalar(
+      decodeScalar(composedBit.challenges[1]) - decodeScalar(first.challenges[1]),
+    );
+    expect(
+      modScalar(decodeScalar(composedBit.responses[1]) - decodeScalar(first.responses[1])),
+    ).not.toBe(modScalar(delta * 17n));
+  });
+
+  test('rejects valid bits hashed for a false statement when their weighted sum differs', () => {
+    const honest = statement(13n, 17n);
+    const lie = statement(100n, 17n);
+    const prepared = prepareRangeProof(honest, 13n, 17n, SEED, CONTEXT);
+    const challenge = proofChallenge('range', CONTEXT, lie, {
+      commitments: prepared.commitments,
+      announcements: prepared.announcements,
+    });
+    const forged = prepared.respond(challenge);
+    expect(inspectRangeProof(honest, forged).challenge).toBe(challenge);
+    expect(verifyRange(lie, forged, CONTEXT)).toBe(false);
+  });
+
+  test('rejects hand-built bit and range forgeries for 2 and field wraparound minus 1', () => {
+    for (const value of [2n, SCALAR_ORDER - 1n]) {
+      const blinding = 17n;
+      const commitment = pedersenCommit(value, blinding);
+      const target = decodePoint(commitment);
+      for (const pretendBit of [0, 1] as const) {
+        const fake = 1 - pretendBit;
+        const eFake = 31n;
+        const zFake = 37n;
+        const nonce = 41n;
+        const announcements = [
+          encodePoint(scalePoint(H, nonce)),
+          encodePoint(scalePoint(H, nonce)),
+        ];
+        announcements[fake] = encodePoint(
+          scalePoint(H, zFake).subtract(
+            scalePoint(target.subtract(scalePoint(G, BigInt(fake))), eFake),
+          ),
+        );
+        for (const kind of ['bit', 'range'] as const) {
+          const claim = { commitment, bits: 1 };
+          const challenge =
+            kind === 'bit'
+              ? proofChallenge('bit', CONTEXT, commitment, announcements)
+              : proofChallenge('range', CONTEXT, claim, {
+                  commitments: [commitment],
+                  announcements: [announcements],
+                });
+          const eHonest = modScalar(challenge - eFake);
+          const zHonest = modScalar(nonce + eHonest * blinding);
+          const challenges: [string, string] = [encodeScalar(eFake), encodeScalar(eFake)];
+          const responses: [string, string] = [encodeScalar(zFake), encodeScalar(zFake)];
+          challenges[pretendBit] = encodeScalar(eHonest);
+          responses[pretendBit] = encodeScalar(zHonest);
+          const bit = { challenges, responses };
+          expect(verifyBit(commitment, bit, CONTEXT)).toBe(false);
+          expect(verifyRange(claim, { commitments: [commitment], proofs: [bit] }, CONTEXT)).toBe(
+            false,
+          );
+        }
+      }
+    }
+  });
+
   test('proves every six-bit value and independently checks weighted sum and shared equations', () => {
     for (let value = 0; value < 64; value += 1) {
       const blinding = BigInt(value * 17) % SCALAR_ORDER;
@@ -171,16 +260,16 @@ describe('range proof', () => {
     expect(proof.commitments).toHaveLength(6);
     expect(proof.proofs).toHaveLength(6);
     expect(claim.commitment).toBe('4osVolE59fcFcKpZc6RJC0Heldku5c_blLwYzSBS1Eg');
-    expect(proof.commitments[0]).toBe('Fr8ysOkBdp-1tFt9uUp6wFgG6RU06G2GPgyKJTptoB8');
-    expect(proof.commitments[5]).toBe('mNI-scsATrU8BkFNqcEWkN1SBsAh4okJ75rso9kt7CQ');
+    expect(proof.commitments[0]).toBe('PrFajs-TgAKDaPxutBQlaHEHzmA3JRYYZvkTOSbQnD0');
+    expect(proof.commitments[5]).toBe('ZNCKxx5lyYdVRW2d51Gx47klMpp2pghOQv83yT2C4Rc');
     expect(proof.proofs[0]).toEqual({
       challenges: [
-        'hkoEvGlaTjI38hk7LeYlVbhqYvR-4rFXyAz-GWcFHQ0',
-        'EVtQPhb_oa1pbA2aRvF8XmJSyns9M1fRx_cBZoUNgQU',
+        'No9DJqwV6fyY2oCkbiLpOEdEpBpOAYt1lROvDys0PA8',
+        'LJB6ReEkXTxC27TUDXj92HAkHB5Kodp3PdIB88XbmAk',
       ],
       responses: [
-        'k4wctt486mdvHpDWrU6Hr2GZqE7pRFq2HY_0D6bvZwc',
-        'wudWFoKXH6QtWpuLDTM4hmANJpntlsjcZjIA6qlB3Q8',
+        'e8c4OFMK2CCPELWiny_PP0-kLLCEL2bm9LE9QwcfNA4',
+        'krCEE3RHSJDadMs5FVon9Z8qxu-24Zl6iXhFeFxhWwI',
       ],
     });
   });

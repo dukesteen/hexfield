@@ -1,4 +1,7 @@
-import { toBase64Url } from '@cp2p/codec';
+import { canonicalEncode, toBase64Url } from '@cp2p/codec';
+import { ristretto255_hasher } from '@noble/curves/ed25519.js';
+import { expand_message_xmd } from '@noble/curves/abstract/hash-to-curve.js';
+import { sha512 } from '@noble/hashes/sha2.js';
 import { hexToBytes } from '@noble/hashes/utils.js';
 import { describe, expect, test } from 'vitest';
 import {
@@ -26,6 +29,29 @@ const GENERATOR_MULTIPLES = [
   '6a493210f7499cd17fecb510ae0cea23a110e8d5b901f8acadd3095c73a3b919',
   '94741f5d5d52755ece4f23f044ee27d5d1ea1e2bd196b462166b16152a9d0259',
 ] as const;
+
+// RFC 9496 Appendix A.3 inputs are uniform 64-byte strings, not messages
+// supplied to RFC 9380 hash_to_ristretto255.
+const ELEMENT_DERIVATION_VECTORS = [
+  {
+    input:
+      '5d1be09e3d0c82fc538112490e35701979d99e06ca3e2b5b54bffe8b4dc772c1' +
+      '4d98b696a1bbfb5ca32c436cc61c16563790306c79eaca7705668b47dffe5bb6',
+    output: '3066f82a1a747d45120d1740f14358531a8f04bbffe6a819f86dfe50f44a0a46',
+  },
+  {
+    input:
+      'f116b34b8f17ceb56e8732a60d913dd10cce47a6d53bee9204be8b44f6678b27' +
+      '0102a56902e2488c46120e9276cfe54638286b9e4b3cdb470b542d46c2068d38',
+    output: 'f26e5b6f7d362d2d2a94c5d0e7602cb4773c95a2e5c31a64f133189fa76ed61b',
+  },
+] as const;
+
+function deriveToCurve(bytes: Uint8Array) {
+  if (!ristretto255_hasher.deriveToCurve)
+    throw new Error('Noble Ristretto element derivation is unavailable.');
+  return ristretto255_hasher.deriveToCurve(bytes);
+}
 
 describe('Ristretto255 group encodings', () => {
   test('matches published RFC 9496 generator multiples and accepts identity by default', () => {
@@ -69,6 +95,37 @@ describe('Ristretto255 group encodings', () => {
     expect(hashToPoint('card', 'x').equals(hashToPoint('deck', 'x'))).toBe(false);
     expect(() => hashToPoint('card\0other', 'x')).toThrow(/domain/);
     expect(() => hashToPoint('card', { invalid: undefined })).toThrow(/./);
+  });
+
+  test('matches RFC 9496 A.3 element derivation from uniform bytes', () => {
+    for (const vector of ELEMENT_DERIVATION_VECTORS) {
+      expect(pointToBytes(deriveToCurve(hexToBytes(vector.input)))).toEqual(
+        hexToBytes(vector.output),
+      );
+    }
+  });
+
+  test('matches RFC 9380 K.3 SHA-512 XMD expansion and the actual H derivation path', () => {
+    const rfcDst = 'QUUX-V01-CS02-with-expander-SHA512-256';
+    expect(expand_message_xmd(new Uint8Array(), rfcDst, 32, sha512)).toEqual(
+      hexToBytes('6b9a7312411d92f921c6f68ca0b6380730a1a4d982c507211a90964c394179ba'),
+    );
+    expect(expand_message_xmd(new TextEncoder().encode('abc'), rfcDst, 32, sha512)).toEqual(
+      hexToBytes('0da749f12fbe5483eb066a5f595055679b976e93abe9be6f0f6318bce7aca8dc'),
+    );
+
+    // The expected 64 bytes were computed independently with SHA-512's XMD
+    // formula over this canonical message and our fixed domain tag.
+    const hMessage = canonicalEncode(['cp2p/v1/hash-to-point', 'pedersen-h', 'cp2p/pedersen/H']);
+    const uniform = expand_message_xmd(hMessage, 'cp2p-v1-ristretto255-h2c', 64, sha512);
+    expect(uniform).toEqual(
+      hexToBytes(
+        '0a928a2d4088f246b0e7245fbbbf155c065f019da61a4ae0a8cb1550a08d7d99' +
+          '74e1def7a38426f5f7e2cff486738dbdc3a2af118f308695ed4baff5c05e5b83',
+      ),
+    );
+    expect(pointToBytes(deriveToCurve(uniform))).toEqual(pointToBytes(H));
+    expect(pointToBytes(hashToPoint('pedersen-h', 'cp2p/pedersen/H'))).toEqual(pointToBytes(H));
   });
 });
 

@@ -17,6 +17,16 @@ function combinations<T>(values: readonly T[], size: number): T[][] {
   );
 }
 
+function expected(
+  commitments: readonly string[],
+  threshold: number,
+  recipientIndex: number,
+): { threshold: number; masterPub: string; recipientIndex: number } {
+  const masterPub = commitments[0];
+  if (!masterPub) throw new Error('Missing master commitment');
+  return { threshold, masterPub, recipientIndex };
+}
+
 describe('Feldman-verified Shamir sharing', () => {
   test('any threshold subset recovers the same canonical secret', () => {
     for (let n = 1; n <= 6; n += 1) {
@@ -26,8 +36,14 @@ describe('Feldman-verified Shamir sharing', () => {
         const distributed = createFeldmanShares(secret, indices, threshold, ENTROPY, CONTEXT);
         expect(distributed.commitments).toHaveLength(threshold);
         expect(distributed.commitments[0]).toBe(encodePoint(scalePoint(G, secret)));
-        for (const share of distributed.shares)
-          expect(verifyFeldmanShare(share, distributed.commitments)).toBe(true);
+        for (const share of distributed.shares) {
+          const checked = verifyFeldmanShare(
+            share,
+            distributed.commitments,
+            expected(distributed.commitments, threshold, share.index),
+          );
+          expect(checked, `n=${n}, threshold=${threshold}, share=${share.index}`).toBe(true);
+        }
         for (const subset of combinations(distributed.shares, threshold))
           expect(recoverSecret(subset, threshold)).toBe(secret);
       }
@@ -43,12 +59,20 @@ describe('Feldman-verified Shamir sharing', () => {
       { index: 3, value: 25n },
     ];
     expect(commitments[1]).toBe(encodePoint(scalePoint(G, 0n)));
-    expect(shares.every((share) => verifyFeldmanShare(share, commitments))).toBe(true);
+    expect(
+      shares.every((share) =>
+        verifyFeldmanShare(share, commitments, expected(commitments, 3, share.index)),
+      ),
+    ).toBe(true);
     expect(recoverSecret(shares, 3)).toBe(7n);
 
     const zero = createFeldmanShares(0n, [1, 4, 9], 2, ENTROPY, CONTEXT);
     expect(zero.commitments[0]).toBe(encodePoint(scalePoint(G, 0n)));
-    expect(zero.shares.every((share) => verifyFeldmanShare(share, zero.commitments))).toBe(true);
+    expect(
+      zero.shares.every((share) =>
+        verifyFeldmanShare(share, zero.commitments, expected(zero.commitments, 2, share.index)),
+      ),
+    ).toBe(true);
     expect(recoverSecret(zero.shares.slice(1), 2)).toBe(0n);
   });
 
@@ -76,39 +100,94 @@ describe('Feldman-verified Shamir sharing', () => {
     );
   });
 
-  test('rejects a changed share, commitment, malformed encoding and hostile shape', () => {
+  test('rejects changed shares, degree/master/recipient mismatch, malformed encoding and hostile shape', () => {
     const { shares, commitments } = createFeldmanShares(19n, [1, 2, 3], 2, ENTROPY, CONTEXT);
     const first = shares[0];
     if (!first) throw new Error('Missing test share');
+    const firstExpected = expected(commitments, 2, first.index);
     expect(
-      verifyFeldmanShare({ ...first, value: (first.value + 1n) % SCALAR_ORDER }, commitments),
+      verifyFeldmanShare(
+        { ...first, value: (first.value + 1n) % SCALAR_ORDER },
+        commitments,
+        firstExpected,
+      ),
     ).toBe(false);
-    expect(verifyFeldmanShare(first, [encodePoint(G), ...commitments.slice(1)])).toBe(false);
-    expect(verifyFeldmanShare(first, [`${commitments[0]}=`, ...commitments.slice(1)])).toBe(false);
-    expect(verifyFeldmanShare(first, [])).toBe(false);
+    expect(
+      verifyFeldmanShare(first, [encodePoint(G), ...commitments.slice(1)], firstExpected),
+    ).toBe(false);
+    expect(
+      verifyFeldmanShare(first, [`${commitments[0]}=`, ...commitments.slice(1)], firstExpected),
+    ).toBe(false);
+    expect(verifyFeldmanShare(first, [], firstExpected)).toBe(false);
     expect(
       verifyFeldmanShare(
         first,
         Array.from({ length: 7 }, () => commitments[0]),
+        firstExpected,
       ),
     ).toBe(false);
     for (const bad of [null, {}, { index: 0, value: first.value }, { ...first, extra: 1 }])
-      expect(verifyFeldmanShare(bad, commitments)).toBe(false);
-    expect(verifyFeldmanShare({ index: 1, value: -1n }, commitments)).toBe(false);
-    expect(verifyFeldmanShare({ index: 1, value: SCALAR_ORDER }, commitments)).toBe(false);
-    expect(verifyFeldmanShare({ index: 1, value: '1' }, commitments)).toBe(false);
+      expect(verifyFeldmanShare(bad, commitments, firstExpected)).toBe(false);
+    expect(verifyFeldmanShare({ index: 1, value: -1n }, commitments, firstExpected)).toBe(false);
+    expect(verifyFeldmanShare({ index: 1, value: SCALAR_ORDER }, commitments, firstExpected)).toBe(
+      false,
+    );
+    expect(verifyFeldmanShare({ index: 1, value: '1' }, commitments, firstExpected)).toBe(false);
     const accessor = Object.defineProperty({ index: 1 }, 'value', {
       enumerable: true,
       get: () => first.value,
     });
-    expect(verifyFeldmanShare(accessor, commitments)).toBe(false);
-    expect(verifyFeldmanShare(Object.create(first), commitments)).toBe(false);
+    expect(verifyFeldmanShare(accessor, commitments, firstExpected)).toBe(false);
+    expect(verifyFeldmanShare(Object.create(first), commitments, firstExpected)).toBe(false);
     const sparse = commitments.slice(0, 1);
     sparse.length = commitments.length;
-    expect(verifyFeldmanShare(first, sparse)).toBe(false);
+    expect(verifyFeldmanShare(first, sparse, firstExpected)).toBe(false);
     const extra = commitments.slice();
     Object.defineProperty(extra, 'extra', { value: 1 });
-    expect(verifyFeldmanShare(first, extra)).toBe(false);
+    expect(verifyFeldmanShare(first, extra, firstExpected)).toBe(false);
+    let commitmentReads = 0;
+    const commitmentAccessor = commitments.slice();
+    Object.defineProperty(commitmentAccessor, '0', {
+      enumerable: true,
+      get() {
+        commitmentReads += 1;
+        return commitments[0];
+      },
+    });
+    expect(verifyFeldmanShare(first, commitmentAccessor, firstExpected)).toBe(false);
+    expect(commitmentReads).toBe(0);
+  });
+
+  test('requires genesis threshold, master key and recipient to match the verified share', () => {
+    const short = createFeldmanShares(29n, [1, 2, 3, 4], 2, ENTROPY, CONTEXT);
+    const long = createFeldmanShares(29n, [1, 2, 3, 4], 3, ENTROPY, CONTEXT);
+    const first = long.shares[0];
+    if (!first) throw new Error('Missing test share');
+    const expectedLong = expected(long.commitments, 3, first.index);
+
+    expect(verifyFeldmanShare(first, long.commitments, expectedLong)).toBe(true);
+    expect(verifyFeldmanShare(first, long.commitments, { ...expectedLong, threshold: 2 })).toBe(
+      false,
+    );
+    expect(verifyFeldmanShare(first, short.commitments, { ...expectedLong, threshold: 3 })).toBe(
+      false,
+    );
+    expect(
+      verifyFeldmanShare(first, long.commitments, {
+        ...expectedLong,
+        masterPub: encodePoint(scalePoint(G, 30n)),
+      }),
+    ).toBe(false);
+    expect(
+      verifyFeldmanShare(first, long.commitments, { ...expectedLong, recipientIndex: 2 }),
+    ).toBe(false);
+  });
+
+  test('a t−1 interpolation from a degree t−1 polynomial does not recover the dealt secret', () => {
+    const secret = 41n;
+    const { shares } = createFeldmanShares(secret, [1, 2, 3, 4], 3, ENTROPY, CONTEXT);
+    const underThreshold = shares.slice(0, 2);
+    expect(recoverSecret(underThreshold, 2)).not.toBe(secret);
   });
 
   test('rejects invalid distribution and recovery parameters before scalar arithmetic', () => {

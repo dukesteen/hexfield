@@ -26,6 +26,13 @@ export interface FeldmanDistribution {
   commitments: string[];
 }
 
+/** Public genesis values required to verify one recipient's escrow share. */
+export interface FeldmanShareExpectation {
+  threshold: number;
+  masterPub: string;
+  recipientIndex: number;
+}
+
 function validIndex(index: unknown): index is number {
   return Number.isSafeInteger(index) && Number(index) > 0 && Number(index) <= MAX_INDEX;
 }
@@ -94,25 +101,41 @@ export function createFeldmanShares(
   };
 }
 
-/** Hostile input returns false, including malformed encodings or share scalars. */
-export function verifyFeldmanShare(share: unknown, commitments: unknown): boolean {
+/** Hostile input returns false, including degree, master-key or recipient mismatches. */
+export function verifyFeldmanShare(
+  share: unknown,
+  commitments: unknown,
+  expected: FeldmanShareExpectation,
+): boolean {
   try {
     const { index, value } = readProofRecord(share, ['index', 'value']);
     if (!validIndex(index) || !validScalar(value)) return false;
-    if (!Array.isArray(commitments) || commitments.length === 0 || commitments.length > MAX_SHARES)
+    const expectation = readProofRecord(expected, ['threshold', 'masterPub', 'recipientIndex']);
+    const { threshold, masterPub, recipientIndex } = expectation;
+    if (
+      typeof threshold !== 'number' ||
+      !Number.isSafeInteger(threshold) ||
+      threshold < 1 ||
+      threshold > MAX_SHARES ||
+      typeof masterPub !== 'string' ||
+      !validIndex(recipientIndex) ||
+      index !== recipientIndex
+    )
       return false;
-    const points = readProofArray(commitments, commitments.length).map((item) => {
+    const encoded = readProofArray(commitments, threshold);
+    if (encoded[0] !== masterPub) return false;
+    const points = encoded.map((item) => {
       if (typeof item !== 'string') throw new TypeError('Invalid Feldman commitment.');
       return decodePoint(item);
     });
     const x = BigInt(index);
     let power = 1n;
-    let expected = scalePoint(G, 0n);
+    let expectedPoint = scalePoint(G, 0n);
     for (const point of points) {
-      expected = expected.add(scalePoint(point, power));
+      expectedPoint = expectedPoint.add(scalePoint(point, power));
       power = modScalar(power * x);
     }
-    return scalePoint(G, value).equals(expected);
+    return scalePoint(G, value).equals(expectedPoint);
   } catch {
     return false;
   }

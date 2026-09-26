@@ -363,3 +363,9 @@ Record decisions here as they are made. Keep earlier entries.
 - Decision: Use compact 64-round shuffle proofs that reconstruct round commitments from challenge bits and responses. Preserve the 64-bit soundness target and validate both permutation directions against an explicit verifier. Compose steal-index ranges with shared Sigma branch challenges, rather than nested independent Fiat–Shamir proofs. Six bits cover each true-branch distance under the current per-type cap.
 - Decision: Run the online session and cryptographic validation together in a worker with bounded proof work and a main-thread transport bridge. The local session remains independent of this arrangement. Actual worker timing is an acceptance requirement.
 - Decision: Original human devices determine escrow holders; a hosted bot excludes its host and adds no holder. Recovery needs certified authorization before disclosure and a second certificate before activation. Missing required holders can stall play. Missing secrets leave the final audit incomplete. Identity keys, game voting keys and escrowed master secrets remain separate.
+
+## 2026-09-26: Cryptographic helper review
+
+- Review: The user approved the Step 1 source packet and future project reviews. The [Claude findings and response](verification/stage07/step1-review-response.md) record the completed read-only review and follow-up fixes.
+- Decision: Require expected escrow threshold, master key and recipient at the Feldman verification API. Separate proof nonce modes inside helpers, even when callers repeat a context. Provide one CDS verifier for shared opening/range branch challenges and the full outer Fiat-Shamir transcript.
+- Validation: Add independent RFC map/expansion vectors and malicious transcript regressions. Helper tests and review do not replace the later application-statement checks, worker benchmarks or full-game adversarial acceptance.

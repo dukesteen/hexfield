@@ -13,7 +13,15 @@ import {
   scalePoint,
 } from './group.js';
 import { proofChallenge, proofNonce, readProofArray, readProofRecord } from './proof-transcript.js';
-import { proveDleq, proveSchnorr, verifyDleq, verifySchnorr } from './sigma.js';
+import {
+  inspectSchnorrProof,
+  prepareSchnorrProof,
+  simulateSchnorrProof,
+  proveDleq,
+  proveSchnorr,
+  verifyDleq,
+  verifySchnorr,
+} from './sigma.js';
 import type { DleqStatement, SchnorrStatement } from './sigma.js';
 
 const SEED = Uint8Array.from({ length: 32 }, (_, index) => index + 1);
@@ -121,6 +129,21 @@ describe('proof transcript', () => {
 });
 
 describe('Schnorr proof', () => {
+  test('composes at an external challenge, answers once, and separates standalone nonces', () => {
+    const statement = schnorr(7n);
+    const prepared = prepareSchnorrProof(statement, 7n, SEED, CONTEXT);
+    const standalone = proveSchnorr(statement, 7n, SEED, CONTEXT);
+    expect(prepared.commitment).not.toBe(standalone.commitment);
+    const proof = prepared.respond(23n);
+    expect(inspectSchnorrProof(statement, proof, 23n)).toBe(prepared.commitment);
+    expect(() => inspectSchnorrProof(statement, proof, 24n)).toThrow(/challenge/);
+    expect(() => prepared.respond(24n)).toThrow(/only answer one/);
+    expect(verifySchnorr(statement, proof, CONTEXT)).toBe(false);
+    const simulated = simulateSchnorrProof(statement, 29n, SEED, CONTEXT);
+    expect(inspectSchnorrProof(statement, simulated, 29n)).toBe(simulated.commitment);
+    expect(verifySchnorr(statement, simulated, CONTEXT)).toBe(false);
+  });
+
   test('matches the independent verification equation and complete transcript', () => {
     const statement = schnorr(7n);
     const proof = proveSchnorr(statement, 7n, SEED, CONTEXT);
