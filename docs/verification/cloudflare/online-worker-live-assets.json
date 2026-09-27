@@ -1,0 +1,22 @@
+[
+  {
+    "path": "index.html",
+    "matchesBuild": true,
+    "sha256": "bfe5b3e3cb76f19bb73c5ff2bd7ac8f80a6ed2df3c6e417004a044ce45b3de78"
+  },
+  {
+    "path": "assets/index-D3SqL45Z.js",
+    "matchesBuild": true,
+    "sha256": "bb8ec2c22e45abf4e7775c0ce9a22e40cebe410ccaaebfd80a26e2aac681fdd6"
+  },
+  {
+    "path": "assets/online-Dz4aD18O.js",
+    "matchesBuild": true,
+    "sha256": "b66611917f4281f6d87d1bef5ce48c7359b45a5aa02fe08e08becd9ac09226be"
+  },
+  {
+    "path": "assets/online-protocol-worker-kKcBmUau.js",
+    "matchesBuild": true,
+    "sha256": "206acc945515a3882f9b41ff7bf5b9b107c36a350c1eb3c2b2fc8c4ee71f486d"
+  }
+]

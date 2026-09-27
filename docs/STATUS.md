@@ -27,9 +27,11 @@ The current app is [Hexfield on Cloudflare](https://hexfield.steenbakkers.cc/).
 The [deployment check](verification/cloudflare/deployment.md) records live
 invite-link startup, replicated setup moves, reload, lobby autosave and desktop /
 mobile viewport checks. Workers Free remains the deployment constraint; TURN is
-disabled. The [action-feedback release](verification/cloudflare/action-feedback.md)
-is live from source `7466004`, with immediate pending indicators and duplicate-click
-protection. It does not reduce cryptographic computation time.
+disabled. The [online worker release](verification/cloudflare/online-worker-release.md)
+is live from source `929e889`. Certified setup and live game computation run in a
+dedicated browser worker so pending indicators, menus and board rendering can
+continue while checks run. It preserves the earlier action feedback and
+duplicate-click protection; it does not eliminate network agreement latency.
 
 The [current local checkpoint](verification/stage09/local-checkpoint-2026-09-27.md)
 adds reviewed signed chat and automatic capture of rejected signed proofs.
