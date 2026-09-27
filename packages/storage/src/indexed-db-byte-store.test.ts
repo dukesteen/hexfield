@@ -130,7 +130,7 @@ describe('IndexedDbByteStore', () => {
     const store = new IndexedDbByteStore();
     await store.putIfAbsent('settings/value', new Uint8Array([3]));
 
-    const upgraded = await openDB<FutureDatabase>('cp2p', 3, {
+    const upgraded = await openDB<FutureDatabase>('cp2p', 5, {
       upgrade(database) {
         database.createObjectStore('future');
       },
@@ -156,12 +156,14 @@ describe('IndexedDbByteStore', () => {
     expect(await store.load('settings/value')).toEqual(new Uint8Array([5, 6, 7]));
     await store.close();
 
-    const upgraded = await openDB<Version2Database>('cp2p', 2);
+    const upgraded = await openDB<Version2Database>('cp2p');
     expect([...upgraded.objectStoreNames].toSorted()).toEqual([
       'bytes',
       'consensus',
+      'deletedGames',
       'entries',
       'games',
+      'snapshots',
     ]);
     expect(await upgraded.get('bytes', 'settings/value')).toEqual(new Uint8Array([5, 6, 7]));
     upgraded.close();
@@ -235,7 +237,7 @@ describe('IndexedDbByteStore', () => {
     open.mockRestore();
     expect(await store.load('private/seat/1')).toBeNull();
 
-    const database = await openDB<SeedDatabase>('cp2p', 2);
+    const database = await openDB<SeedDatabase>('cp2p');
     const transaction = database.transaction('bytes', 'readwrite');
     await transaction.store.put('not a byte record', 'private/corrupt');
     await transaction.done;

@@ -361,6 +361,13 @@ repository claims a durable marker under its cross-tab lock before the request;
 denied, unsupported and failed requests do not stop gameplay. Sixteen focused
 storage/query tests and the online game-screen lifecycle tests pass.
 
+The [public snapshot checkpoint](verification/stage10/public-snapshot-checkpoint.md)
+adds a version-4 IndexedDB cache every 100 certified entries and retains the last
+three. Cache failures cannot change the commit verdict. Reads require independent
+full replay, and game deletion removes cached snapshots in its tombstone
+transaction. This cache does not grant voting authority or replace full replay.
+Optional passphrase encryption of live identity/private storage remains open.
+
 The [takeover review](verification/stage10/takeover-policy-review-disposition.md)
 identified voting-progress, competing-request and returning-target defects in
 the local approval facade. The corrected implementation binds takeover policy

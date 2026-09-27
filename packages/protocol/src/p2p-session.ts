@@ -31,6 +31,7 @@ import type { RecoveryReadiness } from './recovery-types.js';
 import { quorumSize } from './votes.js';
 import { chooseBotPending } from './bot-pending.js';
 import { initialProposalContext, replayCertifiedPrefix } from './replay.js';
+import { cacheCommittedPublicSnapshot } from './public-snapshot.js';
 import { timedDiscardCommand } from './turn-timeout.js';
 import type {
   GameSession,
@@ -92,6 +93,8 @@ export interface P2PSessionOptions extends Omit<
   transferPrivateImportStore?: TransferPrivateStore;
   /** One validated non-membership head for bounded device-route bookkeeping. */
   onCertifiedNonMembershipCommit?: (head: EntryRef) => Result<void>;
+  /** Optional durable public cache; failures never enter the certified commit path. */
+  savePublicSnapshot?: (snapshot: unknown) => Promise<void>;
   /** Fresh driver on both create and restore. Restore replays private consequences. */
   createDriver: (
     engine: Engine,
@@ -361,6 +364,7 @@ export class P2PSession implements GameSession<CertifiedHistory> {
             for (const seat of openedSession.tradeIntents.keys()) openedSession.cancelPending(seat);
             throw new Error(`${applied.error.code}: ${applied.error.message}`);
           }
+          cacheCommittedPublicSnapshot(next, options.savePublicSnapshot);
           const activating =
             validated.entry.payload.kind === 'membership' &&
             next.log.recovery?.pending === null &&

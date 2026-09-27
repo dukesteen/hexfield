@@ -2,12 +2,13 @@ import { openDB } from 'idb';
 import type { DBSchema, IDBPDatabase, IDBPTransaction } from 'idb';
 
 export const DATABASE_NAME = 'cp2p';
-export const DATABASE_VERSION = 3;
+export const DATABASE_VERSION = 4;
 export const BYTE_STORE = 'bytes';
 export const GAME_STORE = 'games';
 export const ENTRY_STORE = 'entries';
 export const CONSENSUS_STORE = 'consensus';
 export const DELETED_GAME_STORE = 'deletedGames';
+export const SNAPSHOT_STORE = 'snapshots';
 
 export const MAX_RECORD_BYTES = 16 * 1024 * 1024;
 
@@ -17,6 +18,7 @@ export interface CP2PDatabase extends DBSchema {
   entries: { key: [string, number]; value: Uint8Array };
   consensus: { key: string; value: Uint8Array };
   deletedGames: { key: string; value: Uint8Array };
+  snapshots: { key: [string, number]; value: Uint8Array };
 }
 
 export function openDatabase(
@@ -36,6 +38,7 @@ export function openDatabase(
         database.createObjectStore(CONSENSUS_STORE);
       }
       if (oldVersion < 3) database.createObjectStore(DELETED_GAME_STORE);
+      if (oldVersion < 4) database.createObjectStore(SNAPSHOT_STORE);
     },
     blocking: () => {
       blocked();
@@ -47,7 +50,14 @@ export function openDatabase(
 }
 
 export function strictWriteTransaction<
-  Stores extends readonly ('bytes' | 'games' | 'entries' | 'consensus' | 'deletedGames')[],
+  Stores extends readonly (
+    | 'bytes'
+    | 'games'
+    | 'entries'
+    | 'consensus'
+    | 'deletedGames'
+    | 'snapshots'
+  )[],
 >(
   database: IDBPDatabase<CP2PDatabase>,
   stores: Stores,

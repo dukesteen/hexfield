@@ -14,6 +14,7 @@ export type {
   OnlineGameTombstone,
 } from './online-game-deletion.js';
 export { IndexedDbProtocolJournal } from './indexed-db-protocol-journal.js';
+export { IndexedDbPublicSnapshotStore } from './public-snapshot-store.js';
 export type {
   IndexedDbProtocolJournalOptions,
   TransferPromotionOptions,

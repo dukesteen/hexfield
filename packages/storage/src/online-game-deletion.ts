@@ -10,6 +10,7 @@ import {
   DELETED_GAME_STORE,
   ENTRY_STORE,
   GAME_STORE,
+  SNAPSHOT_STORE,
   openDatabase,
   strictWriteTransaction,
 } from './database.js';
@@ -48,10 +49,10 @@ const catalogueSchema = v.strictObject({
 });
 type DeletionTransaction = IDBPTransaction<
   CP2PDatabase,
-  readonly ['deletedGames', 'games', 'entries', 'consensus', 'bytes'],
+  readonly ['deletedGames', 'games', 'entries', 'consensus', 'bytes', 'snapshots'],
   'readwrite'
 >;
-type CP2PStoreName = 'bytes' | 'games' | 'entries' | 'consensus' | 'deletedGames';
+type CP2PStoreName = 'bytes' | 'games' | 'entries' | 'consensus' | 'deletedGames' | 'snapshots';
 
 export interface OnlineGameTombstone {
   readonly protocol: typeof TOMBSTONE_PROTOCOL;
@@ -171,6 +172,7 @@ async function deleteTransaction(
     ENTRY_STORE,
     CONSENSUS_STORE,
     BYTE_STORE,
+    SNAPSHOT_STORE,
   ]);
   let markerBytes: Uint8Array | undefined;
   let startBytes: Uint8Array | undefined;
@@ -238,6 +240,7 @@ async function deleteTransaction(
     }
 
     await deleteJournalRecords(transaction, gameId);
+    await deleteSnapshots(transaction, gameId);
     await deleteKnownByteRecords(transaction, gameId, expectedGenesisDigest, identifiers);
     await transaction.done;
     return 'deleted';
@@ -256,6 +259,18 @@ async function deleteTransaction(
     genesisBytes?.fill(0);
     catalogueBytes?.fill(0);
     database.close();
+  }
+}
+
+async function deleteSnapshots(transaction: DeletionTransaction, gameId: string): Promise<void> {
+  const store = transaction.objectStore(SNAPSHOT_STORE);
+  const range = IDBKeyRange.bound([gameId, 0], [gameId, Number.MAX_SAFE_INTEGER]);
+  let cursor = await store.openCursor(range);
+  while (cursor) {
+    // oxlint-disable-next-line eslint/no-await-in-loop -- Cursor steps share the tombstone transaction.
+    await cursor.delete();
+    // oxlint-disable-next-line eslint/no-await-in-loop -- Continue follows the completed deletion.
+    cursor = await cursor.continue();
   }
 }
 

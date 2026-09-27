@@ -273,7 +273,7 @@ test('durable pending import remains inert until exact certified activation prom
     destinationCheck: data.destinationCheck,
     replacementChecks: [],
   });
-  const database = await openDB('cp2p', 3);
+  const database = await openDB('cp2p');
   const extraStageKey = `${stageKey}/older-parent`;
   await database.put('bytes', Uint8Array.of(7), extraStageKey);
   database.close();
@@ -316,7 +316,7 @@ test('durable pending import remains inert until exact certified activation prom
   });
   expect(await store.load(stageKey)).toBeNull();
   expect(await store.loadReadiness(stageKey)).toBeNull();
-  const afterPromotion = await openDB('cp2p', 3);
+  const afterPromotion = await openDB('cp2p');
   expect(await afterPromotion.get('bytes', extraStageKey)).toBeUndefined();
   expect(
     await afterPromotion.get(
@@ -353,7 +353,7 @@ test('durable pending import remains inert until exact certified activation prom
     data.fixture.policy,
   );
   expect(replay.ok).toBe(true);
-  const selectiveReset = await openDB('cp2p', 3);
+  const selectiveReset = await openDB('cp2p');
   const removal = selectiveReset.transaction(
     ['games', 'entries', 'consensus', 'bytes'],
     'readwrite',
@@ -425,7 +425,7 @@ test('stale activation, conflicting immutable staging and partial destination jo
   await expect(journal.promoteTransfer({ ...options, activation: stale })).rejects.toThrow(
     'Activation is not the exact next entry',
   );
-  const database = await openDB('cp2p', 3);
+  const database = await openDB('cp2p');
   await database.put('consensus', Uint8Array.of(1), data.fixture.genesis.gameId);
   database.close();
   await expect(journal.promoteTransfer(options)).rejects.toThrow(/partial journal state/);
@@ -494,7 +494,7 @@ test('certified cancellation erases staged secrets and prevents old-parent resta
   await expect(store.stage(input, data.fixture.source.engine, data.fixture.policy)).rejects.toThrow(
     /finalized/,
   );
-  const tombstones = await openDB('cp2p', 3);
+  const tombstones = await openDB('cp2p');
   await tombstones.put(
     'deletedGames',
     canonicalEncode({
@@ -653,7 +653,7 @@ test('same-device rekey replaces a retired generation and its safety atomically'
   await expect(oldJournal.saveSafety(data.entries.length + 1, 7, Uint8Array.of(1))).rejects.toThrow(
     /binding.*mismatched/i,
   );
-  const persisted = await openDB('cp2p', 3);
+  const persisted = await openDB('cp2p');
   expect(await persisted.get('bytes', recordKey)).toEqual(data.bindingBytes);
   persisted.close();
   await oldJournal.close();
@@ -719,7 +719,7 @@ test('an aborted promotion leaves staging inert, and racing tabs yield one activ
   } finally {
     put.mockRestore();
   }
-  const afterAbort = await openDB('cp2p', 3);
+  const afterAbort = await openDB('cp2p');
   expect(await afterAbort.get('games', gameId)).toBeUndefined();
   expect(await afterAbort.get('consensus', gameId)).toBeUndefined();
   expect(await afterAbort.get('bytes', recordKey)).toBeUndefined();
@@ -822,7 +822,7 @@ test('promotes after the old journal has certified activation and persisted its 
   await expect(journal.promoteTransfer(options)).rejects.toThrow(
     'Existing controller was not retired',
   );
-  const corrected = await openDB('cp2p', 3);
+  const corrected = await openDB('cp2p');
   await corrected.put(
     'consensus',
     canonicalEncode({

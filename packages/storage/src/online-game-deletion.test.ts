@@ -23,6 +23,7 @@ interface TestDatabase {
   entries: { key: [string, number]; value: Uint8Array };
   consensus: { key: string; value: Uint8Array };
   deletedGames: { key: string; value: Uint8Array };
+  snapshots: { key: [string, number]; value: Uint8Array };
 }
 
 class TestLocks implements Pick<LockManager, 'request'> {
@@ -175,7 +176,7 @@ test('v3 migration preserves v2 bytes and creates an empty tombstone store', asy
   const store = new IndexedDbByteStore();
   expect(await store.load('keep/this')).toEqual(Uint8Array.of(11, 12));
   await store.close();
-  const upgraded = await openDB<TestDatabase>('cp2p', 3);
+  const upgraded = await openDB<TestDatabase>('cp2p');
   expect([...upgraded.objectStoreNames].toSorted()).toContain('deletedGames');
   expect(await upgraded.get('bytes', 'keep/this')).toEqual(Uint8Array.of(11, 12));
   expect(await upgraded.get('deletedGames', 'any')).toBeUndefined();
@@ -188,6 +189,9 @@ test('deletion atomically removes known game records but retains identity, escro
   const locks = new TestLocks();
   const store = byteStoreWithLocks(locks);
   const data = await seedGame(store);
+  const before = await openDB<TestDatabase>('cp2p');
+  await before.put('snapshots', Uint8Array.of(9), [data.gameId, 100]);
+  before.close();
   const result = await deleteOnlineGameData(data.gameId, data.digest, {
     lockManager: locks,
     now: () => 1234,
@@ -227,10 +231,11 @@ test('deletion atomically removes known game records but retains identity, escro
       deletedAt: 1234,
     }),
   );
-  const database = await openDB<TestDatabase>('cp2p', 3);
+  const database = await openDB<TestDatabase>('cp2p');
   expect(await database.get('games', data.gameId)).toBeUndefined();
   expect(await database.get('consensus', data.gameId)).toBeUndefined();
   expect(await database.getAllKeys('entries')).toEqual([]);
+  expect(await database.getAllKeys('snapshots')).toEqual([]);
   database.close();
   expect(await deleteOnlineGameData(data.gameId, data.digest, { lockManager: locks })).toBe(
     'already-deleted',

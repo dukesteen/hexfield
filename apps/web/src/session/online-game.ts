@@ -40,7 +40,11 @@ import type {
   SignedGameSeatBinding,
   Transport,
 } from '@cp2p/protocol';
-import { acquireActiveGameWriterLease, IndexedDbProtocolJournal } from '@cp2p/storage';
+import {
+  acquireActiveGameWriterLease,
+  IndexedDbProtocolJournal,
+  IndexedDbPublicSnapshotStore,
+} from '@cp2p/storage';
 import type { GameWriterLease } from '@cp2p/storage';
 import * as v from 'valibot';
 import type { OwnedSeatMaterial } from './online-credentials.js';
@@ -111,6 +115,7 @@ export async function openOnlineGame(
     master: new Uint8Array(item.master),
   }));
   let journal: OnlineJournal | null = null;
+  let snapshotStore: IndexedDbPublicSnapshotStore | null = null;
   let lease: GameWriterLease | null = null;
   let transport: OnlineGameTransport | null = null;
   let session: P2PSession | null = null;
@@ -142,7 +147,11 @@ export async function openOnlineGame(
         item.master.fill(0);
       }
       try {
-        await journal?.close();
+        try {
+          await snapshotStore?.close();
+        } finally {
+          await journal?.close();
+        }
       } finally {
         await lease?.close();
       }
@@ -183,6 +192,7 @@ export async function openOnlineGame(
     checkCancelled();
     if (!lease) throw new Error('This game is already active in another tab');
     const digest = genesisDigest(genesis);
+    if (!runtime.createJournal) snapshotStore = new IndexedDbPublicSnapshotStore(genesis.gameId);
     const keyBinding = {
       recordKey: `online-game/${digest}/keys`,
       bytes: canonicalEncode({
@@ -371,6 +381,7 @@ export async function openOnlineGame(
         .filter((item) => item.kind === 'bot')
         .map((item) => [item.seat, item.signingKey]),
     );
+    const publicSnapshots = snapshotStore;
     const options = {
       genesisEntry: input.entry,
       engine: input.engine,
@@ -380,6 +391,9 @@ export async function openOnlineGame(
       transport,
       clock: input.clock,
       journal,
+      ...(publicSnapshots
+        ? { savePublicSnapshot: (snapshot: unknown) => publicSnapshots.saveCommitted(snapshot) }
+        : {}),
       onCertifiedNonMembershipCommit(head: { readonly seq: number; readonly hash: string }) {
         const pruned = projection.value.pruneRetired(head);
         if (pruned.ok && pruned.value) {
