@@ -1,0 +1,5 @@
+7d54640a276aae12ebaef527d43fdec0cd06c191f88053dfd5395ceae15b5819  packages/protocol/src/consensus.ts
+761fecf8c8d2e431ac863960a3a96c83ce2224b1790513f7e7d4654ff64f8967  packages/protocol/src/consensus-controller.ts
+3b61c6c669f38eb635409b31f62e32953aa7e9fe60fdd587cdefb488908005dc  packages/protocol/src/consensus.test.ts
+241e5a120b16c86c0c7139e1db6230612d2ebc23d0376577e34226f5fc50396d  packages/protocol/src/consensus-controller.test.ts
+306215ce65509baf68e6b9d23e4629e401ba61367fe049339085af4ca1466d0d  packages/protocol/src/log-types.ts

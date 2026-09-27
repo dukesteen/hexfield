@@ -3,31 +3,25 @@ import { identityFromSecret } from '@cp2p/crypto';
 import { failure, success } from '@cp2p/engine';
 import type { Result, Seat } from '@cp2p/engine';
 import {
-  clearStaleAccusation,
+  copyConsensusStateData,
   createConsensusState,
-  inputAvailable,
-  propose,
-  receiveCommit,
-  receiveProposal,
-  receiveVote,
+  openOwnedConsensusState,
   recoverConsensusEffects,
-  resumeAfterReplay,
   restoreConsensusState,
-  stageAccusation,
-  terminalHalt,
-  timeout,
 } from './consensus.js';
 import type {
   ConsensusEffect,
+  ConsensusEvent,
   LocalVoteAdmissibility,
+  OwnedConsensusState,
   ConsensusState,
   ConsensusTransition,
-  TimeoutPhase,
 } from './consensus.js';
 import type { ProposalContext } from './proposal.js';
 import type { SafetyStore, StoredSafety } from './safety-store.js';
-import type { ExcludeProposerControl, LogEntry } from './types.js';
 import { MAX_MESSAGE_BYTES } from './validation.js';
+
+export type { ConsensusEvent } from './consensus.js';
 
 export interface ConsensusControllerOptions {
   context: ProposalContext;
@@ -41,18 +35,6 @@ export interface ConsensusControllerOptions {
   beforePersist?: (previous: ConsensusState, next: ConsensusState) => Result<void>;
   admitLocalValue?: LocalVoteAdmissibility;
 }
-
-export type ConsensusEvent =
-  | { kind: 'input-available' }
-  | { kind: 'propose'; candidate?: LogEntry }
-  | { kind: 'proposal'; proposal: unknown }
-  | { kind: 'vote'; vote: unknown }
-  | { kind: 'commit'; certified: unknown }
-  | { kind: 'stage-accusation'; control: ExcludeProposerControl }
-  | { kind: 'clear-stale-accusation' }
-  | { kind: 'terminal-halt'; reason: string }
-  | { kind: 'resume-after-replay' }
-  | { kind: 'timeout'; phase: TimeoutPhase; round: number };
 
 /**
  * Serializes a single height's transitions and persists before emission.
@@ -68,6 +50,7 @@ export class ConsensusController {
     private readonly options: ConsensusControllerOptions,
     private state: ConsensusState,
     private revision: number,
+    private readonly owned: OwnedConsensusState,
   ) {
     this.secretKey = options.secretKey.slice();
   }
@@ -84,10 +67,12 @@ export class ConsensusController {
           'consensus-store-exists',
           'Restore existing vote records instead of resetting',
         );
+      const owned = openOwnedConsensusState(initial.value, options.context, options.seat);
+      if (!owned.ok) return owned;
       const saved = await options.store.save(null, canonicalEncode(initial.value));
       if (!saved)
         return failure('consensus-write-conflict', 'Another writer initialized this voting record');
-      return success(new ConsensusController(options, initial.value, 0));
+      return success(new ConsensusController(options, initial.value, 0, owned.value));
     } catch {
       return failure('consensus-storage', 'Could not persist the initial voting record');
     }
@@ -134,12 +119,15 @@ export class ConsensusController {
       }
       revision++;
     }
-    return success(new ConsensusController(options, restored.value, revision));
+    const owned = openOwnedConsensusState(restored.value, options.context, options.seat);
+    return owned.ok
+      ? success(new ConsensusController(options, restored.value, revision, owned.value))
+      : owned;
   }
 
   /** Returns a detached, verified snapshot, never the mutable internal record. */
   snapshot(): Result<ConsensusState> {
-    const snapshot = restoreConsensusState(this.state, this.options.context, this.options.seat);
+    const snapshot = this.owned.snapshot();
     if (!snapshot.ok) {
       this.stopVoting();
       return snapshot;
@@ -204,10 +192,18 @@ export class ConsensusController {
         }
         return next;
       }
-      const admitted = this.options.beforePersist?.(this.state, next.value.state);
-      if (admitted && !admitted.ok) return admitted;
+      const candidate = next.value.state;
+      const admitted = this.options.beforePersist?.(
+        copyConsensusStateData(this.state),
+        copyConsensusStateData(candidate),
+      );
+      if (admitted && !admitted.ok) {
+        this.owned.discard();
+        return admitted;
+      }
       try {
-        if (!(await this.options.store.save(this.revision, canonicalEncode(next.value.state)))) {
+        if (!(await this.options.store.save(this.revision, canonicalEncode(candidate)))) {
+          this.owned.discard();
           this.stopped = true;
           return failure(
             'consensus-write-conflict',
@@ -215,6 +211,7 @@ export class ConsensusController {
           );
         }
       } catch {
+        this.owned.discard();
         this.stopped = true;
         return failure(
           'consensus-storage',
@@ -222,7 +219,13 @@ export class ConsensusController {
         );
       }
       this.revision += 1;
-      this.state = next.value.state;
+      const committed = this.owned.commit();
+      if (!committed.ok) {
+        this.owned.discard();
+        this.stopVoting();
+        return committed;
+      }
+      this.state = copyConsensusStateData(candidate);
       // A dispose/crash during the write must not transmit after the write resolves.
       if (this.stopped)
         return failure('consensus-stopped', 'Controller stopped during persistence');
@@ -283,7 +286,8 @@ export class ConsensusController {
       try {
         return await operation();
       } catch {
-        this.stopped = true;
+        this.owned.discard();
+        this.stopVoting();
         return failure('consensus-controller', 'Consensus transition failed; voting has stopped');
       }
     });
@@ -292,58 +296,7 @@ export class ConsensusController {
   }
 
   private reduce(event: ConsensusEvent): Result<ConsensusTransition> {
-    const context = this.options.context;
-    switch (event.kind) {
-      case 'input-available':
-        return inputAvailable(this.state, context);
-      case 'propose':
-        return propose(
-          this.state,
-          context,
-          this.secretKey,
-          event.candidate,
-          this.options.admitLocalValue,
-        );
-      case 'proposal':
-        return receiveProposal(
-          this.state,
-          context,
-          this.secretKey,
-          event.proposal,
-          this.options.admitLocalValue,
-        );
-      case 'vote':
-        return receiveVote(
-          this.state,
-          context,
-          this.secretKey,
-          event.vote,
-          this.options.admitLocalValue,
-        );
-      case 'commit':
-        return receiveCommit(this.state, context, event.certified);
-      case 'stage-accusation':
-        return stageAccusation(this.state, context, event.control);
-      case 'clear-stale-accusation':
-        return clearStaleAccusation(this.state, context);
-      case 'terminal-halt':
-        return terminalHalt(this.state, context, event.reason);
-      case 'resume-after-replay':
-        return resumeAfterReplay(this.state, context);
-      case 'timeout':
-        return timeout(
-          this.state,
-          context,
-          this.secretKey,
-          event.phase,
-          event.round,
-          this.options.admitLocalValue,
-        );
-      default: {
-        const unknownEvent: never = event;
-        return failure('consensus-event', `Unknown consensus event: ${String(unknownEvent)}`);
-      }
-    }
+    return this.owned.dispatch(event, this.secretKey, this.options.admitLocalValue);
   }
 
   private async emit(effects: readonly ConsensusEffect[]): Promise<Result<void>> {

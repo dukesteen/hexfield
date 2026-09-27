@@ -188,6 +188,83 @@ const stateSchema = v.strictObject({
   unappliedCertificate: v.nullable(certifiedSchema),
 });
 
+interface ContextStamp {
+  contextBytes: Uint8Array;
+  functions: readonly (readonly [string, unknown])[];
+}
+
+// Only an OwnedConsensusState's private state enters this set. Public transition
+// functions continue to verify every caller-supplied state in full.
+const ownedStates = new WeakSet<ConsensusState>();
+
+function sameBytes(left: Uint8Array, right: Uint8Array): boolean {
+  return left.length === right.length && left.every((byte, index) => byte === right[index]);
+}
+
+function nonfunctions(value: object): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(value).filter(([, item]) => typeof item !== 'function'));
+}
+
+function runtimeReferences(value: object, name: string): (readonly [string, unknown])[] {
+  const references: (readonly [string, unknown])[] = [[name, value]];
+  let current: object | null = value;
+  for (let depth = 0; current && current !== Object.prototype && depth < 8; depth++) {
+    references.push([`${name}/prototype/${depth}`, current]);
+    for (const key of Object.getOwnPropertyNames(current).toSorted()) {
+      const property = Object.getOwnPropertyDescriptor(current, key);
+      if (typeof property?.value === 'function')
+        references.push([`${name}/${key}`, property.value]);
+      if (property?.get) references.push([`${name}/${key}/get`, Reflect.get(property, 'get')]);
+      if (property?.set) references.push([`${name}/${key}/set`, Reflect.get(property, 'set')]);
+    }
+    current = Object.getPrototypeOf(current);
+  }
+  return references;
+}
+
+function contextStamp(context: ProposalContext): ContextStamp {
+  const functions: (readonly [string, unknown])[] = [
+    ...runtimeReferences(context, 'context'),
+    ...runtimeReferences(context.log, 'log'),
+    ...runtimeReferences(context.log.engine, 'engine'),
+    ...runtimeReferences(context.policy, 'policy'),
+    ...(context.policy.randomDerivations
+      ? runtimeReferences(context.policy.randomDerivations, 'randomDerivations')
+      : [['randomDerivations', null] as const]),
+  ];
+  const { engine, ...log } = context.log;
+  const other = nonfunctions(context);
+  delete other.log;
+  delete other.policy;
+  return {
+    contextBytes: canonicalEncode({
+      ...other,
+      log: { ...log, lastNonces: [...log.lastNonces], engine: nonfunctions(engine) },
+      policy: {
+        ...nonfunctions(context.policy),
+        randomDerivations: nonfunctions(context.policy.randomDerivations ?? {}),
+      },
+    }),
+    functions,
+  };
+}
+
+function sameContextStamp(left: ContextStamp, right: ContextStamp): boolean {
+  return (
+    sameBytes(left.contextBytes, right.contextBytes) &&
+    left.functions.length === right.functions.length &&
+    left.functions.every(
+      ([name, value], index) =>
+        name === right.functions[index]?.[0] && value === right.functions[index]?.[1],
+    )
+  );
+}
+
+/** Detached schema-checked data for observer callbacks; it confers no validation authority. */
+export function copyConsensusStateData(state: ConsensusState): ConsensusState {
+  return v.parse(stateSchema, canonicalDecode(canonicalEncode(state)));
+}
+
 function bound(state: ConsensusState, context: ProposalContext, localSeat: Seat): boolean {
   const member = context.membership.voters.find((voter) => voter.seat === localSeat);
   return (
@@ -316,7 +393,11 @@ function signLocalVote(
   if (ownVote(state, phase)) return success(undefined);
   if (hash !== null && admitValue) {
     const proposal = proposalAt(state, state.round, hash);
-    if (!proposal || !admitValue(proposal)) hash = null;
+    if (
+      !proposal ||
+      !admitValue(v.parse(signedProposalSchema, canonicalDecode(canonicalEncode(proposal))))
+    )
+      hash = null;
   }
   try {
     const vote = signVote(
@@ -655,12 +736,24 @@ function transition(
   context: ProposalContext,
   action: (copy: ConsensusState, effects: ConsensusEffect[]) => Result<void>,
 ): Result<ConsensusTransition> {
-  const restored = restoreConsensusState(state, context, state.localSeat);
+  const restored = ownedStates.has(state)
+    ? success(copyConsensusStateData(state))
+    : restoreConsensusState(state, context, state.localSeat);
   if (!restored.ok) return restored;
   const copy = restored.value;
   const effects: ConsensusEffect[] = [];
   const applied = action(copy, effects);
-  return applied.ok ? success({ state: copy, effects }) : applied;
+  if (!applied.ok) return applied;
+  try {
+    const bytes = canonicalEncode(copy);
+    const parsed = v.safeParse(stateSchema, canonicalDecode(bytes));
+    if (!parsed.success)
+      return failure('consensus-restore', 'Transition produced malformed safety state');
+    if (ownedStates.has(state)) ownedStates.add(copy);
+  } catch {
+    return failure('consensus-restore', 'Transition produced malformed safety state');
+  }
+  return success({ state: copy, effects });
 }
 
 /** Only call this for a genuinely new height after the certified parent is stored. */
@@ -1519,4 +1612,151 @@ export function recoverConsensusEffects(
       validHash: current.valid?.hash ?? null,
     });
   return success(effects);
+}
+
+export type ConsensusEvent =
+  | { kind: 'input-available' }
+  | { kind: 'propose'; candidate?: LogEntry }
+  | { kind: 'proposal'; proposal: unknown }
+  | { kind: 'vote'; vote: unknown }
+  | { kind: 'commit'; certified: unknown }
+  | { kind: 'stage-accusation'; control: ExcludeProposerControl }
+  | { kind: 'clear-stale-accusation' }
+  | { kind: 'terminal-halt'; reason: string }
+  | { kind: 'resume-after-replay' }
+  | { kind: 'timeout'; phase: TimeoutPhase; round: number };
+
+/** Private, validated state for one controller height. Public reducers stay fully validating. */
+export interface OwnedConsensusState {
+  snapshot(): Result<ConsensusState>;
+  dispatch(
+    event: ConsensusEvent,
+    secretKey: Uint8Array,
+    admitValue?: LocalVoteAdmissibility,
+  ): Result<ConsensusTransition>;
+  commit(): Result<void>;
+  discard(): void;
+}
+
+class OwnedConsensusStateImpl implements OwnedConsensusState {
+  private pending: ConsensusState | null = null;
+
+  constructor(
+    private state: ConsensusState,
+    private readonly context: ProposalContext,
+    private readonly seat: Seat,
+    private readonly stamp: ContextStamp,
+  ) {
+    ownedStates.add(state);
+  }
+
+  private checkContext(): Result<void> {
+    let current: ContextStamp;
+    try {
+      current = contextStamp(this.context);
+    } catch {
+      return failure('consensus-restore', 'Certified context is not canonical data');
+    }
+    if (sameContextStamp(this.stamp, current)) return success(undefined);
+    if (this.pending)
+      return failure('consensus-context', 'Certified context changed during persistence');
+    const restored = restoreConsensusState(this.state, this.context, this.seat);
+    if (!restored.ok) return restored;
+    if (!sameBytes(canonicalEncode(restored.value), canonicalEncode(this.state)))
+      return failure('consensus-restore', 'Restore to persist newly verified terminal evidence');
+    return failure('consensus-context', 'Certified context changed; restore this voting record');
+  }
+
+  snapshot(): Result<ConsensusState> {
+    const checked = this.checkContext();
+    return checked.ok ? success(copyConsensusStateData(this.state)) : checked;
+  }
+
+  dispatch(
+    event: ConsensusEvent,
+    secretKey: Uint8Array,
+    admitValue?: LocalVoteAdmissibility,
+  ): Result<ConsensusTransition> {
+    const checked = this.checkContext();
+    if (!checked.ok) return checked;
+    if (this.pending) return failure('consensus-pending', 'Persist the previous transition first');
+    let next: Result<ConsensusTransition>;
+    switch (event.kind) {
+      case 'input-available':
+        next = inputAvailable(this.state, this.context);
+        break;
+      case 'propose':
+        next = propose(this.state, this.context, secretKey, event.candidate, admitValue);
+        break;
+      case 'proposal':
+        next = receiveProposal(this.state, this.context, secretKey, event.proposal, admitValue);
+        break;
+      case 'vote':
+        next = receiveVote(this.state, this.context, secretKey, event.vote, admitValue);
+        break;
+      case 'commit':
+        next = receiveCommit(this.state, this.context, event.certified);
+        break;
+      case 'stage-accusation':
+        next = stageAccusation(this.state, this.context, event.control);
+        break;
+      case 'clear-stale-accusation':
+        next = clearStaleAccusation(this.state, this.context);
+        break;
+      case 'terminal-halt':
+        next = terminalHalt(this.state, this.context, event.reason);
+        break;
+      case 'resume-after-replay':
+        next = resumeAfterReplay(this.state, this.context);
+        break;
+      case 'timeout':
+        next = timeout(this.state, this.context, secretKey, event.phase, event.round, admitValue);
+        break;
+      default: {
+        const unknownEvent: never = event;
+        return failure('consensus-event', `Unknown consensus event: ${String(unknownEvent)}`);
+      }
+    }
+    const after = this.checkContext();
+    if (!after.ok) return after;
+    if (!next.ok) return next;
+    this.pending = copyConsensusStateData(next.value.state);
+    ownedStates.add(this.pending);
+    return success({ state: copyConsensusStateData(this.pending), effects: next.value.effects });
+  }
+
+  commit(): Result<void> {
+    if (!this.pending) throw new Error('No persisted consensus transition to install');
+    let current: ContextStamp;
+    try {
+      current = contextStamp(this.context);
+    } catch {
+      return failure('consensus-context', 'Certified context changed during persistence');
+    }
+    if (!sameContextStamp(this.stamp, current))
+      return failure('consensus-context', 'Certified context changed during persistence');
+    this.state = this.pending;
+    this.pending = null;
+    return success(undefined);
+  }
+
+  discard(): void {
+    this.pending = null;
+  }
+}
+
+export function openOwnedConsensusState(
+  value: ConsensusState,
+  context: ProposalContext,
+  seat: Seat,
+): Result<OwnedConsensusState> {
+  const restored = restoreConsensusState(value, context, seat);
+  if (!restored.ok) return restored;
+  try {
+    return success(
+      new OwnedConsensusStateImpl(restored.value, context, seat, contextStamp(context)),
+    );
+  } catch {
+    return failure('consensus-restore', 'Certified context is not canonical data');
+  }
 }

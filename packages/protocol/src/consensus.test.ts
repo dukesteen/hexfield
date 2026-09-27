@@ -159,6 +159,61 @@ describe('one-height consensus core', () => {
     ).toBe(false);
   });
 
+  test('a changed cached proposal or certified parent still takes the full validation path', () => {
+    const f = setup();
+    const state = value(
+      receiveProposal(
+        value(createConsensusState(f.context, 3)),
+        f.context,
+        f.key(3),
+        f.proposal(1),
+      ),
+    ).state;
+    const altered = {
+      ...state,
+      proposals: state.proposals.map((proposal) => ({ ...proposal, sig: 'forged' })),
+    };
+    expect(errorCode(inputAvailable(altered, f.context))).toBe('consensus-restore');
+    const changedContext: ProposalContext = {
+      ...f.context,
+      log: {
+        ...f.context.log,
+        state: {
+          ...f.context.log.state,
+          counters: {
+            ...f.context.log.state.counters,
+            nextOfferId: f.context.log.state.counters.nextOfferId + 1,
+          },
+        },
+      },
+    };
+    expect(errorCode(inputAvailable(state, changedContext))).toBe('consensus-restore');
+  });
+
+  test('public reducers revalidate retained proposals when a callback changes behavior', () => {
+    const f = setup();
+    const original = f.context.log.engine;
+    let reject = false;
+    f.context.log.engine = {
+      ...original,
+      apply(state, input) {
+        return reject
+          ? { ok: false, error: { code: 'changed-engine', message: 'Changed derivation' } }
+          : original.apply(state, input);
+      },
+    };
+    const state = value(
+      receiveProposal(
+        value(createConsensusState(f.context, 3)),
+        f.context,
+        f.key(3),
+        f.proposal(1),
+      ),
+    ).state;
+    reject = true;
+    expect(errorCode(inputAvailable(state, f.context))).toBe('consensus-restore');
+  });
+
   test('four voters prevote, lock, precommit and commit only on quorum', () => {
     const f = setup();
     let state = value(createConsensusState(f.context, 0));

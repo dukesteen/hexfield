@@ -3,7 +3,7 @@ import type { Result, SystemInput } from '@cp2p/engine';
 import { describe, expect, test } from 'vitest';
 import { ConsensusController } from './consensus-controller.js';
 import type { ConsensusControllerOptions } from './consensus-controller.js';
-import type { ConsensusEffect } from './consensus.js';
+import type { ConsensusEffect, ConsensusEvent } from './consensus.js';
 import {
   entryBody,
   entryHash,
@@ -474,6 +474,97 @@ describe('durable consensus controller', () => {
     expect(emissions.flat().map((effect) => effect.kind)).toContain('broadcast-vote');
   });
 
+  test('does not emit when the certified context changes during persistence', async () => {
+    const store = new PausableStore();
+    const { options, candidate, emissions } = setup(store);
+    const controller = await create(options);
+    store.pauseUpdates = true;
+    const pending = controller.dispatch({ kind: 'propose', candidate });
+    await store.entered.promise;
+    options.context.excludedProposers = [1];
+    store.resume.release();
+    expect(errorCode(await pending)).toBe('consensus-context');
+    expect(emissions).toHaveLength(0);
+    expect(errorCode(await controller.dispatch({ kind: 'input-available' }))).toBe(
+      'consensus-stopped',
+    );
+  });
+
+  test('does not persist an initial record when context stamping fails', async () => {
+    const { options, store } = setup();
+    const cyclic: Record<string, unknown> = {};
+    cyclic.self = cyclic;
+    Object.assign(options.context, { cyclic });
+    expect(errorCode(await ConsensusController.create(options))).toBe('consensus-restore');
+    expect(await store.load()).toBeNull();
+  });
+
+  test('rejects a local callback that changes the certified context during reduction', async () => {
+    const { options, candidate, store, emissions } = setup();
+    const controller = await create({
+      ...options,
+      admitLocalValue() {
+        options.context.excludedProposers = [1];
+        return true;
+      },
+    });
+    expect(errorCode(await controller.dispatch({ kind: 'propose', candidate }))).toBe(
+      'consensus-context',
+    );
+    expect((await store.load())?.revision).toBe(0);
+    expect(emissions).toHaveLength(0);
+  });
+
+  test('context mutation takes precedence over a reducer rejection', async () => {
+    const { options, store, candidate } = setup();
+    const controller = await create(options);
+    const event: ConsensusEvent = {
+      kind: 'propose',
+      get candidate() {
+        options.context.excludedProposers = [1];
+        return { ...candidate, prevHash: 'f'.repeat(64) };
+      },
+    };
+    expect(errorCode(await controller.dispatch(event))).toBe('consensus-context');
+    expect((await store.load())?.revision).toBe(0);
+    expect(errorCode(await controller.dispatch({ kind: 'input-available' }))).toBe(
+      'consensus-stopped',
+    );
+  });
+
+  test('rejects a valid but different certified context at the same height', async () => {
+    const { options, store } = setup();
+    const controller = await create(options);
+    options.context.excludedProposers = [1];
+    expect(errorCode(controller.snapshot())).toBe('consensus-context');
+    expect(errorCode(await controller.dispatch({ kind: 'input-available' }))).toBe(
+      'consensus-stopped',
+    );
+    expect((await store.load())?.revision).toBe(0);
+  });
+
+  test('stops after a throwing persistence observer and rejects unknown events', async () => {
+    const { options, candidate, store } = setup();
+    const unknown = await create(options);
+    // @ts-expect-error Exercise the runtime boundary with an unknown event kind.
+    expect(errorCode(await unknown.dispatch({ kind: 'other' }))).toBe('consensus-event');
+    unknown.dispose();
+    const controller = await restore({
+      ...options,
+      store,
+      beforePersist() {
+        throw new Error('observer failed');
+      },
+    });
+    expect(errorCode(await controller.dispatch({ kind: 'propose', candidate }))).toBe(
+      'consensus-controller',
+    );
+    expect(errorCode(await controller.dispatch({ kind: 'input-available' }))).toBe(
+      'consensus-stopped',
+    );
+    expect((await store.load())?.revision).toBe(0);
+  });
+
   test('serializes concurrent dispatches without signing the same vote twice', async () => {
     const { options, candidate, emissions, store } = setup();
     const controller = await create(options);
@@ -634,6 +725,36 @@ describe('durable consensus controller', () => {
     expect(errorCode(await ConsensusController.create(options))).toBe('consensus-store-exists');
     expect((await store.load())?.bytes).toEqual(original?.bytes);
     expect((await store.load())?.revision).toBe(original?.revision);
+  });
+
+  test('callbacks cannot mutate the controller-owned safety state before or after persistence', async () => {
+    const { options, candidate, store } = setup();
+    const controller = await create({
+      ...options,
+      admitLocalValue(proposal) {
+        proposal.sig = 'forged';
+        return true;
+      },
+      beforePersist(previous, next) {
+        previous.round = 99;
+        const proposal = next.proposals[0];
+        if (proposal) proposal.sig = 'forged';
+        return { ok: true, value: undefined };
+      },
+      onEffects(effects) {
+        for (const effect of effects)
+          if (effect.kind === 'broadcast-proposal') effect.proposal.sig = 'forged';
+      },
+    });
+    expect((await controller.dispatch({ kind: 'propose', candidate })).ok).toBe(true);
+    const snapshot = controller.snapshot();
+    expect(snapshot.ok && snapshot.value.round).toBe(1);
+    expect(snapshot.ok && snapshot.value.proposals[0]?.sig).not.toBe('forged');
+    controller.dispose();
+    const resumed = await restore({ ...options, store });
+    const saved = resumed.snapshot();
+    expect(saved.ok && saved.value.proposals[0]?.sig).not.toBe('forged');
+    resumed.dispose();
   });
 
   test('corrupt local derivation stops an active controller until certified-prefix replay', async () => {

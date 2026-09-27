@@ -1,0 +1,3 @@
+b973f0e90953b0c801b73704f7778d70087a5c6dc1f69b7d766021c38081d2da  packages/protocol/src/consensus.ts
+4200ff75e34754cff6f79ac05878128eb1a5d1b933d145e2d6d79c242b93b309  packages/protocol/src/consensus-controller.ts
+6c0c65c198b1b87a7be28a8a076bb68b99b132d15046f6f5d559c78144d5fb39  packages/protocol/src/consensus-controller.test.ts
