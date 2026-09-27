@@ -29,7 +29,11 @@ import {
   MAX_RECORD_BYTES,
   openDatabase,
   strictWriteTransaction,
+  VAULT_STORE,
 } from './database.js';
+import { IndexedDbByteStore } from './indexed-db-byte-store.js';
+import { VaultRecordAccess } from './local-vault.js';
+import type { VaultOwnerLease } from './local-vault.js';
 import { acquireActiveGameWriterLease } from './game-writer.js';
 import type { GameWriterLeaseOptions } from './game-writer.js';
 import { assertOnlineGameNotDeleted } from './online-game-deletion.js';
@@ -68,6 +72,7 @@ interface ConsensusRecord {
 
 export interface IndexedDbProtocolJournalOptions {
   readonly maxRecordBytes?: number;
+  readonly vault?: VaultOwnerLease;
   /**
    * Bind a separately persisted voting-key record to this journal. The record
    * and initial journal safety data are installed in one transaction.
@@ -80,6 +85,9 @@ export class IndexedDbProtocolJournal implements ProtocolJournal {
   readonly #gameId: string;
   readonly #maxRecordBytes: number;
   readonly #keyBinding: { readonly recordKey: string; readonly bytes: Uint8Array } | undefined;
+  readonly #vault: VaultRecordAccess;
+  readonly #vaultOwner: VaultOwnerLease | undefined;
+  #storedBinding: Uint8Array | undefined;
   #databasePromise: Promise<IDBPDatabase<CP2PDatabase>> | null = null;
   #closePromise: Promise<void> | null = null;
   #closed = false;
@@ -103,6 +111,8 @@ export class IndexedDbProtocolJournal implements ProtocolJournal {
       throw new RangeError('maxRecordBytes must be between zero and 16 MiB');
     this.#gameId = gameId;
     this.#maxRecordBytes = maxRecordBytes;
+    this.#vaultOwner = options.vault;
+    this.#vault = options.vault?.access() ?? new VaultRecordAccess(true);
     this.#keyBinding = options.keyBinding
       ? copyKeyBinding(options.keyBinding, maxRecordBytes)
       : undefined;
@@ -116,11 +126,19 @@ export class IndexedDbProtocolJournal implements ProtocolJournal {
     const database = await this.#database();
     const keyBinding = this.#keyBinding;
     const stores = keyBinding
-      ? ([GAME_STORE, ENTRY_STORE, CONSENSUS_STORE, BYTE_STORE, DELETED_GAME_STORE] as const)
-      : ([GAME_STORE, ENTRY_STORE, CONSENSUS_STORE, DELETED_GAME_STORE] as const);
+      ? ([
+          GAME_STORE,
+          ENTRY_STORE,
+          CONSENSUS_STORE,
+          BYTE_STORE,
+          DELETED_GAME_STORE,
+          VAULT_STORE,
+        ] as const)
+      : ([GAME_STORE, ENTRY_STORE, CONSENSUS_STORE, DELETED_GAME_STORE, VAULT_STORE] as const);
     const transaction = database.transaction(stores, 'readonly');
     let bindingBytes: Uint8Array | undefined;
     try {
+      await this.#vault.assertGeneration(transaction.objectStore(VAULT_STORE));
       await assertOnlineGameNotDeleted(transaction, this.#gameId);
       const genesisBytes = await transaction.objectStore(GAME_STORE).get(this.#gameId);
       const consensusBytes = await transaction.objectStore(CONSENSUS_STORE).get(this.#gameId);
@@ -139,12 +157,7 @@ export class IndexedDbProtocolJournal implements ProtocolJournal {
           throw new TypeError('Voting-key binding exists without its journal');
         return null;
       }
-      if (
-        keyBinding &&
-        (bindingBytes === undefined ||
-          !matchesKeyBinding(bindingBytes, keyBinding.bytes, this.#maxRecordBytes))
-      )
-        throw new TypeError('Journal voting-key binding is missing or mismatched');
+      if (keyBinding) await this.#acceptBinding(bindingBytes);
       if (genesisBytes === undefined || consensusBytes === undefined)
         throw new TypeError('Journal metadata is incomplete');
       const genesis = decodeRecord(genesisBytes, logEntrySchema, this.#maxRecordBytes);
@@ -201,14 +214,27 @@ export class IndexedDbProtocolJournal implements ProtocolJournal {
       consensusRecordSchema,
       this.#maxRecordBytes,
     );
+    const expectedBinding = await this.#captureBinding();
+    const newBinding =
+      this.#keyBinding && !expectedBinding
+        ? await this.#vault.encode(this.#keyBinding.recordKey, this.#keyBinding.bytes)
+        : undefined;
     const database = await this.#database();
     const keyBinding = this.#keyBinding;
     const stores = keyBinding
-      ? ([GAME_STORE, ENTRY_STORE, CONSENSUS_STORE, BYTE_STORE, DELETED_GAME_STORE] as const)
-      : ([GAME_STORE, ENTRY_STORE, CONSENSUS_STORE, DELETED_GAME_STORE] as const);
+      ? ([
+          GAME_STORE,
+          ENTRY_STORE,
+          CONSENSUS_STORE,
+          BYTE_STORE,
+          DELETED_GAME_STORE,
+          VAULT_STORE,
+        ] as const)
+      : ([GAME_STORE, ENTRY_STORE, CONSENSUS_STORE, DELETED_GAME_STORE, VAULT_STORE] as const);
     const transaction = strictWriteTransaction(database, stores);
     let bindingExists: Uint8Array | undefined;
     try {
+      await this.#vault.assertGeneration(transaction.objectStore(VAULT_STORE));
       await assertOnlineGameNotDeleted(transaction, this.#gameId);
       const genesisExists = await transaction.objectStore(GAME_STORE).get(this.#gameId);
       const consensusExists = await transaction.objectStore(CONSENSUS_STORE).get(this.#gameId);
@@ -226,7 +252,8 @@ export class IndexedDbProtocolJournal implements ProtocolJournal {
         if (
           journalExists &&
           (bindingExists === undefined ||
-            !matchesKeyBinding(bindingExists, keyBinding.bytes, this.#maxRecordBytes))
+            !expectedBinding ||
+            !equalBytes(bindingExists, expectedBinding))
         )
           throw new TypeError('Existing journal voting-key binding is missing or mismatched');
       }
@@ -252,7 +279,8 @@ export class IndexedDbProtocolJournal implements ProtocolJournal {
         return false;
       }
       if (keyBinding) {
-        const bindingCopy = keyBinding.bytes.slice();
+        const bindingCopy = newBinding?.slice();
+        if (!bindingCopy) throw new TypeError('New voting-key binding was not prepared');
         try {
           await transaction.objectStore(BYTE_STORE).add(bindingCopy, keyBinding.recordKey);
         } finally {
@@ -268,6 +296,8 @@ export class IndexedDbProtocolJournal implements ProtocolJournal {
       throw error;
     } finally {
       if (bindingExists instanceof Uint8Array) bindingExists.fill(0);
+      expectedBinding?.fill(0);
+      newBinding?.fill(0);
     }
   }
 
@@ -280,11 +310,19 @@ export class IndexedDbProtocolJournal implements ProtocolJournal {
     const database = await this.#database();
     const keyBinding = this.#keyBinding;
     const stores = keyBinding
-      ? ([GAME_STORE, ENTRY_STORE, CONSENSUS_STORE, BYTE_STORE, DELETED_GAME_STORE] as const)
-      : ([CONSENSUS_STORE, DELETED_GAME_STORE] as const);
+      ? ([
+          GAME_STORE,
+          ENTRY_STORE,
+          CONSENSUS_STORE,
+          BYTE_STORE,
+          DELETED_GAME_STORE,
+          VAULT_STORE,
+        ] as const)
+      : ([CONSENSUS_STORE, DELETED_GAME_STORE, VAULT_STORE] as const);
     const transaction = database.transaction(stores, 'readonly');
     let bindingBytes: Uint8Array | undefined;
     try {
+      await this.#vault.assertGeneration(transaction.objectStore(VAULT_STORE));
       await assertOnlineGameNotDeleted(transaction, this.#gameId);
       const bytes = await transaction.objectStore(CONSENSUS_STORE).get(this.#gameId);
       const genesisBytes = keyBinding
@@ -305,8 +343,7 @@ export class IndexedDbProtocolJournal implements ProtocolJournal {
         if (!journalExists) throw new TypeError('Voting-key binding exists without its journal');
         if (genesisBytes === undefined || bytes === undefined || bindingBytes === undefined)
           throw new TypeError('Journal safety or voting-key binding is missing');
-        if (!matchesKeyBinding(bindingBytes, keyBinding.bytes, this.#maxRecordBytes))
-          throw new TypeError('Journal voting-key binding is mismatched');
+        await this.#acceptBinding(bindingBytes);
       }
       if (bytes === undefined) return null;
       const consensus = decodeRecord(bytes, consensusRecordSchema, this.#maxRecordBytes);
@@ -330,14 +367,16 @@ export class IndexedDbProtocolJournal implements ProtocolJournal {
     validateRevision(revision);
     if (revision === Number.MAX_SAFE_INTEGER) return false;
     const safety = copyBytes(bytes, this.#maxRecordBytes);
+    const expectedBinding = await this.#captureBinding();
     const database = await this.#database();
     const keyBinding = this.#keyBinding;
     const stores = keyBinding
-      ? ([CONSENSUS_STORE, BYTE_STORE, DELETED_GAME_STORE] as const)
-      : ([CONSENSUS_STORE, DELETED_GAME_STORE] as const);
+      ? ([CONSENSUS_STORE, BYTE_STORE, DELETED_GAME_STORE, VAULT_STORE] as const)
+      : ([CONSENSUS_STORE, DELETED_GAME_STORE, VAULT_STORE] as const);
     const transaction = strictWriteTransaction(database, stores);
     let bindingBytes: Uint8Array | undefined;
     try {
+      await this.#vault.assertGeneration(transaction.objectStore(VAULT_STORE));
       await assertOnlineGameNotDeleted(transaction, this.#gameId);
       const currentBytes = await transaction.objectStore(CONSENSUS_STORE).get(this.#gameId);
       if (currentBytes === undefined) {
@@ -348,7 +387,8 @@ export class IndexedDbProtocolJournal implements ProtocolJournal {
         bindingBytes = await transaction.objectStore(BYTE_STORE).get(keyBinding.recordKey);
         if (
           bindingBytes === undefined ||
-          !matchesKeyBinding(bindingBytes, keyBinding.bytes, this.#maxRecordBytes)
+          !expectedBinding ||
+          !equalBytes(bindingBytes, expectedBinding)
         )
           throw new TypeError('Journal voting-key binding is missing or mismatched');
       }
@@ -370,6 +410,7 @@ export class IndexedDbProtocolJournal implements ProtocolJournal {
       throw error;
     } finally {
       if (bindingBytes instanceof Uint8Array) bindingBytes.fill(0);
+      expectedBinding?.fill(0);
     }
   }
 
@@ -400,14 +441,23 @@ export class IndexedDbProtocolJournal implements ProtocolJournal {
       consensusRecordSchema,
       this.#maxRecordBytes,
     );
+    const expectedBinding = await this.#captureBinding();
     const database = await this.#database();
     const keyBinding = this.#keyBinding;
     const stores = keyBinding
-      ? ([GAME_STORE, ENTRY_STORE, CONSENSUS_STORE, BYTE_STORE, DELETED_GAME_STORE] as const)
-      : ([GAME_STORE, ENTRY_STORE, CONSENSUS_STORE, DELETED_GAME_STORE] as const);
+      ? ([
+          GAME_STORE,
+          ENTRY_STORE,
+          CONSENSUS_STORE,
+          BYTE_STORE,
+          DELETED_GAME_STORE,
+          VAULT_STORE,
+        ] as const)
+      : ([GAME_STORE, ENTRY_STORE, CONSENSUS_STORE, DELETED_GAME_STORE, VAULT_STORE] as const);
     const transaction = strictWriteTransaction(database, stores);
     let bindingBytes: Uint8Array | undefined;
     try {
+      await this.#vault.assertGeneration(transaction.objectStore(VAULT_STORE));
       await assertOnlineGameNotDeleted(transaction, this.#gameId);
       const consensusBytes = await transaction.objectStore(CONSENSUS_STORE).get(this.#gameId);
       if (consensusBytes === undefined) {
@@ -418,7 +468,8 @@ export class IndexedDbProtocolJournal implements ProtocolJournal {
         bindingBytes = await transaction.objectStore(BYTE_STORE).get(keyBinding.recordKey);
         if (
           bindingBytes === undefined ||
-          !matchesKeyBinding(bindingBytes, keyBinding.bytes, this.#maxRecordBytes)
+          !expectedBinding ||
+          !equalBytes(bindingBytes, expectedBinding)
         )
           throw new TypeError('Journal voting-key binding is missing or mismatched');
       }
@@ -441,6 +492,7 @@ export class IndexedDbProtocolJournal implements ProtocolJournal {
       throw error;
     } finally {
       if (bindingBytes instanceof Uint8Array) bindingBytes.fill(0);
+      expectedBinding?.fill(0);
     }
   }
 
@@ -479,12 +531,20 @@ export class IndexedDbProtocolJournal implements ProtocolJournal {
   async #promoteTransfer(options: TransferPromotionOptions): Promise<boolean> {
     const keyBinding = this.#keyBinding;
     if (!keyBinding) throw new TypeError('Transfer promotion requires a destination key binding');
-    const stagedStore = new TransferImportStore();
+    const stagedStore = new TransferImportStore(this.#newByteStore());
     let staged: Awaited<ReturnType<TransferImportStore['load']>> = null;
     let readiness: Awaited<ReturnType<TransferImportStore['loadReadiness']>> = null;
+    let storedStage: Uint8Array | undefined;
+    let storedReadiness: Uint8Array | undefined;
+    let storedOldBinding: Uint8Array | undefined;
+    let storedNewBinding: Uint8Array | undefined;
     try {
-      staged = await stagedStore.load(options.stageKey);
-      readiness = await stagedStore.loadReadiness(options.stageKey);
+      const stagePinned = await stagedStore.loadPinned(options.stageKey);
+      const readinessPinned = await stagedStore.loadReadinessPinned(options.stageKey);
+      staged = stagePinned?.record ?? null;
+      readiness = readinessPinned?.record ?? null;
+      storedStage = stagePinned?.stored;
+      storedReadiness = readinessPinned?.stored;
       if (!staged || !readiness || staged.gameId !== this.#gameId)
         throw new TypeError('Transfer import or durable readiness is missing');
       const authorization = staged.authorization;
@@ -604,6 +664,24 @@ export class IndexedDbProtocolJournal implements ProtocolJournal {
         )
           throw new TypeError('Existing binding belongs to a different device or seat');
       }
+      storedNewBinding = await this.#vault.encode(keyBinding.recordKey, keyBinding.bytes);
+      if (oldBinding) {
+        const oldStore = this.#newByteStore();
+        try {
+          const pinned = await oldStore.loadPinned(keyBinding.recordKey);
+          if (!pinned) throw new TypeError('Existing active binding is missing');
+          try {
+            if (!equalBytes(pinned.plain, oldBinding))
+              throw new TypeError('Existing active binding differs from the expected controller');
+            storedOldBinding = pinned.stored.slice();
+          } finally {
+            pinned.plain.fill(0);
+            pinned.stored.fill(0);
+          }
+        } finally {
+          await oldStore.close();
+        }
+      }
       const database = await this.#database();
       const transaction = strictWriteTransaction(database, [
         GAME_STORE,
@@ -611,10 +689,12 @@ export class IndexedDbProtocolJournal implements ProtocolJournal {
         CONSENSUS_STORE,
         DELETED_GAME_STORE,
         BYTE_STORE,
+        VAULT_STORE,
       ]);
-      let storedStage: Uint8Array | undefined;
-      let storedCheck: Uint8Array | undefined;
+      let transactionStage: Uint8Array | undefined;
+      let transactionCheck: Uint8Array | undefined;
       try {
+        await this.#vault.assertGeneration(transaction.objectStore(VAULT_STORE));
         await assertOnlineGameNotDeleted(transaction, this.#gameId);
         const bytes = transaction.objectStore(BYTE_STORE);
         const finalKey = transferImportFinalKey(staged);
@@ -623,16 +703,14 @@ export class IndexedDbProtocolJournal implements ProtocolJournal {
           if (priorFinal instanceof Uint8Array) priorFinal.fill(0);
           throw new TypeError('Transfer authorization was already finalized locally');
         }
-        storedStage = await bytes.get(options.stageKey);
-        storedCheck = await bytes.get(readinessKey(options.stageKey));
-        const stagedBytes = canonicalEncode(staged);
-        const readinessBytes = canonicalEncode(readiness);
-        const stageMatches = Boolean(storedStage && equalBytes(storedStage, stagedBytes));
-        stagedBytes.fill(0);
-        storedStage?.fill(0);
-        const checkMatches = Boolean(storedCheck && equalBytes(storedCheck, readinessBytes));
-        readinessBytes.fill(0);
-        storedCheck?.fill(0);
+        transactionStage = await bytes.get(options.stageKey);
+        transactionCheck = await bytes.get(readinessKey(options.stageKey));
+        const stageMatches = Boolean(
+          transactionStage && storedStage && equalBytes(transactionStage, storedStage),
+        );
+        const checkMatches = Boolean(
+          transactionCheck && storedReadiness && equalBytes(transactionCheck, storedReadiness),
+        );
         if (!stageMatches || !checkMatches)
           throw new TypeError('Transfer import changed during promotion');
         const games = transaction.objectStore(GAME_STORE);
@@ -644,7 +722,8 @@ export class IndexedDbProtocolJournal implements ProtocolJournal {
         const bindingMatches = Boolean(
           existingBinding &&
           options.expectedActive &&
-          equalBytes(existingBinding, options.expectedActive.bindingBytes),
+          storedOldBinding &&
+          equalBytes(existingBinding, storedOldBinding),
         );
         existingBinding?.fill(0);
         const range = IDBKeyRange.bound([this.#gameId, 0], [this.#gameId, Number.MAX_SAFE_INTEGER]);
@@ -729,7 +808,7 @@ export class IndexedDbProtocolJournal implements ProtocolJournal {
           }
         }
         await consensus.put(nextConsensus, this.#gameId);
-        const bindingCopy = keyBinding.bytes.slice();
+        const bindingCopy = storedNewBinding.slice();
         try {
           await bytes.put(bindingCopy, keyBinding.recordKey);
         } finally {
@@ -760,11 +839,15 @@ export class IndexedDbProtocolJournal implements ProtocolJournal {
         await transaction.done.catch(() => undefined);
         throw error;
       } finally {
-        if (storedStage instanceof Uint8Array) storedStage.fill(0);
-        if (storedCheck instanceof Uint8Array) storedCheck.fill(0);
+        transactionStage?.fill(0);
+        transactionCheck?.fill(0);
       }
     } finally {
       if (staged) wipeDecodedBytes(staged);
+      storedStage?.fill(0);
+      storedReadiness?.fill(0);
+      storedOldBinding?.fill(0);
+      storedNewBinding?.fill(0);
       await stagedStore.close();
     }
   }
@@ -788,24 +871,74 @@ export class IndexedDbProtocolJournal implements ProtocolJournal {
       if (pending) (await pending).close();
     } finally {
       this.#keyBinding?.bytes.fill(0);
+      this.#storedBinding?.fill(0);
+      if (!this.#vaultOwner) this.#vault.close();
     }
+  }
+
+  async #acceptBinding(stored: Uint8Array | undefined): Promise<void> {
+    const binding = this.#keyBinding;
+    if (!binding || !stored)
+      throw new TypeError('Journal voting-key binding is missing or mismatched');
+    const plain = await this.#vault.decode(binding.recordKey, stored);
+    try {
+      if (!equalBytes(plain, binding.bytes))
+        throw new TypeError('Journal voting-key binding is missing or mismatched');
+      this.#storedBinding?.fill(0);
+      this.#storedBinding = stored.slice();
+    } finally {
+      plain.fill(0);
+    }
+  }
+
+  async #captureBinding(): Promise<Uint8Array | null> {
+    const binding = this.#keyBinding;
+    if (!binding) return null;
+    if (this.#storedBinding) return this.#storedBinding.slice();
+    const store = this.#newByteStore();
+    try {
+      const pinned = await store.loadPinned(binding.recordKey);
+      if (!pinned) return null;
+      try {
+        if (!equalBytes(pinned.plain, binding.bytes))
+          throw new TypeError('Journal voting-key binding is missing or mismatched');
+        this.#storedBinding = pinned.stored.slice();
+        return pinned.stored.slice();
+      } finally {
+        pinned.plain.fill(0);
+        pinned.stored.fill(0);
+      }
+    } finally {
+      await store.close();
+    }
+  }
+
+  #newByteStore(): IndexedDbByteStore {
+    return this.#vaultOwner
+      ? new IndexedDbByteStore({ vault: this.#vaultOwner })
+      : new IndexedDbByteStore();
   }
 
   #database(): Promise<IDBPDatabase<CP2PDatabase>> {
     if (this.#closed) return Promise.reject(new Error('Journal is closed'));
     if (this.#databasePromise) return this.#databasePromise;
     let opening: Promise<IDBPDatabase<CP2PDatabase>>;
-    opening = openDatabase(
-      () => {
+    opening = this.#vault
+      .pin()
+      .then(() =>
+        openDatabase(
+          () => {
+            if (this.#databasePromise === opening) this.#databasePromise = null;
+          },
+          () => {
+            if (this.#databasePromise === opening) this.#databasePromise = null;
+          },
+        ),
+      )
+      .catch((error: unknown) => {
         if (this.#databasePromise === opening) this.#databasePromise = null;
-      },
-      () => {
-        if (this.#databasePromise === opening) this.#databasePromise = null;
-      },
-    ).catch((error: unknown) => {
-      if (this.#databasePromise === opening) this.#databasePromise = null;
-      throw error;
-    });
+        throw error;
+      });
     this.#databasePromise = opening;
     return opening;
   }
@@ -1005,12 +1138,6 @@ function copyKeyBinding(
   if (!(value.bytes instanceof Uint8Array) || value.bytes.byteLength > maxBytes)
     throw new RangeError('Journal voting-key record must be a bounded Uint8Array');
   return { recordKey: value.recordKey, bytes: new Uint8Array(value.bytes) };
-}
-
-function matchesKeyBinding(value: unknown, expected: Uint8Array, maxBytes: number): boolean {
-  if (!(value instanceof Uint8Array) || value.byteLength > maxBytes)
-    throw new TypeError('Stored journal voting-key binding is malformed or oversized');
-  return equalBytes(value, expected);
 }
 
 function validateHeight(height: number): void {

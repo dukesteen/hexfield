@@ -1,6 +1,14 @@
 import type { IDBPDatabase } from 'idb';
-import { BYTE_STORE, MAX_RECORD_BYTES, openDatabase, strictWriteTransaction } from './database.js';
+import {
+  BYTE_STORE,
+  MAX_RECORD_BYTES,
+  openDatabase,
+  strictWriteTransaction,
+  VAULT_STORE,
+} from './database.js';
 import type { CP2PDatabase } from './database.js';
+import { MAX_VAULT_STORED_BYTES, VaultError, VaultRecordAccess } from './local-vault.js';
+import type { VaultOwnerLease } from './local-vault.js';
 
 const MAX_KEY_LENGTH = 512;
 const KEY_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:/-]*$/;
@@ -13,6 +21,8 @@ export interface IndexedDbByteStoreOptions {
   readonly maxRecordBytes?: number;
   /** Override only for tests; production uses same-origin Web Locks. */
   readonly lockProvider?: CeremonyLockProvider;
+  /** A lifetime owner lease acquired before ceremony or game-writer locks. */
+  readonly vault?: VaultOwnerLease;
 }
 
 /**
@@ -23,11 +33,13 @@ export interface IndexedDbByteStoreOptions {
 export class IndexedDbByteStore {
   readonly #maxRecordBytes: number;
   readonly #lockProvider: CeremonyLockProvider | undefined;
+  readonly #vault: VaultRecordAccess;
   #databasePromise: Promise<IDBPDatabase<CP2PDatabase>> | null = null;
 
   constructor(options: IndexedDbByteStoreOptions = {}) {
     this.#maxRecordBytes = options.maxRecordBytes ?? MAX_RECORD_BYTES;
     this.#lockProvider = options.lockProvider;
+    this.#vault = options.vault?.access() ?? new VaultRecordAccess(true);
     if (
       !Number.isSafeInteger(this.#maxRecordBytes) ||
       this.#maxRecordBytes < 0 ||
@@ -40,21 +52,46 @@ export class IndexedDbByteStore {
     return this.#maxRecordBytes;
   }
 
+  /** Internal direct-IDB callers share the same pinned generation and record codec. */
+  recordAccess(): VaultRecordAccess {
+    return this.#vault;
+  }
+
   async load(id: string): Promise<Uint8Array | null> {
+    const captured = await this.loadPinned(id);
+    if (!captured) return null;
+    captured.stored.fill(0);
+    return captured.plain;
+  }
+
+  /** Returns detached plaintext plus the exact stored bytes needed for transaction CAS. */
+  async loadPinned(id: string): Promise<{ plain: Uint8Array; stored: Uint8Array } | null> {
     const key = validateKey(id);
+    await this.#vault.pin();
     const database = await this.#database();
-    const transaction = database.transaction(BYTE_STORE, 'readonly');
+    const transaction = database.transaction([BYTE_STORE, VAULT_STORE], 'readonly');
     let value: Uint8Array | undefined;
     try {
-      value = await transaction.store.get(key);
+      await this.#vault.assertGeneration(transaction.objectStore(VAULT_STORE));
+      value = await transaction.objectStore(BYTE_STORE).get(key);
       await transaction.done;
     } catch (error) {
       await transaction.done.catch(() => undefined);
       throw error;
     }
-    if (value === undefined) return null;
+    if (value === undefined) {
+      if (key === 'online-credentials/device-identity/v1' && this.#vault.hasMetadata)
+        throw new VaultError('identity-missing', 'Reserved device identity is missing');
+      return null;
+    }
     try {
-      return validateStoredBytes(value, this.#maxRecordBytes).slice();
+      validateStoredBytes(value, MAX_VAULT_STORED_BYTES);
+      const plain = await this.#vault.decode(key, value);
+      if (plain.length > this.#maxRecordBytes) {
+        plain.fill(0);
+        throw new TypeError('Stored IndexedDB record is malformed or oversized');
+      }
+      return { plain, stored: value.slice() };
     } finally {
       if (value instanceof Uint8Array) value.fill(0);
     }
@@ -63,22 +100,27 @@ export class IndexedDbByteStore {
   async putIfAbsent(id: string, bytes: Uint8Array): Promise<boolean> {
     const key = validateKey(id);
     const value = copyBytes(bytes, this.#maxRecordBytes);
+    let stored: Uint8Array | undefined;
     try {
+      stored = await this.#vault.encode(key, value);
       const database = await this.#database();
-      const transaction = strictWriteTransaction(database, [BYTE_STORE]);
+      const transaction = strictWriteTransaction(database, [BYTE_STORE, VAULT_STORE]);
       try {
+        await this.#vault.assertGeneration(transaction.objectStore(VAULT_STORE));
         const store = transaction.objectStore(BYTE_STORE);
         const existing = await store.get(key);
         if (existing !== undefined) {
           await transaction.done;
           try {
-            validateStoredBytes(existing, this.#maxRecordBytes);
+            validateStoredBytes(existing, MAX_VAULT_STORED_BYTES);
           } finally {
             if (existing instanceof Uint8Array) existing.fill(0);
           }
           return false;
         }
-        await store.add(value, key);
+        if (key === 'online-credentials/device-identity/v1' && this.#vault.hasMetadata)
+          throw new VaultError('identity-missing', 'Reserved device identity is missing');
+        await store.add(stored, key);
         await transaction.done;
         return true;
       } catch (error) {
@@ -87,6 +129,7 @@ export class IndexedDbByteStore {
       }
     } finally {
       value.fill(0);
+      stored?.fill(0);
     }
   }
 
@@ -105,23 +148,29 @@ export class IndexedDbByteStore {
       expectedCopy.fill(0);
       throw error;
     }
+    let pinned: { plain: Uint8Array; stored: Uint8Array } | null = null;
+    let storedReplacement: Uint8Array | undefined;
     try {
+      pinned = await this.loadPinned(key);
+      if (!pinned || !equalBytes(pinned.plain, expectedCopy)) return false;
+      storedReplacement = await this.#vault.encode(key, replacementCopy);
       const database = await this.#database();
-      const transaction = strictWriteTransaction(database, [BYTE_STORE]);
+      const transaction = strictWriteTransaction(database, [BYTE_STORE, VAULT_STORE]);
       let existing: Uint8Array | undefined;
       try {
+        await this.#vault.assertGeneration(transaction.objectStore(VAULT_STORE));
         const store = transaction.objectStore(BYTE_STORE);
         existing = await store.get(key);
         if (existing === undefined) {
           await transaction.done;
           return false;
         }
-        const current = validateStoredBytes(existing, this.#maxRecordBytes);
-        if (!equalBytes(current, expectedCopy)) {
+        const current = validateStoredBytes(existing, MAX_VAULT_STORED_BYTES);
+        if (!equalBytes(current, pinned.stored)) {
           await transaction.done;
           return false;
         }
-        await store.put(replacementCopy, key);
+        await store.put(storedReplacement, key);
         await transaction.done;
         return true;
       } catch (error) {
@@ -133,6 +182,9 @@ export class IndexedDbByteStore {
     } finally {
       expectedCopy.fill(0);
       replacementCopy.fill(0);
+      pinned?.plain.fill(0);
+      pinned?.stored.fill(0);
+      storedReplacement?.fill(0);
     }
   }
 

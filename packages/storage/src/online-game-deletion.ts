@@ -11,11 +11,14 @@ import {
   ENTRY_STORE,
   GAME_STORE,
   SNAPSHOT_STORE,
+  VAULT_STORE,
   openDatabase,
   strictWriteTransaction,
 } from './database.js';
 import { acquireActiveGameWriterLease } from './game-writer.js';
 import type { GameWriterLockManager } from './game-writer.js';
+import { withExclusiveVault } from './local-vault.js';
+import type { VaultRecordAccess } from './local-vault.js';
 
 const GAME_ID = /^[A-Za-z0-9_-]{22}$/;
 const DIGEST = /^[A-Za-z0-9_-]{43}$/;
@@ -49,10 +52,17 @@ const catalogueSchema = v.strictObject({
 });
 type DeletionTransaction = IDBPTransaction<
   CP2PDatabase,
-  readonly ['deletedGames', 'games', 'entries', 'consensus', 'bytes', 'snapshots'],
+  readonly ['deletedGames', 'games', 'entries', 'consensus', 'bytes', 'snapshots', 'vault'],
   'readwrite'
 >;
-type CP2PStoreName = 'bytes' | 'games' | 'entries' | 'consensus' | 'deletedGames' | 'snapshots';
+type CP2PStoreName =
+  | 'bytes'
+  | 'games'
+  | 'entries'
+  | 'consensus'
+  | 'deletedGames'
+  | 'snapshots'
+  | 'vault';
 
 export interface OnlineGameTombstone {
   readonly protocol: typeof TOMBSTONE_PROTOCOL;
@@ -125,6 +135,18 @@ export async function deleteOnlineGameData(
 ): Promise<DeleteOnlineGameDataResult> {
   validateGameId(gameId);
   if (!DIGEST.test(expectedGenesisDigest)) throw new TypeError('Invalid online game digest');
+  const result = await withExclusiveVault(
+    () => deleteUnderVaultLock(gameId, expectedGenesisDigest, options),
+    options.lockManager,
+  );
+  return result ?? 'busy';
+}
+
+async function deleteUnderVaultLock(
+  gameId: string,
+  expectedGenesisDigest: string,
+  options: DeleteOnlineGameDataOptions,
+): Promise<DeleteOnlineGameDataResult> {
   const lease = await acquireActiveGameWriterLease(
     gameId,
     options.lockManager ? { lockManager: options.lockManager } : {},
@@ -143,7 +165,12 @@ export async function deleteOnlineGameData(
   try {
     return await byteStore.withCeremonyLock('online-games/catalogue-lock-v1', () =>
       lease.run(() =>
-        deleteTransaction(gameId, expectedGenesisDigest, options.now?.() ?? Date.now()),
+        deleteTransaction(
+          gameId,
+          expectedGenesisDigest,
+          options.now?.() ?? Date.now(),
+          byteStore.recordAccess(),
+        ),
       ),
     );
   } finally {
@@ -159,9 +186,11 @@ async function deleteTransaction(
   gameId: string,
   expectedGenesisDigest: string,
   deletedAt: number,
+  vault: VaultRecordAccess,
 ): Promise<DeleteOnlineGameDataResult> {
   if (!Number.isSafeInteger(deletedAt) || deletedAt < 0)
     throw new RangeError('Deletion time is invalid');
+  await vault.pin();
   const database = await openDatabase(
     () => undefined,
     () => undefined,
@@ -173,6 +202,7 @@ async function deleteTransaction(
     CONSENSUS_STORE,
     BYTE_STORE,
     SNAPSHOT_STORE,
+    VAULT_STORE,
   ]);
   let markerBytes: Uint8Array | undefined;
   let startBytes: Uint8Array | undefined;
@@ -180,6 +210,7 @@ async function deleteTransaction(
   let genesisBytes: Uint8Array | undefined;
   let catalogueBytes: Uint8Array | undefined;
   try {
+    await vault.assertGeneration(transaction.objectStore(VAULT_STORE));
     const deletedStore = transaction.objectStore(DELETED_GAME_STORE);
     const bytes = transaction.objectStore(BYTE_STORE);
     markerBytes = await deletedStore.get(gameId);

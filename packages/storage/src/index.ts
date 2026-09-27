@@ -3,6 +3,13 @@ export const PACKAGE_NAME = '@cp2p/storage';
 export { IndexedDbByteStore } from './indexed-db-byte-store.js';
 export type { CeremonyLockProvider, IndexedDbByteStoreOptions } from './indexed-db-byte-store.js';
 export {
+  acquireVaultOwner,
+  migrateLocalVault,
+  VaultError,
+  VaultOwnerLease,
+} from './local-vault.js';
+export type { VaultKeyHandoff, VaultMigrationOptions, VaultOwnerOptions } from './local-vault.js';
+export {
   decodeOnlineGameTombstone,
   deleteOnlineGameData,
   onlineGameTombstoneKey,

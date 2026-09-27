@@ -43,7 +43,9 @@ import { afterEach, expect, test, vi } from 'vitest';
 import { acquireActiveGameWriterLease } from './game-writer.js';
 import { IndexedDbByteStore } from './indexed-db-byte-store.js';
 import { IndexedDbProtocolJournal } from './indexed-db-protocol-journal.js';
+import { acquireVaultOwner, migrateLocalVault } from './local-vault.js';
 import { TransferImportStore, transferImportFinalKey } from './transfer-import-store.js';
+import type { TransferReadinessRecord } from './transfer-import-store.js';
 
 class TestLocks implements Pick<LockManager, 'request'> {
   readonly held = new Set<string>();
@@ -374,6 +376,93 @@ test('durable pending import remains inert until exact certified activation prom
   ).rejects.toThrow(/finalized/);
   await journal.close();
   await store.close();
+}, 30_000);
+
+test('vault-protected transfer promotes ciphertext binding and survives safety write and key rotation', async () => {
+  installFactory();
+  const data = verifiedTransfer();
+  const gameId = data.fixture.genesis.gameId;
+  const recordKey = `online-game/${genesisDigest(data.fixture.genesis)}/keys`;
+  const locks = new TestLocks();
+  const seed = new IndexedDbByteStore();
+  await seed.putIfAbsent('online-credentials/device-identity/v1', Uint8Array.of(1, 2, 3));
+  await seed.close();
+  await migrateLocalVault({ newPassphrase: 'first vault passphrase', lockManager: locks });
+  const owner = await acquireVaultOwner({
+    passphrase: 'first vault passphrase',
+    lockManager: locks,
+  });
+  const bytes = new IndexedDbByteStore({ vault: owner });
+  const stage = new TransferImportStore(bytes);
+  const stageInput = {
+    gameId,
+    authorization: data.authorizationRef,
+    destinationGameKey: data.game.peerId,
+    bindingBytes: data.bindingBytes,
+    sealedPackage: Uint8Array.of(1),
+    privateReplayBytes: Uint8Array.of(2),
+    genesis: data.fixture.genesisEntry,
+    entries: data.entries,
+  };
+  const stageKey = await stage.stage(stageInput, data.fixture.source.engine, data.fixture.policy);
+  expect(await stage.stage(stageInput, data.fixture.source.engine, data.fixture.policy)).toBe(
+    stageKey,
+  );
+  const readiness: TransferReadinessRecord = {
+    protocol: 'seat-transfer-readiness-v1',
+    statement: data.activationStatement,
+    destinationCheck: data.destinationCheck,
+    replacementChecks: [],
+  };
+  await stage.saveReadiness(stageKey, readiness);
+  await stage.saveReadiness(stageKey, readiness);
+  const rawStage = await openDB('cp2p');
+  expect((await rawStage.get('bytes', stageKey))?.subarray(0, 4)).toEqual(
+    Uint8Array.of(0x56, 0x4c, 0x54, 0x31),
+  );
+  rawStage.close();
+  const journal = new IndexedDbProtocolJournal(gameId, {
+    vault: owner,
+    keyBinding: { recordKey, bytes: data.bindingBytes },
+  });
+  expect(
+    await journal.promoteTransfer({
+      stageKey,
+      activation: data.activationCertificate,
+      engine: data.fixture.source.engine,
+      policy: data.fixture.policy,
+      expectedActive: null,
+      leaseOptions: { lockManager: locks },
+    }),
+  ).toBe(true);
+  const installed = await openDB('cp2p');
+  expect((await installed.get('bytes', recordKey))?.subarray(0, 4)).toEqual(
+    Uint8Array.of(0x56, 0x4c, 0x54, 0x31),
+  );
+  installed.close();
+  const loaded = await journal.load();
+  if (!loaded) throw new Error('Promoted vault journal is absent');
+  expect(await journal.saveSafety(loaded.height, 0, loaded.safety.bytes)).toBe(true);
+  await journal.close();
+  await stage.close();
+  await owner.close();
+
+  await migrateLocalVault({
+    oldPassphrase: 'first vault passphrase',
+    newPassphrase: 'second vault passphrase',
+    lockManager: locks,
+  });
+  const rotated = await acquireVaultOwner({
+    passphrase: 'second vault passphrase',
+    lockManager: locks,
+  });
+  const reopened = new IndexedDbProtocolJournal(gameId, {
+    vault: rotated,
+    keyBinding: { recordKey, bytes: data.bindingBytes },
+  });
+  expect((await reopened.load())?.safety).toMatchObject({ revision: 1 });
+  await reopened.close();
+  await rotated.close();
 }, 30_000);
 
 test('stale activation, conflicting immutable staging and partial destination journal fail closed', async () => {

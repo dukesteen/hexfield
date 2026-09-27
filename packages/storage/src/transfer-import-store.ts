@@ -15,6 +15,7 @@ import {
   MAX_RECORD_BYTES,
   openDatabase,
   strictWriteTransaction,
+  VAULT_STORE,
 } from './database.js';
 import { assertOnlineGameNotDeleted } from './online-game-deletion.js';
 import { IndexedDbByteStore } from './indexed-db-byte-store.js';
@@ -151,36 +152,57 @@ export class TransferImportStore {
         seat.master.fill(0);
       }
       const key = transferImportKey(checked);
-      const database = await openDatabase(
-        () => undefined,
-        () => undefined,
-      );
+      const access = this.#bytes.recordAccess();
+      const prior = await this.#bytes.loadPinned(key);
+      let stored: Uint8Array | undefined;
       try {
-        const transaction = strictWriteTransaction(database, [BYTE_STORE, DELETED_GAME_STORE]);
+        if (prior && !equalBytes(prior.plain, bytes))
+          throw new TypeError('Transfer import already exists with different bytes');
+        stored = await access.encode(key, bytes);
+        const database = await openDatabase(
+          () => undefined,
+          () => undefined,
+        );
         try {
-          await assertOnlineGameNotDeleted(transaction, checked.gameId);
-          const store = transaction.objectStore(BYTE_STORE);
-          const final = await store.get(transferImportFinalKey(checked));
-          if (final !== undefined) {
-            final.fill(0);
-            throw new TypeError('Transfer authorization is already finalized locally');
-          }
-          const existing = await store.get(key);
+          const transaction = strictWriteTransaction(database, [
+            BYTE_STORE,
+            DELETED_GAME_STORE,
+            VAULT_STORE,
+          ]);
           try {
-            if (existing === undefined) await store.add(bytes, key);
-            else if (!equalBytes(existing, bytes))
-              throw new TypeError('Transfer import already exists with different bytes');
-          } finally {
-            existing?.fill(0);
+            await access.assertGeneration(transaction.objectStore(VAULT_STORE));
+            await assertOnlineGameNotDeleted(transaction, checked.gameId);
+            const store = transaction.objectStore(BYTE_STORE);
+            const final = await store.get(transferImportFinalKey(checked));
+            if (final !== undefined) {
+              final.fill(0);
+              throw new TypeError('Transfer authorization is already finalized locally');
+            }
+            const existing = await store.get(key);
+            try {
+              if (existing === undefined && !prior) await store.add(stored, key);
+              else if (!existing || !prior || !equalBytes(existing, prior.stored))
+                throw new TypeError('Transfer import already exists with different bytes');
+            } finally {
+              existing?.fill(0);
+            }
+            await transaction.done;
+          } catch (error) {
+            try {
+              transaction.abort();
+            } catch {
+              // A failed commit may have already closed the transaction.
+            }
+            await transaction.done.catch(() => undefined);
+            throw error;
           }
-          await transaction.done;
-        } catch (error) {
-          transaction.abort();
-          await transaction.done.catch(() => undefined);
-          throw error;
+        } finally {
+          database.close();
         }
       } finally {
-        database.close();
+        prior?.plain.fill(0);
+        prior?.stored.fill(0);
+        stored?.fill(0);
       }
       return key;
     } finally {
@@ -189,8 +211,19 @@ export class TransferImportStore {
   }
 
   async load(key: string): Promise<TransferImportRecord | null> {
-    const bytes = await this.#bytes.load(key);
-    if (!bytes) return null;
+    const pinned = await this.loadPinned(key);
+    if (!pinned) return null;
+    pinned.stored.fill(0);
+    return pinned.record;
+  }
+
+  /** Exact ciphertext is retained for a later stage/readiness promotion CAS. */
+  async loadPinned(
+    key: string,
+  ): Promise<{ record: TransferImportRecord; stored: Uint8Array } | null> {
+    const pinned = await this.#bytes.loadPinned(key);
+    if (!pinned) return null;
+    const bytes = pinned.plain;
     let decoded: unknown;
     let accepted = false;
     try {
@@ -204,17 +237,19 @@ export class TransferImportStore {
         throw new TypeError('Stored transfer import is noncanonical or misplaced');
       }
       accepted = true;
-      return parsed;
+      return { record: parsed, stored: pinned.stored };
     } finally {
       if (!accepted) wipeByteArrays(decoded);
+      if (!accepted) pinned.stored.fill(0);
       bytes.fill(0);
     }
   }
 
   /** Prepared only after the full import is durable; retries use the exact same bytes. */
   async saveReadiness(key: string, readiness: TransferReadinessRecord): Promise<void> {
-    const stage = await this.load(key);
-    if (!stage) throw new TypeError('Transfer import is absent');
+    const pinnedStage = await this.loadPinned(key);
+    if (!pinnedStage) throw new TypeError('Transfer import is absent');
+    const stage = pinnedStage.record;
     try {
       const checked = v.parse(readinessSchema, readiness);
       if (
@@ -229,70 +264,104 @@ export class TransferImportStore {
       try {
         if (bytes.byteLength > this.#bytes.maxRecordBytes)
           throw new RangeError('Transfer readiness exceeds the durable record limit');
-        const database = await openDatabase(
-          () => undefined,
-          () => undefined,
-        );
+        const access = this.#bytes.recordAccess();
+        const slot = readinessKey(key);
+        const prior = await this.#bytes.loadPinned(slot);
+        let stored: Uint8Array | undefined;
         try {
-          const transaction = strictWriteTransaction(database, [BYTE_STORE, DELETED_GAME_STORE]);
+          if (prior && !equalBytes(prior.plain, bytes))
+            throw new TypeError('A different readiness packet is already durable');
+          stored = await access.encode(slot, bytes);
+          const database = await openDatabase(
+            () => undefined,
+            () => undefined,
+          );
           try {
-            await assertOnlineGameNotDeleted(transaction, stage.gameId);
-            const store = transaction.objectStore(BYTE_STORE);
-            const final = await store.get(transferImportFinalKey(stage));
-            if (final !== undefined) {
-              final.fill(0);
-              throw new TypeError('Transfer authorization is already finalized locally');
-            }
-            const storedStage = await store.get(key);
-            const stageBytes = canonicalEncode(stage);
+            const transaction = strictWriteTransaction(database, [
+              BYTE_STORE,
+              DELETED_GAME_STORE,
+              VAULT_STORE,
+            ]);
             try {
-              if (!storedStage || !equalBytes(storedStage, stageBytes))
-                throw new TypeError('Transfer import changed before readiness');
-            } finally {
-              stageBytes.fill(0);
-              storedStage?.fill(0);
+              await access.assertGeneration(transaction.objectStore(VAULT_STORE));
+              await assertOnlineGameNotDeleted(transaction, stage.gameId);
+              const store = transaction.objectStore(BYTE_STORE);
+              const final = await store.get(transferImportFinalKey(stage));
+              if (final !== undefined) {
+                final.fill(0);
+                throw new TypeError('Transfer authorization is already finalized locally');
+              }
+              const storedStage = await store.get(key);
+              try {
+                if (!storedStage || !equalBytes(storedStage, pinnedStage.stored))
+                  throw new TypeError('Transfer import changed before readiness');
+              } finally {
+                storedStage?.fill(0);
+              }
+              const previous = await store.get(slot);
+              try {
+                if (previous === undefined && !prior) await store.add(stored, slot);
+                else if (!previous || !prior || !equalBytes(previous, prior.stored))
+                  throw new TypeError('A different readiness packet is already durable');
+              } finally {
+                previous?.fill(0);
+              }
+              await transaction.done;
+            } catch (error) {
+              try {
+                transaction.abort();
+              } catch {
+                // A failed commit may have already closed the transaction.
+              }
+              await transaction.done.catch(() => undefined);
+              throw error;
             }
-            const slot = readinessKey(key);
-            const previous = await store.get(slot);
-            try {
-              if (previous === undefined) await store.add(bytes, slot);
-              else if (!equalBytes(previous, bytes))
-                throw new TypeError('A different readiness packet is already durable');
-            } finally {
-              previous?.fill(0);
-            }
-            await transaction.done;
-          } catch (error) {
-            transaction.abort();
-            await transaction.done.catch(() => undefined);
-            throw error;
+          } finally {
+            database.close();
           }
         } finally {
-          database.close();
+          prior?.plain.fill(0);
+          prior?.stored.fill(0);
+          stored?.fill(0);
         }
       } finally {
         bytes.fill(0);
       }
     } finally {
       wipeByteArrays(stage);
+      pinnedStage.stored.fill(0);
     }
   }
 
   async loadReadiness(key: string): Promise<TransferReadinessRecord | null> {
-    const bytes = await this.#bytes.load(readinessKey(key));
-    if (!bytes) return null;
+    const pinned = await this.loadReadinessPinned(key);
+    if (!pinned) return null;
+    pinned.stored.fill(0);
+    return pinned.record;
+  }
+
+  async loadReadinessPinned(
+    key: string,
+  ): Promise<{ record: TransferReadinessRecord; stored: Uint8Array } | null> {
+    const pinned = await this.#bytes.loadPinned(readinessKey(key));
+    if (!pinned) return null;
+    const bytes = pinned.plain;
+    let accepted = false;
     try {
       const parsed = v.parse(readinessSchema, canonicalDecode(bytes));
       const canonical = canonicalEncode(parsed);
       try {
         if (!equalBytes(canonical, bytes))
           throw new TypeError('Stored transfer readiness is noncanonical');
-        return parsed;
+        accepted = true;
+        return { record: parsed, stored: pinned.stored };
       } finally {
         canonical.fill(0);
       }
     } finally {
+      // The record owns only its parsed immutable strings; no private byte fields.
       bytes.fill(0);
+      if (!accepted) pinned.stored.fill(0);
     }
   }
 
@@ -374,13 +443,19 @@ export class TransferImportStore {
       marker.fill(0);
       throw new RangeError('Transfer outcome exceeds the durable record limit');
     }
+    await this.#bytes.recordAccess().pin();
     const database = await openDatabase(
       () => undefined,
       () => undefined,
     );
     try {
-      const transaction = strictWriteTransaction(database, [BYTE_STORE, DELETED_GAME_STORE]);
+      const transaction = strictWriteTransaction(database, [
+        BYTE_STORE,
+        DELETED_GAME_STORE,
+        VAULT_STORE,
+      ]);
       try {
+        await this.#bytes.recordAccess().assertGeneration(transaction.objectStore(VAULT_STORE));
         await assertOnlineGameNotDeleted(transaction, input.gameId);
         const store = transaction.objectStore(BYTE_STORE);
         const existing = await store.get(finalKey);
@@ -394,7 +469,11 @@ export class TransferImportStore {
         await deleteAuthorizationStages(store, input.gameId, input.authorization.hash);
         await transaction.done;
       } catch (error) {
-        transaction.abort();
+        try {
+          transaction.abort();
+        } catch {
+          // A failed commit may have already closed the transaction.
+        }
         await transaction.done.catch(() => undefined);
         throw error;
       }

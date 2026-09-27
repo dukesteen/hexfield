@@ -14,6 +14,7 @@ import {
 import { openDB } from 'idb';
 import { afterEach, expect, test, vi } from 'vitest';
 import { IndexedDbByteStore } from './indexed-db-byte-store.js';
+import { acquireVaultOwner, migrateLocalVault } from './local-vault.js';
 import { IndexedDbProtocolJournal } from './indexed-db-protocol-journal.js';
 import { deleteOnlineGameData, readOnlineGameTombstone } from './online-game-deletion.js';
 
@@ -182,6 +183,41 @@ test('v3 migration preserves v2 bytes and creates an empty tombstone store', asy
   expect(await upgraded.get('deletedGames', 'any')).toBeUndefined();
   upgraded.close();
   expect(factory).toBeDefined();
+});
+
+test('locked deletion keeps the public tombstone and identity while removing encrypted game keys', async () => {
+  installFactory();
+  const locks = new TestLocks();
+  const clear = byteStoreWithLocks(locks);
+  const data = await seedGame(clear);
+  await clear.close();
+  await migrateLocalVault({ newPassphrase: 'deletion passphrase', lockManager: locks });
+  const liveOwner = await acquireVaultOwner({
+    passphrase: 'deletion passphrase',
+    lockManager: locks,
+  });
+  expect(
+    await deleteOnlineGameData(data.gameId, data.digest, {
+      lockManager: locks,
+      now: () => 1234,
+    }),
+  ).toBe('busy');
+  await liveOwner.close();
+  expect(
+    await deleteOnlineGameData(data.gameId, data.digest, {
+      lockManager: locks,
+      now: () => 1234,
+    }),
+  ).toBe('deleted');
+  expect(await readOnlineGameTombstone(data.gameId)).toMatchObject({ deletedAt: 1234 });
+  const owner = await acquireVaultOwner({ passphrase: 'deletion passphrase', lockManager: locks });
+  const protectedStore = new IndexedDbByteStore({ vault: owner });
+  expect(await protectedStore.load(`online-game/${data.digest}/keys`)).toBeNull();
+  expect(await protectedStore.load('online-credentials/device-identity/v1')).toEqual(
+    Uint8Array.of(1, 2, 3),
+  );
+  await protectedStore.close();
+  await owner.close();
 });
 
 test('deletion atomically removes known game records but retains identity, escrow registry, and tombstone', async () => {

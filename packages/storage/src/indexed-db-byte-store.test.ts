@@ -130,7 +130,7 @@ describe('IndexedDbByteStore', () => {
     const store = new IndexedDbByteStore();
     await store.putIfAbsent('settings/value', new Uint8Array([3]));
 
-    const upgraded = await openDB<FutureDatabase>('cp2p', 5, {
+    const upgraded = await openDB<FutureDatabase>('cp2p', 6, {
       upgrade(database) {
         database.createObjectStore('future');
       },
@@ -164,6 +164,7 @@ describe('IndexedDbByteStore', () => {
       'entries',
       'games',
       'snapshots',
+      'vault',
     ]);
     expect(await upgraded.get('bytes', 'settings/value')).toEqual(new Uint8Array([5, 6, 7]));
     upgraded.close();
