@@ -8,6 +8,7 @@ import {
   invertScalar,
   modScalar,
   scalarToBytes,
+  scalePublicPoint,
   scalePoint,
 } from './group.js';
 import { proofChallenge, proofNonce, readProofArray, readProofRecord } from './proof-transcript.js';
@@ -36,6 +37,16 @@ export interface PreparedRangeProof {
 }
 
 const MAX_RANGE_BITS = 16;
+const inverseWeights = new Map<number, bigint>();
+
+function inverseLastWeight(bits: number): bigint {
+  let inverse = inverseWeights.get(bits);
+  if (inverse === undefined) {
+    inverse = invertScalar(1n << BigInt(bits - 1));
+    inverseWeights.set(bits, inverse);
+  }
+  return inverse;
+}
 
 /** Allows field values, including zero. Counts used in range proofs have narrower bounds. */
 export function pedersenCommit(value: bigint, blinding: bigint): string {
@@ -75,6 +86,7 @@ function readBitProof(value: unknown): BitProof {
 export function inspectBitProof(
   commitment: string,
   proof: unknown,
+  scale: typeof scalePoint = scalePoint,
 ): { challenge: bigint; announcements: BitAnnouncements } {
   const parsed = readBitProof(proof);
   const target = decodePoint(readEncoded(commitment));
@@ -85,8 +97,8 @@ export function inspectBitProof(
   return {
     challenge: modScalar(e0 + e1),
     announcements: [
-      encodePoint(scalePoint(H, z0).subtract(scalePoint(target, e0))),
-      encodePoint(scalePoint(H, z1).subtract(scalePoint(target.subtract(G), e1))),
+      encodePoint(scale(H, z0).subtract(scale(target, e0))),
+      encodePoint(scale(H, z1).subtract(scale(target.subtract(G), e1))),
     ],
   };
 }
@@ -192,7 +204,7 @@ function prepareRange(
     const weight = 1n << BigInt(index);
     const blind =
       index === parsed.bits - 1
-        ? modScalar((blinding - weightedBlinding) * invertScalar(weight))
+        ? modScalar((blinding - weightedBlinding) * inverseLastWeight(parsed.bits))
         : proofNonce(seed, 'range', context, parsed, ['bit-blinding', index]);
     weightedBlinding = modScalar(weightedBlinding + weight * blind);
     const bit = (value >> BigInt(index)) & 1n;
@@ -242,12 +254,15 @@ export function simulateRangeProof(
     const weight = 1n << BigInt(index);
     const point =
       index === parsed.bits - 1
-        ? scalePoint(decodePoint(parsed.commitment).subtract(weighted), invertScalar(weight))
+        ? scalePublicPoint(
+            decodePoint(parsed.commitment).subtract(weighted),
+            inverseLastWeight(parsed.bits),
+          )
         : scalePoint(
             H,
             proofNonce(seed, 'range-simulation', context, parsed, ['commitment', index]),
           );
-    weighted = weighted.add(scalePoint(point, weight));
+    weighted = weighted.add(scalePublicPoint(point, weight));
     commitments.push(encodePoint(point));
   }
   const proofs = commitments.map((_, index): BitProof => {
@@ -267,6 +282,7 @@ export function simulateRangeProof(
 export function inspectRangeProof(
   statement: RangeStatement,
   proof: unknown,
+  scale: typeof scalePoint = scalePoint,
 ): {
   challenge: bigint;
   commitments: readonly string[];
@@ -279,8 +295,8 @@ export function inspectRangeProof(
   let weighted = scalePoint(G, 0n);
   let challenge: bigint | undefined;
   const announcements = commitments.map((commitment, index) => {
-    weighted = weighted.add(scalePoint(decodePoint(commitment), 1n << BigInt(index)));
-    const inspected = inspectBitProof(commitment, proofs[index]);
+    weighted = weighted.add(scale(decodePoint(commitment), 1n << BigInt(index)));
+    const inspected = inspectBitProof(commitment, proofs[index], scale);
     if (challenge !== undefined && challenge !== inspected.challenge)
       throw new TypeError('Range bit proofs must share one challenge.');
     challenge = inspected.challenge;
@@ -313,7 +329,7 @@ export function proveRange(
 export function verifyRange(statement: RangeStatement, proof: unknown, context: unknown): boolean {
   try {
     const parsed = readStatement(statement);
-    const inspected = inspectRangeProof(parsed, proof);
+    const inspected = inspectRangeProof(parsed, proof, scalePublicPoint);
     return (
       inspected.challenge ===
       proofChallenge('range', context, parsed, {

@@ -19,6 +19,7 @@ import {
   pointToBytes,
   scalarFromBytes,
   scalarToBytes,
+  scalePublicPoint,
   scalePoint,
 } from './group.js';
 
@@ -159,5 +160,14 @@ describe('Ristretto255 scalar field', () => {
     expect(scalePoint(H, 0n).is0()).toBe(true);
     expect(() => invertScalar(0n)).toThrow(/nonzero/);
     expect(() => scalePoint(G, SCALAR_ORDER)).toThrow(/canonical/);
+  });
+
+  test('public proof scalar multiplication matches the secret-safe path', () => {
+    const variablePoint = G.add(scalePoint(H, 17n));
+    for (const point of [variablePoint, H, scalePoint(G, 0n)])
+      for (const scalar of [0n, 1n, 2n, 31n, SCALAR_ORDER - 1n])
+        expect(scalePublicPoint(point, scalar).equals(scalePoint(point, scalar))).toBe(true);
+    expect(() => scalePublicPoint(variablePoint, SCALAR_ORDER)).toThrow(/canonical/);
+    expect(() => scalePublicPoint(variablePoint, -1n)).toThrow(/canonical/);
   });
 });

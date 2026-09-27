@@ -1,0 +1,11 @@
+# Public-arithmetic review disposition
+
+The [pinned source review](step5-public-arithmetic-review-raw.md) found a timing leak in the first patch: the CDS prover inspected seven simulated branches and skipped the secret known branch. Variable-time arithmetic on their disclosed scalars made the set of inspected branches observable through total proving time. The concern was valid even though a practical single-trace attack was not demonstrated.
+
+The inspectors now default to secret-safe multiplication. The prover uses that default when it inspects its simulated branches. Public verification explicitly opts into variable-time multiplication and inspects every branch. Fixed range weights and the cached public inverse remain unchanged. The proof encoding and transcript did not change; the pinned proof digest and 49 focused crypto tests pass.
+
+The review's other points were checked against source callers. The only production CDS prover call of these inspectors is the corrected `proveCdsOr` path; standalone and protocol callers use verification without secret-selected branch subsets. The group test now compares both arithmetic paths on an uncached point, precomputed H, and identity, including zero. The installed Noble version is 2.4.0; a dependency upgrade should receive the same constant-time call-path review. The unchanged standalone Schnorr and DLEQ verification paths remain outside this bounded optimization.
+
+The original headless A/B timing predates the side-channel fix and is retained as diagnostic evidence only. Final-source timing is recorded in the [performance note](step5-public-arithmetic-performance.md).
+
+The [post-fix source review](step5-public-arithmetic-followup-raw.md), pinned by its [hash manifest](step5-public-arithmetic-followup-manifest.sha256), confirms the secret-selected inspection path is fixed and found no transcript or proof-soundness change. It identified a separate, pre-existing zero-value timing leak: `scalePoint` returns immediately for scalar zero, and hidden count/bit commitments can call it with zero. This patch did not introduce that branch. It remains an open privacy hardening task; the measured speed result is not a claim that the whole prover is constant time. The codec rejects noncanonical base64url trailing bits by re-encoding decoded bytes in `fromBase64UrlInternal`.

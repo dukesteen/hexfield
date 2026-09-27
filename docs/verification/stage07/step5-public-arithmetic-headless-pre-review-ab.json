@@ -1,0 +1,56 @@
+{
+  "baseline": {
+    "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.0.0 Safari/537.36",
+    "types": 8,
+    "samples": [
+      {
+        "sample": 1,
+        "proveMs": 167.30000019073486,
+        "verifyMs": 70.29999995231628,
+        "totalMs": 237.60000014305115,
+        "valid": true
+      },
+      {
+        "sample": 2,
+        "proveMs": 149.39999985694885,
+        "verifyMs": 70.20000004768372,
+        "totalMs": 219.59999990463257,
+        "valid": true
+      },
+      {
+        "sample": 3,
+        "proveMs": 140.79999995231628,
+        "verifyMs": 65.60000014305115,
+        "totalMs": 206.40000009536743,
+        "valid": true
+      }
+    ]
+  },
+  "optimized": {
+    "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.0.0 Safari/537.36",
+    "types": 8,
+    "samples": [
+      {
+        "sample": 1,
+        "proveMs": 129.29999995231628,
+        "verifyMs": 50.200000047683716,
+        "totalMs": 179.5,
+        "valid": true
+      },
+      {
+        "sample": 2,
+        "proveMs": 120.29999995231628,
+        "verifyMs": 51.60000014305115,
+        "totalMs": 171.90000009536743,
+        "valid": true
+      },
+      {
+        "sample": 3,
+        "proveMs": 123.79999995231628,
+        "verifyMs": 51.09999990463257,
+        "totalMs": 174.89999985694885,
+        "valid": true
+      }
+    ]
+  }
+}

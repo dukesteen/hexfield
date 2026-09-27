@@ -1,5 +1,5 @@
 import { DERIVATION_LABELS, deriveBytes } from './derivation.js';
-import { decodeScalar, encodeScalar, modScalar } from './group.js';
+import { decodeScalar, encodeScalar, modScalar, scalePublicPoint, scalePoint } from './group.js';
 import { proofChallenge, proofNonce, readProofArray, readProofRecord } from './proof-transcript.js';
 import { inspectRangeProof, prepareRangeProof, simulateRangeProof } from './range.js';
 import type { RangeProof, RangeStatement } from './range.js';
@@ -55,14 +55,18 @@ function readStatement(value: CdsOrStatement): CdsOrStatement {
   return { branches };
 }
 
-function inspectBranch(statement: CdsBranchStatement, value: unknown) {
+function inspectBranch(
+  statement: CdsBranchStatement,
+  value: unknown,
+  scale: typeof scalePoint = scalePoint,
+) {
   const record = readProofRecord(value, ['challenge', 'opening', 'ranges']);
   if (typeof record.challenge !== 'string') throw new TypeError('CDS challenge must be encoded.');
   const challenge = decodeScalar(record.challenge);
-  const opening = inspectSchnorrProof(statement.opening, record.opening, challenge);
+  const opening = inspectSchnorrProof(statement.opening, record.opening, challenge, scale);
   const proofs = readProofArray(record.ranges, statement.ranges.length);
   const ranges = statement.ranges.map((range, index) => {
-    const inspected = inspectRangeProof(range, proofs[index]);
+    const inspected = inspectRangeProof(range, proofs[index], scale);
     if (inspected.challenge !== challenge)
       throw new TypeError('CDS range must share the branch challenge.');
     return { commitments: inspected.commitments, announcements: inspected.announcements };
@@ -118,6 +122,7 @@ export function proveCdsOr(
           }),
         ),
       };
+      // Proving skips the secret known branch; the default inspection stays secret-safe.
       return { ...inspectBranch(branch, proof), respond: () => proof };
     }
     if (witness.ranges.length !== branch.ranges.length)
@@ -169,7 +174,9 @@ export function verifyCdsOr(statement: CdsOrStatement, proof: unknown, context: 
     const parsed = readStatement(statement);
     const record = readProofRecord(proof, ['branches']);
     const proofs = readProofArray(record.branches, parsed.branches.length);
-    const inspected = parsed.branches.map((branch, index) => inspectBranch(branch, proofs[index]));
+    const inspected = parsed.branches.map((branch, index) =>
+      inspectBranch(branch, proofs[index], scalePublicPoint),
+    );
     const sum = inspected.reduce((total, branch) => modScalar(total + branch.challenge), 0n);
     return (
       sum ===

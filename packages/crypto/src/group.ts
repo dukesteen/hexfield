@@ -102,3 +102,11 @@ export function scalePoint(point: RistrettoPoint, scalar: bigint): RistrettoPoin
   if (scalar === 0n || point.is0()) return ristretto255.Point.ZERO;
   return point.multiply(scalar);
 }
+
+/** Variable-time multiplication only when scalar and call selection are public. */
+export function scalePublicPoint(point: RistrettoPoint, scalar: bigint): RistrettoPoint {
+  if (!(point instanceof ristretto255.Point)) throw new TypeError('Ristretto point required.');
+  if (typeof scalar !== 'bigint' || scalar < 0n || scalar >= SCALAR_ORDER)
+    throw new RangeError('Scalar multiplier must be canonical.');
+  return point.multiplyUnsafe(scalar);
+}

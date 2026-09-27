@@ -176,6 +176,7 @@ export function inspectSchnorrProof(
   statement: SchnorrStatement,
   proof: unknown,
   challenge: bigint,
+  scale: typeof scalePoint = scalePoint,
 ): string {
   canonicalSecret(challenge);
   const { base, point } = schnorrStatement(statement);
@@ -184,7 +185,7 @@ export function inspectSchnorrProof(
     throw new TypeError('Schnorr proof must contain encoded group elements.');
   const commitment = decodePoint(record.commitment);
   const response = decodeScalar(record.response);
-  if (!scalePoint(base, response).equals(commitment.add(scalePoint(point, challenge))))
+  if (!scale(base, response).equals(commitment.add(scale(point, challenge))))
     throw new TypeError('Schnorr proof does not share the enclosing challenge.');
   return record.commitment;
 }
