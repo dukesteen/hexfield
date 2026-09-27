@@ -42,6 +42,7 @@ import {
 } from './testing/recovery-fixture.js';
 import type { RecoveryFixture } from './testing/recovery-fixture.js';
 import type { ProposalContext } from './proposal.js';
+import { PROTOCOL_VERSION } from './types.js';
 
 function value<T>(result: Result<T>): T {
   if (!result.ok) throw new Error(`${result.error.code}: ${result.error.message}`);
@@ -377,10 +378,10 @@ test('live authorization reserves a fresh key; exact-parent readiness activates 
 test('certifies transfer with the old quorum, replays new authority, and retires the old key', () => {
   const fixture = createRecoveryFixture();
   const before = fixture.ready;
-  expect(fixture.genesis.protocolVersion).toBe(5);
+  expect(fixture.genesis.protocolVersion).toBe(PROTOCOL_VERSION);
   expect(
     validateGenesis(
-      { ...fixture.genesis, protocolVersion: 4 },
+      { ...fixture.genesis, protocolVersion: PROTOCOL_VERSION - 1 },
       fixture.source.engine,
       fixture.policy.genesis,
     ),

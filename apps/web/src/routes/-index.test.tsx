@@ -19,6 +19,9 @@ const { useSettings, useSavedGames, useResumableGames } = vi.hoisted(() => ({
 }));
 
 vi.mock('../queries/hooks.js', () => ({ useSettings, useSavedGames }));
+vi.mock('../queries/online-vault.js', () => ({
+  useOnlineVault: () => ({ data: { mode: 'clear', state: 'ready', generation: 0 } }),
+}));
 vi.mock('../queries/online-games.js', () => ({
   useResumableGames,
   useDeleteOnlineGame: () => ({ isPending: false }),

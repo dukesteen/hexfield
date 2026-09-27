@@ -25,6 +25,9 @@ vi.mock('../../queries/online-public-replays.js', () => ({
   }),
 }));
 vi.mock('../../queries/hooks.js', () => ({ useSettings: () => ({ data: undefined }) }));
+vi.mock('../../queries/online-vault.js', () => ({
+  useOnlineVault: () => ({ data: { mode: 'clear', state: 'ready', generation: 0 } }),
+}));
 vi.mock('../../features/game/use-appearance.js', () => ({
   useBoardAppearance: () => ({ appearance: { theme: 'light', players: [] }, reducedMotion: true }),
 }));

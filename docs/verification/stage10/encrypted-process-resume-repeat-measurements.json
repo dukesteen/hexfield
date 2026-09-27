@@ -1,0 +1,54 @@
+{
+  "gameId": "Albeqv5XFVm7Y2IIOYXbYL",
+  "encrypted": true,
+  "refreshedTransportRole": "higher-ID responder",
+  "savedHead": {
+    "hash": "06e40334929077c923d2e0318857f75a0e47514017b8658b7a7791bbd3827390",
+    "seq": 9
+  },
+  "finalHead": {
+    "hash": "8ef09ade0f7008f7bb645bd4270ba6680a179d9544a06815e553534e605ee0aa",
+    "seq": 10
+  },
+  "terminal": {
+    "moves": 141,
+    "head": {
+      "hash": "4c0ad9e556d77ef2c1bedb388e12a61ae9ce1c3412b15a4a5d742474c6757abc",
+      "seq": 174
+    },
+    "result": {
+      "atTurn": 20,
+      "reason": "public-vp",
+      "winner": 0
+    },
+    "audit": {
+      "kind": "complete",
+      "report": {
+        "auditError": null,
+        "cheatFindings": [],
+        "complete": true,
+        "finalHead": {
+          "hash": "4c0ad9e556d77ef2c1bedb388e12a61ae9ce1c3412b15a4a5d742474c6757abc",
+          "seq": 174
+        },
+        "finalHiddenVictoryPoints": {
+          "0": 0,
+          "1": 0
+        },
+        "historyError": null,
+        "inputErrors": [],
+        "missingSeats": [],
+        "ok": true,
+        "terminal": {
+          "hash": "4c0ad9e556d77ef2c1bedb388e12a61ae9ce1c3412b15a4a5d742474c6757abc",
+          "seq": 174
+        },
+        "violations": []
+      }
+    }
+  },
+  "restartScope": "two independent Chrome processes with persistent disk profiles",
+  "refreshToRestoredMs": 2651.41,
+  "refreshToPeerAcceptedMoveMs": 2796.292708000001,
+  "withinThreeSecondTarget": true
+}

@@ -53,3 +53,11 @@ CI=1 CP2P_ONLINE_RESUME_E2E=1 CP2P_ENCRYPTED_RESUME_E2E=1 CP2P_SNAPSHOT_RESUME_E
 Web/test typechecking and scoped lint passed in the isolated checkout. Browser
 profiles were removed after their processes closed. Recorded JSON contains
 public hashes and audit results, without keys or private hands.
+
+A later repeat against the same isolated source completed the refresh, whole-
+process restart, game, independent audits and history checks again. It restored
+the local head in 2,651 ms and confirmed the next move on the peer in 2,796 ms;
+see the [repeat measurements](encrypted-process-resume-repeat-measurements.json).
+This sample meets three seconds, while the earlier 3,149/3,157 ms samples do not.
+The measurements establish variability near the target, not a consistent latency
+guarantee or mobile-network result.

@@ -25,6 +25,9 @@ vi.mock('../../queries/online-full-saves.js', () => ({
   }),
 }));
 vi.mock('../../queries/hooks.js', () => ({ useSettings: () => ({ data: undefined }) }));
+vi.mock('../../queries/online-vault.js', () => ({
+  useOnlineVault: () => ({ data: { mode: 'clear', state: 'ready', generation: 0 } }),
+}));
 vi.mock('../../features/game/use-appearance.js', () => ({
   useBoardAppearance: () => ({ appearance: { theme: 'light', players: [] }, reducedMotion: true }),
 }));
@@ -52,6 +55,8 @@ test('imported save displays a paused board and does not expose game controls', 
   expect(screen.getByText('lobby:fullSavePrivateLocked')).toBeTruthy();
   expect(screen.getByText('lobby:publicReplayHead')).toBeTruthy();
   expect(screen.getByRole('group', { name: 'full-save board' })).toBeTruthy();
-  expect(screen.queryByRole('button')).toBeNull();
+  const continuation = screen.getByRole('button', { name: 'lobby:importTransferContinue' });
+  expect(continuation.hasAttribute('disabled')).toBe(true);
+  expect(screen.getAllByRole('button')).toEqual([continuation]);
   queryClient.clear();
 });
