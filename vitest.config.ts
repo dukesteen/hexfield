@@ -18,6 +18,7 @@ export default defineConfig({
     exclude: ['**/node_modules/**', '**/dist/**', '**/tests/**'],
     coverage: {
       provider: 'v8',
+      // CI runs the full suite uninstrumented and applies its coverage gate to engine tests only.
       reporter: ['text', 'html', 'lcov'],
       include: [
         'packages/*/src/**/*.{ts,tsx}',

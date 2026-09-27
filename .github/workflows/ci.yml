@@ -47,7 +47,8 @@ jobs:
       - run: pnpm purity:check
       - run: pnpm i18n:check
       - run: pnpm build
-      - run: pnpm test:coverage
+      - run: pnpm test
+      - run: pnpm test:coverage:engine
       - run: pnpm exec playwright install --with-deps ${{ github.event_name == 'pull_request' && 'chromium' || 'chromium firefox webkit' }}
         if: github.event_name != 'workflow_dispatch' || !inputs.skip_e2e
       - run: pnpm test:e2e

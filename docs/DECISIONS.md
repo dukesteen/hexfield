@@ -472,3 +472,9 @@ Record decisions here as they are made. Keep earlier entries.
 - Decision: The game journal atomically binds voting-key material and checks the binding on writes as well as reads. Closing its instance drains pending work, wipes its cloned binding and prevents reuse; restoration creates a new instance.
 - Decision: An authenticated setup disclosure after consent stops game output, including an already-open board. Preserve the public history and the irreversible consent record. Do not retry with the disclosed keys or treat the event as a return to the pre-consent lobby.
 - Boundary: The [foundation review disposition](verification/stage09/startup-foundation-review-disposition.md) records focused fixes and their tests. The first complete recovered-game/audit evidence predates v2; it does not establish current-v2 acceptance. Browser resume, public network deployment and remaining stage acceptance remain unfinished.
+
+## 2026-09-27: Keep full functional tests separate from engine coverage
+
+- Decision: Run the complete Vitest workspace once without coverage instrumentation in CI. Run V8 coverage separately against the engine Vitest project and only `packages/engine/src`, retaining the existing 90% line and 85% branch thresholds. This keeps protocol and crypto functionality in the full test gate without instrumenting their expensive proof tests for coverage.
+- Decision: Keep `pnpm test:coverage` as the all-source local report command; add `pnpm test:coverage:engine` for the bounded CI threshold gate. `pnpm check` still includes the complete functional suite once, and `pnpm run ci` uses the same static, build, functional, focused-coverage and browser phases as the workflow.
+- Evidence: `pnpm test:coverage:engine` passed 25 files and 180 tests; engine coverage was 98.29% lines and 86.6% branches, above the required thresholds. The targeted run took about 14 seconds on the local host. The full suite was not run for this change.
