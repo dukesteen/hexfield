@@ -1,7 +1,7 @@
 import { canonicalEncode, fromBase64Url, hashValue, toBase64Url, toHex } from '@cp2p/codec';
 import { createHashChain, signObject } from '@cp2p/crypto';
 import { BASE_VERSION, failure, success } from '@cp2p/engine';
-import type { Result } from '@cp2p/engine';
+import type { Result, Seat } from '@cp2p/engine';
 import { describe, expect, test, vi } from 'vitest';
 import {
   MemoryBeaconContributionStore,
@@ -65,9 +65,11 @@ function policyFor(): ReplayPolicy {
     entry: {
       // Setup and roll commands are public; the engine still checks their exact legality.
       verifyCommand: (signed) =>
-        ['PLACE_SETTLEMENT', 'PLACE_ROAD', 'ROLL_DICE'].includes(signed.body.command.type)
+        ['PLACE_SETTLEMENT', 'PLACE_ROAD', 'ROLL_DICE', 'OFFER_TRADE'].includes(
+          signed.body.command.type,
+        )
           ? success(undefined)
-          : failure('fixture-command', 'This fixture only drives public setup and roll commands'),
+          : failure('fixture-command', 'This fixture only drives its public test commands'),
     },
   };
 }
@@ -302,6 +304,7 @@ async function playSetupThroughRoll(
   replica: ReplicatedLog,
   clock: VirtualClock,
   fixture: ReturnType<typeof verifiedFixture>,
+  consensusReplicas: readonly ReplicatedLog[] = [replica],
 ): Promise<void> {
   for (let step = 0; step < 32; step += 1) {
     const context = replica.getContext();
@@ -336,7 +339,7 @@ async function playSetupThroughRoll(
       return undefined;
     });
     // oxlint-disable-next-line no-await-in-loop -- Each legal command depends on the preceding certified head.
-    await settle([replica], clock);
+    await settle(consensusReplicas, clock);
     if (resolved === null)
       throw new Error(`Legal ${command.type} did not commit at setup step ${step}`);
     value(resolved);
@@ -590,6 +593,208 @@ describe('verified beacon contribution replication', () => {
     for (const replica of replicas) replica.dispose();
     network.dispose();
   }, 30_000);
+
+  test('early signed timeout cannot decline an unanswered trade at a verified replica', async () => {
+    const fixture = verifiedFixture(2, 2, 5);
+    const peers = fixture.humans.map(
+      (seat) => required(fixture.simulation.identities.get(seat.seat)).peerId,
+    );
+    const network = createMemnet({ peers });
+    const sent: ProtocolMessage[][] = fixture.humans.map(() => []);
+    const transports = peers.map((peer, index) =>
+      observe(network.transport(peer), required(sent[index])),
+    );
+    const journals = fixture.humans.map(() => new MemoryProtocolJournal());
+    const stores = fixture.humans.map(() => new MemoryBeaconContributionStore());
+    const replicas: ReplicatedLog[] = [];
+    let timeoutTarget: { seat: Seat; phase: string } | null = null;
+    const systemInput: NonNullable<ReplicatedLogOptions['systemInput']> = (candidateContext) => {
+      if (!timeoutTarget) return null;
+      const anchor = candidateContext.log.timers?.find(
+        (item) => item.seat === timeoutTarget?.seat && item.phase === timeoutTarget.phase,
+      );
+      if (!anchor) return null;
+      return {
+        input: { kind: 'system', type: 'TIMEOUT', seat: timeoutTarget.seat, phase: anchor.phase },
+        evidence: {
+          kind: 'proof',
+          protocol: TURN_TIMEOUT_PROTOCOL,
+          data: { pendingSince: anchor.pendingSince.seq, deadlineMs: anchor.deadlineMs },
+        },
+      };
+    };
+    try {
+      replicas.push(
+        value(
+          await ReplicatedLog.create({
+            ...optionsFor(
+              fixture,
+              0,
+              required(transports[0]),
+              network.clock,
+              required(journals[0]),
+              required(stores[0]),
+            ),
+            systemInput,
+          }),
+        ),
+      );
+      await settle(replicas, network.clock);
+      const second = value(
+        await ReplicatedLog.create({
+          ...optionsFor(
+            fixture,
+            1,
+            required(transports[1]),
+            network.clock,
+            required(journals[1]),
+            required(stores[1]),
+          ),
+          systemInput,
+        }),
+      );
+      replicas.push(second);
+      deliverFirstProposal(required(peers[0]), required(transports[1]), required(sent[0]));
+      await settle(replicas, network.clock);
+      const first = required(replicas[0]);
+      await playSetupThroughRoll(first, network.clock, fixture, replicas);
+      await settle(replicas, network.clock);
+
+      let context = first.getContext();
+      const active = context.log.state.turn.activeSeat;
+      if (context.log.state.turn.phase.at(-1)?.id !== 'main')
+        throw new Error('Deterministic fixture roll did not enter the main phase');
+      const recipient = fixture.humans.find((item) => item.seat !== active);
+      if (!recipient) throw new Error('No other human trade responder');
+      const resourceKinds = ['brick', 'lumber', 'wool', 'grain', 'ore'] as const;
+      const activeState = context.log.state.seats.find((item) => item.seat === active);
+      if (!activeState) throw new Error('Missing active player');
+      const give = resourceKinds.find((kind) => activeState.resources.min[kind] > 0);
+      const want = resourceKinds.find((kind) => kind !== give);
+      if (!give || !want) throw new Error('Fixture active player has no tradeable resource');
+      const command = {
+        type: 'OFFER_TRADE' as const,
+        give: { [give]: 1 },
+        want: { [want]: 1 },
+        to: [recipient.seat],
+      };
+      const activeIdentity = fixture.simulation.identities.get(active);
+      if (!activeIdentity) throw new Error('Missing active player signing key');
+      const signed = signCommand(
+        {
+          gameId: context.log.genesis.gameId,
+          genesisDigest: context.membership.genesisDigest,
+          seat: active,
+          nonce: (context.log.lastNonces.get(active) ?? 0) + 1,
+          headSeq: context.log.head.seq,
+          headHash: entryHash(context.log.head),
+          command,
+        },
+        activeIdentity.secretKey,
+      );
+      const submission: { result: Result<void> | null } = { result: null };
+      void first.submit(signed).then((result) => {
+        submission.result = result;
+        return undefined;
+      });
+      await settle(replicas, network.clock);
+      const offered = submission.result;
+      if (offered === null) throw new Error('Signed trade offer did not commit');
+      expect(offered.ok).toBe(true);
+      context = first.getContext();
+      const height = context.log.head.seq + 1;
+      const elected = proposerFor(height, 1, context.membership, context.excludedProposers);
+      const anchor = context.log.timers?.find(
+        (item) => item.seat === recipient.seat && item.phase === 'main',
+      );
+      if (!anchor) throw new Error('Certified trade offer has no response timer');
+      expect(anchor.deadlineMs).toBe(5_000);
+      timeoutTarget = { seat: recipient.seat, phase: 'main' };
+      const input = {
+        kind: 'system' as const,
+        type: 'TIMEOUT' as const,
+        seat: recipient.seat,
+        phase: 'main',
+      };
+      const applied = value(fixture.simulation.engine.apply(context.log.state, input));
+      const signerPosition = peers.indexOf(elected.publicKey);
+      const targetPosition = signerPosition === 0 ? 1 : 0;
+      if (signerPosition < 0 || targetPosition >= peers.length)
+        throw new Error('Trade timeout signer has no other human replica');
+      const signer = fixture.simulation.identities.get(elected.seat);
+      if (!signer) throw new Error('Missing elected signer key');
+      const timeoutEntry = signEntry(
+        {
+          seq: context.log.head.seq + 1,
+          term: 1,
+          prevHash: entryHash(context.log.head),
+          payload: {
+            kind: 'system',
+            input,
+            evidence: {
+              kind: 'proof',
+              protocol: TURN_TIMEOUT_PROTOCOL,
+              data: { pendingSince: anchor.pendingSince.seq, deadlineMs: anchor.deadlineMs },
+            },
+          },
+          stateHash: toHex(hashValue(applied.state)),
+          sequencer: elected.publicKey,
+        },
+        signer.secretKey,
+      );
+      const proposal = signProposal(
+        {
+          genesisDigest: context.membership.genesisDigest,
+          epoch: context.membership.epoch,
+          entry: timeoutEntry,
+          validRound: null,
+          prevotes: [],
+        },
+        signer.secretKey,
+      );
+      const safetyBefore = await required(journals[targetPosition]).loadSafety(timeoutEntry.seq);
+      const wireProposal = value(
+        decodeProtocolMessage(value(encodeProtocolMessage({ t: 'PROPOSAL', proposal }))),
+      );
+      required(transports[targetPosition]).inject(elected.publicKey, wireProposal);
+      await settle(replicas, network.clock);
+      expect(await required(journals[targetPosition]).loadSafety(timeoutEntry.seq)).toEqual(
+        safetyBefore,
+      );
+      expect(required(replicas[targetPosition]).getContext().log.head.seq).toBe(
+        context.log.head.seq,
+      );
+
+      // Verified replicas may begin voting inside the last 3 seconds of the
+      // response window to tolerate clock skew. Check refusal well before that
+      // admission window, then prove this exact proposal succeeds afterward.
+      network.clock.advanceBy(1_000);
+      await settle(replicas, network.clock);
+      expect(await required(journals[targetPosition]).loadSafety(timeoutEntry.seq)).toEqual(
+        safetyBefore,
+      );
+      expect(required(replicas[targetPosition]).getContext().log.head.seq).toBe(
+        context.log.head.seq,
+      );
+
+      // The replica's pulse is scheduled every 2 seconds; let the first pulse
+      // after this verified deadline drive the ordinary proposal path.
+      network.clock.advanceBy(anchor.deadlineMs);
+      await settle(replicas, network.clock);
+      const certifiedTimeouts = replicas.map((replica) =>
+        replica.getEntries().find((item) => item.entry.seq === timeoutEntry.seq),
+      );
+      expect(
+        certifiedTimeouts.every(
+          (item) => item && entryHash(item.entry) === entryHash(timeoutEntry),
+        ),
+      ).toBe(true);
+      expect(certifiedTimeouts.every((item) => item?.certificate?.length === 2)).toBe(true);
+    } finally {
+      for (const replica of replicas) replica.dispose();
+      network.dispose();
+    }
+  }, 60_000);
 
   test('needs both human tips before START_SEAT can be certified, then converges', async () => {
     const fixture = verifiedFixture();

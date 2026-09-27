@@ -1,0 +1,14 @@
+{
+  "gameId": "sTqPkmhAV9gfEX-Rl4RgL2",
+  "savedHead": {
+    "hash": "00fc7fba60d20098ecc09d4a82cab6577888d2570fbc0e025849c42d6a76274c",
+    "seq": 8
+  },
+  "finalHead": {
+    "hash": "8821ef85ed6de0689d4e5a6b35d7b856c8515c9c05399f0d5bcdc28bce12c208",
+    "seq": 9
+  },
+  "refreshToRestoredMs": 2207.685958,
+  "refreshToPeerAcceptedMoveMs": 32827.13525,
+  "withinThreeSecondTarget": false
+}

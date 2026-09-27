@@ -135,8 +135,30 @@ test('takeover requires certified offline notice and local quorum-qualified poli
     }
     expect(certifiedOffline).toBe(true);
     expect((await replicas[0]?.canRequestTakeover(0))?.ok).toBe(false);
+
+    // Seat 1 has observed the target absent, but temporarily loses seat 3 as
+    // well. Its local connected voter count is then below the three-seat quorum.
+    const seat1 = fixture.source.identities.get(1);
+    const seat3 = fixture.source.identities.get(3);
+    if (!seat1 || !seat3) throw new Error('Missing survivor identity');
+    network.disconnect(seat1.peerId, seat3.peerId);
+    await Promise.all(replicas.map((replica) => replica.flush()));
+    network.clock.advanceBy(120_000);
+    await Promise.all(replicas.map((replica) => replica.flush()));
+    expect((await replicas[0]?.canRequestTakeover(0))?.ok).toBe(false);
+
+    network.connect(seat1.peerId, seat3.peerId);
+    await Promise.all(replicas.map((replica) => replica.flush()));
+    // The roughly 15 seconds before the outage plus 90 seconds after it are
+    // still short of the 120 seconds required. The outage must add no time.
+    for (let tick = 0; tick < 90; tick += 1) {
+      network.clock.advanceBy(1_000);
+      // oxlint-disable-next-line no-await-in-loop -- Observe every quorum interval.
+      await Promise.all(replicas.map((replica) => replica.flush()));
+    }
+    expect((await replicas[0]?.canRequestTakeover(0))?.ok).toBe(false);
     let eligible = false;
-    for (let tick = 0; tick < 120 && !eligible; tick += 1) {
+    for (let tick = 0; tick < 40 && !eligible; tick += 1) {
       network.clock.advanceBy(1_000);
       // oxlint-disable-next-line no-await-in-loop -- Virtual-time absence must accumulate.
       await Promise.all(replicas.map((replica) => replica.flush()));
