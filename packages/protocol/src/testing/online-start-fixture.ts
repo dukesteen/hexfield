@@ -18,6 +18,7 @@ function required<T>(item: T | null | undefined): T {
 export function attachFixtureOnlineStart(
   body: GenesisBody,
   gameIdentities: ReadonlyMap<Seat, Identity>,
+  lobbyId = `fixture_${toHex(hashValue(body.ceremonyNonce)).slice(0, 16)}`,
 ): GenesisBody {
   const humans = body.seats.filter((seat) => seat.kind === 'human');
   const devices = new Map(
@@ -52,7 +53,7 @@ export function attachFixtureOnlineStart(
     };
   });
   const state: LobbyState = {
-    lobbyId: `fixture_${toHex(hashValue(body.ceremonyNonce)).slice(0, 16)}`,
+    lobbyId,
     hostPeer: required(devices.get(required(humans[0]).publicKey)).peerId,
     hostEpoch: 0,
     version: 0,

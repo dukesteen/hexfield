@@ -1,0 +1,127 @@
+.online-transfer-panel {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text);
+}
+
+.online-transfer-destination {
+  display: grid;
+  gap: 16px;
+  width: min(100% - 32px, 680px);
+  margin: 48px auto;
+}
+
+.online-transfer-dialog {
+  width: min(100% - 32px, 700px);
+}
+
+.online-transfer-panel h2,
+.online-transfer-panel p {
+  margin: 0;
+}
+
+.online-transfer-explanation,
+.online-transfer-warning {
+  color: var(--muted);
+}
+
+.online-transfer-self {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.online-transfer-panel code {
+  overflow-wrap: anywhere;
+  color: var(--text);
+  font:
+    0.9rem/1.5 ui-monospace,
+    monospace;
+  letter-spacing: 0.04em;
+}
+
+.online-transfer-candidates {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.online-transfer-candidates legend {
+  padding-inline: 4px;
+  font-weight: 650;
+}
+
+.online-transfer-candidate {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 8px;
+  border-radius: 6px;
+  background: var(--surface-raised, var(--surface));
+  cursor: pointer;
+}
+
+.online-transfer-candidate input {
+  flex: 0 0 auto;
+  accent-color: var(--accent);
+}
+
+.online-transfer-phase {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 24px;
+}
+
+.online-transfer-spinner {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: online-transfer-spin 800ms linear infinite;
+}
+
+.online-transfer-error {
+  color: var(--danger, #c43b32);
+}
+
+.online-transfer-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+@keyframes online-transfer-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .online-transfer-spinner {
+    animation: none;
+  }
+}
+
+@media (max-width: 560px) {
+  .online-transfer-panel {
+    padding: 16px;
+  }
+
+  .online-transfer-actions > .button {
+    flex: 1 1 auto;
+  }
+}

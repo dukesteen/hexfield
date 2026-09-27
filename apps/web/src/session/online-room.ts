@@ -38,6 +38,9 @@ import type {
 import { UnsupportedOnlineGameVersionError } from './online-game-records.js';
 import type { OnlineStartupSnapshot } from './online-startup.js';
 import type { OnlineGame } from './online-game.js';
+import type { OnlineDeviceRoutes } from './online-game-transport.js';
+import { OnlineTransferBrowser } from './online-transfer-browser.js';
+import type { OnlineTransferLinkOptions } from './online-transfer-link.js';
 import {
   createOnlineLobbyTransport,
   createOnlineNonChatTransport,
@@ -72,6 +75,7 @@ export interface OnlineRoomSnapshot {
   readonly connectionError: string | null;
   readonly startup: OnlineStartupSnapshot | null;
   readonly chat?: ChatSnapshot;
+  readonly deviceRoutes?: OnlineDeviceRoutes;
   readonly closed: boolean;
 }
 
@@ -146,6 +150,7 @@ export class OnlineRoom {
   private chatAllowedPeers: readonly PeerId[] = [];
   private readonly resumedChatState: LobbyState | null;
   private readonly resumedPeers: readonly PeerId[] | null;
+  private activeGamePeers: readonly PeerId[] | null = null;
   private chatSwitching = false;
   private chatSwitchFailed = false;
   private manualOffer: ManualOffer | null = null;
@@ -157,6 +162,9 @@ export class OnlineRoom {
   } | null = null;
   private manualGeneration = 0;
   private frozenRoster = false;
+  private lobbyDetached = false;
+  private transfer: OnlineTransferBrowser | null = null;
+  private transferOpening: Promise<OnlineTransferBrowser> | null = null;
 
   private constructor(
     readonly invite: OnlineInvite,
@@ -168,7 +176,7 @@ export class OnlineRoom {
     controller: LobbyController | null,
     resume: OnlineWorkerResumeInfo | null,
     private readonly ownedStore: IndexedDbByteStore | null,
-    store: EscrowCeremonyStore,
+    private readonly store: EscrowCeremonyStore,
     private readonly clock: ProtocolClock,
     private readonly manualRtcFactory: () => RTCPeerConnection,
     createWorkerClient: () => OnlineWorkerClient,
@@ -213,6 +221,13 @@ export class OnlineRoom {
       transport: createOnlineNonChatTransport(transport),
       clock,
       createClient: createWorkerClient,
+      onDeviceRoutes: (routes: import('./online-game-transport.js').OnlineDeviceRoutes) => {
+        if (this.closing || this.snapshot.closed) return;
+        transport.updateCertifiedRoster(routes);
+        this.activeGamePeers = [...routes.activeDevices];
+        this.update({ deviceRoutes: routes });
+        this.refresh();
+      },
       ...worker,
     };
     this.startup = new OnlineWorkerStartup(
@@ -739,10 +754,51 @@ export class OnlineRoom {
     };
   };
 
+  startTransfer = (
+    network: Pick<OnlineTransferLinkOptions, 'iceServers' | 'iceTransportPolicy'>,
+  ): Promise<OnlineTransferBrowser> => {
+    if (this.transfer && !this.transfer.getSnapshot().closed) {
+      const snapshot = this.transfer.getSnapshot();
+      if (
+        (snapshot.phase !== 'cancelled' && snapshot.phase !== 'cancelled-awaiting-receipt') ||
+        snapshot.busy
+      )
+        return Promise.resolve(this.transfer);
+      void this.transfer.close();
+    }
+    if (this.transferOpening) return this.transferOpening;
+    const game = this.startup.game();
+    if (this.closing || !game) return Promise.reject(new Error('Online game is unavailable'));
+    this.transferOpening = OnlineTransferBrowser.openSource({
+      identity: this.identity,
+      store: this.store,
+      clock: this.clock,
+      worker: this.startup.transferClient(),
+      gameId: game.gameId,
+      genesisDigest: genesisDigest(game.genesis),
+      seat: game.seat,
+      serverUrl: this.invite.serverUrl,
+      network,
+    })
+      .then(async (transfer) => {
+        if (this.closing) {
+          await transfer.close();
+          throw new Error('Online game closed');
+        }
+        this.transfer = transfer;
+        return transfer;
+      })
+      .finally(() => {
+        this.transferOpening = null;
+      });
+    return this.transferOpening;
+  };
+
   close(): Promise<void> {
     if (this.closing) return this.closing;
     // Publish the promise before notifying views, which may call close again.
     this.closing = Promise.resolve().then(() => this.releaseResources());
+    void this.transfer?.close().catch(() => undefined);
     void this.startup.close().catch(() => undefined);
     this.cancelManualInvitation();
     this.chat.dispose();
@@ -758,6 +814,8 @@ export class OnlineRoom {
   private async releaseResources(): Promise<void> {
     try {
       try {
+        await this.transferOpening?.catch(() => undefined);
+        await this.transfer?.close();
         await this.startup.close();
         await this.chat.flush();
       } finally {
@@ -801,11 +859,16 @@ export class OnlineRoom {
     const agreement = this.startup.agreement() ?? this.lobby?.freezeAgreement() ?? null;
     const state = this.lobby?.state();
     const game = this.startup.game();
+    if (game && !this.lobbyDetached) {
+      this.lobbyDetached = true;
+      this.lobby?.dispose();
+    }
     const gameChat = this.chat.scopeKind() === 'game' || game !== null;
     const chatState = gameChat ? (agreement?.state ?? this.resumedChatState) : state;
+    const currentGamePeers = this.activeGamePeers ?? this.resumedPeers;
     this.chatAllowedPeers =
-      this.resumedPeers && gameChat
-        ? [...this.resumedPeers]
+      currentGamePeers && gameChat
+        ? [...currentGamePeers]
         : chatState
           ? [...humanChatPeers(chatState), ...(gameChat || agreement ? [] : chatState.spectators)]
           : [];

@@ -68,6 +68,122 @@ afterEach(() => {
 });
 
 describe('OnlineWorkerClient', () => {
+  test('copies only visible request bytes and reserves the heavy slot for exports too', async () => {
+    vi.useFakeTimers();
+    const worker = new FakeWorker();
+    const client = createClient(worker);
+    const backing = new Uint8Array(2 * 1024 * 1024).fill(7);
+    const bootstrapBytes = backing.subarray(900, 910);
+    try {
+      const importing = client.request({ kind: 'refreshTransferBootstrap', bootstrapBytes });
+      const posted = worker.requests[0];
+      if (posted?.body.kind !== 'refreshTransferBootstrap') throw new Error('Missing bootstrap');
+      backing.fill(0);
+      expect(posted.body.bootstrapBytes).toEqual(new Uint8Array(10).fill(7));
+      expect(posted.body.bootstrapBytes.buffer.byteLength).toBe(10);
+      await expect(client.request({ kind: 'exportSave' })).resolves.toMatchObject({ ok: false });
+      worker.reply(posted, { ok: true, value: undefined });
+      expectOk(await importing);
+      const exporting = client.request({ kind: 'exportTransferBootstrap' });
+      await vi.advanceTimersByTimeAsync(120_001);
+      expect(worker.terminated).toBe(false);
+      await expect(client.request({ kind: 'exportSave' })).resolves.toMatchObject({ ok: false });
+      const exportRequest = worker.requests.at(-1);
+      if (!exportRequest) throw new Error('Missing export');
+      worker.reply(exportRequest, { ok: true, value: new Uint8Array() });
+      expectOk(await exporting);
+
+      backing.fill(9);
+      const ordinary = client.request({
+        kind: 'authorizeLiveTransfer',
+        head: { seq: 1, hash: 'a'.repeat(64) },
+        offer: { packet: backing.subarray(10, 20) },
+      });
+      const ordinaryRequest = worker.requests.at(-1);
+      if (ordinaryRequest?.body.kind !== 'authorizeLiveTransfer') throw new Error('Missing offer');
+      backing.fill(0);
+      expect(ordinaryRequest.body.offer).toEqual({ packet: new Uint8Array(10).fill(9) });
+      worker.reply(ordinaryRequest, { ok: true, value: undefined });
+      expectOk(await ordinary);
+      await expect(
+        client.request({
+          kind: 'refreshTransferBootstrap',
+          bootstrapBytes: new Uint8Array(new SharedArrayBuffer(10)),
+        }),
+      ).resolves.toMatchObject({ ok: false });
+    } finally {
+      client.fail(new Error('Test cleanup'));
+    }
+  });
+
+  test('forwards bounded certified route events and rejects duplicate active/catch-up devices', () => {
+    const worker = new FakeWorker();
+    const client = createClient(worker);
+    const seen: string[] = [];
+    client.subscribe((event) => seen.push(event.kind));
+    const routes = {
+      head: { seq: 12, hash: 'a'.repeat(64) },
+      activeDevices: ['A'.repeat(43), 'B'.repeat(43)],
+      catchupDevices: ['C'.repeat(43)],
+      seats: [
+        { seat: 0, devicePeer: 'A'.repeat(43) },
+        { seat: 1, devicePeer: 'B'.repeat(43) },
+      ],
+    };
+    const event = {
+      protocol: ONLINE_WORKER_PROTOCOL,
+      generation: client.generation,
+      kind: 'deviceRoutes',
+      routes,
+    };
+    worker.emit(event);
+    expect(seen).toEqual(['deviceRoutes']);
+    expect(worker.terminated).toBe(false);
+    worker.emit({ ...event, routes: { ...routes, catchupDevices: ['A'.repeat(43)] } });
+    expect(seen).toEqual(['deviceRoutes']);
+    expect(worker.terminated).toBe(true);
+  });
+
+  test('permits one large public bootstrap without consuming the control byte reserve', async () => {
+    const worker = new FakeWorker();
+    const client = createClient(worker);
+    try {
+      const body = {
+        kind: 'refreshTransferBootstrap' as const,
+        bootstrapBytes: new Uint8Array(2 * 1024 * 1024),
+      };
+      const first = client.request(body);
+      expect(worker.requests).toHaveLength(1);
+      await expect(client.request(body)).resolves.toMatchObject({
+        ok: false,
+        error: { code: 'online-worker-busy' },
+      });
+      const control = client.request({
+        kind: 'setPrivateVisible',
+        visible: false,
+        visibilityToken: 1,
+      });
+      expect(worker.requests).toHaveLength(2);
+      for (const request of worker.requests) worker.reply(request, { ok: true, value: undefined });
+      expectOk(await first);
+      expectOk(await control);
+      const retry = client.request(body);
+      const posted = worker.requests.at(-1);
+      if (!posted) throw new Error('Missing retry');
+      worker.reply(posted, { ok: true, value: undefined });
+      expectOk(await retry);
+      await expect(
+        client.request({
+          kind: 'refreshTransferBootstrap',
+          bootstrapBytes: new Uint8Array(16 * 1024 * 1024 + 1),
+        }),
+      ).resolves.toMatchObject({ ok: false, error: { code: 'online-worker-busy' } });
+      expect(worker.requests).toHaveLength(3);
+    } finally {
+      client.fail(new Error('test complete'));
+    }
+  });
+
   test('bounds pending ordinary request count and total canonical bytes', async () => {
     const worker = new FakeWorker();
     const client = createClient(worker);

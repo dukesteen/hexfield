@@ -69,11 +69,19 @@ export { restoreRetiredSafety } from './retired-safety.js';
 export {
   transferAuthorizationStatementSchema,
   transferChangeSchema,
+  transferCheckDigest,
+  transferEntryRef,
   TRANSFER_DEVICE_DOMAIN,
   TRANSFER_GAME_KEY_DOMAIN,
   TRANSFER_BOT_KEY_DOMAIN,
+  TRANSFER_DESTINATION_CHECK_DOMAIN,
+  TRANSFER_BOT_CHECK_DOMAIN,
 } from './transfer-readiness.js';
-export type { SeatTransferAuthorizationStatement, TransferReplacement } from './transfer-types.js';
+export type {
+  SeatTransferAuthorization,
+  SeatTransferAuthorizationStatement,
+  TransferReplacement,
+} from './transfer-types.js';
 export {
   prepareTransferPrivate,
   importTransferPrivate,

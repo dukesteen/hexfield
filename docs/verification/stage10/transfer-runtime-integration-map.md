@@ -46,10 +46,12 @@ Persist the validated public start before promotion using
 catalogue in that order, and retries repair a missing catalogue entry.
 `loadOnlineGameRecord()` reads the game pointer directly. Awaiting that save
 before promotion closes the crash window where an active journal has no public
-start for ordinary resume. A read-only durable outcome lookup is still needed
-to distinguish completed promotion from a missing stage on restart. An attempt
-also needs a durable locator for its reserved credential attempt and exact stage
-head; missing final outcome does not mean no import exists.
+start for ordinary resume. `TransferImportStore.readOutcome()` now provides a
+bounded durable outcome lookup. Its marker is only a restart hint; the
+participant must check the certified activation and active journal/binding
+before treating promotion as complete. An attempt also needs a durable locator
+for its reserved credentials and exact stage head; missing final outcome does
+not mean no import exists.
 
 Staging validates the binding and public prefix, but treats sealed-packet and
 private-replay bytes as opaque. The worker must authenticate and replay them on
@@ -64,5 +66,22 @@ and checking the exact journal head and binding; an arbitrary cached authority
 map cannot replace replay.
 
 ## Evidence and limits
+
+Worker integration is in progress after checkpoint `499e238`. The worker now
+has separate destination initialization and RPC calls for offers, bootstrap
+refresh, private import, readiness and activation. Source RPCs export public
+bootstrap, authorize the exact current head, submit transfer changes and seal
+private delivery using worker-generated entropy. The game factory supplies its
+private outbox/import stores. A single bounded public bootstrap request has a
+separate byte budget so ordinary control requests remain available. Shutdown
+closes the destination before draining storage and suppresses late transfer
+outputs.
+
+The focused worker/client suite passes 14 tests, including large-request control
+availability, shutdown during private preparation and entropy wiping. Production
+and test TypeScript checks and scoped type-aware lint pass. This is internal
+integration evidence, not a browser-to-browser transfer acceptance result. The
+destination participant and source facade have separate real-certificate tests;
+their complete worker-mediated round trip and review remain pending.
 
 The focused tests cover real signed authorization and activation, old route rejection, fresh-key private restore, promoted browser startup, exact private outbox retries and atomic fake-IndexedDB promotion. They do not yet establish browser-to-browser handoff, transfer-only WebRTC admission, manual reconnect to a replacement host, or a completed game and audit after transfer. Those remain required before enabling the user flow or claiming Stage 10 acceptance.

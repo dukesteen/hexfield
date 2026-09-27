@@ -20,6 +20,7 @@ import { Route as LobbyLobbyIdRouteImport } from './routes/lobby/$lobbyId'
 import { Route as LocalGameIdRouteImport } from './routes/local/$gameId'
 import { Route as LocalNewRouteImport } from './routes/local/new'
 import { Route as OnlineCreateRouteImport } from './routes/online/create'
+import { Route as TransferCodeRouteImport } from './routes/transfer/$code'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -76,6 +77,11 @@ const OnlineCreateRoute = OnlineCreateRouteImport.update({
   path: '/online/create',
   getParentRoute: () => rootRouteImport,
 } as any)
+const TransferCodeRoute = TransferCodeRouteImport.update({
+  id: '/transfer/$code',
+  path: '/transfer/$code',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -88,6 +94,7 @@ export interface FileRoutesByFullPath {
   '/local/$gameId': typeof LocalGameIdRoute
   '/local/new': typeof LocalNewRoute
   '/online/create': typeof OnlineCreateRoute
+  '/transfer/$code': typeof TransferCodeRoute
   '/join/': typeof JoinIndexRoute
 }
 export interface FileRoutesByTo {
@@ -101,6 +108,7 @@ export interface FileRoutesByTo {
   '/local/$gameId': typeof LocalGameIdRoute
   '/local/new': typeof LocalNewRoute
   '/online/create': typeof OnlineCreateRoute
+  '/transfer/$code': typeof TransferCodeRoute
   '/join': typeof JoinIndexRoute
 }
 export interface FileRoutesById {
@@ -115,6 +123,7 @@ export interface FileRoutesById {
   '/local/$gameId': typeof LocalGameIdRoute
   '/local/new': typeof LocalNewRoute
   '/online/create': typeof OnlineCreateRoute
+  '/transfer/$code': typeof TransferCodeRoute
   '/join/': typeof JoinIndexRoute
 }
 export interface FileRouteTypes {
@@ -130,6 +139,7 @@ export interface FileRouteTypes {
     | '/local/$gameId'
     | '/local/new'
     | '/online/create'
+    | '/transfer/$code'
     | '/join/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -143,6 +153,7 @@ export interface FileRouteTypes {
     | '/local/$gameId'
     | '/local/new'
     | '/online/create'
+    | '/transfer/$code'
     | '/join'
   id:
     | '__root__'
@@ -156,6 +167,7 @@ export interface FileRouteTypes {
     | '/local/$gameId'
     | '/local/new'
     | '/online/create'
+    | '/transfer/$code'
     | '/join/'
   fileRoutesById: FileRoutesById
 }
@@ -170,6 +182,7 @@ export interface RootRouteChildren {
   LocalGameIdRoute: typeof LocalGameIdRoute
   LocalNewRoute: typeof LocalNewRoute
   OnlineCreateRoute: typeof OnlineCreateRoute
+  TransferCodeRoute: typeof TransferCodeRoute
   JoinIndexRoute: typeof JoinIndexRoute
 }
 
@@ -252,6 +265,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OnlineCreateRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/transfer/$code': {
+      id: '/transfer/$code'
+      path: '/transfer/$code'
+      fullPath: '/transfer/$code'
+      preLoaderRoute: typeof TransferCodeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -266,6 +286,7 @@ const rootRouteChildren: RootRouteChildren = {
   LocalGameIdRoute: LocalGameIdRoute,
   LocalNewRoute: LocalNewRoute,
   OnlineCreateRoute: OnlineCreateRoute,
+  TransferCodeRoute: TransferCodeRoute,
   JoinIndexRoute: JoinIndexRoute,
 }
 export const routeTree = rootRouteImport

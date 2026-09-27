@@ -12,6 +12,7 @@ export type {
 export { InProcessSignaling } from './in-process-signaling.js';
 export { WebRtcTransport } from './web-rtc-transport.js';
 export type {
+  CertifiedRosterUpdate,
   PeerCandidateRoute,
   WebRtcPeerStats,
   WebRtcTransportOptions,

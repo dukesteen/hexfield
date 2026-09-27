@@ -232,6 +232,13 @@ export function OnlineLobby({
                 })}
               </p>
             )}
+            {(snapshot.startup.phase === 'error' || snapshot.startup.phase === 'halted') &&
+              snapshot.startup.error && (
+                <details className="online-start-error-details">
+                  <summary>{t('lobby:onlineErrorDetails')}</summary>
+                  <p>{snapshot.startup.error}</p>
+                </details>
+              )}
             {snapshot.startup.phase === 'error' && (
               <button
                 className="button button-quiet"

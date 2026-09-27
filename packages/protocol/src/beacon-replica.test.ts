@@ -669,6 +669,73 @@ describe('verified beacon contribution replication', () => {
     network.dispose();
   }, 30_000);
 
+  test('a withheld required beacon reveal leaves the frozen operation uncertified', async () => {
+    const fixture = verifiedFixture();
+    const peers = fixture.humans.map(
+      (seat) => required(fixture.simulation.identities.get(seat.seat)).peerId,
+    );
+    const network = createMemnet({ peers });
+    const sent: ProtocolMessage[][] = [[], []];
+    const firstTransport = observe(network.transport(required(peers[0])), required(sent[0]));
+    const withheldTransport = observeWithoutSystemContributions(
+      network.transport(required(peers[1])),
+      required(sent[1]),
+    );
+    const replicas: ReplicatedLog[] = [];
+    try {
+      const first = value(
+        await ReplicatedLog.create(
+          optionsFor(
+            fixture,
+            0,
+            firstTransport,
+            network.clock,
+            new MemoryProtocolJournal(),
+            new MemoryBeaconContributionStore(),
+          ),
+        ),
+      );
+      replicas.push(first);
+      const second = value(
+        await ReplicatedLog.create(
+          optionsFor(
+            fixture,
+            1,
+            withheldTransport,
+            network.clock,
+            new MemoryProtocolJournal(),
+            new MemoryBeaconContributionStore(),
+          ),
+        ),
+      );
+      replicas.push(second);
+      deliverFirstProposal(required(peers[0]), withheldTransport, required(sent[0]));
+      await settle(replicas, network.clock);
+
+      const setupCount = setupPassCount(fixture);
+      expect(replicas.map((replica) => replica.getContext().log.head.seq)).toEqual([
+        setupCount,
+        setupCount,
+      ]);
+      expect(
+        replicas.every(
+          (replica) =>
+            replica.getContext().log.crypto?.beacon.active !== null &&
+            !replica
+              .getEntries()
+              .some(
+                ({ entry }) =>
+                  entry.payload.kind === 'system' && entry.payload.input.type === 'START_SEAT',
+              ),
+        ),
+      ).toBe(true);
+      expect(required(sent[1]).some((message) => message.t === 'SYS_CONTRIB')).toBe(false);
+    } finally {
+      for (const replica of replicas) replica.dispose();
+      network.dispose();
+    }
+  }, 30_000);
+
   test('repeated complete reveals do not recompute or write while votes are missing', async () => {
     const fixture = verifiedFixture();
     const peers = fixture.humans.map(
@@ -1105,7 +1172,7 @@ describe('verified beacon contribution replication', () => {
     );
     expect(
       await store.load(
-        `${beaconOperationId(operation.value)}/${signer.generation.seq}/${signer.generation.hash}`,
+        `${beaconOperationId(operation.value)}/${required(fixture.humans[0]).seat}/${signer.generation.seq}/${signer.generation.hash}`,
       ),
     ).toEqual(canonicalEncode(delivered.contribution));
     expect(replica.getContext().log.head.seq).toBe(setupCount);

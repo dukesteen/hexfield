@@ -1,0 +1,15 @@
+# Transfer worker and routing review
+
+Read-only security and correctness review of the attached pinned source. Tools disabled. Do not request secrets or actual user data. Return concrete findings with file and line, severity, attack/failure trace, and minimal correction. Distinguish proved issues from assumptions. Also report no blocking findings if applicable.
+
+Scope: the new online worker transfer RPCs, bounded request accounting, temporary transfer-data channel, verified device-route export, WebRTC frozen roster updates and chat route selection. Protocol v4 core, signed transfer membership, immutable private outbox/import, destination credential/stage/promotion cryptography already have separate reviews. Do not redesign consensus. Public bootstrap is independently verified in the worker, with a 16 MiB raw-byte bound. The destination participant owns fresh replacement keys; it creates no voter before its exact certified activation is atomically promoted. P2PSession source methods validate current owned human authority, exact current head for owner intent, affected bot custody and session retirement, detach entropy and suppress late private output. Those source/destination leaves are being verified separately and are not attached in this review.
+
+Check these invariants:
+- Main sees only public evidence, display state, signed offers/readiness and destination-sealed private packets. It cannot obtain signing/master/encryption keys via new RPCs.
+- A pending destination cannot attach the game transport or submit a gameplay command. Promotion returns a gameId; ordinary resume must be opened in a new worker.
+- Shutdown stops import/readiness and source private output, drains accepted work, wipes owned entropy and closes storage. Heavy bootstrap admission preserves control capacity and has a bounded separate pending slot.
+- Worker route lists come only from certified replay. Pending offers or bad certificates never expand active device/chat membership. Old routes can carry bounded public catch-up only, never game commands or chat. The WebRTC roster setter is connection admission, not a certificate verifier.
+- A separate authenticated transfer channel transports only fixed artifact kinds. It uses scope binding, bounded assembly, digest checking, one acknowledged chunk at a time, deadlines and disposal. It is not yet wired to a temporary signaling room or UI. Do not count that acknowledged missing caller as an implementation bug, but identify anything that would make the eventual caller unsafe or nonfunctional.
+- Fresh/restore lifecycle, reentrancy during route callbacks, source retirement and network backpressure must remain correct.
+
+Evidence: genuine worker-mediated destination authorization/import/restart/activation test passed; channel/client/runtime 18 tests passed; certified route test covers rejected certificate, pending destination denial, new route and old public catch-up. Full browser handoff and final v4 game acceptance remain pending. No claim of completed milestone is being made.

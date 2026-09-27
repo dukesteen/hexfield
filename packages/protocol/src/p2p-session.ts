@@ -23,6 +23,7 @@ import type { RecoveredReplicaOwnership } from './replicated-log.js';
 import type { RecoveryApprovalCandidate, RecoveryApprovalPreview } from './recovery-facade.js';
 import { loadRecoveredHost } from './recovered-host.js';
 import type { RecoveredHost } from './recovered-host.js';
+import { loadRecoveryPrivate } from './recovery-private.js';
 import type { RecoveryPrivateStore } from './recovery-private.js';
 import { loadPreparedRecoveryReadiness, prepareRecoveryReadiness } from './recovery-readiness.js';
 import type { RecoveryReadinessStore } from './recovery-readiness.js';
@@ -57,6 +58,11 @@ import type {
 
 import type { SessionDriver } from './session-driver.js';
 import type { SignedMasterReveal } from './master-reveal.js';
+import type { EntryRef } from './beacon-state.js';
+import type { AuthorizedTransfer, SeatTransferAuthorization } from './transfer-types.js';
+import { prepareTransferPrivate as prepareSealedTransferPrivate } from './transfer-private.js';
+import type { TransferPrivateEnvelope, TransferPrivateStore } from './transfer-private.js';
+import { transferAuthorizationStatementSchema, transferRefSchema } from './transfer-readiness.js';
 import type {
   SessionAuditInput,
   SessionAuditJob,
@@ -80,6 +86,12 @@ export interface P2PSessionOptions extends Omit<
   | 'onMasterReveal'
 > {
   auditRunner?: SessionAuditRunner;
+  /** Immutable sealed-packet outbox retained with the certified journal. */
+  transferPrivateOutbox?: TransferPrivateStore;
+  /** Authenticated prior import records used to forward recovery custody. */
+  transferPrivateImportStore?: TransferPrivateStore;
+  /** One validated non-membership head for bounded device-route bookkeeping. */
+  onCertifiedNonMembershipCommit?: (head: EntryRef) => Result<void>;
   /** Fresh driver on both create and restore. Restore replays private consequences. */
   createDriver: (
     engine: Engine,
@@ -142,7 +154,12 @@ export class P2PSession implements GameSession<CertifiedHistory> {
   private privateStateReleased = false;
   private replayingHistory = false;
   private readonly recoveredHosts: RecoveredHost[] = [];
+  private readonly transferPrivateWork = new Map<
+    string,
+    Promise<Result<TransferPrivateEnvelope>>
+  >();
   private recoveryInstalling = false;
+  private readonly automaticTakeovers = new Set<Seat>();
   private botTimer: unknown = null;
   private privateTimeoutTimer: unknown = null;
   private botParent: string | null = null;
@@ -331,6 +348,7 @@ export class P2PSession implements GameSession<CertifiedHistory> {
           : {}),
         onTradeProofResponse: (response) => openedSession.receiveTradeProof(response),
         onRecoveryCandidate: () => openedSession.emit([]),
+        onTakeoverEligible: (seat) => openedSession.requestAutomaticTakeover(seat),
         onAuthorityChange: (current) => openedSession.installRecovery(current),
         onMasterReveal: ({ packet }) => {
           openedSession.auditReveals.set(packet.body.originalSeat, copyCanonical(packet));
@@ -355,6 +373,14 @@ export class P2PSession implements GameSession<CertifiedHistory> {
                 !openedSession.keys.has(controller.seat),
             );
           if (activating) openedSession.recoveryInstalling = true;
+          if (validated.entry.payload.kind !== 'membership') {
+            const updated = options.onCertifiedNonMembershipCommit?.({
+              seq: next.log.head.seq,
+              hash: entryHash(next.log.head),
+            });
+            if (updated && !updated.ok)
+              throw new Error(`Certified route bookkeeping failed: ${updated.error.code}`);
+          }
           openedSession.emit(validated.events);
           openedSession.maybeAudit();
           if (!activating) openedSession.maybeAutomatic();
@@ -767,6 +793,84 @@ export class P2PSession implements GameSession<CertifiedHistory> {
     return { mode: 'p2p', genesis: genesis.value, entries: this.replica.getEntries() };
   }
 
+  /** Public transfer state from the certified head, including after local retirement. */
+  getTransferStatus(
+    authorization?: EntryRef,
+    statement?: unknown,
+  ): {
+    head: EntryRef;
+    pending: AuthorizedTransfer | null;
+    matchedAuthorization: AuthorizedTransfer | null;
+    expiredBeforeCertification: boolean;
+    outcome: {
+      authorization: EntryRef;
+      outcome: 'activated' | 'cancelled';
+      entry: EntryRef;
+    } | null;
+  } {
+    if (!this.replica || this.status.kind === 'disposed')
+      throw new Error('Peer session is unavailable');
+    const { log } = this.replica.getContext();
+    const transfer = log.transfer;
+    if (!transfer) throw new Error('Certified transfer state is unavailable');
+    const query =
+      authorization === undefined ? null : parseCanonical(authorization, transferRefSchema);
+    if (query && !query.ok) throw new TypeError('Transfer authorization reference is malformed');
+    const statementQuery =
+      statement === undefined
+        ? null
+        : parseCanonical(statement, transferAuthorizationStatementSchema);
+    if (statementQuery && !statementQuery.ok)
+      throw new TypeError('Transfer authorization statement is malformed');
+    if (statementQuery && statementQuery.value.genesisDigest !== transfer.genesisDigest)
+      throw new TypeError('Transfer authorization statement belongs to another game');
+    const encodedStatement = statementQuery ? canonicalEncode(statementQuery.value) : null;
+    const matchedAuthorization = encodedStatement
+      ? (transfer.authorizations.find(({ statement: candidate }) => {
+          const encoded = canonicalEncode(candidate);
+          return (
+            encoded.length === encodedStatement.length &&
+            encoded.every((byte, index) => byte === encodedStatement[index])
+          );
+        }) ?? null)
+      : null;
+    if (
+      query &&
+      statementQuery &&
+      (!matchedAuthorization ||
+        matchedAuthorization.entry.seq !== query.value.seq ||
+        matchedAuthorization.entry.hash !== query.value.hash)
+    )
+      throw new TypeError('Transfer authorization reference and statement differ');
+    const outcomeRef = query?.value ?? matchedAuthorization?.entry;
+    const pendingRef = transfer.pending;
+    const pending = pendingRef
+      ? transfer.authorizations.find(
+          ({ entry }) => entry.seq === pendingRef.seq && entry.hash === pendingRef.hash,
+        )
+      : null;
+    if (pendingRef && !pending)
+      throw new Error('Certified pending transfer authorization is unavailable');
+    return {
+      head: { seq: log.head.seq, hash: entryHash(log.head) },
+      pending: pending ? copyCanonical(pending) : null,
+      matchedAuthorization: matchedAuthorization ? copyCanonical(matchedAuthorization) : null,
+      expiredBeforeCertification:
+        statementQuery !== null &&
+        matchedAuthorization === null &&
+        log.head.seq > statementQuery.value.validUntilSeq,
+      outcome: outcomeRef
+        ? copyCanonical(
+            transfer.completed.find(
+              (item) =>
+                item.authorization.seq === outcomeRef.seq &&
+                item.authorization.hash === outcomeRef.hash,
+            ) ?? null,
+          )
+        : null,
+    };
+  }
+
   async flush(): Promise<void> {
     await this.replica?.flush();
   }
@@ -783,6 +887,217 @@ export class P2PSession implements GameSession<CertifiedHistory> {
     if (!this.replica || this.status.kind !== 'running' || this.recoveryInstalling)
       return Promise.resolve(failure('session-inactive', 'Peer session is unavailable'));
     return this.replica.submitTransfer(change);
+  }
+
+  authorizeLiveTransfer(
+    offer: unknown,
+    expectedHead: EntryRef,
+  ): Promise<Result<SeatTransferAuthorization>> {
+    if (!this.replica || this.status.kind !== 'running' || this.recoveryInstalling)
+      return Promise.resolve(failure('session-inactive', 'Peer session is unavailable'));
+    return this.replica.authorizeLiveTransfer(offer, expectedHead);
+  }
+
+  /** Seal exact pending-transfer custody without exposing any master or signing key. */
+  prepareTransferPrivate(
+    authorization: EntryRef,
+    entropy: Uint8Array,
+    nonce: Uint8Array,
+  ): Promise<Result<TransferPrivateEnvelope>> {
+    const parsed = parseCanonical(authorization, transferRefSchema);
+    if (!parsed.ok) return Promise.resolve(parsed);
+    if (
+      !(entropy instanceof Uint8Array) ||
+      entropy.length !== 32 ||
+      !(nonce instanceof Uint8Array) ||
+      nonce.length !== 32
+    )
+      return Promise.resolve(failure('transfer-private-key', 'Entropy and nonce must be 32 bytes'));
+    if (!this.replica || this.status.kind !== 'running' || this.privateStateReleased)
+      return Promise.resolve(
+        failure('transfer-private-unavailable', 'Current private transfer source is unavailable'),
+      );
+    const head = this.getCommittedHead();
+    const id = `${parsed.value.seq}/${parsed.value.hash}/${head.seq}/${head.hash}`;
+    const existing = this.transferPrivateWork.get(id);
+    if (existing)
+      return existing.then((result) => (result.ok ? success(copyCanonical(result.value)) : result));
+    const work = this.prepareTransferPrivateNow(
+      parsed.value,
+      new Uint8Array(entropy),
+      new Uint8Array(nonce),
+    );
+    this.transferPrivateWork.set(id, work);
+    void work.then(() => {
+      if (this.transferPrivateWork.get(id) === work) this.transferPrivateWork.delete(id);
+      return undefined;
+    });
+    return work.then((result) => (result.ok ? success(copyCanonical(result.value)) : result));
+  }
+
+  private async prepareTransferPrivateNow(
+    authorization: EntryRef,
+    entropyCopy: Uint8Array,
+    nonceCopy: Uint8Array,
+  ): Promise<Result<TransferPrivateEnvelope>> {
+    const masters: { seat: Seat; master: Uint8Array }[] = [];
+    const recovered: { secrets: readonly { seat: Seat; master: Uint8Array }[]; dispose(): void }[] =
+      [];
+    let signingKey = new Uint8Array(0);
+    try {
+      const replica = this.replica;
+      const outbox = this.options.transferPrivateOutbox;
+      const sourceSeat = this.options.seat;
+      const localKey = this.keys.get(sourceSeat);
+      if (
+        !replica ||
+        this.status.kind !== 'running' ||
+        this.privateStateReleased ||
+        this.recoveryInstalling ||
+        !outbox ||
+        !localKey
+      )
+        return failure(
+          'transfer-private-unavailable',
+          'Current private transfer source is unavailable',
+        );
+      signingKey = new Uint8Array(localKey);
+      const context = replica.getContext();
+      const head = { seq: context.log.head.seq, hash: entryHash(context.log.head) };
+      const transfer = context.log.transfer;
+      const approved = transfer?.authorizations.find(
+        (item) => item.entry.seq === authorization.seq && item.entry.hash === authorization.hash,
+      );
+      const controller = context.log.authority?.controllers.find(
+        (item) => item.seat === sourceSeat,
+      );
+      const voter = context.membership.voters.find((item) => item.seat === sourceSeat);
+      const identity = identityFromSecret(signingKey);
+      const publicKey = identity.peerId;
+      identity.secretKey.fill(0);
+      identity.publicKey.fill(0);
+      if (
+        !approved ||
+        transfer?.pending?.seq !== authorization.seq ||
+        transfer.pending.hash !== authorization.hash ||
+        context.log.recovery?.pending ||
+        context.log.state.result !== null ||
+        controller?.kind !== 'human' ||
+        controller.status !== 'active' ||
+        controller.publicKey !== publicKey ||
+        controller.hostSeat !== sourceSeat ||
+        voter?.publicKey !== publicKey ||
+        (approved.statement.mode === 'live' && approved.statement.seat !== sourceSeat)
+      )
+        return failure(
+          'transfer-private-authority',
+          'Exact certified source and pending transfer are required',
+        );
+      const recoveryStore =
+        this.options.masterReveal?.recoveryPrivateStore ??
+        this.options.recoveryStore ??
+        this.options.recoveryParticipant?.store;
+      if (approved.statement.mode === 'live') {
+        const loadOwnedMaster = this.options.masterReveal?.loadOwnedMaster;
+        if (!loadOwnedMaster)
+          return failure('transfer-private-masters', 'Owned master loader is unavailable');
+        for (const replacement of approved.statement.replacements) {
+          // oxlint-disable-next-line no-await-in-loop -- Every seat's exact certified custody is checked in order.
+          const owned = await loadOwnedMaster(replacement.seat);
+          if (owned) {
+            if (!(owned instanceof Uint8Array) || owned.length !== 32) {
+              if (owned instanceof Uint8Array) owned.fill(0);
+              return failure('transfer-private-masters', 'Owned master is malformed');
+            }
+            masters.push({ seat: replacement.seat, master: new Uint8Array(owned) });
+            owned.fill(0);
+            continue;
+          }
+          const bot = context.log.authority?.controllers.find(
+            (item) => item.seat === replacement.seat,
+          );
+          const completion = context.log.recovery?.completed.find(
+            (item) =>
+              bot?.activatedAt.seq === item.activation.seq &&
+              bot.activatedAt.hash === item.activation.hash,
+          );
+          if (
+            bot?.kind !== 'bot' ||
+            bot.status !== 'active' ||
+            bot.hostSeat !== sourceSeat ||
+            !completion ||
+            !recoveryStore
+          )
+            return failure(
+              'transfer-private-masters',
+              'An affected seat has no authenticated master',
+            );
+          // oxlint-disable-next-line no-await-in-loop -- Recovery records are bound to separate certified authorizations.
+          const loaded = await loadRecoveryPrivate(
+            context.log,
+            completion.authorization,
+            sourceSeat,
+            recoveryStore,
+          );
+          if (!loaded.ok) return loaded;
+          recovered.push(loaded.value);
+          const secret = loaded.value.secrets.find((item) => item.seat === replacement.seat);
+          if (!secret) return failure('transfer-private-masters', 'Recovered bot master is absent');
+          masters.push({ seat: replacement.seat, master: new Uint8Array(secret.master) });
+        }
+      }
+      if (
+        this.replica !== replica ||
+        this.status.kind !== 'running' ||
+        this.privateStateReleased ||
+        this.getCommittedHead().seq !== head.seq ||
+        this.getCommittedHead().hash !== head.hash
+      )
+        return failure(
+          'transfer-private-stale',
+          'Certified source changed during private preparation',
+        );
+      const packet = await prepareSealedTransferPrivate({
+        journal: this.options.journal,
+        engine: this.options.engine,
+        policy: this.options.policy,
+        authorization,
+        sourceSeat,
+        sourceKind: 'current-controller',
+        signingKey,
+        entropy: entropyCopy,
+        nonce: nonceCopy,
+        ...(approved.statement.mode === 'live' ? { masters } : {}),
+        outbox,
+        ...(recoveryStore ? { recoveryPrivateStore: recoveryStore } : {}),
+        ...(this.options.transferPrivateImportStore
+          ? { importStore: this.options.transferPrivateImportStore }
+          : {}),
+      });
+      if (
+        this.replica !== replica ||
+        this.status.kind !== 'running' ||
+        this.privateStateReleased ||
+        this.getCommittedHead().seq !== head.seq ||
+        this.getCommittedHead().hash !== head.hash
+      )
+        return failure(
+          'transfer-private-stale',
+          'Certified source changed during private delivery',
+        );
+      return packet;
+    } catch {
+      return failure(
+        'transfer-private-storage',
+        'Could not prepare authenticated private transfer',
+      );
+    } finally {
+      signingKey.fill(0);
+      entropyCopy.fill(0);
+      nonceCopy.fill(0);
+      for (const item of masters) item.master.fill(0);
+      for (const item of recovered) item.dispose();
+    }
   }
 
   previewRecoveryAuthorization(change: unknown): Result<RecoveryApprovalCandidate> {
@@ -838,6 +1153,8 @@ export class P2PSession implements GameSession<CertifiedHistory> {
       departedSeat === hostSeat
     )
       return failure('session-recovery-context', 'Certified authority cannot start this takeover');
+    const eligible = await replica.canRequestTakeover(departedSeat);
+    if (!eligible.ok) return eligible;
     const recoverers = authority.controllers
       .filter(
         (item) => item.kind === 'human' && item.status === 'active' && item.seat !== departedSeat,
@@ -919,7 +1236,23 @@ export class P2PSession implements GameSession<CertifiedHistory> {
       entryHash(replica.getContext().log.head) !== parent.hash
     )
       return failure('recovery-parent', 'Certified parent changed during takeover preparation');
+    const stillEligible = await replica.canRequestTakeover(departedSeat);
+    if (!stillEligible.ok) return stillEligible;
     return replica.approveAndSubmitRecovery(authorization);
+  }
+
+  private requestAutomaticTakeover(seat: Seat): void {
+    if (
+      this.context.log.genesis.takeover.mode !== 'auto' ||
+      this.status.kind !== 'running' ||
+      this.automaticTakeovers.has(seat)
+    )
+      return;
+    this.automaticTakeovers.add(seat);
+    void this.requestTakeover(seat, 'easy').then(
+      () => this.automaticTakeovers.delete(seat),
+      () => this.automaticTakeovers.delete(seat),
+    );
   }
 
   /** Rebuilds a halted peer from its certified journal without discarding its votes. */
@@ -942,6 +1275,7 @@ export class P2PSession implements GameSession<CertifiedHistory> {
     this.clearBotTimer();
     this.clearPrivateTimeout();
     this.cancelAudit();
+    this.transferPrivateWork.clear();
     this.auditReveals.clear();
     this.replica?.dispose();
     this.status = { kind: 'disposed' };

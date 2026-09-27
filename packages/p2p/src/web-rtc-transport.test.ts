@@ -508,6 +508,146 @@ describe('authenticated WebRTC mesh', () => {
     }
   });
 
+  test('admits certified destination and catch-up devices after freeze, then retires catch-up', async () => {
+    const f = mesh(3, false, false, true);
+    try {
+      const [a, b, c] = f.roster;
+      if (!a || !b || !c) throw new Error('Missing test identity');
+      const first = { seq: 1, hash: 'a'.repeat(64) };
+      const second = { seq: 2, hash: 'b'.repeat(64) };
+      const initial = [a, b];
+      member(f.peers, 0).updatePreGameRoster(initial);
+      member(f.peers, 1).updatePreGameRoster(initial);
+      for (const peer of f.peers) {
+        peer.freezeRoster();
+        peer.start();
+      }
+      await settle();
+      expect(member(f.peers, 0).peers()).toContain(b);
+      expect(() => member(f.peers, 0).updatePreGameRoster([a, b, c])).toThrow('frozen');
+
+      const includingRetired = {
+        head: first,
+        activeDevices: [a, c],
+        catchupDevices: [b],
+      };
+      for (const peer of f.peers) peer.updateCertifiedRoster(includingRetired);
+      await settle();
+      expect(f.peers.map((peer) => peer.peers().length)).toEqual([2, 2, 2]);
+
+      for (const peer of [member(f.peers, 0), member(f.peers, 2)])
+        peer.updateCertifiedRoster({ ...includingRetired, catchupDevices: [] });
+      expect(member(f.peers, 0).roster()).toEqual([a, c].toSorted());
+      expect(member(f.peers, 0).peers()).not.toContain(b);
+      expect(() => member(f.peers, 0).connect(b)).toThrow('Unknown mesh peer');
+      expect(() => member(f.peers, 0).updateCertifiedRoster(includingRetired)).toThrow(
+        'Conflicting',
+      );
+      expect(() =>
+        member(f.peers, 0).updateCertifiedRoster({
+          head: first,
+          activeDevices: [a, b],
+          catchupDevices: [],
+        }),
+      ).toThrow('Conflicting');
+      expect(() =>
+        member(f.peers, 0).updateCertifiedRoster({ ...includingRetired, head: second }),
+      ).not.toThrow();
+      expect(member(f.peers, 0).roster()).toEqual([a, b, c].toSorted());
+    } finally {
+      f.dispose();
+    }
+  });
+
+  test('rejects stale, malformed and over-capacity certified rosters without changing admission', () => {
+    const f = mesh(7, false, false, true);
+    try {
+      const self = member(f.roster, 0);
+      const peer = member(f.peers, 0);
+      const head = { seq: 4, hash: 'c'.repeat(64) };
+      const activeDevices = [self, member(f.roster, 1)];
+      const update = { head, activeDevices, catchupDevices: [] };
+      expect(() => peer.updateCertifiedRoster(update)).toThrow('not frozen');
+      peer.freezeRoster();
+      peer.updateCertifiedRoster(update);
+      const admitted = peer.roster();
+      expect(() =>
+        peer.updateCertifiedRoster({
+          head: { seq: 3, hash: 'd'.repeat(64) },
+          activeDevices,
+          catchupDevices: [],
+        }),
+      ).toThrow('Stale');
+      expect(() =>
+        peer.updateCertifiedRoster({
+          head: { seq: 4, hash: 'd'.repeat(64) },
+          activeDevices,
+          catchupDevices: [],
+        }),
+      ).toThrow('Stale');
+      expect(() =>
+        peer.updateCertifiedRoster({ head, activeDevices: [self, self], catchupDevices: [] }),
+      ).toThrow('Invalid');
+      expect(() =>
+        peer.updateCertifiedRoster({ head, activeDevices: f.roster, catchupDevices: [] }),
+      ).toThrow('Invalid');
+      expect(() =>
+        peer.updateCertifiedRoster({
+          head: { seq: 5, hash: 'bad' },
+          activeDevices,
+          catchupDevices: [],
+        }),
+      ).toThrow('Invalid');
+      expect(peer.roster()).toEqual(admitted);
+    } finally {
+      f.dispose();
+    }
+  });
+
+  test('a newer certified update from a link-down observer wins over the update closing that link', async () => {
+    const f = mesh(2);
+    try {
+      const [a, b] = f.roster;
+      if (!a || !b) throw new Error('Missing test identity');
+      for (const peer of f.peers) {
+        peer.freezeRoster();
+        peer.start();
+      }
+      await settle();
+      const local = member(f.peers, 0);
+      local.updateCertifiedRoster({
+        head: { seq: 1, hash: 'a'.repeat(64) },
+        activeDevices: [a, b],
+        catchupDevices: [],
+      });
+      local.onPeerChange((_peer, online) => {
+        if (!online)
+          local.updateCertifiedRoster({
+            head: { seq: 3, hash: 'c'.repeat(64) },
+            activeDevices: [a, b],
+            catchupDevices: [],
+          });
+      });
+      expect(() =>
+        local.updateCertifiedRoster({
+          head: { seq: 2, hash: 'b'.repeat(64) },
+          activeDevices: [a],
+          catchupDevices: [],
+        }),
+      ).not.toThrow();
+      expect(local.roster()).toEqual([a, b].toSorted());
+      expect(() =>
+        local.updateCertifiedRoster({
+          head: { seq: 2, hash: 'b'.repeat(64) },
+          activeDevices: [a],
+          catchupDevices: [],
+        }),
+      ).toThrow('Stale');
+    } finally {
+      f.dispose();
+    }
+  });
+
   test('grows a one-peer lobby, preserves links, retires removed peers and freezes the roster', async () => {
     const f = mesh(3, false, false, true);
     try {

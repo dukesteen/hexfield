@@ -288,6 +288,81 @@ describe('objective cheat proofs', () => {
     expect(firstCheatFindings([proved], proved, [0, 1])).toEqual([proved]);
   });
 
+  test('attributes a signed malformed-but-shaped range proof to its exact command parent', () => {
+    const data = context();
+    const ctx = data.context;
+    const signer = required(data.identities[0]);
+    const body = {
+      gameId: ctx.genesis.gameId,
+      genesisDigest: genesisDigest(ctx.genesis),
+      seat: 0 as Seat,
+      nonce: 1,
+      headSeq: ctx.head.seq,
+      headHash: entryHash(ctx.head),
+      command: { type: 'END_TURN' as const },
+    };
+    const input = { kind: 'command' as const, seat: 0 as Seat, command: body.command };
+    const transition = value(ctx.engine.apply(ctx.state, input));
+    const plan = value(
+      planHandTransition(required(ctx.crypto).hands, ctx.state, input, transition),
+    );
+    const binding = {
+      genesisDigest: body.genesisDigest,
+      epoch: 0,
+      anchor: { seq: body.headSeq, hash: body.headHash },
+      command: body,
+    };
+    const proof = value(
+      proveHandObligation(
+        plan,
+        0,
+        { brick: 1, lumber: 0, wool: 0, grain: 0, ore: 0 },
+        {
+          brick: encodeScalar(0n),
+          lumber: encodeScalar(0n),
+          wool: encodeScalar(0n),
+          grain: encodeScalar(0n),
+          ore: encodeScalar(0n),
+        },
+        new Uint8Array(32).fill(7),
+        binding,
+      ),
+    );
+    if (proof.kind !== 'range') throw new Error('Expected a range proof obligation');
+    const firstBit = required(proof.proof.proofs[0]);
+    const responses: [string, string] = [encodeScalar(0n), firstBit.responses[1]];
+    const invalidProof = {
+      ...proof,
+      proof: {
+        ...proof.proof,
+        proofs: [{ ...firstBit, responses }, ...proof.proof.proofs.slice(1)],
+      },
+    };
+    const evidence = composeCommandProofs([], [invalidProof]);
+    if (!evidence) throw new Error('Missing signed range-proof evidence');
+    const signed = signCommand({ ...body, evidence }, signer.secretKey);
+    const finding = value(verifyCheatProof(claim('command-proof', ctx, signed, 0), ctx));
+
+    expect(finding).toMatchObject({
+      seat: 0,
+      kind: 'command-proof',
+      at: { seq: ctx.head.seq, hash: entryHash(ctx.head) },
+    });
+    const wrongParentClaim = claim('command-proof', ctx, signed, 0);
+    expect(
+      verifyCheatProof(
+        {
+          ...wrongParentClaim,
+          evidence: {
+            ...wrongParentClaim.evidence,
+            at: { seq: ctx.head.seq + 1, hash: entryHash(ctx.head) },
+          },
+        },
+        ctx,
+      ),
+    ).toMatchObject({ ok: false, error: { code: 'cheat-unproven' } });
+  });
+
   test('flags a resigned bad count proof including malformed nested proof, but not a forged signature', () => {
     const { context: ctx, identities } = context();
     const owner = required(identities[0]);

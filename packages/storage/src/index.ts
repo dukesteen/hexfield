@@ -19,4 +19,5 @@ export type {
   TransferImportRecord,
   TransferImportInput,
   TransferReadinessRecord,
+  TransferImportOutcome,
 } from './transfer-import-store.js';

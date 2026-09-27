@@ -16,6 +16,7 @@ import { decksReady } from './deck-ledger.js';
 import { deriveEscrowRosters } from './escrow-roster.js';
 import { entryHash, genesisDigest } from './genesis.js';
 import type { LogContext } from './log-types.js';
+import { validateOfflineMarkers } from './recovery-presence.js';
 import type {
   AuthorizedRecovery,
   RecoveryActivationStatement,
@@ -236,7 +237,10 @@ export function validateRecoveryTransition(
       'recovery-parent',
       'Recovery statement differs from its certified parent or next epoch',
     );
-  const history = context.recovery ?? { authorizations: [], pending: null, completed: [] };
+  const history = context.recovery;
+  if (!history) return failure('recovery-history', 'Certified recovery history is unavailable');
+  const offline = validateOfflineMarkers(history, context);
+  if (!offline.ok) return offline;
   const pending = history.pending
     ? history.authorizations.find((item) => same(item.entry, history.pending))
     : undefined;
@@ -262,6 +266,10 @@ function authorize(
   carried: readonly CarriedOperation[],
 ): Result<RecoveryTransition> {
   const statement: RecoveryReadiness = change.statement;
+  if (context.genesis.takeover.afterSeconds === 'never')
+    return failure('recovery-policy', 'Signed game policy disables takeover');
+  if (!history.offline.some((marker) => marker.seat === statement.departedSeat))
+    return failure('recovery-presence', 'Departed human has no certified offline marker');
   const voters = current.controllers.filter(
     (item) => item.kind === 'human' && item.status === 'active',
   );
@@ -455,6 +463,7 @@ function activate(
     recovery: {
       ...history,
       pending: null,
+      offline: history.offline.filter((marker) => marker.seat !== pending.statement.departedSeat),
       completed: [
         ...history.completed,
         {

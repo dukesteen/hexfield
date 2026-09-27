@@ -45,9 +45,27 @@ const readinessSchema = v.strictObject({
     v.maxLength(6),
   ),
 });
+const outcomeSchema = v.variant('outcome', [
+  v.strictObject({
+    outcome: v.literal('cancelled'),
+    authorization: refSchema,
+  }),
+  v.strictObject({
+    outcome: v.literal('promoted'),
+    authorization: refSchema,
+    activation: refSchema,
+  }),
+]);
 
 export type TransferImportRecord = v.InferOutput<typeof stageSchema>;
 export type TransferReadinessRecord = v.InferOutput<typeof readinessSchema>;
+export type TransferImportOutcome =
+  | { readonly kind: 'missing' }
+  | { readonly kind: 'cancelled' }
+  | {
+      readonly kind: 'promoted';
+      readonly activation: { readonly seq: number; readonly hash: string };
+    };
 export type TransferReplayEngine = Parameters<typeof replayCertifiedPrefix>[2];
 export interface TransferImportInput {
   readonly gameId: string;
@@ -264,6 +282,49 @@ export class TransferImportStore {
       } finally {
         canonical.fill(0);
       }
+    } finally {
+      bytes.fill(0);
+    }
+  }
+
+  /**
+   * Read the durable outcome marker only. Callers must match it against replayed
+   * certified history and the active journal before treating it as an outcome.
+   */
+  async readOutcome(
+    gameId: string,
+    authorization: { readonly seq: number; readonly hash: string },
+  ): Promise<TransferImportOutcome> {
+    const scope = v.parse(
+      v.strictObject({
+        gameId: v.pipe(v.string(), v.minLength(1), v.maxLength(128), v.regex(/^[A-Za-z0-9_-]+$/)),
+        authorization: refSchema,
+      }),
+      { gameId, authorization },
+    );
+    const key = transferImportFinalKey(scope);
+    const bytes = await this.#bytes.load(key);
+    if (!bytes) return { kind: 'missing' };
+    try {
+      if (bytes.byteLength > 1024)
+        throw new RangeError('Stored transfer outcome exceeds its record limit');
+      const decoded: unknown = canonicalDecode(bytes);
+      const parsed = v.parse(outcomeSchema, decoded);
+      const canonical = canonicalEncode(parsed);
+      try {
+        if (!equalBytes(canonical, bytes))
+          throw new TypeError('Stored transfer outcome is noncanonical');
+      } finally {
+        canonical.fill(0);
+      }
+      if (
+        parsed.authorization.seq !== scope.authorization.seq ||
+        parsed.authorization.hash !== scope.authorization.hash
+      )
+        throw new TypeError('Stored transfer outcome belongs to another authorization');
+      return parsed.outcome === 'cancelled'
+        ? { kind: 'cancelled' }
+        : { kind: 'promoted', activation: { ...parsed.activation } };
     } finally {
       bytes.fill(0);
     }

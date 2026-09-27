@@ -20,6 +20,8 @@ import {
   LobbyController,
   MAX_MESSAGE_BYTES as MAX_PROTOCOL_MESSAGE_BYTES,
   PROTOCOL_VERSION,
+  proposerFor,
+  signVote,
   signGameSeatBinding,
   validateGenesisOnlineStart,
   verifyGameSeatBindings,
@@ -410,6 +412,9 @@ test('certified activation retires the old route and restores only the new devic
     const throughAuthorization = [...data.deckEntries, authorizedCertificate];
     expect(old.self).toBe(oldGame);
     expect(survivor.advanceCertifiedHistory(throughAuthorization).ok).toBe(true);
+    expect(survivor.deviceRoutes()?.activeDevices).toContain(oldDevice.peer);
+    expect(survivor.deviceRoutes()?.activeDevices).not.toContain(newDevice.peerId);
+    const authorizedRoutes = survivor.deviceRoutes();
     const activationStatement = {
       protocol: 'seat-transfer-activation-v1' as const,
       genesisDigest: statement.genesisDigest,
@@ -452,6 +457,7 @@ test('certified activation retires the old route and restores only the new devic
       ]),
     ).toMatchObject({ ok: false });
     expect(survivor.peers()).toContain(oldGame);
+    expect(survivor.deviceRoutes()).toEqual(authorizedRoutes);
     const throughActivation = [...throughAuthorization, activationCertificate];
     const staleInbox: string[] = [];
     const retiredInbox: string[] = [];
@@ -467,6 +473,16 @@ test('certified activation retires the old route and restores only the new devic
     });
     net.disconnect(oldDevice.peer, survivorDevice.peer);
     expect(survivor.advanceCertifiedHistory(throughActivation).ok).toBe(true);
+    expect(survivor.deviceRoutes()).toMatchObject({
+      head: transferEntryRef(activationEntry),
+      catchupDevices: [oldDevice.peer],
+    });
+    expect(survivor.deviceRoutes()?.activeDevices).toContain(newDevice.peerId);
+    expect(survivor.deviceRoutes()?.activeDevices).not.toContain(oldDevice.peer);
+    expect(survivor.deviceRoutes()?.seats).toContainEqual({
+      seat: 0,
+      devicePeer: newDevice.peerId,
+    });
     expect(survivor.peers()).not.toContain(oldGame);
     net.connect(oldDevice.peer, survivorDevice.peer);
     net.clock.advanceBy(0);
@@ -638,6 +654,28 @@ test('certified activation retires the old route and restores only the new devic
       replacement.send(survivor.self, new Uint8Array([2]));
       net.clock.advanceBy(0);
       expect(messages).toEqual([newGame.peerId]);
+      const graceHead = { seq: activationEntry.seq + 128, hash: 'a'.repeat(64) };
+      expect(survivor.pruneRetired(graceHead)).toEqual({ ok: true, value: false });
+      expect(survivor.deviceRoutes()).toMatchObject({
+        head: graceHead,
+        catchupDevices: [oldDevice.peer],
+      });
+      expect(survivor.pruneRetired({ seq: graceHead.seq, hash: 'b'.repeat(64) })).toMatchObject({
+        ok: false,
+        error: { code: 'online-transport-history' },
+      });
+      const expiredHead = { seq: activationEntry.seq + 129, hash: 'c'.repeat(64) };
+      expect(survivor.pruneRetired(expiredHead)).toEqual({ ok: true, value: true });
+      expect(survivor.deviceRoutes()).toMatchObject({
+        head: expiredHead,
+        catchupDevices: [],
+      });
+      expect(survivor.pruneRetired(expiredHead)).toEqual({ ok: true, value: false });
+      expect(survivor.pruneRetired(graceHead)).toMatchObject({
+        ok: false,
+        error: { code: 'online-transport-history' },
+      });
+      expect(() => survivor.send(oldGame, new Uint8Array([1]))).toThrow(/not a remote human/);
       expect(survivor.advanceCertifiedHistory(data.deckEntries)).toMatchObject({ ok: false });
     } finally {
       replacement.dispose();
@@ -645,6 +683,77 @@ test('certified activation retires the old route and restores only the new devic
   } finally {
     survivor.dispose();
     old.dispose();
+    net.dispose();
+  }
+}, 30_000);
+
+test('a certified control entry advances the route projection without changing device ownership', () => {
+  const data = createRecoveryFixture({ masterBackedBeacon: true });
+  const online = value(validateGenesisOnlineStart(data.genesis)).bindings;
+  const local = required(
+    online.agreement.state.seats.find((seat) => seat.seat === 0 && seat.kind === 'human'),
+  );
+  if (local.kind !== 'human') throw new Error('Missing human device');
+  const net = createMemnet({ peers: [local.peer] });
+  const transport = value(
+    createOnlineGameTransport({
+      deviceTransport: net.transport(local.peer),
+      validatedGenesis: { genesis: data.genesis, state: data.beforeSetup.log.state },
+      agreement: online.agreement,
+      bindings: online.bindings,
+      certifiedHistory: {
+        genesisEntry: data.genesisEntry,
+        entries: data.deckEntries,
+        engine: data.source.engine,
+        policy: data.policy,
+      },
+    }),
+  );
+  try {
+    const parent = data.ready;
+    const seq = parent.log.head.seq + 1;
+    const offender = proposerFor(seq, 1, parent.membership, parent.excludedProposers).seat;
+    const conflicting = (valueHash: string) =>
+      signVote(
+        {
+          genesisDigest: parent.membership.genesisDigest,
+          epoch: parent.membership.epoch,
+          seat: offender,
+          seq,
+          term: 1,
+          phase: 'prevote',
+          valueHash,
+        },
+        recoveryFixtureKey(data, offender),
+      );
+    const control = signRecoveryFixtureEntry(
+      data,
+      parent,
+      {
+        kind: 'control',
+        action: 'exclude-proposer',
+        offender,
+        evidence: {
+          kind: 'vote-equivocation',
+          first: conflicting('a'.repeat(64)),
+          second: conflicting('b'.repeat(64)),
+        },
+      },
+      parent.log.head.stateHash,
+    );
+    const certified = certifyRecoveryFixtureEntry(data, parent, control, [0, 1, 2, 3]);
+    advanceRecoveryFixture(parent, certified);
+    const prior = required(transport.deviceRoutes());
+    expect(transport.advanceCertifiedHistory([...data.deckEntries, certified])).toEqual({
+      ok: true,
+      value: undefined,
+    });
+    expect(transport.deviceRoutes()).toEqual({
+      ...prior,
+      head: transferEntryRef(control),
+    });
+  } finally {
+    transport.dispose();
     net.dispose();
   }
 }, 30_000);

@@ -3,6 +3,9 @@ import { createHashChain, identityFromSecret, scalarToBytes, signObject } from '
 import { success } from '@cp2p/engine';
 import type { Result, Seat } from '@cp2p/engine';
 import { createBeaconSecretSource } from '../beacon-source.js';
+import { completeBeaconState, getBeaconOperation } from '../beacon-state.js';
+import { signBeaconReveal } from '../beacon.js';
+import { BEACON_EVIDENCE_PROTOCOL } from '../crypto-context.js';
 import { deckCeremonyId } from '../deck-genesis.js';
 import {
   GENESIS_PREVIOUS_HASH,
@@ -56,6 +59,8 @@ export function createRecoveryFixture(
     masterBackedBeacon?: boolean;
     chainLength?: number;
     vpTarget?: number;
+    lobbyId?: string;
+    offlineSeat?: Seat | null;
   } = {},
 ) {
   const chainLength = options.chainLength ?? 2;
@@ -73,7 +78,7 @@ export function createRecoveryFixture(
         }),
   });
   const base = { ...genesisBody(source.genesis), security: 'verified' as const, commitments: {} };
-  const deck = createGenesisDeckFixture(base, source.identities);
+  const deck = createGenesisDeckFixture(base, source.identities, options.lobbyId);
   const chains = humanSeats.map((seat) => {
     if (!options.masterBackedBeacon)
       return createHashChain(new Uint8Array(32).fill(seat + 29), chainLength).map((link) =>
@@ -155,6 +160,11 @@ export function createRecoveryFixture(
   }
   if (!context.log.crypto?.beacon.active)
     throw new Error('Verified genesis did not freeze the initial beacon request');
+  if (options.offlineSeat !== null) {
+    const marker = certifyRecoveryFixtureOffline(fixture, context, options.offlineSeat ?? 0);
+    context = advanceRecoveryFixture(context, marker);
+    deckEntries.push(marker);
+  }
   return { ...fixture, deckEntries, ready: context };
 }
 
@@ -223,6 +233,58 @@ export function advanceRecoveryFixture(
   certified: CertifiedEntry,
 ): ProposalContext {
   return value(advanceContext(context, value(validateCertifiedEntry(certified, context))));
+}
+
+/** Certify the public marker required before a seat may be recovered. */
+export function certifyRecoveryFixtureOffline(
+  fixture: Pick<RecoveryFixture, 'source'>,
+  context: ProposalContext,
+  seat: Seat = 0,
+): CertifiedEntry {
+  const entry = signRecoveryFixtureEntry(
+    fixture,
+    context,
+    { kind: 'membership', change: { kind: 'seat-offline', seat } },
+    context.log.head.stateHash,
+  );
+  return certifyRecoveryFixtureEntry(fixture, context, entry, humanSeats);
+}
+
+/** Certify the fixture's frozen first random result without bypassing beacon proofs. */
+export function certifyRecoveryFixtureFirstBeacon(
+  fixture: RecoveryFixture,
+  context: ProposalContext,
+): CertifiedEntry {
+  if (!context.log.crypto) throw new Error('Fixture beacon context is missing');
+  const operation = value(getBeaconOperation(context.log.crypto.beacon));
+  const reveals = humanSeats.map((seat) =>
+    signBeaconReveal(
+      operation,
+      seat,
+      required(required(fixture.chains[seat])[1]),
+      recoveryFixtureKey(fixture, seat),
+    ),
+  );
+  const completed = value(
+    completeBeaconState(context.log.crypto.beacon, reveals, context.log.state, {
+      seq: context.log.head.seq + 1,
+      hash: 'c'.repeat(64),
+    }),
+  );
+  if (completed.outcome.kind !== 'system')
+    throw new Error('Fixture beacon did not produce a system input');
+  const applied = value(fixture.source.engine.apply(context.log.state, completed.outcome.input));
+  const entry = signRecoveryFixtureEntry(
+    fixture,
+    context,
+    {
+      kind: 'system',
+      input: completed.outcome.input,
+      evidence: { kind: 'proof', protocol: BEACON_EVIDENCE_PROTOCOL, data: reveals },
+    },
+    toHex(hashValue(applied.state)),
+  );
+  return certifyRecoveryFixtureEntry(fixture, context, entry, humanSeats);
 }
 
 export function recoveryFixtureReadiness(

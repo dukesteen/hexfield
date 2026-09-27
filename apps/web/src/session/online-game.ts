@@ -45,7 +45,7 @@ import type { GameWriterLease } from '@cp2p/storage';
 import * as v from 'valibot';
 import type { OwnedSeatMaterial } from './online-credentials.js';
 import { createOnlineGameTransport } from './online-game-transport.js';
-import type { OnlineGameTransport } from './online-game-transport.js';
+import type { OnlineDeviceRoutes, OnlineGameTransport } from './online-game-transport.js';
 import { createOnlineGameCandidateStore } from './online-game-candidates.js';
 import { createSessionAuditRunner } from './audit-worker-client.js';
 import { browserEntropy, randomIndex, randomSeed } from './random.js';
@@ -75,6 +75,7 @@ export interface OnlineGameInput {
   readonly signal?: AbortSignal;
   /** Immediate fatal fence for an unexpectedly lost exclusive game writer. */
   readonly onFatal?: (error: Error) => void;
+  readonly onDeviceRoutes?: (routes: OnlineDeviceRoutes) => void;
   /** Resume preserves history; the built-in journal may initialize only an atomically proven unused slot. */
   readonly journalMode?: 'fresh-or-restore' | 'restore-only';
 }
@@ -366,6 +367,14 @@ export async function openOnlineGame(
       transport,
       clock: input.clock,
       journal,
+      onCertifiedNonMembershipCommit(head: { readonly seq: number; readonly hash: string }) {
+        const pruned = projection.value.pruneRetired(head);
+        if (pruned.ok && pruned.value) {
+          const routes = projection.value.deviceRoutes();
+          if (routes) input.onDeviceRoutes?.(routes);
+        }
+        return pruned.ok ? success(undefined) : pruned;
+      },
       onMembershipCommitted(entries: readonly CertifiedEntry[]) {
         const routed = projection.value.advanceCertifiedHistory(entries);
         const payload = entries.at(-1)?.entry.payload;
@@ -376,6 +385,10 @@ export async function openOnlineGame(
             ? transfer.output.statement.replacements
             : [];
         const retired = !routed.ok && routed.error.code === 'online-transport-retired';
+        if (routed.ok) {
+          const routes = projection.value.deviceRoutes();
+          if (routes) input.onDeviceRoutes?.(routes);
+        }
         for (const item of material) {
           if (
             !retired &&
@@ -413,6 +426,8 @@ export async function openOnlineGame(
       stealDeliveryStore: input.store,
       cheatCandidateStore: createOnlineGameCandidateStore(input.store, digest),
       recoveryStore: input.store,
+      transferPrivateOutbox: input.store,
+      transferPrivateImportStore: input.store,
       recoveryParticipant: {
         store: input.store,
         privateEntropy: () => randomSeed(browserEntropy),
@@ -460,6 +475,8 @@ export async function openOnlineGame(
     if (!opened.ok) throw new Error(opened.error.message);
     session = opened.value;
     checkCancelled();
+    const routes = projection.value.deviceRoutes();
+    if (routes) input.onDeviceRoutes?.(routes);
     let closing: Promise<void> | null = null;
     return {
       gameId: genesis.gameId,

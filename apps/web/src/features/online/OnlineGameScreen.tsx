@@ -14,6 +14,10 @@ import { UnsupportedOnlineGameVersionError } from '../../session/online-game-rec
 import { ManualConnectionPanel } from './ManualConnectionPanel';
 import { ConnectionDiagnostics } from './ConnectionDiagnostics';
 import { ChatPanel } from './ChatPanel';
+import { TransferPanel } from './TransferPanel';
+import { useSourceTransfer } from '../../queries/online-transfers';
+import type { OnlineTransferBrowser } from '../../session/online-transfer-browser';
+import { createTransferInviteUrl } from '../../session/online-transfer-link';
 import { useRequestPersistentStorage } from '../../queries/storage-persistence';
 import './online.css';
 
@@ -143,8 +147,17 @@ function OnlineGameInstance({
   const [busy, setBusy] = useState(false);
   const [connectionOpen, setConnectionOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
+  const [transferOpen, setTransferOpen] = useState(false);
+  const [transferBrowser, setTransferBrowser] = useState<OnlineTransferBrowser | null>(null);
+  const sourceTransfer = useSourceTransfer(room);
+  const transfer = useSyncExternalStore(
+    (listener) => transferBrowser?.subscribe(listener) ?? (() => undefined),
+    () => transferBrowser?.getSnapshot() ?? null,
+    () => null,
+  );
   const connectionDialog = useRef<HTMLDialogElement>(null);
   const chatDialog = useRef<HTMLDialogElement>(null);
+  const transferDialog = useRef<HTMLDialogElement>(null);
   const allowNavigation = useRef(false);
   const leaveDialog = useRef<HTMLDialogElement>(null);
   const haltedDialog = useRef<HTMLDialogElement>(null);
@@ -164,6 +177,14 @@ function OnlineGameInstance({
       if (element?.open) element.close();
     };
   }, [chatOpen]);
+  useEffect(() => {
+    const element = transferDialog.current;
+    if (transferOpen && !element?.open) element?.showModal();
+    if (!transferOpen && element?.open) element.close();
+    return () => {
+      if (element?.open) element.close();
+    };
+  }, [transferOpen]);
   const halted = snapshot.startup?.phase === 'halted';
   const blocker = useBlocker({
     shouldBlockFn: ({ current, next }) =>
@@ -210,25 +231,43 @@ function OnlineGameInstance({
     }),
     [agreement],
   );
-  const peerLabels = new Map(
+  const frozenDeviceBySeat = new Map(
     agreement.state.seats.flatMap((seat) =>
-      seat.kind === 'human' ? [[seat.peer, seat.name] as const] : [],
+      seat.kind === 'human' ? [[seat.seat, seat.peer] as const] : [],
     ),
   );
-  const connections: Partial<Record<Seat, string>> = {};
-  const missing = agreement.state.seats.filter(
-    (seat) =>
-      seat.kind === 'human' && seat.peer !== snapshot.self && !snapshot.peers.includes(seat.peer),
+  const currentDeviceBySeat = new Map(
+    snapshot.deviceRoutes?.seats.map(({ seat, devicePeer }) => [seat, devicePeer] as const) ??
+      frozenDeviceBySeat,
   );
+  const currentDeviceForSeat = (seat: Seat): string | null =>
+    snapshot.deviceRoutes
+      ? (currentDeviceBySeat.get(seat) ?? null)
+      : (frozenDeviceBySeat.get(seat) ?? null);
+  const peerLabels = new Map(
+    agreement.state.seats.flatMap((seat) => {
+      if (seat.kind === 'open') return [];
+      const devicePeer = currentDeviceForSeat(seat.seat);
+      return devicePeer ? [[devicePeer, seat.name] as const] : [];
+    }),
+  );
+  const connections: Partial<Record<Seat, string>> = {};
+  const missing = agreement.state.seats.filter((seat) => {
+    const devicePeer = currentDeviceForSeat(seat.seat);
+    return (
+      devicePeer !== null && devicePeer !== snapshot.self && !snapshot.peers.includes(devicePeer)
+    );
+  });
   for (const seat of agreement.state.seats) {
-    if (seat.kind === 'human')
+    const devicePeer = currentDeviceForSeat(seat.seat);
+    if (devicePeer !== null)
       connections[seat.seat] =
-        seat.peer === snapshot.self
+        devicePeer === snapshot.self
           ? t('lobby:onlineYou')
-          : snapshot.peers.includes(seat.peer)
+          : snapshot.peers.includes(devicePeer)
             ? t('lobby:onlineConnected')
             : t('lobby:onlineReconnecting');
-    else if (seat.kind === 'bot') connections[seat.seat] = t('lobby:onlineRandomBot');
+    else connections[seat.seat] = t('lobby:onlineRandomBot');
   }
   const exported = useMutation({
     mutationFn: async () => {
@@ -276,6 +315,20 @@ function OnlineGameInstance({
       setBusy(false);
     }
   };
+  const openTransfer = async () => {
+    setTransferOpen(true);
+    try {
+      setTransferBrowser(await sourceTransfer.mutateAsync());
+    } catch {
+      // The mutation error is shown in the open dialog.
+    }
+  };
+  const withTransfer = (action: (browser: OnlineTransferBrowser) => Promise<void>) => {
+    if (transferBrowser) void action(transferBrowser).catch(() => undefined);
+  };
+  const transferInvite = transfer
+    ? createTransferInviteUrl(window.location.href, transfer.invite)
+    : null;
   const auditText =
     audit?.kind === 'complete'
       ? audit.report.ok
@@ -331,6 +384,15 @@ function OnlineGameInstance({
               >
                 {t('lobby:connectionDiagnosticsTitle')}
               </button>
+              {room.startTransfer && !halted && (
+                <button
+                  className="button button-quiet"
+                  type="button"
+                  onClick={() => void openTransfer()}
+                >
+                  {t('lobby:transferSourceTitle')}
+                </button>
+              )}
             </>
           }
           sessionNotice={
@@ -393,6 +455,46 @@ function OnlineGameInstance({
           {t('lobby:manualClose')}
         </button>
         <ChatPanel room={room} chat={snapshot.chat} labels={peerLabels} self={snapshot.self} />
+      </dialog>
+      <dialog
+        ref={transferDialog}
+        className="app-dialog online-transfer-dialog"
+        aria-label={t('lobby:transferSourceTitle')}
+        onCancel={() => setTransferOpen(false)}
+      >
+        {transfer && transferInvite ? (
+          <TransferPanel
+            role="source"
+            invitationUrl={transferInvite}
+            selfDevice={transfer.selfDevice}
+            candidates={transfer.candidates}
+            selectedDevice={transfer.selectedDevice}
+            phase={transfer.phase}
+            busy={transfer.busy}
+            error={transfer.error}
+            onSelectDevice={(peer) => withTransfer((browser) => browser.selectDevice(peer))}
+            onConfirm={() => withTransfer((browser) => browser.confirm())}
+            onCancel={() => withTransfer((browser) => browser.cancel())}
+            onRetry={() => withTransfer((browser) => browser.retry())}
+            onDismiss={() => setTransferOpen(false)}
+          />
+        ) : (
+          <div className="online-transfer-panel">
+            <h2>{t('lobby:transferSourceTitle')}</h2>
+            {sourceTransfer.error ? (
+              <p role="alert">{sourceTransfer.error.message}</p>
+            ) : (
+              <p role="status">{t('lobby:transferPhase_connecting')}</p>
+            )}
+            <button
+              className="button button-quiet"
+              type="button"
+              onClick={() => setTransferOpen(false)}
+            >
+              {t('lobby:manualClose')}
+            </button>
+          </div>
+        )}
       </dialog>
       <dialog
         ref={haltedDialog}

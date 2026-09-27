@@ -32,6 +32,175 @@ function update(revision: number) {
   };
 }
 
+test('worker owns bootstrap bytes before queued verification and rejects concurrent heavy exports', async () => {
+  const store = Object.assign(new MemoryEscrowLifecycleStore(), { close: async () => undefined });
+  const worker = new OnlineWorkerRuntime({ store, emit: () => undefined });
+  let observed: Uint8Array | undefined;
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  Reflect.set(worker, 'work', gate);
+  Reflect.set(worker, 'destination', {
+    async refreshBootstrap(bytes: Uint8Array) {
+      observed = bytes;
+    },
+    snapshot: () => ({ phase: 'prepared' }),
+    close: async () => undefined,
+  });
+  try {
+    const backing = new Uint8Array(1000).fill(5);
+    const operation = worker.handle(
+      request(1, {
+        kind: 'refreshTransferBootstrap',
+        bootstrapBytes: backing.subarray(10, 15),
+      }),
+    );
+    backing.fill(0);
+    expect(
+      (await worker.handle(request(2, { kind: 'exportTransferBootstrap' }))).result,
+    ).toMatchObject({ ok: false, error: { message: 'Worker is closed or busy' } });
+    release();
+    expect((await operation).result.ok).toBe(true);
+    expect(observed).toEqual(new Uint8Array(5).fill(5));
+    expect(observed?.buffer.byteLength).toBe(5);
+    expect(
+      (
+        await worker.handle(
+          request(3, {
+            kind: 'refreshTransferBootstrap',
+            bootstrapBytes: new Uint8Array(new SharedArrayBuffer(10)),
+          }),
+        )
+      ).result.ok,
+    ).toBe(false);
+  } finally {
+    release();
+    await worker.close();
+  }
+});
+
+test('transfer bootstrap has one bounded slot and shutdown stops the destination before draining', async () => {
+  let storeClosed = false;
+  let destinationClosed = false;
+  const store = Object.assign(new MemoryEscrowLifecycleStore(), {
+    close: async () => {
+      storeClosed = true;
+    },
+  });
+  const worker = new OnlineWorkerRuntime({ store, emit: () => undefined });
+  let release!: () => void;
+  const blocked = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let started!: () => void;
+  const entered = new Promise<void>((resolve) => {
+    started = resolve;
+  });
+  Reflect.set(worker, 'destination', {
+    async refreshBootstrap() {
+      started();
+      await blocked;
+    },
+    snapshot: () => ({ phase: 'prepared' }),
+    async close() {
+      destinationClosed = true;
+      release();
+    },
+  });
+  const body = {
+    kind: 'refreshTransferBootstrap' as const,
+    bootstrapBytes: new Uint8Array(2 * 1024 * 1024),
+  };
+  try {
+    const first = worker.handle(request(1, body));
+    await entered;
+    expect((await worker.handle(request(2, body))).result).toMatchObject({ ok: false });
+    expect(
+      (
+        await worker.handle(
+          request(3, {
+            kind: 'setPrivateVisible',
+            visible: false,
+            visibilityToken: 1,
+          }),
+        )
+      ).result,
+    ).toMatchObject({ ok: true });
+    const closing = worker.handle(request(4, { kind: 'shutdown' }));
+    expect(destinationClosed).toBe(true);
+    expect((await first).result).toMatchObject({ ok: false });
+    expect((await closing).result).toMatchObject({ ok: true });
+    expect(storeClosed).toBe(true);
+  } finally {
+    release();
+    await worker.close();
+  }
+});
+
+test('source transfer RPC rejects stale submission and wipes worker-generated entropy after shutdown', async () => {
+  const store = Object.assign(new MemoryEscrowLifecycleStore(), { close: async () => undefined });
+  const worker = new OnlineWorkerRuntime({ store, emit: () => undefined });
+  const head = { seq: 3, hash: 'a'.repeat(64) };
+  const seeds: Uint8Array[] = [];
+  let submitted = false;
+  let release!: () => void;
+  const blocked = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let started!: () => void;
+  const entered = new Promise<void>((resolve) => {
+    started = resolve;
+  });
+  const session = {
+    getCommittedHead: () => head,
+    submitTransfer: async () => {
+      submitted = true;
+      return success(undefined);
+    },
+    async prepareTransferPrivate(authorization: unknown, entropy: Uint8Array, nonce: Uint8Array) {
+      expect(authorization).toEqual(head);
+      seeds.push(entropy, nonce);
+      expect(entropy).toHaveLength(32);
+      expect(nonce).toHaveLength(32);
+      expect(entropy).not.toEqual(nonce);
+      started();
+      await blocked;
+      return success({ sealed: 'packet' });
+    },
+    dispose: () => release(),
+  };
+  Reflect.set(worker, 'startup', {
+    game: () => ({ session, seat: 0 }),
+    close: async () => undefined,
+  });
+  try {
+    expect(
+      (
+        await worker.handle(
+          request(1, {
+            kind: 'submitTransfer',
+            head: { ...head, seq: 2 },
+            change: {},
+          }),
+        )
+      ).result,
+    ).toMatchObject({ ok: false, error: { code: 'stale-head' } });
+    expect(submitted).toBe(false);
+    const sealing = worker.handle(
+      request(2, { kind: 'prepareTransferPrivate', authorization: head }),
+    );
+    await entered;
+    const closing = worker.handle(request(3, { kind: 'shutdown' }));
+    expect((await sealing).result).toMatchObject({ ok: false });
+    expect((await closing).result).toMatchObject({ ok: true });
+    for (const seed of seeds) expect(seed.every((byte) => byte === 0)).toBe(true);
+  } finally {
+    release();
+    await worker.close();
+  }
+});
+
 test('worker loads the durable device identity and refuses replayed or changed generations', async () => {
   const store = Object.assign(new MemoryEscrowLifecycleStore(), { close: async () => undefined });
   const identity = await loadOrCreateOnlineIdentity(store, (length) =>

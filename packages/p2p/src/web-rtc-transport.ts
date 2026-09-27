@@ -118,6 +118,12 @@ export interface WebRtcTransportOptions {
   readonly randomBytes?: (length: number) => Uint8Array;
 }
 
+export interface CertifiedRosterUpdate {
+  readonly head: { readonly seq: number; readonly hash: string };
+  readonly activeDevices: readonly PeerId[];
+  readonly catchupDevices: readonly PeerId[];
+}
+
 /** Full-mesh Transport; only authenticated PeerLinks become visible to protocol callers. */
 export class WebRtcTransport implements Transport {
   readonly self: PeerId;
@@ -147,6 +153,11 @@ export class WebRtcTransport implements Transport {
   private nextAttemptSeq = 0;
   private started = false;
   private rosterFrozen = false;
+  private certifiedRoster: {
+    readonly head: CertifiedRosterUpdate['head'];
+    readonly activeDevices: ReadonlySet<PeerId>;
+    readonly catchupDevices: ReadonlySet<PeerId>;
+  } | null = null;
   private disposed = false;
 
   constructor(private readonly options: WebRtcTransportOptions) {
@@ -197,6 +208,62 @@ export class WebRtcTransport implements Transport {
   updatePreGameRoster(roster: readonly PeerId[]): void {
     if (this.disposed) throw new Error('WebRTC transport is disposed');
     if (this.rosterFrozen) throw new Error('WebRTC roster is frozen');
+    this.applyRoster(roster);
+  }
+
+  /**
+   * Changes connection admission after lobby freeze. The caller must supply routes verified
+   * against certified game history; this transport does not verify certificates or game packets.
+   */
+  updateCertifiedRoster(update: CertifiedRosterUpdate): void {
+    if (this.disposed) throw new Error('WebRTC transport is disposed');
+    if (!this.rosterFrozen) throw new Error('WebRTC roster is not frozen');
+    const { head, activeDevices, catchupDevices } = update;
+    if (
+      !head ||
+      !Number.isSafeInteger(head.seq) ||
+      head.seq < 0 ||
+      typeof head.hash !== 'string' ||
+      !/^[0-9a-f]{64}$/.test(head.hash) ||
+      !Array.isArray(activeDevices) ||
+      !Array.isArray(catchupDevices) ||
+      activeDevices.length < 1 ||
+      activeDevices.length + catchupDevices.length > 6 ||
+      ![...activeDevices, ...catchupDevices].includes(this.self) ||
+      new Set([...activeDevices, ...catchupDevices]).size !==
+        activeDevices.length + catchupDevices.length
+    )
+      throw new TypeError('Invalid certified WebRTC roster');
+    const previous = this.certifiedRoster;
+    const active = new Set(activeDevices);
+    const catchup = new Set(catchupDevices);
+    if (previous) {
+      if (
+        head.seq < previous.head.seq ||
+        (head.seq === previous.head.seq && head.hash !== previous.head.hash)
+      )
+        throw new Error('Stale certified WebRTC roster');
+      if (
+        head.seq === previous.head.seq &&
+        (active.size !== previous.activeDevices.size ||
+          [...active].some((peer) => !previous.activeDevices.has(peer)) ||
+          [...catchup].some((peer) => !previous.catchupDevices.has(peer)))
+      )
+        throw new Error('Conflicting certified WebRTC roster');
+    }
+    const roster = [...active, ...catchup];
+    for (const peer of roster) parsePeerId(peer);
+    // Link teardown notifies observers synchronously. Install the head before those callbacks
+    // so a reentrant newer update cannot be overwritten by this one.
+    this.certifiedRoster = {
+      head: { seq: head.seq, hash: head.hash },
+      activeDevices: active,
+      catchupDevices: catchup,
+    };
+    this.applyRoster(roster);
+  }
+
+  private applyRoster(roster: readonly PeerId[]): void {
     if (
       !Array.isArray(roster) ||
       roster.length < 1 ||

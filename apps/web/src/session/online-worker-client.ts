@@ -1,4 +1,3 @@
-import { canonicalEncode } from '@cp2p/codec';
 import { failure } from '@cp2p/engine';
 import type { Result } from '@cp2p/engine';
 import type { Unsubscribe } from '@cp2p/protocol';
@@ -13,6 +12,7 @@ import type {
   OnlineWorkerRequest,
   OnlineWorkerRequestBody,
 } from './online-worker-messages.js';
+import { prepareOnlineWorkerRequest } from './online-worker-request-size.js';
 
 export interface OnlineProtocolWorkerPort {
   postMessage(message: OnlineWorkerRequest, transfer: Transferable[]): void;
@@ -26,6 +26,7 @@ export interface OnlineProtocolWorkerPort {
 interface PendingRequest {
   kind: OnlineWorkerRequestBody['kind'];
   bytes: number;
+  heavy: boolean;
   timer: ReturnType<typeof setTimeout>;
   finish(result: Result<unknown>): void;
 }
@@ -53,6 +54,51 @@ function isEvent(
   value: Record<string, unknown>,
 ): value is Record<string, unknown> & OnlineWorkerEvent {
   switch (value.kind) {
+    case 'deviceRoutes': {
+      const routes = value.routes;
+      if (
+        !object(routes) ||
+        !object(routes.head) ||
+        !Number.isSafeInteger(routes.head.seq) ||
+        typeof routes.head.seq !== 'number' ||
+        routes.head.seq < 0 ||
+        typeof routes.head.hash !== 'string' ||
+        !/^[0-9a-f]{64}$/.test(routes.head.hash) ||
+        !Array.isArray(routes.activeDevices) ||
+        !Array.isArray(routes.catchupDevices) ||
+        !Array.isArray(routes.seats) ||
+        routes.seats.length < 2 ||
+        routes.seats.length > 6
+      )
+        return false;
+      const activeDevices = routes.activeDevices;
+      const peers = [...activeDevices, ...routes.catchupDevices];
+      const seenSeats = new Set<number>();
+      const routedDevices: string[] = [];
+      for (const route of routes.seats) {
+        if (
+          !object(route) ||
+          typeof route.seat !== 'number' ||
+          !Number.isInteger(route.seat) ||
+          route.seat < 0 ||
+          route.seat > 5 ||
+          seenSeats.has(route.seat) ||
+          (route.devicePeer !== null && typeof route.devicePeer !== 'string')
+        )
+          return false;
+        seenSeats.add(route.seat);
+        if (typeof route.devicePeer === 'string') routedDevices.push(route.devicePeer);
+      }
+      return (
+        routes.activeDevices.length > 0 &&
+        routedDevices.length === routes.activeDevices.length &&
+        new Set(routedDevices).size === routedDevices.length &&
+        routedDevices.every((peer) => activeDevices.includes(peer)) &&
+        peers.length <= 6 &&
+        new Set(peers).size === peers.length &&
+        peers.every((peer) => typeof peer === 'string' && /^[A-Za-z0-9_-]{43}$/.test(peer))
+      );
+    }
     case 'startup':
       return (
         value.snapshot === null ||
@@ -105,6 +151,7 @@ export class OnlineWorkerClient {
   private readonly failures = new Set<(error: Error) => void>();
   private readonly pending = new Map<number, PendingRequest>();
   private pendingBytes = 0;
+  private pendingHeavy = false;
   private nextId = 0;
   private stopped = false;
   private closing: Promise<void> | null = null;
@@ -126,12 +173,14 @@ export class OnlineWorkerClient {
   ): Promise<Result<OnlineWorkerReplyByKind[K]>> {
     if (this.stopped || (this.closing && body.kind !== 'shutdown'))
       return Promise.resolve(failure('online-worker-closed', 'The online worker is unavailable'));
+    let detachedBody: OnlineWorkerRequestBody;
     let bytes: number;
+    let heavy: boolean;
     try {
-      bytes = canonicalEncode(
-        body.kind === 'attachTransport' ? { ...body, port: null } : body,
-      ).byteLength;
-    } catch {
+      ({ body: detachedBody, bytes, heavy } = prepareOnlineWorkerRequest(body));
+    } catch (error) {
+      if (error instanceof RangeError)
+        return Promise.resolve(failure('online-worker-busy', 'Worker request exceeds its limit'));
       return Promise.resolve(failure('online-worker-request', 'The worker request is malformed'));
     }
     const shutdown = body.kind === 'shutdown';
@@ -146,19 +195,21 @@ export class OnlineWorkerClient {
       ? MAX_ONLINE_WORKER_REQUEST_BYTES
       : MAX_ONLINE_WORKER_REQUEST_BYTES - 65_536;
     if (
-      bytes > MAX_ONLINE_WORKER_REQUEST_BYTES ||
-      (!shutdown && (this.pendingBytes + bytes > byteLimit || this.pending.size >= countLimit))
+      !shutdown &&
+      (this.pending.size >= countLimit ||
+        (heavy ? this.pendingHeavy : this.pendingBytes + bytes > byteLimit))
     )
       return Promise.resolve(failure('online-worker-busy', 'Too many online requests are pending'));
     const id = ++this.nextId;
     return new Promise((resolve) => {
       const timer = setTimeout(
         () => this.fail(new Error('The online worker stopped responding')),
-        options.timeoutMs ?? 120_000,
+        options.timeoutMs ?? (heavy ? 600_000 : 120_000),
       );
       this.pending.set(id, {
         kind: body.kind,
         bytes,
+        heavy,
         timer,
         finish: (result) => {
           // The matched request ID and kind bind the reply to this method's result type.
@@ -166,11 +217,12 @@ export class OnlineWorkerClient {
           resolve(result as Result<OnlineWorkerReplyByKind[K]>);
         },
       });
-      this.pendingBytes += bytes;
+      if (heavy) this.pendingHeavy = true;
+      else this.pendingBytes += bytes;
       try {
         this.worker.postMessage(
-          { protocol: ONLINE_WORKER_PROTOCOL, generation: this.generation, id, body },
-          transfers(body),
+          { protocol: ONLINE_WORKER_PROTOCOL, generation: this.generation, id, body: detachedBody },
+          transfers(detachedBody),
         );
       } catch {
         this.fail(new Error('Could not communicate with the online worker'));
@@ -238,7 +290,8 @@ export class OnlineWorkerClient {
         return;
       }
       this.pending.delete(message.id);
-      this.pendingBytes -= pending.bytes;
+      if (pending.heavy) this.pendingHeavy = false;
+      else this.pendingBytes -= pending.bytes;
       clearTimeout(pending.timer);
       pending.finish(message.result);
       return;
@@ -283,6 +336,7 @@ export class OnlineWorkerClient {
     }
     this.pending.clear();
     this.pendingBytes = 0;
+    this.pendingHeavy = false;
     this.listeners.clear();
     this.failures.clear();
   }

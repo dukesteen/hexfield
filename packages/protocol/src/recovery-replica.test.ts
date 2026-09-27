@@ -12,6 +12,7 @@ import type { Result, Seat } from '@cp2p/engine';
 import { beforeAll, describe, expect, test } from 'vitest';
 import { resolveArtifactSigner } from './authority.js';
 import { createBeaconSecretSource } from './beacon-source.js';
+import { BeaconInbox } from './beacon-inbox.js';
 import {
   MemoryBeaconContributionStore,
   prepareBeaconContribution,
@@ -812,6 +813,157 @@ describe('live certified recovery', () => {
   }, 60_000);
 });
 
+test('live owner countersigns a recent certified offer after an ordinary beacon child', async () => {
+  const fixture = createRecoveryFixture({ masterBackedBeacon: true });
+  const seats = [0, 1, 2, 3] as const;
+  const initialHead = transferEntryRef(fixture.ready.log.head);
+  const reveals = await Promise.all(
+    seats.map(async (seat) => {
+      const source = createBeaconSecretSource(
+        scalarToBytes(BigInt(17 + seat)),
+        { ceremonyId: deckCeremonyId(fixture.genesis), seat },
+        2,
+      );
+      try {
+        const contribution = required(
+          value(
+            await prepareBeaconContribution(
+              required(fixture.ready.log.crypto),
+              seat,
+              recoveryFixtureKey(fixture, seat),
+              source.source,
+              new MemoryBeaconContributionStore(),
+            ),
+          ),
+        );
+        if (contribution.kind !== 'beacon-reveal')
+          throw new Error('Expected a signed initial beacon reveal');
+        return contribution.signed;
+      } finally {
+        source.dispose();
+      }
+    }),
+  );
+  const inbox = new BeaconInbox();
+  value(inbox.refresh(fixture.ready.log.crypto, fixture.genesis, fixture.ready.log.authority));
+  for (const signed of reveals) value(inbox.remember({ kind: 'beacon-reveal', signed }));
+  const payload = required(value(inbox.candidate(fixture.ready.log)));
+  if (payload.kind !== 'system') throw new Error('Expected a certified start-seat input');
+  const applied = value(fixture.source.engine.apply(fixture.ready.log.state, payload.input));
+  const child = signRecoveryFixtureEntry(
+    fixture,
+    fixture.ready,
+    payload,
+    toHex(hashValue(applied.state)),
+  );
+  const certified = certifyRecoveryFixtureEntry(fixture, fixture.ready, child, seats);
+  const advanced = advanceRecoveryFixture(fixture.ready, certified);
+  const journal = await journalAtReady(fixture, 0);
+  expect(
+    await journal.commit(
+      child.seq,
+      0,
+      certified,
+      canonicalEncode(value(createConsensusState(advanced, 0))),
+    ),
+  ).toBe(true);
+  const ownerKey = required(fixture.source.identities.get(0));
+  const network = createMemnet({ peers: [ownerKey.peerId] });
+  const device = identityFromSecret(new Uint8Array(32).fill(140));
+  const game = identityFromSecret(new Uint8Array(32).fill(141));
+  let owner: ReplicatedLog | undefined;
+  try {
+    owner = value(
+      await ReplicatedLog.restore(
+        optionsFor(fixture, 0, network.transport(ownerKey.peerId), network.clock, journal),
+      ),
+    );
+    const controller = required(advanced.log.authority?.controllers[0]);
+    const statement: SeatTransferAuthorizationStatement = {
+      protocol: 'seat-transfer-v1',
+      genesisDigest: advanced.membership.genesisDigest,
+      anchor: initialHead,
+      validUntilSeq: initialHead.seq + 64,
+      mode: 'live',
+      seat: 0,
+      currentController: {
+        publicKey: controller.publicKey,
+        kind: controller.kind,
+        activatedAt: controller.activatedAt,
+        hostSeat: controller.hostSeat,
+      },
+      recovery: null,
+      nextEpoch: advanced.membership.epoch + 1,
+      destination: {
+        devicePeer: device.peerId,
+        gamePeer: game.peerId,
+        transferEncryptionKey: encodePoint(scalePoint(G, 142n)),
+      },
+      replacements: [
+        {
+          seat: 0,
+          oldPublicKey: controller.publicKey,
+          newPublicKey: game.peerId,
+          newHostSeat: 0,
+        },
+      ],
+    };
+    const offer = {
+      kind: 'transfer-authorize' as const,
+      statement,
+      destinationDeviceSig: signObject(TRANSFER_DEVICE_DOMAIN, statement, device.secretKey),
+      destinationGameSig: signObject(TRANSFER_GAME_KEY_DOMAIN, statement, game.secretKey),
+      replacementKeySigs: [],
+    };
+    const expectedHead = transferEntryRef(advanced.log.head);
+    expect(transferEntryRef(owner.getContext().log.head)).toEqual(expectedHead);
+    expect(value(await owner.authorizeLiveTransfer(offer, expectedHead)).ownerIntent).toEqual({
+      signer: 'current-game',
+      sig: signObject(TRANSFER_OWNER_GAME_DOMAIN, statement, ownerKey.secretKey),
+    });
+    expect(await owner.authorizeLiveTransfer(offer, initialHead)).toMatchObject({
+      ok: false,
+      error: { code: 'transfer-head' },
+    });
+    const expired = { ...statement, validUntilSeq: expectedHead.seq };
+    expect(
+      await owner.authorizeLiveTransfer(
+        {
+          ...offer,
+          statement: expired,
+          destinationDeviceSig: signObject(TRANSFER_DEVICE_DOMAIN, expired, device.secretKey),
+          destinationGameSig: signObject(TRANSFER_GAME_KEY_DOMAIN, expired, game.secretKey),
+        },
+        expectedHead,
+      ),
+    ).toMatchObject({ ok: false, error: { code: 'transfer-anchor' } });
+    const wrongController = {
+      ...statement,
+      currentController: { ...statement.currentController, publicKey: game.peerId },
+    };
+    expect(
+      await owner.authorizeLiveTransfer(
+        {
+          ...offer,
+          statement: wrongController,
+          destinationDeviceSig: signObject(
+            TRANSFER_DEVICE_DOMAIN,
+            wrongController,
+            device.secretKey,
+          ),
+          destinationGameSig: signObject(TRANSFER_GAME_KEY_DOMAIN, wrongController, game.secretKey),
+        },
+        expectedHead,
+      ),
+    ).toMatchObject({ ok: false, error: { code: 'transfer-controller' } });
+  } finally {
+    owner?.dispose();
+    device.secretKey.fill(0);
+    game.secretKey.fill(0);
+    network.dispose();
+  }
+}, 30_000);
+
 // Exercise the actual gossip/voting path, rather than constructing its certificates.
 test('live transfer submission certifies cancellation and replacement, then fences the old signer', async () => {
   const fixture = createRecoveryFixture({ masterBackedBeacon: true });
@@ -937,6 +1089,74 @@ test('live transfer submission certifies cancellation and replacement, then fenc
       expect(new Set(hashes).size).toBe(1);
     };
     const first = prepare(120);
+    const offer = {
+      kind: first.change.kind,
+      statement: first.change.statement,
+      destinationDeviceSig: first.change.destinationDeviceSig,
+      destinationGameSig: first.change.destinationGameSig,
+      replacementKeySigs: first.change.replacementKeySigs,
+    };
+    const initialHead = transferEntryRef(submitter.getContext().log.head);
+    const owner = required(replicas[0]);
+    expect(await owner.authorizeLiveTransfer(offer, initialHead)).toEqual({
+      ok: true,
+      value: first.change,
+    });
+    expect(
+      await owner.authorizeLiveTransfer(offer, { ...initialHead, seq: initialHead.seq - 1 }),
+    ).toMatchObject({ ok: false, error: { code: 'transfer-head' } });
+    expect(
+      await owner.authorizeLiveTransfer(offer, { ...initialHead, hash: '0'.repeat(64) }),
+    ).toMatchObject({
+      ok: false,
+      error: { code: 'transfer-head' },
+    });
+    expect(
+      await owner.authorizeLiveTransfer(
+        {
+          ...offer,
+          statement: { ...offer.statement, anchor: { ...initialHead, seq: initialHead.seq - 1 } },
+        },
+        initialHead,
+      ),
+    ).toMatchObject({ ok: false, error: { code: 'transfer-anchor' } });
+    expect(
+      await owner.authorizeLiveTransfer(
+        { ...offer, destinationDeviceSig: first.change.destinationGameSig },
+        initialHead,
+      ),
+    ).toMatchObject({
+      ok: false,
+      error: { code: 'transfer-possession' },
+    });
+    expect(
+      await owner.authorizeLiveTransfer(
+        { ...offer, destinationGameSig: first.change.destinationDeviceSig },
+        initialHead,
+      ),
+    ).toMatchObject({ ok: false, error: { code: 'transfer-possession' } });
+    expect(await required(replicas[1]).authorizeLiveTransfer(offer, initialHead)).toMatchObject({
+      ok: false,
+      error: { code: 'transfer-owner' },
+    });
+    expect(
+      await owner.authorizeLiveTransfer(
+        { ...offer, ownerIntent: first.change.ownerIntent },
+        initialHead,
+      ),
+    ).toMatchObject({
+      ok: false,
+      error: { code: 'transfer-offer' },
+    });
+    expect(
+      await owner.authorizeLiveTransfer(
+        { ...offer, statement: { ...offer.statement, mode: 'return' } },
+        initialHead,
+      ),
+    ).toMatchObject({
+      ok: false,
+      error: { code: 'transfer-offer' },
+    });
     expect(await submitter.submitRecovery(first.change)).toMatchObject({ ok: false });
     expect(
       await submitter.submitTransfer({
@@ -948,6 +1168,15 @@ test('live transfer submission certifies cancellation and replacement, then fenc
     const authorized = submitter.getContext();
     expect(authorized.membership.voters).toEqual(fixture.ready.membership.voters);
     expect(authorized.log.transfer?.pending).toEqual(transferEntryRef(authorized.log.head));
+    expect(
+      await owner.authorizeLiveTransfer(
+        {
+          ...offer,
+          statement: { ...offer.statement, anchor: transferEntryRef(authorized.log.head) },
+        },
+        transferEntryRef(authorized.log.head),
+      ),
+    ).toMatchObject({ ok: false, error: { code: 'transfer-unavailable' } });
     await commit({
       kind: 'transfer-cancel',
       genesisDigest: authorized.membership.genesisDigest,
@@ -955,6 +1184,9 @@ test('live transfer submission certifies cancellation and replacement, then fenc
       parent: transferEntryRef(authorized.log.head),
     });
     expect(submitter.getContext().log.transfer?.pending).toBeNull();
+    expect(
+      await owner.authorizeLiveTransfer(offer, transferEntryRef(owner.getContext().log.head)),
+    ).toMatchObject({ ok: false, error: { code: 'transfer-anchor' } });
     expect(await submitter.submitTransfer(first.change)).toMatchObject({
       ok: false,
       error: { code: 'transfer-anchor' },
@@ -994,6 +1226,12 @@ test('live transfer submission certifies cancellation and replacement, then fenc
     expect(submitter.getContext().log.transfer?.routes[0]?.devicePeer).toBe(
       second.change.statement.destination.devicePeer,
     );
+    expect(
+      await owner.authorizeLiveTransfer(offer, transferEntryRef(submitter.getContext().log.head)),
+    ).toMatchObject({
+      ok: false,
+      error: { code: 'replica-disposed' },
+    });
     expect(await submitter.submitTransfer(activation)).toMatchObject({ ok: false });
     const oldJournal = required(journals[0]);
     const stored = required(await oldJournal.load());
@@ -1075,6 +1313,59 @@ test('live transfer submission certifies cancellation and replacement, then fenc
       expect(destination.getState()).toEqual(submitter.getContext().log.state);
       expect(destination.getPrivate(0)).not.toBeNull();
       expect(destination.getPrivate(1)).toBeNull();
+      const nextDevice = identityFromSecret(new Uint8Array(32).fill(135));
+      const nextGame = identityFromSecret(new Uint8Array(32).fill(136));
+      secrets.push(nextDevice.secretKey, nextGame.secretKey);
+      const current = submitter.getContext();
+      const controller = required(current.log.authority?.controllers[0]);
+      const nextStatement: SeatTransferAuthorizationStatement = {
+        protocol: 'seat-transfer-v1',
+        genesisDigest: current.membership.genesisDigest,
+        anchor: transferEntryRef(current.log.head),
+        validUntilSeq: current.log.head.seq + 64,
+        mode: 'live',
+        seat: 0,
+        currentController: {
+          publicKey: controller.publicKey,
+          kind: controller.kind,
+          activatedAt: controller.activatedAt,
+          hostSeat: controller.hostSeat,
+        },
+        recovery: null,
+        nextEpoch: current.membership.epoch + 1,
+        destination: {
+          devicePeer: nextDevice.peerId,
+          gamePeer: nextGame.peerId,
+          transferEncryptionKey: encodePoint(scalePoint(G, 137n)),
+        },
+        replacements: [
+          {
+            seat: 0,
+            oldPublicKey: controller.publicKey,
+            newPublicKey: nextGame.peerId,
+            newHostSeat: 0,
+          },
+        ],
+      };
+      const nextOffer = {
+        kind: 'transfer-authorize' as const,
+        statement: nextStatement,
+        destinationDeviceSig: signObject(
+          TRANSFER_DEVICE_DOMAIN,
+          nextStatement,
+          nextDevice.secretKey,
+        ),
+        destinationGameSig: signObject(TRANSFER_GAME_KEY_DOMAIN, nextStatement, nextGame.secretKey),
+        replacementKeySigs: [],
+      };
+      const signed = value(
+        await destination.authorizeLiveTransfer(nextOffer, destination.getCommittedHead()),
+      );
+      expect(signed.ownerIntent).toEqual({
+        signer: 'current-game',
+        sig: signObject(TRANSFER_OWNER_GAME_DOMAIN, nextStatement, second.game.secretKey),
+      });
+      expect(destination.getCommittedHead().seq).toBe(current.log.head.seq);
     } finally {
       destination?.dispose();
       destinationNetwork.dispose();

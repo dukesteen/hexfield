@@ -7,12 +7,17 @@ export { createSimulationGenesis } from './testing/simulation-genesis.js';
 export type { SimulationGenesisOptions, SimulationGenesis } from './testing/simulation-genesis.js';
 export { createTerminalAuditFixture } from './testing/audit-fixture.js';
 export { createRetiredSafety } from './retired-safety.js';
+export { persistRecoveryPrivate } from './recovery-private.js';
 export {
   createRecoveryFixture,
   signRecoveryFixtureEntry,
   certifyRecoveryFixtureEntry,
   advanceRecoveryFixture,
+  certifyRecoveryFixtureFirstBeacon,
   recoveryFixtureKey,
+  recoveryFixtureReadiness,
+  signRecoveryFixtureAuthorization,
+  signRecoveryFixtureActivation,
 } from './testing/recovery-fixture.js';
 export {
   TRANSFER_DEVICE_DOMAIN,

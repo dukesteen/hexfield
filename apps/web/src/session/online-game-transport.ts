@@ -1,6 +1,6 @@
 import { fromBase64Url, hashValue, toHex } from '@cp2p/codec';
 import { failure, success } from '@cp2p/engine';
-import type { Engine, Result } from '@cp2p/engine';
+import type { Engine, Result, Seat } from '@cp2p/engine';
 import { MAX_MESSAGE_BYTES as MAX_WEBRTC_MESSAGE_BYTES } from '@cp2p/p2p';
 import {
   genesisDigest,
@@ -41,6 +41,11 @@ interface RetiringRoute {
   hinted: boolean;
 }
 
+function pruneRetiring(retired: Map<PeerId, RetiringRoute>, committedSeq: number): void {
+  for (const [game, route] of retired)
+    if (committedSeq - route.atSeq > RETIRED_GRACE_HEIGHTS) retired.delete(game);
+}
+
 function retireRemovedRoutes(
   prior: ReadonlyMap<PeerId, PeerId>,
   current: ReadonlyMap<PeerId, PeerId>,
@@ -63,8 +68,7 @@ function retireRemovedRoutes(
         hinted: false,
       });
     }
-  for (const [game, route] of retired)
-    if (certified.entry.seq - route.atSeq > RETIRED_GRACE_HEIGHTS) retired.delete(game);
+  pruneRetiring(retired, certified.entry.seq);
   while (retired.size > MAX_RETIRED_ROUTES) {
     const oldest = retired.keys().next().value;
     if (oldest === undefined) break;
@@ -76,8 +80,20 @@ function retireRemovedRoutes(
 export interface OnlineGameTransport extends Transport {
   /** Advances routing only from a verified extension of this transport's certified history. */
   advanceCertifiedHistory(entries: readonly CertifiedEntry[]): Result<void>;
+  /** The caller supplies an already validated non-membership commit head. */
+  pruneRetired(committedHead: OnlineDeviceRoutes['head']): Result<boolean>;
+  /** Connection admission only; current game-key authorization remains in this transport. */
+  deviceRoutes(): OnlineDeviceRoutes | null;
   /** Leaves the authenticated device links and their other subscribers alive. */
   dispose(): void;
+}
+
+export interface OnlineDeviceRoutes {
+  readonly head: { readonly seq: number; readonly hash: string };
+  /** Current certified game-seat owner; null identifies seats currently run as bots. */
+  readonly seats: readonly { readonly seat: Seat; readonly devicePeer: PeerId | null }[];
+  readonly activeDevices: readonly PeerId[];
+  readonly catchupDevices: readonly PeerId[];
 }
 
 export interface OnlineGameTransportOptions {
@@ -210,6 +226,7 @@ export function createOnlineGameTransport(
 function projectCertifiedRoutes(context: ProposalContext): Result<{
   deviceToGame: Map<PeerId, PeerId>;
   gameToDevice: Map<PeerId, PeerId>;
+  seats: readonly { readonly seat: Seat; readonly devicePeer: PeerId | null }[];
 }> {
   const authority = context.log.authority;
   const transfer = context.log.transfer;
@@ -225,7 +242,18 @@ function projectCertifiedRoutes(context: ProposalContext): Result<{
     deviceToGame.set(device, controller.publicKey);
     gameToDevice.set(controller.publicKey, device);
   }
-  return success({ deviceToGame, gameToDevice });
+  const seats: { seat: Seat; devicePeer: PeerId | null }[] = [];
+  for (const controller of authority.controllers) {
+    if (controller.kind === 'bot') {
+      seats.push({ seat: controller.seat, devicePeer: null });
+      continue;
+    }
+    const devicePeer = transfer.routes.find(({ seat }) => seat === controller.seat)?.devicePeer;
+    if (!devicePeer)
+      return failure('online-transport-history', 'Certified human device routes are incomplete');
+    seats.push({ seat: controller.seat, devicePeer });
+  }
+  return success({ deviceToGame, gameToDevice, seats });
 }
 
 class GameKeyTransport implements OnlineGameTransport {
@@ -233,6 +261,7 @@ class GameKeyTransport implements OnlineGameTransport {
   private readonly peerListeners = new Set<(peer: PeerId, online: boolean) => void>();
   private readonly offMessage: Unsubscribe;
   private readonly offPeer: Unsubscribe;
+  private routeHead: OnlineDeviceRoutes['head'] | null;
   private disposed = false;
 
   constructor(
@@ -250,6 +279,9 @@ class GameKeyTransport implements OnlineGameTransport {
       readonly policy: ReplayPolicy;
     } | null,
   ) {
+    this.routeHead = context
+      ? { seq: context.log.head.seq, hash: entryHash(context.log.head) }
+      : null;
     this.offMessage = device.onMessage((from, bytes) => this.receive(from, bytes));
     this.offPeer = device.onPeerChange((peer, online) => {
       for (const route of this.retiring.values())
@@ -288,29 +320,11 @@ class GameKeyTransport implements OnlineGameTransport {
       return failure('online-transport-history', 'Certified history does not extend this prefix');
     if (hashes.length === this.certifiedHashes.length) return success(undefined);
     let next = this.context;
+    const priorSeq = next.log.head.seq;
     let priorRoutes = new Map(this.deviceToGame);
     const retiring = new Map(this.retiring);
-    for (let index = this.certifiedHashes.length; index < entries.length; index++) {
-      const certified = entries[index];
-      if (!certified) return failure('online-transport-history', 'Certified entry is missing');
-      // Historical accusations need a resolver over their exact certified ancestry.
-      const kind = certified.entry?.payload?.kind;
-      if (kind === 'control' || kind === 'cheat-proof') {
-        const replayed = replayCertifiedPrefix(
-          this.verifier.genesisEntry,
-          entries.slice(0, index),
-          this.verifier.engine,
-          this.verifier.policy,
-        );
-        if (!replayed.ok) return replayed;
-        next = replayed.value.context;
-      }
-      const checked = validateCertifiedEntry(certified, next);
-      if (!checked.ok) return checked;
-      const advanced = advanceContext(next, checked.value);
-      if (!advanced.ok) return advanced;
-      next = advanced.value;
-      const nextRoutes = projectCertifiedRoutes(next);
+    const trackRoutes = (certified: CertifiedEntry, context: ProposalContext): Result<void> => {
+      const nextRoutes = projectCertifiedRoutes(context);
       if (!nextRoutes.ok) return nextRoutes;
       const retained = retireRemovedRoutes(
         priorRoutes,
@@ -320,9 +334,45 @@ class GameKeyTransport implements OnlineGameTransport {
       );
       if (!retained.ok) return retained;
       priorRoutes = nextRoutes.value.deviceToGame;
+      return success(undefined);
+    };
+    const extension = entries.slice(this.certifiedHashes.length);
+    if (
+      extension.some(
+        ({ entry }) => entry.payload.kind === 'control' || entry.payload.kind === 'cheat-proof',
+      )
+    ) {
+      const replayed = replayCertifiedPrefix(
+        this.verifier.genesisEntry,
+        entries,
+        this.verifier.engine,
+        this.verifier.policy,
+        (certified, context) =>
+          certified.entry.seq > priorSeq ? trackRoutes(certified, context) : success(undefined),
+      );
+      if (!replayed.ok) return replayed;
+      next = replayed.value.context;
+    } else {
+      for (const certified of extension) {
+        if (!certified) return failure('online-transport-history', 'Certified entry is missing');
+        const checked = validateCertifiedEntry(certified, next);
+        if (!checked.ok) return checked;
+        const advanced = advanceContext(next, checked.value);
+        if (!advanced.ok) return advanced;
+        next = advanced.value;
+        const tracked = trackRoutes(certified, next);
+        if (!tracked.ok) return tracked;
+      }
     }
     const routes = projectCertifiedRoutes(next);
     if (!routes.ok) return routes;
+    const nextHead = { seq: next.log.head.seq, hash: entryHash(next.log.head) };
+    if (
+      this.routeHead &&
+      (nextHead.seq < this.routeHead.seq ||
+        (nextHead.seq === this.routeHead.seq && nextHead.hash !== this.routeHead.hash))
+    )
+      return failure('online-transport-history', 'Certified routing head would move backwards');
     const newSelf = routes.value.deviceToGame.get(this.device.self);
     if (newSelf !== this.self) {
       this.dispose();
@@ -337,6 +387,7 @@ class GameKeyTransport implements OnlineGameTransport {
     );
     this.context = next;
     this.certifiedHashes = hashes;
+    this.routeHead = nextHead;
     this.deviceToGame = routes.value.deviceToGame;
     this.gameToDevice = routes.value.gameToDevice;
     this.retiring = retiring;
@@ -346,6 +397,57 @@ class GameKeyTransport implements OnlineGameTransport {
     for (const route of this.retiring.values())
       if (online.has(route.device)) this.hintRetiring(route);
     return success(undefined);
+  }
+
+  pruneRetired(committedHead: OnlineDeviceRoutes['head']): Result<boolean> {
+    if (this.disposed || !this.context || !this.routeHead)
+      return failure('online-transport-history', 'Certified routing context is unavailable');
+    if (
+      !committedHead ||
+      !Number.isSafeInteger(committedHead.seq) ||
+      typeof committedHead.hash !== 'string' ||
+      !/^[0-9a-f]{64}$/.test(committedHead.hash) ||
+      committedHead.seq < this.routeHead.seq ||
+      (committedHead.seq === this.routeHead.seq && committedHead.hash !== this.routeHead.hash)
+    )
+      return failure('online-transport-history', 'Committed routing head is stale or malformed');
+    const before = this.catchupDevices();
+    pruneRetiring(this.retiring, committedHead.seq);
+    this.routeHead = { seq: committedHead.seq, hash: committedHead.hash };
+    const after = this.catchupDevices();
+    return success(
+      before.length !== after.length || before.some((device, index) => device !== after[index]),
+    );
+  }
+
+  private catchupDevices(): PeerId[] {
+    const activeDevices = this.deviceToGame;
+    return [
+      ...new Set(
+        [...this.retiring.values()]
+          .toSorted(
+            (left, right) => right.atSeq - left.atSeq || left.device.localeCompare(right.device),
+          )
+          .map((route) => route.device),
+      ),
+    ]
+      .filter((device) => !activeDevices.has(device))
+      .slice(0, Math.max(0, 6 - activeDevices.size));
+  }
+
+  deviceRoutes(): OnlineDeviceRoutes | null {
+    if (!this.context || this.disposed) return null;
+    const current = projectCertifiedRoutes(this.context);
+    if (!current.ok) return null;
+    const activeDevices = [...this.deviceToGame.keys()].toSorted();
+    const head = this.routeHead;
+    if (!head) return null;
+    return {
+      head: { ...head },
+      seats: current.value.seats.map((route) => ({ ...route })),
+      activeDevices,
+      catchupDevices: this.catchupDevices(),
+    };
   }
 
   private hintRetiring(route: RetiringRoute): void {

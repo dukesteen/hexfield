@@ -28,6 +28,7 @@ export interface OnlineRoomHandleValue {
   retryStart: () => Promise<Result<void>>;
   getGame: () => OnlineGame<GameSession> | null;
   getPeerStats?: () => Promise<readonly WebRtcPeerStats[]>;
+  startTransfer?: OnlineRoom['startTransfer'];
   sendChat?: (content: ChatContent) => Promise<Result<void>>;
   muteChat?: (peer: PeerId, muted: boolean) => Promise<Result<void>>;
   getSnapshot: () => OnlineRoomSnapshot;

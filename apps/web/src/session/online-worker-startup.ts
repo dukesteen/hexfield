@@ -9,6 +9,7 @@ import type {
   Unsubscribe,
 } from '@cp2p/protocol';
 import type { OnlineGame } from './online-game.js';
+import type { OnlineDeviceRoutes } from './online-game-transport.js';
 import type { OnlineInvite } from './online-invite.js';
 import type { OnlineStartupSnapshot } from './online-startup.js';
 import { OnlineWorkerClient } from './online-worker-client.js';
@@ -27,6 +28,7 @@ interface WorkerStartupOptions {
   clock: ProtocolClock;
   lobby?: LobbyController;
   freezePeers?: (peers: readonly string[]) => void;
+  onDeviceRoutes?: (routes: OnlineDeviceRoutes) => void;
   resume?: OnlineWorkerResumeInfo;
   client?: OnlineWorkerClient;
   initialization?: OnlineWorkerInitialization;
@@ -74,6 +76,12 @@ export class OnlineWorkerStartup {
   }
   game() {
     return this.activeGame;
+  }
+
+  transferClient(): OnlineWorkerClient {
+    if (this.closed || !this.activeGame || !this.client)
+      throw new Error('An active online game is required for device transfer');
+    return this.client;
   }
 
   subscribe(listener: () => void) {
@@ -164,7 +172,9 @@ export class OnlineWorkerStartup {
 
   private receive(event: OnlineWorkerEvent): void {
     if (this.inactive()) return;
-    if (event.kind === 'startup') {
+    if (event.kind === 'deviceRoutes') {
+      this.options.onDeviceRoutes?.(event.routes);
+    } else if (event.kind === 'startup') {
       if (event.snapshot?.phase === 'halted') {
         this.fail(new Error(event.snapshot.error ?? 'Online game stopped'), true);
         // Block output immediately, then allow the worker to drain durable writes and its lease.

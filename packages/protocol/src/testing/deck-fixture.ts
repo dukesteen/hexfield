@@ -200,6 +200,7 @@ function cachedFixture(
 export function createGenesisDeckFixture(
   body: GenesisBody,
   identities: ReadonlyMap<Seat, Identity>,
+  lobbyId?: string,
 ): GenesisDeckFixture {
   // Encryption keys are part of the signed roster before any shuffle transcript.
   const keyedBody: GenesisBody = {
@@ -251,7 +252,11 @@ export function createGenesisDeckFixture(
     },
   };
   return {
-    body: attachFixtureOnlineStart(createGenesisEscrowFixture(nextBody, identities), identities),
+    body: attachFixtureOnlineStart(
+      createGenesisEscrowFixture(nextBody, identities),
+      identities,
+      lobbyId,
+    ),
     transcripts,
     createSource(seat) {
       const sourceDefinition = generated.definitions.find((item) =>

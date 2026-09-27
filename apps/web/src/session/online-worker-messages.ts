@@ -3,11 +3,20 @@ import type {
   Genesis,
   LobbyFreezeAgreement,
   LobbyState,
+  P2PSession,
   RecoveryApprovalPreview,
+  SeatTransferAuthorization,
   SessionUpdate,
+  TransferPrivateEnvelope,
 } from '@cp2p/protocol';
 import type { OnlineInvite } from './online-invite.js';
+import type { OnlineDeviceRoutes } from './online-game-transport.js';
 import type { OnlineStartupSnapshot } from './online-startup.js';
+import type { ExpectedOnlineTransferGame } from './online-transfer-bootstrap.js';
+import type {
+  OnlineTransferDestination,
+  OnlineTransferDestinationSnapshot,
+} from './online-transfer-destination.js';
 
 export const ONLINE_WORKER_PROTOCOL = 'cp2p-online-worker-v1' as const;
 export const MAX_ONLINE_WORKER_REQUEST_BYTES = 1_048_576;
@@ -20,6 +29,34 @@ export interface OnlineWorkerHead {
 }
 
 export type OnlineWorkerRequestBody =
+  | {
+      readonly kind: 'initializeTransfer';
+      readonly self: string;
+      readonly attemptId: string;
+      readonly mode: 'new' | 'resume' | 'open';
+      readonly expected: ExpectedOnlineTransferGame;
+      readonly bootstrapBytes?: Uint8Array;
+    }
+  | { readonly kind: 'transferSnapshot' }
+  | { readonly kind: 'prepareTransferOffer'; readonly seat: Seat; readonly mode: 'live' | 'return' }
+  | { readonly kind: 'refreshTransferBootstrap'; readonly bootstrapBytes: Uint8Array }
+  | { readonly kind: 'importTransferPacket'; readonly packet: TransferPrivateEnvelope }
+  | { readonly kind: 'prepareTransferReadiness' }
+  | { readonly kind: 'observeTransferActivation'; readonly bootstrapBytes: Uint8Array }
+  | { readonly kind: 'observeTransferCancellation'; readonly bootstrapBytes: Uint8Array }
+  | { readonly kind: 'exportTransferBootstrap'; readonly throughSeq?: number }
+  | {
+      readonly kind: 'transferStatus';
+      readonly authorization?: OnlineWorkerHead;
+      readonly statement?: unknown;
+    }
+  | {
+      readonly kind: 'authorizeLiveTransfer';
+      readonly offer: unknown;
+      readonly head: OnlineWorkerHead;
+    }
+  | { readonly kind: 'submitTransfer'; readonly change: unknown; readonly head: OnlineWorkerHead }
+  | { readonly kind: 'prepareTransferPrivate'; readonly authorization: OnlineWorkerHead }
   | {
       readonly kind: 'initialize';
       readonly self: string;
@@ -94,6 +131,22 @@ export interface OnlineWorkerInitialization {
 }
 
 export interface OnlineWorkerReplyByKind {
+  initializeTransfer: OnlineTransferDestinationSnapshot;
+  transferSnapshot: OnlineTransferDestinationSnapshot;
+  prepareTransferOffer: SeatTransferAuthorization;
+  refreshTransferBootstrap: OnlineTransferDestinationSnapshot;
+  importTransferPacket: OnlineTransferDestinationSnapshot;
+  prepareTransferReadiness: Awaited<ReturnType<OnlineTransferDestination['prepareReadiness']>>;
+  observeTransferActivation: {
+    readonly gameId: string;
+    readonly snapshot: OnlineTransferDestinationSnapshot;
+  };
+  observeTransferCancellation: OnlineTransferDestinationSnapshot;
+  exportTransferBootstrap: Uint8Array;
+  transferStatus: ReturnType<P2PSession['getTransferStatus']>;
+  authorizeLiveTransfer: SeatTransferAuthorization;
+  submitTransfer: void;
+  prepareTransferPrivate: TransferPrivateEnvelope;
   initialize: OnlineWorkerInitialization;
   attachTransport: void;
   pinFreeze: { readonly freezeHash: string };
@@ -144,6 +197,12 @@ export interface OnlineWorkerSessionSnapshot {
 }
 
 export type OnlineWorkerEvent =
+  | {
+      readonly protocol: typeof ONLINE_WORKER_PROTOCOL;
+      readonly generation: string;
+      readonly kind: 'deviceRoutes';
+      readonly routes: OnlineDeviceRoutes;
+    }
   | {
       readonly protocol: typeof ONLINE_WORKER_PROTOCOL;
       readonly generation: string;

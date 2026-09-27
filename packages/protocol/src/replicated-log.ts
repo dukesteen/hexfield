@@ -51,10 +51,19 @@ import type { ProtocolMessage } from './messages.js';
 import { recoveryChangeSchema } from './recovery-membership.js';
 import { parseMembershipChange } from './membership-change.js';
 import type { MembershipChange } from './membership-change.js';
-import { transferChangeSchema } from './transfer-readiness.js';
+import {
+  TRANSFER_OWNER_GAME_DOMAIN,
+  transferChangeSchema,
+  transferRefSchema,
+} from './transfer-readiness.js';
+import type { SeatTransferAuthorization } from './transfer-types.js';
 import { previewRecoveryAuthorization } from './recovery-facade.js';
+import { SEAT_ONLINE_DOMAIN, seatOnlineStatement } from './recovery-presence.js';
+import { RecoveryPresenceObserver } from './recovery-presence-observer.js';
+import type { RecoveryPresenceState } from './recovery-presence-observer.js';
 import type { RecoveryApprovalCandidate, RecoveryApprovalPreview } from './recovery-facade.js';
 import type { RecoveryChange } from './recovery-types.js';
+import type { EntryRef } from './beacon-state.js';
 import { RecoveryParticipant } from './recovery-participant.js';
 import type {
   RecoveryParticipantOptions,
@@ -207,6 +216,8 @@ export interface ReplicatedLogOptions {
   ) => void;
   /** Update device routes after the membership COMMIT is sent, before next-height work. */
   onMembershipCommitted?: (entries: readonly CertifiedEntry[]) => Result<void>;
+  /** Local auto-policy hint only; authorization still passes the serialized vote gate. */
+  onTakeoverEligible?: (departedSeat: Seat) => void;
   onStatus?: (status: ReplicatedLogStatus) => void;
 }
 
@@ -248,6 +259,7 @@ export class ReplicatedLog {
     generationHash: string;
   } | null = null;
   private recoveryApprovalRevision = 0;
+  private readonly recoveryPresence = new Map<Seat, RecoveryPresenceObserver>();
   private pendingRecoveryProposal: SignedProposal | null = null;
   private readonly commands: SignedCommand[] = [];
   private readonly rejectedCommands = new Set<string>();
@@ -441,6 +453,7 @@ export class ReplicatedLog {
       const cheats = await replica.recoverCheatCandidates();
       if (!cheats.ok) return cheats;
       replica.attachTransport();
+      replica.observeAllRecoveryPresence();
       replica.broadcastNextCheatClaim();
       const resumed = await replica.activeController().resume();
       if (!resumed.ok) return resumed;
@@ -584,6 +597,71 @@ export class ReplicatedLog {
     return this.enqueueMembership(value, 'transfer', false);
   }
 
+  /** Countersign one destination-only offer against this exact committed head. No gossip occurs. */
+  authorizeLiveTransfer(
+    offer: unknown,
+    expectedHead: EntryRef,
+  ): Promise<Result<SeatTransferAuthorization>> {
+    const parsedOffer = parseCanonical(offer, transferChangeSchema);
+    if (!parsedOffer.ok) return Promise.resolve(parsedOffer);
+    const parsedHead = parseCanonical(expectedHead, transferRefSchema);
+    if (!parsedHead.ok) return Promise.resolve(parsedHead);
+    const change = parsedOffer.value;
+    if (
+      change.kind !== 'transfer-authorize' ||
+      change.statement.mode !== 'live' ||
+      change.ownerIntent !== undefined ||
+      change.returnIntent !== undefined ||
+      change.humanApprovals !== undefined
+    )
+      return Promise.resolve(
+        failure('transfer-offer', 'A live transfer offer must contain only destination signatures'),
+      );
+    return this.enqueue(async () => {
+      const head = this.context.log.head;
+      const headHash = entryHash(head);
+      if (parsedHead.value.seq !== head.seq || parsedHead.value.hash !== headHash)
+        return failure('transfer-head', 'Source consent must name the exact committed head');
+      const controller = this.context.log.authority?.controllers.find(
+        (item) => item.seat === this.options.seat,
+      );
+      const voter = this.context.membership.voters.find((item) => item.seat === this.options.seat);
+      if (
+        change.statement.seat !== this.options.seat ||
+        controller?.kind !== 'human' ||
+        controller.status !== 'active' ||
+        controller.hostSeat !== this.options.seat ||
+        controller.publicKey !== this.self ||
+        voter?.publicKey !== this.self
+      )
+        return failure('transfer-owner', 'Only the current local human may authorize this seat');
+      if (
+        this.context.log.state.result !== null ||
+        this.context.log.recovery?.pending ||
+        this.context.log.transfer?.pending ||
+        this.membershipIntent ||
+        this.pendingRecoverySubmit
+      )
+        return failure(
+          'transfer-unavailable',
+          'Another membership change or game result is pending',
+        );
+      const state = this.activeController().snapshot();
+      if (!state.ok) return state;
+      if (state.value.halted)
+        return failure('replica-halted', 'Voting is halted until certified repair');
+      const signed: SeatTransferAuthorization = {
+        ...change,
+        ownerIntent: {
+          signer: 'current-game',
+          sig: signObject(TRANSFER_OWNER_GAME_DOMAIN, change.statement, this.secretKey),
+        },
+      };
+      const checked = this.deriveCandidate(state.value, { kind: 'membership', change: signed });
+      return checked.ok ? success(signed) : checked;
+    });
+  }
+
   private enqueueMembership(
     value: unknown,
     family: 'recovery' | 'transfer',
@@ -675,6 +753,22 @@ export class ReplicatedLog {
         ? failure('recovery-intent-pending', 'Another takeover request is already pending')
         : success(undefined),
     );
+  }
+
+  /** Local, restart-conservative eligibility; never used to validate certified history. */
+  canRequestTakeover(targetSeat: Seat): Promise<Result<void>> {
+    return this.enqueue(async () => {
+      const policy = this.context.log.genesis.takeover;
+      if (policy.afterSeconds === 'never')
+        return failure('recovery-disabled', 'Takeover is disabled for this game');
+      if (this.context.log.recovery?.pending)
+        return failure('recovery-pending', 'A takeover is already certified');
+      const observed = this.observeRecoveryPresence(targetSeat);
+      if (!observed.ok) return observed;
+      if (!this.context.log.recovery?.offline.some((item) => item.seat === targetSeat))
+        return failure('recovery-offline-required', 'Certified offline notice is required');
+      return this.checkRecoveryPresence(observed.value, policy.afterSeconds * 1_000);
+    });
   }
 
   approveRecoveryAuthorization(value: unknown): Promise<Result<RecoveryApprovalPreview>> {
@@ -1076,9 +1170,9 @@ export class ReplicatedLog {
     );
     this.unsubscribers.push(
       this.options.transport.onPeerChange((peer, online) => {
-        if (!online) return;
         void this.enqueue(async () => {
-          this.cancelRecoveryForReturningPeer(peer);
+          this.observeAllRecoveryPresence();
+          if (online) this.cancelRecoveryForReturningPeer(peer);
           return this.pulse();
         });
       }),
@@ -1646,6 +1740,10 @@ export class ReplicatedLog {
         return this.receiveTradeProofResponse(from, message.response);
       case 'MEMBERSHIP_SUBMIT': {
         const change = message.change;
+        // Presence notices are derived at the current proposer from authenticated
+        // links; they are not arbitrary network-submitted membership intents.
+        if (change.kind === 'seat-offline' || change.kind === 'seat-online')
+          return success(undefined);
         const digest =
           change.kind === 'transfer-cancel' ? change.genesisDigest : change.statement.genesisDigest;
         const parent =
@@ -2046,6 +2144,7 @@ export class ReplicatedLog {
       this.cheatCandidates.size > 0 ||
       this.membershipIntent !== null ||
       this.recoveryCandidate() !== null ||
+      this.presenceCandidate() !== null ||
       (!this.context.log.recovery?.pending &&
         ((!this.cryptoPending() && this.commands.length > 0) ||
           this.deckSetupCandidate() !== null ||
@@ -2097,6 +2196,32 @@ export class ReplicatedLog {
       return null;
     }
     return candidate.value;
+  }
+
+  private presenceCandidate(): MembershipChange | null {
+    if (this.context.log.genesis.security !== 'verified') return null;
+    const policy = this.context.log.genesis.takeover;
+    if (policy.afterSeconds === 'never' || this.context.log.recovery?.pending) return null;
+    const offline = this.context.log.recovery?.offline ?? [];
+    const ownMarker = offline.find((item) => item.seat === this.options.seat);
+    if (ownMarker) {
+      const statement = seatOnlineStatement(this.context.log, this.options.seat);
+      if (statement.ok)
+        return {
+          kind: 'seat-online',
+          proof: {
+            statement: statement.value,
+            sig: signObject(SEAT_ONLINE_DOMAIN, statement.value, this.secretKey),
+          },
+        };
+    }
+    for (const voter of this.context.membership.voters) {
+      if (offline.some((item) => item.seat === voter.seat)) continue;
+      const observed = this.observeRecoveryPresence(voter.seat);
+      if (observed.ok && this.checkRecoveryPresence(observed.value, 15_000).ok)
+        return { kind: 'seat-offline', seat: voter.seat };
+    }
+    return null;
   }
 
   private async prepareRecovery(retransmit: boolean): Promise<Result<void>> {
@@ -2198,6 +2323,8 @@ export class ReplicatedLog {
       });
       if (candidate) return candidate;
     }
+    const presence = this.presenceCandidate();
+    if (presence) return this.entryCandidate(state, { kind: 'membership', change: presence });
     if (this.context.log.recovery?.pending) return null;
     const crypto =
       this.deckSetupCandidate() ??
@@ -2437,11 +2564,18 @@ export class ReplicatedLog {
       if (payload.kind !== 'membership') continue;
       const change = parseMembershipChange(payload.change);
       if (!change.ok) return change;
+      if (change.value.kind === 'seat-offline') {
+        const observed = this.observeRecoveryPresence(change.value.seat);
+        if (!observed.ok) return observed;
+        const admitted = this.checkRecoveryPresence(observed.value, 15_000);
+        if (!admitted.ok) return admitted;
+        continue;
+      }
       if (change.value.kind !== 'recovery-authorize') continue;
       const preview = this.previewRecoveryAuthorization(change.value);
       if (!preview.ok) return preview;
-      if (!this.hasRecoveryApproval(preview.value.preview))
-        return failure('recovery-approval-required', 'Approve this exact takeover before voting');
+      const admitted = this.admitTakeoverAuthorization(preview.value.preview);
+      if (!admitted.ok) return admitted;
     }
     return success(undefined);
   }
@@ -2452,9 +2586,107 @@ export class ReplicatedLog {
     if (payload.kind !== 'membership') return true;
     const change = parseMembershipChange(payload.change);
     if (!change.ok) return false;
+    if (change.value.kind === 'seat-offline') {
+      const observed = this.observeRecoveryPresence(change.value.seat);
+      return observed.ok && this.checkRecoveryPresence(observed.value, 15_000).ok;
+    }
     if (change.value.kind !== 'recovery-authorize') return true;
     const preview = this.previewRecoveryAuthorization(change.value);
-    return preview.ok && this.hasRecoveryApproval(preview.value.preview);
+    return preview.ok && this.admitTakeoverAuthorization(preview.value.preview).ok;
+  }
+
+  private observeRecoveryPresence(targetSeat: Seat): Result<RecoveryPresenceState> {
+    const voters = this.context.membership.voters;
+    const target = voters.find((item) => item.seat === targetSeat);
+    const controller = this.context.log.authority?.controllers.find(
+      (item) => item.seat === targetSeat,
+    );
+    if (!target || controller?.kind !== 'human' || controller.status !== 'active')
+      return failure('recovery-target', 'Takeover target is not an active human voter');
+    let observer = this.recoveryPresence.get(targetSeat);
+    if (!observer) {
+      observer = new RecoveryPresenceObserver();
+      this.recoveryPresence.set(targetSeat, observer);
+    }
+    try {
+      return success(
+        observer.observe({
+          targetSeat,
+          voters,
+          connectedPeers: this.options.transport.peers(),
+          self: this.self,
+          now: this.options.clock.now(),
+        }),
+      );
+    } catch {
+      return failure('recovery-presence', 'Authenticated voter presence is unavailable');
+    }
+  }
+
+  private observeAllRecoveryPresence(): void {
+    for (const voter of this.context.membership.voters) this.observeRecoveryPresence(voter.seat);
+    const current = new Set(this.context.membership.voters.map((item) => item.seat));
+    for (const seat of this.recoveryPresence.keys())
+      if (!current.has(seat)) this.recoveryPresence.delete(seat);
+  }
+
+  private checkRecoveryPresence(observed: RecoveryPresenceState, delayMs: number): Result<void> {
+    if (observed.targetOnline)
+      return failure('recovery-target-online', 'The original voter is connected');
+    if (!observed.quorumReachable)
+      return failure('recovery-quorum', 'The unchanged voter set cannot reach quorum');
+    if (observed.quorumQualifiedAbsentMs < delayMs)
+      return failure(
+        'recovery-too-early',
+        'The local quorum-qualified absence interval has not elapsed',
+      );
+    return success(undefined);
+  }
+
+  private admitTakeoverAuthorization(preview: RecoveryApprovalPreview): Result<void> {
+    const policy = this.context.log.genesis.takeover;
+    if (policy.afterSeconds === 'never')
+      return failure('recovery-disabled', 'Takeover is disabled for this game');
+    if (!this.context.log.recovery?.offline.some((item) => item.seat === preview.departedSeat))
+      return failure('recovery-offline-required', 'Certified offline notice is required');
+    const observed = this.observeRecoveryPresence(preview.departedSeat);
+    if (!observed.ok) return observed;
+    const admitted = this.checkRecoveryPresence(observed.value, policy.afterSeconds * 1_000);
+    if (!admitted.ok) return admitted;
+    if (policy.mode === 'vote' && !this.hasRecoveryApproval(preview))
+      return failure('recovery-approval-required', 'Approve this exact takeover before voting');
+    return success(undefined);
+  }
+
+  private notifyAutoTakeoverEligibility(): void {
+    const policy = this.context.log.genesis.takeover;
+    if (
+      policy.mode !== 'auto' ||
+      this.context.log.recovery?.pending ||
+      this.membershipIntent ||
+      this.pendingRecoverySubmit
+    )
+      return;
+    for (const marker of this.context.log.recovery?.offline ?? []) {
+      const host = this.context.log.authority?.controllers
+        .filter(
+          (item) => item.kind === 'human' && item.status === 'active' && item.seat !== marker.seat,
+        )
+        .map((item) => item.seat)
+        .toSorted((a, b) => a - b)[0];
+      if (host !== this.options.seat) continue;
+      const observed = this.observeRecoveryPresence(marker.seat);
+      if (
+        !observed.ok ||
+        !this.checkRecoveryPresence(observed.value, policy.afterSeconds * 1_000).ok
+      )
+        continue;
+      try {
+        this.options.onTakeoverEligible?.(marker.seat);
+      } catch {
+        this.status({ kind: 'rejected', code: 'recovery-auto-observer' });
+      }
+    }
   }
 
   private hasRecoveryApproval(preview: RecoveryApprovalPreview): boolean {
@@ -3381,6 +3613,7 @@ export class ReplicatedLog {
       throw new Error('Certified journal commit lost its safety CAS');
     this.activeController().dispose();
     this.context = next;
+    this.observeAllRecoveryPresence();
     if (checked.value.entry.payload.kind === 'membership') this.pruneRetiredBotOwnership();
     this.timerObserver.advance(next.log.timers ?? []);
     this.clearTimedVoteRetry();
@@ -3543,6 +3776,8 @@ export class ReplicatedLog {
 
   private async pulse(): Promise<Result<void>> {
     try {
+      this.observeAllRecoveryPresence();
+      this.notifyAutoTakeoverEligibility();
       const snapshot = this.activeController().snapshot();
       if (!snapshot.ok) return snapshot;
       const body = {

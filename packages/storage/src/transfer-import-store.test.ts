@@ -307,6 +307,13 @@ test('durable pending import remains inert until exact certified activation prom
   expect(await journal.promoteTransfer(options)).toBe(false);
   await competing?.close();
   expect(await journal.promoteTransfer(options)).toBe(true);
+  expect(await store.readOutcome(data.fixture.genesis.gameId, data.authorizationRef)).toEqual({
+    kind: 'promoted',
+    activation: {
+      seq: data.activationCertificate.entry.seq,
+      hash: entryHash(data.activationCertificate.entry),
+    },
+  });
   expect(await store.load(stageKey)).toBeNull();
   expect(await store.loadReadiness(stageKey)).toBeNull();
   const afterPromotion = await openDB('cp2p', 2);
@@ -480,12 +487,57 @@ test('certified cancellation erases staged secrets and prevents old-parent resta
   await store.cancelCertified(closing);
   expect(await store.load(key)).toBeNull();
   expect(await store.loadReadiness(key)).toBeNull();
+  expect(await store.readOutcome(data.fixture.genesis.gameId, data.authorizationRef)).toEqual({
+    kind: 'cancelled',
+  });
   await store.cancelCertified(closing);
   await expect(store.stage(input, data.fixture.source.engine, data.fixture.policy)).rejects.toThrow(
     /finalized/,
   );
   await store.close();
 }, 30_000);
+
+test('transfer outcome lookup distinguishes absence and rejects malformed or misbound markers', async () => {
+  installFactory();
+  const bytes = new IndexedDbByteStore();
+  const store = new TransferImportStore(bytes);
+  const authorization = { seq: 7, hash: 'a'.repeat(64) };
+  expect(await store.readOutcome('outcome-missing', authorization)).toEqual({ kind: 'missing' });
+
+  const mismatched = {
+    outcome: 'cancelled',
+    authorization: { seq: 7, hash: 'b'.repeat(64) },
+  };
+  await bytes.putIfAbsent(
+    transferImportFinalKey({ gameId: 'outcome-mismatch', authorization }),
+    canonicalEncode(mismatched),
+  );
+  await expect(store.readOutcome('outcome-mismatch', authorization)).rejects.toThrow(
+    /another authorization/,
+  );
+
+  const malformed = {
+    outcome: 'promoted',
+    authorization,
+    activation: { seq: 8, hash: 'c'.repeat(64) },
+    privateMaterial: 'unexpected',
+  };
+  await bytes.putIfAbsent(
+    transferImportFinalKey({ gameId: 'outcome-malformed', authorization }),
+    canonicalEncode(malformed),
+  );
+  await expect(store.readOutcome('outcome-malformed', authorization)).rejects.toThrow(
+    /Invalid key/,
+  );
+  await bytes.putIfAbsent(
+    transferImportFinalKey({ gameId: 'outcome-oversized', authorization }),
+    new Uint8Array(1025),
+  );
+  await expect(store.readOutcome('outcome-oversized', authorization)).rejects.toThrow(
+    /record limit/,
+  );
+  await store.close();
+}, 10_000);
 
 test('same-device rekey replaces a retired generation and its safety atomically', async () => {
   installFactory();

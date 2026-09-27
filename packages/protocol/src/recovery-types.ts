@@ -48,6 +48,8 @@ export interface AuthorizedRecovery {
 export interface RecoveryState {
   readonly authorizations: readonly AuthorizedRecovery[];
   readonly pending: EntryRef | null;
+  /** Certified observation only; elapsed absence remains a local voting rule. */
+  readonly offline: readonly { readonly seat: Seat; readonly since: EntryRef }[];
   readonly completed: readonly {
     readonly authorization: EntryRef;
     readonly activation: EntryRef;

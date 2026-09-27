@@ -19,15 +19,28 @@ export function ManualConnectionPanel({
   const [target, setTarget] = useState('');
   const manual = snapshot.manual;
   const canInvite = reconnect || snapshot.self === snapshot.invite.hostPeer;
-  const members =
-    (snapshot.agreement?.state ?? snapshot.lobby)?.seats.filter(
-      (seat) => seat.kind === 'human' && seat.peer !== snapshot.self,
-    ) ?? [];
+  const roster = snapshot.agreement?.state ?? snapshot.lobby;
+  const namesBySeat = new Map(
+    roster?.seats.flatMap((seat) =>
+      seat.kind === 'open' ? [] : [[seat.seat, seat.name] as const],
+    ) ?? [],
+  );
+  const deviceRoutes =
+    snapshot.deviceRoutes?.seats ??
+    roster?.seats.flatMap((seat) =>
+      seat.kind === 'human' ? [{ seat: seat.seat, devicePeer: seat.peer }] : [],
+    ) ??
+    [];
+  const members = deviceRoutes.flatMap(({ seat, devicePeer }) => {
+    const name = namesBySeat.get(seat);
+    return devicePeer && devicePeer !== snapshot.self && name ? [{ peer: devicePeer, name }] : [];
+  });
+  const selectedTarget = members.some((member) => member.peer === target) ? target : '';
   const action = useMutation({
     mutationFn: async (kind: 'invite' | 'answer' | 'accept') => {
       const result =
         kind === 'invite'
-          ? await room.startManualInvitation?.(reconnect ? target : undefined)
+          ? await room.startManualInvitation?.(reconnect ? selectedTarget : undefined)
           : kind === 'answer'
             ? await room.answerManualOffer?.(input.trim())
             : await room.acceptManualAnswer?.(input.trim());
@@ -125,23 +138,20 @@ export function ManualConnectionPanel({
           {reconnect && (
             <label>
               {t('lobby:manualChoosePlayer')}
-              <select value={target} onChange={(event) => setTarget(event.target.value)}>
+              <select value={selectedTarget} onChange={(event) => setTarget(event.target.value)}>
                 <option value="">{t('lobby:manualChoosePlayer')}</option>
-                {members.map(
-                  (seat) =>
-                    seat.kind === 'human' && (
-                      <option key={seat.peer} value={seat.peer}>
-                        {seat.name}
-                      </option>
-                    ),
-                )}
+                {members.map((member) => (
+                  <option key={member.peer} value={member.peer}>
+                    {member.name}
+                  </option>
+                ))}
               </select>
             </label>
           )}
           <button
             className="button button-quiet"
             type="button"
-            disabled={action.isPending || (reconnect && !target)}
+            disabled={action.isPending || (reconnect && !selectedTarget)}
             onClick={() => action.mutate('invite')}
           >
             {t(

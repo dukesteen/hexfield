@@ -23,6 +23,7 @@ import type { RecoveryState } from './recovery-types.js';
 import { advanceTransferRecovery } from './transfer-membership.js';
 import { validateTransferTransition } from './transfer-membership.js';
 import { parseMembershipChange } from './membership-change.js';
+import { validateSeatPresenceTransition } from './recovery-presence.js';
 import type { TransferState } from './transfer-types.js';
 
 export {
@@ -170,6 +171,28 @@ export function validateNextEntry(
     if (entry.payload.kind === 'membership') {
       const change = parseMembershipChange(entry.payload.change);
       if (!change.ok) return change;
+      if (change.value.kind === 'seat-offline' || change.value.kind === 'seat-online') {
+        const presence = validateSeatPresenceTransition(
+          change.value,
+          entry,
+          context,
+          transition.value.crypto,
+        );
+        if (!presence.ok) return presence;
+        if (!context.transfer)
+          return failure('transfer-history', 'Certified transfer routes are unavailable');
+        return success({
+          ...presence.value,
+          transfer: {
+            ...context.transfer,
+            intentBarrier: { seq: entry.seq, hash: entryHash(entry) },
+          },
+          entry,
+          hash: entryHash(entry),
+          events: [],
+          lastNonces: new Map(context.lastNonces),
+        });
+      }
       if (
         change.value.kind === 'transfer-authorize' ||
         change.value.kind === 'transfer-activate' ||
@@ -182,8 +205,24 @@ export function validateNextEntry(
           transition.value.crypto,
         );
         if (!transferred.ok) return transferred;
+        if (!context.recovery)
+          return failure('recovery-history', 'Certified recovery history is unavailable');
+        const transferredSeats =
+          change.value.kind === 'transfer-activate'
+            ? change.value.statement.replacements.map((replacement) => replacement.seat)
+            : [];
+        const recovery =
+          transferredSeats.length > 0
+            ? {
+                ...context.recovery,
+                offline: context.recovery.offline.filter(
+                  (marker) => !transferredSeats.includes(marker.seat),
+                ),
+              }
+            : context.recovery;
         return success({
           ...transferred.value,
+          recovery,
           entry,
           hash: entryHash(entry),
           events: [],

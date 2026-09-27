@@ -42,6 +42,7 @@ import { decodeProtocolMessage, encodeProtocolMessage } from './messages.js';
 import { P2PSession } from './p2p-session.js';
 import type { P2PSessionOptions } from './p2p-session.js';
 import { proposerFor } from './proposal.js';
+import { persistRecoveryPrivate } from './recovery-private.js';
 import { initialProposalContext } from './replay.js';
 import type { ReplayPolicy } from './replay.js';
 import { restoreRetiredSafety } from './retired-safety.js';
@@ -72,6 +73,8 @@ import {
   transferEntryRef,
 } from './transfer-readiness.js';
 import type { SeatTransferAuthorizationStatement } from './transfer-types.js';
+import { importTransferPrivate } from './transfer-private.js';
+import type { TransferPrivateStore } from './transfer-private.js';
 import { VerifiedSessionDriver } from './verified-session-driver.js';
 import type { CertifiedEntry, ProposalContext } from './proposal.js';
 import type { Genesis } from './types.js';
@@ -79,6 +82,41 @@ import { signVote } from './votes.js';
 
 const humans = [0, 1, 2] as const;
 const master = (seat: Seat) => scalarToBytes(BigInt(17 + seat));
+
+class MemoryPrivateStore implements TransferPrivateStore {
+  private readonly records = new Map<string, Uint8Array>();
+  private heldLoad: { entered(): void; resume: Promise<void> } | null = null;
+
+  pauseNextLoad(): { entered: Promise<void>; release(): void } {
+    let entered!: () => void;
+    let release!: () => void;
+    const enteredPromise = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const resume = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    this.heldLoad = { entered, resume };
+    return { entered: enteredPromise, release };
+  }
+
+  async load(id: string): Promise<Uint8Array | null> {
+    const held = this.heldLoad;
+    this.heldLoad = null;
+    if (held) {
+      held.entered();
+      await held.resume;
+    }
+    const bytes = this.records.get(id);
+    return bytes ? new Uint8Array(bytes) : null;
+  }
+
+  async putIfAbsent(id: string, bytes: Uint8Array): Promise<boolean> {
+    if (this.records.has(id)) return false;
+    this.records.set(id, new Uint8Array(bytes));
+    return true;
+  }
+}
 
 function value<T>(result: Result<T>): T {
   if (!result.ok) throw new Error(`${result.error.code}: ${result.error.message}`);
@@ -297,6 +335,7 @@ test('fresh destination restores inherited bot without a bot beacon chain and ce
   ];
   const network = createMemnet({ peers });
   const sessions = new Map<Seat, P2PSession>();
+  const nonMembershipHeads = new Map<Seat, { seq: number; hash: string }[]>();
   const providers: ReturnType<typeof createBeaconSecretSource>[] = [];
   let missingHumanBeacon: Result<P2PSession> | null = null;
   try {
@@ -328,6 +367,12 @@ test('fresh destination restores inherited bot without a bot beacon chain and ce
         transport: network.transport(signer.peerId),
         clock: network.clock,
         journal,
+        onCertifiedNonMembershipCommit: (head) => {
+          const seen = nonMembershipHeads.get(seat) ?? [];
+          seen.push({ ...head });
+          nonMembershipHeads.set(seat, seen);
+          return success(undefined);
+        },
         cheatCandidateStore: new MemoryCheatCandidateStore(),
         beaconSource: provider.source,
         beaconContributions: new MemoryBeaconContributionStore(),
@@ -423,6 +468,7 @@ test('fresh destination restores inherited bot without a bot beacon chain and ce
     const committed = required(destination.exportSave().entries.at(-1)).entry;
     if (committed.payload.kind !== 'command') throw new Error('Expected certified bot command');
     expect(committed.payload.signed.body.seat).toBe(3);
+    expect(nonMembershipHeads.get(0)?.at(-1)).toEqual(destination.getCommittedHead());
     expect(
       verifyObject(
         'cmd',
@@ -597,6 +643,13 @@ test('fresh host takes a recovered bot only with its current key and original be
     certifiedActivation,
   ];
   const journal = await journalAt(fixture, 1, entries);
+  const sourceJournal = await journalAt(fixture, 1, entries.slice(0, -1));
+  const sourceNetwork = createMemnet({
+    peers: ([1, 2, 3] as const).map((seat) => required(fixture.source.identities.get(seat)).peerId),
+  });
+  const recoveryStore = new MemoryPrivateStore();
+  const outbox = new MemoryPrivateStore();
+  const imports = new MemoryPrivateStore();
   const network = createMemnet({
     peers: [
       game.peerId,
@@ -614,6 +667,7 @@ test('fresh host takes a recovered bot only with its current key and original be
     { ceremonyId: deckCeremonyId(fixture.genesis), seat: 0 },
     2,
   );
+  let sourceSession: P2PSession | undefined;
   let destination: P2PSession | undefined;
   try {
     expect(active.log.crypto?.beacon.chains.some(({ seat }) => seat === 0)).toBe(true);
@@ -660,6 +714,122 @@ test('fresh host takes a recovered bot only with its current key and original be
             ),
         ),
     };
+    sourceSession = value(
+      await P2PSession.restore({
+        ...options,
+        secretKey: recoveryFixtureKey(fixture, 1),
+        botKeys: new Map([[0, recoveredKey.secretKey]]),
+        transport: sourceNetwork.transport(required(fixture.source.identities.get(1)).peerId),
+        clock: sourceNetwork.clock,
+        journal: sourceJournal,
+        masterReveal: {
+          store: recoveryStore,
+          loadOwnedMaster: async (seat) => (seat === 1 ? master(1) : null),
+          recoveryPrivateStore: recoveryStore,
+        },
+        transferPrivateOutbox: outbox,
+        transferPrivateImportStore: imports,
+      }),
+    );
+    const status = sourceSession.getTransferStatus();
+    expect(status).toEqual({
+      head: authorizationRef,
+      pending: { entry: authorizationRef, statement },
+      outcome: null,
+    });
+    Reflect.set(required(status.pending).entry, 'seq', 0);
+    Reflect.set(required(status.pending).statement.destination, 'devicePeer', 'tampered');
+    expect(sourceSession.getTransferStatus()).toEqual({
+      head: authorizationRef,
+      pending: { entry: authorizationRef, statement },
+      outcome: null,
+    });
+    const entropy = new Uint8Array(32).fill(155);
+    const nonce = new Uint8Array(32).fill(156);
+    expect(
+      await sourceSession.prepareTransferPrivate(authorizationRef, entropy, nonce),
+    ).toMatchObject({ ok: false, error: { code: 'recovery-private-storage' } });
+    expect(
+      await persistRecoveryPrivate(
+        recovering.log,
+        transferEntryRef(recoveryEntry),
+        1,
+        [{ seat: 0, master: master(0) }],
+        recoveryStore,
+      ),
+    ).toEqual({ ok: true, value: undefined });
+    const packet = value(
+      await sourceSession.prepareTransferPrivate(authorizationRef, entropy, nonce),
+    );
+    expect(packet.affectedSeats).toEqual([1, 0]);
+    expect(packet.sourceSigner).toMatchObject({
+      kind: 'current-controller',
+      publicKey: required(fixture.source.identities.get(1)).peerId,
+    });
+    expect(entropy).toEqual(new Uint8Array(32).fill(155));
+    expect(nonce).toEqual(new Uint8Array(32).fill(156));
+    expect(
+      value(
+        await sourceSession.prepareTransferPrivate(
+          authorizationRef,
+          new Uint8Array(32).fill(157),
+          new Uint8Array(32).fill(158),
+        ),
+      ),
+    ).toEqual(packet);
+    const imported = value(
+      await importTransferPrivate({
+        genesisEntry: fixture.genesisEntry,
+        entries: entries.slice(0, -1),
+        engine: fixture.source.engine,
+        policy: fixture.policy,
+        authorization: authorizationRef,
+        packet,
+        destinationEncryptionSecret: scalarToBytes(154n),
+        importStore: imports,
+      }),
+    );
+    try {
+      expect(imported.masters.map(({ seat }) => seat)).toEqual([1, 0]);
+      expect(imported.driver.privateState(1)).not.toBeNull();
+      expect(imported.driver.privateState(0)).not.toBeNull();
+    } finally {
+      imported.dispose();
+    }
+    const concurrent = outbox.pauseNextLoad();
+    const firstRetry = sourceSession.prepareTransferPrivate(
+      authorizationRef,
+      new Uint8Array(32).fill(159),
+      new Uint8Array(32).fill(160),
+    );
+    await concurrent.entered;
+    const secondRetry = sourceSession.prepareTransferPrivate(
+      authorizationRef,
+      new Uint8Array(32).fill(161),
+      new Uint8Array(32).fill(162),
+    );
+    expect(secondRetry).not.toBe(firstRetry);
+    concurrent.release();
+    const firstPacket = value(await firstRetry);
+    const secondPacket = value(await secondRetry);
+    expect(firstPacket).toEqual(packet);
+    expect(secondPacket).toEqual(packet);
+    expect(firstPacket).not.toBe(secondPacket);
+    expect(firstPacket.sealed).not.toBe(secondPacket.sealed);
+    const blocked = outbox.pauseNextLoad();
+    const duringClose = sourceSession.prepareTransferPrivate(
+      authorizationRef,
+      new Uint8Array(32).fill(163),
+      new Uint8Array(32).fill(164),
+    );
+    await blocked.entered;
+    sourceSession.dispose();
+    blocked.release();
+    expect(await duringClose).toMatchObject({
+      ok: false,
+      error: { code: 'transfer-private-stale' },
+    });
+    sourceSession = undefined;
     expect(
       await P2PSession.restore({ ...options, botKeys: new Map([[0, recoveredKey.secretKey]]) }),
     ).toMatchObject({
@@ -675,10 +845,12 @@ test('fresh host takes a recovered bot only with its current key and original be
     expect(destination.getPrivate(0)).not.toBeNull();
     expect(destination.exportSave().entries).toEqual(entries);
   } finally {
+    sourceSession?.dispose();
     destination?.dispose();
     botBeacon.dispose();
     humanBeacon.dispose();
     network.dispose();
+    sourceNetwork.dispose();
     device.secretKey.fill(0);
     game.secretKey.fill(0);
     botGame.secretKey.fill(0);
@@ -805,9 +977,10 @@ test('a second-generation retired human can request only certified history', asy
       retiringOwnerOffline ? 0 : 2,
     );
     keys.set(0, game.secretKey);
+    return { authorization: authorizationRef, activation: transferEntryRef(context.log.head) };
   };
   transfer(firstDevice, firstGame, recoveryFixtureKey(fixture, 0), 163n);
-  transfer(secondDevice, secondGame, firstGame.secretKey, 167n, true);
+  const second = transfer(secondDevice, secondGame, firstGame.secretKey, 167n, true);
   const secondActivated = context;
   const secondActivationSeq = required(entries.at(-1)).entry.seq;
   const pendingController = required(
@@ -1015,6 +1188,51 @@ test('a second-generation retired human can request only certified history', asy
     expect(stale.getCommittedHead().seq).toBe(secondActivationSeq);
     expect(stale.getProtocolStatus()).toMatchObject({ kind: 'retired', seat: 0 });
     expect(stale.getPrivate(0)).toBeNull();
+    expect(stale.exportSave().entries.at(-1)?.entry.seq).toBe(secondActivationSeq);
+    const retiredStatus = stale.getTransferStatus();
+    expect(retiredStatus).toEqual({
+      head: transferEntryRef(secondActivated.log.head),
+      pending: null,
+      matchedAuthorization: null,
+      expiredBeforeCertification: false,
+      outcome: null,
+    });
+    Reflect.set(retiredStatus.head, 'seq', 0);
+    expect(stale.getTransferStatus().head.seq).toBe(secondActivationSeq);
+    const completedStatus = stale.getTransferStatus(second.authorization);
+    expect(completedStatus.outcome).toEqual({
+      authorization: second.authorization,
+      outcome: 'activated',
+      entry: second.activation,
+    });
+    Reflect.set(required(completedStatus.outcome).entry, 'seq', 0);
+    expect(stale.getTransferStatus(second.authorization).outcome?.entry).toEqual(second.activation);
+    const certifiedAuthorization = required(
+      secondActivated.log.transfer?.authorizations.find(
+        ({ entry }) =>
+          entry.seq === second.authorization.seq && entry.hash === second.authorization.hash,
+      ),
+    );
+    const recoveredReference = stale.getTransferStatus(undefined, certifiedAuthorization.statement);
+    expect(recoveredReference.matchedAuthorization).toEqual(certifiedAuthorization);
+    expect(recoveredReference.outcome?.entry).toEqual(second.activation);
+    expect(recoveredReference.expiredBeforeCertification).toBe(false);
+    const uncertified = { ...pendingStatement, validUntilSeq: secondActivationSeq };
+    expect(stale.getTransferStatus(undefined, uncertified).expiredBeforeCertification).toBe(false);
+    expect(
+      stale.getTransferStatus(undefined, {
+        ...uncertified,
+        validUntilSeq: secondActivationSeq - 1,
+      }),
+    ).toMatchObject({
+      matchedAuthorization: null,
+      expiredBeforeCertification: true,
+      outcome: null,
+    });
+    expect(() => stale?.getTransferStatus(second.authorization, uncertified)).toThrow('differ');
+    expect(() =>
+      stale?.getTransferStatus(undefined, { ...uncertified, genesisDigest: 'A'.repeat(43) }),
+    ).toThrow('another game');
     const retiredRecord = required(await staleJournal.load());
     expect(retiredRecord.height).toBe(secondActivationSeq + 1);
     expect(

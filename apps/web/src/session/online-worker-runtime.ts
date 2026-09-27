@@ -1,8 +1,9 @@
 import { canonicalDecode, canonicalEncode, hashValue, toHex } from '@cp2p/codec';
 import { createBaseEngine, success } from '@cp2p/engine';
-import { verifyLobbyFreezeAgreement } from '@cp2p/protocol';
+import { transferChangeSchema, verifyLobbyFreezeAgreement } from '@cp2p/protocol';
 import type { ProtocolClock, SessionUpdate, Unsubscribe } from '@cp2p/protocol';
 import { IndexedDbByteStore } from '@cp2p/storage';
+import * as v from 'valibot';
 import { loadOnlineIdentity } from './online-credentials.js';
 import type { DisposableOnlineIdentity } from './online-credentials.js';
 import { validateOnlineInvite } from './online-invite.js';
@@ -11,7 +12,11 @@ import { loadOnlineGameRecord } from './online-game-records.js';
 import type { SavedOnlineGameRecord } from './online-game-records.js';
 import { loadActiveOnlineResume } from './online-resume-binding.js';
 import { OnlineStartup, pinOnlineFreeze } from './online-startup.js';
+import { encodeOnlineTransferBootstrap } from './online-transfer-bootstrap.js';
+import { OnlineTransferDestination } from './online-transfer-destination.js';
+import { browserEntropy, randomSeed } from './random.js';
 import { createWorkerDeviceTransport } from './online-worker-transport.js';
+import { prepareOnlineWorkerRequest } from './online-worker-request-size.js';
 import {
   MAX_ONLINE_WORKER_REQUEST_BYTES,
   MAX_ONLINE_WORKER_PENDING_REQUESTS,
@@ -87,6 +92,7 @@ export class OnlineWorkerRuntime {
   private lastId = 0;
   private pending = 0;
   private pendingBytes = 0;
+  private pendingHeavy = false;
   private work: Promise<void> = Promise.resolve();
   private readonly sessionWork = new Set<Promise<unknown>>();
   private identity: DisposableOnlineIdentity | null = null;
@@ -94,6 +100,8 @@ export class OnlineWorkerRuntime {
   private resume: SavedOnlineGameRecord | null = null;
   private transport: WorkerTransport | null = null;
   private startup: OnlineStartup | null = null;
+  private destination: OnlineTransferDestination | null = null;
+  private readonly destinationAbort = new AbortController();
   private sessionUnsubscribe: Unsubscribe | null = null;
   private startupUnsubscribe: Unsubscribe | null = null;
   private gameAnnounced = false;
@@ -133,18 +141,11 @@ export class OnlineWorkerRuntime {
         (error: unknown) => this.reply(request, errorResult(error)),
       );
     }
+    let detachedBody: OnlineWorkerRequestBody;
     let bytes: number;
+    let heavy: boolean;
     try {
-      const body =
-        request.body.kind === 'attachTransport'
-          ? { kind: request.body.kind, self: request.body.self, peers: request.body.peers }
-          : request.body;
-      bytes = canonicalEncode({
-        protocol: request.protocol,
-        generation: request.generation,
-        id: request.id,
-        body,
-      }).byteLength;
+      ({ body: detachedBody, bytes, heavy } = prepareOnlineWorkerRequest(request.body));
     } catch {
       return Promise.resolve(
         this.reply(request, errorResult(new Error('Malformed worker request'))),
@@ -162,17 +163,25 @@ export class OnlineWorkerRuntime {
       : MAX_ONLINE_WORKER_REQUEST_BYTES - 65_536;
     if (
       this.closed ||
-      bytes > MAX_ONLINE_WORKER_REQUEST_BYTES ||
       this.pending >= countLimit ||
-      this.pendingBytes + bytes > byteLimit
+      (heavy ? this.pendingHeavy : this.pendingBytes + bytes > byteLimit)
     )
       return Promise.resolve(
         this.reply(request, errorResult(new Error('Worker is closed or busy'))),
       );
     this.pending += 1;
-    this.pendingBytes += bytes;
+    if (heavy) this.pendingHeavy = true;
+    else this.pendingBytes += bytes;
     const lifecycle = [
       'initialize',
+      'initializeTransfer',
+      'prepareTransferOffer',
+      'refreshTransferBootstrap',
+      'importTransferPacket',
+      'prepareTransferReadiness',
+      'observeTransferActivation',
+      'observeTransferCancellation',
+      'transferSnapshot',
       'attachTransport',
       'pinFreeze',
       'startCeremony',
@@ -180,7 +189,7 @@ export class OnlineWorkerRuntime {
     ].includes(request.body.kind);
     const operation = async () => {
       if (this.closed) throw new Error('Worker is closed');
-      return this.dispatch(request.body);
+      return this.dispatch(detachedBody);
     };
     const result = lifecycle ? this.work.then(operation) : Promise.resolve().then(operation);
     if (lifecycle)
@@ -199,7 +208,8 @@ export class OnlineWorkerRuntime {
       )
       .finally(() => {
         this.pending -= 1;
-        this.pendingBytes -= bytes;
+        if (heavy) this.pendingHeavy = false;
+        else this.pendingBytes -= bytes;
       });
   }
 
@@ -222,6 +232,99 @@ export class OnlineWorkerRuntime {
 
   private async dispatch(body: OnlineWorkerRequestBody): Promise<unknown> {
     switch (body.kind) {
+      case 'initializeTransfer':
+        return this.initializeTransfer(body);
+      case 'transferSnapshot':
+        return copyPublic(this.requireDestination().snapshot());
+      case 'prepareTransferOffer': {
+        const offer = await this.transferResult(this.requireDestination().prepareOffer(body));
+        const parsed = v.parse(transferChangeSchema, offer);
+        if (parsed.kind !== 'transfer-authorize') throw new Error('Unexpected transfer offer');
+        return copyPublic(parsed);
+      }
+      case 'refreshTransferBootstrap':
+        await this.transferResult(this.requireDestination().refreshBootstrap(body.bootstrapBytes));
+        return copyPublic(this.requireDestination().snapshot());
+      case 'importTransferPacket':
+        await this.transferResult(this.requireDestination().importPacket(body.packet));
+        return copyPublic(this.requireDestination().snapshot());
+      case 'prepareTransferReadiness': {
+        const readiness = await this.transferResult(this.requireDestination().prepareReadiness());
+        const parsed = v.parse(transferChangeSchema, readiness);
+        if (parsed.kind !== 'transfer-activate') throw new Error('Unexpected transfer readiness');
+        return copyPublic(parsed);
+      }
+      case 'observeTransferActivation': {
+        const gameId = await this.transferResult(
+          this.requireDestination().observeActivation(body.bootstrapBytes),
+        );
+        return { gameId, snapshot: copyPublic(this.requireDestination().snapshot()) };
+      }
+      case 'observeTransferCancellation':
+        await this.transferResult(
+          this.requireDestination().observeCancellation(body.bootstrapBytes),
+        );
+        return copyPublic(this.requireDestination().snapshot());
+      case 'transferStatus':
+        return copyPublic(
+          this.requireSession().getTransferStatus(body.authorization, body.statement),
+        );
+      case 'exportTransferBootstrap': {
+        const session = this.requireSession();
+        const gameId = this.requireStartup().game()?.gameId;
+        if (!gameId) throw new Error('Online game is not active');
+        const start = await loadOnlineGameRecord(this.store, gameId);
+        if (!start || this.closed) throw new Error('Public online start is unavailable');
+        const entries = session.exportSave().entries;
+        const throughSeq = body.throughSeq ?? entries.at(-1)?.entry.seq ?? start.result.entry.seq;
+        const latest = entries.at(-1)?.entry.seq ?? start.result.entry.seq;
+        if (
+          !Number.isSafeInteger(throughSeq) ||
+          throughSeq < start.result.entry.seq ||
+          throughSeq > latest
+        )
+          throw new RangeError('Transfer bootstrap prefix is outside the certified history');
+        const result = encodeOnlineTransferBootstrap({
+          start,
+          entries: entries.filter(({ entry }) => entry.seq <= throughSeq),
+        });
+        if (!result.ok)
+          throw Object.assign(new Error(result.error.message), { code: result.error.code });
+        if (result.value.byteLength > MAX_ONLINE_WORKER_SNAPSHOT_BYTES)
+          throw new Error('Transfer bootstrap exceeds the worker export limit');
+        return result.value;
+      }
+      case 'authorizeLiveTransfer': {
+        const result = await this.transferResult(
+          this.requireSession().authorizeLiveTransfer(body.offer, body.head),
+        );
+        if (!result.ok)
+          throw Object.assign(new Error(result.error.message), { code: result.error.code });
+        return result.value;
+      }
+      case 'submitTransfer': {
+        this.requireHead(body.head);
+        const result = await this.transferResult(this.requireSession().submitTransfer(body.change));
+        if (!result.ok)
+          throw Object.assign(new Error(result.error.message), { code: result.error.code });
+        return undefined;
+      }
+      case 'prepareTransferPrivate': {
+        const entropy = randomSeed(browserEntropy);
+        let nonce: Uint8Array | undefined;
+        try {
+          nonce = randomSeed(browserEntropy);
+          const result = await this.transferResult(
+            this.requireSession().prepareTransferPrivate(body.authorization, entropy, nonce),
+          );
+          if (!result.ok)
+            throw Object.assign(new Error(result.error.message), { code: result.error.code });
+          return result.value;
+        } finally {
+          entropy.fill(0);
+          nonce?.fill(0);
+        }
+      }
       case 'initialize':
         return this.initialize(body);
       case 'attachTransport':
@@ -358,6 +461,52 @@ export class OnlineWorkerRuntime {
     }
   }
 
+  private async initializeTransfer(
+    body: Extract<OnlineWorkerRequestBody, { kind: 'initializeTransfer' }>,
+  ): Promise<OnlineWorkerReplyByKind['initializeTransfer']> {
+    if (this.identity || this.transport || this.startup || this.destination)
+      throw new Error('Worker already initialized');
+    if (!(this.store instanceof IndexedDbByteStore))
+      throw new Error('Transfer promotion requires the atomic IndexedDB store');
+    const identity = await loadOnlineIdentity(this.store);
+    let destination: OnlineTransferDestination | undefined;
+    try {
+      if (this.closed || identity.peerId !== body.self)
+        throw new Error('Transfer device identity is unavailable or differs');
+      destination = await OnlineTransferDestination.create({
+        attemptId: body.attemptId,
+        mode: body.mode,
+        expected: body.expected,
+        identity,
+        store: this.store,
+        signal: this.destinationAbort.signal,
+        ...(body.bootstrapBytes === undefined ? {} : { bootstrapBytes: body.bootstrapBytes }),
+      });
+      if (this.closed) throw new Error('Worker closed during transfer initialization');
+      this.identity = identity;
+      this.destination = destination;
+      return copyPublic(destination.snapshot());
+    } catch (error) {
+      try {
+        await destination?.close();
+      } finally {
+        identity.dispose();
+      }
+      throw error;
+    }
+  }
+
+  private requireDestination(): OnlineTransferDestination {
+    if (!this.destination || this.closed) throw new Error('Transfer destination is not active');
+    return this.destination;
+  }
+
+  private async transferResult<T>(operation: Promise<T>): Promise<T> {
+    const result = await operation;
+    if (this.closed) throw new Error('Worker closed during transfer operation');
+    return result;
+  }
+
   private attachTransport(
     body: Extract<OnlineWorkerRequestBody, { kind: 'attachTransport' }>,
   ): void {
@@ -415,6 +564,15 @@ export class OnlineWorkerRuntime {
       clock: this.clock,
       engine: createBaseEngine(),
       onGameFatal: (error) => this.fatal(error, 'game-writer-lost'),
+      onDeviceRoutes: (routes) => {
+        if (this.closed || !this.generation) return;
+        this.emit({
+          protocol: ONLINE_WORKER_PROTOCOL,
+          generation: this.generation,
+          kind: 'deviceRoutes',
+          routes: copyPublic(routes),
+        });
+      },
       ...mode,
     });
     this.startup = startup;
@@ -536,7 +694,11 @@ export class OnlineWorkerRuntime {
   close(): Promise<void> {
     if (this.closing) return this.closing;
     this.closed = true;
+    this.destinationAbort.abort();
     this.stopOutput();
+    const destinationClosing = this.destination?.close();
+    // Closing immediately stops pending import/readiness work before storage is drained.
+    void destinationClosing?.catch(() => undefined);
     this.closing = (async () => {
       await this.work;
       await Promise.allSettled(this.sessionWork);
@@ -545,9 +707,13 @@ export class OnlineWorkerRuntime {
       try {
         await this.startup?.close();
       } finally {
-        this.transport?.close();
-        this.identity?.dispose();
-        await this.store.close();
+        try {
+          await destinationClosing;
+        } finally {
+          this.transport?.close();
+          this.identity?.dispose();
+          await this.store.close();
+        }
       }
     })();
     return this.closing;

@@ -23,6 +23,7 @@ import { loadCeremonyMaterial, prepareCeremonyMaterial } from './online-credenti
 import type { DisposableOnlineIdentity, OwnedCeremonyMaterial } from './online-credentials.js';
 import { openOnlineGame } from './online-game.js';
 import type { OnlineGame, OnlineGameRuntime } from './online-game.js';
+import type { OnlineDeviceRoutes } from './online-game-transport.js';
 import type { OnlineInvite } from './online-invite.js';
 import { assertSupportedOnlineGameVersion, saveOnlineGameRecord } from './online-game-records.js';
 import type { SavedOnlineGameRecord } from './online-game-records.js';
@@ -45,6 +46,7 @@ interface OnlineStartupBase {
   readonly engine: Engine;
   readonly gameRuntime?: OnlineGameRuntime;
   readonly onGameFatal?: (error: Error) => void;
+  readonly onDeviceRoutes?: (routes: OnlineDeviceRoutes) => void;
 }
 
 export type OnlineStartupOptions = OnlineStartupBase &
@@ -474,6 +476,7 @@ export class OnlineStartup {
         engine: this.options.engine,
         signal: this.abort.signal,
         ...(this.options.onGameFatal ? { onFatal: this.options.onGameFatal } : {}),
+        ...(this.options.onDeviceRoutes ? { onDeviceRoutes: this.options.onDeviceRoutes } : {}),
         ...(this.resume ? { journalMode: 'restore-only' as const } : {}),
       },
       this.options.gameRuntime,
@@ -520,6 +523,7 @@ export class OnlineStartup {
         signal: this.abort.signal,
         journalMode: 'restore-only',
         ...(this.options.onGameFatal ? { onFatal: this.options.onGameFatal } : {}),
+        ...(this.options.onDeviceRoutes ? { onDeviceRoutes: this.options.onDeviceRoutes } : {}),
       },
       this.options.gameRuntime,
     ).finally(() => {
