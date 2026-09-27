@@ -11,6 +11,7 @@ import {
 } from '@cp2p/protocol';
 import type { CertifiedEntry, ReplayedPrefix } from '@cp2p/protocol';
 import * as v from 'valibot';
+import { boundedCanonicalJsonStructure } from './bounded-canonical-json.js';
 import {
   validateOnlineGameStartRecord,
   type SavedOnlineGameRecord,
@@ -228,6 +229,8 @@ export function validateOnlineTransferBootstrap(
     return failure('transfer-bootstrap-expected', 'Expected game binding is malformed');
   if (!(bytes instanceof Uint8Array) || bytes.length > MAX_BOOTSTRAP_BYTES)
     return failure('transfer-bootstrap-size', 'Transfer bootstrap is oversized or malformed');
+  if (!boundedCanonicalJsonStructure(bytes, 600_000))
+    return failure('transfer-bootstrap-size', 'Transfer bootstrap structure exceeds its bounds');
 
   let decoded: unknown;
   let canonical: Uint8Array | undefined;

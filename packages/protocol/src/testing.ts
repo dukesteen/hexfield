@@ -28,3 +28,4 @@ export {
   transferEntryRef,
 } from './transfer-readiness.js';
 export { MemoryEscrowLifecycleStore } from './escrow-lifecycle.js';
+export { acceptEscrowShare, escrowShareEnvelopeHash } from './escrow-distribution.js';

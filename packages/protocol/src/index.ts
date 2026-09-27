@@ -64,7 +64,9 @@ export { advanceContext } from './proposal.js';
 export { certifiedEntrySchema } from './proposal.js';
 export { genesisSchema, logEntrySchema } from './schemas.js';
 export { MemorySafetyStore } from './safety-store.js';
-export { createConsensusState } from './consensus.js';
+export { createConsensusState, restoreConsensusState } from './consensus.js';
+export { verifyRevealedMaster } from './genesis-secrets.js';
+export { validateGenesisEscrow } from './genesis-escrow.js';
 export { restoreRetiredSafety } from './retired-safety.js';
 export {
   transferAuthorizationStatementSchema,
