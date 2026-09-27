@@ -1,0 +1,9 @@
+# HX1 compact review disposition
+
+The source-only Claude review found no signature or offer-binding bypass. Its [raw findings](./hx1-compact-review-raw.md) were checked against the native Chrome path.
+
+1. Multiple deflate streams can encode the same signed body. This is real, and Chrome also accepts a trailing compressed byte in the tested case. `acceptAnswer` now decodes and verifies before comparing answers, then uses the hash of the signed object for idempotence. A stored-block recompression regression returns the same bridge. The compressed text itself remains non-unique; replay identity is the signed object.
+2. The encoder accepted long UTF-8 lines that the compact decoder rejected by byte count. The decoder now relies on the existing 4,096-character SDP line check and 65,536-byte total check. A 3,000-character accented line round-trips.
+3. TextEncoder would replace an unpaired surrogate in scope or SDP. Validation now rejects those strings and the encoder checks its wire restoration before emitting a code. The answer path receives the same check.
+4. Chrome emitted two candidates in both SDP and events, with only an added event `ufrag` separating each pair. Without deduplication, native codes measured about 680/770 characters. The aggregator now treats an event as duplicate only when its `ufrag` matches the SDP ICE username fragment and removing that extension yields a byte-exact SDP candidate. Other candidate differences stay in the signed SDP. The final native run kept both distinct candidates and measured 434/520 characters.
+5. Cross-browser deflate tolerance and Ed25519 primitive strictness were questions, not proven flaws in this change. The signed-body comparison prevents compression variants from changing manual answer identity. Separate Firefox/Safari and physical phone-camera acceptance remain open.

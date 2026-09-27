@@ -1,6 +1,7 @@
-import { canonicalEncode } from '@cp2p/codec';
+import { canonicalEncode, fromBase64Url, toBase64Url } from '@cp2p/codec';
 import { identityFromSecret } from '@cp2p/crypto';
 import type { ProtocolClock } from '@cp2p/protocol';
+import { deflateRawSync, inflateRawSync } from 'node:zlib';
 import { expect, test } from 'vitest';
 import { answerManualOffer, createManualOffer } from './manual-bootstrap.js';
 import { MeshRelaySignalingAdapter } from './mesh-relay-signaling.js';
@@ -184,6 +185,11 @@ test('two signed codes bootstrap an unknown joiner, then carry exact verified si
     expect(answered.gatheringComplete).toBe(true);
     const hostBridge = await invitation.acceptAnswer(answered.code);
     expect(await invitation.acceptAnswer(answered.code)).toBe(hostBridge);
+    const sameAnswer = `HX1.${toBase64Url(
+      deflateRawSync(inflateRawSync(fromBase64Url(answered.code.slice(4))), { level: 0 }),
+    )}`;
+    expect(sameAnswer).not.toBe(answered.code);
+    expect(await invitation.acceptAnswer(sameAnswer)).toBe(hostBridge);
     await Promise.all([hostBridge.ready(), guestBridge.ready()]);
     const received: unknown[] = [];
     const envelope = signSignalEnvelope(
@@ -206,7 +212,6 @@ test('two signed codes bootstrap an unknown joiner, then carry exact verified si
     required(FakePc.all[0]?.channel).send(canonicalEncode(forged));
     expect(received).toHaveLength(1);
     await expect(hostBridge.send(foreign.peerId, envelope)).rejects.toThrow('recipient');
-    await expect(invitation.acceptAnswer(answered.code + 'A')).rejects.toThrow('already used');
     const competing = await answerManualOffer(
       {
         ...common,

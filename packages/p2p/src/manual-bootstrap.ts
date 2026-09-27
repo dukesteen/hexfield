@@ -1,4 +1,4 @@
-import { canonicalDecode, canonicalEncode, toBase64Url } from '@cp2p/codec';
+import { canonicalDecode, canonicalEncode, hashValue, toBase64Url } from '@cp2p/codec';
 import { identityFromSecret, parsePeerId } from '@cp2p/crypto';
 import type { PeerId, ProtocolClock, Unsubscribe } from '@cp2p/protocol';
 import { decodeManualCode, encodeManualCode, manualOfferHash } from './manual-code.js';
@@ -331,32 +331,34 @@ export async function createManualOffer(options: ManualOfferOptions): Promise<Ma
     const code = await encodeManualCode(body, key);
     const offerHash = manualOfferHash(await decodeManualCode(code, options.scope));
     const connection = pc;
-    let accepted: { code: string; bridge: ManualBridge } | null = null;
-    let accepting: { code: string; promise: Promise<ManualBridge> } | null = null;
+    let accepted: { hash: string; bridge: ManualBridge } | null = null;
+    let accepting: { hash: string; promise: Promise<ManualBridge> } | null = null;
     let closed = false;
     return {
       code,
       gatheringComplete: gathered.complete,
       async acceptAnswer(answerCode) {
         if (closed) throw new Error('Manual invitation is closed');
+        const answer = await decodeManualCode(answerCode, options.scope, options.self);
+        if (
+          answer.b.k !== 'a' ||
+          answer.b.t !== options.self ||
+          answer.b.n !== nonce ||
+          answer.b.h !== offerHash ||
+          (options.to !== undefined && answer.b.f !== options.to)
+        )
+          throw new TypeError('Manual answer does not bind this invitation');
+        if (closed) throw new Error('Manual invitation is closed');
+        const answerHash = toBase64Url(hashValue(answer));
         if (accepted) {
-          if (accepted.code !== answerCode) throw new Error('Manual invitation was already used');
+          if (accepted.hash !== answerHash) throw new Error('Manual invitation was already used');
           return accepted.bridge;
         }
         if (accepting) {
-          if (accepting.code !== answerCode) throw new Error('Manual invitation is being answered');
+          if (accepting.hash !== answerHash) throw new Error('Manual invitation is being answered');
           return accepting.promise;
         }
         const promise = (async () => {
-          const answer = await decodeManualCode(answerCode, options.scope, options.self);
-          if (
-            answer.b.k !== 'a' ||
-            answer.b.t !== options.self ||
-            answer.b.n !== nonce ||
-            answer.b.h !== offerHash ||
-            (options.to !== undefined && answer.b.f !== options.to)
-          )
-            throw new TypeError('Manual answer does not bind this invitation');
           if (closed) throw new Error('Manual invitation is closed');
           try {
             await connection.setRemoteDescription({ type: 'answer', sdp: answer.b.s });
@@ -369,7 +371,7 @@ export async function createManualOffer(options: ManualOfferOptions): Promise<Ma
               answer.b.f,
               options.clock,
             );
-            accepted = { code: answerCode, bridge };
+            accepted = { hash: answerHash, bridge };
             return bridge;
           } catch (error) {
             closed = true;
@@ -378,7 +380,7 @@ export async function createManualOffer(options: ManualOfferOptions): Promise<Ma
             throw error;
           }
         })();
-        accepting = { code: answerCode, promise };
+        accepting = { hash: answerHash, promise };
         try {
           return await promise;
         } finally {

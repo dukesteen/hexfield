@@ -46,6 +46,7 @@ export function aggregateManualSdp(
     if (!lines.some((line) => line.startsWith(required)))
       throw new TypeError(`Manual SDP lacks ${required}`);
   const mid = lines.find((line) => line.startsWith('a=mid:'))?.slice('a=mid:'.length);
+  const ufrag = lines.find((line) => line.startsWith('a=ice-ufrag:'))?.slice('a=ice-ufrag:'.length);
   const gathered = new Set<string>();
   for (const line of lines) {
     if (line.startsWith('a=candidate:')) gathered.add(candidateLine(line.slice(2)));
@@ -59,7 +60,17 @@ export function aggregateManualSdp(
       candidate.sdpMLineIndex !== 0
     )
       throw new TypeError('Manual ICE candidate belongs to another media section');
-    gathered.add(candidateLine(candidate.candidate ?? ''));
+    const line = candidateLine(candidate.candidate ?? '');
+    const redundant = ufrag ? ` ufrag ${ufrag}` : '';
+    const marker = redundant ? line.indexOf(redundant) : -1;
+    const end = marker + redundant.length;
+    const withoutUfrag =
+      marker >= 0 && (end === line.length || line[end] === ' ')
+        ? line.slice(0, marker) + line.slice(end)
+        : line;
+    // Chrome repeats a localDescription candidate in icecandidate with the same
+    // ICE ufrag attached. Keep the SDP copy only when the rest is byte-exact.
+    gathered.add(gathered.has(withoutUfrag) ? withoutUfrag : line);
   }
   if (gathered.size > MAX_CANDIDATES)
     throw new RangeError('Manual code has too many distinct ICE candidates');

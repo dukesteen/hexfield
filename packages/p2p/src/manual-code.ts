@@ -1,13 +1,8 @@
-import {
-  canonicalDecode,
-  canonicalEncode,
-  fromBase64Url,
-  hashValue,
-  toBase64Url,
-} from '@cp2p/codec';
+import { fromBase64Url, hashValue, toBase64Url } from '@cp2p/codec';
 import { parsePeerId, signObject, verifyObject } from '@cp2p/crypto';
 import type { PeerId } from '@cp2p/protocol';
 import { aggregateManualSdp } from './manual-sdp.js';
+import { decodeManualSdpWire, encodeManualSdpWire } from './manual-sdp-codec.js';
 
 const PREFIX = 'HX1.';
 const MAX_CODE_CHARS = 2_048;
@@ -17,6 +12,9 @@ const MAX_SCOPE_LENGTH = 128;
 const NONCE_BYTES = 16;
 const HASH_BYTES = 32;
 const CODE_DOMAIN = 'p2p-manual-bootstrap';
+const WIRE_VERSION = 0xa1;
+const encoder = new TextEncoder();
+const decoder = new TextDecoder('utf-8', { fatal: true });
 
 export type ManualCodeBody =
   | {
@@ -55,13 +53,6 @@ function exact(value: Record<string, unknown>, fields: readonly string[]): boole
   );
 }
 
-function canonicalBytes(value: unknown): Uint8Array {
-  const bytes = canonicalEncode(value);
-  if (bytes.length > MAX_DECOMPRESSED_BYTES)
-    throw new RangeError('Manual code evidence exceeds its size limit');
-  return bytes;
-}
-
 function validBase64(value: unknown, length: number): value is string {
   if (typeof value !== 'string') return false;
   try {
@@ -72,6 +63,10 @@ function validBase64(value: unknown, length: number): value is string {
   }
 }
 
+function exactUtf8(value: string): boolean {
+  return decoder.decode(encoder.encode(value)) === value;
+}
+
 function validBody(value: unknown): value is ManualCodeBody {
   if (
     !record(value) ||
@@ -80,10 +75,12 @@ function validBody(value: unknown): value is ManualCodeBody {
     typeof value.sc !== 'string' ||
     value.sc.length < 1 ||
     value.sc.length > MAX_SCOPE_LENGTH ||
+    !exactUtf8(value.sc) ||
     typeof value.f !== 'string' ||
     !validBase64(value.n, NONCE_BYTES) ||
     typeof value.s !== 'string' ||
-    value.s.length > 65_536
+    value.s.length > 65_536 ||
+    !exactUtf8(value.s)
   )
     return false;
   if (value.k === 'o') {
@@ -122,6 +119,74 @@ function validSigned(value: unknown): value is SignedManualCode {
     typeof value.g === 'string' &&
     validBase64(value.g, 64)
   );
+}
+
+function join(parts: readonly Uint8Array[]): Uint8Array {
+  const length = parts.reduce((total, part) => total + part.length, 0);
+  if (length > MAX_DECOMPRESSED_BYTES)
+    throw new RangeError('Manual code evidence exceeds its size limit');
+  const result = new Uint8Array(length);
+  let offset = 0;
+  for (const part of parts) {
+    result.set(part, offset);
+    offset += part.length;
+  }
+  return result;
+}
+
+function wireBytes(signed: SignedManualCode): Uint8Array {
+  const { b } = signed;
+  const scope = encoder.encode(b.sc);
+  if (scope.length > 0xffff) throw new RangeError('Manual code scope is too long');
+  return join([
+    new Uint8Array([WIRE_VERSION, b.k === 'o' ? 0 : 1, b.t === undefined ? 0 : 1]),
+    new Uint8Array([scope.length >>> 8, scope.length & 255]),
+    scope,
+    fromBase64Url(b.f),
+    fromBase64Url(b.n),
+    ...(b.t === undefined ? [] : [fromBase64Url(b.t)]),
+    ...(b.k === 'o' ? [] : [fromBase64Url(b.h)]),
+    fromBase64Url(signed.g),
+    encodeManualSdpWire(b.s),
+  ]);
+}
+
+function signedFromWire(bytes: Uint8Array): SignedManualCode {
+  let offset = 0;
+  const take = (length: number): Uint8Array => {
+    if (length < 0 || length > bytes.length - offset)
+      throw new TypeError('Manual code wire is truncated');
+    const value = bytes.subarray(offset, offset + length);
+    offset += length;
+    return value;
+  };
+  const version = take(1)[0];
+  const kind = take(1)[0];
+  const flags = take(1)[0];
+  const length = take(2);
+  const scopeLength = ((length[0] ?? 0) << 8) | (length[1] ?? 0);
+  if (
+    version !== WIRE_VERSION ||
+    (kind !== 0 && kind !== 1) ||
+    (flags !== 0 && flags !== 1) ||
+    (kind === 1 && flags !== 1) ||
+    scopeLength > MAX_SCOPE_LENGTH * 4
+  )
+    throw new TypeError('Manual code wire header is invalid');
+  const sc = decoder.decode(take(scopeLength));
+  const f = toBase64Url(take(32));
+  const n = toBase64Url(take(NONCE_BYTES));
+  const t = flags === 1 ? toBase64Url(take(32)) : undefined;
+  const h = kind === 1 ? toBase64Url(take(HASH_BYTES)) : undefined;
+  const g = toBase64Url(take(64));
+  const s = decodeManualSdpWire(take(bytes.length - offset));
+  let b: ManualCodeBody;
+  if (kind === 0) b = { v: 1, k: 'o', sc, f, n, s, ...(t === undefined ? {} : { t }) };
+  else {
+    if (t === undefined || h === undefined) throw new TypeError('Manual answer wire is incomplete');
+    b = { v: 1, k: 'a', sc, f, t, n, h, s };
+  }
+  return { b, g };
 }
 
 async function transform(bytes: Uint8Array, mode: 'compress' | 'decompress'): Promise<Uint8Array> {
@@ -178,7 +243,11 @@ export async function encodeManualCode(
   const signed: SignedManualCode = { b: body, g: signObject(CODE_DOMAIN, body, secretKey) };
   if (!verifyObject(CODE_DOMAIN, body, signed.g, parsePeerId(body.f)))
     throw new TypeError('Manual code key does not match its claimed sender');
-  const compressed = await transform(canonicalBytes(signed), 'compress');
+  const wire = wireBytes(signed);
+  const restored = signedFromWire(wire);
+  if (restored.b.sc !== body.sc || restored.b.s !== body.s)
+    throw new TypeError('Manual code cannot restore its signed body exactly');
+  const compressed = await transform(wire, 'compress');
   const code = PREFIX + toBase64Url(compressed);
   if (code.length > MAX_CODE_CHARS) throw new RangeError('Manual code exceeds its size limit');
   return code;
@@ -197,13 +266,13 @@ export async function decodeManualCode(
   if (compressed.length > MAX_COMPRESSED_BYTES || toBase64Url(compressed) !== encoded)
     throw new TypeError('Manual code is not canonical base64url');
   const decodedBytes = await transform(compressed, 'decompress');
-  let decoded: unknown;
+  let decoded: SignedManualCode;
   try {
-    decoded = canonicalDecode(decodedBytes);
+    decoded = signedFromWire(decodedBytes);
   } catch {
-    throw new TypeError('Manual code contains invalid canonical data');
+    throw new TypeError('Manual code contains invalid compact data');
   }
-  const canonical = canonicalBytes(decoded);
+  const canonical = wireBytes(decoded);
   if (
     !validSigned(decoded) ||
     decodedBytes.length !== canonical.length ||

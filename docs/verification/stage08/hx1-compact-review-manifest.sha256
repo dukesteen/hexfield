@@ -1,0 +1,6 @@
+4b86c7aa065165367369e2825325175b47f1cb173d7a34386db13fadf15326bb  packages/p2p/src/manual-code.ts
+0abd56aafcc10860857e9ae7a482f8e2d8352c52d1cbfdef20fbf9cacd2044a8  packages/p2p/src/manual-sdp-codec.ts
+170dd7f9f8fd5c296b332ee40cf51da0dc7049f57341f0b121076a7b9b728fb7  packages/p2p/src/manual-sdp.ts
+222a37f9a39b553b26ab9706cdfb246c7f31d6e0cb0a9dfbc7135d48c5e0c2e1  packages/p2p/src/manual-code.test.ts
+6bd5e287eb451106f6eb8c7ec5e7c4ba0856fe9d0d33a7b767debdc10a7089b5  packages/p2p/src/manual-sdp-codec.test.ts
+c72696dc7741c44fb1f37faef9b853d4748de8c90beb43f226d37f9fd570dae7  packages/p2p/src/manual-bootstrap.ts
