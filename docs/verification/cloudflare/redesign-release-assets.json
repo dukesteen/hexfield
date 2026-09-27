@@ -1,0 +1,22 @@
+[
+  {
+    "path": "/",
+    "match": true,
+    "sha256": "a25c0127fb8a72044efa4fc92b21455cd96e781a1361a71845c579a9ce389648"
+  },
+  {
+    "path": "assets/index-CeFsBm4T.js",
+    "match": true,
+    "sha256": "1ee99277bcbefff3c93f1c6cffa7b6a9d36e63871b56a514ad25d44e72ab04c8"
+  },
+  {
+    "path": "assets/online-protocol-worker-gy_Bp7BH.js",
+    "match": true,
+    "sha256": "90d999174200d0561da5914982f8b5597d205d5b653f2dc5a7450e6e40c0c0e2"
+  },
+  {
+    "path": "assets/board-preview-BZ96gxm-.svg",
+    "match": true,
+    "sha256": "966e239a27783a54aa30225e29bb3918aefce1e0e9edd7b8c4280e5d76c94d88"
+  }
+]

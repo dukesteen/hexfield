@@ -9,6 +9,7 @@
     "apps/web/src/routeTree.gen.ts",
     "docs/verification/**/*-review-input.md",
     "docs/verification/**/*-review-raw.md",
+    "docs/verification/stage07/invalid-proof-control-review-followup-raw.md",
     "docs/verification/stage07/recovered-deck-review-response.md",
     "docs/verification/stage08/manual-relay-review-raw.md",
     "docs/verification/stage10/seat-transfer-review-raw.md",
