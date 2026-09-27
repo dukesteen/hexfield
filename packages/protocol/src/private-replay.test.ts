@@ -1,8 +1,8 @@
 import { fromBase64Url, hashValue, toBase64Url, toHex } from '@cp2p/codec';
 import { scalarToBytes } from '@cp2p/crypto';
-import { success } from '@cp2p/engine';
+import { failure, success } from '@cp2p/engine';
 import type { Result, Seat } from '@cp2p/engine';
-import { beforeAll, describe, expect, test } from 'vitest';
+import { beforeAll, describe, expect, test, vi } from 'vitest';
 import { createBeaconSecretSource } from './beacon-source.js';
 import {
   completeBeaconState,
@@ -12,7 +12,7 @@ import {
 import { signBeaconExtension } from './beacon-extension.js';
 import { signBeaconReveal } from './beacon.js';
 import { BEACON_EVIDENCE_PROTOCOL } from './crypto-context.js';
-import { deckCeremonyId } from './deck-genesis.js';
+import { deckCeremonyId, validateDeckCeremony } from './deck-genesis.js';
 import { createDeckSecretSource } from './deck-source.js';
 import {
   GENESIS_PREVIOUS_HASH,
@@ -96,7 +96,12 @@ function fixture() {
     },
     signer.secretKey,
   );
-  const policy = { genesis: { verifyCommitments: () => success(undefined) }, entry: {} };
+  const policy = {
+    genesis: {
+      verifyCommitments: (candidate: Genesis) => validateDeckCeremony(candidate, deck.transcripts),
+    },
+    entry: {},
+  };
   return { simulation, deck, genesis, signer, entry, policy };
 }
 
@@ -252,6 +257,8 @@ describe('certified private history reconstruction', () => {
     try {
       expect(trace.context().log.state.seats.some((seat) => seat.resources.total > 0)).toBe(true);
       const callerMaster = Buffer.from(master(1));
+      const visited: number[] = [];
+      const observedSeats: Seat[][] = [];
       const recovered = checked(
         reconstructPrivateSeats({
           genesisEntry: base.entry,
@@ -259,8 +266,20 @@ describe('certified private history reconstruction', () => {
           engine: base.simulation.engine,
           policy: base.policy,
           secrets: [{ seat: 1, master: callerMaster }],
+          verifyPrivateState(seq, states) {
+            visited.push(seq);
+            observedSeats.push([...states.keys()]);
+            // A verifier receives detached snapshots, never the live owner state.
+            const state = required(states.get(1));
+            state.hand.brick = 999;
+            state.slots.observerProbe = 'knight';
+            state.ext.observerProbe = { changed: true };
+            return success(undefined);
+          },
         }),
       );
+      expect(visited).toEqual(Array.from({ length: trace.entries.length + 1 }, (_, seq) => seq));
+      expect(observedSeats).toEqual(visited.map(() => [1]));
       expect(recovered.driver.privateState(1)).toEqual(trace.driver.privateState(1));
       expect(recovered.driver.privateState(0)).toBeNull();
       expect(recovered.context.log.state).toEqual(trace.context().log.state);
@@ -269,6 +288,49 @@ describe('certified private history reconstruction', () => {
       expect(callerMaster).toEqual(Buffer.from(master(1)));
       recovered.dispose();
     } finally {
+      trace.driver.dispose();
+    }
+  });
+
+  test.each([
+    { rejectAt: 0, throws: false },
+    { rejectAt: 1, throws: false },
+    { rejectAt: 1, throws: true },
+  ])('disposes rejected replay at $rejectAt, callback throws: $throws', ({ rejectAt, throws }) => {
+    const trace = history(base);
+    const visited: number[] = [];
+    const callerMaster = master(1);
+    const dispose = vi.spyOn(VerifiedSessionDriver.prototype, 'dispose');
+    try {
+      const result = reconstructPrivateSeats({
+        genesisEntry: base.entry,
+        entries: trace.entries,
+        engine: base.simulation.engine,
+        policy: base.policy,
+        secrets: [{ seat: 1, master: callerMaster }],
+        verifyPrivateState(seq) {
+          visited.push(seq);
+          if (seq !== rejectAt) return success(undefined);
+          if (throws) throw new Error('Independent verifier failed');
+          return failure('independent-private-mismatch', 'Independent reconstruction differs', {
+            seq,
+          });
+        },
+      });
+      expect(result).toMatchObject({
+        ok: false,
+        error: throws
+          ? { code: 'private-replay-failed' }
+          : { code: 'independent-private-mismatch', details: { seq: rejectAt } },
+      });
+      expect(visited).toEqual(Array.from({ length: rejectAt + 1 }, (_, seq) => seq));
+      expect(dispose).toHaveBeenCalledExactlyOnceWith();
+      const disposed = required(dispose.mock.contexts[0]);
+      if (!(disposed instanceof VerifiedSessionDriver)) throw new Error('Missing disposed driver');
+      expect(disposed.privateState(1)).toBeNull();
+      expect(callerMaster).toEqual(master(1));
+    } finally {
+      dispose.mockRestore();
       trace.driver.dispose();
     }
   });

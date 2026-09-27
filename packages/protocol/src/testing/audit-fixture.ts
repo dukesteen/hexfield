@@ -1,12 +1,12 @@
 import { fromBase64Url, hashValue, toBase64Url, toHex } from '@cp2p/codec';
 import { scalarToBytes } from '@cp2p/crypto';
-import { RESOURCES, success } from '@cp2p/engine';
+import { RESOURCES } from '@cp2p/engine';
 import type { CommandShape, GameState, Pending, Result, Seat } from '@cp2p/engine';
 import { createBeaconSecretSource } from '../beacon-source.js';
 import { MemoryBeaconContributionStore } from '../beacon-contributions.js';
 import { MemoryCheatCandidateStore } from '../cheat-candidates.js';
 import { MemoryCountContributionStore } from '../count-contributions.js';
-import { deckCeremonyId, genesisDeckDefinitions } from '../deck-genesis.js';
+import { deckCeremonyId, genesisDeckDefinitions, validateDeckCeremony } from '../deck-genesis.js';
 import { createDeckSecretSource } from '../deck-source.js';
 import type { DeckContributionStore } from '../deck-outbox.js';
 import {
@@ -208,8 +208,10 @@ export async function createTerminalAuditFixture(
     first.secretKey,
   );
   const policy: ReplayPolicy = {
-    genesis: { verifyCommitments: () => success(undefined) },
-    entry: { verifyCommand: () => success(undefined) },
+    genesis: {
+      verifyCommitments: (candidate) => validateDeckCeremony(candidate, deck.transcripts),
+    },
+    entry: {},
   };
   const network = createMemnet({ peers: humans.map((seat) => seat.publicKey) });
   const sessions: P2PSession[] = [];

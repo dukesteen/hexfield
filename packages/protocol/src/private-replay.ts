@@ -1,7 +1,7 @@
 import { toBase64Url } from '@cp2p/codec';
 import { scalarFromBytes } from '@cp2p/crypto';
 import { failure, success } from '@cp2p/engine';
-import type { Engine, Result, Seat } from '@cp2p/engine';
+import type { Engine, PrivateState, Result, Seat } from '@cp2p/engine';
 import { createBeaconSecretSource } from './beacon-source.js';
 import type { BeaconSecretProvider } from './beacon-source.js';
 import { deckCeremonyId } from './deck-genesis.js';
@@ -38,6 +38,11 @@ export function reconstructPrivateSeats(input: {
   readonly engine: Engine;
   readonly policy: ReplayPolicy;
   readonly secrets: readonly { readonly seat: Seat; readonly master: Uint8Array }[];
+  /** Independent check of detached snapshots, provisional until the entire replay succeeds. */
+  readonly verifyPrivateState?: (
+    seq: number,
+    states: ReadonlyMap<Seat, PrivateState>,
+  ) => Result<void>;
 }): Result<ReconstructedPrivateSeats> {
   const masters = new Map<Seat, Uint8Array>();
   const beacons = new Map<Seat, { length: number; provider: BeaconSecretProvider }>();
@@ -140,6 +145,19 @@ export function reconstructPrivateSeats(input: {
       },
     );
     const activeDriver = driver;
+    const verifyPrivateState = (seq: number): Result<void> => {
+      if (!input.verifyPrivateState) return success(undefined);
+      const states = new Map<Seat, PrivateState>();
+      for (const seat of masters.keys()) {
+        const state = activeDriver.privateState(seat);
+        if (!state)
+          return failure('verified-private-missing', 'Owned private state is missing', { seq });
+        states.set(seat, state);
+      }
+      return input.verifyPrivateState(seq, states);
+    };
+    const initialPrivateCheck = verifyPrivateState(initial.value.log.head.seq);
+    if (!initialPrivateCheck.ok) return initialPrivateCheck;
     let prior = initial.value;
     const rebuilt = replayCertifiedPrefix(
       input.genesisEntry,
@@ -186,6 +204,8 @@ export function reconstructPrivateSeats(input: {
         }
         const applied = activeDriver.committedEntry(entry, prior.log, next.log);
         if (!applied.ok) return applied;
+        const checked = verifyPrivateState(entry.entry.seq);
+        if (!checked.ok) return checked;
         prior = next;
         return success(undefined);
       },

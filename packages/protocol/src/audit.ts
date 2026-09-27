@@ -259,6 +259,26 @@ export function auditCertifiedGame(input: AuditCertifiedGameInput): AuditReport 
     if (toHex(hashValue(game.state)) !== initial.value.log.head.stateHash) {
       return processingFailure(0, 'audit-genesis-state');
     }
+    const privateHashes = new Map<number, ReadonlyMap<Seat, string>>();
+    const rememberPrivateHashes = (seq: number): Result<void> => {
+      const hashes = new Map<Seat, string>();
+      for (const seat of genesis.config.seats) {
+        const privateState = game.privateView(seat);
+        if (!privateState)
+          return failure(
+            'audit-omniscient-private-missing',
+            'Omniscient private state is missing',
+            {
+              seq,
+            },
+          );
+        hashes.set(seat, toHex(hashValue(privateState)));
+      }
+      privateHashes.set(seq, hashes);
+      return success(undefined);
+    };
+    const initialPrivateHashes = rememberPrivateHashes(initial.value.log.head.seq);
+    if (!initialPrivateHashes.ok) return processingFailure(0, initialPrivateHashes.error.code);
     let prior = initial.value;
     let failureSeq = 0;
     let failureSeat: Seat | null = null;
@@ -293,7 +313,7 @@ export function auditCertifiedGame(input: AuditCertifiedGameInput): AuditReport 
         )
           return failure('audit-state-hash', 'Omniscient state differs from the certified state');
         prior = next;
-        return success(undefined);
+        return rememberPrivateHashes(entry.entry.seq);
       },
     );
     if (!privateReplay.ok) {
@@ -302,6 +322,7 @@ export function auditCertifiedGame(input: AuditCertifiedGameInput): AuditReport 
           'driver-error',
           'audit-private-input',
           'audit-state-hash',
+          'audit-omniscient-private-missing',
           'audit-draw-context',
           'audit-draw-seat',
           'audit-steal-context',
@@ -325,6 +346,20 @@ export function auditCertifiedGame(input: AuditCertifiedGameInput): AuditReport 
       engine: input.engine,
       policy: input.policy,
       secrets: [...masters].map(([seat, master]) => ({ seat, master })),
+      verifyPrivateState(seq, states) {
+        const expected = privateHashes.get(seq);
+        if (
+          !expected ||
+          states.size !== expected.size ||
+          [...states].some(([seat, state]) => toHex(hashValue(state)) !== expected.get(seat))
+        )
+          return failure(
+            'audit-private-state',
+            'Reconstructed private state differs from the omniscient replay',
+            { seq },
+          );
+        return success(undefined);
+      },
     });
     if (!crossCheck.ok) {
       const details = crossCheck.error.details;
@@ -341,6 +376,7 @@ export function auditCertifiedGame(input: AuditCertifiedGameInput): AuditReport 
           'private-replay-beacon',
           'crypto-context-required',
           'verified-private-missing',
+          'audit-private-state',
         ].includes(crossCheck.error.code)
       )
         return processingFailure(seq, crossCheck.error.code);

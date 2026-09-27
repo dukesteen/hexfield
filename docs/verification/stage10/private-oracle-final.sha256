@@ -1,0 +1,6 @@
+9bfed88b6e1a7c5132e884840dbe4e781dccee072ee17994ed9056d77fc1f4d4  packages/protocol/src/audit.ts
+3f1b9e5fd1e5b2fdee266864302ac854dd6a529d1f5e690cd24fdc8f4db0763a  packages/protocol/src/audit.test.ts
+6719ef0ca11f88d7966c1550ce8ed842374d30f0a81ef1d2e92d52e669295eaa  packages/protocol/src/private-replay.ts
+e1f2a5e59c48b8f2ba29663c10ec538e0bdaed1139c9111bb0d8915b6a7fb7f7  packages/protocol/src/private-replay.test.ts
+087c160ffca996957031bf484da64acef3daa2659ff6d0ad3701ddaeb32066a6  packages/protocol/src/testing/audit-fixture.ts
+b6b0d562967e766dd34b42e793b4705d64a2678b9aa2f9db900957d0782d3a3e  packages/protocol/src/beta-game.test.ts

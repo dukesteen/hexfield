@@ -1,5 +1,6 @@
 import { SCALAR_ORDER, scalarToBytes } from '@cp2p/crypto';
 import { RandomBot, createBotRng } from '../../bots/src/index.js';
+import { success } from '@cp2p/engine';
 import type { Engine } from '@cp2p/engine';
 import { beforeAll, describe, expect, test } from 'vitest';
 import { auditCertifiedGame } from './audit.js';
@@ -166,6 +167,47 @@ describe('certified end-game audit', () => {
       complete: false,
       violations: [],
       auditError: { seq: draw?.entry.seq, code: 'driver-error' },
+    });
+  }, 30_000);
+
+  test('catches a transient private-state disagreement even when final private states match', () => {
+    const original = fixture.engine;
+    let added = false;
+    let removed = false;
+    let present = false;
+    const altered: Engine = {
+      ...original,
+      applyAllPrivates(privates, before, input, data) {
+        const applied = original.applyAllPrivates(privates, before, input, data);
+        if (!applied.ok) return applied;
+        const owner = applied.value.get(0);
+        if (!owner) throw new Error('Missing audit fixture owner');
+        const ext = { ...owner.ext };
+        if (input.kind === 'system' && input.type === 'START_SEAT') {
+          ext.transientAuditProbe = { value: 1 };
+          added = true;
+        } else if (Object.hasOwn(ext, 'transientAuditProbe')) {
+          delete ext.transientAuditProbe;
+          removed = true;
+        }
+        present = Object.hasOwn(ext, 'transientAuditProbe');
+        return success(new Map(applied.value).set(0, { ...owner, ext }));
+      },
+    };
+    const firstInput = fixture.entries.find(
+      ({ entry }) => entry.payload.kind === 'system' && entry.payload.input.type === 'START_SEAT',
+    );
+    expect(firstInput).toBeDefined();
+    const report = auditCertifiedGame({ ...fixture, engine: altered });
+    expect(added).toBe(true);
+    expect(removed).toBe(true);
+    expect(present).toBe(false);
+    expect(report).toMatchObject({
+      ok: false,
+      complete: false,
+      violations: [],
+      auditError: { seq: firstInput?.entry.seq, code: 'audit-private-state' },
+      finalHiddenVictoryPoints: null,
     });
   }, 30_000);
 

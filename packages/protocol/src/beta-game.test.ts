@@ -41,6 +41,7 @@ acceptanceTest(
     const jobs = new Map<Seat, AuditJob>();
     const reports = new Map<Seat, AuditReport>();
     const terminalStates = new Map<string, GameState>();
+    const foreignMasterRequests: Seat[] = [];
     const fixture = await createTerminalAuditFixture({
       defaultVpTarget: true,
       prioritizeDevBuy: false,
@@ -58,6 +59,7 @@ acceptanceTest(
       },
       sessionOptions(options) {
         const records = new Map<string, Uint8Array>();
+        const ownedSeats = new Set([options.seat, ...(options.botKeys?.keys() ?? [])]);
         const prepared: P2PSessionOptions = {
           ...options,
           masterReveal: {
@@ -72,7 +74,9 @@ acceptanceTest(
               },
             },
             async loadOwnedMaster(seat) {
-              return scalarToBytes(BigInt(17 + seat));
+              if (ownedSeats.has(seat)) return scalarToBytes(BigInt(17 + seat));
+              foreignMasterRequests.push(seat);
+              return null;
             },
           },
           auditRunner(input) {
@@ -141,6 +145,7 @@ acceptanceTest(
     const terminalState = terminalStates.get('terminal');
     if (!terminalState?.result) throw new Error('Certified game has no terminal result');
     expect(reports.size).toBe(2);
+    expect(foreignMasterRequests).toEqual([]);
     const reportHashes = [...reports.entries()]
       .toSorted(([left], [right]) => left - right)
       .map(([seat, report]) => ({ seat, digest: toHex(hashValue(report)) }));
@@ -158,6 +163,7 @@ acceptanceTest(
       protocolVersion: genesis.protocolVersion,
       engineVersion: genesis.engineVersion,
       security: genesis.security,
+      participants: genesis.seats.map(({ seat, kind }) => ({ seat, kind })),
       config: genesis.config,
       genesisDigest: genesisDigest(genesis),
       finalHead: reports.get(0)?.finalHead,
