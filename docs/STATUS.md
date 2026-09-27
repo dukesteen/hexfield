@@ -15,9 +15,12 @@ The [current beta browser check](verification/stage09/beta-browser-check.md)
 passes four-human manual-code startup, all setup placements, a shared roll, a
 player trade and same-browser reconnect in the Pages production build. A
 [separate v3 ten-point game](verification/stage09/beta-v3-game-check.md) finished
-after 332 moves with matching successful audits from both peers. These checks
-are local; the multiplayer beta is not yet published, and external-network
-connectivity remains unverified.
+after 332 moves with matching successful audits from both peers. The
+[multiplayer beta is published](verification/stage09/beta-release.md) at
+[Hexfield](https://dukesteen.github.io/hexfield/), from source `7ec176d`.
+Production home, create, lobby invitation generation and join-route refresh
+checks pass. External-network connectivity remains unverified, and the full
+milestone acceptance items below remain open.
 
 ## 01 — Repository Foundation
 
