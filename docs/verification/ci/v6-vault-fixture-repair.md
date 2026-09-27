@@ -24,3 +24,24 @@ Focused results: all three route tests and six vault UI tests pass; the targeted
 transfer-membership test passes. Scoped lint and formatting checks pass. The
 separate deck-card fixture failure is owned by the deck acceptance work. The CI
 run is not claimed green by this report.
+
+## Follow-up run on 0882e5f
+
+CI [36352389467](https://github.com/dukesteen/hexfield/actions/runs/36352389467)
+passed the engine simulation, all nine existing stub-network scenarios and unit
+shards 1 and 3. It failed formatting on three review documents and timed out in
+two cryptographic test cases. Deployment was skipped. The review formatting is
+fixed in `9f6fd54`.
+
+The recovery-custody mismatch test combined release authorization, restart
+persistence and unanimous private termination in one 30-second case. It now
+shares its signed fixture and runs those three behaviors as separate cases, each
+with the existing 30-second limit. All release, signature, binding, unanimity,
+replay and post-termination assertions remain. The focused run passed all three
+cases in 18.3 seconds total; scoped lint and formatting also passed. CI has not
+yet verified the split.
+
+The four-human legal development-card draw still needs its 90-second timeout
+investigated. A separate CPU profile identified repeated proposal validation
+inside in-memory consensus state copies; that production optimization is being
+checked before changing the draw fixture or its time limit.
