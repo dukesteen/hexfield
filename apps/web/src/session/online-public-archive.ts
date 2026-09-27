@@ -1,0 +1,137 @@
+import { canonicalDecode, canonicalEncode, sha256, toHex } from '@cp2p/codec';
+import { failure, success } from '@cp2p/engine';
+import type { GameEvent, GameState, Input, Result } from '@cp2p/engine';
+import { entryHash } from '@cp2p/protocol';
+import type { CertifiedEntry } from '@cp2p/protocol';
+import * as v from 'valibot';
+import type { SavedOnlineGameRecord } from './online-game-records.js';
+import { MAX_ONLINE_PUBLIC_ARCHIVE_BYTES } from './online-public-archive-format.js';
+export { MAX_ONLINE_PUBLIC_ARCHIVE_BYTES } from './online-public-archive-format.js';
+import {
+  encodeOnlineTransferBootstrap,
+  validateOnlineTransferBootstrap,
+} from './online-transfer-bootstrap.js';
+
+/** A public replay is never a voting save, even when its source is the latest head. */
+const FORMAT = 'online-public-archive-v1';
+const MAGIC = Uint8Array.of(0x48, 0x58, 0x41, 0x52, 0x31); // HXAR1
+const HEADER_LIMIT = 256;
+
+const headerSchema = v.strictObject({
+  format: v.literal(FORMAT),
+  gameId: v.pipe(v.string(), v.regex(/^[A-Za-z0-9_-]{22}$/)),
+  genesisDigest: v.pipe(v.string(), v.regex(/^[A-Za-z0-9_-]{43}$/)),
+});
+
+export interface PublicOnlineArchiveInput {
+  readonly start: SavedOnlineGameRecord;
+  readonly entries: readonly CertifiedEntry[];
+}
+
+export interface VerifiedPublicOnlineArchive {
+  /** SHA-256 of the exact archive file, used only in the replay namespace. */
+  readonly id: string;
+  readonly gameId: string;
+  readonly genesisDigest: string;
+  readonly head: { readonly seq: number; readonly hash: string };
+  readonly start: SavedOnlineGameRecord;
+  readonly entries: readonly CertifiedEntry[];
+  readonly state: Readonly<GameState>;
+  readonly inputs: readonly Input[];
+  readonly events: readonly GameEvent[];
+}
+
+function equalBytes(left: Uint8Array, right: Uint8Array): boolean {
+  return left.length === right.length && left.every((byte, index) => byte === right[index]);
+}
+
+function archiveHeader(bytes: Uint8Array): Result<{
+  gameId: string;
+  genesisDigest: string;
+  bootstrap: Uint8Array;
+}> {
+  if (
+    !(bytes instanceof Uint8Array) ||
+    bytes.length > MAX_ONLINE_PUBLIC_ARCHIVE_BYTES ||
+    bytes.length < MAGIC.length + 3 ||
+    !MAGIC.every((byte, index) => bytes[index] === byte)
+  )
+    return failure('public-archive-format', 'Public replay archive has an invalid header or size');
+  const headerLength = (Number(bytes[MAGIC.length]) << 8) | Number(bytes[MAGIC.length + 1]);
+  const contentAt = MAGIC.length + 2 + headerLength;
+  if (headerLength < 1 || headerLength > HEADER_LIMIT || contentAt >= bytes.length)
+    return failure('public-archive-format', 'Public replay archive header is out of bounds');
+  try {
+    const headerBytes = bytes.subarray(MAGIC.length + 2, contentAt);
+    const decoded: unknown = canonicalDecode(headerBytes);
+    const checked = v.safeParse(headerSchema, decoded);
+    if (!checked.success || !equalBytes(headerBytes, canonicalEncode(checked.output)))
+      return failure('public-archive-header', 'Public replay archive header is not canonical');
+    return success({
+      gameId: checked.output.gameId,
+      genesisDigest: checked.output.genesisDigest,
+      bootstrap: bytes.subarray(contentAt),
+    });
+  } catch {
+    return failure('public-archive-header', 'Public replay archive header is malformed');
+  }
+}
+
+/** Parses and fully replays signed public evidence without consulting local keys or a journal. */
+export function validateOnlinePublicArchive(
+  bytes: Uint8Array,
+): Result<VerifiedPublicOnlineArchive> {
+  const header = archiveHeader(bytes);
+  if (!header.ok) return header;
+  const checked = validateOnlineTransferBootstrap(header.value.bootstrap, {
+    gameId: header.value.gameId,
+    genesisDigest: header.value.genesisDigest,
+  });
+  if (!checked.ok) return checked;
+  const { record, replay } = checked.value;
+  return success({
+    id: toHex(sha256(bytes)),
+    gameId: record.gameId,
+    genesisDigest: record.genesisDigest,
+    head: { seq: replay.context.log.head.seq, hash: entryHash(replay.context.log.head) },
+    start: record,
+    entries: replay.entries,
+    state: replay.context.log.state,
+    inputs: replay.inputs,
+    events: replay.events,
+  });
+}
+
+/** Exports only the signed start, deck transcripts, and certified public prefix. */
+export function encodeOnlinePublicArchive(input: PublicOnlineArchiveInput): Result<Uint8Array> {
+  try {
+    // The signaling origin is local resume metadata, not signed replay evidence.
+    const publicStart = {
+      ...input.start,
+      invite: { ...input.start.invite, serverUrl: '' },
+    };
+    const bootstrap = encodeOnlineTransferBootstrap({ start: publicStart, entries: input.entries });
+    if (!bootstrap.ok) return bootstrap;
+    const checkedHeader = v.safeParse(headerSchema, {
+      format: FORMAT,
+      gameId: input.start.gameId,
+      genesisDigest: input.start.genesisDigest,
+    });
+    if (!checkedHeader.success)
+      return failure('public-archive-header', 'Public replay archive has an invalid game binding');
+    const header = canonicalEncode(checkedHeader.output);
+    const length = MAGIC.length + 2 + header.length + bootstrap.value.length;
+    if (header.length > HEADER_LIMIT || length > MAX_ONLINE_PUBLIC_ARCHIVE_BYTES)
+      return failure('public-archive-size', 'Public replay archive exceeds its size limit');
+    const bytes = new Uint8Array(length);
+    bytes.set(MAGIC);
+    bytes[MAGIC.length] = header.length >>> 8;
+    bytes[MAGIC.length + 1] = header.length & 0xff;
+    bytes.set(header, MAGIC.length + 2);
+    bytes.set(bootstrap.value, MAGIC.length + 2 + header.length);
+    const verified = validateOnlinePublicArchive(bytes);
+    return verified.ok ? success(bytes) : verified;
+  } catch {
+    return failure('public-archive-encode', 'Public replay archive could not be encoded');
+  }
+}

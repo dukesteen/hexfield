@@ -22,6 +22,7 @@ import * as v from 'valibot';
 import type { CP2PDatabase } from './database.js';
 import {
   CONSENSUS_STORE,
+  DELETED_GAME_STORE,
   ENTRY_STORE,
   BYTE_STORE,
   GAME_STORE,
@@ -31,6 +32,7 @@ import {
 } from './database.js';
 import { acquireActiveGameWriterLease } from './game-writer.js';
 import type { GameWriterLeaseOptions } from './game-writer.js';
+import { assertOnlineGameNotDeleted } from './online-game-deletion.js';
 import {
   deleteAuthorizationStages,
   readinessKey,
@@ -114,11 +116,12 @@ export class IndexedDbProtocolJournal implements ProtocolJournal {
     const database = await this.#database();
     const keyBinding = this.#keyBinding;
     const stores = keyBinding
-      ? ([GAME_STORE, ENTRY_STORE, CONSENSUS_STORE, BYTE_STORE] as const)
-      : ([GAME_STORE, ENTRY_STORE, CONSENSUS_STORE] as const);
+      ? ([GAME_STORE, ENTRY_STORE, CONSENSUS_STORE, BYTE_STORE, DELETED_GAME_STORE] as const)
+      : ([GAME_STORE, ENTRY_STORE, CONSENSUS_STORE, DELETED_GAME_STORE] as const);
     const transaction = database.transaction(stores, 'readonly');
     let bindingBytes: Uint8Array | undefined;
     try {
+      await assertOnlineGameNotDeleted(transaction, this.#gameId);
       const genesisBytes = await transaction.objectStore(GAME_STORE).get(this.#gameId);
       const consensusBytes = await transaction.objectStore(CONSENSUS_STORE).get(this.#gameId);
       const range = IDBKeyRange.bound([this.#gameId, 0], [this.#gameId, Number.MAX_SAFE_INTEGER]);
@@ -201,11 +204,12 @@ export class IndexedDbProtocolJournal implements ProtocolJournal {
     const database = await this.#database();
     const keyBinding = this.#keyBinding;
     const stores = keyBinding
-      ? ([GAME_STORE, ENTRY_STORE, CONSENSUS_STORE, BYTE_STORE] as const)
-      : ([GAME_STORE, ENTRY_STORE, CONSENSUS_STORE] as const);
+      ? ([GAME_STORE, ENTRY_STORE, CONSENSUS_STORE, BYTE_STORE, DELETED_GAME_STORE] as const)
+      : ([GAME_STORE, ENTRY_STORE, CONSENSUS_STORE, DELETED_GAME_STORE] as const);
     const transaction = strictWriteTransaction(database, stores);
     let bindingExists: Uint8Array | undefined;
     try {
+      await assertOnlineGameNotDeleted(transaction, this.#gameId);
       const genesisExists = await transaction.objectStore(GAME_STORE).get(this.#gameId);
       const consensusExists = await transaction.objectStore(CONSENSUS_STORE).get(this.#gameId);
       const entryCount = await transaction
@@ -276,11 +280,12 @@ export class IndexedDbProtocolJournal implements ProtocolJournal {
     const database = await this.#database();
     const keyBinding = this.#keyBinding;
     const stores = keyBinding
-      ? ([GAME_STORE, ENTRY_STORE, CONSENSUS_STORE, BYTE_STORE] as const)
-      : ([CONSENSUS_STORE] as const);
+      ? ([GAME_STORE, ENTRY_STORE, CONSENSUS_STORE, BYTE_STORE, DELETED_GAME_STORE] as const)
+      : ([CONSENSUS_STORE, DELETED_GAME_STORE] as const);
     const transaction = database.transaction(stores, 'readonly');
     let bindingBytes: Uint8Array | undefined;
     try {
+      await assertOnlineGameNotDeleted(transaction, this.#gameId);
       const bytes = await transaction.objectStore(CONSENSUS_STORE).get(this.#gameId);
       const genesisBytes = keyBinding
         ? await transaction.objectStore(GAME_STORE).get(this.#gameId)
@@ -328,11 +333,12 @@ export class IndexedDbProtocolJournal implements ProtocolJournal {
     const database = await this.#database();
     const keyBinding = this.#keyBinding;
     const stores = keyBinding
-      ? ([CONSENSUS_STORE, BYTE_STORE] as const)
-      : ([CONSENSUS_STORE] as const);
+      ? ([CONSENSUS_STORE, BYTE_STORE, DELETED_GAME_STORE] as const)
+      : ([CONSENSUS_STORE, DELETED_GAME_STORE] as const);
     const transaction = strictWriteTransaction(database, stores);
     let bindingBytes: Uint8Array | undefined;
     try {
+      await assertOnlineGameNotDeleted(transaction, this.#gameId);
       const currentBytes = await transaction.objectStore(CONSENSUS_STORE).get(this.#gameId);
       if (currentBytes === undefined) {
         await transaction.done;
@@ -397,11 +403,12 @@ export class IndexedDbProtocolJournal implements ProtocolJournal {
     const database = await this.#database();
     const keyBinding = this.#keyBinding;
     const stores = keyBinding
-      ? ([GAME_STORE, ENTRY_STORE, CONSENSUS_STORE, BYTE_STORE] as const)
-      : ([GAME_STORE, ENTRY_STORE, CONSENSUS_STORE] as const);
+      ? ([GAME_STORE, ENTRY_STORE, CONSENSUS_STORE, BYTE_STORE, DELETED_GAME_STORE] as const)
+      : ([GAME_STORE, ENTRY_STORE, CONSENSUS_STORE, DELETED_GAME_STORE] as const);
     const transaction = strictWriteTransaction(database, stores);
     let bindingBytes: Uint8Array | undefined;
     try {
+      await assertOnlineGameNotDeleted(transaction, this.#gameId);
       const consensusBytes = await transaction.objectStore(CONSENSUS_STORE).get(this.#gameId);
       if (consensusBytes === undefined) {
         await transaction.done;
@@ -602,11 +609,13 @@ export class IndexedDbProtocolJournal implements ProtocolJournal {
         GAME_STORE,
         ENTRY_STORE,
         CONSENSUS_STORE,
+        DELETED_GAME_STORE,
         BYTE_STORE,
       ]);
       let storedStage: Uint8Array | undefined;
       let storedCheck: Uint8Array | undefined;
       try {
+        await assertOnlineGameNotDeleted(transaction, this.#gameId);
         const bytes = transaction.objectStore(BYTE_STORE);
         const finalKey = transferImportFinalKey(staged);
         const priorFinal = await bytes.get(finalKey);

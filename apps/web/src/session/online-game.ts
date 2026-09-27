@@ -49,6 +49,7 @@ import type { OnlineDeviceRoutes, OnlineGameTransport } from './online-game-tran
 import { createOnlineGameCandidateStore } from './online-game-candidates.js';
 import { createSessionAuditRunner } from './audit-worker-client.js';
 import { createOnlineGameHistoryWriter } from './online-game-history-writer.js';
+import { createOnlineGameActivityWriter } from './online-game-activity.js';
 import { browserEntropy, randomIndex, randomSeed } from './random.js';
 
 type OnlineJournal = ProtocolJournal & { close(): Promise<void> };
@@ -114,6 +115,7 @@ export async function openOnlineGame(
   let transport: OnlineGameTransport | null = null;
   let session: P2PSession | null = null;
   let historyWriter: ReturnType<typeof createOnlineGameHistoryWriter> | null = null;
+  let activityWriter: ReturnType<typeof createOnlineGameActivityWriter> | null = null;
   let terminalHead: { seq: number; hash: string } | null = null;
   let leaseLost = false;
   const providers = new Map<Seat, BeaconSecretProvider>();
@@ -126,11 +128,13 @@ export async function openOnlineGame(
   const cleanup = async () => {
     input.signal?.removeEventListener('abort', stopOutput);
     historyWriter?.stop();
+    activityWriter?.stop();
     try {
       session?.dispose();
       await session?.flush();
     } finally {
       await historyWriter?.flush();
+      await activityWriter?.flush();
       transport?.dispose();
       for (const provider of providers.values()) provider.dispose();
       for (const item of material) {
@@ -491,6 +495,13 @@ export async function openOnlineGame(
       session,
       localHumanSeat: human.seat,
       terminalHead,
+      ...(input.onHistoryMetadataError ? { onError: input.onHistoryMetadataError } : {}),
+    });
+    activityWriter = createOnlineGameActivityWriter({
+      store: input.store,
+      gameId: genesis.gameId,
+      genesisDigest: digest,
+      session,
       ...(input.onHistoryMetadataError ? { onError: input.onHistoryMetadataError } : {}),
     });
     const routes = projection.value.deviceRoutes();

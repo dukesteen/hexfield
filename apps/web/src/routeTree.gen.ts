@@ -20,6 +20,7 @@ import { Route as LobbyLobbyIdRouteImport } from './routes/lobby/$lobbyId'
 import { Route as LocalGameIdRouteImport } from './routes/local/$gameId'
 import { Route as LocalNewRouteImport } from './routes/local/new'
 import { Route as OnlineCreateRouteImport } from './routes/online/create'
+import { Route as ReplayArchiveIdRouteImport } from './routes/replay/$archiveId'
 import { Route as TransferCodeRouteImport } from './routes/transfer/$code'
 
 const IndexRoute = IndexRouteImport.update({
@@ -77,6 +78,11 @@ const OnlineCreateRoute = OnlineCreateRouteImport.update({
   path: '/online/create',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ReplayArchiveIdRoute = ReplayArchiveIdRouteImport.update({
+  id: '/replay/$archiveId',
+  path: '/replay/$archiveId',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const TransferCodeRoute = TransferCodeRouteImport.update({
   id: '/transfer/$code',
   path: '/transfer/$code',
@@ -94,6 +100,7 @@ export interface FileRoutesByFullPath {
   '/local/$gameId': typeof LocalGameIdRoute
   '/local/new': typeof LocalNewRoute
   '/online/create': typeof OnlineCreateRoute
+  '/replay/$archiveId': typeof ReplayArchiveIdRoute
   '/transfer/$code': typeof TransferCodeRoute
   '/join/': typeof JoinIndexRoute
 }
@@ -108,6 +115,7 @@ export interface FileRoutesByTo {
   '/local/$gameId': typeof LocalGameIdRoute
   '/local/new': typeof LocalNewRoute
   '/online/create': typeof OnlineCreateRoute
+  '/replay/$archiveId': typeof ReplayArchiveIdRoute
   '/transfer/$code': typeof TransferCodeRoute
   '/join': typeof JoinIndexRoute
 }
@@ -123,6 +131,7 @@ export interface FileRoutesById {
   '/local/$gameId': typeof LocalGameIdRoute
   '/local/new': typeof LocalNewRoute
   '/online/create': typeof OnlineCreateRoute
+  '/replay/$archiveId': typeof ReplayArchiveIdRoute
   '/transfer/$code': typeof TransferCodeRoute
   '/join/': typeof JoinIndexRoute
 }
@@ -139,6 +148,7 @@ export interface FileRouteTypes {
     | '/local/$gameId'
     | '/local/new'
     | '/online/create'
+    | '/replay/$archiveId'
     | '/transfer/$code'
     | '/join/'
   fileRoutesByTo: FileRoutesByTo
@@ -153,6 +163,7 @@ export interface FileRouteTypes {
     | '/local/$gameId'
     | '/local/new'
     | '/online/create'
+    | '/replay/$archiveId'
     | '/transfer/$code'
     | '/join'
   id:
@@ -167,6 +178,7 @@ export interface FileRouteTypes {
     | '/local/$gameId'
     | '/local/new'
     | '/online/create'
+    | '/replay/$archiveId'
     | '/transfer/$code'
     | '/join/'
   fileRoutesById: FileRoutesById
@@ -182,6 +194,7 @@ export interface RootRouteChildren {
   LocalGameIdRoute: typeof LocalGameIdRoute
   LocalNewRoute: typeof LocalNewRoute
   OnlineCreateRoute: typeof OnlineCreateRoute
+  ReplayArchiveIdRoute: typeof ReplayArchiveIdRoute
   TransferCodeRoute: typeof TransferCodeRoute
   JoinIndexRoute: typeof JoinIndexRoute
 }
@@ -265,6 +278,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OnlineCreateRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/replay/$archiveId': {
+      id: '/replay/$archiveId'
+      path: '/replay/$archiveId'
+      fullPath: '/replay/$archiveId'
+      preLoaderRoute: typeof ReplayArchiveIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/transfer/$code': {
       id: '/transfer/$code'
       path: '/transfer/$code'
@@ -286,6 +306,7 @@ const rootRouteChildren: RootRouteChildren = {
   LocalGameIdRoute: LocalGameIdRoute,
   LocalNewRoute: LocalNewRoute,
   OnlineCreateRoute: OnlineCreateRoute,
+  ReplayArchiveIdRoute: ReplayArchiveIdRoute,
   TransferCodeRoute: TransferCodeRoute,
   JoinIndexRoute: JoinIndexRoute,
 }

@@ -1,5 +1,36 @@
-.saved-game-row.online-history-row {
+.saved-game-row.online-history-row,
+.saved-game-row.public-replay-row {
   grid-template-columns: minmax(0, 1fr) 18px;
+}
+
+.online-history-item {
+  padding-block-end: 12px;
+  border-block-end: 1px solid var(--border);
+}
+
+.online-history-item > .saved-game-row {
+  border: 0;
+}
+
+.online-history-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.online-history-actions > button {
+  min-height: 36px;
+  padding: 6px 10px;
+  font-size: 0.75rem;
+}
+
+.online-history-remove {
+  margin-inline-start: auto;
+}
+
+.online-history-inactive {
+  color: var(--muted);
+  font-size: 0.72rem;
 }
 
 .online-history-description {

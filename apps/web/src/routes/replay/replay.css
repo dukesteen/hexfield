@@ -1,0 +1,50 @@
+.public-replay-page {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+.public-replay-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(260px, 1fr);
+  gap: 24px;
+  margin-top: 24px;
+}
+
+.public-replay-page h1,
+.public-replay-page h2 {
+  font-family: 'Young Serif', Georgia, serif;
+  font-weight: 400;
+}
+
+.public-replay-board {
+  height: clamp(320px, 68dvh, 720px);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+.public-replay-board .board-renderer-root {
+  width: 100%;
+  height: 100%;
+}
+
+.public-replay-sidebar {
+  min-width: 0;
+}
+
+@media (max-width: 760px) {
+  .public-replay-page .app-header {
+    padding-inline: 0;
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .public-replay-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .public-replay-board {
+    height: max(320px, min(68dvh, calc(100vw - 48px)));
+  }
+}

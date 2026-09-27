@@ -18,10 +18,18 @@ interface DialogFrameProps {
   footer?: ReactNode;
   onCancel?: (() => void) | undefined;
   variant?: 'trade';
+  className?: string;
 }
 
 /** Native modal supplies focus containment; Escape invokes the optional cancel action. */
-export function DialogFrame({ title, children, footer, onCancel, variant }: DialogFrameProps) {
+export function DialogFrame({
+  title,
+  children,
+  footer,
+  onCancel,
+  variant,
+  className,
+}: DialogFrameProps) {
   const { t } = useTranslation('game');
   const pending = useContext(ActionPendingContext);
   const titleId = useId();
@@ -41,7 +49,10 @@ export function DialogFrame({ title, children, footer, onCancel, variant }: Dial
   return (
     <dialog
       ref={ref}
-      className={variant === 'trade' ? 'trade-dialog' : undefined}
+      className={
+        [variant === 'trade' ? 'trade-dialog' : '', className].filter(Boolean).join(' ') ||
+        undefined
+      }
       aria-labelledby={titleId}
       aria-busy={pending}
       onCancel={(event) => {

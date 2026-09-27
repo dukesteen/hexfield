@@ -24,6 +24,7 @@ import type { OnlineTransferBrowser } from '../../session/online-transfer-browse
 import { createTransferInviteUrl } from '../../session/online-transfer-link';
 import { useRequestPersistentStorage } from '../../queries/storage-persistence';
 import { queryKeys } from '../../queries/keys';
+import { encodePublicReplay } from '../../session/online-public-archive-client.js';
 import './online.css';
 
 const SHAPES = ['circle', 'triangle', 'square', 'diamond'] as const;
@@ -317,26 +318,14 @@ function OnlineGameInstance({
   }
   const exported = useMutation({
     mutationFn: async () => {
-      const blob = new Blob(
-        [
-          JSON.stringify(
-            {
-              format: 'hexfield-certified-history-v1',
-              history: await Promise.resolve(game.session.exportSave()),
-              presentation,
-              audit: game.session.getAudit?.(),
-            },
-            null,
-            2,
-          ),
-        ],
-        { type: 'application/json' },
-      );
+      const history = await Promise.resolve(game.session.exportSave());
+      const bytes = await encodePublicReplay(game.gameId, history);
+      const blob = new Blob([new Uint8Array(bytes)], { type: 'application/octet-stream' });
       const url = URL.createObjectURL(blob);
       try {
         const link = document.createElement('a');
         link.href = url;
-        link.download = `${game.gameId}.peer-history.json`;
+        link.download = `${game.gameId}.hxar`;
         document.body.append(link);
         link.click();
         link.remove();
@@ -592,6 +581,7 @@ function OnlineGameInstance({
         <h2 id="online-game-halted-title">{t('lobby:onlineGameHalted')}</h2>
         <p>{t('lobby:onlineGameHaltedBody')}</p>
         {leaveError && <p role="alert">{t('lobby:onlineLeaveFailed')}</p>}
+        {exported.isError && <p role="alert">{t('lobby:publicReplayExportFailed')}</p>}
         <div className="dialog-actions">
           <button
             className="button button-quiet"
@@ -599,7 +589,7 @@ function OnlineGameInstance({
             disabled={exported.isPending}
             onClick={() => exported.mutate()}
           >
-            {t('game:exportReplay')}
+            {exported.isPending ? t('lobby:publicReplayVerifying') : t('game:exportReplay')}
           </button>
           <button
             className="button button-primary"

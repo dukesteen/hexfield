@@ -9,7 +9,14 @@ import {
 } from '@cp2p/protocol';
 import type { CertifiedEntry, LogEntry, ReplayPolicy } from '@cp2p/protocol';
 import * as v from 'valibot';
-import { BYTE_STORE, MAX_RECORD_BYTES, openDatabase, strictWriteTransaction } from './database.js';
+import {
+  BYTE_STORE,
+  DELETED_GAME_STORE,
+  MAX_RECORD_BYTES,
+  openDatabase,
+  strictWriteTransaction,
+} from './database.js';
+import { assertOnlineGameNotDeleted } from './online-game-deletion.js';
 import { IndexedDbByteStore } from './indexed-db-byte-store.js';
 
 const hashSchema = v.pipe(v.string(), v.regex(/^[0-9a-f]{64}$/));
@@ -149,8 +156,9 @@ export class TransferImportStore {
         () => undefined,
       );
       try {
-        const transaction = strictWriteTransaction(database, [BYTE_STORE]);
+        const transaction = strictWriteTransaction(database, [BYTE_STORE, DELETED_GAME_STORE]);
         try {
+          await assertOnlineGameNotDeleted(transaction, checked.gameId);
           const store = transaction.objectStore(BYTE_STORE);
           const final = await store.get(transferImportFinalKey(checked));
           if (final !== undefined) {
@@ -226,8 +234,9 @@ export class TransferImportStore {
           () => undefined,
         );
         try {
-          const transaction = strictWriteTransaction(database, [BYTE_STORE]);
+          const transaction = strictWriteTransaction(database, [BYTE_STORE, DELETED_GAME_STORE]);
           try {
+            await assertOnlineGameNotDeleted(transaction, stage.gameId);
             const store = transaction.objectStore(BYTE_STORE);
             const final = await store.get(transferImportFinalKey(stage));
             if (final !== undefined) {
@@ -370,8 +379,9 @@ export class TransferImportStore {
       () => undefined,
     );
     try {
-      const transaction = strictWriteTransaction(database, [BYTE_STORE]);
+      const transaction = strictWriteTransaction(database, [BYTE_STORE, DELETED_GAME_STORE]);
       try {
+        await assertOnlineGameNotDeleted(transaction, input.gameId);
         const store = transaction.objectStore(BYTE_STORE);
         const existing = await store.get(finalKey);
         try {

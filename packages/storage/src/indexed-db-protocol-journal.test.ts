@@ -98,7 +98,7 @@ describe('IndexedDbProtocolJournal', () => {
       expect(await journal.initialize(source.entry, Uint8Array.of(9))).toBe(false);
       await journal.close();
 
-      const database = await openDB<JournalDatabase>('cp2p', 2);
+      const database = await openDB<JournalDatabase>('cp2p', 3);
       expect(await database.get('bytes', 'vote-key-game-1')).toEqual(Uint8Array.of(17, 18, 19));
       database.close();
 
@@ -194,7 +194,7 @@ describe('IndexedDbProtocolJournal', () => {
     );
     await mismatched.close();
 
-    const database = await openDB<JournalDatabase>('cp2p', 2);
+    const database = await openDB<JournalDatabase>('cp2p', 3);
     await database.delete('consensus', source.genesis.gameId);
     database.close();
     const incomplete = new IndexedDbProtocolJournal(source.genesis.gameId, { keyBinding: binding });
@@ -207,7 +207,7 @@ describe('IndexedDbProtocolJournal', () => {
     );
     await incomplete.close();
 
-    const missingDatabase = await openDB<JournalDatabase>('cp2p', 2);
+    const missingDatabase = await openDB<JournalDatabase>('cp2p', 3);
     await missingDatabase.delete('bytes', binding.recordKey);
     missingDatabase.close();
     const missing = new IndexedDbProtocolJournal(source.genesis.gameId, { keyBinding: binding });
@@ -225,12 +225,13 @@ describe('IndexedDbProtocolJournal', () => {
     installFactory();
     const source = fixture();
     const binding = { recordKey: 'vote-key-game-3', bytes: Uint8Array.of(6) };
-    const database = await openDB<JournalDatabase>('cp2p', 2, {
+    const database = await openDB<JournalDatabase>('cp2p', 3, {
       upgrade(db) {
         db.createObjectStore('bytes');
         db.createObjectStore('games');
         db.createObjectStore('entries');
         db.createObjectStore('consensus');
+        db.createObjectStore('deletedGames');
       },
     });
     await database.put('bytes', binding.bytes, binding.recordKey);
@@ -255,7 +256,7 @@ describe('IndexedDbProtocolJournal', () => {
     expect(await journal.initialize(source.entry, Uint8Array.of(1))).toBe(true);
     expect(await journal.load()).not.toBeNull();
 
-    const database = await openDB<JournalDatabase>('cp2p', 2);
+    const database = await openDB<JournalDatabase>('cp2p', 3);
     await database.put('bytes', Uint8Array.of(11, 13), keyBinding.recordKey);
     database.close();
     await expect(journal.saveSafety(1, 0, Uint8Array.of(2))).rejects.toThrow(
@@ -266,7 +267,7 @@ describe('IndexedDbProtocolJournal', () => {
       'Journal voting-key binding is missing or mismatched',
     );
 
-    const restoreBinding = await openDB<JournalDatabase>('cp2p', 2);
+    const restoreBinding = await openDB<JournalDatabase>('cp2p', 3);
     await restoreBinding.put('bytes', keyBinding.bytes, keyBinding.recordKey);
     restoreBinding.close();
     expect(await journal.load()).toMatchObject({
@@ -299,7 +300,7 @@ describe('IndexedDbProtocolJournal', () => {
     }
     await journal.close();
 
-    const database = await openDB<JournalDatabase>('cp2p', 2);
+    const database = await openDB<JournalDatabase>('cp2p', 3);
     expect(await database.get('bytes', keyBinding.recordKey)).toBeUndefined();
     expect(await database.get('games', source.genesis.gameId)).toBeUndefined();
     expect(await database.get('consensus', source.genesis.gameId)).toBeUndefined();
@@ -420,7 +421,7 @@ describe('IndexedDbProtocolJournal', () => {
     await journal.initialize(source.entry, Uint8Array.of(1));
     await journal.close();
 
-    const database = await openDB<JournalDatabase>('cp2p', 2);
+    const database = await openDB<JournalDatabase>('cp2p', 3);
     await database.put('consensus', canonicalEncode({ height: 2 }), source.genesis.gameId);
     database.close();
     const reopened = new IndexedDbProtocolJournal(source.genesis.gameId);
@@ -437,7 +438,7 @@ describe('IndexedDbProtocolJournal', () => {
     await journal.commit(1, 0, certified, Uint8Array.of(2));
     await journal.close();
 
-    const database = await openDB<JournalDatabase>('cp2p', 2);
+    const database = await openDB<JournalDatabase>('cp2p', 3);
     const broken = {
       ...certified,
       entry: { ...certified.entry, prevHash: '0'.repeat(64) },

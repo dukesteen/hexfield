@@ -3,6 +3,7 @@ import { getGameArtUrl } from '@cp2p/renderer';
 import { useTranslation } from 'react-i18next';
 import { useSavedGames } from '../queries/hooks';
 import { SavedOnlineGames } from '../features/online/SavedOnlineGames';
+import { PublicReplayLibrary } from '../features/online/PublicReplayLibrary';
 
 export const Route = createFileRoute('/')({ component: Home });
 
@@ -38,6 +39,7 @@ function Home() {
         <div className="home-saved-games">
           <img className="home-board-art" src={getGameArtUrl('preview')} alt="" />
           <SavedOnlineGames />
+          <PublicReplayLibrary />
           <section className="saved-games" aria-labelledby="saved-title">
             <div className="section-heading">
               <h2 id="saved-title">{t('lobby:savedGames')}</h2>

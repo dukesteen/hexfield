@@ -12,6 +12,12 @@ import {
   verifyGameSeatBindings,
   verifyLobbyFreezeAgreement,
 } from '@cp2p/protocol';
+import {
+  decodeOnlineGameTombstone,
+  deleteOnlineGameData,
+  onlineGameTombstoneKey,
+} from '@cp2p/storage';
+import type { DeleteOnlineGameDataOptions, DeleteOnlineGameDataResult } from '@cp2p/storage';
 import type {
   EscrowCeremonyStore,
   Genesis,
@@ -29,6 +35,19 @@ const GAME_ID = /^[A-Za-z0-9_-]{22}$/;
 const DIGEST = /^[A-Za-z0-9_-]{43}$/;
 const PEER_ID = /^[A-Za-z0-9_-]{43}$/;
 const catalogueKey = 'online-games/catalogue-v1';
+
+async function readStoredTombstone(
+  store: EscrowCeremonyStore,
+  gameId: string,
+): Promise<ReturnType<typeof decodeOnlineGameTombstone> | null> {
+  const bytes = await store.load(onlineGameTombstoneKey(gameId));
+  if (bytes === null) return null;
+  try {
+    return decodeOnlineGameTombstone(bytes, gameId);
+  } finally {
+    bytes.fill(0);
+  }
+}
 const inviteSchema = v.strictObject({
   roomId: v.pipe(v.string(), v.minLength(10), v.maxLength(10), v.regex(/^[a-z2-7]{10}$/)),
   hostPeer: v.pipe(v.string(), v.regex(PEER_ID)),
@@ -353,6 +372,8 @@ export async function saveOnlineGameRecord(
   const id = recordKey(digest);
   const indexLock = 'online-games/catalogue-lock-v1';
   return store.withCeremonyLock(indexLock, async () => {
+    if (await readStoredTombstone(store, checked.gameId))
+      throw new Error('This online game was deleted locally and cannot be restarted');
     if (!(await store.putIfAbsent(id, bytes))) {
       const existing = await store.load(id);
       if (!existing || !equalBytes(existing, bytes))
@@ -370,6 +391,8 @@ export async function loadOnlineGameRecord(
   gameId: string,
 ): Promise<SavedOnlineGameRecord | null> {
   if (!GAME_ID.test(gameId)) throw new TypeError('Invalid online game identifier');
+  if (await readStoredTombstone(store, gameId))
+    throw new Error('This online game was deleted locally and cannot be resumed');
   const pointer = await loadPointer(store, gameId);
   if (pointer === null) return null;
   const bytes = await store.load(recordKey(pointer.genesisDigest));
@@ -392,16 +415,43 @@ export async function listOnlineGameRecords(store: EscrowCeremonyStore): Promise
     const results = await Promise.all(
       gameIds.map(async (gameId) => {
         try {
+          if (await readStoredTombstone(store, gameId))
+            return { gameId, summary: null, deleted: true };
           const summary = await loadPointer(store, gameId);
-          return summary ? { gameId, summary } : { gameId, summary: null };
+          return summary
+            ? { gameId, summary, deleted: false }
+            : { gameId, summary: null, deleted: false };
         } catch {
-          return { gameId, summary: null };
+          return { gameId, summary: null, deleted: false };
         }
       }),
     );
     return {
       games: results.flatMap(({ summary }) => (summary ? [summary] : [])),
-      unavailableGameIds: results.flatMap(({ gameId, summary }) => (summary ? [] : [gameId])),
+      unavailableGameIds: results.flatMap(({ gameId, summary, deleted }) =>
+        summary || deleted ? [] : [gameId],
+      ),
     };
   });
+}
+
+/** Delete local game data after validating its immutable signed start record. */
+export async function deleteOnlineGameRecord(
+  store: EscrowCeremonyStore,
+  gameId: string,
+  expectedGenesisDigest: string,
+  options?: DeleteOnlineGameDataOptions,
+): Promise<DeleteOnlineGameDataResult> {
+  if (!GAME_ID.test(gameId) || !DIGEST.test(expectedGenesisDigest))
+    throw new TypeError('Online game identity is invalid');
+  const tombstone = await readStoredTombstone(store, gameId);
+  if (tombstone) {
+    if (tombstone.genesisDigest !== expectedGenesisDigest)
+      throw new Error('This gameId was already deleted with a different genesis');
+    return 'already-deleted';
+  }
+  const record = await loadOnlineGameRecord(store, gameId);
+  if (!record || record.genesisDigest !== expectedGenesisDigest)
+    throw new Error('Saved online game does not match the requested deletion');
+  return deleteOnlineGameData(gameId, expectedGenesisDigest, options);
 }

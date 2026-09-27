@@ -19,7 +19,12 @@ const { useSettings, useSavedGames, useResumableGames } = vi.hoisted(() => ({
 }));
 
 vi.mock('../queries/hooks.js', () => ({ useSettings, useSavedGames }));
-vi.mock('../queries/online-games.js', () => ({ useResumableGames }));
+vi.mock('../queries/online-games.js', () => ({
+  useResumableGames,
+  useDeleteOnlineGame: () => ({ isPending: false }),
+  useExportOnlineReplay: () => ({ isPending: false }),
+  useOpenOnlineReplay: () => ({ isPending: false }),
+}));
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
     t: (key: string) =>
