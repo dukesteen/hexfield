@@ -1063,9 +1063,9 @@ function retainAccusation(
   const proposals =
     evidence.kind === 'proposal-equivocation'
       ? [evidence.first, evidence.second]
-      : evidence.kind === 'invalid-command'
-        ? [evidence.proposal]
-        : [];
+      : evidence.kind === 'vote-equivocation'
+        ? []
+        : [evidence.proposal];
   const votes =
     evidence.kind === 'vote-equivocation'
       ? [evidence.first, evidence.second]

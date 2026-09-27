@@ -146,11 +146,16 @@ function payloadCandidates(value: unknown, context: LogContext): CheatClaim[] {
     const items = parseCanonical(payload.evidence, signedList);
     return items.ok ? items.value.flatMap((item) => candidate('beacon-reveal', item, context)) : [];
   }
+  if (payload.action === 'deck-pass') {
+    const wrapper = parseCanonical(
+      payload.evidence,
+      v.strictObject({ deckId: v.pipe(v.string(), v.minLength(1), v.maxLength(64)), pass: signed }),
+    );
+    return wrapper.ok ? candidate('deck-pass', wrapper.value.pass, context) : [];
+  }
   const artifact = parseCanonical(payload.evidence, signed);
   if (!artifact.ok) return [];
   switch (payload.action) {
-    case 'deck-pass':
-      return candidate('deck-pass', artifact.value, context);
     case 'steal-fixed':
       return candidate('steal-contribution', artifact.value, context);
     case 'steal-dispute':
@@ -164,7 +169,11 @@ function payloadCandidates(value: unknown, context: LogContext): CheatClaim[] {
   return [];
 }
 
-/** Bounded, detached candidates only; every result still requires verifyCheatProof. */
+/**
+ * Consensus-critical extraction under PROTOCOL_VERSION, also used for capture.
+ * Changes to accepted proof shapes require a protocol version change. Candidates
+ * are detached and bounded; every result still requires verifyCheatProof.
+ */
 export function rejectedProofCandidates(value: unknown, context: LogContext): CheatClaim[] {
   if (context.genesis.security !== 'verified' || !context.crypto) return [];
   const parsed = parseCanonical(value, rejectedMessageSchema);

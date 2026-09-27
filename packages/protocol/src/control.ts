@@ -4,7 +4,7 @@ import { failure, success } from '@cp2p/engine';
 import type { Result, Seat } from '@cp2p/engine';
 import * as v from 'valibot';
 import { entryBody, entryHash } from './genesis.js';
-import { validateCommandForEntry } from './log.js';
+import { validateCommandForEntry, validateNextEntry } from './log.js';
 import type { EntryPolicy, LogContext } from './log.js';
 import {
   key32Schema,
@@ -17,6 +17,8 @@ import type { ExcludeProposerControl, SignedProposal } from './types.js';
 import { parseCanonical } from './validation.js';
 import { signedVoteSchema, validateVote } from './votes.js';
 import type { VoteContext } from './votes.js';
+import { rejectedProofCandidates } from './cheat-capture.js';
+import { verifyCheatProof } from './cheat-proof.js';
 
 const signedProposalSchema = v.strictObject({
   body: v.strictObject({
@@ -44,7 +46,7 @@ export interface ControlEvidenceContext {
   /** Must be reconstructed from the certified prefix ending at the offending parent. */
   log: LogContext;
   /** The same deterministic proof policy used for normal entry validation. */
-  commandPolicy: Pick<EntryPolicy, 'verifyCommand'>;
+  commandPolicy: Omit<EntryPolicy, 'term' | 'sequencer'>;
   membership: VoteContext;
   excludedProposers: readonly Seat[];
   proposerFor: (seq: number, term: number) => { seat: Seat; publicKey: string };
@@ -152,7 +154,32 @@ export function validateObjectiveAccusation(
     if (!proposal.ok) return proposal;
     const entry = proposal.value.body.entry;
     const proposer = context.proposerFor(entry.seq, entry.term);
-    if (proposer.seat !== control.offender || entry.payload.kind !== 'command')
+    if (proposer.seat !== control.offender)
+      return failure('control-unproven', 'Evidence is not this proposer’s signed proposal');
+    if (evidence.kind === 'invalid-proof') {
+      if (entry.payload.kind !== 'system' && entry.payload.kind !== 'crypto')
+        return failure('control-unproven', 'Proof accusations require a system or crypto entry');
+      const checked = validateNextEntry(entry, context.log, {
+        ...context.commandPolicy,
+        term: entry.term,
+        sequencer: proposer.publicKey,
+      });
+      if (checked.ok || checked.error.code === 'entry-verification-failed')
+        return failure(
+          'control-unproven',
+          'A valid entry or local fault is not proposer misconduct',
+        );
+      // A rejection alone can be a local fault or stale operation. Reuse the
+      // objective proof classifier against this replayed, certified parent.
+      const claims = rejectedProofCandidates(
+        { t: 'PROPOSAL', proposal: proposal.value },
+        context.log,
+      );
+      return claims.some((claim) => verifyCheatProof(claim, context.log).ok)
+        ? success(undefined)
+        : failure('control-unproven', 'The signed proposal contains no objectively bad proof');
+    }
+    if (entry.payload.kind !== 'command')
       return failure('control-unproven', 'Evidence is not this proposer’s signed command proposal');
     const command = validateCommandForEntry(
       entry.payload.signed,

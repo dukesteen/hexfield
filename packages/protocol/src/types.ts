@@ -4,7 +4,7 @@ import type { SignedVote } from './votes.js';
 import type { CheatClaim } from './cheat-types.js';
 import type { TakeoverPolicy } from './takeover-policy.js';
 
-export const PROTOCOL_VERSION = 4;
+export const PROTOCOL_VERSION = 5;
 
 export interface HumanSeat {
   seat: Seat;
@@ -84,7 +84,8 @@ export type SystemEvidence =
 export type ObjectiveEvidence =
   | { kind: 'vote-equivocation'; first: SignedVote; second: SignedVote }
   | { kind: 'proposal-equivocation'; first: SignedProposal; second: SignedProposal }
-  | { kind: 'invalid-command'; proposal: SignedProposal };
+  | { kind: 'invalid-command'; proposal: SignedProposal }
+  | { kind: 'invalid-proof'; proposal: SignedProposal };
 
 export interface ExcludeProposerControl {
   kind: 'control';

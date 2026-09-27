@@ -374,13 +374,13 @@ test('live authorization reserves a fresh key; exact-parent readiness activates 
   ).toBe(false);
 }, 30_000);
 
-test('v4 certifies transfer with the old quorum, replays new authority, and retires the old key', () => {
+test('certifies transfer with the old quorum, replays new authority, and retires the old key', () => {
   const fixture = createRecoveryFixture();
   const before = fixture.ready;
-  expect(fixture.genesis.protocolVersion).toBe(4);
+  expect(fixture.genesis.protocolVersion).toBe(5);
   expect(
     validateGenesis(
-      { ...fixture.genesis, protocolVersion: 3 },
+      { ...fixture.genesis, protocolVersion: 4 },
       fixture.source.engine,
       fixture.policy.genesis,
     ),

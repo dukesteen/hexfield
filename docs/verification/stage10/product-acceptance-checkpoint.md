@@ -62,12 +62,16 @@ silently omitted. Seven entry-point tests pass. In native Chrome, a 52,578-byte
 bootstrap crossed the authenticated channel, the destination validated it and
 returned its signed offer, and the source reached confirmation.
 
-Full handoff remains unverified. The immediate confirmation was correctly refused
-because initial deck setup was still pending. A subsequent bounded startup probe
-found both workers at certified head 0 with protocol status `sync` after 30 seconds,
-with no legal commands. That startup behavior is under investigation; neither
-extending the transfer timeout nor treating a visible game route as readiness
-would establish acceptance.
+The immediate confirmation was correctly refused because initial deck setup was
+still pending. A later native trace established that setup completes at certified
+head 5 after the protocol retry, around nine seconds. The original test assumed
+the source owned the first turn and then read a duplicate Vite module registry;
+neither observation establishes a production startup stall.
+
+The corrected test has reached certified transfer activation at matching head 7
+on the survivor and destination. Their new authenticated link reconnects after
+the route change. The post-transfer move assertion still needs a completed run
+with the browser's actual registry module; full handoff acceptance remains pending.
 
 ## Current-version recovered game
 

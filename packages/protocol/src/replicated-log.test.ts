@@ -68,9 +68,12 @@ class CapturingTransport implements Transport {
   readonly sent: ProtocolMessage[] = [];
   readonly disconnected: PeerId[] = [];
   private listener: ((from: PeerId, bytes: Uint8Array) => void) | null = null;
-  constructor(readonly self: PeerId) {}
+  constructor(
+    readonly self: PeerId,
+    private readonly connected: PeerId[] = [],
+  ) {}
   peers(): PeerId[] {
-    return [];
+    return [...this.connected];
   }
   send(_to: PeerId, bytes: Uint8Array): void {
     this.sent.push(value(decodeProtocolMessage(bytes)));
@@ -1614,7 +1617,7 @@ describe('replicated certified log adapter', () => {
         return fixture.engine.createGame(config, seed);
       },
     };
-    const transport = new FlakySubmitTransport(first.peerId);
+    const transport = new FlakySubmitTransport(first.peerId, [second.peerId]);
     const clock = new ManualClock();
     const replica = value(
       await ReplicatedLog.create({

@@ -1902,7 +1902,12 @@ export class ReplicatedLog {
               cause: received.error.code,
             });
           }
-          if (entry.payload.kind !== 'command') return received;
+          if (
+            entry.payload.kind !== 'command' &&
+            (this.context.log.genesis.security !== 'verified' ||
+              (entry.payload.kind !== 'system' && entry.payload.kind !== 'crypto'))
+          )
+            return received;
           try {
             const offender = proposerFor(
               entry.seq,
@@ -1916,7 +1921,10 @@ export class ReplicatedLog {
               kind: 'control',
               action: 'exclude-proposer',
               offender,
-              evidence: { kind: 'invalid-command', proposal: message.proposal },
+              evidence: {
+                kind: entry.payload.kind === 'command' ? 'invalid-command' : 'invalid-proof',
+                proposal: message.proposal,
+              },
             });
             if (accused.ok) return success(undefined);
           } catch {

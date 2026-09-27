@@ -467,3 +467,16 @@ Source: [18-pwa-release.md](18-pwa-release.md)
 - [ ] Performance budgets and accessibility checks pass in CI.
 - [ ] Automated deploys for the app and the signaling service.
 - [ ] The release checklist is completed for v1.0.0.
+
+## Protocol v5 proposer evidence checkpoint, 2026-09-27
+
+[The invalid-proof control checkpoint](verification/stage07/invalid-proof-control-checkpoint.md)
+adds certified proposer consequences for attributable bad proofs in system/crypto
+entries, fixes wrapped deck-pass capture, and records the independent review and
+75 focused passing cases. The protocol version is now 5; mixed-version admission
+is rejected. Full cheating/network matrix acceptance remains open.
+
+The frozen v4 three-browser transfer trace now passes activation, old-key
+retirement and a destination move accepted by the survivor at matching head 10.
+A clean v5 rerun is in progress. The earlier reported startup stall was a test
+turn/registry lookup issue; the worker ingress omission was the production bug.

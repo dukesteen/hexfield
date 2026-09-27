@@ -127,6 +127,7 @@ export const objectiveEvidenceSchema = v.variant('kind', [
     second: embeddedProposalSchema,
   }),
   v.strictObject({ kind: v.literal('invalid-command'), proposal: embeddedProposalSchema }),
+  v.strictObject({ kind: v.literal('invalid-proof'), proposal: embeddedProposalSchema }),
 ]);
 export const excludeProposerControlSchema = v.strictObject({
   kind: v.literal('control'),
