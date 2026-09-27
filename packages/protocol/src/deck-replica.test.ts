@@ -534,7 +534,8 @@ describe('live verified deck replication', () => {
   test('automatically certifies an owned victory card after a transient reveal-source failure', async () => {
     const fixture = createVerifiedDeckSession(7, 2, 128, {
       vpTarget: 3,
-      ceremonyNonce: toBase64Url(new Uint8Array(32).fill(7)),
+      // V6 ceremony binding selects an owned victory point first at nonce 9.
+      ceremonyNonce: toBase64Url(new Uint8Array(32).fill(9)),
       boardSeed: fromBase64Url(
         createSimulationGenesis({ seed: 0, humanCount: 2 }).genesis.genesisSeed,
       ),

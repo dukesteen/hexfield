@@ -149,9 +149,9 @@ describe('live verified Monopoly count replication', () => {
       'v:0,2,N',
       'v:1,1,N',
     ];
-    // Nonce 8 selects the v5 Monopoly-first permutation.
+    // Nonce 23 selects the v6 Monopoly-first permutation.
     const fixture = createVerifiedDeckSession(16, 2, 128, {
-      ceremonyNonce: toBase64Url(new Uint8Array(32).fill(8)),
+      ceremonyNonce: toBase64Url(new Uint8Array(32).fill(23)),
       boardSeed: new Uint8Array(32).fill(50),
     });
     const peers = fixture.humans.map(
