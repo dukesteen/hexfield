@@ -64,5 +64,13 @@
   "lobby:connectionDiagnosticsPeer_disconnected",
   "lobby:connectionDiagnosticsRoute_host",
   "lobby:connectionDiagnosticsRoute_srflx",
-  "lobby:connectionDiagnosticsRoute_relay"
+  "lobby:connectionDiagnosticsRoute_relay",
+  "game:fairnessProofCommand",
+  "game:fairnessProofRandomness",
+  "game:fairnessProofShuffle",
+  "game:fairnessProofCard",
+  "game:fairnessProofCount",
+  "game:fairnessProofSteal",
+  "game:fairnessProofDelivery",
+  "game:fairnessProofDispute"
 ]

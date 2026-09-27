@@ -79,6 +79,9 @@ export class OnlineWorkerSession implements GameSession {
   getAudit() {
     return this.current.update.audit ?? { kind: 'not-started' as const };
   }
+  getFairness() {
+    return this.current.update.fairness ?? null;
+  }
   getRecoveryCandidate() {
     return this.current.update.recoveryCandidate ?? null;
   }

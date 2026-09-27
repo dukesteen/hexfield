@@ -104,6 +104,7 @@ export async function createTerminalAuditFixture(
     maxElapsedMs?: number;
     onProgress?: (step: number, state: GameState) => void;
     sessionOptions?: (options: P2PSessionOptions) => P2PSessionOptions;
+    onSessionsReady?: (sessions: readonly P2PSession[], clock: VirtualClock) => Promise<void>;
     onTerminal?: (sessions: readonly P2PSession[], clock: VirtualClock) => Promise<void>;
     /** Let the test runner process I/O without advancing the protocol clock. */
     yieldTask?: () => Promise<void>;
@@ -271,6 +272,7 @@ export async function createTerminalAuditFixture(
       );
       sessions.push(value(opened));
     }
+    await options.onSessionsReady?.(sessions, network.clock);
     await settle(sessions, network.clock, 48);
     for (let step = 0; step < 500; step += 1) {
       if (options.maxElapsedMs !== undefined && Date.now() - startedAt > options.maxElapsedMs)

@@ -233,6 +233,7 @@ function mesh(
   manualDeadline = false,
   selfOnly = false,
   relay = false,
+  tamperDescriptions = false,
 ) {
   const identities = Array.from({ length: count }, (_, index) =>
     identityFromSecret(new Uint8Array(32).fill(index + 1)),
@@ -241,7 +242,35 @@ function mesh(
   const signaling = new InProcessSignaling();
   const fabric = new Fabric();
   const clock = new VirtualClock();
-  const adapters = identities.map((identity) => signaling.adapter(identity.peerId));
+  let tamperedDescriptions = 0;
+  const adapters = identities.map((identity) => {
+    const adapter = signaling.adapter(identity.peerId);
+    if (!tamperDescriptions) return adapter;
+    return {
+      async send(to: PeerId, value: SignedSignalEnvelope): Promise<void> {
+        if (value.body.blob.kind !== 'description') return adapter.send(to, value);
+        tamperedDescriptions++;
+        const description = value.body.blob.description;
+        const fakeFingerprint = `a=fingerprint:sha-256 ${Array(32).fill('CC').join(':')}`;
+        const forged: SignedSignalEnvelope = {
+          ...value,
+          body: {
+            ...value.body,
+            blob: {
+              ...value.body.blob,
+              description: {
+                ...description,
+                sdp: (description.sdp ?? '').replace(/a=fingerprint:[^\r\n]+/, fakeFingerprint),
+              },
+            },
+          },
+        };
+        await adapter.send(to, forged);
+      },
+      onSignal: (listener: (from: PeerId, value: unknown) => void) => adapter.onSignal(listener),
+      close: () => adapter.close(),
+    };
+  });
   const relayAdapters = relay
     ? identities.map(
         (identity, index) =>
@@ -275,6 +304,7 @@ function mesh(
     signaling,
     adapters,
     relayAdapters,
+    tamperedDescriptions: () => tamperedDescriptions,
     fabric,
     clock,
     peers,
@@ -1010,6 +1040,18 @@ describe('authenticated WebRTC mesh', () => {
       f.clock.advanceBy(10_000);
       await settle();
       expect(diagnostics).toHaveLength(count);
+    } finally {
+      f.dispose();
+    }
+  });
+
+  test('a signaling adapter cannot swap DTLS fingerprints inside a signed offer', async () => {
+    const f = mesh(2, false, false, false, false, true);
+    try {
+      for (const peer of f.peers) peer.start();
+      await settle();
+      expect(f.tamperedDescriptions()).toBeGreaterThan(0);
+      expect(f.peers.map((peer) => peer.peers().length)).toEqual([0, 0]);
     } finally {
       f.dispose();
     }

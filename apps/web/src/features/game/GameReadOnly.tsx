@@ -22,6 +22,7 @@ import { toRenderModel } from '../board/toRenderModel';
 import type { GamePresentation } from '../../queries/repositories/saved-games';
 import { useSessionStore } from '../../store/session-store';
 import { EventLog } from './EventLog';
+import { CheatFlag, FairnessStatus } from './FairnessStatus.js';
 import { useGameActions, type GameActionController } from './GameActions';
 import { GameOverPanel } from './GameOverPanel';
 import { PlacementConfirmation } from './PlacementConfirmation';
@@ -173,6 +174,7 @@ function PlayerRail({
                 </span>
               </div>
               <div className="player-panel-status">
+                <CheatFlag seat={seatState.seat} />
                 {gains.length ? (
                   <span
                     className="production-receipt"
@@ -319,6 +321,7 @@ function PlayerDetails({
           {publicSeat.publicVp} <small>{t('game:vpShort')}</small>
         </span>
       </div>
+      <CheatFlag seat={seat} />
       <dl className="player-details-stats">
         <div>
           <dt>{t('game:cockpit.resourceCards')}</dt>
@@ -1004,6 +1007,7 @@ function LiveGame({
             }}
           />
           <DiceRollReadout dice={lastRoll} />
+          <FairnessStatus presentation={presentation} />
           {!finished && actions.placementConfirmation && (
             <PlacementConfirmation
               boardRef={boardRef}

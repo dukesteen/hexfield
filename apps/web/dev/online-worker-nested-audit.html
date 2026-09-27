@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Nested online audit worker check</title>
+    <style>
+      body {
+        max-width: 52rem;
+        margin: 3rem auto;
+        padding: 0 1rem;
+        font:
+          16px/1.5 system-ui,
+          sans-serif;
+      }
+      button {
+        padding: 0.7rem 1rem;
+      }
+      pre {
+        padding: 1rem;
+        overflow-wrap: anywhere;
+        white-space: pre-wrap;
+        background: #16171b;
+        color: #eee;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Nested online audit worker check</h1>
+    <p>
+      Runs one deterministic certified terminal-game audit from a dedicated parent worker that
+      starts the production audit child worker.
+    </p>
+    <p>
+      Copy <code>/private/tmp/hexfield-recovered-audit-browser.json</code> to the ignored
+      <code>apps/web/dev/recovered-audit-fixture.json</code> before running.
+    </p>
+    <button id="run" type="button">Run nested audit</button>
+    <pre id="output" aria-live="polite">Ready.</pre>
+    <script type="module" src="/src/dev/online-worker-nested-audit-page.ts"></script>
+  </body>
+</html>

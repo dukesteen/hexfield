@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next';
 import type { GameEvent } from '@cp2p/engine';
 import type { GamePresentation } from '../../queries/repositories/saved-games';
 import { formatGameEvent } from './event-format';
+import { FairnessFindings } from './FairnessStatus.js';
 
 export function EventLog({
   events,
@@ -17,6 +18,7 @@ export function EventLog({
   return (
     <details className="event-log">
       <summary>{t('game:eventLog')}</summary>
+      <FairnessFindings presentation={presentation} />
       {events.length === 0 ? (
         <p className="muted">{t('game:noEvents')}</p>
       ) : (

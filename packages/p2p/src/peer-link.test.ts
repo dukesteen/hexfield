@@ -618,6 +618,26 @@ describe('authenticated peer link', () => {
     }
   });
 
+  test('a 1 MiB game message completes after DataChannel backpressure clears', () => {
+    const f = pair();
+    try {
+      f.open();
+      const channel = f.leftPc.channel(0);
+      const payload = Uint8Array.from({ length: 1_048_576 }, (_, index) => index % 251);
+      channel.bufferedAmount = 1_048_577;
+      f.left.send(payload);
+      expect(f.rightMessages).toEqual([]);
+
+      for (let retry = 0; retry < 8 && f.rightMessages.length === 0; retry++) channel.low();
+
+      expect(f.rightMessages).toEqual([payload]);
+      expect(f.leftDown).toEqual([]);
+      expect(f.rightDown).toEqual([]);
+    } finally {
+      f.close();
+    }
+  });
+
   test('ICE restart failure closes the link and reports loss', () => {
     const f = pair();
     try {

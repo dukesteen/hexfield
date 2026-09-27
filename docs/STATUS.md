@@ -39,13 +39,20 @@ Two independent browser profiles pass lobby/game messages, reactions, mute,
 history separation and saved-game chat restoration. The new bad-beacon trace
 certifies one cheat finding across two peers while preserving the owed outcome.
 Static/build checks and focused correction tests pass; the checkpoint records
-the mixed-source workspace run precisely. Proposer consequences and fairness UI
-remain unfinished. The
+the mixed-source workspace run precisely. Proposer consequences remain
+unfinished. The [fairness UI checkpoint](verification/stage09/fairness-status-check.md)
+adds a public verified-move counter and certified proof-failure details in the
+board, player information, event log and game results. Its focused UI, worker
+projection and store checks pass 20 tests. The
 [online worker implementation](verification/stage09/online-worker-implementation.md)
 now moves certified setup and live game computation off the UI thread. The complete
 local web suite passes 242 tests. Two-browser placements, dice, trades and restore
-checks pass, as does a hosted-bot startup. Full terminal-audit and proof/heartbeat
-performance acceptance for the new boundary remain open.
+checks pass, as does a hosted-bot startup. The
+[terminal worker check](verification/stage09/online-worker-terminal-check.md)
+now completes a real shortened certified game through the worker runtime and
+session proxy, with both peers passing their audits. A separate native Chrome
+check passes the nested audit-worker path for the same 53-entry history.
+Proof/heartbeat performance acceptance for the new boundary remains open.
 
 ## 01 — Repository Foundation
 
@@ -248,9 +255,13 @@ phone-camera, cross-network and deployment acceptance remain open.
 
 - [ ] 4 browsers (including Firefox and WebKit) form a full mesh via the signaling server and via manual codes plus mesh relay.
 - [ ] Offer codes fit a QR code and scan successfully on a phone camera (manual test, recorded in STATUS.md).
-- [ ] The identity binding rejects a tampered signaling path (unit test with a MITM fake signaling adapter swapping fingerprints).
-- [ ] A 1 MiB message transfers correctly with backpressure.
-- [ ] The signaling server never logs or inspects blobs (code review checklist item plus a test asserting blobs are forwarded verbatim).
+- [x] The identity binding rejects a tampered signaling path (unit test with a MITM fake signaling adapter swapping fingerprints).
+- [x] A 1 MiB message transfers correctly with backpressure.
+- [x] The signaling server never logs or inspects blobs (code review checklist item plus a test asserting blobs are forwarded verbatim).
+
+The [networking acceptance audit](verification/stage08/current-acceptance-audit.md)
+records source review and 74 passing focused tests for these three items. The
+mixed-browser and phone-camera checks remain open.
 
 ## 09 — Lobby & Game Setup (first end-to-end P2P game)
 

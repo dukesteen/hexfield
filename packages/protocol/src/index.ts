@@ -92,6 +92,7 @@ export type {
   SessionStatus,
   SessionTimer,
   SessionUpdate,
+  SessionFairness,
   SubmitOptions,
 } from './session-types.js';
 export { phaseIdentity, timerKey } from './session-timing.js';

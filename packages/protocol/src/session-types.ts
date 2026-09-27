@@ -12,6 +12,7 @@ import type { ProtocolClock, Unsubscribe } from './transport.js';
 import type { SessionAuditState } from './session-audit-types.js';
 import type { RecoveryApprovalCandidate, RecoveryApprovalPreview } from './recovery-facade.js';
 import type { SessionTimer } from './session-timer-types.js';
+import type { CheatFinding } from './cheat-types.js';
 
 export type { SessionTimer } from './session-timer-types.js';
 
@@ -21,6 +22,14 @@ export type SessionStatus =
   | { kind: 'error'; message: string }
   | { kind: 'disposed' };
 
+/** Public facts derived only from the locally verified certified history. */
+export interface SessionFairness {
+  readonly head: { readonly seq: number; readonly hash: string };
+  /** Accepted player/bot commands, excluding automatic engine and protocol entries. */
+  readonly verifiedMoves: number;
+  readonly findings: readonly CheatFinding[];
+}
+
 export interface SessionUpdate {
   revision: number;
   state: GameState;
@@ -29,6 +38,7 @@ export interface SessionUpdate {
   timers: readonly SessionTimer[];
   status: SessionStatus;
   audit?: SessionAuditState;
+  fairness?: SessionFairness | null;
   /** A validated, current-parent takeover proposal awaiting this voter's choice. */
   recoveryCandidate?: RecoveryApprovalCandidate | null;
 }
@@ -48,6 +58,7 @@ export interface GameSession<Save = unknown> {
   validate(seat: Seat, command: CommandShape): Result<void> | Promise<Result<void>>;
   getEvents(): readonly GameEvent[];
   getAudit?(): SessionAuditState;
+  getFairness?(): SessionFairness | null;
   retryAudit?(): boolean | Promise<boolean>;
   getRecoveryCandidate?(): RecoveryApprovalCandidate | null;
   approveRecoveryAuthorization?(change: unknown): Promise<Result<RecoveryApprovalPreview>>;

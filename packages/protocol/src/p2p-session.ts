@@ -129,6 +129,7 @@ export class P2PSession implements GameSession<CertifiedHistory> {
   private readonly keys = new Map<Seat, Uint8Array>();
   private readonly listeners = new Set<(update: SessionUpdate) => void>();
   private readonly events: GameEvent[] = [];
+  private verifiedMoves = 0;
   private status: SessionStatus = { kind: 'running' };
   private protocolStatus: ReplicatedLogStatus | null = null;
   private automaticParent: string | null = null;
@@ -423,6 +424,19 @@ export class P2PSession implements GameSession<CertifiedHistory> {
   }
   getAudit(): SessionAuditState {
     return copyCanonical(this.auditState);
+  }
+  getFairness() {
+    if (this.context.log.genesis.security !== 'verified') return null;
+    return {
+      head: this.getCommittedHead(),
+      verifiedMoves: this.verifiedMoves,
+      findings: (this.context.log.crypto?.cheats ?? []).map((finding) => ({
+        seat: finding.seat,
+        kind: finding.kind,
+        at: { ...finding.at },
+        evidenceId: finding.evidenceId,
+      })),
+    };
   }
   retryAudit(): boolean {
     if (this.status.kind !== 'complete' || this.auditState.kind !== 'error') return false;
@@ -1154,6 +1168,7 @@ export class P2PSession implements GameSession<CertifiedHistory> {
       if (!applied.ok) return applied;
     }
     this.context = next;
+    if (entry.input?.kind === 'command') this.verifiedMoves += 1;
     for (const intent of this.tradeIntents.values())
       intent.finishWait?.(failure('trade-proof-parent', 'The certified parent changed'));
     this.clearAutomaticRetry();
@@ -1434,6 +1449,7 @@ export class P2PSession implements GameSession<CertifiedHistory> {
       timers: this.getTimers(),
       status: this.status,
       audit: this.getAudit(),
+      fairness: this.getFairness(),
       recoveryCandidate: this.getRecoveryCandidate(),
     };
   }

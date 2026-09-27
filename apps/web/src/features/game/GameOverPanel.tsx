@@ -6,6 +6,7 @@ import type { GamePresentation } from '../../queries/repositories/saved-games';
 import { useSessionStore } from '../../store/session-store';
 import { diceHistogram, productionBySeat, victoryBreakdown } from './stats';
 import { PlayerMarker } from './PlayerMarker.js';
+import { CheatFlag, FairnessFindings } from './FairnessStatus.js';
 
 type Score = ReturnType<typeof victoryBreakdown>;
 
@@ -145,6 +146,7 @@ export function GameOverPanel({
               )}
             </p>
             <ScoreParts score={winner.score} />
+            <CheatFlag seat={winner.seat} />
           </section>
 
           <section className="results-standings" aria-labelledby="results-standings-heading">
@@ -158,6 +160,7 @@ export function GameOverPanel({
                   />
                   <span className="results-standing-name">
                     <strong>{player.name}</strong>
+                    <CheatFlag seat={player.seat} />
                     {player.seat === winnerSeat && <small>{t('game:resultsWinnerBadge')}</small>}
                   </span>
                   <span className="results-standing-total">
@@ -181,6 +184,7 @@ export function GameOverPanel({
             </ol>
           </section>
 
+          <FairnessFindings presentation={presentation} />
           <details
             className="results-stats"
             open={statsOpen}

@@ -114,6 +114,24 @@ afterEach(() => {
 });
 
 describe('OnlineWorkerSession', () => {
+  test('keeps certified fairness history available when the private hand is hidden', async () => {
+    const initial = snapshot(3);
+    initial.update.fairness = {
+      head: initial.committedHead,
+      verifiedMoves: 1,
+      findings: [
+        { seat: 1, kind: 'beacon-reveal', at: { seq: 2, hash: 'head-2' }, evidenceId: 'proof' },
+      ],
+    };
+    const { session, client, worker } = setup(initial);
+    expect(session.getFairness()).toEqual(initial.update.fairness);
+    session.setPrivateVisible(false);
+    expect(session.getPrivate(0)).toBeNull();
+    expect(session.getFairness()?.findings).toHaveLength(1);
+    worker.reply(latestRequest(worker, 'setPrivateVisible'), { ok: true, value: undefined });
+    await Promise.resolve();
+    client.fail(new Error('test complete'));
+  });
   test('exposes private state, legal commands, and control only for the local human', async () => {
     const { session, client } = setup();
     expect(session.getPrivate(0)).toMatchObject({ seat: 0, hand: { wood: 2 } });
