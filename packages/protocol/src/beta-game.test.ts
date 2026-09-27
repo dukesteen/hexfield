@@ -46,10 +46,11 @@ acceptanceTest(
       defaultVpTarget: true,
       prioritizeDevBuy: false,
       maxElapsedMs: 480_000,
+      maxSteps: 1_000,
       yieldTask: () => new Promise<void>((resolve) => setImmediate(resolve)),
       onProgress(step, state) {
         process.stdout.write(
-          `verified game: command ${step}, turn ${state.turn.number}, result ${!!state.result}\n`,
+          `verified game: step ${step}, turn ${state.turn.number}, public VP ${state.seats.map((seat) => seat.publicVp).join('/')}, elapsed ${Math.round(performance.now() - startedAt)}ms, result ${!!state.result}\n`,
         );
       },
       chooseCommand(host, pending) {

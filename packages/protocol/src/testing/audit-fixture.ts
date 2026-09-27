@@ -105,6 +105,8 @@ export async function createTerminalAuditFixture(
     ceremonyNonce?: Uint8Array;
     prioritizeDevBuy?: boolean;
     maxElapsedMs?: number;
+    /** Includes automatic-input waits; short audit fixtures keep the default 500 steps. */
+    maxSteps?: number;
     onProgress?: (step: number, state: GameState) => void;
     sessionOptions?: (options: P2PSessionOptions) => P2PSessionOptions;
     onSessionsReady?: (sessions: readonly P2PSession[], clock: VirtualClock) => Promise<void>;
@@ -279,9 +281,10 @@ export async function createTerminalAuditFixture(
     }
     await options.onSessionsReady?.(sessions, network.clock);
     await settle(sessions, network.clock, 48);
-    for (let step = 0; step < 500; step += 1) {
+    const maxSteps = options.maxSteps ?? 500;
+    for (let step = 0; step < maxSteps; step += 1) {
       if (options.maxElapsedMs !== undefined && Date.now() - startedAt > options.maxElapsedMs)
-        throw new Error(`Audit fixture exceeded ${options.maxElapsedMs} ms at command ${step}`);
+        throw new Error(`Audit fixture exceeded ${options.maxElapsedMs} ms at step ${step}`);
       const current = required(sessions[0]);
       const state = required(current.getState());
       if (step % 25 === 0) options.onProgress?.(step, state);
@@ -348,7 +351,7 @@ export async function createTerminalAuditFixture(
       if (completion === null) throw new Error(`Audit fixture command stalled at step ${step}`);
       value(completion);
     }
-    throw new Error('No terminal certified victory within 500 commands');
+    throw new Error(`No terminal certified victory within ${maxSteps} steps`);
   } finally {
     for (const session of sessions) session.dispose();
     for (const source of beaconSources) source.dispose();

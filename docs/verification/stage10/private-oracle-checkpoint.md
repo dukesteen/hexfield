@@ -53,8 +53,8 @@ conservative failure ordering is retained.
 ## Validation
 
 Node 22, focused `audit.test.ts` and `private-replay.test.ts`: **15/15 pass**,
-25.76 seconds wall time. Scoped type-aware lint passes. The opt-in full ten-point
-hosted-bot game is being checked separately; this report does not claim it passed.
+25.76 seconds wall time. Scoped type-aware lint passes. The opt-in [full ten-point hosted-bot game](../stage09/hosted-bot-v6-acceptance.md)
+now passes both human audits, covering every private state through sequence 764.
 The final source hashes are in [the post-review manifest](private-oracle-final.sha256).
 
 Remaining M-D work includes the representative departure/recovery/return

@@ -1,0 +1,35 @@
+ DEPRECATED  The workspace file is deprecated and will be removed in the next major. Please, use the `test.projects` field in /Users/duke/Dev/Personal/colonist-p2p/vitest.config.ts instead.
+
+ RUN  v3.2.7 /Users/duke/Dev/Personal/colonist-p2p
+
+verified game: step 0, turn 0, public VP 0/0/0/0, elapsed 8635ms, result false
+verified game: step 25, turn 4, public VP 2/2/2/2, elapsed 13934ms, result false
+verified game: step 50, turn 12, public VP 2/2/2/2, elapsed 21454ms, result false
+verified game: step 75, turn 18, public VP 2/2/2/2, elapsed 32091ms, result false
+verified game: step 100, turn 27, public VP 2/2/2/2, elapsed 40677ms, result false
+verified game: step 125, turn 36, public VP 2/2/2/3, elapsed 49598ms, result false
+verified game: step 150, turn 43, public VP 3/2/2/3, elapsed 59526ms, result false
+verified game: step 175, turn 50, public VP 3/2/2/4, elapsed 67099ms, result false
+verified game: step 200, turn 57, public VP 3/2/3/4, elapsed 76247ms, result false
+verified game: step 225, turn 63, public VP 4/2/3/4, elapsed 85335ms, result false
+verified game: step 250, turn 70, public VP 4/2/3/4, elapsed 95682ms, result false
+verified game: step 275, turn 76, public VP 4/2/4/4, elapsed 106331ms, result false
+verified game: step 300, turn 85, public VP 6/2/4/4, elapsed 114891ms, result false
+verified game: step 325, turn 91, public VP 6/2/4/4, elapsed 124073ms, result false
+verified game: step 350, turn 98, public VP 7/3/4/4, elapsed 135213ms, result false
+verified game: step 375, turn 107, public VP 7/3/4/4, elapsed 144231ms, result false
+verified game: step 400, turn 114, public VP 7/3/4/4, elapsed 152724ms, result false
+verified game: step 425, turn 118, public VP 8/3/5/4, elapsed 164908ms, result false
+verified game: step 450, turn 125, public VP 8/3/5/6, elapsed 180835ms, result false
+verified game: step 475, turn 133, public VP 9/3/6/6, elapsed 190971ms, result false
+verified game: step 500, turn 139, public VP 9/3/7/6, elapsed 201889ms, result false
+verified game: step 525, turn 146, public VP 9/3/7/6, elapsed 212068ms, result false
+verified game complete: {"protocolVersion":6,"engineVersion":"0.1.0","security":"verified","participants":[{"seat":0,"kind":"human"},{"seat":1,"kind":"human"},{"seat":2,"kind":"bot"},{"seat":3,"kind":"bot"}],"config":{"modules":[{"id":"base","version":"1.0.0"}],"seats":[0,1,2,3],"options":{"base":{"mapLayout":"random"}}},"genesisDigest":"FhpUcWZG0ikWR7uuVb9uFDwghUyoGaiXgj3vQzH8PRU","finalHead":{"seq":764,"hash":"06004e4633b036b5e00538b519f69520da0bd5230d7dc1b5f8bb881767c88e2b"},"terminal":{"seq":764,"hash":"06004e4633b036b5e00538b519f69520da0bd5230d7dc1b5f8bb881767c88e2b"},"result":{"atTurn":146,"reason":"public-vp","winner":0},"turn":146,"certifiedEntries":764,"commandCount":527,"commandBreakdownDigest":"6d9900b91e8541f09fec33658de6600c95392e35e6a54e2ade5f5c637b811959","cheatProofCount":0,"auditReportDigests":[{"seat":0,"digest":"59a56314abc2e639cf4966d01a16235ca1d8a11f5ff846294a8ee8fd839936cf"},{"seat":1,"digest":"59a56314abc2e639cf4966d01a16235ca1d8a11f5ff846294a8ee8fd839936cf"}],"elapsedMs":401123}
+ ✓ |@cp2p/protocol| src/beta-game.test.ts (1 test) 401129ms
+   ✓ one signed current-protocol default-ten-point game finishes and both peers independently audit it  401128ms
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  00:29:57
+   Duration  402.26s (transform 591ms, setup 0ms, collect 906ms, tests 401.13s, environment 0ms, prepare 46ms)
+

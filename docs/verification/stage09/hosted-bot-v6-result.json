@@ -1,0 +1,84 @@
+{
+  "protocolVersion": 6,
+  "engineVersion": "0.1.0",
+  "security": "verified",
+  "participants": [
+    {
+      "seat": 0,
+      "kind": "human"
+    },
+    {
+      "seat": 1,
+      "kind": "human"
+    },
+    {
+      "seat": 2,
+      "kind": "bot"
+    },
+    {
+      "seat": 3,
+      "kind": "bot"
+    }
+  ],
+  "config": {
+    "modules": [
+      {
+        "id": "base",
+        "version": "1.0.0"
+      }
+    ],
+    "seats": [0, 1, 2, 3],
+    "options": {
+      "base": {
+        "mapLayout": "random"
+      }
+    }
+  },
+  "genesisDigest": "FhpUcWZG0ikWR7uuVb9uFDwghUyoGaiXgj3vQzH8PRU",
+  "finalHead": {
+    "seq": 764,
+    "hash": "06004e4633b036b5e00538b519f69520da0bd5230d7dc1b5f8bb881767c88e2b"
+  },
+  "terminal": {
+    "seq": 764,
+    "hash": "06004e4633b036b5e00538b519f69520da0bd5230d7dc1b5f8bb881767c88e2b"
+  },
+  "result": {
+    "atTurn": 146,
+    "reason": "public-vp",
+    "winner": 0
+  },
+  "turn": 146,
+  "certifiedEntries": 764,
+  "commandCount": 527,
+  "commands": {
+    "PLACE_SETTLEMENT": 8,
+    "PLACE_ROAD": 8,
+    "ROLL_DICE": 146,
+    "END_TURN": 145,
+    "BUILD_ROAD": 14,
+    "OFFER_TRADE": 35,
+    "MOVE_ROBBER": 38,
+    "STEAL": 25,
+    "DISCARD": 49,
+    "CANCEL_TRADE": 18,
+    "BUILD_CITY": 9,
+    "BUILD_SETTLEMENT": 5,
+    "MARITIME_TRADE": 16,
+    "BUY_DEV_CARD": 6,
+    "PLAY_DEV_CARD": 5
+  },
+  "commandBreakdownDigest": "6d9900b91e8541f09fec33658de6600c95392e35e6a54e2ade5f5c637b811959",
+  "cheatProofCount": 0,
+  "auditReportDigests": [
+    {
+      "seat": 0,
+      "digest": "59a56314abc2e639cf4966d01a16235ca1d8a11f5ff846294a8ee8fd839936cf"
+    },
+    {
+      "seat": 1,
+      "digest": "59a56314abc2e639cf4966d01a16235ca1d8a11f5ff846294a8ee8fd839936cf"
+    }
+  ],
+  "elapsedMs": 401123
+}

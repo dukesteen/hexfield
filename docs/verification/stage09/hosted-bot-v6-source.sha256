@@ -1,0 +1,6 @@
+b973f0e90953b0c801b73704f7778d70087a5c6dc1f69b7d766021c38081d2da  packages/protocol/src/consensus.ts
+4200ff75e34754cff6f79ac05878128eb1a5d1b933d145e2d6d79c242b93b309  packages/protocol/src/consensus-controller.ts
+5409ddd1b76b1f50b422557a41acdf0bf98f08470e9cca8c6e957a5ea7b3a03b  packages/protocol/src/beta-game.test.ts
+cd45cfaa481e190d2046d3e92699e4f1ecd505837c69253c6b4e4ac48e1ba7ea  packages/protocol/src/testing/audit-fixture.ts
+9bfed88b6e1a7c5132e884840dbe4e781dccee072ee17994ed9056d77fc1f4d4  packages/protocol/src/audit.ts
+6719ef0ca11f88d7966c1550ce8ed842374d30f0a81ef1d2e92d52e669295eaa  packages/protocol/src/private-replay.ts
