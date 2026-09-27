@@ -85,3 +85,11 @@ seconds; four-human draw 64.60 and 64.57 seconds. Scoped lint and formatting
 checks passed. The whole test typecheck still reports errors in a concurrently
 edited recovery test; it did not diagnose the deck change. A fresh CI result
 is still required.
+
+## Passing rerun
+
+[Run 36349348774](https://github.com/dukesteen/hexfield/actions/runs/36349348774)
+passed on `d9ff27a`: static checks/build, all four unit shards, engine simulation,
+all nine network scenarios with one seed each, and GitHub Pages deployment.
+Browser tests were skipped using the user-approved dispatch option. This result
+predates the v6 recovery-void and live-vault integration commits.

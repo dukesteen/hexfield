@@ -4,10 +4,89 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { RandomBot, createBotRng } from '@cp2p/bots';
+import { canonicalDecode, hashValue, toHex } from '@cp2p/codec';
+import { certifiedEntrySchema, entryHash } from '@cp2p/protocol';
 import type { CommandShape, Seat } from '@cp2p/engine';
+import * as v from 'valibot';
 
 test.use({ channel: 'chrome', actionTimeout: 15_000 });
 test.skip(process.env.CP2P_ONLINE_RESUME_E2E !== '1', 'Native Chrome with signaling on port 8909');
+const encrypted = process.env.CP2P_ENCRYPTED_RESUME_E2E === '1';
+const minimumFinishHead = process.env.CP2P_SNAPSHOT_RESUME_E2E === '1' ? 100 : 0;
+const vaultPassphrase = 'disposable encrypted resume acceptance';
+
+async function unlockSavedGame(page: Page): Promise<void> {
+  if (!encrypted) return;
+  await page.getByLabel('Current passphrase', { exact: true }).fill(vaultPassphrase);
+  await page.getByRole('button', { name: 'Unlock games', exact: true }).click();
+  await expect(
+    page.getByText('Your saved multiplayer games are locked', { exact: true }),
+  ).toHaveCount(0);
+}
+
+async function enableProtection(page: Page): Promise<void> {
+  await page.goto('/#/settings');
+  await page.getByLabel('New passphrase', { exact: true }).fill(vaultPassphrase);
+  await page.getByLabel('Repeat new passphrase', { exact: true }).fill(vaultPassphrase);
+  await page.getByRole('button', { name: 'Turn on protection', exact: true }).click();
+  await unlockSavedGame(page);
+}
+
+async function verifyPublicSnapshots(page: Page, gameId: string, head: number) {
+  const saved = await page.evaluate(async (id) => {
+    const database = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open('cp2p');
+      request.addEventListener('success', () => resolve(request.result), { once: true });
+      request.addEventListener('error', () => reject(request.error), { once: true });
+    });
+    try {
+      const transaction = database.transaction(['entries', 'snapshots'], 'readonly');
+      const range = IDBKeyRange.bound([id, 0], [id, Number.MAX_SAFE_INTEGER]);
+      const read = (name: string) =>
+        new Promise<number[][]>((resolve, reject) => {
+          const request = transaction.objectStore(name).getAll(range);
+          request.addEventListener('error', () => reject(request.error), { once: true });
+          request.addEventListener(
+            'success',
+            () => {
+              const rows: unknown = request.result;
+              if (!Array.isArray(rows) || rows.some((row) => !(row instanceof Uint8Array))) {
+                reject(new Error('Unexpected public journal encoding'));
+                return;
+              }
+              resolve(rows.map((row: Uint8Array) => Array.from(row)));
+            },
+            { once: true },
+          );
+        });
+      const [entries, snapshots] = await Promise.all([read('entries'), read('snapshots')]);
+      return { entries, snapshots };
+    } finally {
+      database.close();
+    }
+  }, gameId);
+  const entries = new Map(
+    saved.entries.map((bytes) => {
+      const certified = v.parse(certifiedEntrySchema, canonicalDecode(Uint8Array.from(bytes)));
+      return [certified.entry.seq, certified.entry] as const;
+    }),
+  );
+  const sequences = saved.snapshots.map((bytes) => {
+    const snapshot = v.parse(
+      v.object({ seq: v.number(), hash: v.string(), state: v.unknown() }),
+      canonicalDecode(Uint8Array.from(bytes)),
+    );
+    const entry = entries.get(snapshot.seq);
+    if (!entry) throw new Error('Snapshot has no durable certified entry');
+    expect(snapshot.hash).toBe(entryHash(entry));
+    expect(toHex(hashValue(snapshot.state))).toBe(entry.stateHash);
+    return snapshot.seq;
+  });
+  expect(sequences).toEqual(
+    Array.from({ length: Math.floor(head / 100) }, (_, index) => (index + 1) * 100).slice(-3),
+  );
+  return { sequences };
+}
 
 async function inspect(page: Page, gameId: string, submit = false) {
   return page.evaluate(
@@ -76,6 +155,8 @@ test('refresh and whole-browser restart preserve the certified game through its 
       baseURL,
       viewport: { width: 1280, height: 900 },
     });
+    // Settings plus the game load more resources than the browser's default timing buffer.
+    await context.addInitScript(() => performance.setResourceTimingBufferSize(5_000));
     contexts.push(context);
     return context;
   };
@@ -88,6 +169,7 @@ test('refresh and whole-browser restart preserve the certified game through its 
   watch(host);
   watch(guest);
   try {
+    if (encrypted) await Promise.all([enableProtection(host), enableProtection(guest)]);
     await host.goto('/#/online/create');
     await host.getByLabel('Room name').fill('Resume acceptance');
     await host.getByLabel('Your player name').fill('Resume host');
@@ -134,6 +216,7 @@ test('refresh and whole-browser restart preserve the certified game through its 
     const hostSeats = (await inspect(host, gameId))?.seats;
     const refreshStart = performance.now();
     await second.reload();
+    await unlockSavedGame(second);
     await expect
       .poll(async () => (await inspect(second, gameId))?.head, { timeout: 20_000, intervals: [50] })
       .toEqual(beforeRefresh);
@@ -151,6 +234,7 @@ test('refresh and whole-browser restart preserve the certified game through its 
     guest = await guestContext.newPage();
     watch(guest);
     await guest.goto(route);
+    await unlockSavedGame(guest);
     await expect
       .poll(async () => (await inspect(guest, gameId))?.head, { timeout: 20_000 })
       .toEqual(savedHead);
@@ -159,6 +243,7 @@ test('refresh and whole-browser restart preserve the certified game through its 
     host = await hostContext.newPage();
     watch(host);
     await host.goto(route);
+    await unlockSavedGame(host);
     await expect
       .poll(async () => (await inspect(host, gameId))?.head, { timeout: 20_000 })
       .toEqual(savedHead);
@@ -166,9 +251,12 @@ test('refresh and whole-browser restart preserve the certified game through its 
     const hostActs = (await inspect(host, gameId))?.legal;
     const finalHead = await certifyMove(hostActs ? host : guest, hostActs ? guest : host, gameId);
     const terminal = await finishGame([host, guest], gameId);
+    expect(terminal.head?.seq).toBeGreaterThanOrEqual(minimumFinishHead);
+    const snapshotChecks: { sequences: number[] }[] = [];
     const measurements = JSON.stringify(
       {
         gameId,
+        encrypted,
         refreshedTransportRole: 'higher-ID responder',
         savedHead,
         finalHead,
@@ -201,8 +289,15 @@ test('refresh and whole-browser restart preserve the certified game through its 
       await expect(page.locator('.online-history-audit[data-audit="verified"]')).toHaveCount(1);
       // oxlint-disable-next-line no-await-in-loop
       await expect(page.locator('.online-history-stats dd').first()).toHaveText('1');
+      if (!terminal.head) throw new Error('Missing completed game head');
+      // oxlint-disable-next-line no-await-in-loop -- Closing each writer drains its snapshot writes.
+      snapshotChecks.push(await verifyPublicSnapshots(page, gameId, terminal.head.seq));
     }
     expect(errors).toEqual([]);
+    await writeFile(
+      testInfo.outputPath('snapshot-measurements.json'),
+      JSON.stringify(snapshotChecks, null, 2),
+    );
     await testInfo.attach('resume-measurements', {
       body: measurements,
       contentType: 'application/json',
@@ -246,7 +341,7 @@ async function finishGame(pages: readonly Page[], gameId: string) {
           const result = await session.submit(move.seat, move.command, {
             expectedRevision: move.revision,
           });
-          if (!result.ok && result.error.code !== 'stale-revision')
+          if (!result.ok && !['stale-revision', 'stale-head'].includes(result.error.code))
             throw new Error(`Legal bot move ${move.command.type} refused: ${result.error.code}`);
           submitted = result.ok;
         }
@@ -287,11 +382,19 @@ async function finishGame(pages: readonly Page[], gameId: string) {
             continue;
           let command: CommandShape;
           try {
-            command = bot.decide(
-              { state: current.state, priv: current.priv, seat: current.seat },
-              current.pending,
-              rng,
-            );
+            // A dedicated cache check delays optional building until the hundredth
+            // commit, so an early victory cannot skip the snapshot boundary.
+            const advance =
+              current.head.seq < minimumFinishHead
+                ? current.legal.commands.find((item) => item.type === 'END_TURN')
+                : undefined;
+            command =
+              advance ??
+              bot.decide(
+                { state: current.state, priv: current.priv, seat: current.seat },
+                current.pending,
+                rng,
+              );
           } catch (error) {
             throw new Error(
               `Bot could not choose: ${JSON.stringify({ head: current.head, pending: current.pending, legal: current.legal })}`,

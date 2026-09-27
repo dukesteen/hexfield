@@ -192,7 +192,6 @@ export async function openOnlineGame(
     checkCancelled();
     if (!lease) throw new Error('This game is already active in another tab');
     const digest = genesisDigest(genesis);
-    if (!runtime.createJournal) snapshotStore = new IndexedDbPublicSnapshotStore(genesis.gameId);
     const keyBinding = {
       recordKey: `online-game/${digest}/keys`,
       bytes: canonicalEncode({
@@ -210,6 +209,9 @@ export async function openOnlineGame(
     } finally {
       keyBinding.bytes.fill(0);
     }
+    // Vault-bound journals use an injected factory but still have the same durable public cache.
+    if (journal instanceof IndexedDbProtocolJournal)
+      snapshotStore = new IndexedDbPublicSnapshotStore(genesis.gameId);
     const saved = await journal.load();
     checkCancelled();
     if (saved && entryHash(saved.genesis) !== entryHash(input.entry))
