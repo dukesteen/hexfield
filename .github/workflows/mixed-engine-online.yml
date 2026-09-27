@@ -1,0 +1,63 @@
+name: Mixed-engine online acceptance
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mixed-engine-online-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  browser-acceptance:
+    name: ${{ matrix.mode }} relay
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [signaling, manual-relay]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.7.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: pnpm exec playwright install --with-deps chromium firefox webkit
+      - name: Start local signaling
+        run: |
+          PORT=8909 HOST=127.0.0.1 pnpm --filter @cp2p/signaling start > /tmp/mixed-engine-signaling.log 2>&1 &
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:8909/healthz; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/mixed-engine-signaling.log
+          exit 1
+      - name: Run only this connection mode
+        run: >-
+          pnpm --filter @cp2p/web exec playwright test
+          tests/mixed-engine-online.e2e.ts --project=chromium --workers=1
+        env:
+          CI: '1'
+          CI_BROWSER_SET: chromium
+          CP2P_MIXED_ENGINE_ACCEPTANCE: '1'
+          CP2P_MIXED_ENGINE_MODE: ${{ matrix.mode }}
+          PLAYWRIGHT_TEST_PORT: '5310'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mixed-engine-online-acceptance-${{ matrix.mode }}
+          path: |
+            apps/web/playwright-report/
+            apps/web/test-results/
+          if-no-files-found: ignore
+          retention-days: 7
