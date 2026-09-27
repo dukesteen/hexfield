@@ -1,0 +1,65 @@
+{
+  "commit": "a128f5e",
+  "uncommitted_test": true,
+  "fixture_sha256": "4108af7e11aaa4c9f22d41ad5a932dced9ceb9470cd20ce8c5dbee51301628b2",
+  "fixture_bytes": 334614,
+  "node_run_seconds": 134.85,
+  "browser_seconds": 43.8,
+  "entries": 109,
+  "submitted_commands": 72,
+  "turn": 17,
+  "winner": 3,
+  "terminal_hash": "69b41082154e8101ac6c19cb54bb4ac4329200d44c7a5e6d92db363954a3d675",
+  "audit": {
+    "ok": true,
+    "complete": true,
+    "missingSeats": [],
+    "violations": [],
+    "inputErrors": [],
+    "auditError": null,
+    "historyError": null
+  },
+  "browser": "Existing native Chrome via CUA; actual Worker; localhost development server",
+  "files": [
+    {
+      "path": "packages/protocol/src/recovered-audit-game.test.ts",
+      "sha256": "b50470b0691e5d6b6f99474f3d4d9c21b2ea9f0236aaeb04cb2683ef67fef894"
+    },
+    {
+      "path": "packages/protocol/src/testing/recovery-fixture.ts",
+      "sha256": "a632ed10374413fe947ab92552dc393278bb290d77dd1ecf3e33400f7f6109d3"
+    },
+    {
+      "path": "packages/protocol/src/audit.ts",
+      "sha256": "f637a34c6854cb72fbf46999e8395ef914f5c54e7e18a3537d15e65814342d81"
+    },
+    {
+      "path": "packages/protocol/src/deck-draw.ts",
+      "sha256": "1913cb2362514b4875fce7a99df8b40fb520aaba1990b98187af116c1d4b4986"
+    },
+    {
+      "path": "packages/protocol/src/deck-ledger.ts",
+      "sha256": "71a1fa54c01a350fef9129b13daeb369e4031fc6aa9f76b1b68243f114491392"
+    },
+    {
+      "path": "packages/protocol/src/verified-session-driver.ts",
+      "sha256": "01cd66696ddc985569726b502975da66856945996f7a5cde4736f2be487e6271"
+    },
+    {
+      "path": "apps/web/src/session/audit-worker.ts",
+      "sha256": "903dc23dff074684d3090c343a781350a891c11925f9a5c4b40f677bc1752220"
+    },
+    {
+      "path": "apps/web/src/session/audit-worker-job.ts",
+      "sha256": "89e007555a0531929bb04c727a31d9c7d9c78cee326b6dc16fe54f55dff5278d"
+    },
+    {
+      "path": "apps/web/src/session/audit-worker-client.ts",
+      "sha256": "f2c1a2dbe4f91cb7ba7f6f85ae54be38eeee28a7dbd4de743eb2a00ae2259b8c"
+    },
+    {
+      "path": "apps/web/src/dev/audit-smoke.ts",
+      "sha256": "b3a2e21b226c3df585301be9f5767471dd5475979222c6cea43bdb8759bdea9e"
+    }
+  ]
+}

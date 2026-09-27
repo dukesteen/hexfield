@@ -165,7 +165,12 @@ the exact unlock signer roster from its deal, so later private opening, public
 reveal and audit do not incorrectly return to genesis signing keys. New draws
 still use current certified authority. The focused 43-test check and a subsequent
 snapshot-tampering recheck pass. Claude found no blocking issue; its malformed-key
-hardening is implemented. The full recovered-game audit is still pending.
+hardening is implemented. The [recovered-game acceptance](verification/stage07/recovered-game-audit-check.md)
+now passes one complete game after seat 0 becomes a recovered bot. All three
+surviving sessions finish successful audits, including a development-card draw
+under the replacement authority. The same 109-entry history also passes the
+native Chrome audit worker with an exact report match. Broader adversarial and
+cross-device acceptance remain open.
 
 - [ ] P2P games over memnet with real crypto pass the stage-06 chaos suite (200 seeds per scenario in CI).
 - [ ] Every row in the cheat table is covered by a passing test that checks the cheat is caught at the listed time.

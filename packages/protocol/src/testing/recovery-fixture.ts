@@ -51,10 +51,27 @@ export function recoveryFixtureRef(entry: LogEntry) {
 
 /** Signed four-human genesis and its exact certified deck-pass ancestry. */
 export function createRecoveryFixture(
-  options: { masterBackedBeacon?: boolean; chainLength?: number } = {},
+  options: {
+    seed?: number;
+    masterBackedBeacon?: boolean;
+    chainLength?: number;
+    vpTarget?: number;
+  } = {},
 ) {
   const chainLength = options.chainLength ?? 2;
-  const source = createSimulationGenesis({ seed: 91, humanCount: 4 });
+  const source = createSimulationGenesis({
+    seed: options.seed ?? 91,
+    humanCount: 4,
+    ...(options.vpTarget === undefined
+      ? {}
+      : {
+          config: {
+            modules: [{ id: 'base', version: '1.0.0' }],
+            seats: [0, 1, 2, 3],
+            options: { base: { mapLayout: 'random', vpTarget: options.vpTarget } },
+          },
+        }),
+  });
   const base = { ...genesisBody(source.genesis), security: 'verified' as const, commitments: {} };
   const deck = createGenesisDeckFixture(base, source.identities);
   const chains = humanSeats.map((seat) => {
