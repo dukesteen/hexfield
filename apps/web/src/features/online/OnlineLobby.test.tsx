@@ -26,7 +26,7 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-test('failed and halted setup show their public error only when details are opened', () => {
+test('setup failures expose diagnostics while consented waiting cannot start a new game', () => {
   let snapshot: OnlineRoomSnapshot = {
     invite: { roomId: 'diagnostic', hostPeer: 'host', serverUrl: '' },
     self: 'host',
@@ -80,4 +80,38 @@ test('failed and halted setup show their public error only when details are open
     'signed setup dispute',
   );
   expect(page.queryByRole('button', { name: 'lobby:onlineRetryStart' })).toBeNull();
+
+  snapshot = {
+    ...snapshot,
+    startup: {
+      phase: 'retired',
+      awaitingSeats: [],
+      locallyConsented: false,
+      error: 'online-ceremony-timeout',
+      gameId: null,
+    },
+  };
+  page.rerender(<OnlineLobby lobbyId="diagnostic" />);
+  expect(page.getByText('lobby:onlineStartRetired')).toBeTruthy();
+  expect(page.getByText('lobby:onlineErrorDetails').closest('details')?.textContent).toContain(
+    'online-ceremony-timeout',
+  );
+  expect(page.queryByRole('button', { name: 'lobby:onlineRetryStart' })).toBeNull();
+  expect(page.getByRole('button', { name: 'lobby:onlineJoinNewRoom' })).toBeTruthy();
+
+  snapshot = {
+    ...snapshot,
+    startup: {
+      phase: 'waiting',
+      awaitingSeats: [1],
+      locallyConsented: true,
+      error: null,
+      gameId: null,
+    },
+  };
+  page.rerender(<OnlineLobby lobbyId="diagnostic" />);
+  expect(page.getByText('lobby:onlineStartWaitingAgreement')).toBeTruthy();
+  expect(page.queryByRole('button', { name: 'lobby:onlineRetryStart' })).toBeNull();
+  expect(page.queryByRole('button', { name: 'lobby:onlineNewRoom' })).toBeNull();
+  expect(page.queryByRole('button', { name: 'lobby:onlineJoinNewRoom' })).toBeNull();
 });

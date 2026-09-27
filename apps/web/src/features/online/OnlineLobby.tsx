@@ -235,7 +235,9 @@ export function OnlineLobby({
                 })}
               </p>
             )}
-            {(snapshot.startup.phase === 'error' || snapshot.startup.phase === 'halted') &&
+            {(snapshot.startup.phase === 'error' ||
+              snapshot.startup.phase === 'halted' ||
+              snapshot.startup.phase === 'retired') &&
               snapshot.startup.error && (
                 <details className="online-start-error-details">
                   <summary>{t('lobby:onlineErrorDetails')}</summary>
