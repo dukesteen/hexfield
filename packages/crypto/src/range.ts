@@ -10,6 +10,7 @@ import {
   scalarToBytes,
   scalePublicPoint,
   scalePoint,
+  zeroSafeProductTerms,
 } from './group.js';
 import { proofChallenge, proofNonce, readProofArray, readProofRecord } from './proof-transcript.js';
 
@@ -50,9 +51,11 @@ function inverseLastWeight(bits: number): bigint {
 
 /** Allows field values, including zero. Counts used in range proofs have narrower bounds. */
 export function pedersenCommit(value: bigint, blinding: bigint): string {
-  scalarToBytes(value);
-  scalarToBytes(blinding);
-  return encodePoint(scalePoint(G, value).add(scalePoint(H, blinding)));
+  const [valuePositive, valueCorrection] = zeroSafeProductTerms(G, value);
+  const [blindPositive, blindCorrection] = zeroSafeProductTerms(H, blinding);
+  return encodePoint(
+    valuePositive.add(blindPositive).subtract(valueCorrection).subtract(blindCorrection),
+  );
 }
 
 function readEncoded(value: unknown): string {
@@ -121,7 +124,8 @@ function prepareBit(
   const nonce = proofNonce(seed, 'bit', context, commitment, 'honest-nonce');
   const falseChallenge = proofNonce(seed, 'bit', context, commitment, 'simulated-challenge');
   const falseResponse = proofNonce(seed, 'bit', context, commitment, 'simulated-response');
-  const falseTarget = bit === 0 ? target.subtract(G) : target;
+  const shiftedTarget = target.subtract(G);
+  const falseTarget = bit === 0 ? shiftedTarget : target;
   const honestAnnouncement = encodePoint(scalePoint(H, nonce));
   const falseAnnouncement = encodePoint(
     scalePoint(H, falseResponse).subtract(scalePoint(falseTarget, falseChallenge)),

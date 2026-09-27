@@ -1,0 +1,9 @@
+f5986623a59a11c99b17b59c9859764703d6af255e66b543a65e5e198cd0f235  packages/crypto/src/group.ts
+ed6ade8a8b32055cdb101c70445ea1bed985a6f75b8a3015e4a459bb0df359cf  packages/crypto/src/range.ts
+59e918a7d8cad0278e2085bfc8a31e2ffab7e78076f85f6be48c43507b36ff61  packages/crypto/src/hidden-transfer.ts
+3b4a9994a8395c392f96db0853d9812908eefdb2cfe487d975f37a5df86fbecc  packages/crypto/src/cds.ts
+e2ce8cb6f0549e8b2ae5b6536614067643cf7baa7a8afd1b00b20b8a62f7caca  packages/crypto/src/sigma.ts
+b379c950b615903cd29d795189f4735527e548bf6c27aa172bcb1674424a972b  packages/crypto/src/group.test.ts
+bf79920571d1e3b9cac1364fdda46cda5ed12af5ed0619a4ccf8df48abf4b2a2  packages/crypto/src/hidden-transfer.test.ts
+f24a9c221a549a8fff259eb8f245ab0dc17679b13c532c3970d91acc4df9fffd  node_modules/.pnpm/@noble+curves@2.4.0/node_modules/@noble/curves/abstract/edwards.js
+dbaeee3b41ff47efb76b78e14170fe4dda7c7ecdc387c402f16c5118e0bac356  node_modules/.pnpm/@noble+curves@2.4.0/node_modules/@noble/curves/abstract/curve.js

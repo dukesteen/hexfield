@@ -50,6 +50,17 @@ describe('Pedersen and bit proofs', () => {
     expect(
       decodePoint(pedersenCommit(2n, 3n)).equals(scalePoint(G, 2n).add(scalePoint(H, 3n))),
     ).toBe(true);
+    for (const [value, blinding] of [
+      [0n, 1n],
+      [1n, 0n],
+      [SCALAR_ORDER - 2n, 1n],
+      [SCALAR_ORDER - 1n, SCALAR_ORDER - 1n],
+    ] as const)
+      expect(
+        decodePoint(pedersenCommit(value, blinding)).equals(
+          scalePoint(G, value).add(scalePoint(H, blinding)),
+        ),
+      ).toBe(true);
     for (const invalid of [-1n, SCALAR_ORDER]) {
       expect(() => pedersenCommit(invalid, 0n)).toThrow(/canonical/);
       expect(() => pedersenCommit(0n, invalid)).toThrow(/canonical/);

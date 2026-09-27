@@ -1,0 +1,5 @@
+cc8cf9cb36923db7584fa1e9a7e22d090bb17c0f60d78c02da95cb3551728c33  packages/crypto/src/group.ts
+668c3339b55eba0bd0dd906a8fc8eeb5520f059a9a8e89d60f7a9f18d5e835f5  packages/crypto/src/range.ts
+59e918a7d8cad0278e2085bfc8a31e2ffab7e78076f85f6be48c43507b36ff61  packages/crypto/src/hidden-transfer.ts
+416f22204a77a0dea65661c32ec3589735803b86c56e585cde3f81d878b0bda6  packages/crypto/src/group.test.ts
+bf79920571d1e3b9cac1364fdda46cda5ed12af5ed0619a4ccf8df48abf4b2a2  packages/crypto/src/hidden-transfer.test.ts

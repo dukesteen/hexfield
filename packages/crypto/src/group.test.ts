@@ -21,6 +21,7 @@ import {
   scalarToBytes,
   scalePublicPoint,
   scalePoint,
+  zeroSafeProductTerms,
 } from './group.js';
 
 // RFC 9496 Appendix A.1: identity, generator, and its next two multiples.
@@ -169,5 +170,14 @@ describe('Ristretto255 scalar field', () => {
         expect(scalePublicPoint(point, scalar).equals(scalePoint(point, scalar))).toBe(true);
     expect(() => scalePublicPoint(variablePoint, SCALAR_ORDER)).toThrow(/canonical/);
     expect(() => scalePublicPoint(variablePoint, -1n)).toThrow(/canonical/);
+  });
+
+  test('zero-safe terms match every scalar boundary', () => {
+    for (const point of [G, H, G.add(H), scalePoint(G, 0n)])
+      for (const scalar of [0n, 1n, 2n, 3n, 63n, SCALAR_ORDER - 2n, SCALAR_ORDER - 1n]) {
+        const [positive, correction] = zeroSafeProductTerms(point, scalar);
+        expect(positive.subtract(correction).equals(scalePoint(point, scalar))).toBe(true);
+      }
+    expect(() => zeroSafeProductTerms(G, SCALAR_ORDER)).toThrow(/canonical/);
   });
 });

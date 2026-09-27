@@ -103,6 +103,19 @@ export function scalePoint(point: RistrettoPoint, scalar: bigint): RistrettoPoin
   return point.multiply(scalar);
 }
 
+/** Two nonzero multiplications whose difference equals scalar times point, including zero. */
+export function zeroSafeProductTerms(
+  point: RistrettoPoint,
+  scalar: bigint,
+): readonly [positive: RistrettoPoint, correction: RistrettoPoint] {
+  if (!(point instanceof ristretto255.Point)) throw new TypeError('Ristretto point required.');
+  if (typeof scalar !== 'bigint' || scalar < 0n || scalar >= SCALAR_ORDER)
+    throw new RangeError('Scalar must be a canonical field element.');
+  const half = (scalar >> 1n) + 1n;
+  const correction = 2n - (scalar & 1n);
+  return [point.multiply(half).double(), point.multiply(correction)];
+}
+
 /** Variable-time multiplication only when scalar and call selection are public. */
 export function scalePublicPoint(point: RistrettoPoint, scalar: bigint): RistrettoPoint {
   if (!(point instanceof ristretto255.Point)) throw new TypeError('Ristretto point required.');
