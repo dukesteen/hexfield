@@ -1064,6 +1064,31 @@ input[type='checkbox'] {
 .placement-confirmation button {
   min-height: 44px;
 }
+.action-pending {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.action-spinner {
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  flex: none;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: action-spin 0.8s linear infinite;
+}
+@keyframes action-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .action-spinner {
+    animation: none;
+  }
+}
 .board-offers {
   position: absolute;
   z-index: 7;
@@ -1102,6 +1127,15 @@ input[type='checkbox'] {
 }
 .action-forms dialog > * + * {
   margin-top: 14px;
+}
+.action-dialog-body {
+  display: contents;
+}
+.action-dialog-body > * {
+  margin-top: 14px;
+}
+.action-forms dialog [inert] button {
+  opacity: 0.5;
 }
 .action-forms dialog label {
   display: grid;

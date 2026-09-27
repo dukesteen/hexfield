@@ -1,0 +1,73 @@
+[
+  {
+    "path": "/",
+    "status": 200,
+    "bytes": 1253,
+    "current_assets": true
+  },
+  {
+    "path": "/healthz",
+    "status": 200,
+    "bytes": 2
+  },
+  {
+    "path": "/api/turn",
+    "status": 503,
+    "bytes": 45
+  },
+  {
+    "path": "/assets/index-DCB3cH-U.js",
+    "status": 200,
+    "bytes": 330233
+  },
+  {
+    "path": "/assets/rolldown-runtime-hePW80VL.js",
+    "status": 200,
+    "bytes": 716
+  },
+  {
+    "path": "/assets/jsx-runtime-BNakU3Ej.js",
+    "status": 200,
+    "bytes": 8243
+  },
+  {
+    "path": "/assets/hooks-DvKXhJu5.js",
+    "status": 200,
+    "bytes": 64035
+  },
+  {
+    "path": "/assets/useTranslation-FzNzs4eM.js",
+    "status": 200,
+    "bytes": 5272
+  },
+  {
+    "path": "/assets/link-9aXGfblY.js",
+    "status": 200,
+    "bytes": 10352
+  },
+  {
+    "path": "/assets/useNavigate-D68hlEpu.js",
+    "status": 200,
+    "bytes": 267
+  },
+  {
+    "path": "/assets/lazyRouteComponent-Bk_wOHig.js",
+    "status": 200,
+    "bytes": 4429
+  },
+  {
+    "path": "/assets/preload-helper-BZ1Pz5am.js",
+    "status": 200,
+    "bytes": 1218
+  },
+  {
+    "path": "/assets/index-XkDLOXuy.css",
+    "status": 200,
+    "bytes": 49681
+  },
+  {
+    "path": "/assets/GameReadOnly-DO7B9f8A.js",
+    "status": 200,
+    "bytes": 88560
+  }
+]

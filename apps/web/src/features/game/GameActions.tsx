@@ -12,6 +12,7 @@ import {
 } from '@cp2p/engine';
 import { deriveActionAvailability, type PlacementKind } from '../actions/availability';
 import { DiscardDialog, MonopolyDialog, StealDialog, YearOfPlentyDialog } from '../dialogs';
+import { ActionPendingContext } from '../dialogs/DialogFrame';
 import { BankTradePicker, IncomingOffers, TradeComposer } from '../trade';
 import {
   sessionForActions,
@@ -115,12 +116,35 @@ export interface GameActionController {
   forms: React.ReactNode;
   nextStep: NextStep;
   actionCount: number;
+  submitting: boolean;
 }
 
 export type NextStep =
   | { kind: 'command'; label: string; run: () => void }
   | { kind: 'board'; text: string; cancel?: () => void }
+  | { kind: 'pending'; text: string }
   | { kind: 'text'; text: string; tone: 'muted' | 'alert' };
+
+/** Let React commit pending feedback before synchronous proof work starts. */
+function afterNextPaint(): Promise<void> {
+  return new Promise((resolve) => {
+    if (document.visibilityState !== 'visible' || !window.requestAnimationFrame) {
+      window.setTimeout(resolve, 0);
+      return;
+    }
+    let frame = 0;
+    const finish = () => {
+      window.clearTimeout(timeout);
+      window.cancelAnimationFrame(frame);
+      resolve();
+    };
+    // A tab can become hidden between frames, suspending animation callbacks.
+    const timeout = window.setTimeout(finish, 100);
+    frame = window.requestAnimationFrame(() => {
+      frame = window.requestAnimationFrame(finish);
+    });
+  });
+}
 
 /** The controller only offers engine-provided commands and checks the live revision on submission. */
 export function useGameActions(
@@ -146,6 +170,7 @@ export function useGameActions(
   const [error, setError] = useState<string | null>(null);
   const [buildCostsOpen, setBuildCostsOpen] = useState(false);
   const submitting = useRef(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const actorSeat = actingSeat(state, pending);
   const availability = useMemo(
     () => (seat !== null && legal ? deriveActionAvailability(legal, pending, seat) : null),
@@ -208,19 +233,31 @@ export function useGameActions(
       setError(t('game:staleAction'));
       return;
     }
-    const validated = session.validate(seat, command);
-    if (!validated.ok) {
-      recordOrdinaryActionRejection();
-      setError(t('game:invalidAction'));
-      return;
-    }
     submitting.current = true;
+    setIsSubmitting(true);
     setError(null);
     void (async () => {
       try {
+        await afterNextPaint();
+        const current = useSessionStore.getState();
+        if (
+          sessionForActions() !== session ||
+          current.revision !== revision ||
+          current.revealedSeat !== seat ||
+          current.conflicted
+        ) {
+          setError(t('game:staleAction'));
+          return;
+        }
+        const validated = session.validate(seat, command);
+        if (!validated.ok) {
+          recordOrdinaryActionRejection();
+          setError(t('game:invalidAction'));
+          return;
+        }
         const result = await session.submit(seat, command, { expectedRevision: revision });
         if (result.ok) {
-          useSessionStore.getState().closeActionDialog();
+          if (sessionForActions() === session) useSessionStore.getState().closeActionDialog();
         } else {
           recordOrdinaryActionRejection();
           setError(
@@ -232,13 +269,22 @@ export function useGameActions(
         setError(t('game:invalidAction'));
       } finally {
         submitting.current = false;
+        setIsSubmitting(false);
       }
     })();
   };
   useEffect(() => setError(null), [seat, phase]);
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (seat === null || event.altKey || event.ctrlKey || event.metaKey || event.repeat) return;
+      if (
+        seat === null ||
+        submitting.current ||
+        event.altKey ||
+        event.ctrlKey ||
+        event.metaKey ||
+        event.repeat
+      )
+        return;
       const target = event.target;
       if (
         target instanceof HTMLElement &&
@@ -285,6 +331,7 @@ export function useGameActions(
     return () => window.removeEventListener('keydown', onKeyDown);
   });
   const onBoardSelect = (hit: BoardHit) => {
+    if (submitting.current) return;
     if (hit.kind !== hitKind) return;
     const choice = choices.find((item) => item.id === hit.id);
     if (!choice) return;
@@ -374,6 +421,7 @@ export function useGameActions(
   const visibleForm = forcedForm ?? form;
   const cardPlays = availability?.cardPlays ?? [];
   const closeFormAndFocus = () => {
+    if (submitting.current) return;
     closeForm();
     options.onFormClosed?.();
   };
@@ -392,6 +440,7 @@ export function useGameActions(
     return true;
   });
   const toggleKnightIntent = (cardSlotId: string) => {
+    if (submitting.current) return;
     const card = cardPlays.find(
       (item) => item.slotId === cardSlotId && (item.card ?? priv?.slots[item.slotId]) === 'knight',
     );
@@ -422,6 +471,7 @@ export function useGameActions(
           <button
             className={buttonClass}
             type="button"
+            disabled={isSubmitting}
             key={group.type}
             title={t('game:command.trade')}
             onClick={() => {
@@ -438,6 +488,7 @@ export function useGameActions(
           <button
             className={buttonClass}
             type="button"
+            disabled={isSubmitting}
             key={group.type}
             title={t('game:command.bank')}
             onClick={() => {
@@ -453,6 +504,7 @@ export function useGameActions(
         <button
           className={buttonClass}
           type="button"
+          disabled={isSubmitting}
           key={`${group.type}:${index}`}
           onClick={() => {
             options.onHandOff?.();
@@ -473,6 +525,7 @@ export function useGameActions(
             <button
               className="button button-quiet"
               type="button"
+              disabled={isSubmitting}
               key={choiceSeat}
               onClick={() => {
                 options.onHandOff?.();
@@ -487,19 +540,26 @@ export function useGameActions(
     ) : null;
 
   const dock = (
-    <section className="action-dock" aria-label={t('game:actions')}>
+    <section className="action-dock" aria-label={t('game:actions')} aria-busy={isSubmitting}>
       <div className="action-dock-heading">
         <h2>{t('game:actions')}</h2>
-        <button
-          className="button button-quiet action-costs-trigger"
-          type="button"
-          onClick={() => {
-            options.onHandOff?.();
-            setBuildCostsOpen(true);
-          }}
-        >
-          {t('game:buildCostsTitle')}
-        </button>
+        {isSubmitting ? (
+          <span className="action-pending" role="status">
+            <span className="action-spinner" aria-hidden="true" />
+            {t('game:submittingAction')}
+          </span>
+        ) : (
+          <button
+            className="button button-quiet action-costs-trigger"
+            type="button"
+            onClick={() => {
+              options.onHandOff?.();
+              setBuildCostsOpen(true);
+            }}
+          >
+            {t('game:buildCostsTitle')}
+          </button>
+        )}
       </div>
       {conflicted ? (
         <p role="alert">{t('game:saveConflictStopped')}</p>
@@ -524,6 +584,7 @@ export function useGameActions(
                     <button
                       className={`button action-control ${selectedKind === kind ? 'button-primary' : 'button-quiet'}`}
                       type="button"
+                      disabled={isSubmitting}
                       key={kind}
                       aria-pressed={selectedKind === kind}
                       onClick={() => {
@@ -542,6 +603,7 @@ export function useGameActions(
                     <button
                       className="button button-quiet action-control action-cancel"
                       type="button"
+                      disabled={isSubmitting}
                       onClick={() => useSessionStore.getState().cancelPlacement()}
                     >
                       <span>{t('game:cancelAction')}</span>
@@ -564,6 +626,7 @@ export function useGameActions(
                       <button
                         className={`button action-control ${knightSelected ? 'button-primary' : 'button-quiet'}`}
                         type="button"
+                        disabled={isSubmitting}
                         key={card.slotId}
                         {...(cardKind === 'knight' ? { 'aria-pressed': knightSelected } : {})}
                         onClick={() => {
@@ -624,40 +687,44 @@ export function useGameActions(
   );
 
   const forms = (
-    <div className="action-forms">
-      {!conflicted && status?.kind !== 'error' && availability && formProps && (
-        <>
-          {visibleForm === 'discard' && <DiscardDialog {...formProps} />}
-          {visibleForm === 'steal' && <StealDialog {...formProps} />}
-          {visibleForm === 'trade' && <TradeComposer {...formProps} onCancel={closeFormAndFocus} />}
-          {visibleForm === 'bank' && (
-            <BankTradePicker {...formProps} onCancel={closeFormAndFocus} />
-          )}
-          {visibleForm === 'plenty' && (
-            <YearOfPlentyDialog
-              {...formProps}
-              onCancel={closeFormAndFocus}
-              {...(slotId ? { slotId } : {})}
-            />
-          )}
-          {visibleForm === 'monopoly' && (
-            <MonopolyDialog
-              {...formProps}
-              onCancel={closeFormAndFocus}
-              {...(slotId ? { slotId } : {})}
-            />
-          )}
-        </>
-      )}
-      {buildCostsOpen && (
-        <BuildCostsDialog
-          onClose={() => {
-            setBuildCostsOpen(false);
-            options.onFormClosed?.();
-          }}
-        />
-      )}
-    </div>
+    <ActionPendingContext.Provider value={isSubmitting}>
+      <div className="action-forms" aria-busy={isSubmitting}>
+        {!conflicted && status?.kind !== 'error' && availability && formProps && (
+          <>
+            {visibleForm === 'discard' && <DiscardDialog {...formProps} />}
+            {visibleForm === 'steal' && <StealDialog {...formProps} />}
+            {visibleForm === 'trade' && (
+              <TradeComposer {...formProps} onCancel={closeFormAndFocus} />
+            )}
+            {visibleForm === 'bank' && (
+              <BankTradePicker {...formProps} onCancel={closeFormAndFocus} />
+            )}
+            {visibleForm === 'plenty' && (
+              <YearOfPlentyDialog
+                {...formProps}
+                onCancel={closeFormAndFocus}
+                {...(slotId ? { slotId } : {})}
+              />
+            )}
+            {visibleForm === 'monopoly' && (
+              <MonopolyDialog
+                {...formProps}
+                onCancel={closeFormAndFocus}
+                {...(slotId ? { slotId } : {})}
+              />
+            )}
+          </>
+        )}
+        {buildCostsOpen && (
+          <BuildCostsDialog
+            onClose={() => {
+              setBuildCostsOpen(false);
+              options.onFormClosed?.();
+            }}
+          />
+        )}
+      </div>
+    </ActionPendingContext.Provider>
   );
 
   const promotedCommand = promoted?.commands[0];
@@ -666,6 +733,8 @@ export function useGameActions(
     nextStep = { kind: 'text', tone: 'alert', text: t('game:saveConflictStopped') };
   } else if (status?.kind === 'error') {
     nextStep = { kind: 'text', tone: 'alert', text: t('game:sessionStopped') };
+  } else if (isSubmitting) {
+    nextStep = { kind: 'pending', text: t('game:submittingAction') };
   } else if (error) {
     nextStep = { kind: 'text', tone: 'alert', text: error };
   } else if (seat === null || !availability) {
@@ -702,7 +771,9 @@ export function useGameActions(
           hit: focusTarget,
           label: targetLabel(focusTarget),
           confirm: () => submit(selectedPlacement.command),
-          cancel: () => useSessionStore.getState().clearPlacementCandidate(),
+          cancel: () => {
+            if (!submitting.current) useSessionStore.getState().clearPlacementCandidate();
+          },
         }
       : null;
   const offerOverlay =
@@ -740,5 +811,6 @@ export function useGameActions(
     forms,
     nextStep,
     actionCount,
+    submitting: isSubmitting,
   };
 }

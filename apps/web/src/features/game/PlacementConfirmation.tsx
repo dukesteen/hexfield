@@ -11,6 +11,7 @@ interface Props {
   label: string;
   onConfirm: () => void;
   onCancel: () => void;
+  submitting: boolean;
 }
 
 /** A camera-tracked confirmation anchored to a selected building location. */
@@ -22,6 +23,7 @@ export function PlacementConfirmation({
   label,
   onConfirm,
   onCancel,
+  submitting,
 }: Props) {
   const { t } = useTranslation('game');
   const popupRef = useRef<HTMLDivElement>(null);
@@ -82,16 +84,29 @@ export function PlacementConfirmation({
     >
       <strong>{t('game:placementPreviewTitle', { piece: t(`game:piece.${piece}`) })}</strong>
       <p aria-live="polite">{label}</p>
-      <div className="action-row">
+      <div className="action-row" aria-busy={submitting}>
         <button
           className="button button-primary"
           type="button"
           aria-label={t(`game:confirm.${piece}`)}
           onClick={onConfirm}
+          disabled={submitting}
         >
-          {t('game:confirmPlacement')}
+          {submitting ? (
+            <>
+              <span className="action-spinner" aria-hidden="true" />
+              {t('game:submittingAction')}
+            </>
+          ) : (
+            t('game:confirmPlacement')
+          )}
         </button>
-        <button className="button button-quiet" type="button" onClick={onCancel}>
+        <button
+          className="button button-quiet"
+          type="button"
+          onClick={onCancel}
+          disabled={submitting}
+        >
           {t('game:cancelPlacement')}
         </button>
       </div>

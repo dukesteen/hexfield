@@ -34,6 +34,11 @@ export function NextStepBar({
         >
           {t('game:results')}
         </button>
+      ) : step.kind === 'pending' ? (
+        <div className="next-step-message action-pending" role="status" aria-live="polite">
+          <span className="action-spinner" aria-hidden="true" />
+          <span>{step.text}</span>
+        </div>
       ) : onReturnToBoard ? (
         <button
           className="button button-quiet next-step-primary"
@@ -68,6 +73,7 @@ export function NextStepBar({
           ref={actionsButton}
           className="button button-quiet next-step-actions"
           type="button"
+          disabled={step.kind === 'pending'}
           aria-haspopup="dialog"
           aria-label={t('game:cockpit.actionsAvailable', { count: actionCount })}
           onClick={(event) => onOpenActions(event.currentTarget)}

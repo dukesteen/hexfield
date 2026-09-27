@@ -385,11 +385,13 @@ function HandDock({
   knightIntent,
   toggleKnightIntent,
   compact,
+  submitting,
 }: {
   state: GameState;
   knightIntent: GameActionController['knightIntent'];
   toggleKnightIntent: GameActionController['toggleKnightIntent'];
   compact: boolean;
+  submitting: boolean;
 }) {
   const { t } = useTranslation('game');
   const revealedSeat = useSessionStore((store) => store.revealedSeat);
@@ -476,6 +478,7 @@ function HandDock({
             title={label}
             aria-label={label}
             aria-pressed={knightIntent?.slotId === slot.slotId}
+            disabled={submitting}
             onClick={() => toggleKnightIntent(slot.slotId)}
           >
             {body}
@@ -499,6 +502,7 @@ function HandDock({
             <button
               className="knight-card-choice knight-card-cancel"
               type="button"
+              disabled={submitting}
               aria-label={t('game:cancelKnight')}
               title={t('game:cancelKnight')}
               onClick={() => {
@@ -513,6 +517,7 @@ function HandDock({
             <button
               className="knight-card-choice knight-card-confirm"
               type="button"
+              disabled={submitting}
               aria-label={t('game:playCard', { card: t('game:devknight') })}
               title={t('game:playCard', { card: t('game:devknight') })}
               onClick={() => {
@@ -658,7 +663,12 @@ function HandDock({
               ref={developmentDialog}
               className="development-dialog"
               aria-labelledby="development-dialog-title"
+              aria-busy={submitting}
               onCancel={(event) => {
+                if (submitting) {
+                  event.preventDefault();
+                  return;
+                }
                 if (knightIntent) {
                   event.preventDefault();
                   closeAfterKnightCommit.current = false;
@@ -674,10 +684,17 @@ function HandDock({
               <h2 id="development-dialog-title">
                 {t('game:developmentCards', { count: developmentCards.length })}
               </h2>
+              {submitting && (
+                <p className="action-pending" role="status">
+                  <span className="action-spinner" aria-hidden="true" />
+                  {t('game:submittingAction')}
+                </p>
+              )}
               <div className="development-hand">{developmentCards}</div>
               <button
                 className="button button-quiet"
                 type="button"
+                disabled={submitting}
                 onClick={() => {
                   closeAfterKnightCommit.current = false;
                   knightIntent?.cancel();
@@ -983,10 +1000,13 @@ function LiveGame({
               label={actions.placementConfirmation.label}
               onConfirm={actions.placementConfirmation.confirm}
               onCancel={actions.placementConfirmation.cancel}
+              submitting={actions.submitting}
             />
           )}
           {!finished && actions.offerOverlay && (
-            <div className="board-offers">{actions.offerOverlay}</div>
+            <div className="board-offers" inert={actions.submitting}>
+              {actions.offerOverlay}
+            </div>
           )}
         </section>
         <aside className="game-sidebar" aria-label={t('game:players')}>
@@ -1045,6 +1065,7 @@ function LiveGame({
             knightIntent={finished ? null : actions.knightIntent}
             toggleKnightIntent={actions.toggleKnightIntent}
             compact={compact}
+            submitting={actions.submitting}
           />
           {compact ? (
             <NextStepBar
