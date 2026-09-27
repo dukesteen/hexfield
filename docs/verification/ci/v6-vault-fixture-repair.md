@@ -14,6 +14,11 @@ scenarios. Its unit shards exposed stale fixture assumptions.
 - The imported-save viewer now offers certified device continuation. The test
   checks that its only button is that disabled continuation control while
   private material is locked, rather than assuming no button exists at all.
+- The audit fixture's old ceremony nonce puts its first victory card ninth in
+  the protocol-v6 deck, causing unrelated draws to exhaust its two-minute hook.
+  Nonce 7 puts that card first. The fixture now has a 90-second execution budget
+  within the unchanged hook limit. Its seven terminal-audit and invalid-proof
+  tests passed in 26 seconds.
 
 Focused results: all three route tests and six vault UI tests pass; the targeted
 transfer-membership test passes. Scoped lint and formatting checks pass. The

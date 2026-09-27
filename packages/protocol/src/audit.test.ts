@@ -24,7 +24,9 @@ beforeAll(async () => {
   let setupIndex = 0;
   fixture = await createTerminalAuditFixture({
     boardSeed: new Uint8Array(32).fill(50),
-    ceremonyNonce: new Uint8Array(32).fill(2),
+    // Protocol v6 nonce 7 deals a victory card first; no unrelated draws are needed.
+    ceremonyNonce: new Uint8Array(32).fill(7),
+    maxElapsedMs: 90_000,
     yieldTask: () => new Promise<void>((resolve) => setImmediate(resolve)),
     chooseCommand(host, pending) {
       const commands = host.getLegalCommands(pending.seat).commands;
