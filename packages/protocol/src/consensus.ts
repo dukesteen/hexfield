@@ -38,6 +38,8 @@ import type { ExcludeProposerControl, LogEntry } from './types.js';
 
 export type ConsensusStep = 'propose' | 'prevote' | 'precommit';
 export type TimeoutPhase = ConsensusStep;
+/** Local voting policy; it never changes proposal or certified-entry validity. */
+export type LocalVoteAdmissibility = (proposal: SignedProposal) => boolean;
 
 export interface QuorumValue {
   round: number;
@@ -309,8 +311,13 @@ function signLocalVote(
   phase: VotePhase,
   hash: string | null,
   effects: ConsensusEffect[],
+  admitValue?: LocalVoteAdmissibility,
 ): Result<void> {
   if (ownVote(state, phase)) return success(undefined);
+  if (hash !== null && admitValue) {
+    const proposal = proposalAt(state, state.round, hash);
+    if (!proposal || !admitValue(proposal)) hash = null;
+  }
   try {
     const vote = signVote(
       {
@@ -588,13 +595,21 @@ function drive(
   context: ProposalContext,
   secretKey: Uint8Array,
   effects: ConsensusEffect[],
+  admitValue?: LocalVoteAdmissibility,
 ): Result<void> {
   maybeCommit(state, context, effects);
   if (state.halted !== null || state.decision !== null) return success(undefined);
   if (state.step === 'propose') {
     const waitingProposal = state.proposals.find((item) => item.body.entry.term === state.round);
     if (waitingProposal) {
-      const voted = prevoteProposal(state, context, secretKey, waitingProposal, effects);
+      const voted = prevoteProposal(
+        state,
+        context,
+        secretKey,
+        waitingProposal,
+        effects,
+        admitValue,
+      );
       if (!voted.ok) return voted;
     }
   }
@@ -607,7 +622,15 @@ function drive(
     }
     if (prevotes && state.step === 'prevote' && !ownVote(state, 'precommit')) {
       state.locked = { round: state.round, hash, proposal, prevotes };
-      const signed = signLocalVote(state, context, secretKey, 'precommit', hash, effects);
+      const signed = signLocalVote(
+        state,
+        context,
+        secretKey,
+        'precommit',
+        hash,
+        effects,
+        admitValue,
+      );
       if (!signed.ok) return signed;
     }
   }
@@ -1125,6 +1148,7 @@ export function propose(
   context: ProposalContext,
   secretKey: Uint8Array,
   candidate?: LogEntry,
+  admitValue?: LocalVoteAdmissibility,
 ): Result<ConsensusTransition> {
   return transition(state, context, (copy, effects) => {
     if (copy.decision || copy.halted || copy.step !== 'propose') return success(undefined);
@@ -1174,9 +1198,16 @@ export function propose(
       }
       recordProposal(copy, context, checked.value.proposal, effects);
       effects.push({ kind: 'broadcast-proposal', proposal: checked.value.proposal });
-      const voted = prevoteProposal(copy, context, secretKey, checked.value.proposal, effects);
+      const voted = prevoteProposal(
+        copy,
+        context,
+        secretKey,
+        checked.value.proposal,
+        effects,
+        admitValue,
+      );
       if (!voted.ok) return voted;
-      return drive(copy, context, secretKey, effects);
+      return drive(copy, context, secretKey, effects, admitValue);
     } catch {
       return failure(
         'consensus-key',
@@ -1192,6 +1223,7 @@ function prevoteProposal(
   secretKey: Uint8Array,
   proposal: SignedProposal,
   effects: ConsensusEffect[],
+  admitValue?: LocalVoteAdmissibility,
 ): Result<void> {
   if (proposal.body.entry.term !== state.round || state.step !== 'propose')
     return success(undefined);
@@ -1200,7 +1232,15 @@ function prevoteProposal(
     !state.locked ||
     state.locked.hash === hash ||
     (proposal.body.validRound !== null && proposal.body.validRound >= state.locked.round);
-  return signLocalVote(state, context, secretKey, 'prevote', accepts ? hash : null, effects);
+  return signLocalVote(
+    state,
+    context,
+    secretKey,
+    'prevote',
+    accepts ? hash : null,
+    effects,
+    admitValue,
+  );
 }
 
 export function receiveProposal(
@@ -1208,6 +1248,7 @@ export function receiveProposal(
   context: ProposalContext,
   secretKey: Uint8Array,
   value: unknown,
+  admitValue?: LocalVoteAdmissibility,
 ): Result<ConsensusTransition> {
   return transition(state, context, (copy, effects) => {
     const checked = validateProposal(value, context);
@@ -1270,9 +1311,9 @@ export function receiveProposal(
       return success(undefined);
     haltIfFaultThresholdExceeded(copy, context, effects);
     if (copy.halted) return success(undefined);
-    if (copy.decision) return drive(copy, context, secretKey, effects);
-    const voted = prevoteProposal(copy, context, secretKey, proposal, effects);
-    return voted.ok ? drive(copy, context, secretKey, effects) : voted;
+    if (copy.decision) return drive(copy, context, secretKey, effects, admitValue);
+    const voted = prevoteProposal(copy, context, secretKey, proposal, effects, admitValue);
+    return voted.ok ? drive(copy, context, secretKey, effects, admitValue) : voted;
   });
 }
 
@@ -1281,6 +1322,7 @@ export function receiveVote(
   context: ProposalContext,
   secretKey: Uint8Array,
   value: unknown,
+  admitValue?: LocalVoteAdmissibility,
 ): Result<ConsensusTransition> {
   return transition(state, context, (copy, effects) => {
     const checked = validateVote(value, context.membership);
@@ -1313,7 +1355,7 @@ export function receiveVote(
     }
     recordVote(copy, vote, effects);
     haltIfFaultThresholdExceeded(copy, context, effects);
-    return copy.halted ? success(undefined) : drive(copy, context, secretKey, effects);
+    return copy.halted ? success(undefined) : drive(copy, context, secretKey, effects, admitValue);
   });
 }
 
@@ -1397,13 +1439,14 @@ export function timeout(
   secretKey: Uint8Array,
   phase: TimeoutPhase,
   round: number,
+  admitValue?: LocalVoteAdmissibility,
 ): Result<ConsensusTransition> {
   return transition(state, context, (copy, effects) => {
     if (copy.decision || copy.halted || round !== copy.round || !copy.timers[phase])
       return success(undefined);
     if (phase === 'propose' && copy.step === 'propose') {
       const signed = signLocalVote(copy, context, secretKey, 'prevote', null, effects);
-      return signed.ok ? drive(copy, context, secretKey, effects) : signed;
+      return signed.ok ? drive(copy, context, secretKey, effects, admitValue) : signed;
     }
     if (phase === 'prevote' && copy.step === 'propose') {
       const prevoted = signLocalVote(copy, context, secretKey, 'prevote', null, effects);
@@ -1411,11 +1454,11 @@ export function timeout(
     }
     if (phase === 'prevote' && copy.step === 'prevote') {
       const signed = signLocalVote(copy, context, secretKey, 'precommit', null, effects);
-      return signed.ok ? drive(copy, context, secretKey, effects) : signed;
+      return signed.ok ? drive(copy, context, secretKey, effects, admitValue) : signed;
     }
     if (phase === 'precommit') {
       enterRound(copy, context, copy.round + 1, effects);
-      return drive(copy, context, secretKey, effects);
+      return drive(copy, context, secretKey, effects, admitValue);
     }
     return success(undefined);
   });

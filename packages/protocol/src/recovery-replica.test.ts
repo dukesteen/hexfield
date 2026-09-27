@@ -1,5 +1,5 @@
-import { canonicalDecode, canonicalEncode } from '@cp2p/codec';
-import { scalarToBytes } from '@cp2p/crypto';
+import { canonicalDecode, canonicalEncode, hashValue, toHex } from '@cp2p/codec';
+import { scalarToBytes, signObject } from '@cp2p/crypto';
 import { failure, success } from '@cp2p/engine';
 import type { Result, Seat } from '@cp2p/engine';
 import { beforeAll, describe, expect, test } from 'vitest';
@@ -17,22 +17,26 @@ import type { DeckContributionStore } from './deck-outbox.js';
 import { entryHash } from './genesis.js';
 import { MemoryGenesisConsentStore } from './genesis-outbox.js';
 import { MemoryProtocolJournal } from './journal.js';
-import { decodeProtocolMessage } from './messages.js';
+import { decodeProtocolMessage, encodeProtocolMessage } from './messages.js';
+import { proposerFor, signProposal } from './proposal.js';
+import { previewRecoveryAuthorization } from './recovery-facade.js';
 import { ReplicatedLog } from './replicated-log.js';
 import type { ReplicatedLogOptions } from './replicated-log.js';
-import { recoveryChangeSchema } from './recovery-membership.js';
+import { RECOVERY_READINESS_DOMAIN, recoveryChangeSchema } from './recovery-membership.js';
 import { restoreRetiredSafety } from './retired-safety.js';
 import { MemoryStealDeliveryStore } from './steal-contributions.js';
 import { createStealSecretSource } from './steal-source.js';
 import { createMemnet } from './testing/memnet.js';
 import {
   advanceRecoveryFixture,
+  certifyRecoveryFixtureEntry,
   createRecoveryFixture,
   recoveryFixtureKey,
   recoveryFixtureReadiness,
   recoveryFixtureReplacement,
   signRecoveryFixtureActivation,
   signRecoveryFixtureAuthorization,
+  signRecoveryFixtureEntry,
 } from './testing/recovery-fixture.js';
 import type { RecoveryFixture } from './testing/recovery-fixture.js';
 import type { VirtualClock } from './testing/virtual-clock.js';
@@ -196,6 +200,341 @@ describe('live certified recovery', () => {
     fixture = createRecoveryFixture({ masterBackedBeacon: true });
   }, 30_000);
 
+  test('does not durably vote for a valid takeover until this voter approves that parent', async () => {
+    const seats = [0, 1, 2, 3] as const;
+    const peers = seats.map((seat) => required(fixture.source.identities.get(seat)).peerId);
+    const network = createMemnet({ peers });
+    const elected = proposerFor(
+      fixture.ready.log.head.seq + 1,
+      1,
+      fixture.ready.membership,
+      fixture.ready.excludedProposers,
+    );
+    const targetSeat = elected.seat === 2 ? 3 : 2;
+    const journal = await journalAtReady(fixture, targetSeat);
+    const observed: unknown[] = [];
+    const target = value(
+      await ReplicatedLog.restore({
+        ...optionsFor(
+          fixture,
+          targetSeat,
+          network.transport(required(peers[targetSeat])),
+          network.clock,
+          journal,
+        ),
+        onRecoveryCandidate: (candidate) => observed.push(candidate),
+      }),
+    );
+    try {
+      const replacement = recoveryFixtureReplacement(81);
+      const authorization = signRecoveryFixtureAuthorization(
+        fixture,
+        recoveryFixtureReadiness(fixture, fixture.ready, replacement.peerId),
+        replacement.secretKey,
+      );
+      const entry = signRecoveryFixtureEntry(
+        fixture,
+        fixture.ready,
+        { kind: 'membership', change: authorization },
+        fixture.ready.log.head.stateHash,
+      );
+      const proposal = signProposal(
+        {
+          genesisDigest: fixture.ready.membership.genesisDigest,
+          epoch: fixture.ready.membership.epoch,
+          entry,
+          validRound: null,
+          prevotes: [],
+        },
+        recoveryFixtureKey(fixture, elected.seat),
+      );
+      const height = entry.seq;
+      const safetyBefore = await journal.loadSafety(height);
+      network
+        .transport(elected.publicKey)
+        .send(
+          required(peers[targetSeat]),
+          value(encodeProtocolMessage({ t: 'PROPOSAL', proposal })),
+        );
+      network.clock.advanceBy(1);
+      await target.flush();
+      const refused = required(await journal.loadSafety(height));
+      expect(refused.revision).toBe((safetyBefore?.revision ?? 0) + 1);
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Inspect serialized consensus safety in this focused regression.
+      const refusedState = canonicalDecode(refused.bytes) as {
+        votes: { body: { seat: Seat; valueHash: string | null } }[];
+      };
+      expect(refusedState.votes.filter((vote) => vote.body.seat === targetSeat)).toMatchObject([
+        { body: { valueHash: null } },
+      ]);
+      expect(target.getRecoveryCandidate()?.change).toEqual(authorization);
+      expect(observed.at(-1)).toMatchObject({ departedSeat: 0, canApprove: true });
+      const clearedBeforeQueue = target.approveRecoveryAuthorization(authorization);
+      target.clearRecoveryApproval();
+      expect(await clearedBeforeQueue).toMatchObject({
+        ok: false,
+        error: { code: 'recovery-approval-cleared' },
+      });
+      expect(await target.approveRecoveryAuthorization(authorization)).toMatchObject({ ok: true });
+      expect(target.getContext().log.head.seq).toBe(fixture.ready.log.head.seq);
+      target.clearRecoveryApproval();
+      expect(target.getRecoveryCandidate()).not.toBeNull();
+    } finally {
+      target.dispose();
+      network.dispose();
+    }
+  }, 30_000);
+
+  test('rejects stale approval parents and a second takeover with only two survivors', () => {
+    const replacement = recoveryFixtureReplacement(82);
+    const authorization = signRecoveryFixtureAuthorization(
+      fixture,
+      recoveryFixtureReadiness(fixture, fixture.ready, replacement.peerId),
+      replacement.secretKey,
+    );
+    const first = value(previewRecoveryAuthorization(authorization, fixture.ready.log, 1));
+    expect(first.preview.canApprove).toBe(true);
+    const otherHostStatement = { ...authorization.statement, hostSeat: 2 as const };
+    const otherHost = {
+      ...authorization,
+      statement: otherHostStatement,
+      hostSig: signObject(
+        RECOVERY_READINESS_DOMAIN,
+        otherHostStatement,
+        recoveryFixtureKey(fixture, 2),
+      ),
+      keySigs: [
+        {
+          seat: 0 as const,
+          sig: signObject(RECOVERY_READINESS_DOMAIN, otherHostStatement, replacement.secretKey),
+        },
+      ],
+    };
+    expect(previewRecoveryAuthorization(otherHost, fixture.ready.log, 2)).toMatchObject({
+      ok: false,
+      error: { code: 'recovery-preview-host' },
+    });
+    expect(
+      value(previewRecoveryAuthorization(authorization, fixture.ready.log, 0)).preview.canApprove,
+    ).toBe(false);
+    const stale = {
+      ...authorization,
+      statement: {
+        ...authorization.statement,
+        parent: { seq: 0, hash: entryHash(fixture.genesisEntry) },
+      },
+    };
+    expect(previewRecoveryAuthorization(stale, fixture.ready.log, 1)).toMatchObject({
+      ok: false,
+      error: { code: 'recovery-parent' },
+    });
+    const authorizationEntry = signRecoveryFixtureEntry(
+      fixture,
+      fixture.ready,
+      { kind: 'membership', change: authorization },
+      fixture.ready.log.head.stateHash,
+    );
+    const afterAuthorization = advanceRecoveryFixture(
+      fixture.ready,
+      certifyRecoveryFixtureEntry(fixture, fixture.ready, authorizationEntry, [0, 1, 2]),
+    );
+    const amendedReplacement = recoveryFixtureReplacement(85);
+    const amendment = signRecoveryFixtureAuthorization(
+      fixture,
+      recoveryFixtureReadiness(fixture, afterAuthorization, amendedReplacement.peerId, {
+        seq: authorizationEntry.seq,
+        hash: entryHash(authorizationEntry),
+      }),
+      amendedReplacement.secretKey,
+    );
+    expect(previewRecoveryAuthorization(amendment, afterAuthorization.log, 2)).toMatchObject({
+      ok: true,
+      value: { preview: { amendment: true, canApprove: true } },
+    });
+    const activation = signRecoveryFixtureActivation(
+      fixture,
+      afterAuthorization,
+      authorizationEntry,
+    );
+    const status = value(
+      fixture.source.engine.apply(afterAuthorization.log.state, {
+        kind: 'system',
+        type: 'SEAT_STATUS',
+        seat: 0,
+        status: 'bot',
+      }),
+    );
+    const activationEntry = signRecoveryFixtureEntry(
+      fixture,
+      afterAuthorization,
+      { kind: 'membership', change: activation },
+      toHex(hashValue(status.state)),
+    );
+    const afterActivation = advanceRecoveryFixture(
+      afterAuthorization,
+      certifyRecoveryFixtureEntry(fixture, afterAuthorization, activationEntry, [1, 2, 3]),
+    );
+    const nextReplacement = recoveryFixtureReplacement(83);
+    const next = {
+      ...authorization,
+      statement: {
+        ...authorization.statement,
+        parent: { seq: afterActivation.log.head.seq, hash: entryHash(afterActivation.log.head) },
+        nextEpoch: afterActivation.membership.epoch + 1,
+        departedSeat: 1,
+        hostSeat: 2,
+        replacements: [{ seat: 1, publicKey: nextReplacement.peerId }],
+        recoverers: [2, 3].map((seat) => ({
+          seat,
+          publicKey: required(fixture.genesis.seats[seat]).publicKey,
+        })),
+      },
+    };
+    expect(previewRecoveryAuthorization(next, afterActivation.log, 2)).toMatchObject({
+      ok: false,
+      error: { code: 'recovery-quorum' },
+    });
+  });
+
+  test('a remote voter retains an approved signed submit before any takeover proposal exists', async () => {
+    const seats = [1, 2, 3] as const;
+    const peers = seats.map((seat) => required(fixture.source.identities.get(seat)).peerId);
+    const network = createMemnet({ peers });
+    const firstProposer = proposerFor(
+      fixture.ready.log.head.seq + 1,
+      1,
+      fixture.ready.membership,
+      fixture.ready.excludedProposers,
+    );
+    const hostSeat = 1 as const;
+    expect(hostSeat).not.toBe(firstProposer.seat);
+    const replicas = new Map<Seat, ReplicatedLog>();
+    const proposals: Seat[] = [];
+    try {
+      for (const [index, seat] of seats.entries()) {
+        const inner = network.transport(required(peers[index]));
+        const transport: Transport = {
+          self: inner.self,
+          peers: () => inner.peers(),
+          send: (to, bytes) => inner.send(to, bytes),
+          broadcast: (bytes) => {
+            const decoded = decodeProtocolMessage(bytes);
+            if (
+              decoded.ok &&
+              decoded.value.t === 'PROPOSAL' &&
+              decoded.value.proposal.body.entry.payload.kind === 'membership'
+            )
+              proposals.push(seat);
+            inner.broadcast(bytes);
+          },
+          onMessage: (listener) => inner.onMessage(listener),
+          onPeerChange: (listener) => inner.onPeerChange(listener),
+          disconnect: (peer) => inner.disconnect(peer),
+        };
+        // oxlint-disable-next-line no-await-in-loop -- Each voter restores its own durable certified prefix.
+        const journal = await journalAtReady(fixture, seat);
+        replicas.set(
+          seat,
+          value(
+            // oxlint-disable-next-line no-await-in-loop -- Restores are independent but keep test resource use bounded.
+            await ReplicatedLog.restore(
+              optionsFor(fixture, seat, transport, network.clock, journal),
+            ),
+          ),
+        );
+      }
+      const replacement = recoveryFixtureReplacement(84);
+      const statement = {
+        ...recoveryFixtureReadiness(fixture, fixture.ready, replacement.peerId),
+        hostSeat,
+      };
+      const authorization = {
+        kind: 'recovery-authorize' as const,
+        statement,
+        hostSig: signObject(
+          RECOVERY_READINESS_DOMAIN,
+          statement,
+          recoveryFixtureKey(fixture, hostSeat),
+        ),
+        keySigs: [
+          { seat: 0, sig: signObject(RECOVERY_READINESS_DOMAIN, statement, replacement.secretKey) },
+        ],
+      };
+      expect(
+        await required(replicas.get(hostSeat)).approveRecoveryAuthorization(authorization),
+      ).toMatchObject({ ok: true });
+      const submitted = required(replicas.get(hostSeat)).submitRecovery(authorization);
+      await settle([...replicas.values()], network.clock, 1);
+      const candidate = required(replicas.get(2)).getRecoveryCandidate();
+      expect(candidate?.change).toEqual(authorization);
+      expect(proposals).toEqual([]);
+      const approvals = await Promise.all(
+        seats
+          .filter((seat) => seat !== hostSeat)
+          .map((seat) => required(replicas.get(seat)).approveRecoveryAuthorization(authorization)),
+      );
+      expect(approvals.every((result) => result.ok)).toBe(true);
+      const competingKey = recoveryFixtureReplacement(86);
+      const competing = signRecoveryFixtureAuthorization(
+        fixture,
+        recoveryFixtureReadiness(fixture, fixture.ready, competingKey.peerId),
+        competingKey.secretKey,
+      );
+      expect(await required(replicas.get(2)).approveRecoveryAuthorization(competing)).toMatchObject(
+        {
+          ok: false,
+          error: { code: 'recovery-intent-pending' },
+        },
+      );
+      await settle([...replicas.values()], network.clock, 25);
+      expect(await submitted).toMatchObject({ ok: true });
+      expect(proposals).toContain(hostSeat);
+      expect(
+        [...replicas.values()].every(
+          (replica) => replica.getContext().log.head.seq === fixture.ready.log.head.seq + 1,
+        ),
+      ).toBe(true);
+    } finally {
+      for (const replica of replicas.values()) replica.dispose();
+      network.dispose();
+    }
+  }, 30_000);
+
+  test('a returning target cancels the queued host intent and releases its promise', async () => {
+    const hostPeer = required(fixture.source.identities.get(1)).peerId;
+    const targetPeer = required(fixture.source.identities.get(0)).peerId;
+    const network = createMemnet({ peers: [hostPeer, targetPeer] });
+    const journal = await journalAtReady(fixture, 1);
+    const host = value(
+      await ReplicatedLog.restore(
+        optionsFor(fixture, 1, network.transport(hostPeer), network.clock, journal),
+      ),
+    );
+    try {
+      const replacement = recoveryFixtureReplacement(87);
+      const authorization = signRecoveryFixtureAuthorization(
+        fixture,
+        recoveryFixtureReadiness(fixture, fixture.ready, replacement.peerId),
+        replacement.secretKey,
+      );
+      expect(await host.approveRecoveryAuthorization(authorization)).toMatchObject({ ok: true });
+      const submitted = host.submitRecovery(authorization);
+      await host.flush();
+      network.disconnect(targetPeer, hostPeer);
+      network.connect(targetPeer, hostPeer);
+      await host.flush();
+      expect(await submitted).toMatchObject({
+        ok: false,
+        error: { code: 'recovery-target-returned' },
+      });
+      expect(host.getRecoveryCandidate()).toBeNull();
+      expect(await host.canStartRecoveryRequest()).toMatchObject({ ok: true });
+    } finally {
+      host.dispose();
+      network.dispose();
+    }
+  }, 30_000);
+
   test('gossips authorization during a frozen beacon and activates under the remaining quorum', async () => {
     const seats = [0, 1, 2, 3] as const;
     const peers = seats.map((seat) => required(fixture.source.identities.get(seat)).peerId);
@@ -234,6 +573,10 @@ describe('live certified recovery', () => {
         recoveryFixtureReadiness(fixture, fixture.ready, replacement.peerId),
         replacement.secretKey,
       );
+      const approvals = await Promise.all(
+        replicas.slice(1).map((replica) => replica.approveRecoveryAuthorization(authorization)),
+      );
+      expect(approvals.every((result) => result.ok)).toBe(true);
       const authorizationResult = required(replicas[1]).submitRecovery(authorization);
       await settle(replicas, network.clock);
       expect(await authorizationResult).toMatchObject({ ok: true });
@@ -386,6 +729,10 @@ describe('live certified recovery', () => {
         recoveryFixtureReadiness(fixture, fixture.ready, replacement.peerId),
         replacement.secretKey,
       );
+      const approvals = await Promise.all(
+        replicas.map((replica) => replica.approveRecoveryAuthorization(authorization)),
+      );
+      expect(approvals.every((result) => result.ok)).toBe(true);
       const submitted = required(replicas[0]).submitRecovery(authorization);
       await settle(replicas, network.clock, 50);
       expect(await submitted).toMatchObject({ ok: true });

@@ -13,8 +13,13 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as DevBoardRouteImport } from './routes/dev/board'
 import { Route as DevNetworkRouteImport } from './routes/dev/network'
+import { Route as GameGameIdRouteImport } from './routes/game/$gameId'
+import { Route as JoinIndexRouteImport } from './routes/join/index'
+import { Route as JoinRoomIdRouteImport } from './routes/join/$roomId'
+import { Route as LobbyLobbyIdRouteImport } from './routes/lobby/$lobbyId'
 import { Route as LocalGameIdRouteImport } from './routes/local/$gameId'
 import { Route as LocalNewRouteImport } from './routes/local/new'
+import { Route as OnlineCreateRouteImport } from './routes/online/create'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -36,6 +41,26 @@ const DevNetworkRoute = DevNetworkRouteImport.update({
   path: '/dev/network',
   getParentRoute: () => rootRouteImport,
 } as any)
+const GameGameIdRoute = GameGameIdRouteImport.update({
+  id: '/game/$gameId',
+  path: '/game/$gameId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const JoinIndexRoute = JoinIndexRouteImport.update({
+  id: '/join/',
+  path: '/join/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const JoinRoomIdRoute = JoinRoomIdRouteImport.update({
+  id: '/join/$roomId',
+  path: '/join/$roomId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LobbyLobbyIdRoute = LobbyLobbyIdRouteImport.update({
+  id: '/lobby/$lobbyId',
+  path: '/lobby/$lobbyId',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LocalGameIdRoute = LocalGameIdRouteImport.update({
   id: '/local/$gameId',
   path: '/local/$gameId',
@@ -46,22 +71,37 @@ const LocalNewRoute = LocalNewRouteImport.update({
   path: '/local/new',
   getParentRoute: () => rootRouteImport,
 } as any)
+const OnlineCreateRoute = OnlineCreateRouteImport.update({
+  id: '/online/create',
+  path: '/online/create',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/settings': typeof SettingsRoute
   '/dev/board': typeof DevBoardRoute
   '/dev/network': typeof DevNetworkRoute
+  '/game/$gameId': typeof GameGameIdRoute
+  '/join/$roomId': typeof JoinRoomIdRoute
+  '/lobby/$lobbyId': typeof LobbyLobbyIdRoute
   '/local/$gameId': typeof LocalGameIdRoute
   '/local/new': typeof LocalNewRoute
+  '/online/create': typeof OnlineCreateRoute
+  '/join/': typeof JoinIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/settings': typeof SettingsRoute
   '/dev/board': typeof DevBoardRoute
   '/dev/network': typeof DevNetworkRoute
+  '/game/$gameId': typeof GameGameIdRoute
+  '/join/$roomId': typeof JoinRoomIdRoute
+  '/lobby/$lobbyId': typeof LobbyLobbyIdRoute
   '/local/$gameId': typeof LocalGameIdRoute
   '/local/new': typeof LocalNewRoute
+  '/online/create': typeof OnlineCreateRoute
+  '/join': typeof JoinIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -69,8 +109,13 @@ export interface FileRoutesById {
   '/settings': typeof SettingsRoute
   '/dev/board': typeof DevBoardRoute
   '/dev/network': typeof DevNetworkRoute
+  '/game/$gameId': typeof GameGameIdRoute
+  '/join/$roomId': typeof JoinRoomIdRoute
+  '/lobby/$lobbyId': typeof LobbyLobbyIdRoute
   '/local/$gameId': typeof LocalGameIdRoute
   '/local/new': typeof LocalNewRoute
+  '/online/create': typeof OnlineCreateRoute
+  '/join/': typeof JoinIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -79,24 +124,39 @@ export interface FileRouteTypes {
     | '/settings'
     | '/dev/board'
     | '/dev/network'
+    | '/game/$gameId'
+    | '/join/$roomId'
+    | '/lobby/$lobbyId'
     | '/local/$gameId'
     | '/local/new'
+    | '/online/create'
+    | '/join/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/settings'
     | '/dev/board'
     | '/dev/network'
+    | '/game/$gameId'
+    | '/join/$roomId'
+    | '/lobby/$lobbyId'
     | '/local/$gameId'
     | '/local/new'
+    | '/online/create'
+    | '/join'
   id:
     | '__root__'
     | '/'
     | '/settings'
     | '/dev/board'
     | '/dev/network'
+    | '/game/$gameId'
+    | '/join/$roomId'
+    | '/lobby/$lobbyId'
     | '/local/$gameId'
     | '/local/new'
+    | '/online/create'
+    | '/join/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -104,8 +164,13 @@ export interface RootRouteChildren {
   SettingsRoute: typeof SettingsRoute
   DevBoardRoute: typeof DevBoardRoute
   DevNetworkRoute: typeof DevNetworkRoute
+  GameGameIdRoute: typeof GameGameIdRoute
+  JoinRoomIdRoute: typeof JoinRoomIdRoute
+  LobbyLobbyIdRoute: typeof LobbyLobbyIdRoute
   LocalGameIdRoute: typeof LocalGameIdRoute
   LocalNewRoute: typeof LocalNewRoute
+  OnlineCreateRoute: typeof OnlineCreateRoute
+  JoinIndexRoute: typeof JoinIndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -138,6 +203,34 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DevNetworkRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/game/$gameId': {
+      id: '/game/$gameId'
+      path: '/game/$gameId'
+      fullPath: '/game/$gameId'
+      preLoaderRoute: typeof GameGameIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/join/': {
+      id: '/join/'
+      path: '/join'
+      fullPath: '/join/'
+      preLoaderRoute: typeof JoinIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/join/$roomId': {
+      id: '/join/$roomId'
+      path: '/join/$roomId'
+      fullPath: '/join/$roomId'
+      preLoaderRoute: typeof JoinRoomIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/lobby/$lobbyId': {
+      id: '/lobby/$lobbyId'
+      path: '/lobby/$lobbyId'
+      fullPath: '/lobby/$lobbyId'
+      preLoaderRoute: typeof LobbyLobbyIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/local/$gameId': {
       id: '/local/$gameId'
       path: '/local/$gameId'
@@ -152,6 +245,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LocalNewRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/online/create': {
+      id: '/online/create'
+      path: '/online/create'
+      fullPath: '/online/create'
+      preLoaderRoute: typeof OnlineCreateRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -160,8 +260,13 @@ const rootRouteChildren: RootRouteChildren = {
   SettingsRoute: SettingsRoute,
   DevBoardRoute: DevBoardRoute,
   DevNetworkRoute: DevNetworkRoute,
+  GameGameIdRoute: GameGameIdRoute,
+  JoinRoomIdRoute: JoinRoomIdRoute,
+  LobbyLobbyIdRoute: LobbyLobbyIdRoute,
   LocalGameIdRoute: LocalGameIdRoute,
   LocalNewRoute: LocalNewRoute,
+  OnlineCreateRoute: OnlineCreateRoute,
+  JoinIndexRoute: JoinIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

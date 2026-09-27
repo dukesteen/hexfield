@@ -91,12 +91,19 @@ describe('durable verified genesis consent', () => {
     value(await prepareGenesisConsent(body, transcripts, 0, first.secretKey, store));
     const changed: GenesisBody = {
       ...body,
-      genesisSeed: toBase64Url(new Uint8Array(32).fill(93)),
       createdAt: body.createdAt + 1,
     };
     expect(deckCeremonyId(changed)).toBe(deckCeremonyId(body));
     expect(genesisDigest(changed)).not.toBe(genesisDigest(body));
     expect(signVerifiedGenesis(changed, transcripts, 0, first.secretKey).ok).toBe(true);
+    const changedSeed: GenesisBody = {
+      ...body,
+      genesisSeed: toBase64Url(new Uint8Array(32).fill(93)),
+    };
+    expect(signVerifiedGenesis(changedSeed, transcripts, 0, first.secretKey)).toMatchObject({
+      ok: false,
+      error: { code: 'online-start-seed' },
+    });
     const refused = await prepareGenesisConsent(changed, transcripts, 0, first.secretKey, store);
     expect(refused).toMatchObject({ ok: false, error: { code: 'genesis-outbox-conflict' } });
     expect(store.writes).toBe(1);

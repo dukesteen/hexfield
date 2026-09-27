@@ -33,6 +33,16 @@ function isAuditReference(value: unknown): boolean {
 }
 
 function isAuditReport(value: unknown): value is AuditReport {
+  const scores = record(value) ? value.finalHiddenVictoryPoints : undefined;
+  const validScores =
+    scores === null ||
+    (record(scores) &&
+      Object.entries(scores).every(
+        ([seat, count]) =>
+          ['0', '1', '2', '3', '4', '5'].includes(seat) &&
+          Number.isSafeInteger(count) &&
+          Number(count) >= 0,
+      ));
   return (
     record(value) &&
     typeof value.ok === 'boolean' &&
@@ -48,7 +58,9 @@ function isAuditReport(value: unknown): value is AuditReport {
     (value.auditError === null ||
       (record(value.auditError) &&
         Number.isSafeInteger(value.auditError.seq) &&
-        typeof value.auditError.code === 'string'))
+        typeof value.auditError.code === 'string')) &&
+    validScores &&
+    (value.ok && value.complete ? record(scores) : scores === null)
   );
 }
 

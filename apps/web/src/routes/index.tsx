@@ -1,12 +1,14 @@
 import { createFileRoute, Link } from '@tanstack/react-router';
 import { useTranslation } from 'react-i18next';
 import { useSavedGames } from '../queries/hooks';
+import { useResumableGames } from '../queries/online-games';
 
 export const Route = createFileRoute('/')({ component: Home });
 
 function Home() {
   const { t } = useTranslation(['common', 'lobby', 'game']);
   const games = useSavedGames();
+  const onlineGames = useResumableGames();
   return (
     <main className="home-page app-page">
       <header className="app-header">
@@ -20,37 +22,82 @@ function Home() {
         <section className="home-intro" aria-labelledby="home-title">
           <h1 id="home-title">{t('lobby:homeTitle')}</h1>
           <p>{t('lobby:homeDescription')}</p>
-          <Link to="/local/new" className="button button-primary">
+          <div className="home-online-actions">
+            <Link to="/online/create" className="button button-primary">
+              {t('lobby:playWithFriends')}
+            </Link>
+            <Link to="/join" className="button button-quiet">
+              {t('lobby:joinGame')}
+            </Link>
+          </div>
+          <small className="home-beta-note">{t('lobby:multiplayerBeta')}</small>
+          <Link to="/local/new" className="text-link home-local-link">
             {t('lobby:newGame')}
           </Link>
         </section>
-        <section className="saved-games" aria-labelledby="saved-title">
-          <div className="section-heading">
-            <h2 id="saved-title">{t('lobby:savedGames')}</h2>
-          </div>
-          {games.isError && <p role="alert">{t('lobby:loadFailed')}</p>}
-          {games.isPending && <p role="status">{t('game:loadingGame')}</p>}
-          {games.data?.length === 0 && <p className="muted">{t('lobby:noSavedGames')}</p>}
-          {games.data?.map((game) => (
-            <Link
-              key={game.id}
-              to="/local/$gameId"
-              params={{ gameId: game.id }}
-              className="saved-game-row"
-              aria-label={`${t('lobby:resumeGame')}: ${game.presentation.players.map((p) => p.name).join(', ')}`}
-            >
-              <span className="saved-game-names">
-                {game.presentation.players.map((player) => player.name).join(' · ')}
-              </span>
-              <span className="saved-game-time">
-                {t('lobby:lastSaved', { date: new Date(game.updatedAt).toLocaleDateString() })}
-              </span>
-              <span className="saved-game-arrow" aria-hidden="true">
-                →
-              </span>
-            </Link>
-          ))}
-        </section>
+        <div className="home-saved-games">
+          {(onlineGames.isError ||
+            !!onlineGames.data?.games.length ||
+            !!onlineGames.data?.unavailableGameIds.length) && (
+            <section className="saved-games" aria-labelledby="online-saved-title">
+              <div className="section-heading">
+                <h2 id="online-saved-title">{t('lobby:onlineSavedGames')}</h2>
+              </div>
+              {onlineGames.isError && <p role="alert">{t('lobby:onlineSavedLoadFailed')}</p>}
+              {!!onlineGames.data?.unavailableGameIds.length && (
+                <p role="status">{t('lobby:onlineSavedPartial')}</p>
+              )}
+              {onlineGames.data?.games.map((game) => (
+                <Link
+                  key={game.gameId}
+                  to="/game/$gameId"
+                  params={{ gameId: game.gameId }}
+                  className="saved-game-row"
+                  aria-label={`${t('lobby:onlineResumeTitle')}: ${game.genesis.seats.map((seat) => seat.name).join(', ')}`}
+                >
+                  <span className="saved-game-names">
+                    {game.genesis.seats.map((seat) => seat.name).join(' · ')}
+                  </span>
+                  <span className="saved-game-time">
+                    {t('lobby:onlineGameStarted', {
+                      date: new Date(game.genesis.createdAt).toLocaleDateString(),
+                    })}
+                  </span>
+                  <span className="saved-game-arrow" aria-hidden="true">
+                    →
+                  </span>
+                </Link>
+              ))}
+            </section>
+          )}
+          <section className="saved-games" aria-labelledby="saved-title">
+            <div className="section-heading">
+              <h2 id="saved-title">{t('lobby:savedGames')}</h2>
+            </div>
+            {games.isError && <p role="alert">{t('lobby:loadFailed')}</p>}
+            {games.isPending && <p role="status">{t('game:loadingGame')}</p>}
+            {games.data?.length === 0 && <p className="muted">{t('lobby:noSavedGames')}</p>}
+            {games.data?.map((game) => (
+              <Link
+                key={game.id}
+                to="/local/$gameId"
+                params={{ gameId: game.id }}
+                className="saved-game-row"
+                aria-label={`${t('lobby:resumeGame')}: ${game.presentation.players.map((p) => p.name).join(', ')}`}
+              >
+                <span className="saved-game-names">
+                  {game.presentation.players.map((player) => player.name).join(' · ')}
+                </span>
+                <span className="saved-game-time">
+                  {t('lobby:lastSaved', { date: new Date(game.updatedAt).toLocaleDateString() })}
+                </span>
+                <span className="saved-game-arrow" aria-hidden="true">
+                  →
+                </span>
+              </Link>
+            ))}
+          </section>
+        </div>
       </div>
     </main>
   );

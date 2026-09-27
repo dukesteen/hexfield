@@ -49,7 +49,10 @@ export async function startSignalingServer(
   const core = new RoomCore(() => performance.now());
   const server = createServer((request, response) => {
     if (request.url === '/healthz') {
-      response.writeHead(200, { 'content-type': 'text/plain' });
+      response.writeHead(200, {
+        'content-type': 'text/plain',
+        'access-control-allow-origin': '*',
+      });
       response.end('ok');
     } else {
       response.writeHead(404);

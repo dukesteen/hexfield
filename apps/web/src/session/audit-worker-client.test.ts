@@ -82,6 +82,7 @@ const report: AuditReport = {
   finalHead: null,
   historyError: { code: 'audit-invalid-history' },
   auditError: null,
+  finalHiddenVictoryPoints: null,
 };
 
 afterEach(() => vi.useRealTimers());
@@ -276,5 +277,32 @@ describe('session audit worker adapter', () => {
     job.cancel();
     await expect(job.result).rejects.toMatchObject({ name: 'AbortError' });
     expect(vi.getTimerCount()).toBe(0);
+  });
+
+  test('accepts verified final scores and rejects scores on an unsuccessful audit', async () => {
+    const worker = new FakeWorker();
+    const job = createSessionAuditJob(input(), () => worker);
+    const id = postedRequest(worker).id;
+    const successful: AuditReport = {
+      ...report,
+      ok: true,
+      complete: true,
+      missingSeats: [],
+      historyError: null,
+      finalHiddenVictoryPoints: { 0: 1, 1: 0 },
+    };
+    worker.message({ id, report: successful });
+    await expect(job.result).resolves.toEqual(successful);
+
+    const badWorker = new FakeWorker();
+    const badJob = createSessionAuditJob(input(), () => badWorker);
+    badWorker.message({
+      id: postedRequest(badWorker).id,
+      report: { ...report, finalHiddenVictoryPoints: { 0: 1 } },
+    });
+    await Promise.resolve();
+    expect(badWorker.terminated).toBe(false);
+    badJob.cancel();
+    await expect(badJob.result).rejects.toMatchObject({ name: 'AbortError' });
   });
 });

@@ -1,9 +1,11 @@
 import { identityFromSecret } from '@cp2p/crypto';
-import { toBase64Url } from '@cp2p/codec';
+import { canonicalEncode, toBase64Url } from '@cp2p/codec';
 import type { PeerId } from '@cp2p/protocol';
 import { describe, expect, test } from 'vitest';
 import { InProcessSignaling } from './in-process-signaling.js';
-import { signSignalEnvelope } from './signaling-envelope.js';
+import { ManualBridge } from './manual-bootstrap.js';
+import { MeshRelaySignalingAdapter } from './mesh-relay-signaling.js';
+import { signSignalEnvelope, verifySignalEnvelope } from './signaling-envelope.js';
 import type { SignedSignalEnvelope } from './signaling-envelope.js';
 import { WebRtcTransport } from './web-rtc-transport.js';
 import { VirtualClock } from '../../protocol/src/testing/virtual-clock.js';
@@ -25,6 +27,12 @@ class Channel {
     const values = this.listeners.get(type) ?? [];
     values.push(listener);
     this.listeners.set(type, values);
+  }
+  removeEventListener(type: string, listener: Listener): void {
+    this.listeners.set(
+      type,
+      (this.listeners.get(type) ?? []).filter((value) => value !== listener),
+    );
   }
   emit(type: string, event: Parameters<Listener>[0] = {}): void {
     for (const listener of this.listeners.get(type) ?? []) listener(event);
@@ -68,6 +76,7 @@ class Connection {
   private localSet = false;
   private remoteSet = false;
   readonly candidates: (RTCIceCandidateInit | null)[] = [];
+  statsRecords: readonly Readonly<Record<string, unknown>>[] = [];
   constructor(
     readonly self: PeerId,
     readonly peer: PeerId,
@@ -117,6 +126,17 @@ class Connection {
   }
   async addIceCandidate(candidate: RTCIceCandidateInit | null): Promise<void> {
     this.candidates.push(candidate);
+  }
+  async getStats(): Promise<RTCStatsReport> {
+    const report = new Map(
+      this.statsRecords.map((record, index) => [
+        typeof record.id === 'string' || typeof record.id === 'number'
+          ? String(record.id)
+          : String(index),
+        record,
+      ]),
+    );
+    return report;
   }
   restartIce(): void {
     this.emit('negotiationneeded');
@@ -207,7 +227,13 @@ function member<T>(values: readonly T[], index: number): T {
   return value;
 }
 
-function mesh(count: number, descendingIds = false, manualDeadline = false, selfOnly = false) {
+function mesh(
+  count: number,
+  descendingIds = false,
+  manualDeadline = false,
+  selfOnly = false,
+  relay = false,
+) {
   const identities = Array.from({ length: count }, (_, index) =>
     identityFromSecret(new Uint8Array(32).fill(index + 1)),
   );
@@ -216,6 +242,17 @@ function mesh(count: number, descendingIds = false, manualDeadline = false, self
   const fabric = new Fabric();
   const clock = new VirtualClock();
   const adapters = identities.map((identity) => signaling.adapter(identity.peerId));
+  const relayAdapters = relay
+    ? identities.map(
+        (identity, index) =>
+          new MeshRelaySignalingAdapter(
+            identity.peerId,
+            'test-lobby',
+            clock,
+            member(adapters, index),
+          ),
+      )
+    : [];
   const peers = identities.map((identity, index) => {
     let nextRandom = index + 1;
     return new WebRtcTransport({
@@ -223,7 +260,7 @@ function mesh(count: number, descendingIds = false, manualDeadline = false, self
       secretKey: identity.secretKey,
       roster: selfOnly ? [identity.peerId] : roster,
       scope: 'test-lobby',
-      adapter: member(adapters, index),
+      adapter: relay ? member(relayAdapters, index) : member(adapters, index),
       clock,
       ...(manualDeadline ? { attemptTimeoutMs: null } : {}),
       rtcFactory: (peer) => fabric.create(identity.peerId, peer),
@@ -231,11 +268,13 @@ function mesh(count: number, descendingIds = false, manualDeadline = false, self
         new Uint8Array(length).fill(descendingIds ? 255 - nextRandom++ : nextRandom++),
     });
   });
+  if (relay) peers.forEach((peer, index) => member(relayAdapters, index).attachTransport(peer));
   return {
     identities,
     roster,
     signaling,
     adapters,
+    relayAdapters,
     fabric,
     clock,
     peers,
@@ -247,6 +286,185 @@ function mesh(count: number, descendingIds = false, manualDeadline = false, self
 }
 
 describe('authenticated WebRTC mesh', () => {
+  test('exposes address-free selected route and RTT only for authenticated peers', async () => {
+    const f = mesh(3);
+    try {
+      const [a, b, c] = f.roster;
+      if (!a || !b || !c) throw new Error('Missing stats test peers');
+      const aTransport = member(f.peers, f.roster.indexOf(a));
+      const bTransport = member(f.peers, f.roster.indexOf(b));
+      const cTransport = member(f.peers, f.roster.indexOf(c));
+      expect(await aTransport.peerStats()).toEqual([]);
+      aTransport.connect(b);
+      await settle();
+      const connection = f.fabric.connection(a, b);
+      if (!connection) throw new Error('Missing stats test connection');
+      connection.statsRecords = [
+        { id: 'transport', type: 'transport', selectedCandidatePairId: 'pair' },
+        {
+          id: 'pair',
+          type: 'candidate-pair',
+          localCandidateId: 'local',
+          state: 'succeeded',
+          nominated: true,
+          currentRoundTripTime: 0.0426,
+        },
+        {
+          id: 'local',
+          type: 'local-candidate',
+          candidateType: 'relay',
+          address: '192.0.2.44',
+          usernameFragment: 'private',
+        },
+      ];
+      expect(await aTransport.peerStats()).toEqual([
+        { peer: b, state: 'connected', route: 'relay', rttMs: 43 },
+      ]);
+      expect(await cTransport.peerStats()).toEqual([]);
+      expect(await bTransport.peerStats()).toEqual([
+        { peer: a, state: 'connected', route: 'unknown', rttMs: null },
+      ]);
+    } finally {
+      f.dispose();
+    }
+  });
+
+  test('returns unknown route and RTT when browser statistics fail', async () => {
+    const f = mesh(2);
+    try {
+      const [a, b] = f.roster;
+      if (!a || !b) throw new Error('Missing stats test peers');
+      const transport = member(f.peers, f.roster.indexOf(a));
+      transport.connect(b);
+      await settle();
+      const connection = f.fabric.connection(a, b);
+      if (!connection) throw new Error('Missing stats test connection');
+      connection.getStats = async () => {
+        throw new Error('stats unavailable');
+      };
+      expect(await transport.peerStats()).toEqual([
+        { peer: b, state: 'connected', route: 'unknown', rttMs: null },
+      ]);
+    } finally {
+      f.dispose();
+    }
+  });
+
+  test('signed in-mesh signaling forms the missing link after the server disappears', async () => {
+    const f = mesh(3, false, false, false, true);
+    try {
+      const a = member(f.roster, 0);
+      const b = member(f.roster, 1);
+      const c = member(f.roster, 2);
+      member(f.peers, a < b ? 0 : 1).connect(a < b ? b : a);
+      await settle();
+      member(f.peers, b < c ? 1 : 2).connect(b < c ? c : b);
+      await settle();
+      expect(f.peers.map((peer) => peer.peers().length)).toEqual([1, 2, 1]);
+      for (const adapter of f.adapters) adapter.close();
+      const leaked: Uint8Array[] = [];
+      for (const peer of f.peers) peer.onMessage((_from, bytes) => leaked.push(bytes));
+      member(f.peers, 0).connect(c);
+      await settle();
+      expect(f.peers.map((peer) => peer.peers().length)).toEqual([2, 2, 2]);
+      expect(member(f.peers, 0).peers()).toContain(c);
+      expect(member(f.peers, 2).peers()).toContain(a);
+      expect(leaked).toEqual([]);
+      const temporaryChannel = new Channel(2);
+      temporaryChannel.open();
+      const temporaryPc = new EventTarget();
+      let closedBridgePc = false;
+      Object.assign(temporaryPc, {
+        close: () => {
+          closedBridgePc = true;
+        },
+      });
+      const bridge = new ManualBridge(
+        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Route-only test PC.
+        temporaryPc as unknown as RTCPeerConnection,
+        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Route-only test channel.
+        temporaryChannel as unknown as RTCDataChannel,
+        'test-lobby',
+        a,
+        b,
+        f.clock,
+      );
+      member(f.relayAdapters, 0).addBridge(bridge);
+      expect(closedBridgePc).toBe(false);
+      const routeProof = signSignalEnvelope(
+        {
+          version: 1,
+          scope: 'test-lobby',
+          from: b,
+          to: a,
+          attemptId: toBase64Url(new Uint8Array(16).fill(79)),
+          sessionId: toBase64Url(new Uint8Array(16).fill(80)),
+          attemptSeq: 1,
+          blob: { kind: 'candidate', generation: 0, revision: 1, candidate: null },
+        },
+        member(f.identities, 1).secretKey,
+      );
+      const routePayload = canonicalEncode({ v: 1, hops: 1, envelope: routeProof });
+      const routeFrame = new Uint8Array(5 + routePayload.length);
+      routeFrame.set([0x48, 0x58, 0x52, 0x31, 0]);
+      routeFrame.set(routePayload, 5);
+      member(f.peers, 1).sendRelayFrame(c, routeFrame);
+      await settle();
+      expect(member(f.relayAdapters, 0).hasBridge(b)).toBe(false);
+      expect(closedBridgePc).toBe(true);
+      const received: SignedSignalEnvelope[] = [];
+      member(f.relayAdapters, 2).onSignal((_from, value) => {
+        const signed = verifySignalEnvelope(value, 'test-lobby', c, new Set([a]));
+        if (signed) received.push(signed);
+      });
+      const signal = signSignalEnvelope(
+        {
+          version: 1,
+          scope: 'test-lobby',
+          from: a,
+          to: c,
+          attemptId: toBase64Url(new Uint8Array(16).fill(88)),
+          sessionId: toBase64Url(new Uint8Array(16).fill(89)),
+          attemptSeq: 1,
+          blob: { kind: 'candidate', generation: 0, revision: 1, candidate: null },
+        },
+        member(f.identities, 0).secretKey,
+      );
+      await member(f.relayAdapters, 0).send(c, signal);
+      await member(f.relayAdapters, 0).send(c, signal);
+      await settle();
+      expect(received).toEqual([signal]);
+      await expect(
+        member(f.relayAdapters, 0).send(c, {
+          ...signal,
+          sig: member(f.identities, 1).peerId,
+        }),
+      ).rejects.toThrow('Invalid local signal');
+      expect(leaked).toEqual([]);
+    } finally {
+      f.dispose();
+    }
+  });
+
+  test('a bounded relay holds an early signal until the target authenticates with the host', async () => {
+    const f = mesh(3, false, false, false, true);
+    try {
+      const [a, b, c] = f.roster;
+      if (!a || !b || !c) throw new Error('Missing relay test peer');
+      member(f.peers, a < b ? 0 : 1).connect(a < b ? b : a);
+      await settle();
+      expect(f.peers.map((peer) => peer.peers().length)).toEqual([1, 1, 0]);
+      member(f.adapters, 0).close();
+      member(f.peers, 0).connect(c);
+      await settle();
+      expect(member(f.peers, 0).peers()).not.toContain(c);
+      member(f.peers, b < c ? 1 : 2).connect(b < c ? c : b);
+      await settle();
+      expect(f.peers.map((peer) => peer.peers().length)).toEqual([2, 2, 2]);
+    } finally {
+      f.dispose();
+    }
+  });
   test('can freeze a single-host game roster', () => {
     const f = mesh(2, false, false, true);
     try {

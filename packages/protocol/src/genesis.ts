@@ -13,6 +13,7 @@ import * as v from 'valibot';
 import { validateGenesisEncryption } from './genesis-encryption.js';
 import { validateGenesisMasters } from './genesis-masters.js';
 import { validateGenesisEscrow } from './genesis-escrow.js';
+import { validateGenesisOnlineStart } from './genesis-online-start.js';
 
 export const GENESIS_PREVIOUS_HASH = '0'.repeat(64);
 
@@ -28,6 +29,18 @@ export interface ValidatedGenesis {
 }
 
 export { genesisBody, genesisDigest, genesisId } from './genesis-identity.js';
+
+function preflightVersion(value: unknown): Result<void> {
+  const version = v.safeParse(
+    v.object({ protocolVersion: v.number(), engineVersion: v.string() }),
+    value,
+  );
+  return version.success &&
+    (version.output.protocolVersion !== PROTOCOL_VERSION ||
+      version.output.engineVersion !== ENGINE_VERSION)
+    ? failure('version-mismatch', 'The protocol or engine version differs')
+    : success(undefined);
+}
 
 /** Every human signs the same draft, including its derived identifier. */
 export function signGenesis(
@@ -48,10 +61,17 @@ export function signVerifiedGenesis(
   seat: SeatSignature['seat'],
   secretKey: Uint8Array,
 ): Result<SeatSignature> {
+  const version = preflightVersion(body);
+  if (!version.ok) return version;
   const parsed = parseCanonical(body, v.omit(genesisSchema, ['gameId', 'signatures']));
   if (!parsed.ok) return parsed;
   if (parsed.value.security !== 'verified')
     return failure('genesis-security', 'Verified consent requires verified genesis');
+  if (
+    parsed.value.protocolVersion !== PROTOCOL_VERSION ||
+    parsed.value.engineVersion !== ENGINE_VERSION
+  )
+    return failure('version-mismatch', 'The protocol or engine version differs');
   const encryption = validateGenesisEncryption(parsed.value);
   if (!encryption.ok) return encryption;
   const masters = validateGenesisMasters(parsed.value);
@@ -60,6 +80,8 @@ export function signVerifiedGenesis(
   if (!escrow.ok) return escrow;
   const decks = validateDeckCeremony(parsed.value, transcripts);
   if (!decks.ok) return decks;
+  const onlineStart = validateGenesisOnlineStart(parsed.value);
+  if (!onlineStart.ok) return onlineStart;
   try {
     const signer = identityFromSecret(secretKey);
     const owner = parsed.value.seats.find((participant) => participant.seat === seat);
@@ -78,6 +100,8 @@ export function validateGenesis(
   engine: Engine,
   policy: GenesisPolicy = {},
 ): Result<ValidatedGenesis> {
+  const version = preflightVersion(value);
+  if (!version.ok) return version;
   const parsed = parseCanonical(value, genesisSchema);
   if (!parsed.ok) return parsed;
   const genesis = parsed.value;
@@ -139,6 +163,8 @@ export function validateGenesis(
     if (!masters.ok) return masters;
     const escrow = validateGenesisEscrow(genesis);
     if (!escrow.ok) return escrow;
+    const onlineStart = validateGenesisOnlineStart(genesis);
+    if (!onlineStart.ok) return onlineStart;
     try {
       const verified = policy.verifyCommitments(genesis);
       if (!verified.ok) return verified;

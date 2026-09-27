@@ -32,4 +32,6 @@ export interface AuditReport {
   readonly historyError: { readonly code: string } | null;
   /** Local reconstruction or engine failure, without attributing misconduct. */
   readonly auditError: { readonly seq: number; readonly code: string } | null;
+  /** Hidden VP card counts, disclosed only after a complete successful audit. */
+  readonly finalHiddenVictoryPoints: Partial<Record<Seat, number>> | null;
 }

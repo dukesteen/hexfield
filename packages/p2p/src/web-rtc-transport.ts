@@ -39,6 +39,70 @@ interface DeferredOffer {
   readonly timeout: unknown;
 }
 
+export type PeerCandidateRoute = 'host' | 'srflx' | 'relay' | 'unknown';
+
+/** Address-free connection telemetry for a peer whose link authenticated locally. */
+export interface WebRtcPeerStats {
+  readonly peer: PeerId;
+  readonly state: RTCPeerConnectionState;
+  readonly rttMs: number | null;
+  readonly route: PeerCandidateRoute;
+}
+
+interface StatsRecord {
+  readonly id?: unknown;
+  readonly type?: unknown;
+  readonly selected?: unknown;
+  readonly nominated?: unknown;
+  readonly state?: unknown;
+  readonly localCandidateId?: unknown;
+  readonly currentRoundTripTime?: unknown;
+  readonly selectedCandidatePairId?: unknown;
+  readonly candidateType?: unknown;
+}
+
+function connectionStatsRouteAndRtt(report: RTCStatsReport): {
+  readonly route: PeerCandidateRoute;
+  readonly rttMs: number | null;
+} {
+  const records: StatsRecord[] = [];
+  report.forEach((record) => records.push(record));
+  const byId = new Map(
+    records.flatMap((record) =>
+      typeof record.id === 'string' ? [[record.id, record] as const] : [],
+    ),
+  );
+  const selectedTransport = records.find(
+    (record) => record.type === 'transport' && typeof record.selectedCandidatePairId === 'string',
+  );
+  const selectedPairId = selectedTransport?.selectedCandidatePairId;
+  const selectedPair = typeof selectedPairId === 'string' ? byId.get(selectedPairId) : undefined;
+  const pair =
+    selectedPair ??
+    records.find(
+      (record) =>
+        record.type === 'candidate-pair' &&
+        (record.selected === true || (record.nominated === true && record.state === 'succeeded')),
+    );
+  if (!pair) return { route: 'unknown', rttMs: null };
+  const localCandidate =
+    typeof pair.localCandidateId === 'string' ? byId.get(pair.localCandidateId) : undefined;
+  const route =
+    localCandidate?.candidateType === 'host' ||
+    localCandidate?.candidateType === 'srflx' ||
+    localCandidate?.candidateType === 'relay'
+      ? localCandidate.candidateType
+      : 'unknown';
+  const seconds = pair.currentRoundTripTime;
+  return {
+    route,
+    rttMs:
+      typeof seconds === 'number' && Number.isFinite(seconds) && seconds >= 0
+        ? Math.round(seconds * 1_000)
+        : null,
+  };
+}
+
 export interface WebRtcTransportOptions {
   readonly self: PeerId;
   readonly secretKey: Uint8Array;
@@ -73,6 +137,7 @@ export class WebRtcTransport implements Transport {
   private readonly manualDisconnects = new Set<PeerId>();
   private readonly removedPeerHistory = new Set<PeerId>();
   private readonly messageListeners = new Set<(from: PeerId, bytes: Uint8Array) => void>();
+  private readonly relayListeners = new Set<(from: PeerId, bytes: Uint8Array) => void>();
   private readonly peerListeners = new Set<(peer: PeerId, online: boolean) => void>();
   private readonly diagnosticListeners = new Set<
     (peer: PeerId, reason: string, security: boolean) => void
@@ -205,6 +270,29 @@ export class WebRtcTransport implements Transport {
       .toSorted();
   }
 
+  /** Read selected ICE route and RTT for authenticated peers; candidate addresses are omitted. */
+  async peerStats(): Promise<readonly WebRtcPeerStats[]> {
+    const authenticated = [...this.links.entries()].filter(
+      ([, record]) => record.link.isAuthenticated,
+    );
+    const values = await Promise.all(
+      authenticated.map(async ([peer, record]): Promise<WebRtcPeerStats | null> => {
+        const pc = record.link.pc;
+        const state = pc.connectionState;
+        let route: PeerCandidateRoute = 'unknown';
+        let rttMs: number | null = null;
+        try {
+          ({ route, rttMs } = connectionStatsRouteAndRtt(await pc.getStats()));
+        } catch {
+          /* State remains useful when browser stats are unavailable. */
+        }
+        if (this.links.get(peer) !== record || !record.link.isAuthenticated) return null;
+        return { peer, state, route, rttMs };
+      }),
+    );
+    return values.filter((value): value is WebRtcPeerStats => value !== null);
+  }
+
   send(to: PeerId, message: Uint8Array): void {
     const record = this.links.get(to);
     if (!record?.link.isAuthenticated) throw new Error('Peer is not authenticated');
@@ -216,6 +304,17 @@ export class WebRtcTransport implements Transport {
     const record = this.links.get(to);
     if (!record?.link.isAuthenticated) throw new Error('Peer is not authenticated');
     record.link.send(message, 'bulk');
+  }
+
+  /** Reserved signaling control path; never delivered to gameplay listeners. */
+  sendRelayFrame(to: PeerId, message: Uint8Array): void {
+    this.sendBulk(to, message);
+  }
+
+  onRelayFrame(listener: (from: PeerId, bytes: Uint8Array) => void): Unsubscribe {
+    if (this.disposed) return () => undefined;
+    this.relayListeners.add(listener);
+    return () => this.relayListeners.delete(listener);
   }
 
   broadcast(message: Uint8Array): void {
@@ -285,6 +384,7 @@ export class WebRtcTransport implements Transport {
     } finally {
       this.secretKey.fill(0);
       this.messageListeners.clear();
+      this.relayListeners.clear();
       this.peerListeners.clear();
       this.diagnosticListeners.clear();
     }
@@ -407,14 +507,22 @@ export class WebRtcTransport implements Transport {
         );
       },
       onMessage: (message) => {
-        if (record && this.links.get(peer) === record && link.isAuthenticated)
-          for (const listener of this.messageListeners) {
+        if (record && this.links.get(peer) === record && link.isAuthenticated) {
+          const relay =
+            message.length >= 5 &&
+            message[0] === 0x48 &&
+            message[1] === 0x58 &&
+            message[2] === 0x52 &&
+            message[3] === 0x31 &&
+            message[4] === 0;
+          for (const listener of relay ? this.relayListeners : this.messageListeners) {
             try {
               listener(peer, message.slice());
             } catch {
               /* Isolate observers. */
             }
           }
+        }
       },
       onAuthenticated: () => {
         if (record && this.pendingLinks.get(peer) === record) {

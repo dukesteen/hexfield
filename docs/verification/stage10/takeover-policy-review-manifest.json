@@ -1,0 +1,202 @@
+{
+  "review": "takeover-policy-presence",
+  "sourceMode": "full files plus numbered excerpts",
+  "files": [
+    {
+      "path": "docs/verification/stage10/takeover-policy-review-prompt.md",
+      "sha256": "f34b93b05f15a0bb9322742c6769190fdf719e4fbbb36b3221a5d26b8cd9426d",
+      "bytes": 2829,
+      "lines": 15,
+      "includedRanges": [[1, 15]]
+    },
+    {
+      "path": "docs/verification/stage10/takeover-ui-design.md",
+      "sha256": "872cbc3b573eeb2f1ba33bf3f14ea4c79b5b21aac3997b4cfec1142ff088971d",
+      "bytes": 14965,
+      "lines": 58,
+      "includedRanges": [[1, 58]]
+    },
+    {
+      "path": "packages/protocol/src/recovery-facade.ts",
+      "sha256": "2e0e6fe379ab12253631a05cefdea98ffeda52420e7cdab0caab92212c9c5431",
+      "bytes": 3011,
+      "lines": 70,
+      "includedRanges": [[1, 70]]
+    },
+    {
+      "path": "packages/protocol/src/recovery-readiness.ts",
+      "sha256": "dd90b48b00dd381e7acb02f4c4b0ea4412d4c657667fbaa6bab1f51479e411ef",
+      "bytes": 27350,
+      "lines": 741,
+      "includedRanges": [[1, 741]]
+    },
+    {
+      "path": "packages/protocol/src/recovery-membership.ts",
+      "sha256": "d444c57a1aafeb5f721cd33653ab0ffc738e4dc90efc5b3654e92d4fce5e96ea",
+      "bytes": 16536,
+      "lines": 469,
+      "includedRanges": [[1, 469]]
+    },
+    {
+      "path": "packages/protocol/src/recovery-types.ts",
+      "sha256": "670304a6178443554ad8d72c2b5e7aa501f8a7e50bacb950d8ac9dda14ea83a0",
+      "bytes": 1909,
+      "lines": 56,
+      "includedRanges": [[1, 56]]
+    },
+    {
+      "path": "packages/protocol/src/genesis-online-start.ts",
+      "sha256": "c0cba768358bd7b67b4745d680566d7321c517779968941323750f064a514391",
+      "bytes": 2892,
+      "lines": 66,
+      "includedRanges": [[1, 66]]
+    },
+    {
+      "path": "packages/protocol/src/lobby-types.ts",
+      "sha256": "554d920d07b700760743ddfa01b4962612bbbcc4651713de1a12774548806c48",
+      "bytes": 2018,
+      "lines": 64,
+      "includedRanges": [[1, 64]]
+    },
+    {
+      "path": "packages/protocol/src/types.ts",
+      "sha256": "94410dd04b0014e8a1fae15cc301306fca08718f53ae02ad74c8f8c62831d876",
+      "bytes": 3288,
+      "lines": 131,
+      "includedRanges": [[1, 131]]
+    },
+    {
+      "path": "packages/protocol/src/schemas.ts",
+      "sha256": "0644605fd0e0cd35ededac28e9a52524eb122e8b73839bc94f729fdee160f606",
+      "bytes": 5735,
+      "lines": 169,
+      "includedRanges": [[1, 169]]
+    },
+    {
+      "path": "packages/protocol/src/session-types.ts",
+      "sha256": "4d1290d21a7072eab5d283cf1be0a5703f03c42e0fce15410c90f859e6ddcf8b",
+      "bytes": 2564,
+      "lines": 74,
+      "includedRanges": [[1, 74]]
+    },
+    {
+      "path": "packages/protocol/src/votes.ts",
+      "sha256": "d8ca8b3f9d17b5f774eec2b891f5043139aa753695274e840af2e858050b0206",
+      "bytes": 5664,
+      "lines": 159,
+      "includedRanges": [[1, 159]]
+    },
+    {
+      "path": "docs/10-persistence-reconnection.md",
+      "sha256": "f7bc1b37475b3e0d6e47a74f77ccad3ec001d8de048103c7578f75acdf6da5ca",
+      "bytes": 14209,
+      "lines": 157,
+      "includedRanges": [
+        [10, 20],
+        [55, 95]
+      ]
+    },
+    {
+      "path": "packages/protocol/src/replicated-log.ts",
+      "sha256": "0426d618b36a7ced06f640a3f7f5cab8440209d0c4938aac387cb9c605bb4873",
+      "bytes": 152289,
+      "lines": 3778,
+      "includedRanges": [
+        [210, 255],
+        [475, 505],
+        [545, 690],
+        [895, 922],
+        [950, 1000],
+        [1528, 1585],
+        [1600, 1680],
+        [2245, 2335],
+        [3145, 3180],
+        [3260, 3305]
+      ]
+    },
+    {
+      "path": "packages/protocol/src/p2p-session.ts",
+      "sha256": "edce4652ecfd713d39fc6a72f196673c122a3a624a1d29ea823ab11756568325",
+      "bytes": 58233,
+      "lines": 1511,
+      "includedRanges": [
+        [1, 105],
+        [745, 900],
+        [1420, 1445]
+      ]
+    },
+    {
+      "path": "packages/protocol/src/consensus-controller.ts",
+      "sha256": "063309502103973e2d7d8ca21d3c98982652d9a541203345b51ffc0b5331fac3",
+      "bytes": 13156,
+      "lines": 349,
+      "includedRanges": [[160, 225]]
+    },
+    {
+      "path": "packages/protocol/src/lobby.ts",
+      "sha256": "6a52796c0a5965d3c2acd6ecbad40b954d5fdda1ae234340d645d9d521871c4d",
+      "bytes": 40466,
+      "lines": 1122,
+      "includedRanges": [
+        [75, 95],
+        [113, 140],
+        [195, 215],
+        [270, 315],
+        [350, 395],
+        [465, 490],
+        [575, 615]
+      ]
+    },
+    {
+      "path": "packages/protocol/src/genesis.ts",
+      "sha256": "7ade7b2a1242c16611118b8756bf948f69892c27207f35f0aa16aba8cb30932a",
+      "bytes": 10674,
+      "lines": 257,
+      "includedRanges": [
+        [1, 100],
+        [135, 165]
+      ]
+    },
+    {
+      "path": "packages/protocol/src/log.ts",
+      "sha256": "a182e5f7d5d17e8ebe3f6de7e10edfb39eeeb681994531ee4416e713b486a683",
+      "bytes": 16233,
+      "lines": 393,
+      "includedRanges": [[145, 185]]
+    },
+    {
+      "path": "packages/protocol/src/proposal.ts",
+      "sha256": "3d6175b76bfbd7d5f8f9fa8644d5bd4648df6bccf4fdd995a1c6d8ae00e83ab7",
+      "bytes": 14963,
+      "lines": 378,
+      "includedRanges": [
+        [250, 285],
+        [325, 365]
+      ]
+    },
+    {
+      "path": "packages/protocol/src/recovery-replica.test.ts",
+      "sha256": "490d201b888dd04b22c1fa8ca7645e684ab65bb10b649f75789cde773e8c77e5",
+      "bytes": 27485,
+      "lines": 696,
+      "includedRanges": [[199, 443]]
+    },
+    {
+      "path": "packages/protocol/src/recovery-readiness.test.ts",
+      "sha256": "29ab5e3893ebaaf4da796086f0b7cb2b6ef1bf1e106515897d96c2bba2b16775",
+      "bytes": 15596,
+      "lines": 427,
+      "includedRanges": [[108, 307]]
+    },
+    {
+      "path": "packages/protocol/src/p2p-recovery.test.ts",
+      "sha256": "15374d0261da8277d4e991e7bd21c0e3b350fc213bfe2d07a16caf4e6c428d26",
+      "bytes": 11908,
+      "lines": 287,
+      "includedRanges": [
+        [175, 205],
+        [250, 275]
+      ]
+    }
+  ]
+}

@@ -19,6 +19,7 @@ import {
 } from './consensus.js';
 import type {
   ConsensusEffect,
+  LocalVoteAdmissibility,
   ConsensusState,
   ConsensusTransition,
   TimeoutPhase,
@@ -36,6 +37,9 @@ export interface ConsensusControllerOptions {
   store: SafetyStore;
   /** Effects are at-least-once. Handlers must deduplicate committed sequence/value. */
   onEffects: (effects: readonly ConsensusEffect[]) => void | Promise<void>;
+  /** Local admission only. It must not alter replay or objective validity. */
+  beforePersist?: (previous: ConsensusState, next: ConsensusState) => Result<void>;
+  admitLocalValue?: LocalVoteAdmissibility;
 }
 
 export type ConsensusEvent =
@@ -200,6 +204,8 @@ export class ConsensusController {
         }
         return next;
       }
+      const admitted = this.options.beforePersist?.(this.state, next.value.state);
+      if (admitted && !admitted.ok) return admitted;
       try {
         if (!(await this.options.store.save(this.revision, canonicalEncode(next.value.state)))) {
           this.stopped = true;
@@ -291,11 +297,29 @@ export class ConsensusController {
       case 'input-available':
         return inputAvailable(this.state, context);
       case 'propose':
-        return propose(this.state, context, this.secretKey, event.candidate);
+        return propose(
+          this.state,
+          context,
+          this.secretKey,
+          event.candidate,
+          this.options.admitLocalValue,
+        );
       case 'proposal':
-        return receiveProposal(this.state, context, this.secretKey, event.proposal);
+        return receiveProposal(
+          this.state,
+          context,
+          this.secretKey,
+          event.proposal,
+          this.options.admitLocalValue,
+        );
       case 'vote':
-        return receiveVote(this.state, context, this.secretKey, event.vote);
+        return receiveVote(
+          this.state,
+          context,
+          this.secretKey,
+          event.vote,
+          this.options.admitLocalValue,
+        );
       case 'commit':
         return receiveCommit(this.state, context, event.certified);
       case 'stage-accusation':
@@ -307,7 +331,14 @@ export class ConsensusController {
       case 'resume-after-replay':
         return resumeAfterReplay(this.state, context);
       case 'timeout':
-        return timeout(this.state, context, this.secretKey, event.phase, event.round);
+        return timeout(
+          this.state,
+          context,
+          this.secretKey,
+          event.phase,
+          event.round,
+          this.options.admitLocalValue,
+        );
       default: {
         const unknownEvent: never = event;
         return failure('consensus-event', `Unknown consensus event: ${String(unknownEvent)}`);

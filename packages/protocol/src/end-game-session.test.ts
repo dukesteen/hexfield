@@ -1,4 +1,5 @@
 import { scalarToBytes } from '@cp2p/crypto';
+import { RandomBot, createBotRng } from '../../bots/src/index.js';
 import type { Seat } from '@cp2p/engine';
 import { expect, test } from 'vitest';
 import { auditCertifiedGame } from './audit.js';
@@ -19,6 +20,8 @@ async function settle(sessions: readonly P2PSession[], clock: VirtualClock): Pro
 }
 
 test('finished sessions retry reveals, audit separately and cancel a closing worker', async () => {
+  const bot = new RandomBot();
+  const rng = createBotRng(new Uint8Array(32).fill(59));
   let dropReveals = true;
   let sourceCalls = 0;
   const relayedMasters: { relay: Seat; publisher: Seat }[] = [];
@@ -30,6 +33,11 @@ test('finished sessions retry reveals, audit separately and cancel a closing wor
   >();
   await createTerminalAuditFixture({
     yieldTask: () => new Promise<void>((resolve) => setImmediate(resolve)),
+    chooseCommand(host, pending) {
+      const priv = host.getPrivate(pending.seat);
+      if (!priv) throw new Error('Audit bot lacks its private seat');
+      return bot.decide({ state: host.getState(), priv, seat: pending.seat }, pending, rng);
+    },
     sessionOptions(options) {
       const records = new Map<string, Uint8Array>();
       const prepared: P2PSessionOptions = {

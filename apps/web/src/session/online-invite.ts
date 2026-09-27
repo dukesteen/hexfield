@@ -20,6 +20,7 @@ export function createRoomId(): string {
 export function validateOnlineInvite(invite: OnlineInvite): OnlineInvite {
   if (!roomPattern.test(invite.roomId)) throw new Error('Invalid room code');
   parsePeerId(invite.hostPeer);
+  if (invite.serverUrl === '') return { ...invite };
   const server = new URL(invite.serverUrl);
   if (
     !['ws:', 'wss:'].includes(server.protocol) ||

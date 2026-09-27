@@ -6,6 +6,7 @@ import { utf8ToBytes } from '@noble/hashes/utils.js';
 import { modScalar } from './group.js';
 
 export const DERIVATION_LABELS = Object.freeze({
+  genesisSeed: 'genesis-seed',
   beaconSeed: 'beacon-seed',
   beaconExtension: 'beacon-extension',
   uniformInt: 'uniform-int',

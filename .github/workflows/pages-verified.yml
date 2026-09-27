@@ -1,0 +1,61 @@
+name: Publish locally verified build
+
+on:
+  workflow_dispatch:
+    inputs:
+      verified_sha:
+        description: Full commit SHA that passed local checks and browser verification
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require verification of this exact revision
+        env:
+          VERIFIED_SHA: ${{ inputs.verified_sha }}
+        run: |
+          if [ "$VERIFIED_SHA" != "$GITHUB_SHA" ]; then
+            echo "The verified revision must match this workflow's commit."
+            exit 1
+          fi
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.7.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Build GitHub Pages site
+        run: pnpm --filter @cp2p/web build
+        env:
+          GITHUB_PAGES: 'true'
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: apps/web/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    concurrency:
+      group: github-pages
+      cancel-in-progress: false
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/configure-pages@v5
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

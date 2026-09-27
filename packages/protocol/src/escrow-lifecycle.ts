@@ -163,6 +163,7 @@ function checkedManifest(value: unknown): Result<GenesisBody> {
     genesisSeed: parsed.value.genesisSeed,
     ceremonyNonce: parsed.value.ceremonyNonce,
     security: parsed.value.security,
+    takeover: parsed.value.takeover,
     commitments: parsed.value.commitments,
     createdAt: parsed.value.createdAt,
   };

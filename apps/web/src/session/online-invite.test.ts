@@ -23,6 +23,14 @@ describe('online invitation', () => {
     expect(createRoomId()).toMatch(/^[a-z2-7]{10}$/);
   });
 
+  test('manual invites keep an explicit empty signaling origin', () => {
+    const manual = { ...invite, serverUrl: '' };
+    expect(validateOnlineInvite(manual)).toEqual(manual);
+    expect(parseOnlineInviteUrl(createOnlineInviteUrl('https://example.test/', manual))).toEqual(
+      manual,
+    );
+  });
+
   test('rejects ambiguous, incomplete and malformed invitations', () => {
     const valid = createOnlineInviteUrl('http://localhost:5187/', invite);
     expect(() => parseOnlineInviteUrl(`${valid}&host=${identity.peerId}`)).toThrow(

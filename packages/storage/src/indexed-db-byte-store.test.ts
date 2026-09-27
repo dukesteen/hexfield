@@ -60,6 +60,29 @@ function serializedLockProvider() {
 }
 
 describe('IndexedDbByteStore', () => {
+  test.each(['_', '-'])('accepts a base64url ceremony lock beginning with %s', async (first) => {
+    installFactory();
+    const lockId = `${first}${'A'.repeat(42)}`;
+    const names: string[] = [];
+    const store = new IndexedDbByteStore({
+      lockProvider: async (name, task) => {
+        names.push(name);
+        return task();
+      },
+    });
+    try {
+      expect(
+        await store.withCeremonyLock(lockId, () =>
+          store.putIfAbsent('escrow/test', Uint8Array.of(1)),
+        ),
+      ).toBe(true);
+      expect(await store.load('escrow/test')).toEqual(Uint8Array.of(1));
+      expect(names).toEqual([`cp2p/escrow-ceremony/${lockId}`]);
+    } finally {
+      await store.close();
+    }
+  });
+
   test('coordinates atomic first writes and compare-and-swap across connections', async () => {
     installFactory();
     const first = new IndexedDbByteStore();

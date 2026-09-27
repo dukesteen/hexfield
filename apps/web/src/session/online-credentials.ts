@@ -232,6 +232,17 @@ export async function loadOrCreateOnlineIdentity(
   });
 }
 
+/** Resume requires the original durable device key; it cannot mint a replacement. */
+export async function loadOnlineIdentity(
+  store: OnlineCredentialStore,
+): Promise<DisposableOnlineIdentity> {
+  return store.withCeremonyLock(DEVICE_ID, async () => {
+    const prior = await store.load(DEVICE_ID);
+    if (prior === null) throw new Error('Stored online device identity is missing');
+    return identityFromRecord(prior);
+  });
+}
+
 function checkedLayout(
   layout: readonly OnlineSeatLayout[],
   devicePeerId: PeerId,
@@ -374,6 +385,8 @@ export async function prepareCeremonyMaterial(input: {
   readonly ceremonyNonce: Uint8Array;
   readonly layout: readonly OnlineSeatLayout[];
   readonly randomBytes?: RandomBytes;
+  /** Internal resume guard: reject absent material instead of minting fresh keys. */
+  readonly loadOnly?: boolean;
 }): Promise<OwnedCeremonyMaterial> {
   const nonceBytes = input.ceremonyNonce.slice();
   if (nonceBytes.length !== 32) {
@@ -402,6 +415,7 @@ export async function prepareCeremonyMaterial(input: {
     return await input.store.withCeremonyLock(id, async () => {
       const prior = await input.store.load(id);
       if (prior !== null) return materialFromRecord(prior, expected);
+      if (input.loadOnly) throw new Error('Stored ceremony material is missing');
 
       const ownedSeats = layout.filter(
         (seat) =>
@@ -484,4 +498,11 @@ export async function prepareCeremonyMaterial(input: {
     identity.secretKey.fill(0);
     identity.publicKey.fill(0);
   }
+}
+
+/** Load exact persisted game keys and masters without any generation path. */
+export async function loadCeremonyMaterial(
+  input: Omit<Parameters<typeof prepareCeremonyMaterial>[0], 'randomBytes' | 'loadOnly'>,
+): Promise<OwnedCeremonyMaterial> {
+  return prepareCeremonyMaterial({ ...input, loadOnly: true });
 }

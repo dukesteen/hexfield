@@ -1,3 +1,4 @@
+import { RandomBot, createBotRng } from '@cp2p/bots';
 import { beforeAll, describe, expect, test } from 'vitest';
 import { createTerminalAuditFixture } from '@cp2p/protocol/testing';
 import { baseAuditPolicy } from './audit-worker-job.js';
@@ -8,8 +9,15 @@ type Fixture = Awaited<ReturnType<typeof createTerminalAuditFixture>>;
 let fixture: Fixture;
 
 beforeAll(async () => {
+  const bot = new RandomBot();
+  const rng = createBotRng(new Uint8Array(32).fill(59));
   fixture = await createTerminalAuditFixture({
     yieldTask: () => new Promise<void>((resolve) => setImmediate(resolve)),
+    chooseCommand(host, pending) {
+      const priv = host.getPrivate(pending.seat);
+      if (!priv) throw new Error('Audit bot lacks its private seat');
+      return bot.decide({ state: host.getState(), priv, seat: pending.seat }, pending, rng);
+    },
   });
 }, 120_000);
 

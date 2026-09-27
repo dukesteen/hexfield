@@ -196,6 +196,106 @@ export async function prepareRecoveryReadiness(
   }
 }
 
+/** Restore a pre-certification reservation without regenerating or exposing its secret keys. */
+export async function loadPreparedRecoveryReadiness(
+  context: LogContext,
+  hostSeat: Seat,
+  departedSeat: Seat,
+  hostSigningKey: Uint8Array,
+  store: RecoveryReadinessStore,
+): Promise<Result<RecoveryAuthorization | null>> {
+  if (!(hostSigningKey instanceof Uint8Array) || hostSigningKey.byteLength !== 32)
+    return failure('recovery-readiness-input', 'Host signing key is invalid');
+  const key = hostSigningKey.slice();
+  let stored: Uint8Array | null = null;
+  let decoded: unknown;
+  let canonical: Uint8Array | null = null;
+  let identityKey: Uint8Array | null = null;
+  try {
+    const snapshot: LogContext = {
+      genesis: canonicalClone(context.genesis),
+      engine: context.engine,
+      head: canonicalClone(context.head),
+      state: canonicalClone(context.state),
+      lastNonces: new Map(context.lastNonces),
+      crypto: context.crypto === null ? null : canonicalClone(context.crypto),
+      ...(context.authority === undefined ? {} : { authority: canonicalClone(context.authority) }),
+      ...(context.recovery === undefined ? {} : { recovery: canonicalClone(context.recovery) }),
+    };
+    const slot = [
+      'recovery-readiness',
+      genesisDigest(snapshot.genesis),
+      snapshot.head.seq,
+      entryHash(snapshot.head),
+      (snapshot.authority?.epoch ?? -1) + 1,
+      departedSeat,
+      hostSeat,
+    ].join('/');
+    stored = await store.load(slot);
+    if (stored === null) return success(null);
+    if (stored.byteLength > MAX_MESSAGE_BYTES)
+      return failure('recovery-readiness-store', 'Stored readiness record is too large');
+    decoded = canonicalDecode(stored);
+    const record = v.parse(readinessStoreEntrySchema, decoded);
+    canonical = canonicalEncode(record);
+    if (record.slot !== slot || !sameBytes(canonical, stored))
+      return failure('recovery-readiness-store', 'Stored readiness record is invalid');
+    const statement = v.parse(recoveryReadinessSchema, record.statement);
+    const parsed = v.parse(recoveryChangeSchema, record.authorization);
+    if (
+      parsed.kind !== 'recovery-authorize' ||
+      !sameValue(parsed.statement, statement) ||
+      statement.departedSeat !== departedSeat ||
+      statement.hostSeat !== hostSeat ||
+      record.replacements.length !== statement.replacements.length
+    )
+      return failure('recovery-readiness-store', 'Stored readiness binding is invalid');
+    const hostIdentity = identityFromSecret(key);
+    identityKey = hostIdentity.secretKey;
+    const host = snapshot.authority?.controllers.find((item) => item.seat === hostSeat);
+    if (
+      host?.kind !== 'human' ||
+      host.status !== 'active' ||
+      host.publicKey !== hostIdentity.peerId
+    )
+      return failure('recovery-readiness-host', 'Local host key differs from certified authority');
+    for (const [index, replacement] of record.replacements.entries()) {
+      const identity = identityFromSecret(replacement.secretKey);
+      try {
+        if (
+          replacement.seat !== statement.replacements[index]?.seat ||
+          identity.peerId !== statement.replacements[index]?.publicKey
+        )
+          return failure(
+            'recovery-readiness-store',
+            'Stored replacement key differs from its statement',
+          );
+      } finally {
+        identity.secretKey.fill(0);
+      }
+    }
+    const provisional = provisionalEntry(snapshot, parsed, key, hostIdentity.peerId);
+    const checked = validateRecoveryTransition(parsed, provisional, snapshot, snapshot.crypto);
+    return checked.ok ? success(parsed) : checked;
+  } catch {
+    return failure('recovery-readiness-store', 'Could not validate stored readiness');
+  } finally {
+    key.fill(0);
+    identityKey?.fill(0);
+    stored?.fill(0);
+    canonical?.fill(0);
+    if (decoded && typeof decoded === 'object' && 'replacements' in decoded) {
+      const replacements = (decoded as { replacements?: unknown }).replacements;
+      if (Array.isArray(replacements))
+        for (const replacement of replacements)
+          if (replacement && typeof replacement === 'object' && 'secretKey' in replacement) {
+            const secretKey = replacement.secretKey;
+            if (secretKey instanceof Uint8Array) secretKey.fill(0);
+          }
+    }
+  }
+}
+
 /** Restore only keys activated by the certified authority and recovery history in context. */
 export async function loadActivatedRecoveryKeys(
   context: LogContext,

@@ -2,6 +2,7 @@ import * as v from 'valibot';
 import type { SignedProposal } from './types.js';
 import { signedVoteSchema } from './votes.js';
 import { cheatClaimSchema } from './cheat-schema.js';
+import { takeoverPolicySchema } from './takeover-policy.js';
 import {
   hashSchema as hash,
   key32Schema as key32,
@@ -79,6 +80,7 @@ export const genesisSchema = v.strictObject({
   genesisSeed: key32,
   ceremonyNonce: key32,
   security: v.picklist(['stub', 'verified']),
+  takeover: takeoverPolicySchema,
   commitments: v.record(label, v.unknown()),
   createdAt: nonnegativeInteger,
   gameId,

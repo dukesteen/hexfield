@@ -1,5 +1,6 @@
 import { canonicalDecode, canonicalEncode, toBase64Url } from '@cp2p/codec';
 import { scalarToBytes, signObject } from '@cp2p/crypto';
+import { RandomBot, createBotRng } from '../../bots/src/index.js';
 import type { Result, Seat } from '@cp2p/engine';
 import { beforeAll, describe, expect, test } from 'vitest';
 import { MemoryProtocolJournal } from './journal.js';
@@ -54,8 +55,15 @@ let journal: MemoryProtocolJournal;
 let genesisOnly: MemoryProtocolJournal;
 
 beforeAll(async () => {
+  const bot = new RandomBot();
+  const rng = createBotRng(new Uint8Array(32).fill(59));
   fixture = await createTerminalAuditFixture({
     yieldTask: () => new Promise<void>((resolve) => setImmediate(resolve)),
+    chooseCommand(host, pending) {
+      const priv = host.getPrivate(pending.seat);
+      if (!priv) throw new Error('Audit bot lacks its private seat');
+      return bot.decide({ state: host.getState(), priv, seat: pending.seat }, pending, rng);
+    },
   });
   journal = new MemoryProtocolJournal();
   genesisOnly = new MemoryProtocolJournal();

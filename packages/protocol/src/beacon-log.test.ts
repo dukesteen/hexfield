@@ -39,6 +39,7 @@ import {
 } from './replay.js';
 import { createSimulationGenesis } from './testing/simulation-genesis.js';
 import { createGenesisDeckFixture } from './testing/deck-fixture.js';
+import { TURN_TIMEOUT_PROTOCOL } from './turn-timeout.js';
 import {
   createStealContribution,
   createStealDispute,
@@ -512,6 +513,24 @@ describe('certified beacon log integration', () => {
     if (!certifiedResult.ok) throw new Error(certifiedResult.error.message);
     const advanced = advanceContext(data.initial, certifiedResult.value);
     if (!advanced.ok) throw new Error(advanced.error.message);
+    const earlyTimeout = signAt(
+      data,
+      advanced.value,
+      {
+        kind: 'system',
+        input: { kind: 'system', type: 'TIMEOUT', seat: 0, phase: 'main' },
+        evidence: {
+          kind: 'proof',
+          protocol: TURN_TIMEOUT_PROTOCOL,
+          data: { pendingSince: advanced.value.log.head.seq, deadlineMs: 10_000 },
+        },
+      },
+      advanced.value.log.head.stateHash,
+    );
+    expect(
+      validateNextEntry(earlyTimeout, advanced.value.log, directPolicy(data, advanced.value)),
+    ).toMatchObject({ ok: false, error: { code: 'turn-timeout-anchor' } });
+    expect(data.verifySystem).not.toHaveBeenCalled();
     const replayed = replayCertifiedPrefix(
       data.entry,
       [...data.setupEntries, proof],

@@ -4,6 +4,7 @@ import { createBaseEngine, ENGINE_VERSION } from '@cp2p/engine';
 import type { GameConfig, Seat } from '@cp2p/engine';
 import { GENESIS_PREVIOUS_HASH, genesisId, signEntry, signGenesis } from '../genesis.js';
 import { PROTOCOL_VERSION } from '../types.js';
+import { DEFAULT_TAKEOVER_POLICY } from '../takeover-policy.js';
 import type { Genesis, GenesisBody, LogEntry } from '../types.js';
 
 export interface SimulationGenesisOptions {
@@ -134,6 +135,7 @@ export function createSimulationGenesis(options: SimulationGenesisOptions): Simu
       }),
     ),
     security: 'stub',
+    takeover: DEFAULT_TAKEOVER_POLICY,
     commitments: {},
     createdAt: 1_700_000_000_000 + gameIndex,
   };

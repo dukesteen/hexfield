@@ -41,11 +41,32 @@ function isAuditReference(reference: unknown): boolean {
 
 function isAuditReport(value: unknown): value is AuditReport {
   if (typeof value !== 'object' || value === null) return false;
+  const ok = Reflect.get(value, 'ok');
+  const complete = Reflect.get(value, 'complete');
+  const finalHiddenVictoryPoints = Reflect.get(value, 'finalHiddenVictoryPoints');
   const historyError = Reflect.get(value, 'historyError');
   const auditError = Reflect.get(value, 'auditError');
+  const validFinalScores =
+    finalHiddenVictoryPoints === null ||
+    (typeof finalHiddenVictoryPoints === 'object' &&
+      finalHiddenVictoryPoints !== null &&
+      !Array.isArray(finalHiddenVictoryPoints) &&
+      Object.entries(finalHiddenVictoryPoints).every(
+        ([seat, count]) =>
+          ['0', '1', '2', '3', '4', '5'].includes(seat) &&
+          Number.isSafeInteger(count) &&
+          Number(count) >= 0,
+      ));
+  const successHasScores =
+    ok === true &&
+    complete === true &&
+    finalHiddenVictoryPoints !== null &&
+    typeof finalHiddenVictoryPoints === 'object';
+  const failedAuditHidesScores =
+    (ok !== true || complete !== true) && finalHiddenVictoryPoints === null;
   return (
-    typeof Reflect.get(value, 'ok') === 'boolean' &&
-    typeof Reflect.get(value, 'complete') === 'boolean' &&
+    typeof ok === 'boolean' &&
+    typeof complete === 'boolean' &&
     Array.isArray(Reflect.get(value, 'missingSeats')) &&
     Array.isArray(Reflect.get(value, 'violations')) &&
     Array.isArray(Reflect.get(value, 'inputErrors')) &&
@@ -60,7 +81,9 @@ function isAuditReport(value: unknown): value is AuditReport {
       (typeof auditError === 'object' &&
         auditError !== null &&
         Number.isSafeInteger(Reflect.get(auditError, 'seq')) &&
-        typeof Reflect.get(auditError, 'code') === 'string'))
+        typeof Reflect.get(auditError, 'code') === 'string')) &&
+    validFinalScores &&
+    (successHasScores || failedAuditHidesScores)
   );
 }
 

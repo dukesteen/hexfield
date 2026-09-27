@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   RESOURCES,
@@ -104,6 +105,7 @@ function PlayerRail({
   activeSeat,
   receipts,
   compact,
+  connectionLabels,
   onOpenPlayer,
 }: {
   state: GameState;
@@ -111,6 +113,7 @@ function PlayerRail({
   activeSeat: Seat;
   receipts: readonly ProductionReceipt[];
   compact: boolean;
+  connectionLabels?: Partial<Record<Seat, string>>;
   onOpenPlayer: (seat: Seat, trigger: HTMLButtonElement) => void;
 }) {
   const { t } = useTranslation('game');
@@ -203,7 +206,9 @@ function PlayerRail({
                 ) : (
                   <>
                     {activeSeat === seatState.seat && <span>{t('game:actingNow')}</span>}
-                    <span className="connection-status">{t('game:localConnection')}</span>
+                    <span className="connection-status">
+                      {connectionLabels?.[seatState.seat] ?? t('game:localConnection')}
+                    </span>
                   </>
                 )}
               </div>
@@ -280,12 +285,14 @@ function PlayerDetails({
   presentation,
   receipt,
   activeSeat,
+  connectionLabels,
 }: {
   state: GameState;
   seat: Seat;
   presentation: GamePresentation;
   receipt: ProductionReceipt | undefined;
   activeSeat: Seat;
+  connectionLabels?: Partial<Record<Seat, string>>;
 }) {
   const { t } = useTranslation('game');
   const publicSeat = state.seats.find((item) => item.seat === seat);
@@ -349,7 +356,11 @@ function PlayerDetails({
       <h3>{t('game:cockpit.awards')}</h3>
       <p>{awards.length ? awards.join(' · ') : t('game:cockpit.noAwards')}</p>
       <h3>{t('game:cockpit.status')}</h3>
-      <p>{activeSeat === seat ? t('game:actingNow') : t('game:localConnection')}</p>
+      <p>
+        {activeSeat === seat
+          ? t('game:actingNow')
+          : (connectionLabels?.[seat] ?? t('game:localConnection'))}
+      </p>
       <h3>{t('game:recentGainsLabel')}</h3>
       <div className="player-details-gains" aria-live="polite">
         {gains.length
@@ -744,8 +755,13 @@ interface GameScreenProps {
   presentation: GamePresentation;
   saveStatus: SaveStatus;
   onLeave: () => void;
+  gameTitle?: string;
+  connectionLabels?: Partial<Record<Seat, string>>;
+  sessionNotice?: ReactNode;
+  resultNotice?: ReactNode;
+  menuActions?: ReactNode;
   devTools?: React.ReactNode;
-  onRematch: () => Promise<void>;
+  onRematch?: () => Promise<void>;
   onExportReplay: () => Promise<void>;
   onRendererReady?: (renderer: BoardRenderer) => void;
   onActionsChange?: (actions: ActionAvailability | null, revision: number) => void;
@@ -755,6 +771,11 @@ export function GameReadOnly({
   presentation,
   saveStatus,
   onLeave,
+  gameTitle,
+  connectionLabels,
+  sessionNotice,
+  resultNotice,
+  menuActions,
   devTools,
   onRematch,
   onExportReplay,
@@ -770,8 +791,13 @@ export function GameReadOnly({
       presentation={presentation}
       saveStatus={saveStatus}
       onLeave={onLeave}
+      {...(gameTitle !== undefined ? { gameTitle } : {})}
+      {...(connectionLabels !== undefined ? { connectionLabels } : {})}
+      {...(sessionNotice !== undefined ? { sessionNotice } : {})}
+      {...(resultNotice !== undefined ? { resultNotice } : {})}
+      {...(menuActions !== undefined ? { menuActions } : {})}
       {...(devTools ? { devTools } : {})}
-      onRematch={onRematch}
+      {...(onRematch ? { onRematch } : {})}
       onExportReplay={onExportReplay}
       {...(onRendererReady ? { onRendererReady } : {})}
       {...(onActionsChange ? { onActionsChange } : {})}
@@ -784,6 +810,11 @@ function LiveGame({
   presentation,
   saveStatus,
   onLeave,
+  gameTitle,
+  connectionLabels,
+  sessionNotice,
+  resultNotice,
+  menuActions,
   devTools,
   onRematch,
   onExportReplay,
@@ -881,7 +912,7 @@ function LiveGame({
           <span aria-hidden="true">☰</span>
         </summary>
         <div className="game-menu-panel">
-          <strong>{t('game:gameTitle')}</strong>
+          <strong>{gameTitle ?? t('game:gameTitle')}</strong>
           <p>{t('game:turnNumber', { number: state.turn.number })}</p>
           <p>
             {winner
@@ -896,6 +927,7 @@ function LiveGame({
                 : t('game:saveError')}
           </span>
           <TurnTimer />
+          {menuActions}
           <button className="button button-quiet" type="button" onClick={skip}>
             {t('game:skipAnimations')}
           </button>
@@ -958,12 +990,18 @@ function LiveGame({
           )}
         </section>
         <aside className="game-sidebar" aria-label={t('game:players')}>
+          {sessionNotice !== undefined && (
+            <div role="status" aria-live="polite">
+              {sessionNotice}
+            </div>
+          )}
           <PlayerRail
             state={state}
             presentation={presentation}
             activeSeat={actions.actorSeat}
             receipts={receipts}
             compact={compact}
+            {...(connectionLabels !== undefined ? { connectionLabels } : {})}
             onOpenPlayer={(seat, trigger) => openSheet({ kind: 'player', seat }, trigger)}
           />
           <details
@@ -1067,6 +1105,7 @@ function LiveGame({
                 presentation={presentation}
                 receipt={receipts.find((item) => item.seat === sheet.seat)}
                 activeSeat={actions.actorSeat}
+                {...(connectionLabels !== undefined ? { connectionLabels } : {})}
               />
             )}
           </CockpitSheet>
@@ -1077,8 +1116,9 @@ function LiveGame({
           events={events}
           presentation={presentation}
           onViewBoard={viewBoard}
-          onRematch={onRematch}
+          {...(onRematch ? { onRematch } : {})}
           onExportReplay={onExportReplay}
+          {...(resultNotice !== undefined ? { resultNotice } : {})}
         />
       )}
       {waitingSeat !== null && revealedSeat === null && !winner && (

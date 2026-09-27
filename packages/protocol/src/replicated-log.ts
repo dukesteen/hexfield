@@ -49,6 +49,8 @@ import type { LogContext, ValidatedEntry } from './log.js';
 import { decodeProtocolMessage, encodeProtocolMessage } from './messages.js';
 import type { ProtocolMessage } from './messages.js';
 import { recoveryChangeSchema } from './recovery-membership.js';
+import { previewRecoveryAuthorization } from './recovery-facade.js';
+import type { RecoveryApprovalCandidate, RecoveryApprovalPreview } from './recovery-facade.js';
 import type { RecoveryChange } from './recovery-types.js';
 import { RecoveryParticipant } from './recovery-participant.js';
 import type {
@@ -80,6 +82,13 @@ import {
 } from './replay.js';
 import type { ReplayPolicy } from './replay.js';
 import type { PeerId, ProtocolClock, Transport, Unsubscribe } from './transport.js';
+import {
+  LocalTimerObserver,
+  TURN_TIMEOUT_PROTOCOL,
+  verifyTimeoutEvidence,
+} from './turn-timeout.js';
+import type { TimerAnchor } from './turn-timeout.js';
+import type { SessionTimer } from './session-types.js';
 import type {
   EntryPayload,
   ExcludeProposerControl,
@@ -170,6 +179,8 @@ export interface ReplicatedLogOptions {
   ) => Result<readonly IndexedHandProof[]>;
   /** Verified remote trade proofs are delivered to the pre-admission coordinator. */
   onTradeProofResponse?: (response: SignedTradeProofResponse) => void;
+  /** A validated current-parent authorization is available for a user decision. */
+  onRecoveryCandidate?: (preview: RecoveryApprovalPreview | null) => void;
   /** Private recovery inputs; the replica supplies its own journal and current signing key. */
   recoveryParticipant?: Pick<
     RecoveryParticipantOptions,
@@ -223,6 +234,15 @@ export class ReplicatedLog {
   private readonly timers = new Map<string, unknown>();
   private readonly pending: PendingCommand[] = [];
   private recoveryIntent: PendingRecovery | null = null;
+  private pendingRecoverySubmit: PendingRecovery | null = null;
+  private recoveryCandidateForApproval: RecoveryApprovalCandidate | null = null;
+  private recoveryApproval: {
+    parentHash: string;
+    statementHash: string;
+    generationHash: string;
+  } | null = null;
+  private recoveryApprovalRevision = 0;
+  private pendingRecoveryProposal: SignedProposal | null = null;
   private readonly commands: SignedCommand[] = [];
   private readonly rejectedCommands = new Set<string>();
   private readonly rejectedProposals = new Set<string>();
@@ -274,6 +294,13 @@ export class ReplicatedLog {
   private preparedDeckPrefix: string | null = null;
   private sentDeckPrefix: string | null = null;
   private readonly sentBeaconOperations = new Set<string>();
+  private readonly timerObserver: LocalTimerObserver;
+  private timedVoteRetry: {
+    parentHash: string;
+    anchorHash: string;
+    proposal: SignedProposal | null;
+    handle: unknown;
+  } | null = null;
   private accusation: ExcludeProposerControl | null = null;
   private readonly cheatCandidates = new Map<string, CheatClaim>();
   private readonly unsubscribers: Unsubscribe[] = [];
@@ -303,6 +330,7 @@ export class ReplicatedLog {
     this.deckKeys = local.keys;
     this.deckSetupPasses = local.passes;
     this.createDeckSource = options.createDeckSource;
+    this.timerObserver = new LocalTimerObserver(options.clock, context.log.timers ?? []);
     if (options.beaconSource) this.beaconSources.set(options.seat, options.beaconSource);
     for (const [seat, source] of options.beaconSources ?? []) this.beaconSources.set(seat, source);
     const identity = identityFromSecret(this.secretKey);
@@ -422,6 +450,10 @@ export class ReplicatedLog {
     return copyCanonical(this.entries);
   }
 
+  getTimers(): readonly SessionTimer[] {
+    return this.context.log.genesis.security === 'verified' ? this.timerObserver.timers() : [];
+  }
+
   /** Replays the certified parent before retrying a retained, authenticated certificate. */
   repair(snapshot?: unknown): Promise<Result<void>> {
     return this.enqueue(() => this.repairNow(snapshot));
@@ -461,6 +493,9 @@ export class ReplicatedLog {
     this.activeController().dispose();
     this.controller = null;
     this.context = fresh;
+    this.timerObserver.advance(fresh.log.timers ?? []);
+    this.clearTimedVoteRetry();
+    this.clearRecoveryCandidate();
     this.rejectedCommands.clear();
     this.rejectedProposals.clear();
     this.rejectedDeckContributions.clear();
@@ -517,11 +552,29 @@ export class ReplicatedLog {
 
   /** Gossip one parent-bound membership change and resolve when it is certified. */
   submitRecovery(value: unknown): Promise<Result<void>> {
+    return this.enqueueRecovery(value, false);
+  }
+
+  /** One serialized explicit local approval and submission after durable key preparation. */
+  approveAndSubmitRecovery(value: unknown): Promise<Result<void>> {
+    return this.enqueueRecovery(value, true);
+  }
+
+  private enqueueRecovery(value: unknown, approveLocally: boolean): Promise<Result<void>> {
+    const approvalRevision = this.recoveryApprovalRevision;
     return new Promise((resolve) => {
       let accepted = false;
       void this.enqueue(async () => {
         const parsed = parseCanonical(value, recoveryChangeSchema);
         if (!parsed.ok) return parsed;
+        const hash = toHex(hashValue(parsed.value));
+        const conflicting = this.recoveryIntent;
+        if (conflicting && (conflicting.hash !== hash || conflicting.resolve))
+          return failure('recovery-intent-pending', 'A recovery change is already pending');
+        if (approveLocally) {
+          const approved = await this.approveRecoveryInQueue(parsed.value, approvalRevision);
+          if (!approved.ok) return approved;
+        }
         const state = this.activeController().snapshot();
         if (!state.ok) return state;
         if (state.value.halted)
@@ -531,7 +584,16 @@ export class ReplicatedLog {
           change: parsed.value,
         });
         if (!checked.ok) return checked;
-        const hash = toHex(hashValue(parsed.value));
+        if (parsed.value.kind === 'recovery-authorize') {
+          const preview = this.previewRecoveryAuthorization(parsed.value);
+          if (!preview.ok) return preview;
+          this.rememberRecoveryCandidate(preview.value);
+          if (!this.hasRecoveryApproval(preview.value.preview))
+            return failure(
+              'recovery-approval-required',
+              'Approve this exact takeover before submitting',
+            );
+        }
         const existing = this.recoveryIntent;
         if (existing) {
           if (existing.hash !== hash || existing.resolve)
@@ -566,6 +628,97 @@ export class ReplicatedLog {
     });
   }
 
+  previewRecoveryAuthorization(value: unknown): Result<RecoveryApprovalCandidate> {
+    return previewRecoveryAuthorization(value, this.context.log, this.options.seat);
+  }
+
+  getRecoveryCandidate(): RecoveryApprovalCandidate | null {
+    return this.recoveryCandidateForApproval
+      ? copyCanonical(this.recoveryCandidateForApproval)
+      : null;
+  }
+
+  canStartRecoveryRequest(): Promise<Result<void>> {
+    return this.enqueue(async () =>
+      this.recoveryIntent || this.pendingRecoverySubmit || this.recoveryApproval
+        ? failure('recovery-intent-pending', 'Another takeover request is already pending')
+        : success(undefined),
+    );
+  }
+
+  approveRecoveryAuthorization(value: unknown): Promise<Result<RecoveryApprovalPreview>> {
+    const revision = this.recoveryApprovalRevision;
+    return this.enqueue(() => this.approveRecoveryInQueue(value, revision));
+  }
+
+  private async approveRecoveryInQueue(
+    value: unknown,
+    revision: number,
+  ): Promise<Result<RecoveryApprovalPreview>> {
+    if (revision !== this.recoveryApprovalRevision)
+      return failure('recovery-approval-cleared', 'The local takeover approval was cleared');
+    const candidate = this.previewRecoveryAuthorization(value);
+    if (!candidate.ok) return candidate;
+    if (!candidate.value.preview.canApprove)
+      return failure('recovery-approval-seat', 'This voter cannot approve its own takeover');
+    const candidateHash = toHex(hashValue(candidate.value.change));
+    if (this.recoveryIntent && this.recoveryIntent.hash !== candidateHash)
+      return failure('recovery-intent-pending', 'Another takeover request is already pending');
+    if (this.pendingRecoverySubmit && this.pendingRecoverySubmit.hash !== candidateHash)
+      return failure('recovery-intent-pending', 'Another takeover request is already pending');
+    const generation = this.context.log.authority?.controllers.find(
+      (item) => item.seat === this.options.seat,
+    )?.activatedAt;
+    if (!generation)
+      return failure('recovery-approval-authority', 'Local controller generation is unavailable');
+    this.recoveryApproval = {
+      parentHash: candidate.value.preview.parent.hash,
+      statementHash: candidate.value.preview.statementHash,
+      generationHash: generation.hash,
+    };
+    this.recoveryCandidateForApproval = null;
+    this.rememberRecoveryCandidate(candidate.value);
+    const submitted = this.pendingRecoverySubmit;
+    if (submitted) {
+      this.pendingRecoverySubmit = null;
+      const submittedChange = parseCanonical(submitted.change, recoveryChangeSchema);
+      if (
+        submittedChange.ok &&
+        submittedChange.value.kind === 'recovery-authorize' &&
+        submitted.parentHash === candidate.value.preview.parent.hash &&
+        toHex(hashValue(submittedChange.value.statement)) ===
+          candidate.value.preview.statementHash &&
+        !this.recoveryIntent
+      ) {
+        this.recoveryIntent = submitted;
+        const sent = this.broadcast({ t: 'RECOVERY_SUBMIT', change: submitted.change });
+        if (!sent.ok) this.status({ kind: 'pending', commandHash: submitted.hash });
+      }
+    }
+    if (this.pendingRecoveryProposal) {
+      const proposal = this.pendingRecoveryProposal;
+      this.pendingRecoveryProposal = null;
+      const payload = proposal.body.entry.payload;
+      const change =
+        payload.kind === 'membership' ? parseCanonical(payload.change, recoveryChangeSchema) : null;
+      if (
+        change?.ok &&
+        change.value.kind === 'recovery-authorize' &&
+        toHex(hashValue(change.value.statement)) === candidate.value.preview.statementHash
+      ) {
+        const admitted = await this.activeController().dispatch({ kind: 'proposal', proposal });
+        if (!admitted.ok && admitted.error.code !== 'recovery-approval-required') return admitted;
+      }
+    }
+    const offered = await this.offerAvailableInput();
+    return offered.ok ? success(candidate.value.preview) : offered;
+  }
+
+  clearRecoveryApproval(): void {
+    this.recoveryApprovalRevision++;
+    this.recoveryApproval = null;
+  }
+
   /** Waits until all previously queued messages/transitions have settled. */
   async flush(): Promise<void> {
     let current: Promise<unknown>;
@@ -588,6 +741,7 @@ export class ReplicatedLog {
     this.cheatCandidates.clear();
     this.recoveryParticipant?.dispose();
     this.recoveryParticipant = null;
+    this.clearRecoveryCandidate();
     this.masterRevealCoordinator?.dispose();
     this.masterRevealCoordinator = null;
     this.acceptedMasterSeats.clear();
@@ -606,6 +760,7 @@ export class ReplicatedLog {
     for (const handle of this.timers.values()) this.options.clock.clearTimeout(handle);
     this.timers.clear();
     if (this.pulseTimer !== null) this.options.clock.clearTimeout(this.pulseTimer);
+    this.clearTimedVoteRetry();
     for (const pending of this.pending.splice(0)) {
       this.options.clock.clearTimeout(pending.pendingTimer);
       pending.resolve(
@@ -789,6 +944,11 @@ export class ReplicatedLog {
       secretKey: this.secretKey,
       store: journalSafetyStore(this.options.journal, this.context.log.head.seq + 1),
       onEffects: (effects) => this.handleEffects(effects),
+      admitLocalValue: (proposal) => this.canVoteForRecoveryProposal(proposal),
+      beforePersist: (previous, next) => {
+        const timed = this.admitTimedVotes(previous, next);
+        return timed.ok ? this.admitRecoveryVotes(previous, next) : timed;
+      },
     });
     if (!controller.ok) return controller;
     this.controller = controller.value;
@@ -858,8 +1018,12 @@ export class ReplicatedLog {
       }),
     );
     this.unsubscribers.push(
-      this.options.transport.onPeerChange((_peer, online) => {
-        if (online) void this.enqueue(() => this.pulse());
+      this.options.transport.onPeerChange((peer, online) => {
+        if (!online) return;
+        void this.enqueue(async () => {
+          this.cancelRecoveryForReturningPeer(peer);
+          return this.pulse();
+        });
       }),
     );
   }
@@ -1430,6 +1594,21 @@ export class ReplicatedLog {
           return failure('recovery-proof-invalid', 'Recovery change failed at certified parent', {
             cause: checked.error.code,
           });
+        if (change.kind === 'recovery-authorize') {
+          const preview = this.previewRecoveryAuthorization(change);
+          if (!preview.ok) return preview;
+          if (
+            this.recoveryCandidateForApproval &&
+            this.recoveryCandidateForApproval.preview.statementHash !==
+              preview.value.preview.statementHash
+          )
+            return success(undefined);
+          this.rememberRecoveryCandidate(preview.value);
+          if (!this.hasRecoveryApproval(preview.value.preview)) {
+            this.pendingRecoverySubmit ??= { hash, change, parentHash: parent.hash };
+            return success(undefined);
+          }
+        }
         this.recoveryIntent = { hash, change, parentHash: parent.hash };
         return this.offerAvailableInput();
       }
@@ -1501,6 +1680,32 @@ export class ReplicatedLog {
         });
         if (!received.ok) {
           if (
+            received.error.code === 'recovery-approval-required' &&
+            entry.payload.kind === 'membership'
+          ) {
+            const preview = this.previewRecoveryAuthorization(entry.payload.change);
+            if (!preview.ok) return preview;
+            if (
+              this.recoveryCandidateForApproval &&
+              this.recoveryCandidateForApproval.preview.statementHash !==
+                preview.value.preview.statementHash
+            )
+              return success(undefined);
+            this.rememberRecoveryCandidate(preview.value);
+            this.pendingRecoveryProposal = copyCanonical(message.proposal);
+            return success(undefined);
+          }
+          if (
+            received.error.code === 'turn-timeout-early' &&
+            entry.payload.kind === 'system' &&
+            entry.payload.input.type === 'TIMEOUT'
+          ) {
+            const pending = this.timedVoteRetry;
+            if (pending?.parentHash === entryHash(this.context.log.head))
+              pending.proposal = copyCanonical(message.proposal);
+            return success(undefined);
+          }
+          if (
             received.error.details?.proposalEntryRejected === true &&
             !FATAL_CONTROLLER_ERRORS.has(received.error.code) &&
             entry.seq === this.context.log.head.seq + 1 &&
@@ -1534,6 +1739,10 @@ export class ReplicatedLog {
           } catch {
             // An invalid proposer index is not accusation evidence.
           }
+        }
+        if (received.ok && entry.payload.kind === 'membership') {
+          const preview = this.previewRecoveryAuthorization(entry.payload.change);
+          if (preview.ok) this.rememberRecoveryCandidate(preview.value);
         }
         return received;
       }
@@ -2002,11 +2211,248 @@ export class ReplicatedLog {
     if (this.cryptoPending()) return null;
     try {
       const candidate = this.options.systemInput?.(detachedContext(this.context));
-      return candidate ? { kind: 'system', ...candidate } : null;
+      if (candidate) {
+        if (
+          this.context.log.genesis.security === 'verified' &&
+          candidate.input.type === 'TIMEOUT'
+        ) {
+          const anchor = verifyTimeoutEvidence(
+            candidate.input,
+            candidate.evidence,
+            this.context.log.timers,
+          );
+          if (
+            !anchor.ok ||
+            (this.timerObserver.elapsed(anchor.value) ?? 0) < anchor.value.deadlineMs
+          )
+            return null;
+        }
+        return { kind: 'system', ...candidate };
+      }
+      if (this.context.log.genesis.security !== 'verified') return null;
+      for (const expired of this.timerObserver.timers()) {
+        if (expired.remainingMs !== 0 || expired.phase === 'discard') continue;
+        const anchor = this.context.log.timers?.find((item) => item.key === expired.key);
+        if (!anchor) continue;
+        const input: SystemInput = {
+          kind: 'system',
+          type: 'TIMEOUT',
+          seat: anchor.seat,
+          phase: anchor.phase,
+        };
+        if (!this.options.engine.validate(this.context.log.state, input).ok) continue;
+        return {
+          kind: 'system',
+          input,
+          evidence: {
+            kind: 'proof',
+            protocol: TURN_TIMEOUT_PROTOCOL,
+            data: { pendingSince: anchor.pendingSince.seq, deadlineMs: anchor.deadlineMs },
+          },
+        };
+      }
+      return null;
     } catch {
       this.status({ kind: 'rejected', code: 'system-input' });
       return null;
     }
+  }
+
+  /** Refuse local votes that would precede this peer's observed timer window. */
+  private admitTimedVotes(previous: ConsensusState, next: ConsensusState): Result<void> {
+    if (this.context.log.genesis.security !== 'verified') return success(undefined);
+    const prior = new Set(
+      previous.votes
+        .filter((vote) => vote.body.seat === this.options.seat)
+        .map((vote) => `${vote.body.term}/${vote.body.phase}`),
+    );
+    const proposals = [
+      ...next.proposals,
+      ...next.hints.flatMap((hint) => (hint.kind === 'proposal' ? [hint.proposal] : [])),
+      ...(next.locked ? [next.locked.proposal] : []),
+      ...(next.valid ? [next.valid.proposal] : []),
+    ];
+    for (const vote of next.votes) {
+      if (
+        vote.body.seat !== this.options.seat ||
+        prior.has(`${vote.body.term}/${vote.body.phase}`) ||
+        vote.body.valueHash === null
+      )
+        continue;
+      const proposal = proposals.find((item) => entryHash(item.body.entry) === vote.body.valueHash);
+      if (!proposal)
+        return failure('turn-timeout-proposal', 'Local vote has no retained proposal value');
+      const payload = proposal.body.entry.payload;
+      if (payload.kind !== 'system' || payload.input.type !== 'TIMEOUT') continue;
+      const anchor = verifyTimeoutEvidence(
+        payload.input,
+        payload.evidence,
+        this.context.log.timers,
+      );
+      if (!anchor.ok) return anchor;
+      const admitted = this.timerObserver.canVote(anchor.value);
+      if (!admitted.ok) {
+        this.scheduleTimedVoteRetry(anchor.value);
+        return admitted;
+      }
+    }
+    return success(undefined);
+  }
+
+  private admitRecoveryVotes(previous: ConsensusState, next: ConsensusState): Result<void> {
+    if (this.context.log.genesis.security !== 'verified') return success(undefined);
+    const prior = new Set(
+      previous.votes
+        .filter((vote) => vote.body.seat === this.options.seat)
+        .map((vote) => toHex(hashValue(vote.body))),
+    );
+    const proposals = [
+      ...next.proposals,
+      ...next.hints.flatMap((hint) => (hint.kind === 'proposal' ? [hint.proposal] : [])),
+      ...(next.locked ? [next.locked.proposal] : []),
+      ...(next.valid ? [next.valid.proposal] : []),
+    ];
+    for (const vote of next.votes) {
+      if (
+        vote.body.seat !== this.options.seat ||
+        prior.has(toHex(hashValue(vote.body))) ||
+        vote.body.valueHash === null
+      )
+        continue;
+      const proposal = proposals.find((item) => entryHash(item.body.entry) === vote.body.valueHash);
+      if (!proposal)
+        return failure('recovery-approval-proposal', 'Local vote has no retained proposal value');
+      const payload = proposal.body.entry.payload;
+      if (payload.kind !== 'membership') continue;
+      const change = parseCanonical(payload.change, recoveryChangeSchema);
+      if (!change.ok) return change;
+      if (change.value.kind !== 'recovery-authorize') continue;
+      const preview = this.previewRecoveryAuthorization(change.value);
+      if (!preview.ok) return preview;
+      if (!this.hasRecoveryApproval(preview.value.preview))
+        return failure('recovery-approval-required', 'Approve this exact takeover before voting');
+    }
+    return success(undefined);
+  }
+
+  private canVoteForRecoveryProposal(proposal: SignedProposal): boolean {
+    if (this.context.log.genesis.security !== 'verified') return true;
+    const payload = proposal.body.entry.payload;
+    if (payload.kind !== 'membership') return true;
+    const change = parseCanonical(payload.change, recoveryChangeSchema);
+    if (!change.ok) return false;
+    if (change.value.kind !== 'recovery-authorize') return true;
+    const preview = this.previewRecoveryAuthorization(change.value);
+    return preview.ok && this.hasRecoveryApproval(preview.value.preview);
+  }
+
+  private hasRecoveryApproval(preview: RecoveryApprovalPreview): boolean {
+    const generation = this.context.log.authority?.controllers.find(
+      (item) => item.seat === this.options.seat,
+    )?.activatedAt;
+    return !!(
+      preview.canApprove &&
+      generation &&
+      this.recoveryApproval?.parentHash === preview.parent.hash &&
+      this.recoveryApproval.statementHash === preview.statementHash &&
+      this.recoveryApproval.generationHash === generation.hash
+    );
+  }
+
+  private rememberRecoveryCandidate(candidate: RecoveryApprovalCandidate): void {
+    if (this.recoveryCandidateForApproval) return;
+    this.recoveryCandidateForApproval = copyCanonical(candidate);
+    try {
+      this.options.onRecoveryCandidate?.(copyCanonical(candidate.preview));
+    } catch {
+      this.status({ kind: 'rejected', code: 'recovery-candidate-observer' });
+    }
+  }
+
+  private clearRecoveryCandidate(): void {
+    this.recoveryApprovalRevision++;
+    const hadCandidate = this.recoveryCandidateForApproval !== null;
+    this.recoveryCandidateForApproval = null;
+    this.recoveryApproval = null;
+    this.pendingRecoveryProposal = null;
+    this.pendingRecoverySubmit = null;
+    if (!hadCandidate) return;
+    try {
+      this.options.onRecoveryCandidate?.(null);
+    } catch {
+      this.status({ kind: 'rejected', code: 'recovery-candidate-observer' });
+    }
+  }
+
+  private cancelRecoveryForReturningPeer(peer: PeerId): void {
+    const active = this.context.log.authority?.controllers.find(
+      (item) => item.kind === 'human' && item.status === 'active' && item.publicKey === peer,
+    );
+    if (!active) return;
+    const pending = this.recoveryIntent;
+    const pendingSeat =
+      pending?.change.kind === 'recovery-authorize'
+        ? pending.change.statement.departedSeat
+        : undefined;
+    const candidateSeat = this.recoveryCandidateForApproval?.preview.departedSeat;
+    const submitSeat =
+      this.pendingRecoverySubmit?.change.kind === 'recovery-authorize'
+        ? this.pendingRecoverySubmit.change.statement.departedSeat
+        : undefined;
+    if (![pendingSeat, candidateSeat, submitSeat].includes(active.seat)) return;
+    this.clearRecoveryCandidate();
+    if (pendingSeat !== active.seat || !pending) return;
+    this.recoveryIntent = null;
+    if (pending.pendingTimer !== undefined) this.options.clock.clearTimeout(pending.pendingTimer);
+    pending.resolve?.(failure('recovery-target-returned', 'The original voter has returned'));
+  }
+
+  private scheduleTimedVoteRetry(anchor: TimerAnchor): void {
+    const delay = this.timerObserver.untilVote(anchor);
+    if (delay === null || delay === 0 || this.disposed) return;
+    const parentHash = entryHash(this.context.log.head);
+    const anchorHash = anchor.pendingSince.hash;
+    if (
+      this.timedVoteRetry?.parentHash === parentHash &&
+      this.timedVoteRetry.anchorHash === anchorHash
+    )
+      return;
+    this.clearTimedVoteRetry();
+    const retry = {
+      parentHash,
+      anchorHash,
+      proposal: null as SignedProposal | null,
+      handle: null as unknown,
+    };
+    retry.handle = this.options.clock.setTimeout(
+      () => {
+        if (this.timedVoteRetry !== retry) return;
+        this.timedVoteRetry = null;
+        void this.enqueue(async () => {
+          if (this.disposed || entryHash(this.context.log.head) !== parentHash)
+            return success(undefined);
+          if (retry.proposal) {
+            const admitted = await this.activeController().dispatch({
+              kind: 'proposal',
+              proposal: retry.proposal,
+            });
+            if (!admitted.ok) {
+              if (admitted.error.code === 'turn-timeout-early' && this.timedVoteRetry)
+                this.timedVoteRetry.proposal = retry.proposal;
+              else return admitted;
+            }
+          }
+          return this.offerAvailableInput(true);
+        });
+      },
+      Math.max(1, Math.ceil(delay)),
+    );
+    this.timedVoteRetry = retry;
+  }
+
+  private clearTimedVoteRetry(): void {
+    if (this.timedVoteRetry) this.options.clock.clearTimeout(this.timedVoteRetry.handle);
+    this.timedVoteRetry = null;
   }
 
   private beaconCandidate() {
@@ -2789,6 +3235,9 @@ export class ReplicatedLog {
       throw new Error('Certified journal commit lost its safety CAS');
     this.activeController().dispose();
     this.context = next;
+    this.timerObserver.advance(next.log.timers ?? []);
+    this.clearTimedVoteRetry();
+    this.clearRecoveryCandidate();
     this.pendingTradeProofs.clear();
     this.tradeProofResponses.clear();
     this.tradeProofRequestsByFinalizer.clear();
@@ -3365,6 +3814,14 @@ function detachedContext(context: ProposalContext): ProposalContext {
       ...(context.log.recovery ? { recovery: copyCanonical(context.log.recovery) } : {}),
       lastNonces: new Map(context.log.lastNonces),
       crypto: copyCanonical(context.log.crypto),
+      ...(context.log.timers
+        ? {
+            timers: context.log.timers.map((timer) => ({
+              ...timer,
+              pendingSince: { ...timer.pendingSince },
+            })),
+          }
+        : {}),
     },
     membership: {
       ...context.membership,

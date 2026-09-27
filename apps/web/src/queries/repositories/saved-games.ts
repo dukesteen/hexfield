@@ -1,3 +1,4 @@
+import { LOBBY_COLOURS } from '@cp2p/protocol';
 import * as v from 'valibot';
 import { browserStorage, type KeyValueStorage } from './storage';
 
@@ -6,7 +7,7 @@ const SAVE_PREFIX = 'hexfield:save:v1:';
 const playerSchema = v.strictObject({
   seat: v.picklist([0, 1, 2, 3]),
   name: v.pipe(v.string(), v.minLength(1), v.maxLength(40)),
-  color: v.picklist(['blue', 'orange', 'green', 'magenta']),
+  color: v.picklist(LOBBY_COLOURS),
   shape: v.picklist(['circle', 'triangle', 'square', 'diamond']),
 });
 

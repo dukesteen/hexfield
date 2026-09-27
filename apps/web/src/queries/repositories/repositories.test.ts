@@ -1,7 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, expect, test } from 'vitest';
 import { LocalSavedGameRepository, SaveConflictError, type SaveInput } from './saved-games';
-import { LocalSettingsRepository } from './settings';
 import { MemoryStorage } from './storage';
 
 const presentation = {
@@ -21,23 +20,29 @@ function snapshot(revision: number): SaveInput {
   };
 }
 
-describe('settings repository', () => {
-  test('retains concurrent patches and validates stored data', async () => {
-    const storage = new MemoryStorage();
-    const repository = new LocalSettingsRepository(() => storage);
-    const [theme, privacy] = await Promise.all([
-      repository.update({ theme: 'dark' }),
-      repository.update({ hotseatCover: false }),
-    ]);
-    expect(theme.theme).toBe('dark');
-    expect(privacy.hotseatCover).toBe(false);
-    expect(await repository.get()).toMatchObject({ theme: 'dark', hotseatCover: false });
-    storage.setItem('hexfield:settings:v1', '{"v":1,"theme":"bad"}');
-    await expect(repository.get()).rejects.toThrow(/Invalid/);
-  });
-});
-
 describe('saved game repository', () => {
+  test('stores the full six-color shared player presentation palette', async () => {
+    const storage = new MemoryStorage();
+    const repository = new LocalSavedGameRepository(
+      () => storage,
+      async (_name, work) => work(),
+    );
+    const extendedPresentation: SaveInput['presentation'] = {
+      players: [
+        { seat: 0, name: 'Ada', color: 'red', shape: 'circle' },
+        { seat: 1, name: 'Lin', color: 'yellow', shape: 'triangle' },
+      ],
+      botDelayMs: 0,
+    };
+    const saved = await repository.save({
+      ...snapshot(1),
+      presentation: extendedPresentation,
+    });
+
+    expect((await repository.get(saved.id))?.presentation).toEqual(extendedPresentation);
+    repository.dispose();
+  });
+
   test('lists, loads and rejects stale or divergent revisions', async () => {
     const storage = new MemoryStorage();
     const repository = new LocalSavedGameRepository(

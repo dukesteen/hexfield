@@ -15,6 +15,7 @@ import {
   validateGenesisEntry,
 } from './genesis.js';
 import { deckPassHash, validateDeckGenesisCommitments } from './deck-genesis.js';
+import { validateGenesisOnlineStart } from './genesis-online-start.js';
 import { createGenesisDeckFixture } from './testing/deck-fixture.js';
 import { fixtureAt, protocolFixture } from './testing/fixtures.js';
 import { createSimulationGenesis } from './testing/simulation-genesis.js';
@@ -54,6 +55,46 @@ function verifiedFixture() {
 }
 
 describe('genesis validation', () => {
+  test('refuses verified consent for unsupported versions even with matching deck proofs', () => {
+    const fixture = verifiedFixture();
+    const unsupported = createGenesisDeckFixture(
+      {
+        ...genesisBody(fixture.genesis),
+        protocolVersion: 1,
+        commitments: {},
+      },
+      fixture.identities,
+    );
+    expect(
+      signVerifiedGenesis(unsupported.body, unsupported.transcripts, 0, fixture.human.secretKey),
+    ).toMatchObject({ ok: false, error: { code: 'version-mismatch' } });
+    const oldBody: Record<string, unknown> = { ...fixture.ceremony.body, protocolVersion: 2 };
+    delete oldBody.takeover;
+    expect(
+      signVerifiedGenesis(
+        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Verify rejection of a saved pre-v3 body missing required fields.
+        oldBody as unknown as GenesisBody,
+        fixture.ceremony.transcripts,
+        0,
+        fixture.human.secretKey,
+      ),
+    ).toMatchObject({ ok: false, error: { code: 'version-mismatch' } });
+    const oldGenesis = { ...fixture.genesis, protocolVersion: 2 } as Record<string, unknown>;
+    delete oldGenesis.takeover;
+    expect(validateGenesis(oldGenesis, fixture.engine)).toMatchObject({
+      ok: false,
+      error: { code: 'version-mismatch' },
+    });
+    expect(
+      signVerifiedGenesis(
+        { ...fixture.ceremony.body, engineVersion: 'unsupported' },
+        fixture.ceremony.transcripts,
+        0,
+        fixture.human.secretKey,
+      ),
+    ).toMatchObject({ ok: false, error: { code: 'version-mismatch' } });
+  }, 15_000);
+
   test('derives one deterministic game and verifies every human plus the initial entry', () => {
     const { engine, body, genesis, state, entry } = protocolFixture();
     expect(genesisId(body)).toBe(genesis.gameId);
@@ -84,6 +125,20 @@ describe('genesis validation', () => {
     expect(errorCode(validateGenesis(changed, engine, { allowStub: true }))).toBe(
       'genesis-signatures',
     );
+    const changedTakeover: GenesisBody = {
+      ...body,
+      takeover: { mode: 'auto', afterSeconds: 30 },
+    };
+    expect(genesisDigest(changedTakeover)).not.toBe(genesisDigest(body));
+    expect(
+      errorCode(
+        validateGenesis(
+          { ...genesis, takeover: changedTakeover.takeover, gameId: genesisId(changedTakeover) },
+          engine,
+          { allowStub: true },
+        ),
+      ),
+    ).toBe('genesis-signatures');
 
     // The log's genesis hash commits to the full digest but excludes signature encodings.
     const changedEntry = { ...entry, payload: { kind: 'genesis' as const, genesis: changed } };
@@ -363,7 +418,7 @@ describe('genesis validation', () => {
   }, 15_000);
 
   test('human consent signs only a fully replayed fixed-deck ceremony', () => {
-    const { ceremony, human, bot, genesis } = verifiedFixture();
+    const { ceremony, human, bot, genesis, engine } = verifiedFixture();
     const signed = signVerifiedGenesis(ceremony.body, ceremony.transcripts, 0, human.secretKey);
     expect(signed).toMatchObject({ ok: true, value: genesis.signatures[0] });
     expect(errorCode(signVerifiedGenesis(ceremony.body, [], 0, human.secretKey))).toBe(
@@ -424,6 +479,51 @@ describe('genesis validation', () => {
     expect(
       errorCode(signVerifiedGenesis(ceremony.body, changedTranscripts, 0, human.secretKey)),
     ).toBe('deck-ceremony-hash');
+
+    const missingCommitments = { ...ceremony.body.commitments };
+    delete missingCommitments.onlineStart;
+    const missingOnlineStart: GenesisBody = {
+      ...ceremony.body,
+      commitments: missingCommitments,
+    };
+    expect(
+      errorCode(signVerifiedGenesis(missingOnlineStart, ceremony.transcripts, 0, human.secretKey)),
+    ).toBe('online-start');
+    let policyCalled = false;
+    const resignedGenesis: Genesis = {
+      ...missingOnlineStart,
+      gameId: genesisId(missingOnlineStart),
+      signatures: [signGenesis(missingOnlineStart, 0, human.secretKey)],
+    };
+    expect(
+      errorCode(
+        validateGenesis(resignedGenesis, engine, {
+          verifyCommitments: () => {
+            policyCalled = true;
+            return success(undefined);
+          },
+        }),
+      ),
+    ).toBe('online-start');
+    expect(policyCalled).toBe(false);
+    expect(
+      errorCode(
+        signVerifiedGenesis(
+          { ...ceremony.body, genesisSeed: toBase64Url(new Uint8Array(32).fill(93)) },
+          ceremony.transcripts,
+          0,
+          human.secretKey,
+        ),
+      ),
+    ).toBe('online-start-seed');
+    expect(
+      errorCode(
+        validateGenesisOnlineStart({
+          ...ceremony.body,
+          takeover: { mode: 'auto', afterSeconds: 30 },
+        }),
+      ),
+    ).toBe('online-start-roster');
   }, 15_000);
 
   test('rejects malformed canonical data and unsupported or invalid genesis state', () => {

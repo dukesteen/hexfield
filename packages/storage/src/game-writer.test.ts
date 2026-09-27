@@ -40,6 +40,22 @@ afterEach(() => {
 });
 
 describe('browser game writer lease', () => {
+  test.each(['-', '_'])(
+    'coordinates base64url game and voter identifiers beginning with %s',
+    async (prefix) => {
+      const locks = new TestLockManager();
+      const gameId = prefix + 'a'.repeat(21);
+      const voter = prefix + 'b'.repeat(42);
+      const lease = await acquireGameWriterLease(gameId, voter, { lockManager: locks });
+      expect(lease).not.toBeNull();
+      expect(await acquireGameWriterLease(gameId, voter, { lockManager: locks })).toBeNull();
+      await lease?.close();
+      const reopened = await acquireGameWriterLease(gameId, voter, { lockManager: locks });
+      expect(reopened).not.toBeNull();
+      await reopened?.close();
+    },
+  );
+
   test('claims only the same game and voter identity, without waiting or stealing', async () => {
     const locks = new TestLockManager();
     const first = await acquireGameWriterLease('game-1', 'seat-2-key', { lockManager: locks });

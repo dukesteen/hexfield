@@ -171,9 +171,31 @@ describe('signed lobby controller', () => {
     value(room.third.request({ kind: 'setReady', ready: true }));
     room.flush();
     expect(room.host.state()?.seats.every((seat) => seat.ready)).toBe(true);
-    value(room.host.configure({ ...room.config, options: { base: { vpTarget: 4 } } }));
+    expect(room.host.state()?.seedMode).toEqual({ kind: 'joint' });
+    expect(room.host.state()?.takeover).toEqual({ mode: 'vote', afterSeconds: 120 });
+    const fixedSeed = { kind: 'fixed' as const, seed: toBase64Url(new Uint8Array(32).fill(4)) };
+    const takeover = { mode: 'auto' as const, afterSeconds: 30 };
+    value(
+      room.host.configure(
+        { ...room.config, options: { base: { vpTarget: 4 } } },
+        fixedSeed,
+        takeover,
+      ),
+    );
     room.flush();
     expect(room.second.state()?.seats.every((seat) => !seat.ready)).toBe(true);
+    expect(room.second.state()?.seedMode).toEqual(fixedSeed);
+    expect(room.second.state()?.takeover).toEqual(takeover);
+    expect(room.third.configure(room.config, { kind: 'joint' }).ok).toBe(false);
+    expect(room.host.configure(room.config, { kind: 'fixed', seed: 'not-a-seed' }).ok).toBe(false);
+    expect(
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Exercise malformed input from an untyped caller.
+      room.host.configure(room.config, undefined, { mode: 'auto', afterSeconds: 'never' } as never)
+        .ok,
+    ).toBe(false);
+    expect(room.host.configure(room.config, undefined, { mode: 'vote', afterSeconds: 14 }).ok).toBe(
+      false,
+    );
     expect(room.host.start(toBase64Url(new Uint8Array(32).fill(7))).ok).toBe(false);
     value(room.host.request({ kind: 'setReady', ready: true }));
     room.flush();
@@ -212,6 +234,18 @@ describe('signed lobby controller', () => {
     expect(verified.acks[0]).not.toBe(agreement.acks[0]);
     const changedState = { ...agreement.state, name: 'Different room' };
     expect(verifyLobbyFreezeAgreement({ ...agreement, state: changedState }).ok).toBe(false);
+    expect(
+      verifyLobbyFreezeAgreement({
+        ...agreement,
+        state: { ...agreement.state, seedMode: { kind: 'joint' } },
+      }).ok,
+    ).toBe(false);
+    expect(
+      verifyLobbyFreezeAgreement({
+        ...agreement,
+        state: { ...agreement.state, takeover: { mode: 'vote', afterSeconds: 30 } },
+      }).ok,
+    ).toBe(false);
     expect(
       verifyLobbyFreezeAgreement({ ...agreement, state: { ...agreement.state, status: 'started' } })
         .ok,
@@ -273,6 +307,8 @@ describe('signed lobby controller', () => {
       nonce: 1,
       peer: required(room.peers[1]),
       config: room.config,
+      seedMode: required(room.host.state()).seedMode,
+      takeover: required(room.host.state()).takeover,
     };
     room.net.transport(required(room.peers[1])).send(
       required(room.peers[0]),
@@ -338,6 +374,21 @@ describe('signed lobby controller', () => {
       kind: 'protocol-version',
       hostVersion: PROTOCOL_VERSION + 1,
     });
+    const oldState = { ...state } as Record<string, unknown>;
+    delete oldState.takeover;
+    const oldBody = { protocolVersion: 2, engineVersion: ENGINE_VERSION, state: oldState };
+    room.net.transport(required(room.peers[0])).send(
+      required(room.peers[1]),
+      canonicalEncode({
+        t: 'LOBBY_STATE',
+        snapshot: {
+          body: oldBody,
+          sig: signObject('lobby-state', oldBody, required(room.keys[0])),
+        },
+      }),
+    );
+    room.flush();
+    expect(room.second.getDiagnostic()).toEqual({ kind: 'protocol-version', hostVersion: 2 });
   });
 
   test('requires every bot host to occupy a human seat before signing a freeze', () => {

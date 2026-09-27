@@ -31,6 +31,20 @@ function makeAdapter(port: number, seed: number) {
 }
 
 describe('localhost signaling host', () => {
+  test('exposes health status to browser diagnostics on another origin', async () => {
+    const server = await startSignalingServer(0);
+    try {
+      const response = await fetch(`http://127.0.0.1:${server.port}/healthz`, {
+        headers: { Origin: 'https://game.example.test' },
+      });
+      expect(response.status).toBe(200);
+      expect(response.headers.get('access-control-allow-origin')).toBe('*');
+      expect(await response.text()).toBe('ok');
+    } finally {
+      await server.close();
+    }
+  });
+
   test('joins two authenticated ws clients and relays a signed envelope', async () => {
     const server = await startSignalingServer(0);
     const a = makeAdapter(server.port, 1);

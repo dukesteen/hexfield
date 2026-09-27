@@ -10,22 +10,16 @@ import type {
 } from '@cp2p/engine';
 import type { ProtocolClock, Unsubscribe } from './transport.js';
 import type { SessionAuditState } from './session-audit-types.js';
+import type { RecoveryApprovalCandidate, RecoveryApprovalPreview } from './recovery-facade.js';
+import type { SessionTimer } from './session-timer-types.js';
+
+export type { SessionTimer } from './session-timer-types.js';
 
 export type SessionStatus =
   | { kind: 'running' }
   | { kind: 'complete' }
   | { kind: 'error'; message: string }
   | { kind: 'disposed' };
-
-/** expiresAt uses the injected scheduler's Unix-millisecond clock; null means paused. */
-export interface SessionTimer {
-  key: string;
-  seat: Seat;
-  phase: string;
-  remainingMs: number;
-  expiresAt: number | null;
-  paused: boolean;
-}
 
 export interface SessionUpdate {
   revision: number;
@@ -35,6 +29,8 @@ export interface SessionUpdate {
   timers: readonly SessionTimer[];
   status: SessionStatus;
   audit?: SessionAuditState;
+  /** A validated, current-parent takeover proposal awaiting this voter's choice. */
+  recoveryCandidate?: RecoveryApprovalCandidate | null;
 }
 
 export interface SubmitOptions {
@@ -53,6 +49,10 @@ export interface GameSession<Save = unknown> {
   getEvents(): readonly GameEvent[];
   getAudit?(): SessionAuditState;
   retryAudit?(): boolean;
+  getRecoveryCandidate?(): RecoveryApprovalCandidate | null;
+  approveRecoveryAuthorization?(change: unknown): Promise<Result<RecoveryApprovalPreview>>;
+  clearRecoveryApproval?(): void;
+  requestTakeover?(departedSeat: Seat, botLevel: 'easy' | 'medium' | 'hard'): Promise<Result<void>>;
   controllableSeats(): Seat[];
   submit(seat: Seat, command: CommandShape, options?: SubmitOptions): Promise<Result<void>>;
   /** Cancel preparation that has not entered consensus; accepted commands cannot be cancelled. */
@@ -63,5 +63,5 @@ export interface GameSession<Save = unknown> {
   dispose(): void;
 }
 
-/** Scheduler contract uses Unix milliseconds to match session timer expiry. */
+/** Scheduler readings are local and must never be compared across peers. */
 export interface SessionScheduler extends ProtocolClock {}

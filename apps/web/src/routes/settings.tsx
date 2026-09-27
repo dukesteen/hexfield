@@ -3,6 +3,7 @@ import { useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSettings, useUpdateSettings } from '../queries/hooks';
 import type { Settings } from '../queries/repositories/settings';
+import { NetworkSettingsForm } from '../features/online/NetworkSettingsForm';
 
 export const Route = createFileRoute('/settings')({ component: SettingsPage });
 
@@ -23,6 +24,7 @@ function SettingsPage() {
         {settings.isPending && <p role="status">{t('game:loadingGame')}</p>}
         {settings.isError && <p role="alert">{t('lobby:settingsLoadError')}</p>}
         {settings.data && <SettingsForm initial={settings.data} />}
+        {settings.data && <NetworkSettingsForm initial={settings.data.network} />}
       </div>
     </main>
   );

@@ -4,6 +4,21 @@ Check each item only after its acceptance evidence is recorded. Stage 01 uses th
 
 Milestones A and B are complete. The [release and milestone audit](verification/stage05/pages-release.md) links the acceptance evidence and the published local-play app.
 
+The immediate release goal is now the [first multiplayer beta](multiplayer-beta.md),
+following the user's 2026-09-27 scope reduction. It prioritizes manual-code play
+with friends without operating a server, same-browser reconnect, and completed
+games with audits. Seat transfer, recovered-human return, takeover UI and other
+large features are deferred. Signaling deployment is optional. Full M-C and M-D
+remain incomplete; the smaller beta does not change their acceptance claims.
+
+The [current beta browser check](verification/stage09/beta-browser-check.md)
+passes four-human manual-code startup, all setup placements, a shared roll, a
+player trade and same-browser reconnect in the Pages production build. A
+[separate v3 ten-point game](verification/stage09/beta-v3-game-check.md) finished
+after 332 moves with matching successful audits from both peers. These checks
+are local; the multiplayer beta is not yet published, and external-network
+connectivity remains unverified.
+
 ## 01 — Repository Foundation
 
 Source: [01-repo-foundation.md](01-repo-foundation.md)
@@ -183,7 +198,25 @@ cross-device acceptance remain open.
 
 Source: [08-webrtc-networking.md](08-webrtc-networking.md)
 
-The [latest Chrome check](verification/stage08/chromium-replacement-smoke.md) formed all six native links, transferred a 1 MiB pattern and reconnected a lost pair after the authenticated replacement fixes. It used four same-origin frames, not four independent browsers. The [transport review response](verification/stage08/mesh-final-review-response.md) records protection against old signed offers replacing a live connection, deferred offer handling and 45 focused passing tests. The signaling service and client adapter pass 21 focused tests. The [signaling review response](verification/stage08/server-review-response.md) records half-open socket replacement, heartbeats, paced messages and full forwarded-frame limits. Manual/relay signaling, deployment, lobby setup and browser recovery are still unfinished.
+The [latest Chrome check](verification/stage08/chromium-replacement-smoke.md) formed all six native links, transferred a 1 MiB pattern and reconnected a lost pair after the authenticated replacement fixes. It used four same-origin frames, not four independent browsers. The [transport review response](verification/stage08/mesh-final-review-response.md) records protection against old signed offers replacing a live connection, deferred offer handling and 45 focused passing tests. The signaling service and client adapter pass 21 focused tests. The [signaling review response](verification/stage08/server-review-response.md) records half-open socket replacement, heartbeats, paced messages and full forwarded-frame limits.
+
+Manual signed codes, QR generation/scanning, in-mesh signaling relay, configurable
+ICE settings and connection diagnostics are implemented locally. The
+[two-origin browser check](verification/stage09/manual-browser-check.md) reaches
+the board and certifies human/bot moves without a signaling server, then restores
+the guest's saved board and private hand after closing its tab. Its manual
+reconnect follow-up exposed a stale bootstrap bridge. After the lifecycle fix,
+the surviving host accepts a replacement connection and both peers certify the
+next turn handoff. The reconnected game then finishes at its configured
+three-point target, with both browsers independently reporting a passed game
+audit. This uses two humans and two hosted bots on the same laptop and network;
+it does not establish the four-browser or external-network criteria.
+Thirty focused manual/transport/room tests pass.
+The [TURN guide](ops/turn.md) covers deployment and credential configuration;
+temporary credentials now refresh while a room remains open. Fourteen focused
+RTC-configuration, credential-query and room-registry tests pass, including
+expiry, retry and disposal. App typechecking and scoped lint pass. Cross-browser,
+phone-camera, cross-network and deployment acceptance remain open.
 
 - [ ] 4 browsers (including Firefox and WebKit) form a full mesh via the signaling server and via manual codes plus mesh relay.
 - [ ] Offer codes fit a QR code and scan successfully on a phone camera (manual test, recorded in STATUS.md).
@@ -200,8 +233,11 @@ Chrome with three clients using real signaling and WebRTC. Guests take seats,
 the host adds a bot, and all humans sign the same configuration and ceremony
 nonce. A native startup race found during the check is fixed with bounded signed
 snapshot retries. Device identities and fresh per-game key material have durable
-storage helpers. This is a connection/controller checkpoint; the production
-create/join screens, ceremony and game-session handoff remain unfinished.
+storage helpers. The create/join/lobby screens are now implemented, with a
+[native host UI check](verification/stage09/lobby-ui-check.md) covering room
+creation, bot seating, readiness, settings, invitation copying and leave
+confirmation. The adapter between authenticated device connections and fresh
+game identities passes focused tests. The home screen still exposes only local play.
 
 A detached `verifyLobbyFreezeAgreement` now verifies the exact ready-state
 snapshot and one signed ACK from each seated human before ceremony restoration;
@@ -209,6 +245,51 @@ its focused lobby checks pass. The [online-start plan](verification/stage09/onli
 records the remaining board-seed transcript, device-to-game key bindings, durable
 ceremony phases and game-session handoff. It is a design contract, not acceptance
 evidence.
+
+The next local checkpoint implements the protocol-v2 board-seed ceremony,
+certified device-to-game identity bindings, durable browser startup and the
+online game route. A real two-human/two-bot trace finishes setup and certifies
+its first board move with isolated private hands. Four-human setup also passes
+with real escrow and deck proofs. Focused retry, close-during-startup and
+storage-binding tests pass. The [startup foundation review disposition](verification/stage09/startup-foundation-review-disposition.md)
+records the reproduced nonce-reuse and wrong-device-routing fixes. Native
+browser lobby-to-board and close/reopen/rejoin verification now pass in the
+[manual-code check](verification/stage09/manual-browser-check.md), including
+a completed shortened game and passed audits on both peers. The resume
+follow-up review also has its correction record below. A current-v2
+four-human recovered-game acceptance run remains open.
+These are local implementation results, not a published P2P release or Stage 09
+acceptance.
+
+The focused online-ceremony file now passes all 11 cases (71.2 seconds), covering
+one through four humans, exact share/ACK replay after restart, bad-share
+retirement, objective invalid-envelope evidence, and post-consent disclosure
+before and after a ready result. Three browser-startup lifecycle traces pass
+(18.4 seconds), including lease contention, closing while acquiring a lease,
+and stopping both opening and active games after the coordinator reports a
+verified disclosure. The latter tests inject the authenticated coordinator event
+at the browser lifecycle boundary; the ceremony tests establish its cryptographic
+verification. No browser gameplay acceptance is implied by these Node tests.
+
+The [implementation review disposition](verification/stage09/online-start-implementation-review-disposition.md)
+records fixes for valid ceremony lock IDs, invalid-envelope handling after
+consent, unauthorized packet senders and interrupted retirement. Focused
+regressions pass. The [saved-game resume checkpoint](verification/stage10/browser-resume-checkpoint.md)
+adds the browser resume route and saved-game list, restores existing credentials
+and the certified journal, and drains replayed disputes before activation.
+Eleven runtime tests pass in 59.69 seconds. Combined type, lint, dependency and
+production-build checks pass. The resume follow-up review is complete; its
+[correction record](verification/stage10/browser-resume-review-disposition.md)
+tracks the journal identifier and route lifecycle fixes, catalogue resilience,
+safe first-open recovery and dispute-evidence work. Native Chromium
+close/reopen restoration now passes; measured refresh performance remains
+pending.
+
+The online lobby exposes every base-module option, all four turn-timer values,
+the agreed random or fixed board seed, and bot-host assignment. Guests can inspect
+the signed settings before readying. Three configuration-form tests and five
+signed-lobby tests pass, including ready resets and seed binding. The actual
+browser form check is still pending.
 
 - [ ] Create → invite → join → start → finish → audit ✓ works over the signaling server and over manual codes.
 - [ ] Mixed humans and bots work. The bot host can be any peer.
@@ -230,6 +311,24 @@ bot. A delayed departed client catches up and retires its former key. Native
 Chrome checks cover the atomic journal and cross-worker writer lease. Browser
 session integration, complete recovered games and audit acceptance remain open.
 No Stage 10 acceptance item is checked by these implementation checkpoints.
+
+The [saved-game resume checkpoint](verification/stage10/browser-resume-checkpoint.md)
+verifies restart after a certified move using two human sessions and hosted
+bots. Browser refresh, external-network reconnection, transferable saves and
+seat-transfer controls still require integration and acceptance checks.
+
+Opening an online game now requests persistent browser storage once. The settings
+repository claims a durable marker under its cross-tab lock before the request;
+denied, unsupported and failed requests do not stop gameplay. Sixteen focused
+storage/query tests and the online game-screen lifecycle tests pass.
+
+The [takeover review](verification/stage10/takeover-policy-review-disposition.md)
+identified voting-progress, competing-request and returning-target defects in
+the local approval facade. Corrections are in progress. The signed takeover
+policy and certified online/offline entries are not implemented yet. The
+[seat-transfer design](verification/stage10/seat-transfer-design.md) defines the
+remaining fresh-key transfer and recovered-human return work; it is not
+implementation or acceptance evidence.
 
 - [ ] All chaos additions pass on 500 seeds each.
 - [ ] Refresh-resume takes < 3 s to be back in play on a typical laptop (measured).

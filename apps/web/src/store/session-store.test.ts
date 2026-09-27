@@ -3,6 +3,7 @@ import { baseModule, success, type GameConfig, type Seat } from '@cp2p/engine';
 import { standardFixedBoard } from '@cp2p/maps';
 import type { EdgeId, VertexId } from '@cp2p/engine/geometry';
 import { LocalSession, type GameSession, type SessionUpdate } from '../session';
+import type { AuditReport, SessionAuditState } from '@cp2p/protocol';
 import { attachSession, pauseForExternalConflict, useSessionStore } from './session-store';
 
 const live: LocalSession[] = [];
@@ -30,7 +31,11 @@ function sessionFixture(seats: Seat[] = [0, 1]) {
   return made.value;
 }
 
-function fakeView(source: LocalSession, humans: Seat[]) {
+function fakeView(
+  source: LocalSession,
+  humans: Seat[],
+  options: { mode?: GameSession['mode']; privateSeats?: Seat[] } = {},
+) {
   const listeners = new Set<(update: SessionUpdate) => void>();
   const pauses: boolean[] = [];
   const update: SessionUpdate = {
@@ -42,9 +47,10 @@ function fakeView(source: LocalSession, humans: Seat[]) {
     status: { kind: 'running' },
   };
   const session: GameSession = {
-    mode: 'local',
+    mode: options.mode ?? 'local',
     getState: () => update.state,
-    getPrivate: (seat) => source.getPrivate(seat),
+    getPrivate: (seat) =>
+      options.privateSeats && !options.privateSeats.includes(seat) ? null : source.getPrivate(seat),
     getPending: () => update.pending,
     getTimers: () => update.timers,
     getLegalCommands: (seat) => source.getLegalCommands(seat),
@@ -83,12 +89,62 @@ function fakeView(source: LocalSession, humans: Seat[]) {
       listeners.forEach((listener) => listener(update));
     },
     emit: () => listeners.forEach((listener) => listener(update)),
+    setResult: () => {
+      update.state = {
+        ...update.state,
+        result: { winner: update.state.turn.activeSeat, reason: 'test', atTurn: 1 },
+      };
+      listeners.forEach((listener) => listener(update));
+    },
+    setAudit: (audit: SessionAuditState) => {
+      update.audit = audit;
+      listeners.forEach((listener) => listener(update));
+    },
     advanceRevision: () => {
       update.revision += 1;
       listeners.forEach((listener) => listener(update));
     },
   };
 }
+
+test('peer final hidden scores stay private until a complete successful audit', () => {
+  const source = sessionFixture();
+  const fixture = fakeView(source, [0], { mode: 'p2p', privateSeats: [0] });
+  const detach = attachSession('audited-final-score', fixture.session);
+  try {
+    fixture.setResult();
+    expect(useSessionStore.getState().finalHiddenVictoryPoints[1]).toBeNull();
+
+    const failed: AuditReport = {
+      ok: false,
+      complete: true,
+      missingSeats: [],
+      violations: [{ seq: 1, seat: null, kind: 'audit-failed', detail: 'audit-failed' }],
+      inputErrors: [],
+      cheatFindings: [],
+      terminal: { seq: 1, hash: 'terminal' },
+      finalHead: { seq: 1, hash: 'head' },
+      historyError: null,
+      auditError: null,
+      finalHiddenVictoryPoints: null,
+    };
+    fixture.setAudit({ kind: 'complete', report: failed });
+    expect(useSessionStore.getState().finalHiddenVictoryPoints[1]).toBeNull();
+
+    fixture.setAudit({
+      kind: 'complete',
+      report: {
+        ...failed,
+        ok: true,
+        violations: [],
+        finalHiddenVictoryPoints: { 0: 1, 1: 2 },
+      },
+    });
+    expect(useSessionStore.getState().finalHiddenVictoryPoints).toMatchObject({ 0: 0, 1: 2 });
+  } finally {
+    detach();
+  }
+});
 
 test('a cross-tab pause survives later session updates', () => {
   const source = sessionFixture();

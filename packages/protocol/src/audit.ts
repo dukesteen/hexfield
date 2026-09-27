@@ -141,6 +141,7 @@ export function auditCertifiedGame(input: AuditCertifiedGameInput): AuditReport 
   let finalHead: AuditEntryRef | null = null;
   let historyError: { code: string } | null = null;
   let auditError: AuditReport['auditError'] = null;
+  let finalHiddenVictoryPoints: AuditReport['finalHiddenVictoryPoints'] = null;
   let cheatFindings: AuditReport['cheatFindings'] = [];
   let missingSeats: Seat[] = [];
   let complete = false;
@@ -160,6 +161,7 @@ export function auditCertifiedGame(input: AuditCertifiedGameInput): AuditReport 
     finalHead,
     historyError,
     auditError,
+    finalHiddenVictoryPoints,
   });
   const processingFailure = (seq: number, code: string): AuditReport => {
     auditError = { seq, code };
@@ -345,6 +347,17 @@ export function auditCertifiedGame(input: AuditCertifiedGameInput): AuditReport 
       violations.push(issue(seq, null, crossCheck.error.code));
     } else {
       crossCheck.value.dispose();
+      const counts: Partial<Record<Seat, number>> = {};
+      for (const seat of genesis.config.seats) {
+        const privateState = game.privateView(seat);
+        const publicSeat = game.state.seats.find((item) => item.seat === seat);
+        if (!privateState || !publicSeat)
+          return processingFailure(context.log.head.seq, 'audit-final-private-state');
+        counts[seat] = publicSeat.cardSlots.filter(
+          (slot) => !slot.revealed && privateState.slots[slot.slotId] === 'victoryPoint',
+        ).length;
+      }
+      finalHiddenVictoryPoints = counts;
     }
     complete = true;
     return report();

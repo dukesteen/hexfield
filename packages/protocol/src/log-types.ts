@@ -5,6 +5,7 @@ import type { CryptoContext } from './crypto-context.js';
 import type { PeerId } from './transport.js';
 import type { SeatAuthorities } from './authority-types.js';
 import type { RecoveryState } from './recovery-types.js';
+import type { TimerAnchor } from './turn-timeout.js';
 import type {
   ExcludeProposerControl,
   Genesis,
@@ -23,6 +24,8 @@ export interface LogContext {
   /** Replayed controller authority. Legacy epoch-zero fixtures may omit it. */
   authority?: SeatAuthorities;
   recovery?: RecoveryState;
+  /** Certified pending intervals, independent of each peer's observed elapsed time. */
+  timers?: readonly TimerAnchor[];
 }
 
 export interface EntryPolicy {

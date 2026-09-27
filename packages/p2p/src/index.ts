@@ -11,6 +11,26 @@ export type {
 } from './signaling-envelope.js';
 export { InProcessSignaling } from './in-process-signaling.js';
 export { WebRtcTransport } from './web-rtc-transport.js';
-export type { WebRtcTransportOptions } from './web-rtc-transport.js';
+export type {
+  PeerCandidateRoute,
+  WebRtcPeerStats,
+  WebRtcTransportOptions,
+} from './web-rtc-transport.js';
+export { MeshRelaySignalingAdapter } from './mesh-relay-signaling.js';
 export { ServerSignalingAdapter } from './server-signaling.js';
 export type { ServerSignalingOptions } from './server-signaling.js';
+export { aggregateManualSdp } from './manual-sdp.js';
+export {
+  encodeManualCode,
+  decodeManualCode,
+  manualOfferHash,
+  readManualLobbyOffer,
+} from './manual-code.js';
+export type { ManualCodeBody, SignedManualCode } from './manual-code.js';
+export { ManualBridge, createManualOffer, answerManualOffer } from './manual-bootstrap.js';
+export type {
+  ManualBootstrapOptions,
+  ManualOfferOptions,
+  ManualOffer,
+  ManualAnswer,
+} from './manual-bootstrap.js';

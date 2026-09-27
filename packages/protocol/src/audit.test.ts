@@ -1,4 +1,5 @@
 import { SCALAR_ORDER, scalarToBytes } from '@cp2p/crypto';
+import { RandomBot, createBotRng } from '../../bots/src/index.js';
 import type { Engine } from '@cp2p/engine';
 import { beforeAll, describe, expect, test } from 'vitest';
 import { auditCertifiedGame } from './audit.js';
@@ -8,8 +9,15 @@ type Fixture = Awaited<ReturnType<typeof createTerminalAuditFixture>>;
 let fixture: Fixture;
 
 beforeAll(async () => {
+  const bot = new RandomBot();
+  const rng = createBotRng(new Uint8Array(32).fill(59));
   fixture = await createTerminalAuditFixture({
     yieldTask: () => new Promise<void>((resolve) => setImmediate(resolve)),
+    chooseCommand(host, pending) {
+      const priv = host.getPrivate(pending.seat);
+      if (!priv) throw new Error('Audit bot lacks its private seat');
+      return bot.decide({ state: host.getState(), priv, seat: pending.seat }, pending, rng);
+    },
   });
 }, 120_000);
 
@@ -27,6 +35,14 @@ describe('certified end-game audit', () => {
     });
     expect(report.terminal?.seq).toBeGreaterThan(0);
     expect(report.finalHead?.seq).toBeGreaterThanOrEqual(report.terminal?.seq ?? 0);
+    expect(
+      Object.keys(report.finalHiddenVictoryPoints ?? {})
+        .map(Number)
+        .toSorted((left, right) => left - right),
+    ).toEqual([0, 1, 2, 3]);
+    expect(Object.values(report.finalHiddenVictoryPoints ?? {}).every(Number.isSafeInteger)).toBe(
+      true,
+    );
     expect(fixture.entries[(report.terminal?.seq ?? 0) - 1]?.entry.payload.kind).toBe('command');
   }, 30_000);
 
@@ -35,6 +51,7 @@ describe('certified end-game audit', () => {
     expect(report.ok).toBe(false);
     expect(report.complete).toBe(false);
     expect(report.terminal).toBeNull();
+    expect(report.finalHiddenVictoryPoints).toBeNull();
   });
 
   test('keeps missing and bad supplied masters out of owner violations', () => {
@@ -44,6 +61,7 @@ describe('certified end-game audit', () => {
       complete: false,
       missingSeats: [0],
       violations: [],
+      finalHiddenVictoryPoints: null,
     });
 
     const wrong = auditCertifiedGame({
@@ -78,6 +96,7 @@ describe('certified end-game audit', () => {
     const report = auditCertifiedGame({ ...fixture, engine: altered });
     expect(report.ok).toBe(false);
     expect(report.complete).toBe(true);
+    expect(report.finalHiddenVictoryPoints).toBeNull();
     expect(report.violations).toContainEqual({
       seq: report.terminal?.seq,
       seat: null,

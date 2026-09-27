@@ -29,6 +29,11 @@ export default defineConfig({
     host: '127.0.0.1',
     port: 5187,
     strictPort: true,
-    watch: { ignored: ['**/playwright-report/**', '**/test-results/**'] },
+    watch: {
+      ignored: ['**/playwright-report/**', '**/test-results/**'],
+      ...(process.env.CHOKIDAR_USEPOLLING === 'true'
+        ? { usePolling: true, useFsEvents: false, interval: 250 }
+        : {}),
+    },
   },
 });

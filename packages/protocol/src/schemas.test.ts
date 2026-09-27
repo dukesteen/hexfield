@@ -37,6 +37,7 @@ const body: GenesisBody = {
   genesisSeed: toBase64Url(seed),
   ceremonyNonce: toBase64Url(new Uint8Array(32).fill(7)),
   security: 'stub' as const,
+  takeover: { mode: 'vote', afterSeconds: 120 },
   commitments: {},
   createdAt: 1_700_000_000_000,
 };

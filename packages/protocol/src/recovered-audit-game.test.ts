@@ -245,6 +245,12 @@ test('a recovered game reaches a real result and audits the original master from
     );
     replacement.secretKey.fill(0);
     const host = required(sessions.get(1));
+    const approvals = await Promise.all(
+      ([1, 2, 3] as const).map((seat) =>
+        required(sessions.get(seat)).approveRecoveryAuthorization(authorization),
+      ),
+    );
+    expect(approvals.every((result) => result.ok)).toBe(true);
     const submitted = host.submitRecovery(authorization);
     await pumpUntil(() =>
       [...sessions.values()].every((session) =>

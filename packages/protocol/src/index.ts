@@ -32,6 +32,16 @@ export {
   validateGenesisEntry,
 } from './genesis.js';
 export type { GenesisPolicy, ValidatedGenesis } from './genesis.js';
+export { validateGenesisOnlineStart } from './genesis-online-start.js';
+export type { VerifiedOnlineStart } from './genesis-online-start.js';
+export type { GenesisSeedMode } from './genesis-seed.js';
+export { OnlineCeremony } from './online-ceremony.js';
+export type {
+  OnlineCeremonyOptions,
+  OnlineCeremonyProgress,
+  OnlineCeremonyResult,
+  OnlineCeremonyPhase,
+} from './online-ceremony.js';
 export { signCommand, stubEvidence, validateNextEntry, validateSignedCommand } from './log.js';
 export type { EntryPolicy, LogContext, ValidatedEntry } from './log.js';
 export { validateExcludeProposerControl, validateObjectiveAccusation } from './control.js';
@@ -52,7 +62,7 @@ export type {
 } from './proposal.js';
 export { advanceContext } from './proposal.js';
 export { certifiedEntrySchema } from './proposal.js';
-export { logEntrySchema } from './schemas.js';
+export { genesisSchema, logEntrySchema } from './schemas.js';
 export { MemorySafetyStore } from './safety-store.js';
 export type { SafetyStore, StoredSafety } from './safety-store.js';
 export { MemoryProtocolJournal, journalSafetyStore } from './journal.js';
@@ -85,8 +95,12 @@ export type {
   SubmitOptions,
 } from './session-types.js';
 export { phaseIdentity, timerKey } from './session-timing.js';
+export { TURN_TIMEOUT_PROTOCOL } from './turn-timeout.js';
+export type { TimerAnchor } from './turn-timeout.js';
 export type { PeerId, ProtocolClock, Transport, Unsubscribe } from './transport.js';
 export { PROTOCOL_VERSION } from './types.js';
+export { DEFAULT_TAKEOVER_POLICY, takeoverPolicySchema } from './takeover-policy.js';
+export type { TakeoverPolicy } from './takeover-policy.js';
 export { LobbyController, verifyLobbyFreezeAgreement } from './lobby.js';
 export type { LobbyControllerOptions, HostLobbyOptions, JoinLobbyOptions } from './lobby.js';
 export { LOBBY_COLOURS } from './lobby-types.js';
@@ -100,6 +114,18 @@ export type {
   LobbySeat,
   LobbyState,
 } from './lobby-types.js';
+export {
+  ONLINE_SEAT_BINDING_DOMAIN,
+  ONLINE_SEAT_BINDING_PROTOCOL,
+  signGameSeatBinding,
+  verifyGameSeatBindings,
+} from './online-bindings.js';
+export type {
+  GameSeatBindingBody,
+  SignedGameSeatBinding,
+  SignGameSeatBindingInput,
+  VerifiedGameSeatBindings,
+} from './online-bindings.js';
 export { EscrowCeremony } from './escrow-ceremony.js';
 export type { CeremonySend, EscrowCeremonyStore } from './escrow-ceremony.js';
 export type { EscrowManifestApproval } from './escrow-lifecycle.js';
@@ -207,7 +233,12 @@ export type {
   RecoveryState,
 } from './recovery-types.js';
 export { recoveryCheckDigest } from './recovery-membership.js';
-export { prepareRecoveryReadiness, loadActivatedRecoveryKeys } from './recovery-readiness.js';
+export {
+  prepareRecoveryReadiness,
+  loadPreparedRecoveryReadiness,
+  loadActivatedRecoveryKeys,
+} from './recovery-readiness.js';
+export type { RecoveryApprovalCandidate, RecoveryApprovalPreview } from './recovery-facade.js';
 export type {
   ActivatedRecoveryKeySet,
   RecoveryReadinessReplacement,

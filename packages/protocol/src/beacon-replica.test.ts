@@ -1,6 +1,6 @@
 import { canonicalEncode, fromBase64Url, hashValue, toBase64Url, toHex } from '@cp2p/codec';
 import { createHashChain, signObject } from '@cp2p/crypto';
-import { failure, success } from '@cp2p/engine';
+import { BASE_VERSION, failure, success } from '@cp2p/engine';
 import type { Result } from '@cp2p/engine';
 import { describe, expect, test, vi } from 'vitest';
 import {
@@ -28,7 +28,7 @@ import { signCommand } from './log.js';
 import { decodeProtocolMessage, encodeProtocolMessage } from './messages.js';
 import type { ProtocolMessage } from './messages.js';
 import { ReplicatedLog } from './replicated-log.js';
-import { proposerFor } from './proposal.js';
+import { proposerFor, signProposal } from './proposal.js';
 import type { ReplicatedLogOptions, ReplicatedLogStatus } from './replicated-log.js';
 import { randomDerivations } from './random-derivations.js';
 import { replayCertifiedPrefix, snapshotFromContext } from './replay.js';
@@ -39,6 +39,7 @@ import { createSimulationGenesis } from './testing/simulation-genesis.js';
 import type { VirtualClock } from './testing/virtual-clock.js';
 import type { PeerId, Transport } from './transport.js';
 import type { Genesis, GenesisBody } from './types.js';
+import { TURN_TIMEOUT_PROTOCOL } from './turn-timeout.js';
 
 function value<T>(result: Result<T>): T {
   if (!result.ok) throw new Error(`${result.error.code}: ${result.error.message}`);
@@ -71,8 +72,30 @@ function policyFor(): ReplayPolicy {
   };
 }
 
-function verifiedFixture(humanCount = 2, chainLength = 2) {
-  const simulation = createSimulationGenesis({ seed: 91, humanCount });
+function verifiedFixture(humanCount = 2, chainLength = 2, turnTimerSec?: number) {
+  const simulation = createSimulationGenesis({
+    seed: 91,
+    humanCount,
+    ...(turnTimerSec
+      ? {
+          config: {
+            modules: [{ id: 'base', version: BASE_VERSION }],
+            seats: [0, 1, 2, 3],
+            options: {
+              base: {
+                mapLayout: 'random',
+                turnTimer: {
+                  preRollSec: turnTimerSec,
+                  mainSec: turnTimerSec,
+                  discardSec: turnTimerSec,
+                  robberSec: turnTimerSec,
+                },
+              },
+            },
+          },
+        }
+      : {}),
+  });
   const humans = simulation.genesis.seats.filter((seat) => seat.kind === 'human');
   const chains = humans.map((_, index) =>
     createHashChain(new Uint8Array(32).fill(index + 29), chainLength),
@@ -323,6 +346,166 @@ async function playSetupThroughRoll(
 }
 
 describe('verified beacon contribution replication', () => {
+  test('early signed timeout waits for each verified peer, including a restored peer', async () => {
+    const fixture = verifiedFixture(2, 2, 1);
+    const peers = fixture.humans.map(
+      (seat) => required(fixture.simulation.identities.get(seat.seat)).peerId,
+    );
+    const network = createMemnet({ peers });
+    const sent: ProtocolMessage[][] = [[], []];
+    const transports = peers.map((peer, index) =>
+      observe(network.transport(peer), required(sent[index])),
+    );
+    const journals = [new MemoryProtocolJournal(), new MemoryProtocolJournal()];
+    const stores = [new MemoryBeaconContributionStore(), new MemoryBeaconContributionStore()];
+    const options = [0, 1].map((position) =>
+      optionsFor(
+        fixture,
+        position,
+        required(transports[position]),
+        network.clock,
+        required(journals[position]),
+        required(stores[position]),
+      ),
+    );
+    const first = value(await ReplicatedLog.create(required(options[0])));
+    await settle([first], network.clock);
+    const second = value(await ReplicatedLog.create(required(options[1])));
+    const replicas = [first, second];
+    deliverFirstProposal(required(peers[0]), required(transports[1]), required(sent[0]));
+    await settle(replicas, network.clock);
+
+    let ready = false;
+    for (let step = 0; step < 20; step += 1) {
+      const context = first.getContext();
+      if (context.log.state.turn.phase.at(-1)?.id === 'preRoll') {
+        ready = true;
+        break;
+      }
+      const pending = fixture.simulation.engine
+        .getPending(context.log.state)
+        .find((item) => item.kind === 'player');
+      if (!pending || pending.kind !== 'player') throw new Error('Expected a legal setup command');
+      const command = fixture.simulation.engine.getLegalCommands(context.log.state, pending.seat)
+        .commands[0];
+      if (!command) throw new Error('No legal setup command');
+      const signed = signCommand(
+        {
+          gameId: context.log.genesis.gameId,
+          genesisDigest: context.membership.genesisDigest,
+          seat: pending.seat,
+          nonce: (context.log.lastNonces.get(pending.seat) ?? 0) + 1,
+          headSeq: context.log.head.seq,
+          headHash: entryHash(context.log.head),
+          command,
+        },
+        required(fixture.simulation.identities.get(pending.seat)).secretKey,
+      );
+      let submitted: Result<void> | null = null;
+      void first.submit(signed).then((result) => {
+        submitted = result;
+        return undefined;
+      });
+      // oxlint-disable-next-line no-await-in-loop -- Each certified setup move is the next move's parent.
+      await settle(replicas, network.clock);
+      if (!submitted) throw new Error(`Setup command ${step} was not certified`);
+      value(submitted);
+    }
+    expect(ready).toBe(true);
+    const context = first.getContext();
+    const anchor = required(context.log.timers?.find((item) => item.phase === 'preRoll'));
+    const input = { kind: 'system' as const, type: 'TIMEOUT', seat: anchor.seat, phase: 'preRoll' };
+    const applied = value(fixture.simulation.engine.apply(context.log.state, input));
+    const elected = proposerFor(
+      context.log.head.seq + 1,
+      1,
+      context.membership,
+      context.excludedProposers,
+    );
+    const signerPosition = peers.indexOf(elected.publicKey);
+    if (signerPosition < 0) throw new Error('Timeout proposer is not a human peer');
+    const targetPosition = signerPosition === 0 ? 1 : 0;
+    expect(first.getContext().log.head.stateHash).toBe(second.getContext().log.head.stateHash);
+    network.clock.advanceBy(400);
+    required(replicas[targetPosition]).dispose();
+    replicas[targetPosition] = value(
+      await ReplicatedLog.restore(required(options[targetPosition])),
+    );
+    expect(required(replicas[targetPosition]).getTimers()).toMatchObject([
+      { phase: 'preRoll', remainingMs: 1_000 },
+    ]);
+    const key = required(fixture.simulation.identities.get(elected.seat)).secretKey;
+    const entry = signEntry(
+      {
+        seq: context.log.head.seq + 1,
+        term: 1,
+        prevHash: entryHash(context.log.head),
+        payload: {
+          kind: 'system',
+          input,
+          evidence: {
+            kind: 'proof',
+            protocol: TURN_TIMEOUT_PROTOCOL,
+            data: { pendingSince: anchor.pendingSince.seq, deadlineMs: anchor.deadlineMs },
+          },
+        },
+        stateHash: toHex(hashValue(applied.state)),
+        sequencer: elected.publicKey,
+      },
+      key,
+    );
+    const proposal = signProposal(
+      {
+        genesisDigest: context.membership.genesisDigest,
+        epoch: context.membership.epoch,
+        entry,
+        validRound: null,
+        prevotes: [],
+      },
+      key,
+    );
+    const height = entry.seq;
+    const safetyBefore = await required(journals[targetPosition]).loadSafety(height);
+    const wireProposal = value(
+      decodeProtocolMessage(value(encodeProtocolMessage({ t: 'PROPOSAL', proposal }))),
+    );
+    required(transports[targetPosition]).inject(elected.publicKey, wireProposal);
+    await settle(replicas, network.clock);
+    expect(await required(journals[targetPosition]).loadSafety(height)).toEqual(safetyBefore);
+    network.clock.advanceBy(600);
+    await settle(replicas, network.clock);
+    expect(required(replicas[targetPosition]).getContext().log.head.seq).toBe(context.log.head.seq);
+    network.clock.advanceBy(400);
+    await settle(replicas, network.clock);
+    expect(await required(journals[targetPosition]).loadSafety(height)).not.toEqual(safetyBefore);
+    expect(required(replicas[targetPosition]).getContext().log.head.seq).toBe(context.log.head.seq);
+    network.clock.advanceBy(600);
+    await settle(replicas, network.clock);
+    const timeoutEntries = replicas.map((replica) =>
+      replica.getEntries().find((item) => item.entry.seq === height),
+    );
+    expect(
+      timeoutEntries.every(
+        (item) =>
+          item?.entry.payload.kind === 'system' && item.entry.payload.input.type === 'TIMEOUT',
+      ),
+    ).toBe(true);
+    expect(timeoutEntries.map((item) => item && entryHash(item.entry))).toEqual([
+      entryHash(entry),
+      entryHash(entry),
+    ]);
+    expect(timeoutEntries.map((item) => item?.entry.stateHash)).toEqual([
+      toHex(hashValue(applied.state)),
+      toHex(hashValue(applied.state)),
+    ]);
+    expect(timeoutEntries[0]?.certificate).toHaveLength(2);
+    expect(replicas[0]?.getContext().log.head.stateHash).toBe(
+      replicas[1]?.getContext().log.head.stateHash,
+    );
+    for (const replica of replicas) replica.dispose();
+    network.dispose();
+  }, 30_000);
+
   test('needs both human tips before START_SEAT can be certified, then converges', async () => {
     const fixture = verifiedFixture();
     const peers = fixture.humans.map(

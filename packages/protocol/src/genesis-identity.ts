@@ -11,6 +11,7 @@ export function genesisBody(genesis: GenesisBody): GenesisBody {
     genesisSeed: genesis.genesisSeed,
     ceremonyNonce: genesis.ceremonyNonce,
     security: genesis.security,
+    takeover: genesis.takeover,
     commitments: genesis.commitments,
     createdAt: genesis.createdAt,
   };

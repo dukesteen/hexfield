@@ -1,0 +1,68 @@
+{
+  "files": [
+    {
+      "path": "docs/verification/stage09/online-start-plan.md",
+      "sha256": "b1c98b71651dfdae97d26d549dbf2d646452ee3be9431828c497e82396f9672b"
+    },
+    {
+      "path": "packages/crypto/src/derivation.ts",
+      "sha256": "1913bb90fead1319af33153c69ea329b2f822d19e6ca1a6ce93bbbf358472be0"
+    },
+    {
+      "path": "packages/protocol/src/genesis-seed.ts",
+      "sha256": "06d25a6aad9c24e25218bcfa19df219887d655ccf05fa79e188ef428170e47bc"
+    },
+    {
+      "path": "packages/protocol/src/genesis-seed.test.ts",
+      "sha256": "6325c7b173cf2bceda3efb23bcdba92ef26fab6bd5ba1bd1f4c8d838fb5bcb91"
+    },
+    {
+      "path": "packages/protocol/src/online-bindings.ts",
+      "sha256": "bc26cc131318bfd5da8d01fbc977a72492a2e880bbcd05aefe434c804545cb30"
+    },
+    {
+      "path": "packages/protocol/src/online-bindings.test.ts",
+      "sha256": "962ff233ed4076661065d4da854745712ef20959b2f73e99efdb7ed03465f824"
+    },
+    {
+      "path": "packages/protocol/src/genesis-online-start.ts",
+      "sha256": "c0cba768358bd7b67b4745d680566d7321c517779968941323750f064a514391"
+    },
+    {
+      "path": "packages/protocol/src/genesis.ts",
+      "sha256": "c1f4b4f3411c1a8acd7cc547532cf0265d6cb77f2d80919d293ab3cdca62eacb"
+    },
+    {
+      "path": "packages/protocol/src/genesis.test.ts",
+      "sha256": "08a96891d7cab8ac9ad16dd6a0833b9e8e6bc265db794de22971fe2cc3949e9a"
+    },
+    {
+      "path": "packages/protocol/src/lobby.ts",
+      "sha256": "6a52796c0a5965d3c2acd6ecbad40b954d5fdda1ae234340d645d9d521871c4d"
+    },
+    {
+      "path": "packages/protocol/src/lobby-types.ts",
+      "sha256": "554d920d07b700760743ddfa01b4962612bbbcc4651713de1a12774548806c48"
+    },
+    {
+      "path": "packages/protocol/src/types.ts",
+      "sha256": "94410dd04b0014e8a1fae15cc301306fca08718f53ae02ad74c8f8c62831d876"
+    },
+    {
+      "path": "apps/web/src/session/online-game-transport.ts",
+      "sha256": "d31c4024030a58980092ba529bea83637735248a581b2176b7739941e1771f7b"
+    },
+    {
+      "path": "apps/web/src/session/online-game-transport.test.ts",
+      "sha256": "4f30ea3f7510b71c3cc6a9b5763bb3651ccde8eaa5ba2b05a636c88739b6126e"
+    },
+    {
+      "path": "packages/storage/src/indexed-db-protocol-journal.ts",
+      "sha256": "31ebb95d61d87dd8f1793154131f4334d672dcbafa5e196579d1485c37e20425"
+    },
+    {
+      "path": "packages/storage/src/indexed-db-protocol-journal.test.ts",
+      "sha256": "b5d6842b9c15f3eaf0ce8acb51663681d4e2f9c4ccf7ad4bbb8fd144e8f79b7c"
+    }
+  ]
+}

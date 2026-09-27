@@ -329,7 +329,9 @@ async function openHostedBotSessions(
   const host = fixture.identities[0];
   const otherHuman = fixture.identities[1];
   const hostedBot = fixture.identities[2];
-  if (!host || !otherHuman || !hostedBot) throw new Error('Missing bot fixture identities');
+  const otherBot = fixture.identities[3];
+  if (!host || !otherHuman || !hostedBot || !otherBot)
+    throw new Error('Missing bot fixture identities');
   const clock = new VirtualClock();
   const net = createMemnet({ peers, clock });
   const hostJournal = new MemoryProtocolJournal();
@@ -347,6 +349,7 @@ async function openHostedBotSessions(
     net.transport(otherHuman.peerId),
     clock,
     new MemoryProtocolJournal(),
+    new Map([[3, otherBot.secretKey]]),
   );
   const sessions = [
     value(await P2PSession.create({ ...hostOptions, decideBot, botDelayMs })),
@@ -365,8 +368,8 @@ async function advanceToHostedBotTurn(
     if (!host) throw new Error('Missing host session');
     const seat = host.getState().turn.activeSeat;
     if (seat === 2) return;
-    if (seat !== 0 && seat !== 1) throw new Error(`Unexpected setup seat ${seat}`);
-    const owner = sessions[seat];
+    if (seat !== 0 && seat !== 1 && seat !== 3) throw new Error(`Unexpected setup seat ${seat}`);
+    const owner = sessions[seat === 3 ? 1 : seat];
     if (!owner) throw new Error(`Missing owner for seat ${seat}`);
     const command = owner.getLegalCommands(seat).commands[0];
     if (!command) throw new Error(`No setup command for seat ${seat}`);

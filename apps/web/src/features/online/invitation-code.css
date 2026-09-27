@@ -1,0 +1,108 @@
+.invitation-code {
+  display: grid;
+  grid-template-columns: minmax(160px, 280px) minmax(0, 1fr);
+  align-items: center;
+  gap: 24px;
+}
+
+.invitation-qr {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1;
+  background: #fff;
+}
+.invitation-code-text {
+  min-width: 0;
+  display: grid;
+  gap: 12px;
+}
+.invitation-code-text label {
+  display: grid;
+  gap: 8px;
+  font-weight: 650;
+}
+.invitation-code-text textarea,
+.manual-code-input {
+  width: 100%;
+  resize: vertical;
+  padding: 12px;
+  border: 1px solid var(--control);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font:
+    0.8rem/1.5 ui-monospace,
+    monospace;
+  overflow-wrap: anywhere;
+}
+.invitation-code-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.invitation-code-actions .button {
+  min-height: 40px;
+}
+.invitation-scanner {
+  display: grid;
+  justify-items: start;
+  gap: 12px;
+}
+.invitation-scanner video {
+  width: min(100%, 420px);
+  max-height: 300px;
+  border-radius: 8px;
+  background: #000;
+}
+
+.manual-connection {
+  display: grid;
+  gap: 16px;
+}
+.manual-connection h2,
+.manual-connection p {
+  margin: 0;
+}
+.manual-connection-form {
+  display: grid;
+  justify-items: start;
+  gap: 12px;
+}
+.manual-connection-form label {
+  display: grid;
+  gap: 8px;
+  width: 100%;
+}
+.manual-connection details summary {
+  cursor: pointer;
+  padding-block: 8px;
+}
+.manual-connection-form select {
+  min-height: 44px;
+}
+.manual-fallback {
+  margin-top: 20px;
+}
+.manual-fallback summary {
+  cursor: pointer;
+  padding-block: 12px;
+}
+.connection-dialog {
+  width: min(900px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+}
+.connection-dialog .connection-diagnostics {
+  margin-block: 20px;
+}
+
+@media (max-width: 640px) {
+  .invitation-code {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+  }
+  .invitation-qr {
+    width: min(100%, 320px);
+    margin-inline: auto;
+  }
+}

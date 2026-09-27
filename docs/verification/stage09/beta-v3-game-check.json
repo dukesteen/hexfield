@@ -1,0 +1,67 @@
+{
+  "protocolVersion": 3,
+  "engineVersion": "0.1.0",
+  "security": "verified",
+  "config": {
+    "modules": [
+      {
+        "id": "base",
+        "version": "1.0.0"
+      }
+    ],
+    "seats": [0, 1, 2, 3],
+    "options": {
+      "base": {
+        "mapLayout": "random"
+      }
+    }
+  },
+  "genesisDigest": "XwPnz7vrLUF1oNSxuNbA44BK6ulU2dJEOabxQ4jNJPY",
+  "finalHead": {
+    "seq": 478,
+    "hash": "43ababfdebadf2e976218b5d77e155dac3541839825bc29995b0322e523c075c"
+  },
+  "terminal": {
+    "seq": 478,
+    "hash": "43ababfdebadf2e976218b5d77e155dac3541839825bc29995b0322e523c075c"
+  },
+  "result": {
+    "atTurn": 89,
+    "reason": "claimed-vp",
+    "winner": 3
+  },
+  "turn": 89,
+  "certifiedEntries": 478,
+  "commandCount": 332,
+  "commands": {
+    "PLACE_SETTLEMENT": 8,
+    "PLACE_ROAD": 8,
+    "ROLL_DICE": 89,
+    "END_TURN": 88,
+    "OFFER_TRADE": 21,
+    "MARITIME_TRADE": 12,
+    "BUILD_CITY": 10,
+    "MOVE_ROBBER": 18,
+    "STEAL": 12,
+    "BUILD_ROAD": 9,
+    "DISCARD": 27,
+    "CANCEL_TRADE": 9,
+    "BUILD_SETTLEMENT": 4,
+    "BUY_DEV_CARD": 9,
+    "PLAY_DEV_CARD": 7,
+    "CLAIM_VICTORY": 1
+  },
+  "cheatProofCount": 0,
+  "auditReportDigests": [
+    {
+      "seat": 0,
+      "digest": "f13aa05d1b6d63b5d0bcf7ec017c654558771dd2ce5bf40961b9ac54c1217916"
+    },
+    {
+      "seat": 1,
+      "digest": "f13aa05d1b6d63b5d0bcf7ec017c654558771dd2ce5bf40961b9ac54c1217916"
+    }
+  ],
+  "elapsedMs": 425542,
+  "commandBreakdownDigest": "dc9ebfc27b00e945f782d384e10f18300a8484d8ffee27030ccfdc43ebe56254"
+}

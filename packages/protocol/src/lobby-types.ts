@@ -1,5 +1,7 @@
 import type { GameConfig, Seat } from '@cp2p/engine';
 import type { PeerId } from './transport.js';
+import type { GenesisSeedMode } from './genesis-seed.js';
+import type { TakeoverPolicy } from './takeover-policy.js';
 
 export const LOBBY_COLOURS = ['blue', 'orange', 'green', 'magenta', 'yellow', 'red'] as const;
 export type LobbyColour = (typeof LOBBY_COLOURS)[number];
@@ -28,6 +30,8 @@ export interface LobbyState {
   readonly seats: readonly LobbySeat[];
   readonly spectators: readonly PeerId[];
   readonly config: GameConfig;
+  readonly seedMode: GenesisSeedMode;
+  readonly takeover: TakeoverPolicy;
   readonly status: 'open' | 'starting' | 'started';
   readonly ceremonyNonce: string | null;
 }

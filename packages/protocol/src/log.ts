@@ -17,6 +17,7 @@ import type { EntryPolicy, LogContext } from './log-types.js';
 import { resolveArtifactSigner } from './authority.js';
 import { seatSchema } from './schema-values.js';
 import { validateRecoveryTransition } from './recovery-membership.js';
+import { verifyTimeoutEvidence } from './turn-timeout.js';
 import type { SeatAuthorities } from './authority-types.js';
 import type { RecoveryState } from './recovery-types.js';
 
@@ -90,6 +91,10 @@ function entryInput(
   }
   if (context.genesis.security === 'verified' && payload.input.type === 'STEAL_RESULT')
     return failure('steal-result-unverified', 'Verified steals require a certified signed receipt');
+  if (context.genesis.security === 'verified' && payload.input.type === 'TIMEOUT') {
+    const checked = verifyTimeoutEvidence(payload.input, payload.evidence, context.timers);
+    return checked.ok ? success({ input: payload.input, crypto }) : checked;
+  }
   if (payload.evidence.kind === 'stub') {
     if (context.genesis.security !== 'stub' || !policy.allowStub)
       return failure('stub-forbidden', 'Stub evidence is forbidden in this session');

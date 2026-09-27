@@ -2,8 +2,9 @@ import type { CommandShape, GameConfig, Seat, SystemInput } from '@cp2p/engine';
 import type { PeerId } from './transport.js';
 import type { SignedVote } from './votes.js';
 import type { CheatClaim } from './cheat-types.js';
+import type { TakeoverPolicy } from './takeover-policy.js';
 
-export const PROTOCOL_VERSION = 1;
+export const PROTOCOL_VERSION = 3;
 
 export interface HumanSeat {
   seat: Seat;
@@ -37,6 +38,7 @@ export interface GenesisBody {
   genesisSeed: string;
   ceremonyNonce: string;
   security: 'stub' | 'verified';
+  takeover: TakeoverPolicy;
   commitments: Record<string, unknown>;
   createdAt: number;
 }

@@ -15,11 +15,13 @@ import {
 import { stubEvidence } from './log.js';
 import type { LogContext } from './log.js';
 import type { ProposalContext } from './proposal.js';
-import { signProposal } from './proposal.js';
+import { proposerFor, signProposal } from './proposal.js';
 import { MemorySafetyStore } from './safety-store.js';
 import type { SafetyStore } from './safety-store.js';
 import { fixtureAt, protocolFixture } from './testing/fixtures.js';
 import { signVote } from './votes.js';
+import { LocalTimerObserver } from './turn-timeout.js';
+import { VirtualClock } from './testing/virtual-clock.js';
 
 function errorCode(result: Result<unknown>): string | undefined {
   return result.ok ? undefined : result.error.code;
@@ -164,6 +166,160 @@ async function restore(options: ConsensusControllerOptions): Promise<ConsensusCo
 }
 
 describe('durable consensus controller', () => {
+  test('a locked value can be declined in a later round without losing the round transition', async () => {
+    const { options, candidate } = setup(new MemorySafetyStore(), true);
+    let approved = true;
+    const controller = await create({
+      ...options,
+      admitLocalValue: () => approved,
+      beforePersist(previous, next) {
+        return !approved &&
+          next.votes.slice(previous.votes.length).some((vote) => vote.body.valueHash !== null)
+          ? { ok: false, error: { code: 'unexpected-positive-vote', message: 'Approval was lost' } }
+          : { ok: true, value: undefined };
+      },
+    });
+    try {
+      expect((await controller.dispatch({ kind: 'propose', candidate })).ok).toBe(true);
+      const first = controller.snapshot();
+      if (!first.ok) throw new Error(first.error.code);
+      const originalPrevote = first.value.votes.find((vote) => vote.body.phase === 'prevote');
+      if (!originalPrevote) throw new Error('Missing first-round prevote');
+      const digest = options.context.membership.genesisDigest;
+      const vote = (seat: 1 | 2, phase: 'prevote' | 'precommit', hash: string | null) =>
+        signVote(
+          {
+            genesisDigest: digest,
+            epoch: 0,
+            seat,
+            seq: 1,
+            term: 1,
+            phase,
+            valueHash: hash,
+          },
+          fixtureAt(protocolFixture().identities, seat).secretKey,
+        );
+      expect(
+        (
+          await controller.dispatch({
+            kind: 'vote',
+            vote: vote(1, 'prevote', entryHash(candidate)),
+          })
+        ).ok,
+      ).toBe(true);
+      expect(
+        (
+          await controller.dispatch({
+            kind: 'vote',
+            vote: vote(2, 'prevote', entryHash(candidate)),
+          })
+        ).ok,
+      ).toBe(true);
+      const locked = controller.snapshot();
+      expect(locked.ok && locked.value.locked?.hash).toBe(entryHash(candidate));
+      expect(
+        (await controller.dispatch({ kind: 'vote', vote: vote(1, 'precommit', null) })).ok,
+      ).toBe(true);
+      expect(
+        (await controller.dispatch({ kind: 'vote', vote: vote(2, 'precommit', null) })).ok,
+      ).toBe(true);
+      approved = false;
+      expect(
+        (await controller.dispatch({ kind: 'timeout', phase: 'precommit', round: 1 })).ok,
+      ).toBe(true);
+      const nextProposer = proposerFor(1, 2, options.context.membership);
+      const proposerKey = fixtureAt(protocolFixture().identities, nextProposer.seat).secretKey;
+      const nextEntry = signEntry(
+        { ...entryBody(candidate), term: 2, sequencer: nextProposer.publicKey },
+        proposerKey,
+      );
+      const proof = [
+        originalPrevote,
+        vote(1, 'prevote', entryHash(candidate)),
+        vote(2, 'prevote', entryHash(candidate)),
+      ];
+      const nextProposal = signProposal(
+        { genesisDigest: digest, epoch: 0, entry: nextEntry, validRound: 1, prevotes: proof },
+        proposerKey,
+      );
+      expect((await controller.dispatch({ kind: 'proposal', proposal: nextProposal })).ok).toBe(
+        true,
+      );
+      const resumed = controller.snapshot();
+      expect(resumed.ok && resumed.value.round).toBe(2);
+      expect(
+        resumed.ok &&
+          resumed.value.votes.find((item) => item.body.term === 2 && item.body.phase === 'prevote')
+            ?.body.valueHash,
+      ).toBeNull();
+    } finally {
+      controller.dispose();
+    }
+  });
+
+  test('a locally refused value persists a nil vote and can advance its round', async () => {
+    const { options, candidate, store } = setup();
+    const controller = await create({
+      ...options,
+      admitLocalValue: () => false,
+      beforePersist(_previous, next) {
+        return next.votes.some((vote) => vote.body.seat === 0 && vote.body.valueHash !== null)
+          ? {
+              ok: false,
+              error: { code: 'unexpected-positive-vote', message: 'Value was not admitted' },
+            }
+          : { ok: true, value: undefined };
+      },
+    });
+    expect((await controller.dispatch({ kind: 'propose', candidate })).ok).toBe(true);
+    const first = controller.snapshot();
+    expect(
+      first.ok && first.value.votes.find((vote) => vote.body.phase === 'prevote')?.body.valueHash,
+    ).toBeNull();
+    expect((await store.load())?.revision).toBe(1);
+    controller.dispose();
+    const resumed = await restore({ ...options, admitLocalValue: () => false });
+    const snapshot = resumed.snapshot();
+    expect(
+      snapshot.ok &&
+        snapshot.value.votes.find((vote) => vote.body.phase === 'prevote')?.body.valueHash,
+    ).toBeNull();
+    resumed.dispose();
+  });
+
+  test('a transient timer gate saves no vote or proposal and can retry later', async () => {
+    const { options, candidate, store, emissions } = setup();
+    const clock = new VirtualClock();
+    const anchor = {
+      key: 'turn/0/main',
+      seat: 0 as const,
+      phase: 'main',
+      deadlineMs: 10_000,
+      pendingSince: { seq: 0, hash: entryHash(options.context.log.head) },
+    };
+    const observer = new LocalTimerObserver(clock, [anchor]);
+    const controller = await create({
+      ...options,
+      beforePersist(previous, next) {
+        return next.votes.length > previous.votes.length
+          ? observer.canVote(anchor)
+          : { ok: true, value: undefined };
+      },
+    });
+    const original = await store.load();
+    const memory = controller.snapshot();
+    expect(errorCode(await controller.dispatch({ kind: 'propose', candidate }))).toBe(
+      'turn-timeout-early',
+    );
+    expect(await store.load()).toEqual(original);
+    expect(controller.snapshot()).toEqual(memory);
+    expect(emissions).toEqual([]);
+    clock.advanceBy(7_000);
+    expect((await controller.dispatch({ kind: 'propose', candidate })).ok).toBe(true);
+    expect((await store.load())?.revision).toBe((original?.revision ?? 0) + 1);
+    controller.dispose();
+  });
+
   test('rejected proposal replays reuse a bounded cache without repeating entry derivation', async () => {
     const { options, candidate, store } = setup();
     let derivations = 0;

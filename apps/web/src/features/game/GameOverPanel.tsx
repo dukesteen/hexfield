@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { GameEvent, GameState } from '@cp2p/engine';
 import type { GamePresentation } from '../../queries/repositories/saved-games';
@@ -39,13 +40,15 @@ export function GameOverPanel({
   onViewBoard,
   onRematch,
   onExportReplay,
+  resultNotice,
 }: {
   state: GameState;
   events: readonly GameEvent[];
   presentation: GamePresentation;
   onViewBoard: () => void;
-  onRematch: () => Promise<void>;
+  onRematch?: () => Promise<void>;
   onExportReplay: () => Promise<void>;
+  resultNotice?: ReactNode;
 }) {
   const { t } = useTranslation('game');
   const dialog = useRef<HTMLDialogElement>(null);
@@ -118,6 +121,7 @@ export function GameOverPanel({
         <h2 id="results-heading" ref={heading} tabIndex={-1}>
           {t('game:winner', { player: winner.name })}
         </h2>
+        {resultNotice !== undefined && <div>{resultNotice}</div>}
       </header>
       <div className="results-body">
         <div className="results-layout">
@@ -225,14 +229,16 @@ export function GameOverPanel({
         >
           {t('game:exportReplay')}
         </button>
-        <button
-          className="button button-primary"
-          type="button"
-          disabled={busy}
-          onClick={() => void run(onRematch)}
-        >
-          {t('game:rematch')}
-        </button>
+        {onRematch && (
+          <button
+            className="button button-primary"
+            type="button"
+            disabled={busy}
+            onClick={() => void run(onRematch)}
+          >
+            {t('game:rematch')}
+          </button>
+        )}
       </footer>
     </dialog>
   );

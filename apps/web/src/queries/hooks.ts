@@ -8,7 +8,7 @@ import {
   type SavedGameRepository,
 } from './repositories/saved-games';
 import {
-  LocalSettingsRepository,
+  IndexedDbSettingsRepository,
   type SettingsPatch,
   type SettingsRepository,
 } from './repositories/settings';
@@ -22,7 +22,7 @@ let browserRepositories: WebRepositories | undefined;
 
 export function getWebRepositories(): WebRepositories {
   browserRepositories ??= {
-    settings: new LocalSettingsRepository(),
+    settings: new IndexedDbSettingsRepository(),
     savedGames: new LocalSavedGameRepository(),
   };
   return browserRepositories;

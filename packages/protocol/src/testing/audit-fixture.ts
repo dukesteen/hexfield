@@ -1,7 +1,7 @@
 import { fromBase64Url, hashValue, toBase64Url, toHex } from '@cp2p/codec';
 import { scalarToBytes } from '@cp2p/crypto';
 import { RESOURCES, success } from '@cp2p/engine';
-import type { CommandShape, GameState, Result, Seat } from '@cp2p/engine';
+import type { CommandShape, GameState, Pending, Result, Seat } from '@cp2p/engine';
 import { createBeaconSecretSource } from '../beacon-source.js';
 import { MemoryBeaconContributionStore } from '../beacon-contributions.js';
 import { MemoryCheatCandidateStore } from '../cheat-candidates.js';
@@ -98,10 +98,20 @@ function quietRobber(
 /** Real certified two-human game ending through a privately dealt victory card. */
 export async function createTerminalAuditFixture(
   options: {
+    /** Omit the VP override so the base engine uses its default ten-point target. */
+    defaultVpTarget?: boolean;
+    prioritizeDevBuy?: boolean;
+    maxElapsedMs?: number;
+    onProgress?: (step: number, state: GameState) => void;
     sessionOptions?: (options: P2PSessionOptions) => P2PSessionOptions;
     onTerminal?: (sessions: readonly P2PSession[], clock: VirtualClock) => Promise<void>;
     /** Let the test runner process I/O without advancing the protocol clock. */
     yieldTask?: () => Promise<void>;
+    /** Test policy for legal player choices when no development purchase is available. */
+    chooseCommand?: (
+      host: P2PSession,
+      pending: Extract<Pending, { kind: 'player' }>,
+    ) => CommandShape;
   } = {},
 ): Promise<{
   genesisEntry: LogEntry;
@@ -115,13 +125,18 @@ export async function createTerminalAuditFixture(
     await settleMessages(sessions, clock, passes);
     await options.yieldTask?.();
   }
+  const startedAt = Date.now();
   const simulation = createSimulationGenesis({
     seed: 3,
     humanCount: 2,
     config: {
       modules: [{ id: 'base', version: '1.0.0' }],
       seats: [0, 1, 2, 3],
-      options: { base: { mapLayout: 'random', vpTarget: 3 } },
+      options: {
+        base: options.defaultVpTarget
+          ? { mapLayout: 'random' }
+          : { mapLayout: 'random', vpTarget: 3 },
+      },
     },
   });
   const boardSeed = fromBase64Url(
@@ -131,6 +146,8 @@ export async function createTerminalAuditFixture(
   const raw = {
     ...genesisBody(simulation.genesis),
     genesisSeed: toBase64Url(boardSeed),
+    // This signed nonce gives a reproducible honest deck order.
+    ceremonyNonce: toBase64Url(new Uint8Array(32).fill(3)),
     security: 'verified' as const,
     commitments: {},
   };
@@ -256,8 +273,11 @@ export async function createTerminalAuditFixture(
     }
     await settle(sessions, network.clock, 48);
     for (let step = 0; step < 500; step += 1) {
+      if (options.maxElapsedMs !== undefined && Date.now() - startedAt > options.maxElapsedMs)
+        throw new Error(`Audit fixture exceeded ${options.maxElapsedMs} ms at command ${step}`);
       const current = required(sessions[0]);
       const state = required(current.getState());
+      if (step % 25 === 0) options.onProgress?.(step, state);
       if (state.result) {
         const entries = current.exportSave().entries.slice();
         if (!sessions.every((session) => session.exportSave().entries.length === entries.length)) {
@@ -294,7 +314,10 @@ export async function createTerminalAuditFixture(
       const legalSet = host.getLegalCommands(pending.seat);
       const legal = legalSet.commands;
       const command =
-        legal.find((item) => item.type === 'BUY_DEV_CARD') ??
+        (options.prioritizeDevBuy === false
+          ? undefined
+          : legal.find((item) => item.type === 'BUY_DEV_CARD')) ??
+        options.chooseCommand?.(host, pending) ??
         legal.find((item) => item.type === 'ROLL_DICE') ??
         legal.find((item) => item.type === 'END_TURN') ??
         (legalSet.templates.some((item) => item.type === 'DISCARD')

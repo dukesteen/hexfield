@@ -1,7 +1,12 @@
 import { toBase64Url } from '@cp2p/codec';
 import { decodeScalar, identityFromSecret } from '@cp2p/crypto';
 import { describe, expect, test } from 'vitest';
-import { loadOrCreateOnlineIdentity, prepareCeremonyMaterial } from './online-credentials.js';
+import {
+  loadCeremonyMaterial,
+  loadOnlineIdentity,
+  loadOrCreateOnlineIdentity,
+  prepareCeremonyMaterial,
+} from './online-credentials.js';
 import type { OnlineCredentialStore, OnlineSeatLayout, RandomBytes } from './online-credentials.js';
 
 interface SharedRecords {
@@ -61,6 +66,50 @@ function layout(devicePeerId: string, otherPeerId: string): OnlineSeatLayout[] {
 }
 
 describe('persistent online credentials', () => {
+  test('resume loads only the original identity and exact game keys', async () => {
+    const store = new MemoryCredentialStore();
+    await expect(loadOnlineIdentity(store)).rejects.toThrow('missing');
+    const identity = await loadOrCreateOnlineIdentity(store, deterministicBytes(15));
+    const restoredIdentity = await loadOnlineIdentity(store);
+    expect(restoredIdentity.peerId).toBe(identity.peerId);
+    const nonce = new Uint8Array(32).fill(16);
+    const seats = layout(identity.peerId, peer(17));
+    await expect(
+      loadCeremonyMaterial({
+        store,
+        identity: restoredIdentity,
+        ceremonyNonce: nonce,
+        layout: seats,
+      }),
+    ).rejects.toThrow('missing');
+    const created = await prepareCeremonyMaterial({
+      store,
+      identity,
+      ceremonyNonce: nonce,
+      layout: seats,
+      randomBytes: deterministicBytes(18),
+    });
+    const loaded = await loadCeremonyMaterial({
+      store,
+      identity: restoredIdentity,
+      ceremonyNonce: nonce,
+      layout: seats,
+    });
+    expect(loaded.keys).toEqual(created.keys);
+    await expect(
+      loadCeremonyMaterial({
+        store,
+        identity: restoredIdentity,
+        ceremonyNonce: nonce,
+        layout: seats.map((seat) => (seat.kind === 'bot' ? { ...seat, botHost: peer(17) } : seat)),
+      }),
+    ).rejects.toThrow('another layout');
+    loaded.dispose();
+    created.dispose();
+    restoredIdentity.dispose();
+    identity.dispose();
+  });
+
   test('pins one device identity across concurrent store connections and restart', async () => {
     const shared: SharedRecords = { values: new Map(), locks: new Map() };
     const firstStore = new MemoryCredentialStore(shared);

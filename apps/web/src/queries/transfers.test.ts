@@ -14,8 +14,8 @@ const config: GameConfig = {
 
 const presentation: GamePresentation = {
   players: [
-    { seat: 0, name: 'Ari', color: 'blue', shape: 'circle' },
-    { seat: 1, name: 'Bea', color: 'orange', shape: 'triangle' },
+    { seat: 0, name: 'Ari', color: 'red', shape: 'circle' },
+    { seat: 1, name: 'Bea', color: 'yellow', shape: 'triangle' },
     { seat: 2, name: 'Cai', color: 'green', shape: 'square' },
   ],
   botDelayMs: 500,

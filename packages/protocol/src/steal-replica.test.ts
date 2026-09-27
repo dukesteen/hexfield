@@ -245,14 +245,19 @@ test('a live hidden steal survives a dropped delivery and restart with one priva
     expect(gate.sent.length).toBeGreaterThan(sentBeforeRestore);
     for (const bytes of gate.sent) expect(bytes).toEqual(firstDelivery);
     gate.held = false;
-    network.clock.advanceBy(3_000);
-    await settle(live, network.clock, 64);
-    const results = required(live[0])
-      .exportSave()
-      .entries.filter(
-        ({ entry }) =>
-          entry.payload.kind === 'system' && entry.payload.input.type === 'STEAL_RESULT',
-      );
+    const stealResults = () =>
+      required(live[0])
+        .exportSave()
+        .entries.filter(
+          ({ entry }) =>
+            entry.payload.kind === 'system' && entry.payload.input.type === 'STEAL_RESULT',
+        );
+    for (let attempt = 0; attempt < 8 && stealResults().length === 0; attempt++) {
+      network.clock.advanceBy(1_000);
+      // oxlint-disable-next-line no-await-in-loop -- Each virtual tick can schedule the next consensus phase.
+      await settle(live, network.clock, 16);
+    }
+    const results = stealResults();
     expect(results).toHaveLength(1);
     const after = allHands();
     const botSeats = fixture.genesis.seats

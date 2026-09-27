@@ -4,6 +4,7 @@ import { createBaseEngine, ENGINE_VERSION } from '@cp2p/engine';
 import type { GameConfig } from '@cp2p/engine';
 import { GENESIS_PREVIOUS_HASH, genesisId, signEntry, signGenesis } from '../genesis.js';
 import { PROTOCOL_VERSION } from '../types.js';
+import { DEFAULT_TAKEOVER_POLICY } from '../takeover-policy.js';
 import type { Genesis, GenesisBody, LogEntry } from '../types.js';
 
 export function fixtureAt<T>(items: readonly T[], index: number): T {
@@ -62,6 +63,7 @@ export function protocolFixture(): {
     genesisSeed: toBase64Url(seed),
     ceremonyNonce: toBase64Url(new Uint8Array(32).fill(7)),
     security: 'stub',
+    takeover: DEFAULT_TAKEOVER_POLICY,
     commitments: {},
     createdAt: 1_700_000_000_000,
   };

@@ -1,0 +1,100 @@
+{
+  "review": "online-start-implementation",
+  "files": [
+    {
+      "path": "docs/verification/stage09/online-start-implementation-review-prompt.md",
+      "sha256": "389862e66c83863b9b61eb77d5736cc3d31ea11c626ff9f8fafd7cb6da111c25",
+      "bytes": 1946
+    },
+    {
+      "path": "docs/verification/stage09/startup-foundation-review-disposition.md",
+      "sha256": "3e82ed0cf8da0aabe7049c501e72662340aab2339909c990e716b4b97cd45a6d",
+      "bytes": 5476
+    },
+    {
+      "path": "packages/protocol/src/online-ceremony.ts",
+      "sha256": "18630fad5cbe3db9b1a451e80dada7f626c84c3335e37197112ce9a755ed3b4e",
+      "bytes": 86251
+    },
+    {
+      "path": "packages/protocol/src/online-ceremony-wire.ts",
+      "sha256": "1a8fe6a39ff70a5af3db4c0b7d2e55b497e4f4c9b1e35a74bf83aefc9eccd51c",
+      "bytes": 3715
+    },
+    {
+      "path": "packages/protocol/src/online-ceremony.test.ts",
+      "sha256": "b3774001f010d5ee42acc2668b1f273d9d9fd7c155734067d86e8219ed4fdc90",
+      "bytes": 27472
+    },
+    {
+      "path": "apps/web/src/session/online-startup.ts",
+      "sha256": "89a2fa94e0fb6109876d1fc726706cf24dfee393ce3876707224ab98b92e2fd2",
+      "bytes": 13018
+    },
+    {
+      "path": "apps/web/src/session/online-startup-retry.test.ts",
+      "sha256": "eeb870fc19b00c50b6431044e176c88c0e24e5393562ec1b0bffc7e13c4d7d82",
+      "bytes": 13982
+    },
+    {
+      "path": "apps/web/src/session/online-freeze-pin.test.ts",
+      "sha256": "1eb101d1cb66e4f81f8853766f71fd1f900a6a475af3a17052e8a5929ca2aeed",
+      "bytes": 2762
+    },
+    {
+      "path": "apps/web/src/session/online-startup.test.ts",
+      "sha256": "7d7278e1a2bf9c448ff8bc0b09e50996456677ecf7dcd8e51b22aa7b0c4d4b76",
+      "bytes": 8178
+    },
+    {
+      "path": "apps/web/src/session/online-game.ts",
+      "sha256": "1f9431e5e7fbb4ba71d73cc6a268f58a1d92d8267e1987b38baa7b8f7fa142d2",
+      "bytes": 11655
+    },
+    {
+      "path": "apps/web/src/session/online-room.ts",
+      "sha256": "cc434e7588fa980703a5baa3324c4aa2dd471af506c4987f114895a39a6bcffc",
+      "bytes": 10427
+    },
+    {
+      "path": "apps/web/src/session/online-game-transport.ts",
+      "sha256": "410bc7b16c3fdd17c2dc4f51e619fcbbd314c7b689507b7f1dbfe63f855476e6",
+      "bytes": 7927
+    },
+    {
+      "path": "apps/web/src/session/online-credentials.ts",
+      "sha256": "3e0459d19ad8e384de3eca672538fecf2bdeb40477375f435704b9fec78f466b",
+      "bytes": 16338
+    },
+    {
+      "path": "packages/protocol/src/escrow-ceremony.ts",
+      "sha256": "d56593b235667450666bccf07a00d5976738dcdc3e4197e0845ae54b9a7456e2",
+      "bytes": 21752
+    },
+    {
+      "path": "packages/protocol/src/escrow-lifecycle.ts",
+      "sha256": "c31e9c25c98baf2930ef578ca72a93272265cca10fd4b55900c9d1227fb4cd27",
+      "bytes": 39090
+    },
+    {
+      "path": "packages/protocol/src/escrow-distribution.ts",
+      "sha256": "84e583ded210f5fe6dd5fd78da0fe15cace947798c0b57578fd8aa3207b0160f",
+      "bytes": 20922
+    },
+    {
+      "path": "packages/protocol/src/escrow-dispute.ts",
+      "sha256": "005cb0cb5a01a6c777cb6f6448b97abb13cf2a5e7eabff745bb52b3b33a41ee1",
+      "bytes": 8010
+    },
+    {
+      "path": "packages/protocol/src/genesis-escrow.ts",
+      "sha256": "1f0eff6287fdfd989448e8dded1e389594408699cb6040dcd4b188097a8e450c",
+      "bytes": 5657
+    },
+    {
+      "path": "packages/storage/src/indexed-db-byte-store.ts",
+      "sha256": "70070a3e3c1a0a3febf86a8a0d6917a4314f45f68a776577ff3b0ac8916cec48",
+      "bytes": 6437
+    }
+  ]
+}

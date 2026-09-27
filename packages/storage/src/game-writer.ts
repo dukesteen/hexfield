@@ -106,7 +106,7 @@ function validateId(value: string, label: string): void {
     typeof value !== 'string' ||
     value.length === 0 ||
     value.length > 512 ||
-    !/^[A-Za-z0-9][A-Za-z0-9._:-]*$/.test(value)
+    !/^[A-Za-z0-9_-][A-Za-z0-9._:-]*$/.test(value)
   )
     throw new TypeError(`${label} must be a nonempty bounded identifier`);
 }

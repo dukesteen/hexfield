@@ -1,0 +1,110 @@
+{
+  "review": "browser-resume",
+  "files": [
+    {
+      "path": "docs/verification/stage10/browser-resume-review-prompt.md",
+      "sha256": "b3abd8c9b2a95364ba1a0af40995759fe6f0811193d404c54bbea62e1063527e",
+      "bytes": 2440
+    },
+    {
+      "path": "docs/verification/stage10/browser-resume-checkpoint.md",
+      "sha256": "42e348d2a435b055c78fb3febe8895bc96e835403ce08ed52022c5b95c07bfcf",
+      "bytes": 3541
+    },
+    {
+      "path": "docs/verification/stage09/online-start-implementation-review-response.md",
+      "sha256": "71a5595134ae17245b518576bf79939b07a265bfb15546e64f9d313980089520",
+      "bytes": 8426
+    },
+    {
+      "path": "docs/verification/stage09/online-start-implementation-review-disposition.md",
+      "sha256": "cf300afed374adc9f43593a6fdf8c731c38acdf270007445bdf2abaa6655aaff",
+      "bytes": 2488
+    },
+    {
+      "path": "packages/protocol/src/online-ceremony.ts",
+      "sha256": "00b84b214cfabbfcf4decd04d4e42c37f011c5fef2ea9d6ae896177d26f48668",
+      "bytes": 91008
+    },
+    {
+      "path": "packages/protocol/src/online-ceremony.test.ts",
+      "sha256": "bdd5eca9d55c6b35d0a83b28bff531a481edd0e51e3aaada0f3a76b69a61f8aa",
+      "bytes": 36997
+    },
+    {
+      "path": "packages/protocol/src/escrow-ceremony.ts",
+      "sha256": "d56593b235667450666bccf07a00d5976738dcdc3e4197e0845ae54b9a7456e2",
+      "bytes": 21752
+    },
+    {
+      "path": "packages/protocol/src/escrow-lifecycle.ts",
+      "sha256": "c31e9c25c98baf2930ef578ca72a93272265cca10fd4b55900c9d1227fb4cd27",
+      "bytes": 39090
+    },
+    {
+      "path": "apps/web/src/session/online-room.ts",
+      "sha256": "981ce573ce7e8215229658f07615c78e7f6e4dabdd41b222a13f632f406ff6dc",
+      "bytes": 11933
+    },
+    {
+      "path": "apps/web/src/session/online-startup.ts",
+      "sha256": "b6e07fa07aa1bf9c8e68dbbf71f4358427b6d913e9691863afab879dd485ac8e",
+      "bytes": 16792
+    },
+    {
+      "path": "apps/web/src/session/online-resume.test.ts",
+      "sha256": "2cbf6179c1ead1b9e240ae4be72fe3534007493818c0261075a98d0b18ec9607",
+      "bytes": 11826
+    },
+    {
+      "path": "apps/web/src/session/online-startup-retry.test.ts",
+      "sha256": "2c18b5a583c0b3620f454656e2581c0586c546d97160fcc5072a2e021eb8e03c",
+      "bytes": 14818
+    },
+    {
+      "path": "apps/web/src/session/online-game.ts",
+      "sha256": "c0a8449d1a6cd7029fd64bf4351713d0359bcad22abcab1959d21916507cbe19",
+      "bytes": 11934
+    },
+    {
+      "path": "apps/web/src/session/online-credentials.ts",
+      "sha256": "046459b969b3e261f2d93a01103a52dc863ed1ed0f7c36f60643216fafed9e6a",
+      "bytes": 17288
+    },
+    {
+      "path": "apps/web/src/session/online-game-records.ts",
+      "sha256": "057bb7d2d8de64f9936f9c5bc8224b2b4aeb759e1d88a5e0977ae537dec8269a",
+      "bytes": 12640
+    },
+    {
+      "path": "apps/web/src/session/online-game-records.test.ts",
+      "sha256": "dbe794ff0edc3e25b3d2e1a4f159151160aae6e0ce99826f8b9c1eaf650370c3",
+      "bytes": 10174
+    },
+    {
+      "path": "apps/web/src/features/online/room-registry.ts",
+      "sha256": "723ce8c1139d3a7c1f02b5500b3fb1d6a1f78a5d9935ff1b4212fc667d877417",
+      "bytes": 6288
+    },
+    {
+      "path": "apps/web/src/features/online/room-registry.test.ts",
+      "sha256": "b82ff3bada5cd51a92b2c57d850ef963594961da60de1b98e784cf2b5491c324",
+      "bytes": 8559
+    },
+    {
+      "path": "apps/web/src/features/online/OnlineGameScreen.tsx",
+      "sha256": "5a42a72a11499b7e079094d843a0f341f9b9d9354577baed63f5dc1e43688123",
+      "bytes": 11287
+    },
+    {
+      "path": "packages/storage/src/indexed-db-byte-store.ts",
+      "sha256": "d9c0193f4e9b235dd1564124f40f69d4ffa32c0732bbc621b252e16d47e7a16f",
+      "bytes": 6592
+    },
+    {
+      "path": "packages/storage/src/indexed-db-protocol-journal.ts",
+      "sha256": "5f41ff4600a0cf06baa992bdc7cace794e9f68cb4301efc3d99328be1def5996",
+      "bytes": 22039
+    }
+  ]
+}

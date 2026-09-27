@@ -4,5 +4,12 @@
   "singleQuote": true,
   "trailingComma": "all",
   "printWidth": 100,
-  "ignorePatterns": ["pnpm-lock.yaml", "apps/web/src/routeTree.gen.ts"]
+  "ignorePatterns": [
+    "pnpm-lock.yaml",
+    "apps/web/src/routeTree.gen.ts",
+    "docs/verification/stage07/recovered-deck-review-response.md",
+    "docs/verification/stage08/manual-relay-review-raw.md",
+    "docs/verification/stage10/seat-transfer-review-raw.md",
+    "docs/verification/stage10/takeover-policy-review-response.md"
+  ]
 }

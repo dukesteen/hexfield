@@ -15,7 +15,6 @@ import { createHandSecretSource } from './hand-source.js';
 import { MemoryProtocolJournal } from './journal.js';
 import { P2PSession } from './p2p-session.js';
 import type { P2PSessionOptions } from './p2p-session.js';
-import { prepareRecoveryReadiness } from './recovery-readiness.js';
 import { replayCertifiedPrefix } from './replay.js';
 import { MemoryStealDeliveryStore } from './steal-contributions.js';
 import { createStealSecretSource } from './steal-source.js';
@@ -24,8 +23,6 @@ import {
   advanceRecoveryFixture,
   createRecoveryFixture,
   recoveryFixtureKey,
-  recoveryFixtureReadiness,
-  recoveryFixtureReplacement,
 } from './testing/recovery-fixture.js';
 import { VerifiedSessionDriver } from './verified-session-driver.js';
 
@@ -49,7 +46,6 @@ test('a surviving session recovers a bot, finishes the frozen beacon and resumes
   });
   const sessions = new Map<Seat, P2PSession>();
   const options = new Map<Seat, P2PSessionOptions>();
-  const stores = new Map<Seat, MemoryGenesisConsentStore>();
   const providers: ReturnType<typeof createBeaconSecretSource>[] = [];
   let botMayMove = true;
   const decisions: { seat: Seat; level: string }[] = [];
@@ -100,7 +96,6 @@ test('a surviving session recovers a bot, finishes the frozen beacon and resumes
         context = next;
       }
       const store = new MemoryGenesisConsentStore();
-      stores.set(seat, store);
       const stealSource = (owner: Seat) =>
         createStealSecretSource(
           master(owner),
@@ -182,19 +177,19 @@ test('a surviving session recovers a bot, finishes the frozen beacon and resumes
       sessions.set(seat, value(await P2PSession.restore(current)));
     }
 
-    const replacement = recoveryFixtureReplacement(119);
-    const authorization = value(
-      await prepareRecoveryReadiness(
-        recoveryFixtureReadiness(fixture, fixture.ready, replacement.peerId),
-        fixture.ready.log,
-        recoveryFixtureKey(fixture, 1),
-        [{ seat: 0, secretKey: replacement.secretKey }],
-        required(stores.get(1)),
+    const host = required(sessions.get(1));
+    const submitted = host.requestTakeover(0, 'medium');
+    await pumpUntil(() =>
+      ([2, 3] as const).every((seat) => required(sessions.get(seat)).getRecoveryCandidate()),
+    );
+    const authorization = required(required(sessions.get(2)).getRecoveryCandidate()).change;
+    const replacementKey = required(authorization.statement.replacements[0]).publicKey;
+    const approvals = await Promise.all(
+      ([2, 3] as const).map((seat) =>
+        required(sessions.get(seat)).approveRecoveryAuthorization(authorization),
       ),
     );
-    replacement.secretKey.fill(0);
-    const host = required(sessions.get(1));
-    const submitted = host.submitRecovery(authorization);
+    expect(approvals.every((result) => result.ok)).toBe(true);
     await pumpUntil(() =>
       [...sessions.values()].every((session) => {
         const history = session.exportSave();
@@ -257,7 +252,7 @@ test('a surviving session recovers a bot, finishes the frozen beacon and resumes
     ).entry;
     if (commandEntry.payload.kind !== 'command') throw new Error('Expected recovered bot command');
     const { body, sig } = commandEntry.payload.signed;
-    expect(verifyObject('cmd', body, sig, parsePeerId(replacement.peerId))).toBe(true);
+    expect(verifyObject('cmd', body, sig, parsePeerId(replacementKey))).toBe(true);
     expect(
       verifyObject('cmd', body, sig, parsePeerId(required(fixture.genesis.seats[0]).publicKey)),
     ).toBe(false);

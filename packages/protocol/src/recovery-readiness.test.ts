@@ -1,7 +1,7 @@
 import { canonicalDecode, canonicalEncode, hashValue, toHex } from '@cp2p/codec';
 import { beforeAll, describe, expect, test } from 'vitest';
 import { entryHash } from './genesis.js';
-import { prepareRecoveryReadiness } from './recovery-readiness.js';
+import { loadPreparedRecoveryReadiness, prepareRecoveryReadiness } from './recovery-readiness.js';
 import { loadActivatedRecoveryKeys } from './recovery-readiness.js';
 import type { RecoveryReadinessStore } from './recovery-readiness.js';
 import type { ProposalContext } from './proposal.js';
@@ -131,6 +131,53 @@ describe('durable recovery readiness', () => {
       replacements: [{ seat: 0, secretKey: replacement.secretKey }],
     });
     expect(result.ok && 'secretKey' in result.value).toBe(false);
+  });
+
+  test('restores only the exact parent-bound reserved authorization without exposing keys', async () => {
+    const replacement = recoveryFixtureReplacement(212);
+    const statement = recoveryFixtureReadiness(fixture, fixture.ready, replacement.peerId);
+    const store = new MemoryStore();
+    const original = await storeReadiness(fixture, statement, replacement.secretKey, store);
+    const restored = await loadPreparedRecoveryReadiness(
+      fixture.ready.log,
+      1,
+      0,
+      recoveryFixtureKey(fixture, 1),
+      store,
+    );
+    expect(restored).toEqual({ ok: true, value: original });
+    expect(restored.ok && restored.value && 'secretKey' in restored.value).toBe(false);
+    expect(
+      await loadPreparedRecoveryReadiness(
+        fixture.beforeSetup.log,
+        1,
+        0,
+        recoveryFixtureKey(fixture, 1),
+        store,
+      ),
+    ).toEqual({ ok: true, value: null });
+    const wrongHost = await loadPreparedRecoveryReadiness(
+      fixture.ready.log,
+      1,
+      0,
+      recoveryFixtureKey(fixture, 2),
+      store,
+    );
+    expect(wrongHost).toMatchObject({ ok: false, error: { code: 'recovery-readiness-host' } });
+    const [slot, bytes] = [...store.records.entries()][0] ?? [];
+    if (!slot || !bytes) throw new Error('Missing stored readiness');
+    const corrupted = bytes.slice();
+    corrupted[corrupted.length - 1] = (corrupted[corrupted.length - 1] ?? 0) ^ 1;
+    store.records.set(slot, corrupted);
+    expect(
+      await loadPreparedRecoveryReadiness(
+        fixture.ready.log,
+        1,
+        0,
+        recoveryFixtureKey(fixture, 1),
+        store,
+      ),
+    ).toMatchObject({ ok: false, error: { code: 'recovery-readiness-store' } });
   });
 
   test('recovers an exact authorization after a lost write reply and on retry', async () => {

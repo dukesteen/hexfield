@@ -1,0 +1,75 @@
+.connection-diagnostics {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text);
+}
+
+.connection-diagnostics details {
+  padding: 13px 16px;
+}
+
+.connection-diagnostics summary {
+  color: var(--text);
+  cursor: pointer;
+  font-weight: 680;
+}
+
+.connection-diagnostics-body {
+  display: grid;
+  gap: 12px;
+  padding-top: 14px;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.connection-diagnostics-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px 16px;
+}
+
+.connection-diagnostics-report dl {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+.connection-diagnostics-report dl > div {
+  padding: 9px 11px;
+  border-radius: 8px;
+  background: var(--page);
+}
+
+.connection-diagnostics-report dt {
+  font-size: 0.78rem;
+}
+
+.connection-diagnostics-report dd {
+  margin: 3px 0 0;
+  color: var(--text);
+  font-weight: 650;
+}
+
+.connection-diagnostics p {
+  margin: 0;
+}
+
+.connection-diagnostics-peers {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.connection-diagnostics-peers li {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 5px 12px;
+  padding-top: 7px;
+  border-top: 1px solid var(--border);
+}

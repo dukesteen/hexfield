@@ -157,6 +157,7 @@ function fixture() {
     success(undefined),
   );
   const replica = {
+    getTimers: driver.getTimers,
     requestTradeProof: (request: SignedTradeProofRequest) => {
       requests.push(request);
       return requestFailure === null

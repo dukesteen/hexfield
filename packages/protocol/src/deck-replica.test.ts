@@ -491,7 +491,7 @@ async function driveSessionToFirstPurchase(
 
 describe('live verified deck replication', () => {
   test('automatically certifies an owned victory card after a transient reveal-source failure', async () => {
-    const fixture = createVerifiedDeckSession(3, 2, 128, {
+    const fixture = createVerifiedDeckSession(7, 2, 128, {
       vpTarget: 3,
       boardSeed: fromBase64Url(
         createSimulationGenesis({ seed: 0, humanCount: 2 }).genesis.genesisSeed,

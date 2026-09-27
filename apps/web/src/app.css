@@ -217,6 +217,25 @@ a {
   color: var(--muted);
   font-size: 1.1rem;
 }
+.home-online-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.home-beta-note {
+  display: block;
+  margin-top: 12px;
+  color: var(--muted);
+}
+.home-local-link {
+  display: inline-block;
+  margin-top: 28px;
+}
+.home-saved-games {
+  min-width: 0;
+  display: grid;
+  gap: 32px;
+}
 .saved-games {
   padding-top: 12px;
 }
@@ -318,6 +337,30 @@ input[type='checkbox'] {
 .settings-form {
   max-width: 560px;
 }
+.network-settings {
+  margin-top: 36px;
+}
+.network-settings summary {
+  cursor: pointer;
+  font-weight: 650;
+  padding-block: 8px;
+}
+.network-settings-fields {
+  display: grid;
+  gap: 12px;
+  padding-top: 12px;
+}
+.network-settings textarea {
+  width: 100%;
+  resize: vertical;
+  padding: 8px 12px;
+  border: 1px solid var(--control);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.875rem;
+}
 .settings-form > .button,
 .setup-form > .button {
   justify-self: start;
@@ -396,6 +439,12 @@ input[type='checkbox'] {
 }
 .color-magenta {
   --player-color: #b35b93;
+}
+.color-yellow {
+  --player-color: #e6ad26;
+}
+.color-red {
+  --player-color: #cf4a44;
 }
 .advanced-options {
   border: 1px solid var(--border);

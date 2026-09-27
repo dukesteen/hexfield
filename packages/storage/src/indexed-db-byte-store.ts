@@ -4,6 +4,7 @@ import type { CP2PDatabase } from './database.js';
 
 const MAX_KEY_LENGTH = 512;
 const KEY_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:/-]*$/;
+const LOCK_PATTERN = /^[A-Za-z0-9_-][A-Za-z0-9._:/-]*$/;
 
 export type CeremonyLockProvider = <T>(name: string, task: () => Promise<T>) => Promise<T>;
 
@@ -111,7 +112,8 @@ export class IndexedDbByteStore {
    * transactions or make network delivery durable.
    */
   async withCeremonyLock<T>(ceremonyId: string, task: () => Promise<T>): Promise<T> {
-    const id = validateKey(ceremonyId);
+    // Bare ceremony digests use every base64url character, including the first one.
+    const id = validateKey(ceremonyId, LOCK_PATTERN);
     const lockName = `cp2p/escrow-ceremony/${id}`;
     const provider = this.#lockProvider ?? browserLockProvider;
     return provider(lockName, task);
@@ -145,13 +147,8 @@ export class IndexedDbByteStore {
   }
 }
 
-function validateKey(id: string): string {
-  if (
-    typeof id !== 'string' ||
-    id.length === 0 ||
-    id.length > MAX_KEY_LENGTH ||
-    !KEY_PATTERN.test(id)
-  )
+function validateKey(id: string, pattern = KEY_PATTERN): string {
+  if (typeof id !== 'string' || id.length === 0 || id.length > MAX_KEY_LENGTH || !pattern.test(id))
     throw new TypeError('IndexedDB record key is invalid');
   return id;
 }

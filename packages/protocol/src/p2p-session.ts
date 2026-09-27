@@ -13,19 +13,24 @@ import type {
   Result,
   Seat,
 } from '@cp2p/engine';
-import { entryHash } from './genesis.js';
+import { entryHash, genesisDigest } from './genesis.js';
 import { signCommand } from './log.js';
 import type { LogContext, ValidatedEntry } from './log.js';
 import type { CertifiedEntry, ProposalContext } from './proposal.js';
 import { ReplicatedLog } from './replicated-log.js';
 import type { ReplicatedLogOptions, ReplicatedLogStatus } from './replicated-log.js';
 import type { RecoveredReplicaOwnership } from './replicated-log.js';
+import type { RecoveryApprovalCandidate, RecoveryApprovalPreview } from './recovery-facade.js';
 import { loadRecoveredHost } from './recovered-host.js';
 import type { RecoveredHost } from './recovered-host.js';
 import type { RecoveryPrivateStore } from './recovery-private.js';
+import { loadPreparedRecoveryReadiness, prepareRecoveryReadiness } from './recovery-readiness.js';
 import type { RecoveryReadinessStore } from './recovery-readiness.js';
+import type { RecoveryReadiness } from './recovery-types.js';
+import { quorumSize } from './votes.js';
 import { chooseBotPending } from './bot-pending.js';
 import { initialProposalContext, replayCertifiedPrefix } from './replay.js';
+import { timedDiscardCommand } from './turn-timeout.js';
 import type {
   GameSession,
   SessionStatus,
@@ -71,6 +76,7 @@ export interface P2PSessionOptions extends Omit<
   | 'tradeProof'
   | 'onTradeProofResponse'
   | 'onAuthorityChange'
+  | 'onRecoveryCandidate'
   | 'onMasterReveal'
 > {
   auditRunner?: SessionAuditRunner;
@@ -135,6 +141,7 @@ export class P2PSession implements GameSession<CertifiedHistory> {
   private readonly recoveredHosts: RecoveredHost[] = [];
   private recoveryInstalling = false;
   private botTimer: unknown = null;
+  private privateTimeoutTimer: unknown = null;
   private botParent: string | null = null;
   private readonly auditReveals = new Map<Seat, SignedMasterReveal>();
   private auditState: SessionAuditState = { kind: 'not-started' };
@@ -313,6 +320,7 @@ export class P2PSession implements GameSession<CertifiedHistory> {
             }
           : {}),
         onTradeProofResponse: (response) => openedSession.receiveTradeProof(response),
+        onRecoveryCandidate: () => openedSession.emit([]),
         onAuthorityChange: (current) => openedSession.installRecovery(current),
         onMasterReveal: ({ packet }) => {
           openedSession.auditReveals.set(packet.body.originalSeat, copyCanonical(packet));
@@ -374,6 +382,7 @@ export class P2PSession implements GameSession<CertifiedHistory> {
         session.dispose();
         return failure('session-replay-head', 'Certified journal changed during private replay');
       }
+      session.schedulePrivateTimeout();
       session.maybeAutomatic();
       session.maybeAudit();
       return success(session);
@@ -400,7 +409,11 @@ export class P2PSession implements GameSession<CertifiedHistory> {
       : [];
   }
   getTimers(): readonly SessionTimer[] {
-    return this.status.kind === 'running' ? (this.driver.getTimers?.() ?? []) : [];
+    return this.status.kind === 'running'
+      ? this.context.log.genesis.security === 'verified'
+        ? (this.replica?.getTimers() ?? [])
+        : (this.driver.getTimers?.() ?? [])
+      : [];
   }
   getEvents(): readonly GameEvent[] {
     return [...this.events];
@@ -742,6 +755,143 @@ export class P2PSession implements GameSession<CertifiedHistory> {
     return this.replica.submitRecovery(change);
   }
 
+  previewRecoveryAuthorization(change: unknown): Result<RecoveryApprovalCandidate> {
+    return this.replica
+      ? this.replica.previewRecoveryAuthorization(change)
+      : failure('session-unavailable', 'The verified session is not running');
+  }
+
+  getRecoveryCandidate(): RecoveryApprovalCandidate | null {
+    return this.replica?.getRecoveryCandidate() ?? null;
+  }
+
+  approveRecoveryAuthorization(change: unknown): Promise<Result<RecoveryApprovalPreview>> {
+    return this.replica
+      ? this.replica.approveRecoveryAuthorization(change)
+      : Promise.resolve(failure('session-unavailable', 'The verified session is not running'));
+  }
+
+  clearRecoveryApproval(): void {
+    this.replica?.clearRecoveryApproval();
+  }
+
+  /** Explicit vote-mode takeover request; fresh bot keys are reserved before gossip. */
+  async requestTakeover(
+    departedSeat: Seat,
+    botLevel: 'easy' | 'medium' | 'hard',
+  ): Promise<Result<void>> {
+    const replica = this.replica;
+    if (
+      !replica ||
+      this.privateStateReleased ||
+      this.status.kind !== 'running' ||
+      this.recoveryInstalling
+    )
+      return failure('session-recovery-unavailable', 'The game session is unavailable');
+    const store = this.options.recoveryStore ?? this.options.recoveryParticipant?.store;
+    if (!store) return failure('session-recovery-store', 'Takeover needs durable recovery storage');
+    const context = replica.getContext();
+    const authority = context.log.authority;
+    const hostSeat = this.options.seat;
+    const hostKey = this.keys.get(hostSeat);
+    const host = authority?.controllers.find((item) => item.seat === hostSeat);
+    const departed = authority?.controllers.find((item) => item.seat === departedSeat);
+    if (
+      !authority ||
+      !hostKey ||
+      context.log.recovery?.pending ||
+      context.log.state.result !== null ||
+      host?.kind !== 'human' ||
+      host.status !== 'active' ||
+      departed?.kind !== 'human' ||
+      departed.status !== 'active' ||
+      departedSeat === hostSeat
+    )
+      return failure('session-recovery-context', 'Certified authority cannot start this takeover');
+    const recoverers = authority.controllers
+      .filter(
+        (item) => item.kind === 'human' && item.status === 'active' && item.seat !== departedSeat,
+      )
+      .map(({ seat, publicKey }) => ({ seat, publicKey }));
+    if (recoverers.length < quorumSize(context.membership.voters.length))
+      return failure('recovery-quorum', 'Remaining humans cannot meet the old voter quorum');
+    if (Math.min(...recoverers.map((item) => item.seat)) !== hostSeat)
+      return failure('recovery-host', 'The lowest surviving human seat initiates this takeover');
+    const available = await replica.canStartRecoveryRequest();
+    if (!available.ok) return available;
+    const affected = authority.controllers.filter(
+      (item) => item.seat === departedSeat || item.hostSeat === departedSeat,
+    );
+    const parent = { seq: context.log.head.seq, hash: entryHash(context.log.head) };
+    const restored = await loadPreparedRecoveryReadiness(
+      context.log,
+      hostSeat,
+      departedSeat,
+      hostKey,
+      store,
+    );
+    if (!restored.ok) return restored;
+    let authorization = restored.value;
+    if (authorization) {
+      if (authorization.statement.botLevel !== botLevel)
+        return failure('recovery-bot-level-conflict', 'Stored takeover uses another bot level');
+    } else {
+      const replacements: { seat: Seat; secretKey: Uint8Array }[] = [];
+      try {
+        const runtimeCrypto: unknown = Reflect.get(globalThis, 'crypto');
+        const getRandomValues =
+          runtimeCrypto && typeof runtimeCrypto === 'object'
+            ? Reflect.get(runtimeCrypto, 'getRandomValues')
+            : null;
+        if (typeof getRandomValues !== 'function')
+          return failure('session-recovery-entropy', 'Secure random generation is unavailable');
+        for (const controller of affected) {
+          const secretKey = new Uint8Array(32);
+          Reflect.apply(getRandomValues, runtimeCrypto, [secretKey]);
+          replacements.push({ seat: controller.seat, secretKey });
+        }
+        const statement: RecoveryReadiness = {
+          genesisDigest: genesisDigest(context.log.genesis),
+          parent,
+          nextEpoch: authority.epoch + 1,
+          departedSeat,
+          hostSeat,
+          botLevel,
+          replacements: replacements.map(({ seat, secretKey }) => {
+            const identity = identityFromSecret(secretKey);
+            try {
+              return { seat, publicKey: identity.peerId };
+            } finally {
+              identity.secretKey.fill(0);
+            }
+          }),
+          recoverers,
+          previous: null,
+        };
+        const prepared = await prepareRecoveryReadiness(
+          statement,
+          context.log,
+          hostKey,
+          replacements,
+          store,
+        );
+        if (!prepared.ok) return prepared;
+        authorization = prepared.value;
+      } catch {
+        return failure('session-recovery-entropy', 'Could not create fresh replacement keys');
+      } finally {
+        for (const replacement of replacements) replacement.secretKey.fill(0);
+      }
+    }
+    if (
+      this.replica !== replica ||
+      this.privateStateReleased ||
+      entryHash(replica.getContext().log.head) !== parent.hash
+    )
+      return failure('recovery-parent', 'Certified parent changed during takeover preparation');
+    return replica.approveAndSubmitRecovery(authorization);
+  }
+
   /** Rebuilds a halted peer from its certified journal without discarding its votes. */
   async repair(): Promise<Result<void>> {
     if (!this.replica || this.status.kind === 'disposed')
@@ -760,6 +910,7 @@ export class P2PSession implements GameSession<CertifiedHistory> {
     for (const seat of this.tradeIntents.keys()) this.cancelPending(seat);
     this.clearAutomaticRetry();
     this.clearBotTimer();
+    this.clearPrivateTimeout();
     this.cancelAudit();
     this.auditReveals.clear();
     this.replica?.dispose();
@@ -1013,6 +1164,7 @@ export class P2PSession implements GameSession<CertifiedHistory> {
       this.protocolStatus = null;
     this.events.push(...entry.events);
     this.status = next.log.state.result ? { kind: 'complete' } : { kind: 'running' };
+    this.schedulePrivateTimeout();
     return success(undefined);
   }
 
@@ -1044,9 +1196,27 @@ export class P2PSession implements GameSession<CertifiedHistory> {
         this.context.log.state,
         new Map([[privateState.seat, privateState]]),
       );
-      return success(
-        input?.kind === 'command' && input.seat === privateState.seat ? input.command : null,
+      if (input?.kind === 'command' && input.seat === privateState.seat)
+        return success(input.command);
+      if (this.context.log.genesis.security !== 'verified') return success(null);
+      const expired = this.getTimers().some(
+        (timer) =>
+          timer.seat === privateState.seat &&
+          timer.phase === 'discard' &&
+          !timer.paused &&
+          timer.remainingMs === 0,
       );
+      if (!expired) return success(null);
+      const pending = this.options.engine
+        .getPending(this.context.log.state)
+        .some(
+          (item) =>
+            item.kind === 'player' &&
+            item.seat === privateState.seat &&
+            item.allowed.includes('DISCARD'),
+        );
+      if (!pending) return success(null);
+      return timedDiscardCommand(this.context.log.state, privateState);
     } catch {
       return failure('automatic-input-unavailable', 'Could not determine the automatic action');
     }
@@ -1062,11 +1232,21 @@ export class P2PSession implements GameSession<CertifiedHistory> {
       if (state) privates.set(seat, state);
     }
     const input = this.options.engine.getAutomaticInput(this.context.log.state, privates);
-    if (input?.kind !== 'command' || !this.keys.has(input.seat)) return;
-    this.cancelPending(input.seat);
-    if (this.inflight.has(input.seat)) return;
+    let automatic = input?.kind === 'command' && this.keys.has(input.seat) ? input : null;
+    if (!automatic) {
+      for (const [seat, privateState] of privates) {
+        const prepared = this.automaticCommand(privateState);
+        if (prepared.ok && prepared.value?.type === 'DISCARD') {
+          automatic = { kind: 'command', seat, command: prepared.value };
+          break;
+        }
+      }
+    }
+    if (!automatic) return;
+    this.cancelPending(automatic.seat);
+    if (this.inflight.has(automatic.seat)) return;
     this.automaticParent = parent;
-    void this.submit(input.seat, input.command)
+    void this.submit(automatic.seat, automatic.command)
       .then((result) => {
         if (entryHash(this.context.log.head) !== parent) this.maybeAutomatic();
         else if (!result.ok) this.retryAutomatic(parent, result.error.code);
@@ -1214,6 +1394,37 @@ export class P2PSession implements GameSession<CertifiedHistory> {
     this.botParent = null;
   }
 
+  private schedulePrivateTimeout(): void {
+    this.clearPrivateTimeout();
+    if (
+      !this.replica ||
+      this.status.kind !== 'running' ||
+      this.context.log.genesis.security !== 'verified'
+    )
+      return;
+    const next = this.getTimers()
+      .filter(
+        (timer) =>
+          timer.phase === 'discard' &&
+          this.keys.has(timer.seat) &&
+          !timer.paused &&
+          timer.remainingMs > 0,
+      )
+      .toSorted((a, b) => a.remainingMs - b.remainingMs)[0];
+    if (!next) return;
+    this.privateTimeoutTimer = this.options.clock.setTimeout(() => {
+      this.privateTimeoutTimer = null;
+      this.maybeAutomatic();
+      this.schedulePrivateTimeout();
+    }, next.remainingMs);
+  }
+
+  private clearPrivateTimeout(): void {
+    if (this.privateTimeoutTimer !== null)
+      this.options.clock.clearTimeout(this.privateTimeoutTimer);
+    this.privateTimeoutTimer = null;
+  }
+
   private update(events: readonly GameEvent[]): SessionUpdate {
     return {
       revision: this.context.log.head.seq,
@@ -1223,6 +1434,7 @@ export class P2PSession implements GameSession<CertifiedHistory> {
       timers: this.getTimers(),
       status: this.status,
       audit: this.getAudit(),
+      recoveryCandidate: this.getRecoveryCandidate(),
     };
   }
   private emit(events: readonly GameEvent[]): void {
@@ -1270,6 +1482,14 @@ function detachedLogContext(context: LogContext): LogContext {
     state: copyCanonical(context.state),
     lastNonces: new Map(context.lastNonces),
     crypto: copyCanonical(context.crypto),
+    ...(context.timers
+      ? {
+          timers: context.timers.map((timer) => ({
+            ...timer,
+            pendingSince: { ...timer.pendingSince },
+          })),
+        }
+      : {}),
     ...(context.authority ? { authority: copyCanonical(context.authority) } : {}),
     ...(context.recovery ? { recovery: copyCanonical(context.recovery) } : {}),
   };

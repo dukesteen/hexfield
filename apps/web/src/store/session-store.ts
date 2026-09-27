@@ -8,6 +8,7 @@ import type {
   Seat,
 } from '@cp2p/engine';
 import type { GameSession, SessionStatus, SessionTimer } from '../session';
+import type { SessionAuditState } from '@cp2p/protocol';
 import type { EdgeId, VertexId } from '@cp2p/engine/geometry';
 import { requiredHumanSeat } from './pending-actors';
 
@@ -22,6 +23,7 @@ interface SessionView {
   pending: readonly Pending[];
   timers: readonly SessionTimer[];
   status: SessionStatus | null;
+  audit: SessionAuditState | null;
   revision: number;
   waitingSeat: Seat | null;
   revealedSeat: Seat | null;
@@ -61,6 +63,7 @@ const emptyView: SessionView = {
   pending: [],
   timers: [],
   status: null,
+  audit: null,
   revision: 0,
   waitingSeat: null,
   revealedSeat: null,
@@ -264,15 +267,21 @@ export function attachSession(gameId: string, session: GameSession): () => void 
       desiredSeat ?? (humans.length === 1 && manuallyConcealed ? (humans[0] ?? null) : null);
     const finalHiddenVictoryPoints: Partial<Record<Seat, number | null>> = {};
     if (update.state.result) {
+      const auditedScores =
+        update.audit?.kind === 'complete' && update.audit.report.ok && update.audit.report.complete
+          ? update.audit.report.finalHiddenVictoryPoints
+          : null;
       for (const seat of update.state.config.seats) {
         const privateState = session.getPrivate(seat);
         const publicSeat = update.state.seats.find((item) => item.seat === seat);
         finalHiddenVictoryPoints[seat] =
-          privateState && publicSeat
+          publicSeat && privateState
             ? publicSeat.cardSlots.filter(
                 (slot) => !slot.revealed && privateState.slots[slot.slotId] === 'victoryPoint',
               ).length
-            : null;
+            : publicSeat && typeof auditedScores?.[seat] === 'number'
+              ? auditedScores[seat]
+              : null;
       }
     }
     useSessionStore.setState({
@@ -282,6 +291,7 @@ export function attachSession(gameId: string, session: GameSession): () => void 
       pending: update.pending,
       timers: update.timers,
       status: update.status,
+      audit: update.audit ?? null,
       revision: update.revision,
       waitingSeat: coverSeat,
       revealedSeat: visibleSeat,

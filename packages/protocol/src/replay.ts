@@ -11,6 +11,7 @@ import type { CertifiedEntry, ProposalContext } from './proposal.js';
 import { authenticatedCheatSigner, verifyCheatProof } from './cheat-proof.js';
 import type { CheatFinding } from './cheat-proof.js';
 import { initialSeatAuthorities } from './authority.js';
+import { advanceTimerAnchors } from './turn-timeout.js';
 
 const MAX_HISTORICAL_CONTEXTS = 16;
 
@@ -46,6 +47,8 @@ export function initialProposalContext(
     authority.value,
   );
   if (!crypto.ok) return crypto;
+  const timers = advanceTimerAnchors(engine, state, entry);
+  if (!timers.ok) return timers;
   return success({
     log: {
       genesis,
@@ -54,6 +57,7 @@ export function initialProposalContext(
       head: entry,
       lastNonces: new Map(),
       crypto: crypto.value,
+      timers: timers.value,
       authority: authority.value,
       recovery: { authorizations: [], pending: null, completed: [] },
     },
@@ -227,6 +231,7 @@ export function snapshotFromContext(context: ProposalContext) {
       crypto: context.log.crypto,
       authority: context.log.authority ?? null,
       recovery: context.log.recovery ?? null,
+      timers: context.log.timers ?? [],
       lastNonces: [...context.log.lastNonces].toSorted(([a], [b]) => a - b),
       membership: context.membership,
       excludedProposers: context.excludedProposers,

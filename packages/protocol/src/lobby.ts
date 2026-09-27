@@ -15,6 +15,10 @@ import { PROTOCOL_VERSION } from './types.js';
 import { decodeMessage, encodeMessage } from './wire.js';
 import type { PeerId, ProtocolClock, Transport, Unsubscribe } from './transport.js';
 import { LOBBY_COLOURS } from './lobby-types.js';
+import { genesisSeedModeSchema } from './genesis-seed.js';
+import type { GenesisSeedMode } from './genesis-seed.js';
+import { DEFAULT_TAKEOVER_POLICY, takeoverPolicySchema } from './takeover-policy.js';
+import type { TakeoverPolicy } from './takeover-policy.js';
 import type {
   LobbyBotLevel,
   LobbyDiagnostic,
@@ -81,6 +85,8 @@ const stateSchema = v.strictObject({
   ),
   spectators: v.pipe(v.array(key32Schema), v.maxLength(MAX_SPECTATORS)),
   config: v.unknown(),
+  seedMode: genesisSeedModeSchema,
+  takeover: takeoverPolicySchema,
   status: v.picklist(['open', 'starting', 'started'] as const),
   ceremonyNonce: v.nullable(key32Schema),
 });
@@ -104,7 +110,7 @@ const signedRequestSchema = v.strictObject({ body: requestBodySchema, sig: signa
 const stateBodySchema = v.strictObject({
   protocolVersion: nonnegativeIntegerSchema,
   engineVersion: v.string(),
-  state: stateSchema,
+  state: v.unknown(),
 });
 const signedStateSchema = v.strictObject({ body: stateBodySchema, sig: signature64Schema });
 const ackBodySchema = v.strictObject({
@@ -123,7 +129,12 @@ const hostBodySchema = v.strictObject({
   peer: key32Schema,
 });
 const signedConfigSchema = v.strictObject({
-  body: v.strictObject({ ...hostBodySchema.entries, config: v.unknown() }),
+  body: v.strictObject({
+    ...hostBodySchema.entries,
+    config: v.unknown(),
+    seedMode: genesisSeedModeSchema,
+    takeover: takeoverPolicySchema,
+  }),
   sig: signature64Schema,
 });
 const signedKickSchema = v.strictObject({
@@ -175,6 +186,8 @@ export interface HostLobbyOptions extends LobbyControllerOptions {
   readonly name: string;
   readonly hostName: string;
   readonly config: GameConfig;
+  readonly seedMode?: GenesisSeedMode;
+  readonly takeover?: TakeoverPolicy;
 }
 
 export interface JoinLobbyOptions extends LobbyControllerOptions {
@@ -344,6 +357,10 @@ export class LobbyController {
   static createHost(options: HostLobbyOptions): Result<LobbyController> {
     const checked = validConfig(options.config);
     if (!checked.ok) return checked;
+    const seedMode = v.safeParse(genesisSeedModeSchema, options.seedMode ?? { kind: 'joint' });
+    if (!seedMode.success) return failure('lobby-seed', 'Board seed selection is invalid');
+    const takeover = v.safeParse(takeoverPolicySchema, options.takeover ?? DEFAULT_TAKEOVER_POLICY);
+    if (!takeover.success) return failure('lobby-takeover', 'Takeover policy is invalid');
     const room = v.safeParse(roomSchema, options.lobbyId);
     const name = v.safeParse(nameSchema, options.name);
     const hostName = v.safeParse(nameSchema, options.hostName);
@@ -376,6 +393,8 @@ export class LobbyController {
         seats,
         spectators: [],
         config: checked.value,
+        seedMode: seedMode.output,
+        takeover: takeover.output,
         status: 'open',
         ceremonyNonce: null,
       };
@@ -451,13 +470,25 @@ export class LobbyController {
       : this.send(state.hostPeer, { t: 'LOBBY_REQ', request });
   }
 
-  configure(config: GameConfig): Result<void> {
+  configure(
+    config: GameConfig,
+    seedMode?: GenesisSeedMode,
+    takeover?: TakeoverPolicy,
+  ): Result<void> {
     const checked = validConfig(config);
     if (!checked.ok) return checked;
     const authority = this.hostOpen();
     if (!authority.ok) return authority;
     const state = authority.value;
-    const edit = this.hostEdit(state, 'lobby-config', { config: checked.value });
+    const seed = v.safeParse(genesisSeedModeSchema, seedMode ?? state.seedMode);
+    if (!seed.success) return failure('lobby-seed', 'Board seed selection is invalid');
+    const policy = v.safeParse(takeoverPolicySchema, takeover ?? state.takeover);
+    if (!policy.success) return failure('lobby-takeover', 'Takeover policy is invalid');
+    const edit = this.hostEdit(state, 'lobby-config', {
+      config: checked.value,
+      seedMode: seed.output,
+      takeover: policy.output,
+    });
     const announced = this.broadcast({ t: 'LOBBY_CONFIG', edit });
     if (!announced.ok) return announced;
     const seats = checked.value.seats.map((seat, index) => {
@@ -471,7 +502,13 @@ export class LobbyController {
             ready: false as const,
           };
     });
-    return this.commit({ ...state, config: checked.value, seats });
+    return this.commit({
+      ...state,
+      config: checked.value,
+      seedMode: seed.output,
+      takeover: policy.output,
+      seats,
+    });
   }
 
   setBot(seat: Seat, level: LobbyBotLevel, botHost = this.peer): Result<void> {
@@ -788,9 +825,14 @@ export class LobbyController {
 
   private receiveState(from: PeerId, snapshot: v.InferOutput<typeof signedStateSchema>): void {
     const body = snapshot.body;
+    const header = v.safeParse(
+      v.object({ lobbyId: roomSchema, hostPeer: key32Schema }),
+      body.state,
+    );
     if (
-      body.state.lobbyId !== this.options.lobbyId ||
-      from !== body.state.hostPeer ||
+      !header.success ||
+      header.output.lobbyId !== this.options.lobbyId ||
+      from !== header.output.hostPeer ||
       !verify('lobby-state', body, snapshot.sig, from)
     )
       return;

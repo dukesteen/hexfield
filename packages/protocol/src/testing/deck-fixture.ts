@@ -17,6 +17,8 @@ import type { DeckDefinition, DeckSetupState, SignedDeckPass } from '../deck-set
 import type { GenesisBody } from '../types.js';
 import { createStealSecretSource } from '../steal-source.js';
 import { createGenesisEscrowFixture } from './escrow-fixture.js';
+import { attachFixtureOnlineStart } from './online-start-fixture.js';
+import { LOBBY_COLOURS } from '../lobby-types.js';
 
 const CACHE_LIMIT = 4;
 const cache = new Map<string, CachedDeckFixture>();
@@ -212,7 +214,9 @@ export function createGenesisDeckFixture(
         })),
     },
     seats: body.seats.map((seat) => {
-      if (seat.encryptionKey !== undefined) return { ...seat };
+      const colour = LOBBY_COLOURS[seat.seat];
+      if (!colour) throw new Error(`No lobby colour for fixture seat ${seat.seat}`);
+      if (seat.encryptionKey !== undefined) return { ...seat, colour };
       const source = createStealSecretSource(
         masterFor(seat.seat),
         body.ceremonyNonce,
@@ -220,7 +224,11 @@ export function createGenesisDeckFixture(
         seat.publicKey,
       );
       try {
-        return { ...seat, encryptionKey: encodePoint(scalePoint(G, source.encryptionSecret())) };
+        return {
+          ...seat,
+          colour,
+          encryptionKey: encodePoint(scalePoint(G, source.encryptionSecret())),
+        };
       } finally {
         source.dispose();
       }
@@ -243,7 +251,7 @@ export function createGenesisDeckFixture(
     },
   };
   return {
-    body: createGenesisEscrowFixture(nextBody, identities),
+    body: attachFixtureOnlineStart(createGenesisEscrowFixture(nextBody, identities), identities),
     transcripts,
     createSource(seat) {
       const sourceDefinition = generated.definitions.find((item) =>
