@@ -766,6 +766,39 @@ describe('certified deck log', () => {
     expect(slot.seat).toBe(active.seat);
     expect(slot.slotId).toBe(active.slotId);
     expect(JSON.stringify(result.context.log.state)).not.toContain(slot.receipt.point);
+    expect(slot.unlockSigners.map(({ seat }) => seat)).toEqual(
+      active.participants.filter(({ seat }) => seat !== active.seat).map(({ seat }) => seat),
+    );
+    for (const changed of [
+      { publicKey: toBase64Url(new Uint8Array(32)) },
+      { generation: { seq: 1, hash: 'f'.repeat(64) } },
+    ]) {
+      const forged = {
+        ...result.context,
+        log: {
+          ...result.context.log,
+          crypto: {
+            ...need(result.context.log.crypto),
+            decks: {
+              ...ledger,
+              decks: ledger.decks.map((item) => ({
+                ...item,
+                slots: item.slots.map((held) => ({
+                  ...held,
+                  unlockSigners: held.unlockSigners.map((signer, index) =>
+                    index === 0 ? { ...signer, ...changed } : signer,
+                  ),
+                })),
+              })),
+            },
+          },
+        },
+      };
+      expect(verifyReplaySnapshot(snapshotFromContext(forged), result.context)).toMatchObject({
+        ok: false,
+        error: { code: 'snapshot-mismatch' },
+      });
+    }
     const owner = data.deck.createSource(active.seat);
     const decoded = decodeDeckCard(deck.setup, slot.receipt, owner.lock(active.position));
     expect(decoded.ok).toBe(true);

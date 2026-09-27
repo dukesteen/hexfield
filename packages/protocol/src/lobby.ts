@@ -264,6 +264,45 @@ function verify(domain: string, body: unknown, sig: string, peer: PeerId): boole
   }
 }
 
+/** Validates a persisted freeze without relying on a live lobby or transport. */
+export function verifyLobbyFreezeAgreement(value: unknown): Result<LobbyFreezeAgreement> {
+  const parsed = v.safeParse(
+    v.strictObject({
+      state: stateSchema,
+      acks: v.pipe(v.array(signedAckSchema), v.minLength(1), v.maxLength(4)),
+    }),
+    value,
+  );
+  if (!parsed.success) return failure('lobby-freeze', 'Freeze agreement is malformed');
+  const checked = validState(parsed.output.state);
+  if (!checked.ok) return checked;
+  const state = checked.value;
+  if (state.status !== 'starting' || !state.ceremonyNonce)
+    return failure('lobby-freeze', 'Agreement requires a starting snapshot');
+  const humans = state.seats.filter((seat) => seat.kind === 'human');
+  if (parsed.output.acks.length !== humans.length)
+    return failure('lobby-freeze-ack', 'Every seated human must sign exactly once');
+  const byPeer = new Map(parsed.output.acks.map((ack) => [ack.body.peer, ack]));
+  if (byPeer.size !== humans.length)
+    return failure('lobby-freeze-ack', 'Freeze ACK signer is missing or repeated');
+  const hash = stateHash(state);
+  const acks: LobbyFreezeAck[] = [];
+  for (const human of humans) {
+    const ack = byPeer.get(human.peer);
+    if (
+      !ack ||
+      ack.body.lobbyId !== state.lobbyId ||
+      ack.body.hostEpoch !== state.hostEpoch ||
+      ack.body.ceremonyNonce !== state.ceremonyNonce ||
+      ack.body.stateHash !== hash ||
+      !verify('lobby-freeze-ack', ack.body, ack.sig, human.peer)
+    )
+      return failure('lobby-freeze-ack', 'Freeze ACK does not bind the exact seated snapshot');
+    acks.push(ack);
+  }
+  return success(clone({ state, acks }));
+}
+
 /** Host-owned lobby document. No secret material or genesis consent lives here. */
 export class LobbyController {
   private current: LobbyState | null;

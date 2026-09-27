@@ -74,6 +74,7 @@ function privateDataFor(
         deck.setup,
         slot.receipt,
         source.lock(slot.receipt.operation.position),
+        slot.unlockSigners,
       );
       return decoded.ok ? success({ [input.seat]: { card: decoded.value.card } }) : decoded;
     } finally {

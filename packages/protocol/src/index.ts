@@ -87,7 +87,7 @@ export type {
 export { phaseIdentity, timerKey } from './session-timing.js';
 export type { PeerId, ProtocolClock, Transport, Unsubscribe } from './transport.js';
 export { PROTOCOL_VERSION } from './types.js';
-export { LobbyController } from './lobby.js';
+export { LobbyController, verifyLobbyFreezeAgreement } from './lobby.js';
 export type { LobbyControllerOptions, HostLobbyOptions, JoinLobbyOptions } from './lobby.js';
 export { LOBBY_COLOURS } from './lobby-types.js';
 export type {

@@ -3,7 +3,7 @@ import { identityFromSecret, signObject } from '@cp2p/crypto';
 import { BASE_VERSION, ENGINE_VERSION } from '@cp2p/engine';
 import type { GameConfig, Result } from '@cp2p/engine';
 import { afterEach, describe, expect, test } from 'vitest';
-import { LobbyController } from './lobby.js';
+import { LobbyController, verifyLobbyFreezeAgreement } from './lobby.js';
 import { createMemnet } from './testing/memnet.js';
 import type { Transport } from './transport.js';
 import { PROTOCOL_VERSION } from './types.js';
@@ -197,6 +197,55 @@ describe('signed lobby controller', () => {
       nonce,
     ]);
     expect(agreements[0]?.acks).toHaveLength(3);
+    const agreement = required(agreements[0]);
+    const verified = value(
+      verifyLobbyFreezeAgreement({
+        state: agreement.state,
+        acks: agreement.acks.toReversed(),
+      }),
+    );
+    expect(verified.acks.map((ack) => ack.body.peer)).toEqual(
+      agreement.state.seats.filter((seat) => seat.kind === 'human').map((seat) => seat.peer),
+    );
+    expect(verified).not.toBe(agreement);
+    expect(verified.state).not.toBe(agreement.state);
+    expect(verified.acks[0]).not.toBe(agreement.acks[0]);
+    const changedState = { ...agreement.state, name: 'Different room' };
+    expect(verifyLobbyFreezeAgreement({ ...agreement, state: changedState }).ok).toBe(false);
+    expect(
+      verifyLobbyFreezeAgreement({ ...agreement, state: { ...agreement.state, status: 'started' } })
+        .ok,
+    ).toBe(false);
+    expect(verifyLobbyFreezeAgreement({ ...agreement, acks: agreement.acks.slice(1) }).ok).toBe(
+      false,
+    );
+    expect(
+      verifyLobbyFreezeAgreement({
+        ...agreement,
+        acks: [agreement.acks[0], agreement.acks[0], agreement.acks[1]],
+      }).ok,
+    ).toBe(false);
+    const firstAck = required(agreement.acks[0]);
+    for (const body of [
+      { ...firstAck.body, lobbyId: 'another_room' },
+      { ...firstAck.body, hostEpoch: firstAck.body.hostEpoch + 1 },
+      { ...firstAck.body, ceremonyNonce: toBase64Url(new Uint8Array(32).fill(9)) },
+      { ...firstAck.body, stateHash: '0'.repeat(64) },
+      { ...firstAck.body, peer: required(room.peers[2]) },
+    ]) {
+      expect(
+        verifyLobbyFreezeAgreement({
+          ...agreement,
+          acks: [{ ...firstAck, body }, ...agreement.acks.slice(1)],
+        }).ok,
+      ).toBe(false);
+    }
+    expect(
+      verifyLobbyFreezeAgreement({
+        ...agreement,
+        acks: [{ ...firstAck, sig: required(agreement.acks[1]).sig }, ...agreement.acks.slice(1)],
+      }).ok,
+    ).toBe(false);
     expect(room.host.start(nonce).ok).toBe(false);
   });
 

@@ -1,4 +1,5 @@
 import { hashValue, toHex } from '@cp2p/codec';
+import { parsePeerId } from '@cp2p/crypto';
 import { failure, success } from '@cp2p/engine';
 import type { GameState, Result, Seat, SystemInput } from '@cp2p/engine';
 import * as v from 'valibot';
@@ -40,6 +41,12 @@ const slotSchema = v.strictObject({
   seat: seatSchema,
   receipt: v.unknown(),
   deal: entryRefSchema,
+  unlockSigners: v.pipe(
+    v.array(
+      v.strictObject({ seat: seatSchema, publicKey: key32Schema, generation: entryRefSchema }),
+    ),
+    v.maxLength(5),
+  ),
 });
 const deckSchema = v.strictObject({
   commitment: commitmentSchema,
@@ -100,6 +107,8 @@ export interface LedgerSlot {
   seat: Seat;
   receipt: DealtDeckCard;
   deal: EntryRef;
+  /** Signers verified at the certified deal, retained across later controller changes. */
+  unlockSigners: readonly ArtifactSigner[];
 }
 
 export interface LedgerDeck {
@@ -175,6 +184,7 @@ export function validateDeckLedger(value: unknown): Result<DeckLedger> {
       if (!parsedReceipt.ok) return parsedReceipt;
       const operation = validateDeckDrawOperation(parsedReceipt.value.operation);
       if (!operation.ok) return operation;
+      const unlockers = operation.value.participants.filter(({ seat }) => seat !== slot.seat);
       if (
         item.nextPass !== item.commitment.passHashes.length ||
         operation.value.deckId !== definition.deckId ||
@@ -185,9 +195,20 @@ export function validateDeckLedger(value: unknown): Result<DeckLedger> {
         operation.value.position >= item.nextPosition ||
         slot.deal.seq <= operation.value.anchor.seq ||
         allSlots.has(slot.slotId) ||
+        slot.unlockSigners.length !== unlockers.length ||
+        slot.unlockSigners.some(
+          (signer, index) =>
+            signer.seat !== unlockers[index]?.seat || signer.generation.seq >= slot.deal.seq,
+        ) ||
+        new Set(slot.unlockSigners.map(({ publicKey }) => publicKey)).size !== unlockers.length ||
         !checkedOperation(setup.value, operation.value)
       )
         return failure('deck-ledger-slot', 'Unrevealed slot is inconsistent with its deck');
+      try {
+        for (const signer of slot.unlockSigners) parsePeerId(signer.publicKey);
+      } catch {
+        return failure('deck-ledger-signer', 'A historical unlock signing key is invalid');
+      }
       previousPosition = operation.value.position;
       allSlots.add(slot.slotId);
       slots.push({
@@ -195,6 +216,7 @@ export function validateDeckLedger(value: unknown): Result<DeckLedger> {
         seat: slot.seat,
         receipt: { ...parsedReceipt.value, operation: operation.value },
         deal: slot.deal,
+        unlockSigners: slot.unlockSigners,
       });
     }
     decks.push({
@@ -380,7 +402,7 @@ export function completeDeckDeal(
   input: SystemInput,
   evidence: unknown,
   deal: EntryRef,
-  signers?: readonly ArtifactSigner[],
+  signers: readonly ArtifactSigner[],
 ): Result<DeckLedger> {
   const current = validateDeckLedger(ledger);
   if (!current.ok) return current;
@@ -413,6 +435,9 @@ export function completeDeckDeal(
     return failure('deck-deal-context', 'Deal does not match the frozen request');
   const receipt = completeDeckDraw(active, proof.value.data, signers);
   if (!receipt.ok) return receipt;
+  // This projection is produced only after the log resolves the authorized keys
+  // and verifies every unlock. Later reveals must use these historical keys,
+  // not the genesis roster or the controllers active when the card is played.
   const decks = current.value.decks.map((item, index) =>
     index === deckIndex
       ? {
@@ -420,7 +445,13 @@ export function completeDeckDeal(
           nextPosition: item.nextPosition + 1,
           slots: [
             ...item.slots,
-            { slotId: active.slotId, seat: active.seat, receipt: receipt.value, deal },
+            {
+              slotId: active.slotId,
+              seat: active.seat,
+              receipt: receipt.value,
+              deal,
+              unlockSigners: signers,
+            },
           ],
         }
       : item,
@@ -498,6 +529,7 @@ export function revealDeckCards(
         nonce: body.nonce,
         command,
       },
+      slot.unlockSigners,
     );
     if (!verified.ok) return verified;
     if (

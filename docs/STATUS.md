@@ -159,6 +159,14 @@ wiring, corrupt reveal records, fault attribution and worker deadlines. Pending
 recovery now pauses ordinary gameplay until activation. Complete recovered-game
 audits, adversarial acceptance and performance remain open.
 
+The [recovered deck receipt correction](verification/stage07/recovered-deck-review-disposition.md)
+fixes a reproduced private draw halt after seat takeover. A certified card retains
+the exact unlock signer roster from its deal, so later private opening, public
+reveal and audit do not incorrectly return to genesis signing keys. New draws
+still use current certified authority. The focused 43-test check and a subsequent
+snapshot-tampering recheck pass. Claude found no blocking issue; its malformed-key
+hardening is implemented. The full recovered-game audit is still pending.
+
 - [ ] P2P games over memnet with real crypto pass the stage-06 chaos suite (200 seeds per scenario in CI).
 - [ ] Every row in the cheat table is covered by a passing test that checks the cheat is caught at the listed time.
 - [ ] Every completed honest game has no `CHEAT_PROOF` entries and produces `AuditReport.ok === true` (1,000 simulated games).
@@ -189,6 +197,13 @@ nonce. A native startup race found during the check is fixed with bounded signed
 snapshot retries. Device identities and fresh per-game key material have durable
 storage helpers. This is a connection/controller checkpoint; the production
 create/join screens, ceremony and game-session handoff remain unfinished.
+
+A detached `verifyLobbyFreezeAgreement` now verifies the exact ready-state
+snapshot and one signed ACK from each seated human before ceremony restoration;
+its focused lobby checks pass. The [online-start plan](verification/stage09/online-start-plan.md)
+records the remaining board-seed transcript, device-to-game key bindings, durable
+ceremony phases and game-session handoff. It is a design contract, not acceptance
+evidence.
 
 - [ ] Create → invite → join → start → finish → audit ✓ works over the signaling server and over manual codes.
 - [ ] Mixed humans and bots work. The bot host can be any peer.

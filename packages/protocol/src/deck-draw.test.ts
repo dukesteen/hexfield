@@ -13,6 +13,9 @@ import {
   verifyDeckReveal,
 } from './deck-draw.js';
 import type { DealtDeckCard, DeckDrawRequest, SignedDeckUnlock } from './deck-draw.js';
+import type { ArtifactSigner } from './authority-types.js';
+import { createDeckGenesisCommitment } from './deck-genesis.js';
+import { validateDeckLedger } from './deck-ledger.js';
 import {
   applyDeckPass,
   deckSetupId,
@@ -153,6 +156,131 @@ function keyAt(fixture: Fixture, seatIndex: number): Uint8Array {
 }
 
 describe('private deck draw', () => {
+  test('opens and later reveals a card with the signer roster authorized at its deal', () => {
+    const fixture = FIXTURE;
+    const frozen = freezeDeckDraw(fixture.setup, fixture.request);
+    if (!frozen.ok) throw new Error(frozen.error.code);
+    const replacement = identityFromSecret(bytes(99));
+    const signers: ArtifactSigner[] = frozen.value.participants
+      .filter(({ seat }) => seat !== fixture.request.seat)
+      .map(({ seat, publicKey }) => ({
+        seat,
+        publicKey: seat === 0 ? replacement.peerId : publicKey,
+        generation: { seq: seat === 0 ? 10 : 0, hash: hexHash('c') },
+      }));
+    const unlocks: SignedDeckUnlock[] = [];
+    for (const { seat } of signers)
+      unlocks.push(
+        signDeckUnlock(
+          frozen.value,
+          unlocks,
+          lockAt(fixture, seat, fixture.request.position),
+          bytes(80 + seat),
+          seat === 0 ? replacement.secretKey : keyAt(fixture, seat),
+          signers,
+        ),
+      );
+    replacement.secretKey.fill(0);
+    const completed = completeDeckDraw(frozen.value, unlocks, signers);
+    if (!completed.ok) throw new Error(completed.error.code);
+    const receipt = completed.value;
+    const commitment = createDeckGenesisCommitment(fixture.setup.definition, fixture.passes);
+    if (!commitment.ok) throw new Error(commitment.error.code);
+    const ledgerWithSigners = (unlockSigners: readonly ArtifactSigner[]) => ({
+      genesisDigest: fixture.request.genesisDigest,
+      active: null,
+      decks: [
+        {
+          commitment: commitment.value,
+          setup: fixture.setup,
+          nextPass: fixture.passes.length,
+          nextPosition: fixture.request.position + 1,
+          slots: [
+            {
+              slotId: fixture.request.slotId,
+              seat: fixture.request.seat,
+              receipt,
+              deal: { seq: 13, hash: hexHash('d') },
+              unlockSigners,
+            },
+          ],
+        },
+      ],
+    });
+    expect(validateDeckLedger(ledgerWithSigners(signers)).ok).toBe(true);
+    expect(validateDeckLedger(ledgerWithSigners(signers.toReversed())).ok).toBe(false);
+    expect(
+      validateDeckLedger(
+        ledgerWithSigners(
+          signers.map((signer) => ({
+            ...signer,
+            generation: { ...signer.generation, seq: 13 },
+          })),
+        ),
+      ).ok,
+    ).toBe(false);
+    expect(
+      validateDeckLedger(
+        ledgerWithSigners(
+          signers.map((signer) => ({
+            ...signer,
+            publicKey: replacement.peerId,
+          })),
+        ),
+      ).ok,
+    ).toBe(false);
+    const invalidKeys = signers.map((signer, index) =>
+      index === 0 ? { ...signer, publicKey: toBase64Url(new Uint8Array(32)) } : signer,
+    );
+    expect(validateDeckLedger(ledgerWithSigners(invalidKeys))).toMatchObject({
+      ok: false,
+      error: { code: 'deck-ledger-signer' },
+    });
+    const lock = lockAt(fixture, fixture.request.seat, fixture.request.position);
+    expect(decodeDeckCard(fixture.setup, receipt, lock, invalidKeys)).toMatchObject({
+      ok: false,
+      error: { code: 'deck-unlock-authority' },
+    });
+    expect(errorCode(decodeDeckCard(fixture.setup, receipt, lock))).toBe('deck-unlock-signature');
+    const decoded = decodeDeckCard(fixture.setup, receipt, lock, signers);
+    if (!decoded.ok) throw new Error(decoded.error.code);
+    const context = revealContext(fixture.request);
+    const reveal = proveDeckReveal(
+      fixture.setup,
+      receipt,
+      decoded.value.identity,
+      lock,
+      bytes(98),
+      context,
+      signers,
+    );
+    expect(verifyDeckReveal(fixture.setup, receipt, reveal, context, signers)).toEqual(decoded);
+
+    // A later replacement cannot rewrite who authorized this already dealt card.
+    const laterSigners = signers.map((signer) => ({
+      ...signer,
+      publicKey: signer.seat === 0 ? identityFromSecret(bytes(100)).peerId : signer.publicKey,
+    }));
+    expect(errorCode(decodeDeckCard(fixture.setup, receipt, lock, laterSigners))).toBe(
+      'deck-unlock-signature',
+    );
+    expect(verifyDeckReveal(fixture.setup, receipt, reveal, context, laterSigners).ok).toBe(false);
+    expect(completeDeckDraw(frozen.value, draw(fixture).unlocks, signers).ok).toBe(false);
+    expect(
+      decodeDeckCard(
+        fixture.setup,
+        {
+          ...receipt,
+          unlocks: receipt.unlocks.map((unlock, index) =>
+            index === 0 ? { ...unlock, sig: 'A'.repeat(86) } : unlock,
+          ),
+        },
+        lock,
+        signers,
+      ).ok,
+    ).toBe(false);
+  });
+
   test('reuses an unlock proof during replay while still rejecting a changed signature', () => {
     const frozen = freezeDeckDraw(FIXTURE.setup, {
       ...FIXTURE.request,

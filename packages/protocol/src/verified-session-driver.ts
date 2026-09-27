@@ -644,7 +644,7 @@ export class VerifiedSessionDriver implements SessionDriver {
       try {
         source = this.newSource(deck.commitment.definition.deckId, body.seat);
         const lock = source.lock(slot.receipt.operation.position);
-        const decoded = decodeDeckCard(deck.setup, slot.receipt, lock);
+        const decoded = decodeDeckCard(deck.setup, slot.receipt, lock, slot.unlockSigners);
         if (!decoded.ok) return decoded;
         if (
           (body.command.type === 'PLAY_DEV_CARD' && decoded.value.card !== body.command.card) ||
@@ -668,6 +668,7 @@ export class VerifiedSessionDriver implements SessionDriver {
             lock,
             seed,
             revealContext,
+            slot.unlockSigners,
           );
           data.push({ slotId, ...reveal });
         } finally {
@@ -839,6 +840,7 @@ export class VerifiedSessionDriver implements SessionDriver {
             deck.setup,
             slot.receipt,
             source.lock(slot.receipt.operation.position),
+            slot.unlockSigners,
           );
           if (!decoded.ok) return decoded;
           privateData[owner] = { card: decoded.value.card };

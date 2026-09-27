@@ -248,6 +248,11 @@ export function verifyDeckUnlockPrefix(
       signers.some((signer, index) => signer.seat !== expected[index]?.seat))
   )
     return failure('deck-unlock-authority', 'Unlock signer roster differs from the frozen draw');
+  try {
+    for (const signer of signers ?? []) parsePeerId(signer.publicKey);
+  } catch {
+    return failure('deck-unlock-authority', 'An unlock signing key is invalid');
+  }
   const parsed = parseCanonical(
     value,
     v.pipe(v.array(deckUnlockSchema), v.maxLength(expected.length)),
@@ -354,6 +359,7 @@ export function completeDeckDraw(
 function verifiedReceipt(
   setup: DeckSetupState,
   receipt: DealtDeckCard,
+  signers?: readonly ArtifactSigner[],
 ): Result<{ setup: DeckSetupState; receipt: DealtDeckCard }> {
   const parsedSetup = validateDeckSetupState(setup);
   if (!parsedSetup.ok) return parsedSetup;
@@ -378,7 +384,7 @@ function verifiedReceipt(
   if (!expected.ok) return expected;
   if (deckDrawOperationId(expected.value) !== deckDrawOperationId(parsed.value.operation))
     return failure('deck-receipt-setup', 'This receipt belongs to another deck');
-  const complete = completeDeckDraw(expected.value, parsed.value.unlocks);
+  const complete = completeDeckDraw(expected.value, parsed.value.unlocks, signers);
   if (!complete.ok) return complete;
   if (complete.value.point !== parsed.value.point)
     return failure('deck-receipt-point', 'The claimed dealt point differs from its unlock chain');
@@ -390,13 +396,17 @@ function identityPoint(setup: DeckSetupState, identity: string): string {
   return encodePoint(hashToPoint('card', { ceremonyId, deckId, deckEpoch, identity }));
 }
 
-/** Call only for the owner after certification. Provisional decoding never publishes a hand. */
+/**
+ * Call only for the owner after certification. Provisional decoding never publishes a hand.
+ * Replacement signers must come from the replayed deal, never a peer-supplied receipt.
+ */
 export function decodeDeckCard(
   setup: DeckSetupState,
   receipt: DealtDeckCard,
   lock: bigint,
+  signers?: readonly ArtifactSigner[],
 ): Result<{ identity: string; card: string }> {
-  const verified = verifiedReceipt(setup, receipt);
+  const verified = verifiedReceipt(setup, receipt, signers);
   if (!verified.ok) return verified;
   const deck = verified.value.setup;
   const dealt = verified.value.receipt;
@@ -419,8 +429,9 @@ function revealStatement(
   receipt: DealtDeckCard,
   identity: string,
   context: DeckRevealContext,
+  signers?: readonly ArtifactSigner[],
 ) {
-  const verified = checked(verifiedReceipt(setup, receipt));
+  const verified = checked(verifiedReceipt(setup, receipt, signers));
   const deck = verified.setup;
   const checkedContext = checked(parseCanonical(context, revealContextSchema));
   const operation = verified.receipt.operation;
@@ -459,8 +470,9 @@ export function proveDeckReveal(
   lock: bigint,
   seed: Uint8Array,
   context: DeckRevealContext,
+  signers?: readonly ArtifactSigner[],
 ): DeckCardReveal {
-  const statement = revealStatement(setup, receipt, identity, context);
+  const statement = revealStatement(setup, receipt, identity, context, signers);
   return { identity, proof: proveDleq(statement.statement, lock, seed, statement.context) };
 }
 
@@ -469,11 +481,12 @@ export function verifyDeckReveal(
   receipt: DealtDeckCard,
   value: unknown,
   context: DeckRevealContext,
+  signers?: readonly ArtifactSigner[],
 ): Result<{ identity: string; card: string }> {
   const parsed = parseCanonical(value, revealSchema);
   if (!parsed.ok) return parsed;
   try {
-    const statement = revealStatement(setup, receipt, parsed.value.identity, context);
+    const statement = revealStatement(setup, receipt, parsed.value.identity, context, signers);
     return verifyDleq(statement.statement, parsed.value.proof, statement.context)
       ? success({ ...statement.card })
       : failure('deck-reveal-proof', 'The card identity does not match the held position');

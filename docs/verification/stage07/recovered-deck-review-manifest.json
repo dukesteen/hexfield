@@ -1,0 +1,40 @@
+{
+  "files": [
+    {
+      "path": "packages/protocol/src/deck-draw.ts",
+      "sha256": "aa4a419c1401dce613d13562a89c1f928c1b2f43532ab2a4490ba3bb461574c3"
+    },
+    {
+      "path": "packages/protocol/src/deck-ledger.ts",
+      "sha256": "6cbe0acb1a34f5d0be6956566f68da4ada02e2423b840bacc78227f68935916d"
+    },
+    {
+      "path": "packages/protocol/src/crypto-context.ts",
+      "sha256": "ecfdceaff778dbc78fab649d4ffbbbe24ad09e9610ba9effdb9b0a702438bdbb"
+    },
+    {
+      "path": "packages/protocol/src/verified-session-driver.ts",
+      "sha256": "01cd66696ddc985569726b502975da66856945996f7a5cde4736f2be487e6271"
+    },
+    {
+      "path": "packages/protocol/src/audit.ts",
+      "sha256": "f637a34c6854cb72fbf46999e8395ef914f5c54e7e18a3537d15e65814342d81"
+    },
+    {
+      "path": "packages/protocol/src/authority.ts",
+      "sha256": "1f7ebdd14b27ccb747fa6bd833bdc504739cd096e698d62c33cd3e76362d4dc3"
+    },
+    {
+      "path": "packages/protocol/src/replay.ts",
+      "sha256": "27f914d96ac9deba3df341cad38f45de54e437554cd7dc255f587c53fcd4eeb9"
+    },
+    {
+      "path": "packages/protocol/src/deck-draw.test.ts",
+      "sha256": "fc39e49d2aeeed2465bdafd46082b9d3511214fbdf6ac85486649e0f6aa9c266"
+    },
+    {
+      "path": "packages/protocol/src/deck-ledger.test.ts",
+      "sha256": "6a7b59f79ae96db9ef788635e0e5edd3ec4b773fdc0b629d2fbd22486e1dbd8b"
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+# Recovered deck receipt review disposition
+
+Claude reviewed the supplied source with tools disabled. The review found no blocking issue in retaining the exact signer roster authenticated at the certified deal. This is historical receipt evidence; new operations still resolve current authority from replay.
+
+Confirmed hardening: malformed historical keys could reach `parsePeerId` outside a Result-producing catch. `validateDeckLedger` now checks every stored signing key, and `verifyDeckUnlockPrefix` rejects an invalid explicit signer key with `deck-unlock-authority`. Regression coverage includes invalid points, roster order, duplicates, activation heights, retired-key rejection and later-key rejection on an old receipt. A certified snapshot regression rejects changed stored keys and generations.
+
+`completeDeckDeal` requires the explicit authorized roster. Low-level draw/proof helpers retain their original genesis-only default for standalone callers; every production call in the driver, ledger reveal and audit passes the replayed slot roster. Private reconstruction uses the same driver. No public protocol UI or stored production P2P games have been released; this changes an internal replay-derived snapshot, not the certified engine state hash. Old projected snapshots cannot supply authority and must match full certified replay.
+
+The review's outbox concern is already addressed by the existing generation-specific `deck-unlock` record ID. Position reservation stays bound to the frozen operation, while replacement signers have a fresh generation record. The live regression passed the previously failing recovered draw after this correction and all survivors stayed synchronized. Its first attempt did not reach victory within the unchanged cap because the test strategy did not trade; complete recovered-game audit acceptance remains separate.
+
+Validation on the correction: 43 focused tests across deck draw, deck ledger, certified deck log, verified private driver and lobby passed in 17.87 seconds. After adding snapshot tampering assertions, the three certified-deck tests passed again in 7.95 seconds. Scoped lint and protocol production typechecking passed. The full workspace gate and native recovered-game audit worker check remain pending.

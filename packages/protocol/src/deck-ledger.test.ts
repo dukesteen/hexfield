@@ -80,6 +80,7 @@ function readyFixture(card: 'knight' | 'victoryPoint' = 'knight') {
       { kind: 'system', type: 'CARD_DEALT', deck: 'dev', seat: 0, slotId: 'dev:0' },
       { kind: 'proof', protocol: DECK_DRAW_PROTOCOL, data: [] },
       deal,
+      [],
     ),
   );
   const afterDeal: GameState = {
@@ -154,6 +155,7 @@ describe('certified deck ledger', () => {
         { kind: 'system', type: 'CARD_DEALT', deck: 'dev', seat: 0, slotId: 'dev:0' },
         { kind: 'proof', protocol: DECK_DRAW_PROTOCOL, data: [] },
         deal,
+        [],
       ).ok,
     ).toBe(false);
   });
@@ -180,6 +182,7 @@ describe('certified deck ledger', () => {
         { ...input, card: 'knight' },
         { kind: 'proof', protocol: DECK_DRAW_PROTOCOL, data: [] },
         deal,
+        [],
       ).ok,
     ).toBe(false);
     expect(
@@ -190,6 +193,7 @@ describe('certified deck ledger', () => {
         input,
         { kind: 'proof', protocol: DECK_DRAW_PROTOCOL, data: [{}] },
         deal,
+        [],
       ).ok,
     ).toBe(false);
     expect(
@@ -200,6 +204,7 @@ describe('certified deck ledger', () => {
         input,
         { kind: 'proof', protocol: 'wrong', data: [] },
         deal,
+        [],
       ).ok,
     ).toBe(false);
   });
