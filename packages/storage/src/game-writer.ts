@@ -3,6 +3,8 @@ export type GameWriterLockManager = Pick<LockManager, 'request'>;
 export interface GameWriterLeaseOptions {
   /** Test seam; production uses the same-origin browser Web Locks manager. */
   readonly lockManager?: GameWriterLockManager;
+  /** Called synchronously once if the held lock ends before normal release. */
+  readonly onLost?: (error: GameWriterLeaseError) => void;
 }
 
 export interface GameWriterLease {
@@ -40,15 +42,36 @@ export async function acquireGameWriterLease(
     resolveAcquired = resolve;
   });
   let lockRequestError: unknown;
+  let leaseActive = false;
+  let accepting = true;
+  let expectedRelease = false;
+  let lostError: GameWriterLeaseError | null = null;
+  const notifyLost = () => {
+    if (!leaseActive || expectedRelease || lostError) return;
+    lostError = new GameWriterLeaseError('lost', 'Game writer lock ended unexpectedly');
+    try {
+      options.onLost?.(lostError);
+    } catch {
+      // A notification is advisory cleanup; it must not create an unhandled lock rejection.
+    }
+  };
   const lockRequest = manager
     .request(name, { mode: 'exclusive', ifAvailable: true }, async (lock) => {
+      if (lock) leaseActive = true;
       resolveAcquired(lock);
       if (lock) await releaseSignal;
     })
-    .catch((error: unknown) => {
-      lockRequestError = error;
-      resolveAcquired(null);
-    });
+    .then(
+      () => {
+        notifyLost();
+        return undefined;
+      },
+      (error: unknown) => {
+        lockRequestError = error;
+        if (leaseActive) notifyLost();
+        else resolveAcquired(null);
+      },
+    );
 
   const lock = await acquired;
   if (!lock) {
@@ -57,22 +80,17 @@ export async function acquireGameWriterLease(
     return null;
   }
 
-  let accepting = true;
   let queue: Promise<void> = Promise.resolve();
   let closePromise: Promise<void> | null = null;
-  let lost = false;
-  void lockRequest.then(() => {
-    if (accepting) lost = true;
-    return undefined;
-  });
 
   return {
     lockName: name,
     run<T>(task: () => T | PromiseLike<T>): Promise<T> {
       if (!accepting)
         return Promise.reject(new GameWriterLeaseError('closed', 'Game writer lease is closed'));
+      if (lostError) return Promise.reject(lostError);
       const result = queue.then(async () => {
-        if (lost) throw new GameWriterLeaseError('lost', 'Game writer lock ended unexpectedly');
+        if (lostError) throw lostError;
         return task();
       });
       queue = result.then(
@@ -86,6 +104,7 @@ export async function acquireGameWriterLease(
       accepting = false;
       closePromise = (async () => {
         await queue;
+        expectedRelease = true;
         releaseLock();
         await lockRequest;
         if (lockRequestError !== undefined) throw lockRequestError;

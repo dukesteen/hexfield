@@ -27,6 +27,58 @@ class TestLockManager implements Pick<LockManager, 'request'> {
   }
 }
 
+class ExternallyEndingLockManager implements Pick<LockManager, 'request'> {
+  #failRequest: ((error: unknown) => void) | undefined;
+  #endRequest: (() => void) | undefined;
+  #callbackDone: Promise<void> | undefined;
+  readonly held = new Set<string>();
+
+  request<T>(name: string, callback: LockGrantedCallback<T>): Promise<T>;
+  request<T>(name: string, options: LockOptions, callback: LockGrantedCallback<T>): Promise<T>;
+  request<T>(
+    name: string,
+    optionsOrCallback: LockOptions | LockGrantedCallback<T>,
+    maybeCallback?: LockGrantedCallback<T>,
+  ): Promise<T> {
+    const options = typeof optionsOrCallback === 'function' ? undefined : optionsOrCallback;
+    const callback = typeof optionsOrCallback === 'function' ? optionsOrCallback : maybeCallback;
+    if (!callback) throw new Error('Missing lock callback');
+    if (this.held.has(name) && options?.ifAvailable) return Promise.resolve(callback(null));
+    this.held.add(name);
+    let finish!: (value: T | PromiseLike<T>) => void;
+    let fail!: (error: unknown) => void;
+    const request = new Promise<T>((resolve, reject) => {
+      finish = resolve;
+      fail = reject;
+    });
+    this.#failRequest = fail;
+    this.#endRequest = () => {
+      void Promise.resolve(callback(null)).then(finish, fail);
+    };
+    this.#callbackDone = Promise.resolve(callback({ name, mode: options?.mode ?? 'exclusive' }))
+      .then(finish, fail)
+      .then(
+        () => undefined,
+        () => undefined,
+      );
+    return request;
+  }
+
+  failUnexpectedly(name: string, error: unknown): void {
+    this.held.delete(name);
+    this.#failRequest?.(error);
+  }
+
+  endUnexpectedly(name: string): void {
+    this.held.delete(name);
+    this.#endRequest?.();
+  }
+
+  async waitForCallbackClose(): Promise<void> {
+    await this.#callbackDone;
+  }
+}
+
 function deferred<T = void>() {
   let resolve!: (value: T | PromiseLike<T>) => void;
   const promise = new Promise<T>((finish) => {
@@ -140,6 +192,86 @@ describe('browser game writer lease', () => {
     const next = await acquireGameWriterLease('game-5', 'voter', { lockManager: locks });
     expect(next).not.toBeNull();
     await next?.close();
+  });
+
+  test('notifies and fences immediately when the held lock request resolves unexpectedly', async () => {
+    const locks = new ExternallyEndingLockManager();
+    const onLost = vi.fn<() => void>();
+    const lease = await acquireGameWriterLease('game-loss', 'voter', {
+      lockManager: locks,
+      onLost,
+    });
+    if (!lease) throw new Error('Expected a writer lease');
+
+    locks.endUnexpectedly(lease.lockName);
+    await vi.waitFor(() => expect(onLost).toHaveBeenCalledOnce());
+    expect(onLost).toHaveBeenCalledWith(expect.objectContaining({ code: 'lost' }));
+    const task = vi.fn<() => void>();
+    await expect(lease.run(task)).rejects.toMatchObject({ code: 'lost' });
+    expect(task).not.toHaveBeenCalled();
+
+    await lease.close();
+    await locks.waitForCallbackClose();
+    expect(onLost).toHaveBeenCalledOnce();
+  });
+
+  test('unexpected request rejection notifies once and swallows callback errors', async () => {
+    const locks = new ExternallyEndingLockManager();
+    const onLost = vi.fn<() => void>(() => {
+      throw new Error('cleanup callback failed');
+    });
+    const lease = await acquireGameWriterLease('game-reject', 'voter', {
+      lockManager: locks,
+      onLost,
+    });
+    if (!lease) throw new Error('Expected a writer lease');
+    const requestError = new Error('lock request ended');
+
+    locks.failUnexpectedly(lease.lockName, requestError);
+    await vi.waitFor(() => expect(onLost).toHaveBeenCalledOnce());
+    expect(onLost).toHaveBeenCalledWith(expect.objectContaining({ code: 'lost' }));
+    await expect(lease.run(() => 'must not run')).rejects.toMatchObject({ code: 'lost' });
+    await expect(lease.close()).rejects.toBe(requestError);
+    await locks.waitForCallbackClose();
+    expect(onLost).toHaveBeenCalledOnce();
+  });
+
+  test('explicit close does not report normal lock release as loss', async () => {
+    const locks = new TestLockManager();
+    const onLost = vi.fn<() => void>();
+    const lease = await acquireGameWriterLease('game-normal-close', 'voter', {
+      lockManager: locks,
+      onLost,
+    });
+    if (!lease) throw new Error('Expected a writer lease');
+
+    await lease.close();
+    expect(onLost).not.toHaveBeenCalled();
+  });
+
+  test('notifies on loss while close is draining and skips queued work', async () => {
+    const locks = new ExternallyEndingLockManager();
+    const onLost = vi.fn<() => void>();
+    const lease = await acquireGameWriterLease('game-draining-loss', 'voter', {
+      lockManager: locks,
+      onLost,
+    });
+    if (!lease) throw new Error('Expected a writer lease');
+
+    const gate = deferred();
+    const first = lease.run(() => gate.promise);
+    const secondTask = vi.fn<() => void>();
+    const second = lease.run(secondTask);
+    const closing = lease.close();
+
+    locks.endUnexpectedly(lease.lockName);
+    await vi.waitFor(() => expect(onLost).toHaveBeenCalledOnce());
+    gate.resolve();
+    await first;
+    await expect(second).rejects.toMatchObject({ code: 'lost' });
+    await closing;
+    expect(secondTask).not.toHaveBeenCalled();
+    expect(onLost).toHaveBeenCalledOnce();
   });
 
   test('validates identifiers and fails safely when Web Locks are unavailable', async () => {
