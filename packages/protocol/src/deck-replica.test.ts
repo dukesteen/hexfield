@@ -203,6 +203,36 @@ async function settle(
   await Promise.all(replicas.map((replica) => replica.flush()));
 }
 
+async function settleUntil(
+  replicas: readonly { flush(): Promise<void> }[],
+  clock: VirtualClock,
+  done: () => boolean,
+  maxPasses: number,
+): Promise<boolean> {
+  for (let pass = 0; pass < maxPasses; pass += 1) {
+    // oxlint-disable-next-line no-await-in-loop -- Deliver the packets produced by the prior pass.
+    await Promise.all(replicas.map((replica) => replica.flush()));
+    clock.advanceBy(0);
+    // oxlint-disable-next-line no-await-in-loop
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    if (done()) return true;
+  }
+  await Promise.all(replicas.map((replica) => replica.flush()));
+  return done();
+}
+
+function matchingReplicaHeads(replicas: readonly ReplicatedLog[]): boolean {
+  const first = required(replicas[0]).getContext().log.head;
+  return replicas.every((replica) => entryHash(replica.getContext().log.head) === entryHash(first));
+}
+
+function allReplicasDealtFirstCard(replicas: readonly ReplicatedLog[]): boolean {
+  return (
+    matchingReplicaHeads(replicas) &&
+    replicas.every((replica) => replica.getContext().log.crypto?.decks.decks[0]?.nextPosition === 1)
+  );
+}
+
 function discardChoice(fixture: VerifiedDeckSession, state: GameState, seat: Seat): CommandShape {
   const holder = required(state.seats.find((item) => item.seat === seat));
   let remaining = Math.floor(holder.resources.total / 2);
@@ -355,13 +385,24 @@ async function driveToDraw(
         return undefined;
       });
     // oxlint-disable-next-line eslint/no-await-in-loop -- Complete this command before the next choice.
-    await settle(replicas, clock);
-    if (result === null) {
+    let committed = await settleUntil(
+      replicas,
+      clock,
+      () => result !== null && matchingReplicaHeads(replicas),
+      32,
+    );
+    if (!committed) {
       clock.advanceBy(2_000);
       // oxlint-disable-next-line eslint/no-await-in-loop -- The timeout may release the current proposal.
-      await settle(replicas, clock);
+      committed = await settleUntil(
+        replicas,
+        clock,
+        () => result !== null && matchingReplicaHeads(replicas),
+        32,
+      );
     }
-    if (result === null) throw new Error(`${choice.type} did not commit at step ${step}`);
+    if (!committed || result === null)
+      throw new Error(`${choice.type} did not commit at step ${step}`);
     value(result);
   }
   const context = required(replicas[0]).getContext();
@@ -796,7 +837,9 @@ describe('live verified deck replication', () => {
     const decks = required(drawContext.log.crypto?.decks);
     const firstRequest = required(decks.active ?? decks.decks[0]?.slots[0]?.receipt.operation);
     expect(firstRequest.position).toBe(0);
-    await settle(replicas, network.clock, 64);
+    expect(
+      await settleUntil(replicas, network.clock, () => allReplicasDealtFirstCard(replicas), 64),
+    ).toBe(true);
     expect(droppedDirectPrefix).toBeGreaterThan(0);
     expect(
       required(received[2]).some(({ from, prefix }) => from === peers[0] && prefix === 1),
@@ -916,7 +959,9 @@ describe('live verified deck replication', () => {
         settlementOrder: BOARD_50_SETTLEMENT_ORDER,
         minimumBuyerSeat: 2,
       });
-      await settle(replicas, network.clock, 64);
+      expect(
+        await settleUntil(replicas, network.clock, () => allReplicasDealtFirstCard(replicas), 64),
+      ).toBe(true);
       const first = required(replicas[0]);
       const deals = first
         .getEntries()

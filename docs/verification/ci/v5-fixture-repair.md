@@ -62,3 +62,26 @@ one final post-commit restore of the proof supplier. These two focused checks
 pass locally in 50.18 and 44.39 seconds. Their hosted-runner allowance is now
 90 seconds; the recovery activation check gets 15 seconds. Protocol deadlines,
 bounded move counts and the separate performance benchmarks are unchanged.
+
+## Second sharded run
+
+[Run 36347483384](https://github.com/dukesteen/hexfield/actions/runs/36347483384)
+passed static checks, simulation, network scenarios and the other three unit
+shards. Unit shard 2 failed only the three-human deck relay (64.71 seconds
+against 60 seconds) and four-human draw (90.27 seconds against 90 seconds).
+The seven-test deck file took 323.60 seconds. No protocol rejection caused
+either failure; both exceeded their test wall-clock limits.
+
+The draw driver previously drained 32 fixed network passes after every legal
+command and 64 after the purchase, even when the certified heads and dealt card
+had already converged. It now stops after the command result and every live
+replica agrees on the certified head, and stops the final drain only once every
+replica has the first certified card. The existing maximum pass counts, legal
+setup, dropped direct contribution, relay observation, quorum certificates,
+unlock checks and owner/foreign private restore assertions remain.
+
+Two focused local runs of the affected cases passed: relay 35.30 and 35.23
+seconds; four-human draw 64.60 and 64.57 seconds. Scoped lint and formatting
+checks passed. The whole test typecheck still reports errors in a concurrently
+edited recovery test; it did not diagnose the deck change. A fresh CI result
+is still required.
