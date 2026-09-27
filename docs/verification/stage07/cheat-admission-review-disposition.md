@@ -1,0 +1,13 @@
+# Malicious admission review disposition
+
+The [raw source-only review](cheat-admission-review-raw.md) used the [pinned input](cheat-admission-review-input.md) and [pre-review source hashes](cheat-admission-review-manifest.sha256). Claude had no tools or MCP access. After the review, trailing whitespace was stripped from the input bundle to satisfy the repository check; its source text and line numbers did not change. The manifest hashes that whitespace-clean copy. The raw response is unchanged. The [post-fix hashes](cheat-admission-review-postfix-manifest.sha256) identify the tested files. No production code changed.
+
+1. The wool test now uses a nonzero blinding. The honest owner proof producer returns `hand-proof-witness` for the zero-wool debit. A valid proof of the unshifted commitment verifies on its own, then fails against the required commitment after subtracting one resource. This is a mismatched signed statement, not a proof of a false opening.
+2. The test comment and acceptance row now state that the parent is actor-signed over a hand-edited, invariant-clean state whose sequence skips uncertified setup and dice entries. It tests admission and attribution at that parent. It does not establish replayable certified ancestry.
+3. The overspend test asserts that the command owner and elected proposer are different seats before checking the owner finding and separate proposer-exclusion evidence.
+4. The live steal test compares the certified `steal-fixed` evidence hash with the held, publicly verified contribution. The recipient's certified dispute follows that exact packet.
+5. After the finding, three further virtual ticks produce no steal result. The test constructs a correctly bound receipt signed by the frozen recipient and confirms that public receipt verification succeeds. Both `verifyStealResult` and signed-entry admission reject its attempted result with `steal-result-state` because the certified dispute is present. Public and private hands remain unchanged. The victim receives the `bad-steal-delivery` finding; the valid fixed-entry proposer receives no exclusion.
+
+The test does not claim that a bad sealed opening is rejected before `steal-fixed`. Its public transfer proof is valid, so the first objective detection is the recipient's signed dispute. The before-commit claim concerns `STEAL_RESULT`.
+
+Focused Vitest passed 3/3 across the two changed test files in 40.11 seconds. Scoped type-aware lint, formatting and `git diff --check` passed. Repository test typechecking found no error in these files, but the command remains red on concurrent `packages/protocol/src/testing/verified-non-voter-actor.test.ts` errors; that file is outside this change.
