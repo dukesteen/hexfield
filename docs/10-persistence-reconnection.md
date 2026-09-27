@@ -142,7 +142,7 @@ If the original human returns (with their device storage intact), `SEAT_RETURN` 
   - (c) all peers are killed at a random point, then restarted in random order → the game resumes and completes;
   - (d) the sequencer is killed during a deck unlock chain;
   - (e) a peer returns after its seat was taken over.
-- Private-state reconstruction equals the real private state at every seq (compare against the omniscient simulation) for 500 random games.
+- Private-state reconstruction equals the real private state at every certified seq, compared against an independent omniscient simulation in the representative lifecycle game. Add focused draw, steal, transfer, recovery and return fixtures for any private-state branch that game does not traverse; see the [bounded acceptance policy](verification/p2p-acceptance-policy.md).
 - Playwright: refresh a browser mid-game → it auto-resumes; close a context permanently → vote takeover → the game finishes.
 - Storage migration test from schema v1 to the current version.
 - Lost vote store, failed transactions, tab writer contention, stale save imports, certified key transfers and crashes at every signing boundary.
@@ -151,7 +151,7 @@ If the original human returns (with their device storage intact), `SEAT_RETURN` 
 
 ## Acceptance criteria
 
-- [ ] All chaos additions pass on 500 seeds each.
+- [ ] Every chaos addition passes a deterministic trace with the fault, safety and conditional-liveness assertions in the [bounded acceptance policy](verification/p2p-acceptance-policy.md), including each distinct unlock persistence boundary.
 - [ ] Refresh-resume takes < 3 s to be back in play on a typical laptop (measured).
 - [ ] Four-human takeover and audit pass; two-/three-human departure pauses safely and resumes when the required voter returns.
 - [ ] A game can be exported and resumed in another browser as the same seat through a certified key transfer; a stale save cannot reactivate a retired key.

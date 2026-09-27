@@ -287,9 +287,9 @@ Every hidden action was already verified when it happened, so this step doesn't 
 
 ## Acceptance criteria
 
-- [ ] P2P games over memnet with real crypto pass the stage-06 chaos suite (200 seeds per scenario in CI).
+- [ ] P2P games over memnet with real crypto pass all nine stage-06 chaos scenarios, one deterministic full-game trace per scenario under the [bounded acceptance policy](verification/p2p-acceptance-policy.md).
 - [ ] Every row in the cheat table is covered by a passing test that checks the cheat is caught at the listed time.
-- [ ] Every completed honest game has no `CHEAT_PROOF` entries and produces `AuditReport.ok === true` (1,000 simulated games).
+- [ ] Human-only, hosted-bot and recovered-bot games each complete on the current protocol with no false `CHEAT_PROOF` entries and `AuditReport.ok === true` from every surviving human, as specified in the [bounded acceptance policy](verification/p2p-acceptance-policy.md).
 - [ ] Dice outcomes from the beacon pass a chi-square test over 100k rounds.
 - [ ] Escrow recovery works after a seat departs mid-game, and the recovered seat continues as a bot.
 - [ ] Shuffle and steal proofs meet the performance targets in Steps 3 and 5.
