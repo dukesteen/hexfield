@@ -8,8 +8,9 @@ The immediate release goal is now the [first multiplayer beta](multiplayer-beta.
 following the user's 2026-09-27 scope reduction. It prioritizes manual-code play
 with friends without operating a server, same-browser reconnect, and completed
 games with audits. Seat transfer, recovered-human return, takeover UI and other
-large features are deferred. Signaling deployment is optional. Full M-C and M-D
-remain incomplete; the smaller beta does not change their acceptance claims.
+large features remain deferred from the beta. The app and signaling service are
+now deployed together on Cloudflare. Full M-C and M-D remain incomplete; the
+smaller beta does not change their acceptance claims.
 
 The [current beta browser check](verification/stage09/beta-browser-check.md)
 passes four-human manual-code startup, all setup placements, a shared roll, a
@@ -21,6 +22,26 @@ after 332 moves with matching successful audits from both peers. The
 Production home, create, lobby invitation generation and join-route refresh
 checks pass. External-network connectivity remains unverified, and the full
 milestone acceptance items below remain open.
+
+The current app is [Hexfield on Cloudflare](https://hexfield.steenbakkers.cc/).
+The [deployment check](verification/cloudflare/deployment.md) records live
+invite-link startup, replicated setup moves, reload, lobby autosave and desktop /
+mobile viewport checks. Workers Free remains the deployment constraint; TURN is
+disabled. The [action-feedback release](verification/cloudflare/action-feedback.md)
+is live from source `7466004`, with immediate pending indicators and duplicate-click
+protection. It does not reduce cryptographic computation time.
+
+The [current local checkpoint](verification/stage09/local-checkpoint-2026-09-27.md)
+adds reviewed signed chat and automatic capture of rejected signed proofs.
+Two independent browser profiles pass lobby/game messages, reactions, mute,
+history separation and saved-game chat restoration. The new bad-beacon trace
+certifies one cheat finding across two peers while preserving the owed outcome.
+Static/build checks and focused correction tests pass; the checkpoint records
+the mixed-source workspace run precisely. Proposer consequences and fairness UI
+remain unfinished. The
+[online worker design](verification/stage09/online-worker-design.md) describes the
+remaining move of setup and live game computation off the UI thread. It is not
+implemented yet.
 
 ## 01 — Repository Foundation
 
