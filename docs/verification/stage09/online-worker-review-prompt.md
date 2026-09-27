@@ -1,0 +1,7 @@
+# Stage 09 dedicated online worker review
+
+Read-only security and lifecycle review of the pinned source excerpts. Do not use tools, browse, or edit files. The user has approved this review. The input contains repository source and deterministic tests only, with no runtime credentials or private game records. Its manifest hashes the complete files; excerpts are labelled with original line numbers. Treat this as a snapshot, not a claim about later edits.
+
+Focus on concrete failures in consent and durable key ownership; local device identity versus certified game identity; owned-human versus hosted-bot private data; MessagePort frame and RPC caps; generation and request binding; peer loss/reconnection; terminal, dispute and close ordering; writer lease loss; and stale head/visibility responses. Check that a main-thread claim cannot replace worker verification, no online signer runs outside the worker, and late worker output cannot escape shutdown. Examine tests for what they actually distinguish.
+
+Report each confirmed finding with severity, file and line, a plausible sequence, and a narrow fix. Separate speculative risks and missing acceptance evidence. An initial real-browser guest startup failed during the current integration investigation; its cause is unresolved and is not evidence of a specific source bug. Do not mark browser acceptance complete. If the reviewed paths are sound, say so plainly.

@@ -4,7 +4,8 @@ import type { Result } from '@cp2p/engine';
 import { LobbyController, MemoryProtocolJournal, OnlineCeremony } from '@cp2p/protocol';
 import type { OnlineCeremonyProgress } from '@cp2p/protocol';
 import { createMemnet, MemoryEscrowLifecycleStore } from '@cp2p/protocol/testing';
-import type { GameWriterLease } from '@cp2p/storage';
+import { GameWriterLeaseError } from '@cp2p/storage';
+import type { GameWriterLease, GameWriterLeaseOptions } from '@cp2p/storage';
 import { expect, test, vi } from 'vitest';
 import { loadOrCreateOnlineIdentity } from './online-credentials.js';
 import { createOnlineLobbyTransport } from './online-lobby-transport.js';
@@ -58,7 +59,11 @@ function captureCeremonyProgress() {
 }
 
 async function setupTwoHumans(
-  acquireHostLease: () => Promise<GameWriterLease | null>,
+  acquireHostLease: (
+    gameId: string,
+    voterIdentity: string,
+    options?: GameWriterLeaseOptions,
+  ) => Promise<GameWriterLease | null>,
   freezeHost: () => void = () => undefined,
 ) {
   const stores = [new MemoryEscrowLifecycleStore(), new MemoryEscrowLifecycleStore()];
@@ -187,6 +192,28 @@ async function setupTwoHumans(
     },
   };
 }
+
+test('an unexpected writer loss immediately disposes the live signer and blocks game output', async () => {
+  let onLost: GameWriterLeaseOptions['onLost'];
+  const room = await setupTwoHumans(async (_gameId, _voter, options) => {
+    onLost = options?.onLost;
+    return testLease();
+  });
+  try {
+    await room.settle(
+      () => required(room.starts[0]).game() !== null && required(room.starts[1]).game() !== null,
+    );
+    const hostGame = required(required(room.starts[0]).game());
+    expect(onLost).toBeTypeOf('function');
+    onLost?.(new GameWriterLeaseError('lost', 'Test writer loss'));
+    expect(hostGame.session.getPrivate(hostGame.seat)).toBeNull();
+    const sent = room.hostGameFrames();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(room.hostGameFrames()).toBe(sent);
+  } finally {
+    await room.close();
+  }
+}, 20_000);
 
 test('retries the exact consented game after its writer lease is briefly unavailable', async () => {
   const progress = captureCeremonyProgress();

@@ -59,7 +59,7 @@ export function DevDrawer({
       const type: unknown = Reflect.get(parsed, 'type');
       if (typeof type !== 'string') throw new Error(t('editor:invalidCommand'));
       const command: CommandShape = { ...parsed, type };
-      const valid = session.validate(seat, command);
+      const valid = await session.validate(seat, command);
       if (!valid.ok) throw new Error(`${valid.error.code}: ${valid.error.message}`);
       const submitted = await session.submit(
         seat,

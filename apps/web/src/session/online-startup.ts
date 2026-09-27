@@ -14,6 +14,7 @@ import type {
   LobbyController,
   LobbyFreezeAgreement,
   OnlineCeremonyProgress,
+  LobbyState,
   ProtocolClock,
   Transport,
   Unsubscribe,
@@ -42,6 +43,7 @@ interface OnlineStartupBase {
   readonly clock: ProtocolClock;
   readonly engine: Engine;
   readonly gameRuntime?: OnlineGameRuntime;
+  readonly onGameFatal?: (error: Error) => void;
 }
 
 export type OnlineStartupOptions = OnlineStartupBase &
@@ -51,11 +53,20 @@ export type OnlineStartupOptions = OnlineStartupBase &
         /** Removes unseated connections and freezes discovery before key disclosure. */
         readonly freezePeers: (peers: readonly string[]) => void;
         readonly resume?: never;
+        readonly approved?: never;
       }
     | {
         readonly resume: SavedOnlineGameRecord;
         readonly lobby?: never;
         readonly freezePeers?: never;
+        readonly approved?: never;
+      }
+    | {
+        /** The worker receives this only after the main lobby formed every signed ACK. */
+        readonly approved: LobbyFreezeAgreement;
+        readonly lobby?: never;
+        readonly freezePeers?: never;
+        readonly resume?: never;
       }
   );
 
@@ -103,6 +114,18 @@ export class OnlineStartup {
         locallyConsented: true,
         error: null,
         gameId: this.resume.gameId,
+      };
+    } else if (options.approved) {
+      const checked = verifyLobbyFreezeAgreement(options.approved);
+      if (!checked.ok || checked.value.state.lobbyId !== this.invite.roomId)
+        throw new Error('Approved online start has an invalid signed agreement');
+      this.approved = checked.value;
+      this.current = {
+        phase: 'frozen',
+        awaitingSeats: [],
+        locallyConsented: true,
+        error: null,
+        gameId: null,
       };
     }
     if (options.lobby) this.unsubscribers.push(options.lobby.onChange(() => this.observe()));
@@ -299,6 +322,18 @@ export class OnlineStartup {
     }
     if (!this.ceremony) {
       const approved = this.approved;
+      if (!this.resume && this.options.approved) {
+        const freezeHash = toHex(hashValue(approved.state));
+        await this.requirePin(
+          `online-freeze/${this.options.identity.peerId}/${approved.state.ceremonyNonce}`,
+          { protocol: 'online-freeze-pin-v1', freezeHash },
+        );
+        await this.pin(`online-start/${freezeHash}/agreement`, {
+          protocol: 'online-browser-start-v1',
+          invite: this.invite,
+          agreement: approved,
+        });
+      }
       if (this.resume) {
         const freezeHash = toHex(hashValue(approved.state));
         await this.requirePin(
@@ -401,6 +436,7 @@ export class OnlineStartup {
         clock: this.options.clock,
         engine: this.options.engine,
         signal: this.abort.signal,
+        ...(this.options.onGameFatal ? { onFatal: this.options.onGameFatal } : {}),
         ...(this.resume ? { journalMode: 'restore-only' as const } : {}),
       },
       this.options.gameRuntime,
@@ -463,6 +499,31 @@ export class OnlineStartup {
     if (!existing || !sameBytes(existing, bytes))
       throw new Error('Saved online consent or game record is missing or differs');
   }
+}
+
+/** The worker durably pins the exact lobby state before the device signs its freeze ACK. */
+export async function pinOnlineFreeze(
+  store: EscrowCeremonyStore,
+  self: string,
+  supplied: LobbyState,
+): Promise<string> {
+  const state = copyEvidence(supplied);
+  if (
+    state.status !== 'starting' ||
+    !state.ceremonyNonce ||
+    !state.seats.some((seat) => seat.kind === 'human' && seat.peer === self)
+  )
+    throw new Error('Only a seated human can pin a starting lobby');
+  const freezeHash = toHex(hashValue(state));
+  const id = `online-freeze/${self}/${state.ceremonyNonce}`;
+  const bytes = canonicalEncode({ protocol: 'online-freeze-pin-v1', freezeHash });
+  await store.withCeremonyLock(id, async () => {
+    if (await store.putIfAbsent(id, bytes)) return;
+    const existing = await store.load(id);
+    if (!existing || !sameBytes(existing, bytes))
+      throw new Error('Stored online freeze differs from this lobby state');
+  });
+  return freezeHash;
 }
 
 function sameBytes(left: Uint8Array, right: Uint8Array): boolean {

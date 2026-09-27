@@ -6,13 +6,16 @@ import { ResourceCardPicker } from '../trade/ResourceCard.js';
 import { DialogFrame } from './DialogFrame.js';
 import { emptyCounts } from './resources.js';
 import type { CommandFormProps } from './types.js';
+import { useCommandValidations } from './use-command-validation.js';
+import { ValidationChecking } from './ValidationChecking.js';
 
 interface Props extends CommandFormProps {
   slotId?: string;
 }
 
 /** The selected two cards are a request; a short bank may pay fewer cards. */
-export function YearOfPlentyDialog({ legal, state, validate, onSubmit, onCancel, slotId }: Props) {
+export function YearOfPlentyDialog(props: Props) {
+  const { legal, state, onSubmit, onCancel, slotId } = props;
   const { t } = useTranslation('rules');
   const [resources, setResources] = useState<ResourceCounts>(emptyCounts);
   const template = legal.templates.find(
@@ -22,15 +25,16 @@ export function YearOfPlentyDialog({ legal, state, validate, onSubmit, onCancel,
       typeof item.slotId === 'string' &&
       (slotId === undefined || item.slotId === slotId),
   );
-  if (!template || typeof template.slotId !== 'string') return null;
   const selected = RESOURCES.reduce((sum, resource) => sum + resources[resource], 0);
   const command = {
     type: 'PLAY_DEV_CARD',
-    slotId: template.slotId,
+    slotId: template?.slotId,
     card: 'yearOfPlenty',
     params: { resources },
   };
-  const valid = selected === 2 && validate(command).ok;
+  const [validation] = useCommandValidations(template ? [command] : [], props);
+  if (!template || typeof template.slotId !== 'string') return null;
+  const valid = selected === 2 && validation === 'valid';
   const base = state.config.options.base;
   const hiddenBank =
     typeof base === 'object' && base !== null && Reflect.get(base, 'hideBankCounts') === true;
@@ -50,6 +54,7 @@ export function YearOfPlentyDialog({ legal, state, validate, onSubmit, onCancel,
       footer={
         <div className="trade-dialog-footer">
           <p aria-live="polite">{t('rules:discard.selected', { selected, count: 2 })}</p>
+          <ValidationChecking checking={selected === 2 && validation === 'checking'} />
           <div className="trade-dialog-buttons">
             {onCancel && (
               <button className="button button-quiet" type="button" onClick={onCancel}>
@@ -61,7 +66,7 @@ export function YearOfPlentyDialog({ legal, state, validate, onSubmit, onCancel,
               type="button"
               disabled={!valid}
               onClick={() => {
-                if (selected === 2 && validate(command).ok) onSubmit(command);
+                if (valid) onSubmit(command);
               }}
             >
               {t('rules:action.confirm')}
@@ -87,7 +92,9 @@ export function YearOfPlentyDialog({ legal, state, validate, onSubmit, onCancel,
           })}
         </p>
       ) : null}
-      {selected === 2 && !valid && <p role="alert">{t('rules:validation.plenty')}</p>}
+      {selected === 2 && validation === 'invalid' && (
+        <p role="alert">{t('rules:validation.plenty')}</p>
+      )}
     </DialogFrame>
   );
 }

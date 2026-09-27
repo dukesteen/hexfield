@@ -1,5 +1,5 @@
 import type { Seat } from '@cp2p/engine';
-import type { LobbyFreezeAgreement } from '@cp2p/protocol';
+import type { GameSession, LobbyFreezeAgreement } from '@cp2p/protocol';
 import { useBlocker, useNavigate } from '@tanstack/react-router';
 import { useMutation } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
@@ -128,7 +128,7 @@ function OnlineGameInstance({
   agreement,
 }: {
   room: OnlineRoomHandleValue;
-  game: OnlineGame;
+  game: OnlineGame<GameSession>;
   agreement: LobbyFreezeAgreement;
 }) {
   const { t } = useTranslation(['game', 'lobby']);
@@ -237,9 +237,9 @@ function OnlineGameInstance({
           JSON.stringify(
             {
               format: 'hexfield-certified-history-v1',
-              history: game.session.exportSave(),
+              history: await Promise.resolve(game.session.exportSave()),
               presentation,
-              audit: game.session.getAudit(),
+              audit: game.session.getAudit?.(),
             },
             null,
             2,
@@ -295,7 +295,9 @@ function OnlineGameInstance({
         <button
           className="button button-quiet"
           type="button"
-          onClick={() => game.session.retryAudit()}
+          onClick={() => {
+            void Promise.resolve(game.session.retryAudit?.()).catch(() => undefined);
+          }}
         >
           {t('lobby:onlineRetryAudit')}
         </button>

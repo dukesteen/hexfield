@@ -3,6 +3,8 @@ import { RESOURCES } from '@cp2p/engine';
 import type { CommandShape, ResourceCounts, Seat } from '@cp2p/engine';
 import { useTranslation } from 'react-i18next';
 import type { CommandFormProps } from '../dialogs/types.js';
+import { useCommandValidations } from '../dialogs/use-command-validation.js';
+import { ValidationChecking } from '../dialogs/ValidationChecking.js';
 import { TradeExchange } from './ResourceCard.js';
 
 type ResponseStatus = 'accepted' | 'declined' | 'waiting';
@@ -68,15 +70,8 @@ function StatusIcon({ status }: { status: ResponseStatus }) {
 }
 
 /** Public offers stay visible, while only the viewing seat's concrete actions are clickable. */
-export function IncomingOffers({
-  legal,
-  state,
-  seat,
-  validate,
-  onSubmit,
-  playerLabel,
-  collapsedWhilePlacing = false,
-}: CommandFormProps & { collapsedWhilePlacing?: boolean }) {
+export function IncomingOffers(props: CommandFormProps & { collapsedWhilePlacing?: boolean }) {
+  const { legal, state, seat, onSubmit, playerLabel, collapsedWhilePlacing = false } = props;
   const { t } = useTranslation('rules');
   const base = state.ext.base;
   const value = record(base) ? base.offers : null;
@@ -93,6 +88,8 @@ export function IncomingOffers({
         command.type === 'CONFIRM_TRADE') &&
       typeof command.offerId === 'number',
   );
+  const validations = useCommandValidations(responses, props);
+  const validationFor = (command: CommandShape) => validations[responses.indexOf(command)];
   const actionableIds = [...new Set(responses.map((command) => command.offerId))];
   const actionable = actionableIds.length;
   const actionableKey = actionableIds.join(',');
@@ -139,7 +136,9 @@ export function IncomingOffers({
   );
   const acceptBlocked = choices.some(
     (command) =>
-      command.type === 'RESPOND_TRADE' && command.accept === true && !validate(command).ok,
+      command.type === 'RESPOND_TRADE' &&
+      command.accept === true &&
+      validationFor(command) === 'invalid',
   );
   const index = offers.indexOf(selected);
   const step = (delta: number) => {
@@ -228,6 +227,9 @@ export function IncomingOffers({
               {t('rules:trade.cannotAccept')}
             </p>
           )}
+          <ValidationChecking
+            checking={choices.some((command) => validationFor(command) === 'checking')}
+          />
           {own && Array.isArray(selected.to) && (
             <ul
               className="trade-responses"
@@ -252,7 +254,7 @@ export function IncomingOffers({
         {choices.length > 0 && (
           <div className="trade-offer-actions" data-layout={own ? 'stack' : 'row'}>
             {choices.map((command, position) => {
-              const ok = validate(command).ok;
+              const ok = validationFor(command) === 'valid';
               return (
                 <button
                   type="button"
@@ -261,7 +263,7 @@ export function IncomingOffers({
                   disabled={!ok}
                   aria-describedby={!ok && acceptBlocked ? noteId : undefined}
                   onClick={() => {
-                    if (validate(command).ok) onSubmit(command);
+                    if (ok) onSubmit(command);
                   }}
                 >
                   {actionLabel(command, t, state.config.seats, playerLabel)}

@@ -26,6 +26,7 @@ import type {
   ProtocolClock,
   ProtocolJournal,
   ReplayPolicy,
+  GameSession,
   SessionAuditRunner,
   SignedDeckPass,
   SignedGameSeatBinding,
@@ -63,15 +64,17 @@ export interface OnlineGameInput {
   readonly engine: Engine;
   readonly botDelayMs?: number;
   readonly signal?: AbortSignal;
+  /** Immediate fatal fence for an unexpectedly lost exclusive game writer. */
+  readonly onFatal?: (error: Error) => void;
   /** Resume preserves history; the built-in journal may initialize only an atomically proven unused slot. */
   readonly journalMode?: 'fresh-or-restore' | 'restore-only';
 }
 
-export interface OnlineGame {
+export interface OnlineGame<T extends GameSession = P2PSession> {
   readonly gameId: string;
   readonly genesis: Genesis;
   readonly seat: Seat;
-  readonly session: P2PSession;
+  readonly session: T;
   close(): Promise<void>;
 }
 
@@ -97,9 +100,10 @@ export async function openOnlineGame(
   let lease: GameWriterLease | null = null;
   let transport: OnlineGameTransport | null = null;
   let session: P2PSession | null = null;
+  let leaseLost = false;
   const providers: BeaconSecretProvider[] = [];
   const checkCancelled = () => {
-    if (input.signal?.aborted)
+    if (input.signal?.aborted || leaseLost)
       throw new DOMException('Online game opening was cancelled', 'AbortError');
   };
   const stopOutput = () => transport?.dispose();
@@ -182,7 +186,22 @@ export async function openOnlineGame(
     }
     const local = material.find((item) => item.seat === human.seat);
     if (!local) throw new Error('The local game key is missing');
-    lease = await (runtime.acquireLease ?? acquireGameWriterLease)(genesis.gameId, human.publicKey);
+    lease = await (runtime.acquireLease ?? acquireGameWriterLease)(
+      genesis.gameId,
+      human.publicKey,
+      {
+        onLost(error) {
+          leaseLost = true;
+          transport?.dispose();
+          session?.dispose();
+          try {
+            input.onFatal?.(error);
+          } catch {
+            // Reporting failure cannot restore authority or resume output.
+          }
+        },
+      },
+    );
     checkCancelled();
     if (!lease) throw new Error('This game is already active in another tab');
     const digest = genesisDigest(genesis);

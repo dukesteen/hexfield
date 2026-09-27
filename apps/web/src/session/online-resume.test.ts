@@ -40,11 +40,17 @@ async function settle(
   done: () => boolean,
   snapshots: () => unknown,
 ): Promise<void> {
-  for (let step = 0; step < 600; step += 1) {
+  // Crypto may consume polling steps before a hosted bot's timer starts; bound inactivity per state.
+  let previous = JSON.stringify(snapshots());
+  let withoutProgress = 0;
+  for (let step = 0; step < 2_400 && withoutProgress < 600; step += 1) {
     clock.advanceBy(step % 10 === 0 ? 100 : 0);
     // oxlint-disable-next-line no-await-in-loop -- Allow the real proof work to yield between virtual ticks.
     await new Promise((resolve) => setTimeout(resolve, 0));
     if (done()) return;
+    const current = JSON.stringify(snapshots());
+    withoutProgress = current === previous ? withoutProgress + 1 : 0;
+    previous = current;
   }
   throw new Error(`Online resume stalled: ${JSON.stringify(snapshots())}`);
 }
@@ -130,7 +136,14 @@ test('restores the exact signed game and first certified action without new cons
             .getPending()
             .some((item) => item.kind === 'player' && item.seat === game.seat),
         ),
-      () => games.map((game) => game.session.getCommittedHead()),
+      () =>
+        games.map((game) => ({
+          head: game.session.getCommittedHead(),
+          pending: game.session.getPending(),
+          controlled: game.session.controllableSeats(),
+          hostedPrivate: game.session.getPrivate(3) !== null,
+          protocol: game.session.getProtocolStatus(),
+        })),
     );
     const actor = required(
       games.find((game) =>

@@ -1,5 +1,4 @@
 import { hashValue, toHex } from '@cp2p/codec';
-import { createBaseEngine } from '@cp2p/engine';
 import { failure, success } from '@cp2p/engine';
 import type { GameConfig, Result } from '@cp2p/engine';
 import {
@@ -21,6 +20,7 @@ import type {
   ProtocolClock,
   Unsubscribe,
   EscrowCeremonyStore,
+  GameSession,
 } from '@cp2p/protocol';
 import { acquireGameWriterLease, IndexedDbByteStore } from '@cp2p/storage';
 import type { GameWriterLease } from '@cp2p/storage';
@@ -28,7 +28,14 @@ import { loadOnlineIdentity, loadOrCreateOnlineIdentity } from './online-credent
 import type { DisposableOnlineIdentity } from './online-credentials.js';
 import { createRoomId, validateOnlineInvite } from './online-invite.js';
 import type { OnlineInvite } from './online-invite.js';
-import { OnlineStartup } from './online-startup.js';
+import { OnlineWorkerStartup } from './online-worker-startup.js';
+import { OnlineWorkerClient } from './online-worker-client.js';
+import type { OnlineProtocolWorkerPort } from './online-worker-client.js';
+import type {
+  OnlineWorkerInitialization,
+  OnlineWorkerResumeInfo,
+} from './online-worker-messages.js';
+import { UnsupportedOnlineGameVersionError } from './online-game-records.js';
 import type { OnlineStartupSnapshot } from './online-startup.js';
 import type { OnlineGame } from './online-game.js';
 import {
@@ -37,8 +44,6 @@ import {
 } from './online-lobby-transport.js';
 import { OnlineChat } from './online-chat.js';
 import type { ChatContent, ChatSnapshot } from './online-chat.js';
-import { loadOnlineGameRecord } from './online-game-records.js';
-import type { SavedOnlineGameRecord } from './online-game-records.js';
 import { planPregameRoster } from './online-room-roster.js';
 
 export type OpenOnlineRoom =
@@ -99,6 +104,7 @@ export interface OnlineRoomRuntime {
   readonly iceServers?: readonly RTCIceServer[];
   readonly iceTransportPolicy?: RTCIceTransportPolicy;
   readonly acquireLease?: typeof acquireGameWriterLease;
+  readonly workerFactory?: () => OnlineProtocolWorkerPort;
 }
 
 function createBrowserClock(): ProtocolClock {
@@ -135,7 +141,7 @@ export class OnlineRoom {
   private manualRetryPeer: PeerId | null = null;
   private snapshot: OnlineRoomSnapshot;
   private closing: Promise<void> | null = null;
-  private readonly startup: OnlineStartup;
+  private readonly startup: OnlineWorkerStartup;
   private readonly chat: OnlineChat;
   private chatAllowedPeers: readonly PeerId[] = [];
   private readonly resumedChatState: LobbyState | null;
@@ -159,11 +165,13 @@ export class OnlineRoom {
     private readonly signaling: ServerSignalingAdapter | null,
     private readonly relay: MeshRelaySignalingAdapter,
     controller: LobbyController | null,
-    resume: SavedOnlineGameRecord | null,
+    resume: OnlineWorkerResumeInfo | null,
     private readonly ownedStore: IndexedDbByteStore | null,
     store: EscrowCeremonyStore,
     private readonly clock: ProtocolClock,
     private readonly manualRtcFactory: () => RTCPeerConnection,
+    createWorkerClient: () => OnlineWorkerClient,
+    worker: { client: OnlineWorkerClient; initialization: OnlineWorkerInitialization } | null,
   ) {
     this.lobby = controller;
     this.resumedChatState = resume?.agreement.state ?? null;
@@ -197,13 +205,13 @@ export class OnlineRoom {
     });
     const common = {
       invite,
-      identity,
+      self: identity.peerId,
       transport: createOnlineNonChatTransport(transport),
-      store,
       clock,
-      engine: createBaseEngine(),
+      createClient: createWorkerClient,
+      ...worker,
     };
-    this.startup = new OnlineStartup(
+    this.startup = new OnlineWorkerStartup(
       resume
         ? { ...common, resume }
         : {
@@ -252,17 +260,42 @@ export class OnlineRoom {
     let transport: WebRtcTransport | null = null;
     let controller: LobbyController | null = null;
     let room: OnlineRoom | null = null;
+    let worker: { client: OnlineWorkerClient; initialization: OnlineWorkerInitialization } | null =
+      null;
+    let workerClient: OnlineWorkerClient | null = null;
+    const createWorkerClient = () =>
+      new OnlineWorkerClient(runtime.workerFactory ? { worker: runtime.workerFactory() } : {});
     try {
       identity =
         request.kind === 'resume'
           ? await loadOnlineIdentity(store)
           : await loadOrCreateOnlineIdentity(store);
-      const resume =
-        request.kind === 'resume' ? await loadOnlineGameRecord(store, request.gameId) : null;
+      if (request.kind === 'resume') {
+        workerClient = createWorkerClient();
+        const initialized = await workerClient.request({
+          kind: 'initialize',
+          mode: 'resume',
+          self: identity.peerId,
+          gameId: request.gameId,
+        });
+        if (!initialized.ok) {
+          if (
+            initialized.error.code === 'unsupported-version' &&
+            'savedVersion' in initialized.error &&
+            typeof initialized.error.savedVersion === 'number'
+          )
+            throw new UnsupportedOnlineGameVersionError(initialized.error.savedVersion);
+          throw new Error(initialized.error.message);
+        }
+        if (initialized.value.self !== identity.peerId)
+          throw new Error('Saved online game device identity differs');
+        worker = { client: workerClient, initialization: initialized.value };
+      }
+      const resume = worker?.initialization.resume ?? null;
       let inviteSource: OnlineInvite;
       if (request.kind === 'resume') {
-        if (!resume) throw new Error('Saved online game is missing');
-        inviteSource = resume.invite;
+        if (!resume || !worker) throw new Error('Saved online game is missing');
+        inviteSource = worker.initialization.invite;
       } else if (request.kind === 'join') inviteSource = request.invite;
       else if (request.kind === 'manual-join') {
         const hint = await readManualLobbyOffer(request.offerCode);
@@ -352,6 +385,8 @@ export class OnlineRoom {
               iceServers: [...(runtime.iceServers ?? [])],
               iceTransportPolicy: runtime.iceTransportPolicy ?? 'all',
             })),
+        createWorkerClient,
+        worker,
       );
       room.update({ signaling: status });
       if (request.kind === 'manual-join') {
@@ -365,8 +400,9 @@ export class OnlineRoom {
         throw error;
       }
       try {
-        controller?.dispose();
+        await workerClient?.shutdown();
       } finally {
+        controller?.dispose();
         try {
           if (transport) transport.dispose();
           else if (relay) relay.close();
@@ -390,7 +426,7 @@ export class OnlineRoom {
 
   retryStart = () => this.startup.retryFailed();
 
-  getGame = (): OnlineGame | null => this.startup.game();
+  getGame = (): OnlineGame<GameSession> | null => this.startup.game();
 
   sendChat = (content: ChatContent): Promise<Result<void>> => {
     if (this.startup.game() && this.chat.scopeKind() !== 'game')
@@ -705,6 +741,7 @@ export class OnlineRoom {
     if (this.closing) return this.closing;
     // Publish the promise before notifying views, which may call close again.
     this.closing = Promise.resolve().then(() => this.releaseResources());
+    void this.startup.close().catch(() => undefined);
     this.cancelManualInvitation();
     this.chat.dispose();
     this.update({ closed: true });

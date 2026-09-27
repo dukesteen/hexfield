@@ -6,23 +6,21 @@ import { ResourceCardPicker } from '../trade/ResourceCard.js';
 import { DialogFrame } from './DialogFrame.js';
 import { emptyCounts } from './resources.js';
 import type { CommandFormProps } from './types.js';
+import { useCommandValidations } from './use-command-validation.js';
+import { ValidationChecking } from './ValidationChecking.js';
 
 /** The exact count comes from the engine's discard template. */
-export function DiscardDialog({
-  legal,
-  privateState,
-  validate,
-  onSubmit,
-  onCancel,
-}: CommandFormProps) {
+export function DiscardDialog(props: CommandFormProps) {
+  const { legal, privateState, onSubmit, onCancel } = props;
   const { t } = useTranslation('rules');
   const [cards, setCards] = useState<ResourceCounts>(emptyCounts);
   const template = legal.templates.find((item) => item.type === 'DISCARD');
-  if (typeof template?.count !== 'number') return null;
-  const count = template.count;
+  const count = typeof template?.count === 'number' ? template.count : 0;
   const selected = RESOURCES.reduce((sum, resource) => sum + cards[resource], 0);
   const command = { type: 'DISCARD', cards };
-  const valid = selected === count && validate(command).ok;
+  const [validation] = useCommandValidations([command], props);
+  if (typeof template?.count !== 'number') return null;
+  const valid = selected === count && validation === 'valid';
   const change = (resource: Resource, value: number) => {
     if (value < 0 || value > (privateState.hand[resource] ?? 0)) return;
     setCards((current) => ({ ...current, [resource]: value }));
@@ -36,6 +34,7 @@ export function DiscardDialog({
       footer={
         <div className="trade-dialog-footer">
           <p aria-live="polite">{t('rules:discard.selected', { selected, count })}</p>
+          <ValidationChecking checking={selected === count && validation === 'checking'} />
           <div className="trade-dialog-buttons">
             {onCancel && (
               <button className="button button-quiet" type="button" onClick={onCancel}>
@@ -47,7 +46,7 @@ export function DiscardDialog({
               type="button"
               disabled={!valid}
               onClick={() => {
-                if (selected === count && validate(command).ok) onSubmit(command);
+                if (valid) onSubmit(command);
               }}
             >
               {t('rules:action.confirm')}

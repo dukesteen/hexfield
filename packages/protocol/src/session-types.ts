@@ -45,10 +45,10 @@ export interface GameSession<Save = unknown> {
   getPending(): readonly Pending[];
   getTimers(): readonly SessionTimer[];
   getLegalCommands(seat: Seat): LegalCommandSet;
-  validate(seat: Seat, command: CommandShape): Result<void>;
+  validate(seat: Seat, command: CommandShape): Result<void> | Promise<Result<void>>;
   getEvents(): readonly GameEvent[];
   getAudit?(): SessionAuditState;
-  retryAudit?(): boolean;
+  retryAudit?(): boolean | Promise<boolean>;
   getRecoveryCandidate?(): RecoveryApprovalCandidate | null;
   approveRecoveryAuthorization?(change: unknown): Promise<Result<RecoveryApprovalPreview>>;
   clearRecoveryApproval?(): void;
@@ -56,9 +56,11 @@ export interface GameSession<Save = unknown> {
   controllableSeats(): Seat[];
   submit(seat: Seat, command: CommandShape, options?: SubmitOptions): Promise<Result<void>>;
   /** Cancel preparation that has not entered consensus; accepted commands cannot be cancelled. */
-  cancelPending?(seat: Seat): boolean;
+  cancelPending?(seat: Seat): boolean | Promise<boolean>;
   subscribe(listener: (update: SessionUpdate) => void): Unsubscribe;
-  exportSave(): Save;
+  exportSave(): Save | Promise<Save>;
+  /** Conceal any cached online private view when its owning seat is hidden. */
+  setPrivateVisible?(visible: boolean): void;
   setPaused?(paused: boolean): void;
   dispose(): void;
 }

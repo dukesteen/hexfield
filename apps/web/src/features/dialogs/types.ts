@@ -14,7 +14,10 @@ export interface CommandFormProps {
   state: GameState;
   seat: Seat;
   playerLabel: (seat: Seat) => string;
-  validate: (command: CommandShape) => Result<void>;
+  validate: (command: CommandShape) => Result<void> | Promise<Result<void>>;
+  /** Invalidates advisory results when the certified head or session changes. */
+  validationKey?: string;
+  validationSession?: object | null;
   onSubmit: (command: CommandShape) => void;
   onCancel?: () => void;
 }

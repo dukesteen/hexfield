@@ -5,28 +5,23 @@ import type { ResourceCounts } from '@cp2p/engine';
 import { DialogFrame } from '../dialogs/DialogFrame.js';
 import { emptyCounts } from '../dialogs/resources.js';
 import type { CommandFormProps } from '../dialogs/types.js';
+import { useCommandValidations } from '../dialogs/use-command-validation.js';
+import { ValidationChecking } from '../dialogs/ValidationChecking.js';
 import { ResourceCardPicker } from './ResourceCard.js';
 
 /** Each give-card tap adds exactly one harbor-rate unit; the live validator remains final. */
-export function BankTradePicker({
-  legal,
-  state,
-  seat,
-  privateState,
-  validate,
-  onSubmit,
-  onCancel,
-}: CommandFormProps) {
+export function BankTradePicker(props: CommandFormProps) {
+  const { legal, state, seat, privateState, onSubmit, onCancel } = props;
   const { t } = useTranslation('rules');
   const [give, setGive] = useState<ResourceCounts>(emptyCounts);
   const [get, setGet] = useState<ResourceCounts>(emptyCounts);
   const [touched, setTouched] = useState(false);
-  if (!legal.templates.some((item) => item.type === 'MARITIME_TRADE')) return null;
   const base = state.config.options.base;
   const hideBankCounts =
     typeof base === 'object' && base !== null && Reflect.get(base, 'hideBankCounts') === true;
   const command = { type: 'MARITIME_TRADE', give, get };
-  const result = validate(command);
+  const [validation] = useCommandValidations([command], props);
+  if (!legal.templates.some((item) => item.type === 'MARITIME_TRADE')) return null;
   const rates: ResourceCounts = {
     brick: baseHarborRate(state, seat, 'brick'),
     lumber: baseHarborRate(state, seat, 'lumber'),
@@ -38,7 +33,8 @@ export function BankTradePicker({
   const units = RESOURCES.reduce((total, resource) => total + (get[resource] ?? 0), 0);
   const footer = (
     <div className="trade-dialog-footer">
-      {!result.ok && touched && (
+      <ValidationChecking checking={validation === 'checking' && touched} />
+      {validation === 'invalid' && touched && (
         <p className="trade-dialog-error" role="alert">
           {t('rules:validation.bank')}
         </p>
@@ -52,9 +48,9 @@ export function BankTradePicker({
         <button
           className="button button-primary"
           type="button"
-          disabled={!result.ok}
+          disabled={validation !== 'valid'}
           onClick={() => {
-            if (validate(command).ok) onSubmit(command);
+            if (validation === 'valid') onSubmit(command);
           }}
         >
           {t('rules:action.confirm')}

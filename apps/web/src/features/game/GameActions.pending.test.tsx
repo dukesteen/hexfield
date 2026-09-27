@@ -115,3 +115,32 @@ test('a changed revision during the paint delay stops submission even if animati
     text: 'game:staleAction',
   });
 });
+
+test('a head change while worker validation is pending prevents stale submit', async () => {
+  let finish: ((value: ReturnType<typeof success>) => void) | undefined;
+  const validate = vi.fn<() => Promise<ReturnType<typeof success>>>(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  const submit = vi.fn<() => Promise<ReturnType<typeof success>>>(async () => success(undefined));
+  harness.session.current = { mode: 'p2p', validate, submit };
+  const state = createBaseEngine().createGame(
+    { modules: [{ id: 'base', version: '1.0.0' }], seats: [0, 1], options: { base: {} } },
+    new Uint8Array(32).fill(7),
+  );
+  const view = renderHook(() =>
+    useGameActions(state, [], { players: [], botDelayMs: 0 }, { compact: true }),
+  );
+  const step = view.result.current.nextStep;
+  if (step.kind !== 'command') throw new Error('Expected an action command');
+  act(() => step.run());
+  await waitFor(() => expect(validate).toHaveBeenCalledTimes(1));
+  expect(view.result.current.submitting).toBe(true);
+  expect(submit).not.toHaveBeenCalled();
+  harness.state.revision = 8;
+  await act(async () => finish?.(success(undefined)));
+  expect(submit).not.toHaveBeenCalled();
+  expect(view.result.current.nextStep).toMatchObject({ kind: 'text', text: 'game:staleAction' });
+});

@@ -4,6 +4,8 @@ import type { Resource, ResourceCounts, Seat } from '@cp2p/engine';
 import { DialogFrame } from '../dialogs/DialogFrame.js';
 import { emptyCounts } from '../dialogs/resources.js';
 import type { CommandFormProps } from '../dialogs/types.js';
+import { useCommandValidations } from '../dialogs/use-command-validation.js';
+import { ValidationChecking } from '../dialogs/ValidationChecking.js';
 import { ResourceCardPicker } from './ResourceCard.js';
 
 function hasOpenOffer(value: unknown, seat: Seat): boolean {
@@ -21,16 +23,8 @@ function hasOpenOffer(value: unknown, seat: Seat): boolean {
 }
 
 /** Offer or counter-offer composer; the live validator decides whether its terms can be sent. */
-export function TradeComposer({
-  legal,
-  state,
-  seat,
-  privateState,
-  validate,
-  onSubmit,
-  onCancel,
-  playerLabel,
-}: CommandFormProps) {
+export function TradeComposer(props: CommandFormProps) {
+  const { legal, state, seat, privateState, onSubmit, onCancel, playerLabel } = props;
   const { t } = useTranslation('rules');
   const [give, setGive] = useState<ResourceCounts>(emptyCounts);
   const [want, setWant] = useState<ResourceCounts>(emptyCounts);
@@ -41,12 +35,13 @@ export function TradeComposer({
   const template = legal.templates.find(
     (item) => item.type === 'OFFER_TRADE' || item.type === 'PROPOSE_TRADE',
   );
-  if (!template) return null;
-  const command =
-    template.type === 'OFFER_TRADE'
+  const command = !template
+    ? null
+    : template.type === 'OFFER_TRADE'
       ? { type: template.type, give, want, to }
       : { type: template.type, give, want };
-  const result = validate(command);
+  const [validation] = useCommandValidations(command ? [command] : [], props);
+  if (!template) return null;
   const change = (field: 'give' | 'want', resource: Resource, value: number) => {
     setTouched(true);
     if (field === 'give') {
@@ -56,7 +51,8 @@ export function TradeComposer({
   };
   const footer = (
     <div className="trade-dialog-footer">
-      {!result.ok && touched && (
+      <ValidationChecking checking={validation === 'checking' && touched} />
+      {validation === 'invalid' && touched && (
         <p className="trade-dialog-error" role="alert">
           {t('rules:validation.trade')}
         </p>
@@ -70,9 +66,9 @@ export function TradeComposer({
         <button
           className="button button-primary"
           type="button"
-          disabled={!result.ok}
+          disabled={validation !== 'valid'}
           onClick={() => {
-            if (validate(command).ok) onSubmit(command);
+            if (validation === 'valid' && command) onSubmit(command);
           }}
         >
           {t('rules:trade.send')}

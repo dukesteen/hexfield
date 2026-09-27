@@ -4,7 +4,7 @@ import { loadOnlineConnectionSettings } from '../../queries/network.js';
 import type { OpenOnlineRoom } from '../../session/online-room.js';
 import type { OnlineRoomSnapshot } from '../../session/online-room.js';
 import type { OnlineInvite } from '../../session/online-invite.js';
-import type { LobbyController } from '@cp2p/protocol';
+import type { GameSession, LobbyController } from '@cp2p/protocol';
 import type { Unsubscribe } from '@cp2p/protocol';
 import type { OnlineGame } from '../../session/online-game.js';
 import type { WebRtcPeerStats } from '@cp2p/p2p';
@@ -26,7 +26,7 @@ export interface OnlineRoomHandleValue {
   cancelManualInvitation?: OnlineRoom['cancelManualInvitation'];
   startGame: () => Result<void>;
   retryStart: () => Promise<Result<void>>;
-  getGame: () => OnlineGame | null;
+  getGame: () => OnlineGame<GameSession> | null;
   getPeerStats?: () => Promise<readonly WebRtcPeerStats[]>;
   sendChat?: (content: ChatContent) => Promise<Result<void>>;
   muteChat?: (peer: PeerId, muted: boolean) => Promise<Result<void>>;

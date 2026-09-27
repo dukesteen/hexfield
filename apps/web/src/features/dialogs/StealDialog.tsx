@@ -1,33 +1,34 @@
 import { useTranslation } from 'react-i18next';
 import { DialogFrame } from './DialogFrame.js';
 import type { CommandFormProps } from './types.js';
+import { useCommandValidations } from './use-command-validation.js';
+import { ValidationChecking } from './ValidationChecking.js';
 
 /** Victims are only those in the current concrete legal command list. */
-export function StealDialog({
-  legal,
-  state,
-  validate,
-  onSubmit,
-  onCancel,
-  playerLabel,
-}: CommandFormProps) {
+export function StealDialog(props: CommandFormProps) {
+  const { legal, state, onSubmit, onCancel, playerLabel } = props;
   const { t } = useTranslation('rules');
   const choices = legal.commands.flatMap((command) => {
     if (command.type !== 'STEAL') return [];
     const victim = state.config.seats.find((seat) => seat === command.victim);
     return victim === undefined ? [] : [{ command, victim }];
   });
+  const validations = useCommandValidations(
+    choices.map(({ command }) => command),
+    props,
+  );
   if (!choices.length) return null;
   return (
     <DialogFrame title={t('rules:steal.title')} onCancel={onCancel}>
       <p>{t('rules:steal.instruction')}</p>
-      {choices.map(({ command, victim }) => (
+      <ValidationChecking checking={validations.includes('checking')} />
+      {choices.map(({ command, victim }, index) => (
         <button
           type="button"
           key={victim}
-          disabled={!validate(command).ok}
+          disabled={validations[index] !== 'valid'}
           onClick={() => {
-            if (validate(command).ok) onSubmit(command);
+            if (validations[index] === 'valid') onSubmit(command);
           }}
         >
           {t('rules:steal.seat', {

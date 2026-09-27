@@ -6,13 +6,16 @@ import { ResourceCardPicker } from '../trade/ResourceCard.js';
 import { DialogFrame } from './DialogFrame.js';
 import { emptyCounts } from './resources.js';
 import type { CommandFormProps } from './types.js';
+import { useCommandValidations } from './use-command-validation.js';
+import { ValidationChecking } from './ValidationChecking.js';
 
 interface Props extends CommandFormProps {
   slotId?: string;
 }
 
 /** Card selection resolves to an exact engine-provided Monopoly command. */
-export function MonopolyDialog({ legal, validate, onSubmit, onCancel, slotId }: Props) {
+export function MonopolyDialog(props: Props) {
+  const { legal, onSubmit, onCancel, slotId } = props;
   const { t } = useTranslation('rules');
   const [selected, setSelected] = useState<Resource | null>(null);
   const choices = legal.commands.filter(
@@ -21,7 +24,6 @@ export function MonopolyDialog({ legal, validate, onSubmit, onCancel, slotId }: 
       command.card === 'monopoly' &&
       (slotId === undefined || command.slotId === slotId),
   );
-  if (!choices.length) return null;
   const selectable = RESOURCES.filter((resource) =>
     choices.some((choice) => {
       const params = choice.params;
@@ -39,6 +41,8 @@ export function MonopolyDialog({ legal, validate, onSubmit, onCancel, slotId }: 
       typeof params === 'object' && params !== null && Reflect.get(params, 'resource') === selected
     );
   });
+  const [validation] = useCommandValidations(command ? [command] : [], props);
+  if (!choices.length) return null;
   return (
     <DialogFrame
       title={t('rules:monopoly.title')}
@@ -46,6 +50,7 @@ export function MonopolyDialog({ legal, validate, onSubmit, onCancel, slotId }: 
       variant="trade"
       footer={
         <div className="trade-dialog-footer">
+          <ValidationChecking checking={!!command && validation === 'checking'} />
           <div className="trade-dialog-buttons">
             {onCancel && (
               <button className="button button-quiet" type="button" onClick={onCancel}>
@@ -55,9 +60,9 @@ export function MonopolyDialog({ legal, validate, onSubmit, onCancel, slotId }: 
             <button
               className="button button-primary"
               type="button"
-              disabled={!command || !validate(command).ok}
+              disabled={!command || validation !== 'valid'}
               onClick={() => {
-                if (command && validate(command).ok) onSubmit(command);
+                if (command && validation === 'valid') onSubmit(command);
               }}
             >
               {t('rules:action.confirm')}

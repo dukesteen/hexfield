@@ -39,9 +39,11 @@ certifies one cheat finding across two peers while preserving the owed outcome.
 Static/build checks and focused correction tests pass; the checkpoint records
 the mixed-source workspace run precisely. Proposer consequences and fairness UI
 remain unfinished. The
-[online worker design](verification/stage09/online-worker-design.md) describes the
-remaining move of setup and live game computation off the UI thread. It is not
-implemented yet.
+[online worker implementation](verification/stage09/online-worker-implementation.md)
+now moves certified setup and live game computation off the UI thread. The complete
+local web suite passes 242 tests. Two-browser placements, dice, trades and restore
+checks pass, as does a hosted-bot startup. Full terminal-audit and proof/heartbeat
+performance acceptance for the new boundary remain open.
 
 ## 01 — Repository Foundation
 

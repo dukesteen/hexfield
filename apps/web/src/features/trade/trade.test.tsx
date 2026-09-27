@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeAll, describe, expect, test, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { createInstance } from 'i18next';
 import { I18nextProvider } from 'react-i18next';
 import { createBaseEngine, failure, success } from '@cp2p/engine';
@@ -93,6 +93,35 @@ function validateBank(command: CommandShape): Result<void> {
 }
 
 describe('controlled trade forms', () => {
+  test('online offer checks show pending feedback and disable submission until the current verdict', async () => {
+    const finishes: ((result: Result<void>) => void)[] = [];
+    const validate = vi.fn<() => Promise<Result<void>>>(
+      () =>
+        new Promise((resolve) => {
+          finishes.push(resolve);
+        }),
+    );
+    const onSubmit = vi.fn<(command: CommandShape) => void>();
+    mount(
+      <TradeComposer
+        {...props({ commands: [], templates: [{ type: 'OFFER_TRADE' }] }, validateOffer, onSubmit)}
+        validate={validate}
+        validationKey="head-1:seat-0"
+        validationSession={{ mode: 'p2p' }}
+      />,
+    );
+    const send = screen.getByRole('button', { name: 'Send offer' });
+    expect(send.hasAttribute('disabled')).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: 'Add Brick to You give' }));
+    expect(screen.getByText('Checking this move…')).toBeTruthy();
+    expect(screen.queryByRole('alert')).toBeNull();
+    await waitFor(() => expect(validate).toHaveBeenCalledTimes(2));
+    await act(async () => finishes[1]?.(success(undefined)));
+    expect(send.hasAttribute('disabled')).toBe(false);
+    fireEvent.click(send);
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+  });
+
   test('offer composer submits selected give/want and recipients only after validation', () => {
     const onSubmit = vi.fn<(command: CommandShape) => void>();
     mount(

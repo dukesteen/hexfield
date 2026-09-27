@@ -441,7 +441,20 @@ function HandDock({
       card,
       ...(params ? { params } : {}),
     };
-    const valid = sessionForActions()?.validate(revealedSeat, command);
+    const session = sessionForActions();
+    if (session?.mode === 'p2p') {
+      const legal = session
+        .getLegalCommands(revealedSeat)
+        .commands.some(
+          (candidate) =>
+            candidate.type === 'PLAY_DEV_CARD' &&
+            candidate.slotId === slotId &&
+            candidate.card === card,
+        );
+      return legal ? null : t('game:cardRuleUnavailable');
+    }
+    const valid = session?.validate(revealedSeat, command);
+    if (valid && 'then' in valid) return t('game:cardRuleUnavailable');
     if (valid?.ok) return null;
     const code = valid?.error.code;
     if (code === 'not-pending') return t('game:cardNotYourTurn');

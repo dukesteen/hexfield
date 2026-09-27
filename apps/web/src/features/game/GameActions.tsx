@@ -249,10 +249,24 @@ export function useGameActions(
           setError(t('game:staleAction'));
           return;
         }
-        const validated = session.validate(seat, command);
+        const validated = await session.validate(seat, command);
         if (!validated.ok) {
           recordOrdinaryActionRejection();
-          setError(t('game:invalidAction'));
+          setError(
+            t(
+              validated.error.code === 'stale-revision' ? 'game:staleAction' : 'game:invalidAction',
+            ),
+          );
+          return;
+        }
+        const afterValidation = useSessionStore.getState();
+        if (
+          sessionForActions() !== session ||
+          afterValidation.revision !== revision ||
+          afterValidation.revealedSeat !== seat ||
+          afterValidation.conflicted
+        ) {
+          setError(t('game:staleAction'));
           return;
         }
         const result = await session.submit(seat, command, { expectedRevision: revision });
@@ -405,6 +419,8 @@ export function useGameActions(
           state,
           seat,
           playerLabel,
+          validationKey: `${revision}:${seat}`,
+          validationSession: sessionForActions(),
           validate: (command: CommandShape) =>
             sessionForActions()?.validate(seat, command) ?? {
               ok: false as const,

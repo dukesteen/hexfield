@@ -110,6 +110,7 @@ export function restoreSessionPause(): void {
 /** An external writer stops bots and timers until this session is discarded. */
 export function pauseForExternalConflict(): void {
   externalPaused = true;
+  liveSession?.setPrivateVisible?.(false);
   liveSession?.setPaused?.(true);
   useSessionStore.setState({
     conflicted: true,
@@ -131,9 +132,11 @@ export const useSessionStore = create<SessionStore>((set) => ({
     const humans = session.controllableSeats();
     const required = requiredHumanSeat(session.getState(), session.getPending(), humans);
     if ((optionalSeat ?? required) !== seat && !(required === null && humans.length === 1)) return;
-    const privateState = session.getPrivate(seat);
-    if (!privateState) return;
     manuallyConcealed = false;
+    session.setPrivateVisible?.(true);
+    const privateState = session.getPrivate(seat);
+    // Worker-backed sessions publish a fresh display view asynchronously.
+    if (!privateState) return;
     set({
       revealedSeat: seat,
       privateState,
@@ -144,6 +147,7 @@ export const useSessionStore = create<SessionStore>((set) => ({
   },
   conceal: () => {
     manuallyConcealed = true;
+    liveSession?.setPrivateVisible?.(false);
     const onlyHuman = liveSession?.controllableSeats().length === 1;
     set((current) => ({
       waitingSeat: onlyHuman ? current.revealedSeat : current.waitingSeat,
@@ -265,6 +269,7 @@ export function attachSession(gameId: string, session: GameSession): () => void 
           : null;
     const coverSeat =
       desiredSeat ?? (humans.length === 1 && manuallyConcealed ? (humans[0] ?? null) : null);
+    session.setPrivateVisible?.(visibleSeat !== null);
     const finalHiddenVictoryPoints: Partial<Record<Seat, number | null>> = {};
     if (update.state.result) {
       const auditedScores =
@@ -312,6 +317,7 @@ export function attachSession(gameId: string, session: GameSession): () => void 
   session.setPaused?.(privacyPaused || externalPaused);
   return () => {
     unsubscribe();
+    session.setPrivateVisible?.(false);
     if (liveSession === session) liveSession = null;
     privacyPaused = false;
     externalPaused = false;

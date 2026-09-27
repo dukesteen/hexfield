@@ -1,6 +1,7 @@
 {
   "action": { "confirm": "Confirm", "cancel": "Cancel" },
   "validation": {
+    "checking": "Checking this move…",
     "plenty": "These resource choices cannot be played right now.",
     "trade": "These trade terms cannot be offered right now. Check your cards and recipients.",
     "bank": "This bank trade cannot be made right now. Check the amounts and available cards."
