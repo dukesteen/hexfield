@@ -36,3 +36,5 @@ not close the entire browser process, finish the game or exercise another browse
 engine, mobile network or takeover. Contexts close in `finally`. The working tree
 included the optional vault's default-off storage hooks; vault-enabled storage
 was not exercised by this browser trace.
+
+The later [whole-process trace](native-process-resume-acceptance.md) covers browser exit, profile restoration, a terminal game, both final audits and verified Home history on pinned v5 source.

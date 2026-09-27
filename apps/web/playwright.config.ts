@@ -21,7 +21,8 @@ export default defineConfig({
   webServer: {
     command: `pnpm dev --host 127.0.0.1 --port ${port} --strictPort`,
     url: baseURL,
-    reuseExistingServer: !process.env.CI,
+    // Acceptance must run its checkout, never another worktree on the same port.
+    reuseExistingServer: !process.env.CI && process.env.CP2P_ONLINE_RESUME_E2E !== '1',
     timeout: 60_000,
   },
 });
