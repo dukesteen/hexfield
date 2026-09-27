@@ -26,7 +26,7 @@ describe('board effect motion', () => {
     expect(middle.y).toBe(16);
   });
 
-  it('lifts production tokens smoothly, holds them, then settles them', () => {
+  it('grows production tokens smoothly, holds them, then shrinks them', () => {
     expect(productionTokenMotion(0)).toBe(0);
     expect(productionTokenMotion(0.15)).toBeGreaterThan(0.5);
     expect(productionTokenMotion(0.4)).toBe(1);

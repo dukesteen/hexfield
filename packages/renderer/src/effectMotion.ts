@@ -28,7 +28,7 @@ export function diceMotion(progress: number): DiceMotion {
   };
 }
 
-/** Lift, hold, and settle a producing number token without changing its ground position. */
+/** Grow, hold, and shrink a number token around its center. */
 export function productionTokenMotion(progress: number): number {
   const t = Math.max(0, Math.min(1, progress));
   if (t < 0.25) {

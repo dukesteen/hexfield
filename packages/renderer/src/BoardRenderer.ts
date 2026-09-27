@@ -552,7 +552,7 @@ export class PixiBoardRenderer implements BoardRenderer {
         sprite.width = original.width;
         sprite.height = original.height;
         node.addChild(sprite);
-        return { sprite, y: original.position.y, scaleX: sprite.scale.x, scaleY: sprite.scale.y };
+        return { sprite, scaleX: sprite.scale.x, scaleY: sprite.scale.y };
       });
       node.visible = false;
       this.layers.effects.addChild(node);
@@ -567,10 +567,9 @@ export class PixiBoardRenderer implements BoardRenderer {
           if (pulseProgress === null) return false;
           node.visible = true;
           for (const original of originals) original.visible = false;
-          const lift = productionTokenMotion(pulseProgress);
-          for (const { sprite, y, scaleX, scaleY } of sprites) {
-            sprite.scale.set(scaleX * (1 + lift * 0.6), scaleY * (1 + lift * 0.6));
-            sprite.position.y = y - lift * this.hexSize * 0.12;
+          const scale = 1 + productionTokenMotion(pulseProgress) * 0.6;
+          for (const { sprite, scaleX, scaleY } of sprites) {
+            sprite.scale.set(scaleX * scale, scaleY * scale);
           }
           return progress >= 1;
         },
