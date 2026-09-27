@@ -49,7 +49,7 @@ export function NextStepBar({
         </button>
       ) : step.kind === 'command' ? (
         <button
-          className="button button-primary next-step-primary"
+          className={`button button-primary next-step-primary ${step.rollDice ? 'action-roll-dice' : ''}`}
           type="button"
           onClick={step.run}
         >

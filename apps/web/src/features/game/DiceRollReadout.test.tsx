@@ -3,6 +3,7 @@ import { cleanup, render, screen } from '@testing-library/react';
 import { createInstance } from 'i18next';
 import { afterEach, beforeAll, expect, test } from 'vitest';
 import { I18nextProvider } from 'react-i18next';
+import { getDieUrl } from '@cp2p/renderer';
 import type { GameEvent } from '@cp2p/engine';
 import game from '../../i18n/locales/en/game.json';
 import { DiceRollReadout, latestDiceRoll } from './DiceRollReadout.js';
@@ -23,7 +24,7 @@ test('readout uses the latest public dice event and announces the total', () => 
   expect(lastRoll).toEqual({ faces: [6, 1], total: 7 });
   if (!lastRoll) throw new Error('Expected a public dice roll');
 
-  render(
+  const { container } = render(
     <I18nextProvider i18n={i18n}>
       <DiceRollReadout dice={lastRoll} />
     </I18nextProvider>,
@@ -32,6 +33,9 @@ test('readout uses the latest public dice event and announces the total', () => 
   expect(screen.getByRole('img', { name: 'Last roll: 6 and 1, total 7' })).toBeTruthy();
   expect(screen.getByText('Last roll')).toBeTruthy();
   expect(screen.getByText('7')).toBeTruthy();
+  const faces = container.querySelectorAll('.dice-roll-face');
+  expect(faces[0]?.getAttribute('src')).toBe(getDieUrl(6));
+  expect(faces[1]?.getAttribute('src')).toBe(getDieUrl(1));
 });
 
 test('readout stays absent until a valid public roll exists', () => {

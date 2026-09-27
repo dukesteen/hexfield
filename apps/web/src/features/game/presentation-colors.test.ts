@@ -2,6 +2,7 @@ import { LOBBY_COLOURS } from '@cp2p/protocol';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, test } from 'vitest';
+import { getFactionUrl } from '@cp2p/renderer';
 import { PlayerMarker } from './PlayerMarker.js';
 import { BOARD_PLAYER_COLORS } from './use-appearance.js';
 
@@ -13,7 +14,7 @@ describe('shared player presentation colors', () => {
       expect(BOARD_PLAYER_COLORS[color]).toBeGreaterThan(0);
       expect(
         renderToStaticMarkup(createElement(PlayerMarker, { shape: 'circle', color })),
-      ).toContain(`color-${color}`);
+      ).toContain(`src="${getFactionUrl(color)}"`);
     }
   });
 });

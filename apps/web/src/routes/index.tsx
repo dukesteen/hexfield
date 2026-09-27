@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from '@tanstack/react-router';
+import { getGameArtUrl } from '@cp2p/renderer';
 import { useTranslation } from 'react-i18next';
 import { useSavedGames } from '../queries/hooks';
 import { useResumableGames } from '../queries/online-games';
@@ -36,6 +37,7 @@ function Home() {
           </Link>
         </section>
         <div className="home-saved-games">
+          <img className="home-board-art" src={getGameArtUrl('preview')} alt="" />
           {(onlineGames.isError ||
             !!onlineGames.data?.games.length ||
             !!onlineGames.data?.unavailableGameIds.length) && (

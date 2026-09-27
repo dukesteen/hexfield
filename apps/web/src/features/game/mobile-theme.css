@@ -1,0 +1,648 @@
+.game-page[data-compact='true'] .game-menu {
+  top: calc(12px + env(safe-area-inset-top));
+  left: 12px;
+}
+.mobile-topbar {
+  flex: none;
+  min-width: 0;
+  padding: calc(12px + env(safe-area-inset-top)) 12px 8px 64px;
+}
+.mobile-topbar .player-rail {
+  padding: 0;
+  overflow: visible;
+}
+.mobile-topbar .player-list {
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+  height: auto;
+  padding-bottom: 4px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.mobile-topbar .player-panel {
+  position: relative;
+  flex: 1 0 130px;
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) auto;
+  grid-template-rows: 18px 12px;
+  gap: 2px 6px;
+  align-content: center;
+  height: 48px;
+  min-width: 0;
+  padding: 4px 7px;
+  border: 2px solid transparent;
+  border-radius: 12px;
+  background: var(--raised);
+  box-shadow: 0 3px 0 var(--panel-shadow);
+}
+.mobile-topbar .player-panel.is-active {
+  border-color: #d6a33b;
+  background: var(--active-panel);
+}
+.mobile-topbar .player-panel-heading {
+  display: contents;
+}
+.mobile-topbar .player-panel-heading .player-marker {
+  grid-column: 1;
+  grid-row: 1 / 3;
+  align-self: center;
+  width: 22px;
+  height: 26px;
+}
+.mobile-topbar .player-panel-heading strong {
+  display: block;
+  position: static;
+  width: auto;
+  height: auto;
+  clip-path: none;
+  grid-column: 2;
+  grid-row: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  line-height: 18px;
+}
+.mobile-topbar .player-panel .player-vp {
+  grid-column: 3;
+  grid-row: 1 / 3;
+  align-self: center;
+  min-width: 24px;
+  padding: 4px 5px;
+  border-radius: 7px;
+  font:
+    15px/1 'Young Serif',
+    Georgia,
+    serif;
+}
+.mobile-topbar .player-panel-status,
+.mobile-topbar .player-panel.has-receipt .player-panel-status {
+  display: flex;
+  grid-column: 2;
+  grid-row: 2;
+  gap: 3px;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 12px;
+}
+.mobile-topbar .is-active .player-panel-status {
+  color: #547c40;
+}
+.mobile-topbar .is-active .connection-status,
+.mobile-topbar .player-seat-index,
+.mobile-topbar .timer-ring,
+.mobile-topbar .player-panel-stats,
+.mobile-topbar .player-piece-counts,
+.mobile-topbar .player-vp small,
+.mobile-topbar .receipt-label {
+  display: none;
+}
+.mobile-topbar .production-receipt {
+  gap: 4px;
+}
+.mobile-topbar .receipt-resource img {
+  width: 12px;
+  height: 12px;
+}
+.mobile-topbar .player-panel-open {
+  border-radius: 10px;
+}
+.mobile-session-notice {
+  flex: none;
+  margin: 0 12px 6px;
+  padding: 6px 10px;
+  border: 1px solid #d6b87f;
+  border-radius: 10px;
+  background: var(--surface);
+  font-size: 11px;
+}
+.game-page[data-compact='true'] .game-grid {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) auto;
+}
+.game-page[data-compact='true'] .game-board {
+  grid-column: 1;
+  grid-row: 1;
+  border: 0;
+}
+.game-page[data-compact='true'] .board-renderer-root {
+  width: calc(100% + 60px);
+  margin-left: -30px;
+}
+.game-page[data-compact='true'] .dice-roll-readout {
+  top: 10px;
+  right: 12px;
+  display: flex;
+  gap: 6px;
+  padding: 6px 8px;
+}
+.game-page[data-compact='true'] .dice-roll-readout figcaption {
+  display: none;
+}
+.game-page[data-compact='true'] .dice-roll-total {
+  order: -1;
+  padding-inline: 2px;
+  font:
+    18px/1 'Young Serif',
+    Georgia,
+    serif;
+}
+.game-page[data-compact='true'] .dice-roll-face {
+  width: 28px;
+  height: 28px;
+}
+.mobile-board-awards {
+  position: absolute;
+  top: 10px;
+  left: 12px;
+  z-index: 4;
+  pointer-events: none;
+}
+.mobile-board-awards .awards-panel {
+  padding: 0;
+  border: 0;
+}
+.mobile-board-awards .award-list {
+  gap: 6px;
+}
+.mobile-board-awards .award-item {
+  flex: none;
+}
+.mobile-board-awards h2,
+.mobile-board-awards .award-item > div {
+  display: none;
+}
+.game-page[data-compact='true'] .game-bottom {
+  position: relative;
+  grid-column: 1;
+  grid-row: 2;
+  display: block;
+  align-self: stretch;
+  height: auto;
+  overflow: visible;
+  padding: 10px 12px max(14px, env(safe-area-inset-bottom));
+  border: 0;
+  border-top: 1px solid var(--border);
+  border-radius: 22px 22px 0 0;
+  background: var(--raised);
+  box-shadow: 0 -6px 18px rgb(59 42 46 / 12%);
+}
+.mobile-bottom-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.game-page[data-compact='true'] .hand-dock {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  overflow: visible;
+}
+.game-page[data-compact='true'] .hand-dock .section-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+  min-height: 20px;
+  margin: 0;
+}
+.game-page[data-compact='true'] .hand-dock h2 {
+  position: static;
+  width: auto;
+  height: auto;
+  clip-path: none;
+  overflow: visible;
+  font-size: 16px;
+}
+.game-page[data-compact='true'] .hand-total {
+  display: block;
+  margin-left: auto;
+  font-size: 10px;
+}
+.game-page[data-compact='true'] .hand-controls {
+  display: flex;
+  gap: 2px;
+}
+.game-page[data-compact='true'] .hand-dev-control {
+  display: none;
+}
+.game-page[data-compact='true'] .hand-hide-control {
+  min-width: 32px;
+  min-height: 32px;
+  padding: 4px;
+}
+.game-page[data-compact='true'] .hand-cards {
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  margin: -3px -12px 0;
+  padding: 9px 12px 3px;
+  scrollbar-width: thin;
+}
+.game-page[data-compact='true'] .resource-hand {
+  display: contents;
+}
+.game-page[data-compact='true'] .resource-hand-card {
+  flex: 0 0 52px;
+}
+.game-page[data-compact='true'] .hand-dock .resource-card {
+  --card-w: 52px;
+}
+.game-page[data-compact='true'] .hand-dock .resource-card img {
+  width: 52px;
+  height: 74px;
+}
+.game-page[data-compact='true'] .hand-dock .resource-card-name {
+  display: none;
+}
+.game-page[data-compact='true'] .hand-dock .resource-card-count {
+  right: -6px;
+  top: -6px;
+  min-width: 20px;
+  height: 20px;
+  border: 0;
+  padding: 0 4px;
+  line-height: 20px;
+  font-size: 11px;
+  background: #3d2f35;
+  color: #f7efde;
+}
+.game-page[data-compact='true'] .hand-cards .development-hand {
+  display: contents;
+}
+.game-page[data-compact='true'] .hand-cards .development-card {
+  flex: 0 0 52px;
+  width: 52px;
+  height: 74px;
+  margin: 0;
+  transform: none;
+}
+.game-page[data-compact='true'] .hand-cards .development-card-main,
+.game-page[data-compact='true'] .hand-cards .development-card-art {
+  display: block;
+  position: relative;
+  inset: auto;
+  width: 52px;
+  height: 74px;
+  min-height: 0;
+  padding: 0;
+  transform: none;
+}
+.game-page[data-compact='true'] .hand-cards .development-card img {
+  width: 52px;
+  height: 74px;
+  object-fit: contain;
+  transform: none;
+}
+.game-page[data-compact='true'] .hand-cards .development-card-main strong {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+.mobile-control-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) 1.5fr;
+  gap: 8px;
+}
+.mobile-tabs {
+  display: contents;
+}
+.mobile-tab {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-width: 0;
+  height: 56px;
+  padding: 0;
+  border: 0;
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 3px 0 var(--panel-shadow);
+  font-size: 10px;
+}
+.mobile-tab img {
+  width: 30px;
+  height: 30px;
+  object-fit: contain;
+}
+.mobile-tab[aria-expanded='true'] {
+  background: var(--active-panel);
+}
+.mobile-tab i {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+.mobile-step {
+  display: flex;
+  min-width: 0;
+}
+.mobile-step > button {
+  position: relative;
+  flex: 1;
+  align-self: stretch;
+  min-width: 0;
+  min-height: 56px;
+  padding: 4px;
+  border: 0;
+  border-radius: 12px;
+  background: #c2493a;
+  color: #fff8ec;
+  box-shadow: 0 3px 0 #8e2f24;
+  font:
+    16px/1.1 'Young Serif',
+    Georgia,
+    serif;
+}
+.game-page[data-compact='true'] .mobile-step .action-roll-dice {
+  background: #547c40;
+  box-shadow: 0 3px 0 #38562a;
+}
+.mobile-next-step {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 12px;
+  right: 12px;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  line-height: 1.4;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: 0 2px 0 var(--panel-shadow);
+}
+.mobile-control-row[aria-busy='true'] button:disabled {
+  opacity: 1;
+}
+.mobile-turn-spinner {
+  position: absolute;
+  right: 5px;
+  bottom: 5px;
+  width: 10px;
+  height: 10px;
+}
+.mobile-next-step > span {
+  flex: 1;
+  min-width: 0;
+}
+.mobile-next-step .button {
+  min-height: 44px;
+  padding: 4px 8px;
+  font-size: 11px;
+}
+.game-page[data-compact='true'] .cockpit-sheet {
+  border: 0;
+  border-radius: 22px 22px 0 0;
+  background: var(--surface);
+  box-shadow: 0 -10px 30px rgb(42 32 37 / 25%);
+}
+.game-page[data-compact='true'] .cockpit-sheet::before {
+  content: '';
+  position: absolute;
+  top: 8px;
+  left: calc(50% - 20px);
+  width: 40px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--panel-shadow);
+}
+.game-page[data-compact='true'] .cockpit-sheet-header {
+  padding: 20px 16px 8px;
+  border: 0;
+}
+.game-page[data-compact='true'] .cockpit-sheet-header h2 {
+  font-size: 20px;
+}
+.game-page[data-compact='true'] .cockpit-sheet-close {
+  min-width: 44px;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  background: var(--raised);
+  font-size: 24px;
+}
+.mobile-build-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.mobile-build-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 66px;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: 14px;
+  background: var(--panel);
+  color: var(--text);
+  box-shadow: 0 2px 0 var(--panel-shadow);
+  text-align: left;
+}
+.mobile-build-art {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  object-fit: contain;
+}
+.mobile-build-copy {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+  font:
+    16px 'Young Serif',
+    Georgia,
+    serif;
+}
+.mobile-build-cost {
+  display: flex;
+  gap: 4px;
+}
+.mobile-build-cost img {
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
+}
+.mobile-build-context .desktop-action-status {
+  position: static;
+  transform: none;
+  width: auto;
+  margin-top: 12px;
+}
+.mobile-trade-options {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+.mobile-trade-options > button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 96px;
+  padding: 8px;
+  border: 0;
+  border-radius: 14px;
+  background: var(--panel);
+  color: var(--text);
+  box-shadow: 0 2px 0 var(--panel-shadow);
+  font-size: 12px;
+}
+.mobile-trade-options img {
+  width: 44px;
+  height: 44px;
+  object-fit: contain;
+}
+.game-page[data-compact='true'] .cockpit-sheet .bank-panel {
+  padding: 0;
+  border: 0;
+}
+.game-page[data-compact='true'] .cockpit-sheet .bank-panel h2 {
+  margin-bottom: 16px;
+  font-size: 16px;
+}
+.game-page[data-compact='true'] .cockpit-sheet .bank-cards {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 6px;
+}
+.game-page[data-compact='true'] .cockpit-sheet .bank-card .resource-card {
+  --card-w: 34px;
+}
+.game-page[data-compact='true'] .cockpit-sheet .bank-card img {
+  width: 34px;
+  height: 48px;
+}
+.game-page[data-compact='true'] .cockpit-sheet .bank-card .resource-card-name {
+  font-size: 9px;
+}
+.mobile-players-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.mobile-players-list .player-details {
+  padding: 10px 12px;
+  border: 2px solid var(--border);
+  border-radius: 14px;
+  background: var(--raised);
+}
+.mobile-players-list .player-details[data-active='true'] {
+  border-color: #d6a33b;
+  background: var(--active-panel);
+}
+.mobile-players-list .player-details > h3,
+.mobile-players-list .player-details > p,
+.mobile-players-list .player-details-gains {
+  display: none;
+}
+.mobile-players-list .awards-panel {
+  padding: 6px 0;
+  border: 0;
+}
+.mobile-players-list .awards-panel h2 {
+  display: none;
+}
+.mobile-players-list .player-details-stats {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 4px;
+  margin: 10px 0;
+}
+.mobile-players-list .player-details-stats > div {
+  padding: 0;
+  background: transparent;
+  font-size: 11px;
+}
+.mobile-players-list .player-details-stats dt {
+  font-size: 11px;
+}
+.game-page[data-compact='true'] .cockpit-sheet .event-log {
+  padding: 0;
+  border: 0;
+}
+.game-page[data-compact='true'] .cockpit-sheet .event-log > summary {
+  display: none;
+}
+.game-page[data-compact='true'] .cockpit-sheet .event-log ol {
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  font-size: 12px;
+}
+
+@media (max-height: 500px) and (min-width: 640px) {
+  .mobile-topbar {
+    position: absolute;
+    z-index: 3;
+    top: max(12px, env(safe-area-inset-top));
+    right: 12px;
+    width: 306px;
+    padding: 0;
+  }
+  .mobile-topbar .player-list {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 6px;
+  }
+  .mobile-topbar .player-list:has(.player-panel:nth-child(3)) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .mobile-board-awards {
+    top: 68px;
+  }
+  .game-page[data-compact='true'] .board-renderer-root {
+    width: 100%;
+    margin-left: 0;
+  }
+  .game-page[data-compact='true'] .game-grid {
+    grid-template-columns: minmax(0, 1fr) 330px;
+    grid-template-rows: minmax(0, 1fr);
+  }
+  .game-page[data-compact='true'] .game-bottom {
+    grid-column: 2;
+    grid-row: 1;
+    max-height: none;
+    border-radius: 18px 0 0;
+    align-self: end;
+  }
+  .mobile-session-notice {
+    position: absolute;
+    z-index: 7;
+    left: 68px;
+    right: 342px;
+    top: 12px;
+    margin: 0;
+  }
+  .game-page[data-compact='true'] .cockpit-sheet {
+    border-radius: 22px 0 0 22px;
+  }
+}

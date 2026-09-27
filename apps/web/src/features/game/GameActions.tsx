@@ -1,13 +1,24 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { getPieceIconUrl, type BoardHighlights, type BoardHit } from '@cp2p/renderer';
+import {
+  getGameArtUrl,
+  getPieceIconUrl,
+  getResourceIconUrl,
+  type BoardHighlights,
+  type BoardHit,
+} from '@cp2p/renderer';
 import type { EdgeId, HexId, VertexId } from '@cp2p/engine/geometry';
 import { buildBoardGraph } from '@cp2p/engine/geometry';
 import {
+  CITY_COST,
+  DEV_COST,
   RESOURCES,
+  ROAD_COST,
+  SETTLEMENT_COST,
   type CommandShape,
   type GameState,
   type Pending,
+  type Resource,
   type Seat,
 } from '@cp2p/engine';
 import { deriveActionAvailability, type PlacementKind } from '../actions/availability';
@@ -47,10 +58,12 @@ const actionPaths: Readonly<Record<string, string>> = {
 const noChoices = [] as const;
 const closeForm = () => useSessionStore.getState().closeActionDialog();
 
-function ActionIcon({ kind }: { kind: string }) {
+function ActionIcon({ kind, color }: { kind: string; color?: string | undefined }) {
   const piece = kind === 'freeRoad' ? 'road' : kind;
   if (piece === 'road' || piece === 'settlement' || piece === 'city')
-    return <img className="action-icon" src={getPieceIconUrl(piece)} alt="" aria-hidden="true" />;
+    return (
+      <img className="action-icon" src={getPieceIconUrl(piece, color)} alt="" aria-hidden="true" />
+    );
   const path = actionPaths[kind] ?? 'M5 12h14m-5-5 5 5-5 5';
   return (
     <svg className="action-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -113,6 +126,12 @@ export interface GameActionController {
   knightIntent: { slotId: string; confirm: () => void; cancel: () => void } | null;
   toggleKnightIntent: (slotId: string) => void;
   dock: React.ReactNode;
+  desktopBuild: React.ReactNode;
+  desktopStatus: React.ReactNode;
+  desktopTrade: React.ReactNode;
+  desktopTurn: React.ReactNode;
+  mobileBuild: React.ReactNode;
+  mobileTrade: React.ReactNode;
   forms: React.ReactNode;
   nextStep: NextStep;
   actionCount: number;
@@ -120,9 +139,13 @@ export interface GameActionController {
 }
 
 export type NextStep =
-  | { kind: 'command'; label: string; run: () => void }
+  | { kind: 'command'; label: string; rollDice: boolean; run: () => void }
   | { kind: 'board'; text: string; cancel?: () => void }
-  | { kind: 'pending'; text: string }
+  | {
+      kind: 'pending';
+      text: string;
+      turnAction?: { label: string; rollDice: boolean };
+    }
   | { kind: 'text'; text: string; tone: 'muted' | 'alert' };
 
 /** Let React commit pending feedback before synchronous proof work starts. */
@@ -170,7 +193,8 @@ export function useGameActions(
   const [error, setError] = useState<string | null>(null);
   const [buildCostsOpen, setBuildCostsOpen] = useState(false);
   const submitting = useRef(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submittingCommand, setSubmittingCommand] = useState<CommandShape['type'] | null>(null);
+  const isSubmitting = submittingCommand !== null;
   const actorSeat = actingSeat(state, pending);
   const availability = useMemo(
     () => (seat !== null && legal ? deriveActionAvailability(legal, pending, seat) : null),
@@ -219,6 +243,8 @@ export function useGameActions(
   const playerLabel = (candidate: Seat) =>
     presentation.players.find((player) => player.seat === candidate)?.name ??
     t('game:playerFallback', { number: candidate + 1 });
+  const playerColor =
+    seat === null ? undefined : presentation.players.find((player) => player.seat === seat)?.color;
 
   const submit = (command: CommandShape) => {
     if (seat === null || submitting.current) return;
@@ -234,7 +260,7 @@ export function useGameActions(
       return;
     }
     submitting.current = true;
-    setIsSubmitting(true);
+    setSubmittingCommand(command.type);
     setError(null);
     void (async () => {
       try {
@@ -283,7 +309,7 @@ export function useGameActions(
         setError(t('game:invalidAction'));
       } finally {
         submitting.current = false;
-        setIsSubmitting(false);
+        setSubmittingCommand(null);
       }
     })();
   };
@@ -475,24 +501,35 @@ export function useGameActions(
     ? normalGroups.find((group) => group.type === 'ROLL_DICE' || group.type === 'END_TURN')
     : undefined;
   const sheetNormalGroups = normalGroups.filter((group) => group !== promoted);
+  const actionsEnabled = !isSubmitting && !conflicted && status?.kind !== 'error';
+  const chooseBoardAction = (kind: PlacementKind) => {
+    options.onHandOff?.();
+    const store = useSessionStore.getState();
+    if (selectedKind !== kind) store.choosePlacement(kind);
+    else if (mandatoryPlacement) store.clearPlacementCandidate();
+    else store.cancelPlacement();
+  };
+  const openTrade = (dialog: 'bank' | 'trade') => {
+    options.onHandOff?.();
+    useSessionStore.getState().openActionDialog(dialog);
+  };
   const actionButtons = (groups: typeof primary) =>
     groups.flatMap((group) => {
       if (
         ['RESPOND_TRADE', 'CANCEL_TRADE', 'CONFIRM_TRADE', 'STEAL', 'DISCARD'].includes(group.type)
       )
         return [];
-      const buttonClass = `button button-quiet action-control ${group.type in normalActionOrder ? 'action-normal-control' : ''}`;
+      const buttonClass = `button button-quiet action-control ${group.type in normalActionOrder ? 'action-normal-control' : ''} ${group.type === 'ROLL_DICE' ? 'action-roll-dice' : ''}`;
       if (group.type === 'OFFER_TRADE' || group.type === 'PROPOSE_TRADE')
         return [
           <button
             className={buttonClass}
             type="button"
-            disabled={isSubmitting}
+            disabled={!actionsEnabled}
             key={group.type}
             title={t('game:command.trade')}
             onClick={() => {
-              options.onHandOff?.();
-              useSessionStore.getState().openActionDialog('trade');
+              openTrade('trade');
             }}
           >
             <ActionIcon kind={group.type} />
@@ -504,12 +541,11 @@ export function useGameActions(
           <button
             className={buttonClass}
             type="button"
-            disabled={isSubmitting}
+            disabled={!actionsEnabled}
             key={group.type}
             title={t('game:command.bank')}
             onClick={() => {
-              options.onHandOff?.();
-              useSessionStore.getState().openActionDialog('bank');
+              openTrade('bank');
             }}
           >
             <ActionIcon kind={group.type} />
@@ -520,7 +556,7 @@ export function useGameActions(
         <button
           className={buttonClass}
           type="button"
-          disabled={isSubmitting}
+          disabled={!actionsEnabled}
           key={`${group.type}:${index}`}
           onClick={() => {
             options.onHandOff?.();
@@ -532,6 +568,31 @@ export function useGameActions(
         </button>
       ));
     });
+  const cardPlayButtons = dockCardPlays.map((card) => {
+    const cardKind = card.card ?? priv?.slots[card.slotId] ?? 'Hidden';
+    const knightSelected = cardKind === 'knight' && form === 'knight' && slotId === card.slotId;
+    return (
+      <button
+        className={`button action-control ${knightSelected ? 'button-primary' : 'button-quiet'}`}
+        type="button"
+        disabled={!actionsEnabled}
+        key={card.slotId}
+        {...(cardKind === 'knight' ? { 'aria-pressed': knightSelected } : {})}
+        onClick={() => {
+          options.onHandOff?.();
+          if (cardKind === 'knight') toggleKnightIntent(card.slotId);
+          else if (cardKind === 'yearOfPlenty')
+            useSessionStore.getState().openActionDialog('plenty', card.slotId);
+          else if (cardKind === 'monopoly')
+            useSessionStore.getState().openActionDialog('monopoly', card.slotId);
+          else if (card.commands[0]) submit(card.commands[0]);
+        }}
+      >
+        <ActionIcon kind="PLAY_DEV_CARD" />
+        <span>{t('game:playCard', { card: t(`game:dev${cardKind}`) })}</span>
+      </button>
+    );
+  });
   const optionalTradeChooser =
     optionalChoices.length > 0 && optionalViewingSeat === null ? (
       <details className="optional-trade-chooser">
@@ -554,6 +615,17 @@ export function useGameActions(
         </div>
       </details>
     ) : null;
+  const placementInstruction = selectedKind
+    ? selectedPlacement
+      ? t('game:placementSelectedInstruction', {
+          piece: t(`game:piece.${selectedKind === 'freeRoad' ? 'road' : selectedKind}`),
+        })
+      : selectedKind === 'road' || selectedKind === 'freeRoad'
+        ? t('game:roadInstruction', { count: choices.length })
+        : selectedKind === 'settlement' || selectedKind === 'city'
+          ? t('game:buildingInstruction', { count: choices.length })
+          : t('game:boardInstruction', { action: t(`game:placement.${selectedKind}`) })
+    : null;
 
   const dock = (
     <section className="action-dock" aria-label={t('game:actions')} aria-busy={isSubmitting}>
@@ -603,15 +675,9 @@ export function useGameActions(
                       disabled={isSubmitting}
                       key={kind}
                       aria-pressed={selectedKind === kind}
-                      onClick={() => {
-                        options.onHandOff?.();
-                        const store = useSessionStore.getState();
-                        if (selectedKind !== kind) store.choosePlacement(kind);
-                        else if (mandatoryPlacement) store.clearPlacementCandidate();
-                        else store.cancelPlacement();
-                      }}
+                      onClick={() => chooseBoardAction(kind)}
                     >
-                      <ActionIcon kind={kind} />
+                      <ActionIcon kind={kind} color={playerColor} />
                       <span>{t(`game:buildAction.${kind}`)}</span>
                     </button>
                   ))}
@@ -634,50 +700,12 @@ export function useGameActions(
                   aria-label={t('game:contextActions')}
                 >
                   {actionButtons(contextualGroups)}
-                  {dockCardPlays.map((card) => {
-                    const cardKind = card.card ?? priv?.slots[card.slotId] ?? 'Hidden';
-                    const knightSelected =
-                      cardKind === 'knight' && form === 'knight' && slotId === card.slotId;
-                    return (
-                      <button
-                        className={`button action-control ${knightSelected ? 'button-primary' : 'button-quiet'}`}
-                        type="button"
-                        disabled={isSubmitting}
-                        key={card.slotId}
-                        {...(cardKind === 'knight' ? { 'aria-pressed': knightSelected } : {})}
-                        onClick={() => {
-                          options.onHandOff?.();
-                          if (cardKind === 'knight') {
-                            toggleKnightIntent(card.slotId);
-                          } else if (cardKind === 'yearOfPlenty') {
-                            useSessionStore.getState().openActionDialog('plenty', card.slotId);
-                          } else if (cardKind === 'monopoly') {
-                            useSessionStore.getState().openActionDialog('monopoly', card.slotId);
-                          } else if (card.commands[0]) submit(card.commands[0]);
-                        }}
-                      >
-                        <ActionIcon kind="PLAY_DEV_CARD" />
-                        <span>{t('game:playCard', { card: t(`game:dev${cardKind}`) })}</span>
-                      </button>
-                    );
-                  })}
+                  {cardPlayButtons}
                 </div>
               )}
-              {selectedKind && (
+              {placementInstruction && (
                 <p className="action-context-hint" role="status">
-                  {selectedPlacement
-                    ? t('game:placementSelectedInstruction', {
-                        piece: t(
-                          `game:piece.${selectedKind === 'freeRoad' ? 'road' : selectedKind}`,
-                        ),
-                      })
-                    : selectedKind === 'road' || selectedKind === 'freeRoad'
-                      ? t('game:roadInstruction', { count: choices.length })
-                      : selectedKind === 'settlement' || selectedKind === 'city'
-                        ? t('game:buildingInstruction', { count: choices.length })
-                        : t('game:boardInstruction', {
-                            action: t(`game:placement.${selectedKind}`),
-                          })}
+                  {placementInstruction}
                 </p>
               )}
               {optionalTradeChooser}
@@ -699,6 +727,288 @@ export function useGameActions(
           {error}
         </p>
       )}
+    </section>
+  );
+
+  const costTitle = (cost: Readonly<Record<Resource, number>>) =>
+    RESOURCES.filter((resource) => cost[resource] > 0)
+      .map((resource) =>
+        t('game:buildCostResource', { count: cost[resource], resource: t(`game:${resource}`) }),
+      )
+      .join(', ');
+  const costIcons = (cost: Readonly<Record<Resource, number>>) => (
+    <span className="mobile-build-cost" role="img" aria-label={costTitle(cost)}>
+      {RESOURCES.flatMap((resource) =>
+        Array.from({ length: cost[resource] }, (_, index) => (
+          <img
+            src={getResourceIconUrl(resource)}
+            alt=""
+            aria-hidden="true"
+            key={`${resource}:${index}`}
+          />
+        )),
+      )}
+    </span>
+  );
+  const buildChoices = [
+    { kind: 'road', label: t('game:buildCosts.road'), cost: ROAD_COST },
+    { kind: 'settlement', label: t('game:buildCosts.settlement'), cost: SETTLEMENT_COST },
+    { kind: 'city', label: t('game:buildCosts.city'), cost: CITY_COST },
+  ] as const;
+  const buyDevCard = primary.find((group) => group.type === 'BUY_DEV_CARD')?.commands[0];
+  const bankTrade = normalGroups.find((group) => group.type === 'MARITIME_TRADE');
+  const playerTrade = normalGroups.find(
+    (group) => group.type === 'OFFER_TRADE' || group.type === 'PROPOSE_TRADE',
+  );
+  const turnGroup = normalGroups.find(
+    (group) => group.type === 'ROLL_DICE' || group.type === 'END_TURN',
+  );
+  const turnCommand = turnGroup?.commands[0];
+  const desktopBuild = (
+    <section
+      className="desktop-build-panel"
+      aria-label={t('game:buildPanel')}
+      aria-busy={isSubmitting}
+    >
+      <div className="desktop-action-panel-heading">
+        <h2>{t('game:buildPanel')}</h2>
+        <button
+          className="button button-quiet desktop-build-costs"
+          type="button"
+          aria-label={t('game:buildCostsTitle')}
+          title={t('game:buildCostsTitle')}
+          onClick={() => {
+            options.onHandOff?.();
+            setBuildCostsOpen(true);
+          }}
+        >
+          ?
+        </button>
+      </div>
+      <div className="desktop-build-grid" role="group" aria-label={t('game:chooseBoardAction')}>
+        {buildChoices.map(({ kind, label, cost }) => {
+          const available = availability?.placements[kind].length;
+          return (
+            <button
+              className={`desktop-build-button ${selectedKind === kind ? 'is-selected' : ''}`}
+              type="button"
+              key={kind}
+              disabled={!actionsEnabled || !available}
+              aria-label={t(`game:buildAction.${kind}`)}
+              title={`${label} · ${costTitle(cost)}`}
+              aria-pressed={selectedKind === kind}
+              onClick={() => chooseBoardAction(kind)}
+            >
+              <img src={getPieceIconUrl(kind, playerColor)} alt="" aria-hidden="true" />
+            </button>
+          );
+        })}
+        <button
+          className="desktop-build-button"
+          type="button"
+          disabled={!actionsEnabled || !buyDevCard}
+          aria-label={t('game:command.BUY_DEV_CARD')}
+          title={`${t('game:buildCosts.developmentCard')} · ${costTitle(DEV_COST)}`}
+          onClick={() => {
+            if (buyDevCard) {
+              options.onHandOff?.();
+              submit(buyDevCard);
+            }
+          }}
+        >
+          <img src={getGameArtUrl('cardBack')} alt="" aria-hidden="true" />
+        </button>
+      </div>
+    </section>
+  );
+  const desktopStatus = (
+    <div className="desktop-action-status" aria-busy={isSubmitting}>
+      {(availableBoardKinds.some((kind) => kind === 'freeRoad' || kind === 'robber') ||
+        contextualGroups.length > 0 ||
+        cardPlayButtons.length > 0) && (
+        <div className="desktop-context-actions" role="group" aria-label={t('game:contextActions')}>
+          {availableBoardKinds
+            .filter((kind) => kind === 'freeRoad' || kind === 'robber')
+            .map((kind) => (
+              <button
+                className={`button action-control ${selectedKind === kind ? 'button-primary' : 'button-quiet'}`}
+                type="button"
+                key={kind}
+                disabled={!actionsEnabled}
+                aria-pressed={selectedKind === kind}
+                onClick={() => chooseBoardAction(kind)}
+              >
+                <ActionIcon kind={kind} color={playerColor} />
+                <span>{t(`game:buildAction.${kind}`)}</span>
+              </button>
+            ))}
+          {actionButtons(contextualGroups.filter((group) => group.type !== 'BUY_DEV_CARD'))}
+          {cardPlayButtons}
+        </div>
+      )}
+      {placementInstruction && (
+        <p className="desktop-placement-instruction" role="status">
+          {placementInstruction}
+        </p>
+      )}
+      {selectedKind && !mandatoryPlacement && !selectedPlacement && (
+        <button
+          className="button button-quiet desktop-placement-cancel"
+          type="button"
+          disabled={!actionsEnabled}
+          onClick={() => useSessionStore.getState().cancelPlacement()}
+        >
+          {t('game:cancelAction')}
+        </button>
+      )}
+      {optionalTradeChooser}
+      {seat === null && !conflicted && status?.kind !== 'error' && (
+        <p className="desktop-awaiting-action" role="status">
+          {t('game:awaitingAction')}
+        </p>
+      )}
+    </div>
+  );
+  const desktopTrade = (
+    <section className="desktop-trade-panel" aria-label={t('game:tradePanel')}>
+      <h2>{t('game:tradePanel')}</h2>
+      <div className="desktop-trade-buttons" role="group" aria-label={t('game:normalTrade')}>
+        <button
+          className="desktop-trade-button"
+          type="button"
+          disabled={!actionsEnabled || !bankTrade}
+          title={t('game:command.bank')}
+          onClick={() => openTrade('bank')}
+        >
+          <img src={getGameArtUrl('bankTrade')} alt="" aria-hidden="true" />
+          <span>{t('game:bank')}</span>
+        </button>
+        <button
+          className="desktop-trade-button"
+          type="button"
+          disabled={!actionsEnabled || !playerTrade}
+          title={t('game:command.trade')}
+          onClick={() => openTrade('trade')}
+        >
+          <img src={getGameArtUrl('playerTrade')} alt="" aria-hidden="true" />
+          <span>{t('game:players')}</span>
+        </button>
+      </div>
+    </section>
+  );
+  const desktopTurn = (
+    <div className="desktop-turn-control" aria-busy={isSubmitting}>
+      {turnCommand && (
+        <button
+          className={`desktop-turn-button ${turnGroup.type === 'ROLL_DICE' ? 'action-roll-dice' : ''}`}
+          type="button"
+          disabled={!actionsEnabled}
+          onClick={() => {
+            options.onHandOff?.();
+            submit(turnCommand);
+          }}
+        >
+          <span>{t(`game:command.${turnGroup.type}`)}</span>
+          <small>{turnGroup.type === 'ROLL_DICE' ? 'R' : 'E'}</small>
+        </button>
+      )}
+      {isSubmitting && (
+        <span className="action-pending" role="status">
+          <span className="action-spinner" aria-hidden="true" />
+          {t('game:submittingAction')}
+        </span>
+      )}
+      {error && (
+        <p className="action-error" role="alert">
+          {error}
+        </p>
+      )}
+      {conflicted && <p role="alert">{t('game:saveConflictStopped')}</p>}
+      {status?.kind === 'error' && <p role="alert">{t('game:sessionStopped')}</p>}
+    </div>
+  );
+  const mobileBuild = (
+    <section
+      className="mobile-build-panel"
+      aria-label={t('game:buildPanel')}
+      aria-busy={isSubmitting}
+    >
+      <div className="mobile-build-list">
+        {buildChoices.map(({ kind, label, cost }) => (
+          <button
+            className={`mobile-build-row ${selectedKind === kind ? 'is-selected' : ''}`}
+            type="button"
+            key={kind}
+            disabled={!actionsEnabled || !availability?.placements[kind].length}
+            aria-label={t(`game:buildAction.${kind}`)}
+            title={`${label} · ${costTitle(cost)}`}
+            aria-pressed={selectedKind === kind}
+            onClick={() => chooseBoardAction(kind)}
+          >
+            <img
+              className="mobile-build-art"
+              src={getPieceIconUrl(kind, playerColor)}
+              alt=""
+              aria-hidden="true"
+            />
+            <span className="mobile-build-copy">
+              <strong>{label}</strong>
+              {costIcons(cost)}
+            </span>
+          </button>
+        ))}
+        <button
+          className="mobile-build-row"
+          type="button"
+          disabled={!actionsEnabled || !buyDevCard}
+          aria-label={t('game:command.BUY_DEV_CARD')}
+          title={`${t('game:buildCosts.developmentCard')} · ${costTitle(DEV_COST)}`}
+          onClick={() => {
+            if (buyDevCard) {
+              options.onHandOff?.();
+              submit(buyDevCard);
+            }
+          }}
+        >
+          <img
+            className="mobile-build-art"
+            src={getGameArtUrl('cardBack')}
+            alt=""
+            aria-hidden="true"
+          />
+          <span className="mobile-build-copy">
+            <strong>{t('game:buildCosts.developmentCard')}</strong>
+            {costIcons(DEV_COST)}
+          </span>
+        </button>
+      </div>
+      <div className="mobile-build-context">{desktopStatus}</div>
+    </section>
+  );
+  const mobileTrade = (
+    <section className="mobile-trade-panel" aria-label={t('game:tradePanel')}>
+      <div className="mobile-trade-options">
+        <button
+          className="mobile-trade-option"
+          type="button"
+          disabled={!actionsEnabled || !bankTrade}
+          title={t('game:command.bank')}
+          onClick={() => openTrade('bank')}
+        >
+          <img src={getGameArtUrl('bankTrade')} alt="" aria-hidden="true" />
+          <span>{t('game:bank')}</span>
+        </button>
+        <button
+          className="mobile-trade-option"
+          type="button"
+          disabled={!actionsEnabled || !playerTrade}
+          title={t('game:command.trade')}
+          onClick={() => openTrade('trade')}
+        >
+          <img src={getGameArtUrl('playerTrade')} alt="" aria-hidden="true" />
+          <span>{t('game:players')}</span>
+        </button>
+      </div>
     </section>
   );
 
@@ -750,7 +1060,18 @@ export function useGameActions(
   } else if (status?.kind === 'error') {
     nextStep = { kind: 'text', tone: 'alert', text: t('game:sessionStopped') };
   } else if (isSubmitting) {
-    nextStep = { kind: 'pending', text: t('game:submittingAction') };
+    nextStep = {
+      kind: 'pending',
+      text: t('game:submittingAction'),
+      ...(submittingCommand === 'ROLL_DICE' || submittingCommand === 'END_TURN'
+        ? {
+            turnAction: {
+              label: t(`game:command.${submittingCommand}`),
+              rollDice: submittingCommand === 'ROLL_DICE',
+            },
+          }
+        : {}),
+    };
   } else if (error) {
     nextStep = { kind: 'text', tone: 'alert', text: error };
   } else if (seat === null || !availability) {
@@ -769,6 +1090,7 @@ export function useGameActions(
     nextStep = {
       kind: 'command',
       label: t(`game:command.${promoted?.type}`),
+      rollDice: promoted?.type === 'ROLL_DICE',
       run: () => submit(promotedCommand),
     };
   } else {
@@ -824,6 +1146,12 @@ export function useGameActions(
         : null,
     toggleKnightIntent,
     dock,
+    desktopBuild,
+    desktopStatus,
+    desktopTrade,
+    desktopTurn,
+    mobileBuild,
+    mobileTrade,
     forms,
     nextStep,
     actionCount,

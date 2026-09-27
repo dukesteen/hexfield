@@ -256,5 +256,13 @@ export function deriveVisualEffects(
       }
     }
   }
+  if (board.some((effect) => effect.kind === 'dice-roll')) {
+    const hexes = after.board.hexes.flatMap((hex) =>
+      hex.token === roll && hex.id !== after.board.robberHex && isHexId(hex.id) ? [hex.id] : [],
+    );
+    if (hexes.length > 0) {
+      board.push({ id: `${revision}:production`, kind: 'production-pulse', hexes });
+    }
+  }
   return { board, flights, tradeFlights, stealFlights, productionGains };
 }

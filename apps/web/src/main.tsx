@@ -8,6 +8,9 @@ import { queryClient } from './queryClient';
 import { router } from './router';
 import './style.css';
 import './app.css';
+import './features/game/game-theme.css';
+import './redesign.css';
+import './features/game/mobile-theme.css';
 
 const root = document.getElementById('root');
 if (!root) throw new Error('Missing #root');

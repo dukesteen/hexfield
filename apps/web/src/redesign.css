@@ -1,0 +1,425 @@
+:root {
+  --page: #efe6d4;
+  --surface: #f7efde;
+  --raised: #f1e7d2;
+  --text: #3d2f35;
+  --muted: #766657;
+  --border: #e0d5c2;
+  --control: #a58f77;
+  --accent: #9c4935;
+  --accent-text: #fff8ec;
+  --error: #aa3429;
+  --panel-shadow: #d6c7a8;
+  color: var(--text);
+  background-color: var(--page);
+  font-family: 'DM Mono', monospace;
+  color-scheme: light;
+}
+
+:root[data-theme='dark'] {
+  --page: #29252a;
+  --surface: #332c32;
+  --raised: #40363c;
+  --text: #f5ebd9;
+  --muted: #cfbfac;
+  --border: #594b50;
+  --control: #af9983;
+  --accent: #eea184;
+  --accent-text: #30272c;
+  --error: #ffb29e;
+  --panel-shadow: #211b22;
+  color-scheme: dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --page: #29252a;
+    --surface: #332c32;
+    --raised: #40363c;
+    --text: #f5ebd9;
+    --muted: #cfbfac;
+    --border: #594b50;
+    --control: #af9983;
+    --accent: #eea184;
+    --accent-text: #30272c;
+    --error: #ffb29e;
+    --panel-shadow: #211b22;
+    color-scheme: dark;
+  }
+}
+
+.app-dialog h2,
+.home-page h1,
+.home-page h2,
+.form-page h1,
+.form-page h2,
+.online-page h1,
+.online-page h2 {
+  font-family: 'Young Serif', Georgia, serif;
+  font-weight: 400;
+}
+
+.home-page .app-header,
+.form-page .app-header,
+.online-page .app-header {
+  max-width: 1200px;
+  border-color: var(--border);
+}
+
+.home-page .app-brand,
+.form-page .app-brand,
+.online-page .app-brand {
+  font-family: 'Young Serif', Georgia, serif;
+  font-size: 1.125rem;
+  font-weight: 400;
+}
+
+.home-page .brand-mark {
+  background: #a6362a;
+}
+
+.app-dialog .button,
+.home-page .button,
+.form-page .button,
+.online-page .button {
+  border-radius: 10px;
+  box-shadow: 0 3px 0 var(--panel-shadow);
+  transition:
+    transform 160ms ease,
+    background-color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.app-dialog .button:active,
+.home-page .button:active,
+.form-page .button:active,
+.online-page .button:active {
+  transform: translateY(2px);
+  box-shadow: 0 1px 0 var(--panel-shadow);
+}
+
+.app-dialog .button-primary,
+.home-page .button-primary,
+.form-page .button-primary,
+.online-page .button-primary {
+  border-color: #3d2f35;
+  background: #3d2f35;
+  color: #f7efde;
+}
+
+:root[data-theme='dark'] :is(.app-dialog, .home-page, .form-page, .online-page) .button-primary {
+  border-color: #a6362a;
+  background: #a6362a;
+  color: #fff8ec;
+}
+
+.app-dialog .button-quiet,
+.home-page .button-quiet,
+.form-page .button-quiet,
+.online-page .button-quiet {
+  border-color: var(--border);
+  background: var(--surface);
+  color: var(--text);
+}
+
+.home-content {
+  max-width: 1200px;
+  align-items: center;
+  gap: clamp(32px, 6vw, 80px);
+}
+
+.home-intro {
+  position: relative;
+  isolation: isolate;
+  padding-top: 28px;
+}
+
+.home-intro h1 {
+  position: relative;
+  max-width: 12ch;
+  font-size: clamp(2.8rem, 6vw, 4.75rem);
+  line-height: 1.04;
+  letter-spacing: -0.025em;
+}
+
+.home-intro > p {
+  position: relative;
+  max-width: 36ch;
+  color: var(--muted);
+  font-size: 1rem;
+}
+
+.home-board-art {
+  display: block;
+  justify-self: center;
+  width: min(100%, 390px);
+  max-height: 360px;
+  object-fit: contain;
+  filter: drop-shadow(0 12px 16px rgb(61 47 53 / 12%));
+}
+
+.home-online-actions {
+  gap: 10px;
+}
+
+.home-beta-note {
+  font-size: 0.75rem;
+}
+
+.home-local-link,
+.home-page .text-link,
+.form-page .text-link,
+.online-page .text-link {
+  color: var(--accent);
+}
+
+.home-saved-games {
+  gap: 18px;
+}
+.home-saved-games > .saved-games {
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface);
+  box-shadow: 0 5px 0 var(--panel-shadow);
+}
+
+.saved-games {
+  min-width: 0;
+  padding: 0;
+}
+
+.saved-games .section-heading {
+  padding-bottom: 10px;
+  border-color: var(--border);
+}
+
+.saved-games .section-heading h2 {
+  font-size: 1.25rem;
+}
+
+.saved-game-row {
+  grid-template-columns: minmax(0, 1fr) auto 18px;
+  gap: 12px;
+  padding: 14px 2px;
+  border-color: var(--border);
+}
+
+.saved-game-names {
+  color: var(--text);
+  font-weight: 500;
+}
+
+.saved-game-time {
+  font-size: 0.72rem;
+}
+
+.form-page-content {
+  width: min(100%, 960px);
+  padding-top: clamp(28px, 5vw, 52px);
+}
+
+.form-page-content > h1 {
+  font-size: clamp(2rem, 4vw, 3rem);
+}
+
+.form-page-content > .muted {
+  color: var(--muted);
+}
+
+.player-form-row > .player-marker {
+  align-self: end;
+  justify-self: center;
+  margin-bottom: 8px;
+}
+
+.form-page fieldset,
+.online-page .online-invite-panel,
+.online-page .online-start-panel,
+.online-page .online-section {
+  border-color: var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: 0 3px 0 var(--panel-shadow);
+}
+
+.form-page input:not([type='checkbox']),
+.form-page select,
+.form-page textarea,
+.online-page input:not([type='checkbox']),
+.online-page select,
+.online-page textarea {
+  border-color: var(--control);
+  border-radius: 8px;
+  background: var(--page);
+  color: var(--text);
+}
+
+.form-page :is(input, select, textarea):focus-visible,
+.online-page :is(input, select, textarea):focus-visible {
+  outline-color: #a6362a;
+}
+
+.settings-form {
+  max-width: 720px;
+}
+
+.settings-form:not(.network-settings) > fieldset {
+  grid-template-columns: minmax(130px, 0.7fr) minmax(180px, 1fr);
+  align-items: center;
+}
+
+.settings-form > fieldset legend {
+  font-family: 'Young Serif', Georgia, serif;
+  font-size: 1.1rem;
+  font-weight: 400;
+}
+
+.settings-form > fieldset .checkbox-row {
+  grid-column: 1 / -1;
+}
+
+.settings-form > .button {
+  justify-self: stretch;
+}
+
+.network-settings {
+  max-width: 720px;
+  margin-top: 26px;
+}
+
+.network-settings summary {
+  font-family: 'Young Serif', Georgia, serif;
+  font-size: 1.05rem;
+}
+
+.network-settings-options > summary {
+  cursor: pointer;
+  padding-block: 12px;
+}
+
+.network-settings-options > fieldset {
+  margin: 12px 0 20px;
+}
+
+.online-connection-options {
+  border-top: 1px solid var(--border);
+  padding-top: 14px;
+}
+
+.online-connection-options summary {
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+
+.online-connection-fields {
+  display: grid;
+  gap: 16px;
+  padding-top: 18px;
+}
+
+.online-connection-fields .muted {
+  font-size: 0.8rem;
+  font-weight: 400;
+}
+
+.online-page .online-status,
+.online-page .online-seat-row,
+.online-page .online-start-progress,
+.online-page .online-chat-history {
+  border-color: var(--border);
+  border-radius: 11px;
+  background: var(--raised);
+}
+
+.online-page .online-seat-row {
+  box-shadow: 0 2px 0 var(--panel-shadow);
+}
+
+.online-page .online-kicker {
+  color: var(--accent);
+}
+
+.online-page .online-status-ready {
+  background: #6fa35a;
+}
+
+.online-page .online-status-retrying {
+  background: #e59a3c;
+}
+
+.online-page .online-status-closed {
+  background: #c2493a;
+}
+
+.online-page .online-marker.color-blue {
+  --online-seat-color: #4f7fbf;
+}
+.online-page .online-marker.color-orange {
+  --online-seat-color: #e59a3c;
+}
+.online-page .online-marker.color-green {
+  --online-seat-color: #6fa35a;
+}
+.online-page .online-marker.color-magenta {
+  --online-seat-color: #292528;
+}
+.online-page .online-marker.color-yellow {
+  --online-seat-color: #f2ebd8;
+}
+.online-page .online-marker.color-red {
+  --online-seat-color: #c2493a;
+}
+
+@media (max-width: 767px) {
+  .home-content {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 28px;
+    padding: 28px 18px 40px;
+  }
+
+  .home-intro {
+    padding-top: 12px;
+  }
+
+  .home-board-art {
+    width: min(100%, 280px);
+    max-height: 240px;
+  }
+
+  .home-saved-games {
+    padding: 16px;
+  }
+
+  .saved-game-row {
+    grid-template-columns: minmax(0, 1fr) 18px;
+    gap: 4px 10px;
+    padding: 12px 2px;
+  }
+
+  .saved-game-time {
+    grid-column: 1;
+  }
+
+  .saved-game-arrow {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+  }
+
+  .form-page-content {
+    padding: 28px 18px 48px;
+  }
+
+  .settings-form:not(.network-settings) > fieldset {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-page .button,
+  .form-page .button,
+  .online-page .button {
+    transition: none;
+  }
+}

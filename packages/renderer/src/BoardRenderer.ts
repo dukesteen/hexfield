@@ -1,15 +1,23 @@
-import { Application, Container, Graphics, Sprite, Text } from 'pixi.js';
+import { Application, Container, Graphics, Sprite } from 'pixi.js';
 import type { Texture } from 'pixi.js';
 import { buildBoardGraph, edgeToPixel, hexToPixel, vertexToPixel } from '@cp2p/engine/geometry';
 import type { BoardGraph, EdgeId, HexId, Point, VertexId } from '@cp2p/engine/geometry';
 import { hitTestBoard } from './input/hitTest.js';
-import { cameraPositionAtAnchor, clampCameraAxis } from './input/camera.js';
-import { loadBoardTextures } from './assets/terrainTextures.js';
+import { cameraPositionAtAnchor, clampCameraAxis, fitZoomToBounds } from './input/camera.js';
+import { artColorFromNumber, loadBoardTextures } from './assets/terrainTextures.js';
+import { assignTerrainVariants } from './assets/terrainVariants.js';
+import { roadVariantForEdge } from './roadVariant.js';
 import type { BoardTextures } from './assets/terrainTextures.js';
 import { sameAppearance } from './appearance.js';
-import { diceMotion, robberPosition } from './effectMotion.js';
+import {
+  DICE_ROLL_DURATION_MS,
+  PRODUCTION_TOKEN_PULSE_MS,
+  diceMotion,
+  productionPulseProgress,
+  productionTokenMotion,
+  robberPosition,
+} from './effectMotion.js';
 import { harborLayout } from './harborLayout.js';
-import { tokenFontSize, tokenPipRadius, tokenPips } from './tokenLayout.js';
 import type {
   BoardAppearance,
   BoardRendererDiagnostics,
@@ -29,9 +37,9 @@ import type {
 const HEX_SIZE = 54;
 const MIN_ZOOM = 0.35;
 const MAX_ZOOM = 3.2;
-const HARBOR_MARKER_SCALE = 0.96;
-const ROAD_LENGTH = 0.74;
-const ROAD_THICKNESS = 0.18;
+const FIT_PADDING = 24;
+const ROAD_ART_SCALE = 0.64;
+const ROBBER_GROUND_ANCHOR = 70 / 92;
 const LANE_INSET = 0.22;
 const LANE_WIDTH = 0.15;
 const LANE_DASHES = 3;
@@ -41,7 +49,6 @@ const EDGE_RING_LENGTH = 0.82;
 const EDGE_RING_HEIGHT = 0.32;
 const EDGE_INK = 0x18332b;
 const EDGE_PAPER = 0xfcfdfc;
-const DARK_BOARD_BACKDROP = 0x17191c;
 const SITE_HALO = 0.2;
 const SITE_RING = 0.11;
 const SITE_RING_WIDTH = 0.04;
@@ -82,47 +89,6 @@ const HEX_NEIGHBORS = [
   { q: 0, r: -1 },
   { q: 1, r: -1 },
 ] as const;
-const DICE_DOTS: readonly (readonly Point[])[] = [
-  [{ x: 0, y: 0 }],
-  [
-    { x: -1, y: -1 },
-    { x: 1, y: 1 },
-  ],
-  [
-    { x: -1, y: -1 },
-    { x: 0, y: 0 },
-    { x: 1, y: 1 },
-  ],
-  [
-    { x: -1, y: -1 },
-    { x: 1, y: -1 },
-    { x: -1, y: 1 },
-    { x: 1, y: 1 },
-  ],
-  [
-    { x: -1, y: -1 },
-    { x: 1, y: -1 },
-    { x: 0, y: 0 },
-    { x: -1, y: 1 },
-    { x: 1, y: 1 },
-  ],
-  [
-    { x: -1, y: -1 },
-    { x: 1, y: -1 },
-    { x: -1, y: 0 },
-    { x: 1, y: 0 },
-    { x: -1, y: 1 },
-    { x: 1, y: 1 },
-  ],
-];
-const HARBOR_RESOURCE: Readonly<Record<string, 'brick' | 'lumber' | 'wool' | 'grain' | 'ore'>> = {
-  brick: 'brick',
-  lumber: 'lumber',
-  wool: 'wool',
-  grain: 'grain',
-  ore: 'ore',
-};
-
 const DEFAULT_PLAYER_STYLE = { color: 0x0072b2, marker: 'circle' } as const;
 const DEFAULT_PLAYERS: BoardAppearance['players'] = [
   { seat: 0, color: 0x0072b2, marker: 'circle' },
@@ -144,22 +110,6 @@ function hexCorners(center: Point, size: number): number[] {
   return points;
 }
 
-function markerShape(
-  graphics: Graphics,
-  x: number,
-  y: number,
-  color: number,
-  marker: BoardAppearance['players'][number]['marker'],
-  radius: number,
-): void {
-  if (marker === 'circle') graphics.circle(x, y, radius);
-  else if (marker === 'square') graphics.rect(x - radius, y - radius, radius * 2, radius * 2);
-  else if (marker === 'diamond')
-    graphics.poly([x, y - radius, x + radius, y, x, y + radius, x - radius, y], true);
-  else graphics.poly([x, y - radius, x + radius, y + radius, x - radius, y + radius], true);
-  graphics.fill({ color }).stroke({ color: 0x18332b, width: 2 });
-}
-
 /** A rules-neutral Pixi renderer. Coordinates passed to public methods are CSS client coordinates. */
 export class PixiBoardRenderer implements BoardRenderer {
   private readonly app: Application;
@@ -169,6 +119,7 @@ export class PixiBoardRenderer implements BoardRenderer {
   private readonly screenEffects = new Container();
   private readonly layers: Record<LayerName, Container>;
   private readonly buildingNodes = new Map<VertexId, Container>();
+  private readonly tokenSprites = new Map<HexId, Sprite>();
   private readonly detachedChildren: Container[] = [];
   private readonly activeEffects = new Map<
     string,
@@ -176,6 +127,7 @@ export class PixiBoardRenderer implements BoardRenderer {
       readonly kind: BoardEffect['kind'];
       readonly node: Container;
       readonly update: (progress: number) => boolean;
+      readonly cleanup?: () => void;
       readonly started: number;
       readonly duration: number;
     }
@@ -185,6 +137,9 @@ export class PixiBoardRenderer implements BoardRenderer {
   private robberSprite: Sprite | null = null;
   private robberMoveActive = false;
   private readonly signatures = new Map<LayerName, string>();
+  private readonly terrainVariants = new Map<string, 1 | 2 | 3>();
+  private terrainIdentity = '';
+  private graphIdentity = '';
   private readonly viewChangeListeners = new Set<() => void>();
   private viewSignature = '';
   private readonly onSelect?: BoardRendererOptions['onSelect'];
@@ -281,7 +236,7 @@ export class PixiBoardRenderer implements BoardRenderer {
         autoDensity: true,
         resolution: devicePixelRatio,
         antialias: true,
-        backgroundColor: options.appearance?.theme === 'dark' ? DARK_BOARD_BACKDROP : 0xd1e7e9,
+        backgroundAlpha: 0,
         preference: 'webgl',
       });
       const hexSize = options.hexSize ?? HEX_SIZE;
@@ -308,8 +263,31 @@ export class PixiBoardRenderer implements BoardRenderer {
     if (this.destroyed) return;
     const firstRender = this.model === null;
     this.model = model;
-    this.graph = buildBoardGraph(model.hexes);
-    this.drawChanged('background', [this.appearance.theme]);
+    const graphIdentity = JSON.stringify(model.hexes.map(({ id, q, r }) => ({ id, q, r })));
+    if (graphIdentity !== this.graphIdentity) {
+      this.graph = buildBoardGraph(model.hexes);
+      this.graphIdentity = graphIdentity;
+    }
+    const terrainIdentity = JSON.stringify(
+      model.hexes.map(({ id, q, r, terrain, token }) => ({ id, q, r, terrain, token })),
+    );
+    if (terrainIdentity !== this.terrainIdentity) {
+      const waterHexes: RenderModel['hexes'] = this.waterCells().map(({ q, r }) => ({
+        id: `h:${q},${r}`,
+        q,
+        r,
+        terrain: 'sea',
+        token: null,
+      }));
+      this.terrainVariants.clear();
+      for (const [id, variant] of assignTerrainVariants([...model.hexes, ...waterHexes]))
+        this.terrainVariants.set(id, variant);
+      this.terrainIdentity = terrainIdentity;
+    }
+    this.drawChanged('background', [
+      this.appearance.theme,
+      model.hexes.map(({ q, r, terrain }) => ({ q, r, terrain })),
+    ]);
     this.drawChanged('terrain', [model.hexes]);
     this.drawChanged('harbors', [model.harbors]);
     this.drawChanged('tokens', [model.hexes.map(({ id, q, r, token }) => ({ id, q, r, token }))]);
@@ -437,8 +415,7 @@ export class PixiBoardRenderer implements BoardRenderer {
       this.destroyed ||
       (sameHit(this.focusTarget, hit) &&
         this.focusPreview?.piece === preview?.piece &&
-        this.focusPreview?.color === preview?.color &&
-        this.focusPreview?.marker === preview?.marker)
+        this.focusPreview?.color === preview?.color)
     )
       return;
     this.focusTarget = hit;
@@ -483,6 +460,7 @@ export class PixiBoardRenderer implements BoardRenderer {
       }
       if (this.reducedMotion) continue;
       if (effect.kind === 'robber-move') this.cancelRobberMove();
+      if (effect.kind === 'production-pulse') this.cancelProductionPulse();
       const active = this.createEffect(effect);
       if (active)
         this.activeEffects.set(effect.id, {
@@ -498,7 +476,10 @@ export class PixiBoardRenderer implements BoardRenderer {
   skipAnimations(): void {
     if (this.effectFrame !== 0) cancelAnimationFrame(this.effectFrame);
     this.effectFrame = 0;
-    for (const { node } of this.activeEffects.values()) this.retireNode(node);
+    for (const { node, cleanup } of this.activeEffects.values()) {
+      cleanup?.();
+      this.retireNode(node);
+    }
     this.activeEffects.clear();
     this.setRobberMoveActive(false);
     this.renderFrame();
@@ -517,9 +498,15 @@ export class PixiBoardRenderer implements BoardRenderer {
     readonly node: Container;
     readonly update: (progress: number) => boolean;
     readonly duration: number;
+    readonly cleanup?: () => void;
   } | null {
     const node = new Container();
-    const duration = effect.kind === 'dice-roll' ? 700 : 420;
+    const duration =
+      effect.kind === 'dice-roll'
+        ? DICE_ROLL_DURATION_MS
+        : effect.kind === 'production-pulse'
+          ? DICE_ROLL_DURATION_MS + PRODUCTION_TOKEN_PULSE_MS
+          : 420;
     if (effect.kind === 'dice-roll') {
       if (effect.dice.some((face) => !Number.isInteger(face) || face < 1 || face > 6)) return null;
       const faceSize = Math.min(64, Math.max(56, this.app.screen.width * 0.07));
@@ -528,21 +515,13 @@ export class PixiBoardRenderer implements BoardRenderer {
       for (const [index, face] of effect.dice.entries()) {
         const die = new Container();
         die.position.set(index === 0 ? -(faceSize + gap) / 2 : (faceSize + gap) / 2, 0);
-        die.addChild(
-          new Graphics()
-            .roundRect(-faceSize / 2, -faceSize / 2, faceSize, faceSize, faceSize * 0.16)
-            .fill({ color: 0xffffff })
-            .stroke({ color: 0x18332b, width: Math.max(2, faceSize * 0.04) }),
-        );
-        const faceGraphics = new Graphics();
-        const spots = DICE_DOTS[face - 1];
-        if (spots) {
-          for (const spot of spots)
-            faceGraphics
-              .circle(spot.x * faceSize * 0.19, spot.y * faceSize * 0.19, faceSize * 0.075)
-              .fill({ color: 0x18332b });
-          die.addChild(faceGraphics);
-        }
+        const faceTexture = this.textures.dice[face - 1];
+        if (!faceTexture) return null;
+        const sprite = new Sprite(faceTexture);
+        sprite.anchor.set(0.5);
+        sprite.width = faceSize;
+        sprite.height = faceSize;
+        die.addChild(sprite);
         node.addChild(die);
       }
       this.screenEffects.addChild(node);
@@ -561,25 +540,66 @@ export class PixiBoardRenderer implements BoardRenderer {
         },
       };
     }
+    if (effect.kind === 'production-pulse') {
+      const originals = [...new Set(effect.hexes)]
+        .map((id) => this.tokenSprites.get(id))
+        .filter((sprite): sprite is Sprite => sprite !== undefined);
+      if (originals.length === 0) return null;
+      const sprites = originals.map((original) => {
+        const sprite = new Sprite(original.texture);
+        sprite.anchor.set(0.5);
+        sprite.position.copyFrom(original.position);
+        sprite.width = original.width;
+        sprite.height = original.height;
+        node.addChild(sprite);
+        return { sprite, scaleX: sprite.scale.x, scaleY: sprite.scale.y };
+      });
+      node.visible = false;
+      this.layers.effects.addChild(node);
+      return {
+        node,
+        duration,
+        cleanup: () => {
+          for (const original of originals) original.visible = true;
+        },
+        update: (progress) => {
+          const pulseProgress = productionPulseProgress(progress * duration);
+          if (pulseProgress === null) return false;
+          node.visible = true;
+          for (const original of originals) original.visible = false;
+          const scale = 1 + productionTokenMotion(pulseProgress) * 0.6;
+          for (const { sprite, scaleX, scaleY } of sprites) {
+            sprite.scale.set(scaleX * scale, scaleY * scale);
+          }
+          return progress >= 1;
+        },
+      };
+    }
     if (effect.kind === 'piece-pop') {
       const point = this.pointForHit(effect.at);
       if (!point) return null;
       node.position.set(point.x, point.y);
+      const color = artColorFromNumber(
+        this.playerStyleMap().get(effect.seat)?.color ?? DEFAULT_PLAYER_STYLE.color,
+      );
       const texture =
         effect.piece === 'road'
-          ? this.textures.road
+          ? this.textures.roads[color][1]
           : effect.piece === 'city'
-            ? this.textures.city
-            : this.textures.settlement;
+            ? this.textures.cities[color]
+            : this.textures.settlements[color];
       const sprite = new Sprite(texture);
       sprite.anchor.set(0.5);
       sprite.position.set(0, 0);
       const size = effect.piece === 'road' ? this.hexSize * 0.72 : this.hexSize * 0.5;
       sprite.width = size;
-      sprite.height = effect.piece === 'road' ? this.hexSize * 0.14 : size;
-      sprite.tint = this.playerStyleMap().get(effect.seat)?.color ?? DEFAULT_PLAYER_STYLE.color;
-      if (effect.piece === 'road' && effect.at.kind === 'edge')
-        sprite.rotation = edgeToPixel(effect.at.id, this.hexSize).angle;
+      sprite.height = size;
+
+      if (effect.piece === 'road' && effect.at.kind === 'edge') {
+        sprite.texture = this.textures.roads[color][roadVariantForEdge(effect.at.id)];
+        sprite.width = this.hexSize * ROAD_ART_SCALE;
+        sprite.height = this.hexSize * ROAD_ART_SCALE;
+      }
       node.addChild(sprite);
       this.layers.effects.addChild(node);
       return {
@@ -596,9 +616,9 @@ export class PixiBoardRenderer implements BoardRenderer {
     const to = this.model?.hexes.find((hex) => hex.id === effect.toHex);
     if (!from || !to) return null;
     const sprite = new Sprite(this.textures.robber);
-    sprite.anchor.set(0.5);
-    sprite.width = this.hexSize * 0.52;
-    sprite.height = this.hexSize * 0.52;
+    sprite.anchor.set(0.5, ROBBER_GROUND_ANCHOR);
+    sprite.width = this.hexSize * 0.8;
+    sprite.height = this.hexSize * 1.15;
     node.addChild(sprite);
     this.layers.effects.addChild(node);
     const start = hexToPixel(from.q, from.r, this.hexSize);
@@ -621,6 +641,7 @@ export class PixiBoardRenderer implements BoardRenderer {
     if (this.destroyed) return;
     for (const [id, effect] of this.activeEffects) {
       if (effect.update(Math.min(1, (now - effect.started) / effect.duration))) {
+        effect.cleanup?.();
         this.retireNode(effect.node);
         this.activeEffects.delete(id);
         if (effect.kind === 'robber-move') this.setRobberMoveActive(false);
@@ -652,6 +673,15 @@ export class PixiBoardRenderer implements BoardRenderer {
       this.activeEffects.delete(id);
     }
     this.setRobberMoveActive(false);
+  }
+
+  private cancelProductionPulse(): void {
+    for (const [id, effect] of this.activeEffects) {
+      if (effect.kind !== 'production-pulse') continue;
+      effect.cleanup?.();
+      this.retireNode(effect.node);
+      this.activeEffects.delete(id);
+    }
   }
 
   private pointForHit(hit: BoardHit): Point | null {
@@ -713,32 +743,32 @@ export class PixiBoardRenderer implements BoardRenderer {
   }
 
   private roadSprite(id: EdgeId, color: number): Sprite {
+    const artColor = artColorFromNumber(color);
+    const variant = roadVariantForEdge(id);
+    const sprite = new Sprite(this.textures.roads[artColor][variant]);
     const edge = edgeToPixel(id, this.hexSize);
-    const sprite = new Sprite(this.textures.road);
     sprite.anchor.set(0.5);
     sprite.position.set(edge.midpoint.x, edge.midpoint.y);
-    sprite.width = this.hexSize * ROAD_LENGTH;
-    sprite.height = this.hexSize * ROAD_THICKNESS;
-    sprite.rotation = edge.angle;
-    sprite.tint = color;
+    sprite.width = this.hexSize * ROAD_ART_SCALE;
+    sprite.height = this.hexSize * ROAD_ART_SCALE;
     return sprite;
   }
 
   private buildingNode(
     kind: 'settlement' | 'city',
-    style: Pick<BoardAppearance['players'][number], 'color' | 'marker'>,
+    style: Pick<BoardAppearance['players'][number], 'color'>,
     point: Point,
   ): Container {
-    const size = kind === 'city' ? 14 : 12;
     const node = new Container();
     node.position.set(point.x, point.y);
-    const marker = new Graphics();
-    markerShape(marker, 0, 0, style.color, style.marker, size + 5);
-    const sprite = new Sprite(kind === 'city' ? this.textures.city : this.textures.settlement);
-    sprite.anchor.set(0.5);
-    sprite.width = size * 2;
-    sprite.height = size * 2;
-    node.addChild(marker, sprite);
+    const color = artColorFromNumber(style.color);
+    const sprite = new Sprite(
+      kind === 'city' ? this.textures.cities[color] : this.textures.settlements[color],
+    );
+    sprite.anchor.set(kind === 'city' ? 23 / 48 : 0.5, kind === 'city' ? 28 / 50 : 22 / 40);
+    sprite.width = this.hexSize * (kind === 'city' ? 48 / 80 : 40 / 80);
+    sprite.height = this.hexSize * (kind === 'city' ? 50 / 80 : 40 / 80);
+    node.addChild(sprite);
     return node;
   }
 
@@ -813,8 +843,6 @@ export class PixiBoardRenderer implements BoardRenderer {
     if (this.destroyed) return;
     if (sameAppearance(this.appearance, appearance)) return;
     this.appearance = appearance;
-    this.app.renderer.background.color =
-      appearance.theme === 'dark' ? DARK_BOARD_BACKDROP : 0xd1e7e9;
     this.signatures.delete('background');
     this.signatures.delete('roads');
     this.signatures.delete('buildings');
@@ -903,12 +931,14 @@ export class PixiBoardRenderer implements BoardRenderer {
     if (!bounds) return;
     const width = bounds.maxX - bounds.minX;
     const height = bounds.maxY - bounds.minY;
-    this.zoom = Math.max(
+    this.zoom = fitZoomToBounds(
+      width,
+      height,
+      this.app.screen.width,
+      this.app.screen.height,
+      FIT_PADDING,
       MIN_ZOOM,
-      Math.min(
-        MAX_ZOOM,
-        Math.min((this.app.screen.width - 24) / width, (this.app.screen.height - 24) / height),
-      ),
+      MAX_ZOOM,
     );
     const centerX = (bounds.minX + bounds.maxX) / 2;
     const centerY = (bounds.minY + bounds.maxY) / 2;
@@ -928,7 +958,10 @@ export class PixiBoardRenderer implements BoardRenderer {
     if (this.pulseFrame !== 0) cancelAnimationFrame(this.pulseFrame);
     if (this.renderFrameId !== 0) cancelAnimationFrame(this.renderFrameId);
     if (this.effectFrame !== 0) cancelAnimationFrame(this.effectFrame);
-    for (const { node } of this.activeEffects.values()) node.destroy({ children: true });
+    for (const { node, cleanup } of this.activeEffects.values()) {
+      cleanup?.();
+      node.destroy({ children: true });
+    }
     this.activeEffects.clear();
     this.viewChangeListeners.clear();
     this.app.destroy(true, { children: true, texture: false, textureSource: false });
@@ -938,6 +971,7 @@ export class PixiBoardRenderer implements BoardRenderer {
   private drawChanged(name: LayerName, value: unknown): void {
     const signature = JSON.stringify(value);
     if (this.signatures.get(name) === signature) return;
+    if (name === 'tokens') this.cancelProductionPulse();
     this.signatures.set(name, signature);
     this.rebuiltLayers += 1;
     const layer = this.layers[name];
@@ -945,53 +979,62 @@ export class PixiBoardRenderer implements BoardRenderer {
     const model = this.model;
     if (!model) return;
     if (name === 'background') {
-      const color = this.appearance.theme === 'dark' ? DARK_BOARD_BACKDROP : 0xd1e7e9;
-      layer.addChild(new Graphics().rect(-8192, -8192, 16384, 16384).fill({ color }));
+      if (this.isStandardFootprint()) {
+        const frame = new Sprite(this.textures.frame);
+        frame.anchor.set(0.5);
+        frame.width = this.hexSize * 14;
+        frame.height = this.hexSize * 13;
+        layer.addChild(frame);
+        const underlay = new Sprite(this.textures.underlay);
+        underlay.anchor.set(0.5);
+        underlay.width = frame.width;
+        underlay.height = frame.height;
+        layer.addChild(underlay);
+      } else {
+        const underlay = new Graphics();
+        for (const hex of model.hexes) {
+          underlay
+            .poly(hexCorners(hexToPixel(hex.q, hex.r, this.hexSize), this.hexSize * 1.01), true)
+            .fill({ color: hex.terrain === 'sea' ? 0x4d97ae : 0xe3c98f });
+        }
+        for (const center of this.waterCenters()) {
+          underlay.poly(hexCorners(center, this.hexSize * 1.01), true).fill({ color: 0x4d97ae });
+        }
+        layer.addChild(underlay);
+      }
     } else if (name === 'terrain') {
-      for (const center of this.waterCenters())
-        this.drawTerrainTile(layer, center, this.textures.terrain.sea);
+      for (const { q, r, center } of this.waterCells()) {
+        const variant = this.terrainVariants.get(`h:${q},${r}`) ?? 1;
+        const texture = this.textures.terrain.sea[variant - 1] ?? this.textures.terrain.sea[0];
+        if (texture) this.drawTerrainTile(layer, center, texture);
+      }
 
       for (const hex of model.hexes) {
         const center = hexToPixel(hex.q, hex.r, this.hexSize);
         const textureKey = TERRAIN_TEXTURES[hex.terrain];
-        if (textureKey) this.drawTerrainTile(layer, center, this.textures.terrain[textureKey]);
+        if (textureKey) {
+          const variants = this.textures.terrain[textureKey];
+          const index = textureKey === 'desert' ? 0 : (this.terrainVariants.get(hex.id) ?? 1) - 1;
+          const texture = variants[index] ?? variants[0];
+          if (texture) this.drawTerrainTile(layer, center, texture);
+        }
       }
     } else if (name === 'harbors') {
       for (const harbor of model.harbors) this.drawHarbor(layer, harbor.edge, harbor.kind);
     } else if (name === 'tokens') {
+      this.tokenSprites.clear();
       for (const hex of model.hexes) {
         if (hex.token === null) continue;
         const center = hexToPixel(hex.q, hex.r, this.hexSize);
-        const token = new Container();
-        token.position.set(center.x, center.y);
-        const face = new Sprite(this.textures.numberToken);
+        const texture = this.textures.tokens[hex.token];
+        if (!texture) continue;
+        const face = new Sprite(texture);
         face.anchor.set(0.5);
-        face.width = this.hexSize * 0.82;
-        face.height = this.hexSize * 0.82;
-        token.addChild(face);
-        const pipColor = hex.token === 6 || hex.token === 8 ? 0xae3329 : 0x49665b;
-        const pips = tokenPips(hex.token, this.hexSize);
-        if (pips.length > 0) {
-          const graphics = new Graphics();
-          for (const pip of pips) {
-            graphics.circle(pip.x, pip.y, tokenPipRadius(this.hexSize)).fill({ color: pipColor });
-          }
-          token.addChild(graphics);
-        }
-        const text = new Text({
-          text: String(hex.token),
-          style: {
-            fontFamily: 'system-ui, sans-serif',
-            fontSize: tokenFontSize(this.hexSize),
-            fill: hex.token === 6 || hex.token === 8 ? 0xae3329 : 0x18332b,
-            fontWeight: '700',
-          },
-          resolution: this.app.renderer.resolution * MAX_ZOOM,
-        });
-        text.anchor.set(0.5);
-        text.position.set(0, -this.hexSize * 0.06);
-        token.addChild(text);
-        layer.addChild(token);
+        face.position.set(center.x, center.y);
+        face.width = this.hexSize * 0.625;
+        face.height = this.hexSize * 0.625;
+        this.tokenSprites.set(hex.id, face);
+        layer.addChild(face);
       }
     } else if (name === 'focus') {
       this.detachedChildren.push(...this.layers.edgeFocus.removeChildren());
@@ -1039,7 +1082,6 @@ export class PixiBoardRenderer implements BoardRenderer {
             previewPiece,
             {
               color: this.focusPreview.color,
-              marker: this.focusPreview.marker ?? 'circle',
             },
             point,
           );
@@ -1089,10 +1131,10 @@ export class PixiBoardRenderer implements BoardRenderer {
       if (hex) {
         const center = hexToPixel(hex.q, hex.r, this.hexSize);
         const sprite = new Sprite(this.textures.robber);
-        sprite.anchor.set(0.5);
+        sprite.anchor.set(0.5, ROBBER_GROUND_ANCHOR);
         sprite.position.set(center.x, center.y);
-        sprite.width = this.hexSize * 0.52;
-        sprite.height = this.hexSize * 0.52;
+        sprite.width = this.hexSize * 0.8;
+        sprite.height = this.hexSize * 1.15;
         sprite.visible = !this.robberMoveActive;
         layer.addChild(sprite);
         this.robberSprite = sprite;
@@ -1120,80 +1162,55 @@ export class PixiBoardRenderer implements BoardRenderer {
     const layout = harborLayout(first, second, landCenter);
     if (!layout) return;
 
-    const jetty = new Sprite(this.textures.harborJetty);
-    jetty.anchor.set(0.5, 104 / 112);
-    jetty.position.set(layout.midpoint.x, layout.midpoint.y);
-    jetty.width = 128 * layout.scale;
-    jetty.height = 112 * layout.scale;
-    jetty.scale.y *= layout.verticalFlip;
-    jetty.rotation = layout.angle;
-    layer.addChild(jetty);
-
-    const badge = new Container();
-    badge.position.set(layout.hub.x, layout.hub.y);
-    const marker = new Sprite(this.textures.harborMarker);
-    marker.anchor.set(0.5);
-    marker.position.set(0, 0);
-    marker.width = this.hexSize * HARBOR_MARKER_SCALE;
-    marker.height = this.hexSize * HARBOR_MARKER_SCALE;
-    badge.addChild(marker);
-
-    const resource = HARBOR_RESOURCE[kind];
-    if (resource) {
-      const icon = new Sprite(this.textures.resources[resource]);
-      icon.anchor.set(0.5);
-      icon.position.set(0, -this.hexSize * 0.17);
-      icon.width = this.hexSize * 0.29;
-      icon.height = this.hexSize * 0.29;
-      badge.addChild(icon);
-    }
-    const generic = kind === 'generic';
-    // Fixed trade ratios use outlined artwork, independent of browser font metrics.
-    const ratio = generic ? '3:1' : resource ? '2:1' : null;
-    const label = ratio
-      ? new Sprite(this.textures.harborRatios[ratio])
-      : new Text({
-          text: this.harborLabelFormatter(kind),
-          style: {
-            fontFamily: 'system-ui, sans-serif',
-            fontSize: this.hexSize * 0.23,
-            fill: 0x18332b,
-            fontWeight: '700',
-            padding: 2,
-          },
-          resolution: this.app.renderer.resolution * MAX_ZOOM,
-        });
-    if (ratio) {
-      label.width = this.hexSize * (generic ? 0.5 : 0.39);
-      label.height = label.width * (24 / 40);
-    }
-    label.anchor.set(0.5);
-    label.position.set(0, this.hexSize * (generic ? -0.06 : 0.1));
-    badge.addChild(label);
-    layer.addChild(badge);
+    const texture = this.textures.harbors[kind === 'generic' ? '3to1' : kind];
+    if (!texture) return;
+    const outward = { x: layout.midpoint.x - landCenter.x, y: layout.midpoint.y - landCenter.y };
+    const sprite = new Sprite(texture);
+    sprite.anchor.set(0.5, 0.23);
+    sprite.position.set(layout.hub.x, layout.hub.y);
+    sprite.width = this.hexSize * 1.25;
+    sprite.height = this.hexSize * 1.25;
+    sprite.rotation = Math.atan2(outward.y, outward.x) + Math.PI / 2;
+    layer.addChild(sprite);
   }
 
-  private waterCenters(): Point[] {
+  private isStandardFootprint(): boolean {
+    if (!this.model || this.model.hexes.length !== 19) return false;
+    const cells = new Set(this.model.hexes.map(({ q, r }) => `${q},${r}`));
+    for (let q = -2; q <= 2; q += 1) {
+      for (let r = -2; r <= 2; r += 1) {
+        if (Math.max(Math.abs(q), Math.abs(r), Math.abs(q + r)) <= 2 && !cells.has(`${q},${r}`))
+          return false;
+      }
+    }
+    return true;
+  }
+
+  private waterCells(): { q: number; r: number; center: Point }[] {
     if (!this.model) return [];
     const occupied = new Set(this.model.hexes.map((hex) => `${hex.q},${hex.r}`));
-    const water = new Map<string, Point>();
+    const water = new Map<string, { q: number; r: number; center: Point }>();
     for (const hex of this.model.hexes) {
       for (const offset of HEX_NEIGHBORS) {
         const q = hex.q + offset.q;
         const r = hex.r + offset.r;
         const key = `${q},${r}`;
-        if (!occupied.has(key)) water.set(key, hexToPixel(q, r, this.hexSize));
+        if (!occupied.has(key)) water.set(key, { q, r, center: hexToPixel(q, r, this.hexSize) });
       }
     }
     return [...water.values()];
+  }
+
+  private waterCenters(): Point[] {
+    return this.waterCells().map(({ center }) => center);
   }
 
   private drawTerrainTile(layer: Container, center: Point, texture: Texture): void {
     const sprite = new Sprite(texture);
     sprite.anchor.set(0.5);
     sprite.position.set(center.x, center.y);
-    sprite.width = Math.sqrt(3) * this.hexSize;
-    sprite.height = this.hexSize * 2;
+    sprite.width = (150 / 80) * this.hexSize;
+    sprite.height = (174 / 80) * this.hexSize;
     layer.addChild(sprite);
     layer.addChild(
       new Graphics()
@@ -1221,15 +1238,16 @@ export class PixiBoardRenderer implements BoardRenderer {
     }
     if (!resized) return;
     if (this.model) this.fitToBoard();
-    else this.renderFrame();
+    // Resizing clears the canvas immediately. Draw before the browser can paint a blank frame.
+    this.renderFrameNow();
   }
 
   private clampCamera(): void {
     const width = this.app.screen.width;
     const height = this.app.screen.height;
-    const bounds = this.boardPixelBounds();
+    const bounds = this.fitPixelBounds();
     if (!bounds) return;
-    const margin = 24;
+    const margin = FIT_PADDING;
     this.cameraX = clampCameraAxis(
       this.cameraX,
       bounds.minX,
@@ -1255,6 +1273,15 @@ export class PixiBoardRenderer implements BoardRenderer {
     readonly maxY: number;
   } | null {
     if (!this.model?.hexes.length) return null;
+    if (this.isStandardFootprint()) {
+      // The authored 1120×1040 frame uses an 80-unit hex radius and is centered at (0, 0).
+      return {
+        minX: -this.hexSize * 7,
+        maxX: this.hexSize * 7,
+        minY: -this.hexSize * 6.5,
+        maxY: this.hexSize * 6.5,
+      };
+    }
     const centers = [
       ...this.model.hexes.map((hex) => hexToPixel(hex.q, hex.r, this.hexSize)),
       ...this.waterCenters(),
@@ -1273,19 +1300,10 @@ export class PixiBoardRenderer implements BoardRenderer {
     readonly minY: number;
     readonly maxY: number;
   } | null {
-    if (!this.model?.hexes.length) return null;
-    const points: Point[] = [];
-    for (const hex of this.model.hexes) {
-      if (hex.terrain === 'sea') continue;
-      const corners = hexCorners(hexToPixel(hex.q, hex.r, this.hexSize), this.hexSize);
-      for (let index = 0; index < corners.length; index += 2) {
-        const x = corners[index];
-        const y = corners[index + 1];
-        if (x !== undefined && y !== undefined) points.push({ x, y });
-      }
-    }
-    if (points.length === 0) return this.boardPixelBounds();
-    const badgeRadius = this.hexSize * (HARBOR_MARKER_SCALE / 2);
+    const board = this.boardPixelBounds();
+    if (!board || !this.model) return null;
+    let { minX, maxX, minY, maxY } = board;
+    const badgeRadius = this.hexSize * 0.8;
     for (const harbor of this.model.harbors) {
       const edgeIndex = this.graph?.edgeIndex[harbor.edge];
       const endpoints = edgeIndex === undefined ? undefined : this.graph?.edgeVertices[edgeIndex];
@@ -1304,18 +1322,12 @@ export class PixiBoardRenderer implements BoardRenderer {
         hexToPixel(landHex.q, landHex.r, this.hexSize),
       );
       if (!layout) continue;
-      points.push(
-        { x: layout.hub.x - badgeRadius, y: layout.hub.y - badgeRadius },
-        { x: layout.hub.x + badgeRadius, y: layout.hub.y + badgeRadius },
-      );
+      minX = Math.min(minX, layout.hub.x - badgeRadius);
+      maxX = Math.max(maxX, layout.hub.x + badgeRadius);
+      minY = Math.min(minY, layout.hub.y - badgeRadius);
+      maxY = Math.max(maxY, layout.hub.y + badgeRadius);
     }
-    const padding = this.hexSize * 0.075;
-    return {
-      minX: Math.min(...points.map((point) => point.x)) - padding,
-      maxX: Math.max(...points.map((point) => point.x)) + padding,
-      minY: Math.min(...points.map((point) => point.y)) - padding,
-      maxY: Math.max(...points.map((point) => point.y)) + padding,
-    };
+    return { minX, maxX, minY, maxY };
   }
 
   private updateCamera(): void {
@@ -1337,6 +1349,15 @@ export class PixiBoardRenderer implements BoardRenderer {
         this.destroyDetachedChildren();
       }
     });
+  }
+
+  private renderFrameNow(): void {
+    if (this.destroyed) return;
+    if (this.renderFrameId !== 0) cancelAnimationFrame(this.renderFrameId);
+    this.renderFrameId = 0;
+    this.app.render();
+    this.renderedFrames += 1;
+    this.destroyDetachedChildren();
   }
 
   private destroyDetachedChildren(): void {

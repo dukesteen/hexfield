@@ -97,9 +97,10 @@ export function CockpitSheet({
         <button
           className="button button-quiet cockpit-sheet-close"
           type="button"
+          aria-label={t('game:cockpit.close')}
           onClick={() => dialogRef.current?.close()}
         >
-          {t('game:cockpit.close')}
+          <span aria-hidden="true">×</span>
         </button>
       </header>
       <div

@@ -12,6 +12,7 @@ import { BoardView } from '../board/BoardView';
 import { ResourceCard } from '../trade/ResourceCard';
 import {
   getDevelopmentCardUrl,
+  getGameArtUrl,
   getPieceIconUrl,
   getResourceIconUrl,
   type BoardRenderer,
@@ -32,9 +33,10 @@ import { useVisualEffects, type ProductionReceipt } from './use-visual-effects';
 import { DiceRollReadout, latestDiceRoll } from './DiceRollReadout.js';
 import { CockpitSheet } from './CockpitSheet.js';
 import { PlayerMarker } from './PlayerMarker.js';
-import { NextStepBar } from './NextStepBar.js';
+import { MobileGameControls, type MobileTab } from './MobileGameControls.js';
 import { useCompactCockpit } from './use-compact-cockpit.js';
 import type { SaveStatus } from './save-coordinator';
+import { AwardsPanel } from './AwardsPanel';
 
 const MAX_INLINE_DEVELOPMENT_CARDS = 5;
 const MAX_NARROW_INLINE_DEVELOPMENT_CARDS = 3;
@@ -118,9 +120,16 @@ function PlayerRail({
   onOpenPlayer: (seat: Seat, trigger: HTMLButtonElement) => void;
 }) {
   const { t } = useTranslation('game');
+  const revealedSeat = useSessionStore((store) => store.revealedSeat);
+  const base = state.config.options.base;
+  const target =
+    typeof base === 'object' && base !== null && 'vpTarget' in base ? base.vpTarget : 10;
   return (
     <aside className="player-rail" aria-label={t('game:players')}>
-      <h2>{t('game:players')}</h2>
+      <div className="player-rail-heading">
+        <h2>{t('game:players')}</h2>
+        {typeof target === 'number' && <span>{t('game:vpToWin', { count: target })}</span>}
+      </div>
       <div className="player-list">
         {state.seats.map((seatState) => {
           const identity = presentation.players.find((player) => player.seat === seatState.seat);
@@ -156,12 +165,23 @@ function PlayerRail({
               aria-label={playerName(presentation, seatState.seat)}
               aria-current={activeSeat === seatState.seat ? 'step' : undefined}
             >
+              {activeSeat === seatState.seat && (
+                <img
+                  className="player-turn-marker"
+                  src={getGameArtUrl('turnMarker')}
+                  alt=""
+                  aria-hidden="true"
+                />
+              )}
               <div className="player-panel-heading">
                 <PlayerMarker
                   shape={identity?.shape ?? 'circle'}
                   color={identity?.color ?? 'blue'}
                 />
                 <strong>{playerName(presentation, seatState.seat)}</strong>
+                {revealedSeat === seatState.seat && (
+                  <span className="player-you">{t('game:you')}</span>
+                )}
                 <span className="player-seat-index" aria-hidden="true">
                   {t('game:playerShort', { number: seatState.seat + 1 })}
                 </span>
@@ -251,7 +271,7 @@ function PlayerRail({
                     title={label}
                     key={kind}
                   >
-                    <img src={getPieceIconUrl(kind)} alt="" aria-hidden="true" />
+                    <img src={getPieceIconUrl(kind, identity?.color)} alt="" aria-hidden="true" />
                     <span aria-hidden="true">{count}</span>
                   </span>
                 ))}
@@ -288,6 +308,7 @@ function PlayerDetails({
   receipt,
   activeSeat,
   connectionLabels,
+  summary = false,
 }: {
   state: GameState;
   seat: Seat;
@@ -295,6 +316,7 @@ function PlayerDetails({
   receipt: ProductionReceipt | undefined;
   activeSeat: Seat;
   connectionLabels?: Partial<Record<Seat, string>>;
+  summary?: boolean;
 }) {
   const { t } = useTranslation('game');
   const publicSeat = state.seats.find((item) => item.seat === seat);
@@ -309,7 +331,7 @@ function PlayerDetails({
     state.awards.largestArmy === seat ? t('game:largestArmy') : null,
   ].filter((award) => award !== null);
   return (
-    <section className="player-details">
+    <section className="player-details" data-active={activeSeat === seat}>
       <div className="player-details-head">
         <PlayerMarker shape={identity?.shape ?? 'circle'} color={identity?.color ?? 'blue'} />
         <strong>{identity?.name ?? t('game:playerFallback', { number: seat + 1 })}</strong>
@@ -324,19 +346,19 @@ function PlayerDetails({
       <CheatFlag seat={seat} />
       <dl className="player-details-stats">
         <div>
-          <dt>{t('game:cockpit.resourceCards')}</dt>
+          <dt>{t(summary ? 'game:statCards' : 'game:cockpit.resourceCards')}</dt>
           <dd>{publicSeat.resources.total}</dd>
         </div>
         <div>
-          <dt>{t('game:cockpit.developmentCards')}</dt>
+          <dt>{t(summary ? 'game:statDev' : 'game:cockpit.developmentCards')}</dt>
           <dd>{publicSeat.cardSlots.filter((slot) => !slot.revealed).length}</dd>
         </div>
         <div>
-          <dt>{t('game:cockpit.knightsPlayed')}</dt>
+          <dt>{t(summary ? 'game:statKnights' : 'game:cockpit.knightsPlayed')}</dt>
           <dd>{knightsPlayed(state, seat)}</dd>
         </div>
         <div>
-          <dt>{t('game:cockpit.longestRoute')}</dt>
+          <dt>{t(summary ? 'game:statRoad' : 'game:cockpit.longestRoute')}</dt>
           <dd>{baseLongestRoadLength(state, seat)}</dd>
         </div>
       </dl>
@@ -350,7 +372,7 @@ function PlayerDetails({
           );
           return (
             <span role="img" aria-label={label} key={piece}>
-              <img src={getPieceIconUrl(piece)} alt="" aria-hidden="true" />
+              <img src={getPieceIconUrl(piece, identity?.color)} alt="" aria-hidden="true" />
               <b aria-hidden="true">{count}</b>
             </span>
           );
@@ -554,7 +576,9 @@ function HandDock({
     ? MAX_NARROW_INLINE_DEVELOPMENT_CARDS
     : MAX_INLINE_DEVELOPMENT_CARDS;
   const useDevelopmentDialog = compactHand || developmentCards.length > inlineCardLimit;
-  const visibleDevelopmentCards = developmentCards.slice(0, inlineCardLimit);
+  const visibleDevelopmentCards = compact
+    ? developmentCards
+    : developmentCards.slice(0, inlineCardLimit);
   const activeKnightSlot = knightIntent?.slotId;
   const activeKnightIsOverflow =
     activeKnightSlot !== undefined &&
@@ -577,6 +601,19 @@ function HandDock({
     <section className="hand-dock" aria-label={t('game:yourHand')}>
       <div className="section-heading">
         <h2>{t('game:yourHand')}</h2>
+        {privateState && (
+          <span className="hand-total">
+            {t('game:handCardCount', {
+              count: Object.values(privateState.hand).reduce((sum, count) => sum + count, 0),
+            })}
+            {compact && (
+              <span className="hand-dev-total">
+                {' '}
+                · {t('game:mobileDevCount', { count: developmentCards.length })}
+              </span>
+            )}
+          </span>
+        )}
         {revealedSeat !== null && (
           <div className="hand-controls">
             {compact && (
@@ -646,34 +683,36 @@ function HandDock({
         <p className="muted">{t('game:handHidden')}</p>
       ) : (
         <>
-          <div className="resource-hand">
-            {RESOURCES.map((resource) => (
-              <div
-                className="resource-hand-card"
-                key={resource}
-                data-empty={(privateState.hand[resource] ?? 0) === 0}
-                tabIndex={0}
-                title={t('game:resourceInHand', {
-                  resource: t(`game:${resource}`),
-                  count: privateState.hand[resource] ?? 0,
-                })}
-                aria-label={t('game:resourceInHand', {
-                  resource: t(`game:${resource}`),
-                  count: privateState.hand[resource] ?? 0,
-                })}
-              >
-                <ResourceCard resource={resource} count={privateState.hand[resource] ?? 0} />
-              </div>
-            ))}
-          </div>
-          {!compactHand && developmentCards.length > 0 && (
-            <div
-              className={`development-hand ${developmentCards.length > 2 ? 'is-fanned' : ''} ${knightIntent ? 'has-knight-intent' : ''}`}
-              data-card-count={visibleDevelopmentCards.length}
-            >
-              {visibleDevelopmentCards}
+          <div className="hand-cards">
+            <div className="resource-hand">
+              {RESOURCES.map((resource) => (
+                <div
+                  className="resource-hand-card"
+                  key={resource}
+                  data-empty={(privateState.hand[resource] ?? 0) === 0}
+                  tabIndex={0}
+                  title={t('game:resourceInHand', {
+                    resource: t(`game:${resource}`),
+                    count: privateState.hand[resource] ?? 0,
+                  })}
+                  aria-label={t('game:resourceInHand', {
+                    resource: t(`game:${resource}`),
+                    count: privateState.hand[resource] ?? 0,
+                  })}
+                >
+                  <ResourceCard resource={resource} count={privateState.hand[resource] ?? 0} />
+                </div>
+              ))}
             </div>
-          )}
+            {(compact || !compactHand) && developmentCards.length > 0 && (
+              <div
+                className={`development-hand ${developmentCards.length > 2 ? 'is-fanned' : ''} ${knightIntent ? 'has-knight-intent' : ''}`}
+                data-card-count={visibleDevelopmentCards.length}
+              >
+                {visibleDevelopmentCards}
+              </div>
+            )}
+          </div>
           {useDevelopmentDialog && developmentCards.length > 0 && (
             <dialog
               ref={developmentDialog}
@@ -838,6 +877,44 @@ export function GameReadOnly({
   );
 }
 
+function BankPanel({ state, hidden }: { state: GameState; hidden: boolean }) {
+  const { t } = useTranslation('game');
+  if (hidden) return <p className="bank-panel muted">{t('game:bankHidden')}</p>;
+  return (
+    <section className="bank-panel" aria-label={t('game:bank')}>
+      <h2>{t('game:bank')}</h2>
+      <div className="bank-cards">
+        {RESOURCES.map((resource) => (
+          <span
+            className="bank-card"
+            key={resource}
+            tabIndex={0}
+            aria-label={t('game:resourceInBank', {
+              resource: t(`game:${resource}`),
+              count: state.bank[resource] ?? 0,
+            })}
+          >
+            <ResourceCard resource={resource} count={state.bank[resource] ?? 0} size="sm" />
+          </span>
+        ))}
+        <span
+          className="bank-card bank-development"
+          tabIndex={0}
+          aria-label={t('game:developmentInBank', {
+            count: state.decks.dev?.remaining ?? 0,
+          })}
+        >
+          <span className="resource-card" data-size="sm">
+            <img src={getGameArtUrl('cardBack')} alt="" aria-hidden="true" />
+            <b className="resource-card-count">{state.decks.dev?.remaining ?? 0}</b>
+            <span className="resource-card-name">{t('game:cockpit.devTile')}</span>
+          </span>
+        </span>
+      </div>
+    </section>
+  );
+}
+
 function LiveGame({
   state,
   presentation,
@@ -866,7 +943,7 @@ function LiveGame({
   const { appearance, reducedMotion } = useBoardAppearance(presentation);
   const [gameInfoOpen, setGameInfoOpen] = useState(!compact);
   useEffect(() => setGameInfoOpen(!compact), [compact]);
-  const [sheet, setSheet] = useState<{ kind: 'actions' } | { kind: 'player'; seat: Seat } | null>(
+  const [sheet, setSheet] = useState<{ kind: MobileTab } | { kind: 'player'; seat: Seat } | null>(
     null,
   );
   const sheetRef = useRef<HTMLDialogElement>(null);
@@ -879,7 +956,7 @@ function LiveGame({
     setSheet(null);
   };
   const openSheet = (
-    next: { kind: 'actions' } | { kind: 'player'; seat: Seat },
+    next: { kind: MobileTab } | { kind: 'player'; seat: Seat },
     trigger: HTMLButtonElement,
   ) => {
     sheetTrigger.current = trigger;
@@ -931,6 +1008,9 @@ function LiveGame({
   );
   const activeName = playerName(presentation, actions.actorSeat);
   const winner = state.result ? playerName(presentation, state.result.winner) : null;
+  const mobileColor =
+    presentation.players.find((player) => player.seat === (revealedSeat ?? actions.actorSeat))
+      ?.color ?? 'blue';
   const baseOptions = state.config.options.base;
   const hideBankCounts =
     typeof baseOptions === 'object' &&
@@ -939,7 +1019,12 @@ function LiveGame({
     baseOptions.hideBankCounts === true;
 
   return (
-    <div className="game-page">
+    <div
+      className="game-page"
+      data-board-theme={appearance.theme}
+      data-compact={compact ? 'true' : 'false'}
+      style={{ backgroundImage: `url(${getGameArtUrl('background')})` }}
+    >
       <details className="game-menu">
         <summary aria-label={t('game:openMenu')}>
           <span aria-hidden="true">☰</span>
@@ -979,6 +1064,24 @@ function LiveGame({
           {devTools}
         </div>
       </details>
+      {compact && (
+        <div className="mobile-topbar">
+          <PlayerRail
+            state={state}
+            presentation={presentation}
+            activeSeat={actions.actorSeat}
+            receipts={receipts}
+            compact
+            {...(connectionLabels !== undefined ? { connectionLabels } : {})}
+            onOpenPlayer={(seat, trigger) => openSheet({ kind: 'player', seat }, trigger)}
+          />
+        </div>
+      )}
+      {compact && sessionNotice !== undefined && (
+        <div className="mobile-session-notice" role="status" aria-live="polite">
+          {sessionNotice}
+        </div>
+      )}
       <div className="game-grid">
         <section ref={boardRef} className="game-board" aria-label={t('game:board')}>
           <BoardView
@@ -1007,7 +1110,13 @@ function LiveGame({
             }}
           />
           <DiceRollReadout dice={lastRoll} />
+          {compact && (
+            <div className="mobile-board-awards">
+              <AwardsPanel state={state} presentation={presentation} />
+            </div>
+          )}
           <FairnessStatus presentation={presentation} />
+          {!compact && !finished && actions.desktopStatus}
           {!finished && actions.placementConfirmation && (
             <PlacementConfirmation
               boardRef={boardRef}
@@ -1026,128 +1135,150 @@ function LiveGame({
             </div>
           )}
         </section>
-        <aside className="game-sidebar" aria-label={t('game:players')}>
-          {sessionNotice !== undefined && (
-            <div role="status" aria-live="polite">
-              {sessionNotice}
-            </div>
-          )}
-          <PlayerRail
-            state={state}
-            presentation={presentation}
-            activeSeat={actions.actorSeat}
-            receipts={receipts}
-            compact={compact}
-            {...(connectionLabels !== undefined ? { connectionLabels } : {})}
-            onOpenPlayer={(seat, trigger) => openSheet({ kind: 'player', seat }, trigger)}
-          />
-          <details
-            className="game-info"
-            open={gameInfoOpen}
-            onToggle={(event) => setGameInfoOpen(event.currentTarget.open)}
-          >
-            <summary>{t('game:gameInfo')}</summary>
-            {!hideBankCounts ? (
-              <section className="bank-panel" aria-label={t('game:bank')}>
-                <h2>{t('game:bank')}</h2>
-                <div className="bank-cards">
-                  {RESOURCES.map((resource) => (
-                    <span
-                      className="bank-card"
-                      key={resource}
-                      tabIndex={0}
-                      aria-label={t('game:resourceInBank', {
-                        resource: t(`game:${resource}`),
-                        count: state.bank[resource] ?? 0,
-                      })}
-                    >
-                      <ResourceCard
-                        resource={resource}
-                        count={state.bank[resource] ?? 0}
-                        size="sm"
-                      />
-                    </span>
-                  ))}
-                </div>
-              </section>
-            ) : (
-              <p className="bank-panel muted">{t('game:bankHidden')}</p>
+        {!compact && (
+          <aside className="game-sidebar" aria-label={t('game:players')}>
+            {sessionNotice !== undefined && (
+              <div role="status" aria-live="polite">
+                {sessionNotice}
+              </div>
             )}
-            <EventLog events={events} presentation={presentation} />
-          </details>
-        </aside>
-        <div className="game-bottom">
-          <HandDock
-            state={state}
-            knightIntent={finished ? null : actions.knightIntent}
-            toggleKnightIntent={actions.toggleKnightIntent}
-            compact={compact}
-            submitting={actions.submitting}
-          />
-          {compact ? (
-            <NextStepBar
-              step={finished ? null : actions.nextStep}
-              actionCount={actions.actionCount}
-              hasOptional={optionalChoices.length > 0}
-              onOpenActions={(trigger) => openSheet({ kind: 'actions' }, trigger)}
-              {...(optionalViewingSeat !== null
-                ? { onReturnToBoard: () => useSessionStore.getState().leaveOptionalSeat() }
-                : {})}
-              onResults={() => setResultsOpen(true)}
-              resultsButton={resultsButton}
-              actionsButton={actionsButton}
+            <PlayerRail
+              state={state}
+              presentation={presentation}
+              activeSeat={actions.actorSeat}
+              receipts={receipts}
+              compact={compact}
+              {...(connectionLabels !== undefined ? { connectionLabels } : {})}
+              onOpenPlayer={(seat, trigger) => openSheet({ kind: 'player', seat }, trigger)}
             />
-          ) : winner ? (
-            <section className="action-dock finished-dock" aria-label={t('game:actions')}>
-              <h2>{t('game:gameOver')}</h2>
-              <p>{t('game:winner', { player: winner })}</p>
-              <button
-                ref={resultsButton}
-                className="button button-primary"
-                type="button"
-                onClick={() => setResultsOpen(true)}
-              >
-                {t('game:results')}
-              </button>
-            </section>
+            <details
+              className="game-info"
+              open={gameInfoOpen}
+              onToggle={(event) => setGameInfoOpen(event.currentTarget.open)}
+            >
+              <summary>{t('game:gameInfo')}</summary>
+              <AwardsPanel state={state} presentation={presentation} />
+              <BankPanel state={state} hidden={hideBankCounts} />
+              <EventLog events={events} presentation={presentation} />
+            </details>
+          </aside>
+        )}
+        <div className="game-bottom">
+          {compact ? (
+            <div className="mobile-bottom-controls">
+              <HandDock
+                state={state}
+                knightIntent={finished ? null : actions.knightIntent}
+                toggleKnightIntent={actions.toggleKnightIntent}
+                compact
+                submitting={actions.submitting}
+              />
+              <MobileGameControls
+                step={finished ? null : actions.nextStep}
+                hasOptional={optionalChoices.length > 0}
+                playerColor={mobileColor}
+                onOpenTab={(kind, trigger) => openSheet({ kind }, trigger)}
+                {...(optionalViewingSeat !== null
+                  ? { onReturnToBoard: () => useSessionStore.getState().leaveOptionalSeat() }
+                  : {})}
+                onResults={() => setResultsOpen(true)}
+                resultsButton={resultsButton}
+                actionsButton={actionsButton}
+              />
+            </div>
           ) : (
-            actions.dock
+            <>
+              {!finished && actions.desktopBuild}
+              <HandDock
+                state={state}
+                knightIntent={finished ? null : actions.knightIntent}
+                toggleKnightIntent={actions.toggleKnightIntent}
+                compact={false}
+                submitting={actions.submitting}
+              />
+              {winner ? (
+                <section className="action-dock finished-dock" aria-label={t('game:actions')}>
+                  <h2>{t('game:gameOver')}</h2>
+                  <p>{t('game:winner', { player: winner })}</p>
+                  <button
+                    ref={resultsButton}
+                    className="button button-primary"
+                    type="button"
+                    onClick={() => setResultsOpen(true)}
+                  >
+                    {t('game:results')}
+                  </button>
+                </section>
+              ) : (
+                <>
+                  {actions.desktopTrade}
+                  {actions.desktopTurn}
+                </>
+              )}
+            </>
           )}
         </div>
       </div>
       {!finished && actions.forms}
-      {compact &&
-        sheet &&
-        !forcedForm &&
-        !finished &&
-        !(waitingSeat !== null && revealedSeat === null) && (
-          <CockpitSheet
-            title={
-              sheet.kind === 'actions' ? t('game:actions') : playerName(presentation, sheet.seat)
-            }
-            dialogRef={sheetRef}
-            swipeToDismiss={sheet.kind === 'player'}
-            onClosed={() => {
-              setSheet(null);
-              if (restoreSheetFocus.current)
-                requestAnimationFrame(() => sheetTrigger.current?.focus());
-              restoreSheetFocus.current = true;
-            }}
-          >
-            {sheet.kind === 'actions' ? (
-              actions.dock
-            ) : (
-              <PlayerDetails
-                state={state}
-                seat={sheet.seat}
-                presentation={presentation}
-                receipt={receipts.find((item) => item.seat === sheet.seat)}
-                activeSeat={actions.actorSeat}
-                {...(connectionLabels !== undefined ? { connectionLabels } : {})}
-              />
-            )}
-          </CockpitSheet>
-        )}
+      {compact && sheet && !forcedForm && !(waitingSeat !== null && revealedSeat === null) && (
+        <CockpitSheet
+          title={
+            sheet.kind === 'player'
+              ? playerName(presentation, sheet.seat)
+              : sheet.kind === 'build'
+                ? t('game:buildPanel')
+                : sheet.kind === 'trade'
+                  ? t('game:tradePanel')
+                  : sheet.kind === 'players'
+                    ? t('game:players')
+                    : t('game:eventLog')
+          }
+          dialogRef={sheetRef}
+          swipeToDismiss
+          onClosed={() => {
+            setSheet(null);
+            if (restoreSheetFocus.current)
+              requestAnimationFrame(() => sheetTrigger.current?.focus());
+            restoreSheetFocus.current = true;
+          }}
+        >
+          {sheet.kind === 'build' ? (
+            actions.mobileBuild
+          ) : sheet.kind === 'trade' ? (
+            <>
+              {actions.mobileTrade}
+              <BankPanel state={state} hidden={hideBankCounts} />
+            </>
+          ) : sheet.kind === 'players' ? (
+            <div className="mobile-players-list">
+              {state.seats.map(({ seat }) => (
+                <PlayerDetails
+                  key={seat}
+                  state={state}
+                  seat={seat}
+                  presentation={presentation}
+                  receipt={receipts.find((item) => item.seat === seat)}
+                  activeSeat={actions.actorSeat}
+                  summary
+                  {...(connectionLabels !== undefined ? { connectionLabels } : {})}
+                />
+              ))}
+              <AwardsPanel state={state} presentation={presentation} />
+            </div>
+          ) : sheet.kind === 'log' ? (
+            <EventLog events={events} presentation={presentation} initiallyOpen />
+          ) : sheet.kind === 'player' ? (
+            <PlayerDetails
+              state={state}
+              seat={sheet.seat}
+              presentation={presentation}
+              receipt={receipts.find((item) => item.seat === sheet.seat)}
+              activeSeat={actions.actorSeat}
+              {...(connectionLabels !== undefined ? { connectionLabels } : {})}
+            />
+          ) : null}
+        </CockpitSheet>
+      )}
       {finished && resultsOpen && (
         <GameOverPanel
           state={state}

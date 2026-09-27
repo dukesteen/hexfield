@@ -392,3 +392,307 @@
 .online-chat-dialog {
   width: min(32rem, calc(100vw - 2rem));
 }
+
+/* Room layout shares the game table's parchment palette. */
+.online-page.online-lobby-page {
+  --online-yellow: #e3ae3a;
+  --online-red: #c2493a;
+  background-position: center;
+  background-size: cover;
+  background-attachment: fixed;
+  font-family: 'DM Mono', monospace;
+  color: var(--text);
+}
+
+.online-page.online-lobby-page .app-header {
+  width: min(100% - 32px, 1200px);
+  max-width: none;
+}
+
+.online-page.online-lobby-page .online-lobby-content {
+  width: min(100% - 32px, 1200px);
+  padding: 28px 0 72px;
+  gap: 18px;
+}
+
+.online-page.online-lobby-page .online-lobby-heading {
+  position: relative;
+  isolation: isolate;
+  min-height: 164px;
+  padding: 26px 30px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: var(--surface);
+  box-shadow: 0 4px 0 var(--panel-shadow);
+}
+
+.online-page.online-lobby-page .online-lobby-heading > div {
+  position: relative;
+  z-index: 1;
+}
+
+.online-page.online-lobby-page .online-room-art {
+  position: absolute;
+  right: 22%;
+  bottom: -55px;
+  width: 260px;
+  max-width: 42%;
+  opacity: 0.38;
+  pointer-events: none;
+}
+
+.online-page.online-lobby-page .online-kicker {
+  color: var(--accent);
+  font-size: 0.7rem;
+  font-weight: 500;
+  letter-spacing: 0.16em;
+}
+
+.online-page.online-lobby-page .online-lobby-heading h1 {
+  font-family: 'Young Serif', Georgia, serif;
+  font-size: clamp(2rem, 3.5vw, 3.1rem);
+  font-weight: 400;
+  line-height: 1.08;
+}
+
+.online-page.online-lobby-page .online-status {
+  align-self: flex-start;
+  border-radius: 10px;
+  background: var(--raised);
+  color: var(--text);
+  font-size: 0.75rem;
+  box-shadow: 0 2px 0 var(--panel-shadow);
+}
+
+.online-page.online-lobby-page .online-room-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(320px, 0.8fr);
+  grid-template-areas: 'main side';
+  align-items: start;
+  gap: 18px;
+}
+
+.online-page.online-lobby-page .online-room-main,
+.online-page.online-lobby-page .online-room-side {
+  display: grid;
+  align-content: start;
+  gap: 18px;
+  min-width: 0;
+}
+
+.online-page.online-lobby-page .online-room-main {
+  grid-area: main;
+}
+
+.online-page.online-lobby-page .online-room-side {
+  grid-area: side;
+}
+
+.online-page.online-lobby-page
+  :is(.online-section, .online-start-panel, .online-chat, .connection-diagnostics) {
+  min-width: 0;
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface);
+  box-shadow: 0 3px 0 var(--panel-shadow);
+}
+
+.online-page.online-lobby-page :is(.online-section, .online-start-panel, .online-chat) h2 {
+  margin: 0;
+  font-family: 'Young Serif', Georgia, serif;
+  font-size: 1.25rem;
+  font-weight: 400;
+}
+
+.online-page.online-lobby-page .online-section > .section-heading {
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.online-page.online-lobby-page .online-seat-list {
+  gap: 10px;
+}
+
+.online-page.online-lobby-page .online-seat-row {
+  grid-template-columns: 52px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--raised);
+  box-shadow: 0 2px 0 var(--panel-shadow);
+}
+
+.online-page.online-lobby-page .online-marker {
+  width: 48px;
+  height: 52px;
+}
+
+.online-page.online-lobby-page .online-marker .player-marker {
+  width: 42px;
+  height: 46px;
+}
+
+.online-page.online-lobby-page .online-seat-title strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-family: 'Young Serif', Georgia, serif;
+  font-size: 1.1rem;
+  font-weight: 400;
+}
+
+.online-page.online-lobby-page .online-seat-number {
+  color: var(--muted);
+  font-size: 0.68rem;
+}
+
+.online-page.online-lobby-page .online-ready {
+  padding: 3px 7px;
+  border-radius: 6px;
+  background: var(--page);
+  color: var(--muted);
+  font-size: 0.68rem;
+}
+
+.online-page.online-lobby-page .online-is-ready {
+  background: color-mix(in srgb, #6fa35a 20%, var(--surface));
+  color: #4f7a3e;
+}
+
+.online-page.online-lobby-page .online-seat-edit {
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.online-page.online-lobby-page .online-seat-actions {
+  max-width: 180px;
+}
+
+.online-page.online-lobby-page .online-start-panel {
+  background: var(--raised);
+}
+
+.online-page.online-lobby-page .online-start-panel > .button {
+  min-height: 48px;
+  padding-inline: 22px;
+  white-space: nowrap;
+}
+
+.online-page.online-lobby-page .online-chat-history {
+  min-height: 130px;
+  max-height: 260px;
+  border-color: var(--border);
+  border-radius: 10px;
+  background: var(--raised);
+}
+
+.online-page.online-lobby-page .connection-diagnostics {
+  padding: 0;
+}
+
+.online-page.online-lobby-page .connection-diagnostics summary {
+  font-family: 'Young Serif', Georgia, serif;
+  font-size: 1rem;
+  font-weight: 400;
+}
+
+.online-page.online-lobby-page .invitation-code {
+  grid-template-columns: 116px minmax(0, 1fr);
+  gap: 12px;
+}
+
+.online-page.online-lobby-page .invitation-qr {
+  border: 8px solid #fff;
+  border-radius: 10px;
+  box-shadow: 0 2px 0 var(--panel-shadow);
+}
+
+.online-page.online-lobby-page .invitation-code-text textarea {
+  min-height: 88px;
+  background: var(--page);
+  font-size: 0.7rem;
+}
+
+:root[data-theme='dark'] .online-page.online-lobby-page .online-is-ready {
+  color: #b8dfaa;
+}
+
+@media (max-width: 920px) {
+  .online-page.online-lobby-page .online-room-grid {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: 'side' 'main';
+  }
+
+  .online-page.online-lobby-page .online-room-side {
+    grid-template-columns: minmax(0, 1fr) minmax(260px, 0.7fr);
+  }
+}
+
+@media (max-width: 680px) {
+  .online-page.online-lobby-page {
+    background-attachment: scroll;
+  }
+
+  .online-page.online-lobby-page .online-lobby-content {
+    width: min(100% - 24px, 1200px);
+    padding-top: 16px;
+  }
+
+  .online-page.online-lobby-page .online-lobby-heading {
+    min-height: 0;
+    align-items: flex-start;
+    padding: 20px;
+  }
+
+  .online-page.online-lobby-page .online-room-art {
+    right: -44px;
+    bottom: -30px;
+    width: 180px;
+    opacity: 0.18;
+  }
+
+  .online-page.online-lobby-page .online-room-side {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .online-page.online-lobby-page .online-seat-row {
+    grid-template-columns: 42px minmax(0, 1fr);
+  }
+
+  .online-page.online-lobby-page .online-marker,
+  .online-page.online-lobby-page .online-marker .player-marker {
+    width: 40px;
+    height: 44px;
+  }
+
+  .online-page.online-lobby-page .online-seat-actions {
+    grid-column: 2;
+    max-width: none;
+  }
+
+  .online-page.online-lobby-page .online-invite-panel,
+  .online-page.online-lobby-page .online-start-panel {
+    align-items: stretch;
+  }
+
+  .online-page.online-lobby-page .invitation-code {
+    grid-template-columns: 116px minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 420px) {
+  .online-page.online-lobby-page .invitation-code {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .online-page.online-lobby-page .invitation-qr {
+    width: min(100%, 220px);
+  }
+
+  .online-page.online-lobby-page :is(.online-section, .online-start-panel, .online-chat) {
+    padding: 14px;
+  }
+}
