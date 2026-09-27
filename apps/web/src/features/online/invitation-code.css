@@ -88,12 +88,68 @@
   padding-block: 12px;
 }
 .connection-dialog {
-  width: min(900px, calc(100vw - 32px));
+  width: min(720px, calc(100vw - 32px));
   max-height: calc(100dvh - 32px);
   overflow-y: auto;
+  overscroll-behavior: contain;
 }
 .connection-dialog .connection-diagnostics {
-  margin-block: 20px;
+  margin-block: 20px 16px;
+  background: var(--raised);
+  box-shadow: 0 2px 0 var(--panel-shadow);
+}
+
+.connection-dialog > .section-heading {
+  align-items: center;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+:is(.connection-dialog, .online-resume-panel) .manual-connection {
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--raised);
+  box-shadow: 0 2px 0 var(--panel-shadow);
+  font-size: 0.85rem;
+  line-height: 1.6;
+}
+
+:is(.connection-dialog, .online-resume-panel) .manual-connection h2 {
+  font-size: 1.15rem;
+}
+
+:is(.connection-dialog, .online-resume-panel) .manual-connection p {
+  margin: 0;
+}
+
+:is(.connection-dialog, .online-resume-panel) .invitation-code {
+  grid-template-columns: 140px minmax(0, 1fr);
+  gap: 16px;
+}
+
+:is(.connection-dialog, .online-resume-panel) .invitation-qr {
+  border: 8px solid #fff;
+  border-radius: 10px;
+}
+
+:is(.connection-dialog, .online-resume-panel) .manual-connection details {
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.connection-dialog .manual-connection-form select {
+  background: var(--surface);
+}
+
+@media (max-width: 480px) {
+  :is(.connection-dialog, .online-resume-panel) .invitation-code {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  :is(.connection-dialog, .online-resume-panel) .invitation-qr {
+    width: 180px;
+  }
 }
 
 @media (max-width: 640px) {

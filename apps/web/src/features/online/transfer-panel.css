@@ -1,28 +1,72 @@
 .online-transfer-panel {
   display: grid;
-  gap: 14px;
+  gap: 16px;
   min-width: 0;
-  padding: 20px;
+  padding: clamp(18px, 4vw, 28px);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: 16px;
   background: var(--surface);
   color: var(--text);
+  box-shadow: 0 3px 0 var(--panel-shadow, transparent);
 }
 
 .online-transfer-destination {
   display: grid;
   gap: 16px;
-  width: min(100% - 32px, 680px);
-  margin: 48px auto;
+  align-content: center;
+  width: min(100% - 36px, 620px);
+  min-height: calc(100dvh - 72px);
+  margin: 0 auto;
+  padding: 28px 0 44px;
+}
+
+.online-transfer-invalid {
+  min-height: 100dvh;
+  display: grid;
+  grid-template-rows: auto 1fr;
+}
+
+.online-transfer-invalid .app-header {
+  width: 100%;
+}
+
+.online-transfer-invalid .online-transfer-destination {
+  width: min(100% - 36px, 540px);
+  min-height: 0;
+  padding-block: 32px;
 }
 
 .online-transfer-dialog {
-  width: min(100% - 32px, 700px);
+  width: min(700px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  padding: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.online-transfer-dialog .online-transfer-panel {
+  border: 0;
+  box-shadow: none;
+}
+
+.online-transfer-panel .invitation-code {
+  grid-template-columns: 140px minmax(0, 1fr);
+  gap: 16px;
+}
+
+.online-transfer-panel .invitation-qr {
+  border: 8px solid #fff;
+  border-radius: 10px;
 }
 
 .online-transfer-panel h2,
+.online-transfer-panel h1,
 .online-transfer-panel p {
   margin: 0;
+}
+
+.online-transfer-panel h1 {
+  font-size: clamp(1.75rem, 5vw, 2.5rem);
 }
 
 .online-transfer-explanation,
@@ -50,9 +94,10 @@
   display: grid;
   gap: 8px;
   margin: 0;
-  padding: 12px;
+  padding: 14px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 12px;
+  background: var(--surface);
 }
 
 .online-transfer-candidates legend {
@@ -65,22 +110,39 @@
   align-items: center;
   gap: 10px;
   min-width: 0;
-  padding: 8px;
-  border-radius: 6px;
-  background: var(--surface-raised, var(--surface));
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--raised, var(--surface));
   cursor: pointer;
 }
 
-.online-transfer-candidate input {
-  flex: 0 0 auto;
+.online-transfer-candidate input[type='radio'] {
+  appearance: auto;
+  width: 18px;
+  height: 18px;
+  min-height: 18px;
+  flex: 0 0 18px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
   accent-color: var(--accent);
+}
+
+.online-transfer-candidate:hover {
+  border-color: var(--control);
 }
 
 .online-transfer-phase {
   display: flex;
   align-items: center;
   gap: 10px;
-  min-height: 24px;
+  min-height: 42px;
+  padding: 9px 12px;
+  border-radius: 10px;
+  background: var(--raised, var(--surface));
 }
 
 .online-transfer-spinner {
@@ -94,7 +156,7 @@
 }
 
 .online-transfer-error {
-  color: var(--danger, #c43b32);
+  color: var(--error);
 }
 
 .online-transfer-actions {
@@ -102,6 +164,10 @@
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 8px;
+}
+
+.online-transfer-actions > .button {
+  min-width: 112px;
 }
 
 @keyframes online-transfer-spin {
@@ -116,9 +182,29 @@
   }
 }
 
+@media (max-width: 767px) {
+  .online-transfer-destination {
+    min-height: calc(100dvh - 60px);
+  }
+}
+
 @media (max-width: 560px) {
+  .online-transfer-panel .invitation-code {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .online-transfer-panel .invitation-qr {
+    width: 160px;
+    margin-inline: auto;
+  }
+
+  .online-transfer-destination {
+    padding-block: 20px 32px;
+  }
+
   .online-transfer-panel {
-    padding: 16px;
+    gap: 14px;
+    padding: 18px;
   }
 
   .online-transfer-actions > .button {

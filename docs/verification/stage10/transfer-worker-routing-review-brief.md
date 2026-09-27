@@ -5,6 +5,7 @@ Read-only security and correctness review of the attached pinned source. Tools d
 Scope: the new online worker transfer RPCs, bounded request accounting, temporary transfer-data channel, verified device-route export, WebRTC frozen roster updates and chat route selection. Protocol v4 core, signed transfer membership, immutable private outbox/import, destination credential/stage/promotion cryptography already have separate reviews. Do not redesign consensus. Public bootstrap is independently verified in the worker, with a 16 MiB raw-byte bound. The destination participant owns fresh replacement keys; it creates no voter before its exact certified activation is atomically promoted. P2PSession source methods validate current owned human authority, exact current head for owner intent, affected bot custody and session retirement, detach entropy and suppress late private output. Those source/destination leaves are being verified separately and are not attached in this review.
 
 Check these invariants:
+
 - Main sees only public evidence, display state, signed offers/readiness and destination-sealed private packets. It cannot obtain signing/master/encryption keys via new RPCs.
 - A pending destination cannot attach the game transport or submit a gameplay command. Promotion returns a gameId; ordinary resume must be opened in a new worker.
 - Shutdown stops import/readiness and source private output, drains accepted work, wipes owned entropy and closes storage. Heavy bootstrap admission preserves control capacity and has a bounded separate pending slot.

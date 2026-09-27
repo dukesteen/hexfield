@@ -735,6 +735,8 @@ test('fresh host takes a recovered bot only with its current key and original be
     expect(status).toEqual({
       head: authorizationRef,
       pending: { entry: authorizationRef, statement },
+      matchedAuthorization: null,
+      expiredBeforeCertification: false,
       outcome: null,
     });
     Reflect.set(required(status.pending).entry, 'seq', 0);
@@ -742,6 +744,8 @@ test('fresh host takes a recovered bot only with its current key and original be
     expect(sourceSession.getTransferStatus()).toEqual({
       head: authorizationRef,
       pending: { entry: authorizationRef, statement },
+      matchedAuthorization: null,
+      expiredBeforeCertification: false,
       outcome: null,
     });
     const entropy = new Uint8Array(32).fill(155);
@@ -871,13 +875,13 @@ test('a second-generation retired human can request only certified history', asy
   );
   const entries = [...fixture.deckEntries];
   let context = fixture.ready;
-  const certify = (change: unknown, excludedSeat: Seat = 2) => {
+  const certify = (change: unknown, excludedSeat: Seat = 2, term = 1) => {
     const nextSeq = context.log.head.seq + 1;
-    const elected = proposerFor(nextSeq, 1, context.membership, context.excludedProposers);
+    const elected = proposerFor(nextSeq, term, context.membership, context.excludedProposers);
     const entry = signEntry(
       {
         seq: nextSeq,
-        term: 1,
+        term,
         prevHash: entryHash(context.log.head),
         payload: { kind: 'membership', change },
         stateHash: context.log.head.stateHash,
@@ -896,7 +900,7 @@ test('a second-generation retired human can request only certified history', asy
               epoch: context.membership.epoch,
               seat,
               seq: nextSeq,
-              term: 1,
+              term,
               phase: 'precommit',
               valueHash: entryHash(entry),
             },
@@ -963,6 +967,21 @@ test('a second-generation retired human can request only certified history', asy
       replacements: statement.replacements,
       checkDigest: transferCheckDigest(context.log, authorizationRef),
     };
+    // The stale first-generation journal below has no record of a proposal
+    // signed by its key after going offline. Choose a genuine surviving
+    // proposer for the certificate that retires that key.
+    const activationTerm = retiringOwnerOffline
+      ? [1, 2, 3, 4].find(
+          (term) =>
+            proposerFor(
+              context.log.head.seq + 1,
+              term,
+              context.membership,
+              context.excludedProposers,
+            ).seat !== 0,
+        )
+      : 1;
+    if (activationTerm === undefined) throw new Error('No surviving activation proposer');
     certify(
       {
         kind: 'transfer-activate',
@@ -975,6 +994,7 @@ test('a second-generation retired human can request only certified history', asy
         replacementChecks: [],
       },
       retiringOwnerOffline ? 0 : 2,
+      activationTerm,
     );
     keys.set(0, game.secretKey);
     return { authorization: authorizationRef, activation: transferEntryRef(context.log.head) };

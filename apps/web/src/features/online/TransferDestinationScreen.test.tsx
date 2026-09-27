@@ -25,7 +25,10 @@ vi.mock('@tanstack/react-router', () => ({
 }));
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock('../../session/online-transfer-link.js', () => ({
-  decodeTransferInvite: () => ({ body: { sourceDevice: 'source-device' } }),
+  decodeTransferInvite: (code: string) => {
+    if (code === 'invalid-code') throw new TypeError('Invalid invitation');
+    return { body: { sourceDevice: 'source-device' } };
+  },
 }));
 vi.mock('../../queries/online-transfers.js', () => ({
   openDestinationTransfer: vi.fn<() => Promise<DestinationTransferHandle>>(),
@@ -81,6 +84,8 @@ test('starts only on explicit action, then closes importer before opening the pr
   const opened = destination();
   vi.mocked(openDestinationTransfer).mockResolvedValue(opened.handle);
   const page = render(<TransferDestinationScreen code="signed-code" />);
+  expect(page.getByRole('main').classList.contains('online-page')).toBe(true);
+  expect(page.getByRole('main').querySelector('.online-transfer-destination')).toBeTruthy();
   expect(openDestinationTransfer).not.toHaveBeenCalled();
   fireEvent.click(page.getByRole('button', { name: 'lobby:transferStart' }));
   await waitFor(() => expect(page.getByRole('status')).toBeTruthy());
@@ -138,4 +143,14 @@ test('leaving during an importer open rejects its late result', async () => {
   finish(opened.handle);
   await waitFor(() => expect(opened.close).toHaveBeenCalledOnce());
   expect(navigate).toHaveBeenCalledTimes(1);
+});
+
+test('invalid invitation uses the same themed destination shell and a clear return action', () => {
+  const page = render(<TransferDestinationScreen code="invalid-code" />);
+  const main = page.getByRole('main');
+  expect(main.classList.contains('online-page')).toBe(true);
+  expect(main.classList.contains('online-transfer-invalid')).toBe(true);
+  expect(page.getByRole('heading', { name: 'lobby:transferInvalidInvite' })).toBeTruthy();
+  expect(page.getByRole('link', { name: 'lobby:backHome' })).toBeTruthy();
+  expect(openDestinationTransfer).not.toHaveBeenCalled();
 });

@@ -5,7 +5,7 @@ import { expect, test } from 'vitest';
 import { genesisDigest, validateGenesis } from './genesis.js';
 import { createConsensusState } from './consensus.js';
 import type { LogContext } from './log-types.js';
-import { validateCertifiedEntry } from './proposal.js';
+import { proposerFor, validateCertifiedEntry } from './proposal.js';
 import { validateRecoveryTransition } from './recovery-membership.js';
 import { validateTransferTransition } from './transfer-membership.js';
 import { replayCertifiedPrefix, snapshotFromContext } from './replay.js';
@@ -709,8 +709,29 @@ test('return uses the last certified human game key after recovered bot activati
 
   // A later loss creates a new return root. The original human key and R1
   // ancestry must not become valid again after this second recovery.
+  const offlineTerm = [1, 2, 3, 4].find(
+    (term) =>
+      proposerFor(returned.log.head.seq + 1, term, returned.membership, returned.excludedProposers)
+        .seat !== 0,
+  );
+  if (offlineTerm === undefined) throw new Error('No surviving offline-marker proposer');
+  const secondOfflineEntry = signRecoveryFixtureEntry(
+    fixture,
+    returned,
+    { kind: 'membership', change: { kind: 'seat-offline', seat: 0 } },
+    returned.log.head.stateHash,
+    offlineTerm,
+  );
+  const afterSecondOffline = advanceRecoveryFixture(
+    returned,
+    certifyRecoveryFixtureEntry(fixture, returned, secondOfflineEntry, [1, 2, 3]),
+  );
   const secondReplacement = recoveryFixtureReplacement(88);
-  const secondReadiness = recoveryFixtureReadiness(fixture, returned, secondReplacement.peerId);
+  const secondReadiness = recoveryFixtureReadiness(
+    fixture,
+    afterSecondOffline,
+    secondReplacement.peerId,
+  );
   const secondAuthorize = signRecoveryFixtureAuthorization(
     fixture,
     secondReadiness,
@@ -718,13 +739,13 @@ test('return uses the last certified human game key after recovered bot activati
   );
   const secondAuthorizeEntry = signRecoveryFixtureEntry(
     fixture,
-    returned,
+    afterSecondOffline,
     { kind: 'membership', change: secondAuthorize },
-    returned.log.head.stateHash,
+    afterSecondOffline.log.head.stateHash,
   );
   const secondAuthorized = advanceRecoveryFixture(
-    returned,
-    certifyRecoveryFixtureEntry(fixture, returned, secondAuthorizeEntry, [1, 2, 3]),
+    afterSecondOffline,
+    certifyRecoveryFixtureEntry(fixture, afterSecondOffline, secondAuthorizeEntry, [1, 2, 3]),
   );
   const secondActivate = signRecoveryFixtureActivation(
     fixture,

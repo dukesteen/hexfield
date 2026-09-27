@@ -63,6 +63,7 @@ test('a surviving session recovers a bot, finishes the frozen beacon and resumes
   const network = createMemnet({
     peers: fixture.genesis.seats.map(({ publicKey }) => publicKey),
   });
+  network.crash(required(fixture.genesis.seats[0]).publicKey);
   const sessions = new Map<Seat, P2PSession>();
   const options = new Map<Seat, P2PSessionOptions>();
   const providers: ReturnType<typeof createBeaconSecretSource>[] = [];
@@ -196,6 +197,8 @@ test('a surviving session recovers a bot, finishes the frozen beacon and resumes
       sessions.set(seat, value(await P2PSession.restore(current)));
     }
 
+    network.clock.advanceBy(120_000);
+    await Promise.all([...sessions.values()].map((session) => session.flush()));
     const host = required(sessions.get(1));
     const submitted = host.requestTakeover(0, 'medium');
     await pumpUntil(() =>

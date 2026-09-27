@@ -40,8 +40,8 @@ async function readyJournal(fixture: RecoveryFixture, seat: Seat): Promise<Memor
   ).toBe(true);
   for (const certified of fixture.deckEntries) {
     const next = advanceRecoveryFixture(context, certified);
-    // oxlint-disable-next-line no-await-in-loop -- Certified ancestry is sequential.
     expect(
+      // oxlint-disable-next-line no-await-in-loop -- Certified ancestry is sequential.
       await journal.commit(
         certified.entry.seq,
         0,
@@ -95,7 +95,8 @@ function replicaOptions(
 }
 
 test('takeover requires certified offline notice and local quorum-qualified policy time', async () => {
-  const fixture = createRecoveryFixture({ masterBackedBeacon: true });
+  // Leave the public marker uncertified so this trace exercises live 15-second admission.
+  const fixture = createRecoveryFixture({ masterBackedBeacon: true, offlineSeat: null });
   const network = createMemnet({ peers: fixture.genesis.seats.map((seat) => seat.publicKey) });
   const absent = fixture.genesis.seats.find((seat) => seat.seat === 0);
   if (!absent) throw new Error('Missing target');
@@ -105,10 +106,11 @@ test('takeover requires certified offline notice and local quorum-qualified poli
     for (const seat of [1, 2, 3] as const) {
       const identity = fixture.source.identities.get(seat);
       if (!identity) throw new Error('Missing voter identity');
-      const journal = await readyJournal(fixture, seat);
       // oxlint-disable-next-line no-await-in-loop -- Restore uses each independent durable journal.
+      const journal = await readyJournal(fixture, seat);
       replicas.push(
         value(
+          // oxlint-disable-next-line no-await-in-loop -- Restore uses each independent durable journal.
           await ReplicatedLog.restore(
             replicaOptions(
               fixture,

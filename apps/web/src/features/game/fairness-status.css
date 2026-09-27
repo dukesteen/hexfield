@@ -1,22 +1,10 @@
 .fairness-status {
-  position: absolute;
-  z-index: 5;
-  top: 8px;
-  left: 60px;
   display: flex;
   align-items: center;
-  gap: 6px;
-  max-width: calc(100% - 190px);
-  min-height: 44px;
-  padding: 7px 10px;
-  border: 1px solid var(--border);
-  border-radius: 9px;
-  background: var(--surface);
-  box-shadow: 0 2px 8px #090b0e33;
-  color: var(--muted);
-  font-size: 0.75rem;
-  font-weight: 600;
-  cursor: pointer;
+  justify-content: flex-start;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
 }
 .fairness-status svg {
   width: 17px;

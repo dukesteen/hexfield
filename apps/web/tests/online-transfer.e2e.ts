@@ -16,9 +16,11 @@ test.skip(process.env.CP2P_ONLINE_TRANSFER_E2E !== '1', 'Requires local signalin
 async function gameView(page: Page, gameId: string) {
   return page.evaluate(async (id) => {
     const path: string = '/src/features/online/room-registry.ts';
+    // oxlint-disable typescript/no-unsafe-type-assertion -- Vite serves this known local module inside the browser; its exports match the compile-time import.
     const { getOnlineGameRoom } = (await import(
       /* @vite-ignore */ path
     )) as typeof import('../src/features/online/room-registry.js');
+    // oxlint-enable typescript/no-unsafe-type-assertion
     const session = getOnlineGameRoom(id)?.getGame()?.session;
     if (!session) return null;
     const seats = session.controllableSeats();
@@ -34,9 +36,11 @@ async function gameView(page: Page, gameId: string) {
 async function submitFirstLegal(page: Page, gameId: string): Promise<boolean> {
   return page.evaluate(async (id) => {
     const path: string = '/src/features/online/room-registry.ts';
+    // oxlint-disable typescript/no-unsafe-type-assertion -- Vite serves this known local module inside the browser; its exports match the compile-time import.
     const { getOnlineGameRoom } = (await import(
       /* @vite-ignore */ path
     )) as typeof import('../src/features/online/room-registry.js');
+    // oxlint-enable typescript/no-unsafe-type-assertion
     const session = getOnlineGameRoom(id)?.getGame()?.session;
     if (!session) return false;
     for (const seat of session.controllableSeats()) {
@@ -67,13 +71,14 @@ test('a certified seat transfer retires the old signer and the new device makes 
     await source.goto('/#/online/create');
     await source.getByLabel('Room name').fill('Transfer acceptance');
     await source.getByLabel('Your player name').fill('Source');
-    await source.getByLabel('Connection method').selectOption('server');
-    await source.getByLabel('Signaling server origin').fill(SIGNALING_URL);
+    await source.getByText('Advanced connection options', { exact: true }).click();
+    await source.getByLabel('Invite friends with').selectOption('server');
+    await source.getByLabel('Custom room server').fill(SIGNALING_URL);
     await source.getByLabel('Player count').selectOption('2');
     await source.getByRole('button', { name: 'Create room' }).click();
     await expect(source.getByRole('heading', { name: 'Transfer acceptance' })).toBeVisible();
 
-    const invitation = await source.getByLabel('Full invitation link').inputValue();
+    const invitation = await source.getByLabel('Invitation link', { exact: true }).inputValue();
     await survivor.goto(invitation);
     await expect(survivor.getByRole('heading', { name: 'Transfer acceptance' })).toBeVisible();
     await survivor.getByRole('button', { name: 'Take seat' }).click();

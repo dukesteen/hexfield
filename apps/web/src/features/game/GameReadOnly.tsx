@@ -1045,6 +1045,7 @@ function LiveGame({
                 : t('game:saveError')}
           </span>
           <TurnTimer />
+          <FairnessStatus presentation={presentation} />
           {menuActions}
           <button className="button button-quiet" type="button" onClick={skip}>
             {t('game:skipAnimations')}
@@ -1115,7 +1116,6 @@ function LiveGame({
               <AwardsPanel state={state} presentation={presentation} />
             </div>
           )}
-          <FairnessStatus presentation={presentation} />
           {!compact && !finished && actions.desktopStatus}
           {!finished && actions.placementConfirmation && (
             <PlacementConfirmation

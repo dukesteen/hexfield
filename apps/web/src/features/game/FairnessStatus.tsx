@@ -79,7 +79,7 @@ export function FairnessStatus({ presentation }: { presentation: GamePresentatio
       <button
         ref={trigger}
         type="button"
-        className={`fairness-status ${flagged ? 'has-findings' : ''}`}
+        className={`button button-quiet fairness-status ${flagged ? 'has-findings' : ''}`}
         aria-label={t('game:fairnessOpen', { status: label })}
         aria-haspopup="dialog"
         title={label}

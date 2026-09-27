@@ -41,6 +41,7 @@ import { createStealSecretSource } from './steal-source.js';
 import { createMemnet } from './testing/memnet.js';
 import {
   advanceRecoveryFixture,
+  certifyRecoveryFixtureFirstBeacon,
   certifyRecoveryFixtureEntry,
   createRecoveryFixture,
   recoveryFixtureKey,
@@ -398,13 +399,26 @@ describe('live certified recovery', () => {
       afterAuthorization,
       certifyRecoveryFixtureEntry(fixture, afterAuthorization, activationEntry, [1, 2, 3]),
     );
+    const secondOffline = signRecoveryFixtureEntry(
+      fixture,
+      afterActivation,
+      { kind: 'membership', change: { kind: 'seat-offline', seat: 1 } },
+      afterActivation.log.head.stateHash,
+    );
+    const afterSecondOffline = advanceRecoveryFixture(
+      afterActivation,
+      certifyRecoveryFixtureEntry(fixture, afterActivation, secondOffline, [1, 2, 3]),
+    );
     const nextReplacement = recoveryFixtureReplacement(83);
     const next = {
       ...authorization,
       statement: {
         ...authorization.statement,
-        parent: { seq: afterActivation.log.head.seq, hash: entryHash(afterActivation.log.head) },
-        nextEpoch: afterActivation.membership.epoch + 1,
+        parent: {
+          seq: afterSecondOffline.log.head.seq,
+          hash: entryHash(afterSecondOffline.log.head),
+        },
+        nextEpoch: afterSecondOffline.membership.epoch + 1,
         departedSeat: 1,
         hostSeat: 2,
         replacements: [{ seat: 1, publicKey: nextReplacement.peerId }],
@@ -414,21 +428,29 @@ describe('live certified recovery', () => {
         })),
       },
     };
-    expect(previewRecoveryAuthorization(next, afterActivation.log, 2)).toMatchObject({
+    expect(previewRecoveryAuthorization(next, afterSecondOffline.log, 2)).toMatchObject({
       ok: false,
       error: { code: 'recovery-quorum' },
     });
   });
 
   test('a remote voter retains an approved signed submit before any takeover proposal exists', async () => {
+    // The certified offline marker shifts round-one proposer to the host. A
+    // genuine beacon child keeps this case about approval by another proposer.
+    const beaconChild = certifyRecoveryFixtureFirstBeacon(fixture, fixture.ready);
+    const remoteFixture = {
+      ...fixture,
+      deckEntries: [...fixture.deckEntries, beaconChild],
+      ready: advanceRecoveryFixture(fixture.ready, beaconChild),
+    };
     const seats = [1, 2, 3] as const;
-    const peers = seats.map((seat) => required(fixture.source.identities.get(seat)).peerId);
+    const peers = seats.map((seat) => required(remoteFixture.source.identities.get(seat)).peerId);
     const network = createMemnet({ peers });
     const firstProposer = proposerFor(
-      fixture.ready.log.head.seq + 1,
+      remoteFixture.ready.log.head.seq + 1,
       1,
-      fixture.ready.membership,
-      fixture.ready.excludedProposers,
+      remoteFixture.ready.membership,
+      remoteFixture.ready.excludedProposers,
     );
     const hostSeat = 1 as const;
     expect(hostSeat).not.toBe(firstProposer.seat);
@@ -456,20 +478,21 @@ describe('live certified recovery', () => {
           disconnect: (peer) => inner.disconnect(peer),
         };
         // oxlint-disable-next-line no-await-in-loop -- Each voter restores its own durable certified prefix.
-        const journal = await journalAtReady(fixture, seat);
+        const journal = await journalAtReady(remoteFixture, seat);
         replicas.set(
           seat,
           value(
             // oxlint-disable-next-line no-await-in-loop -- Restores are independent but keep test resource use bounded.
             await ReplicatedLog.restore(
-              optionsFor(fixture, seat, transport, network.clock, journal),
+              optionsFor(remoteFixture, seat, transport, network.clock, journal),
             ),
           ),
         );
       }
+      await settle([...replicas.values()], network.clock, 120);
       const replacement = recoveryFixtureReplacement(84);
       const statement = {
-        ...recoveryFixtureReadiness(fixture, fixture.ready, replacement.peerId),
+        ...recoveryFixtureReadiness(remoteFixture, remoteFixture.ready, replacement.peerId),
         hostSeat,
       };
       const authorization = {
@@ -478,7 +501,7 @@ describe('live certified recovery', () => {
         hostSig: signObject(
           RECOVERY_READINESS_DOMAIN,
           statement,
-          recoveryFixtureKey(fixture, hostSeat),
+          recoveryFixtureKey(remoteFixture, hostSeat),
         ),
         keySigs: [
           { seat: 0, sig: signObject(RECOVERY_READINESS_DOMAIN, statement, replacement.secretKey) },
@@ -500,8 +523,8 @@ describe('live certified recovery', () => {
       expect(approvals.every((result) => result.ok)).toBe(true);
       const competingKey = recoveryFixtureReplacement(86);
       const competing = signRecoveryFixtureAuthorization(
-        fixture,
-        recoveryFixtureReadiness(fixture, fixture.ready, competingKey.peerId),
+        remoteFixture,
+        recoveryFixtureReadiness(remoteFixture, remoteFixture.ready, competingKey.peerId),
         competingKey.secretKey,
       );
       expect(await required(replicas.get(2)).approveRecoveryAuthorization(competing)).toMatchObject(
@@ -512,10 +535,10 @@ describe('live certified recovery', () => {
       );
       await settle([...replicas.values()], network.clock, 25);
       expect(await submitted).toMatchObject({ ok: true });
-      expect(proposals).toContain(hostSeat);
+      expect(proposals).toContain(firstProposer.seat);
       expect(
         [...replicas.values()].every(
-          (replica) => replica.getContext().log.head.seq === fixture.ready.log.head.seq + 1,
+          (replica) => replica.getContext().log.head.seq === remoteFixture.ready.log.head.seq + 1,
         ),
       ).toBe(true);
     } finally {
@@ -563,6 +586,7 @@ describe('live certified recovery', () => {
     const seats = [0, 1, 2, 3] as const;
     const peers = seats.map((seat) => required(fixture.source.identities.get(seat)).peerId);
     const network = createMemnet({ peers });
+    for (const peer of peers.slice(1)) network.disconnect(required(peers[0]), peer);
     const replicas: ReplicatedLog[] = [];
     const journals = new Map<Seat, MemoryProtocolJournal>();
     const retired: Seat[] = [];
@@ -591,6 +615,11 @@ describe('live certified recovery', () => {
       expect(replicas.every((replica) => replica.getContext().log.head.seq === readySeq)).toBe(
         true,
       );
+      // The 15-second public marker is already certified in the fixture. Each
+      // honest survivor still needs its own restart-conservative 120-second
+      // quorum-qualified observation before signing a positive vote.
+      network.clock.advanceBy(120_000);
+      await Promise.all(replicas.map((replica) => replica.flush()));
       const replacement = recoveryFixtureReplacement(77);
       const authorization = signRecoveryFixtureAuthorization(
         fixture,
@@ -637,6 +666,7 @@ describe('live certified recovery', () => {
       ).toBe(true);
       expect(required(replicas[0]).getContext().membership.epoch).toBe(0);
       gate.holdRecovery = false;
+      for (const peer of peers.slice(1)) network.connect(required(peers[0]), peer);
       await settle(replicas, network.clock);
       expect(gate.syncRequests).toBeGreaterThan(0);
       expect(gate.syncResponses).toBeGreaterThan(0);
@@ -748,6 +778,8 @@ describe('live certified recovery', () => {
           ),
         );
       }
+      network.clock.advanceBy(120_000);
+      await Promise.all(replicas.map((replica) => replica.flush()));
       const authorization = signRecoveryFixtureAuthorization(
         fixture,
         recoveryFixtureReadiness(fixture, fixture.ready, replacement.peerId),

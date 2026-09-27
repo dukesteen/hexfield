@@ -88,11 +88,18 @@ export function TransferDestinationScreen({ code }: { code: string }) {
 
   if (!invite)
     return (
-      <main className="app-page message-page">
-        <h1>{t('lobby:transferInvalidInvite')}</h1>
-        <Link className="button button-primary" to="/">
-          {t('lobby:backHome')}
-        </Link>
+      <main className="app-page online-page online-transfer-invalid">
+        <header className="app-header">
+          <Link className="text-link" to="/">
+            {t('lobby:backHome')}
+          </Link>
+          <span className="app-brand">{t('lobby:transferDestinationTitle')}</span>
+        </header>
+        <div className="online-transfer-destination">
+          <section className="online-transfer-panel">
+            <h1>{t('lobby:transferInvalidInvite')}</h1>
+          </section>
+        </div>
       </main>
     );
 

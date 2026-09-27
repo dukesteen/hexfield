@@ -10,6 +10,10 @@
   --accent-text: #fff8ec;
   --error: #aa3429;
   --panel-shadow: #d6c7a8;
+  --scene-blend: normal;
+  --primary-fill: #3d2f35;
+  --primary-text: #f7efde;
+  --ready-text: #4f7a3e;
   color: var(--text);
   background-color: var(--page);
   font-family: 'DM Mono', monospace;
@@ -28,6 +32,10 @@
   --accent-text: #30272c;
   --error: #ffb29e;
   --panel-shadow: #211b22;
+  --scene-blend: multiply;
+  --primary-fill: #a6362a;
+  --primary-text: #fff8ec;
+  --ready-text: #b8dfaa;
   color-scheme: dark;
 }
 
@@ -44,6 +52,10 @@
     --accent-text: #30272c;
     --error: #ffb29e;
     --panel-shadow: #211b22;
+    --scene-blend: multiply;
+    --primary-fill: #a6362a;
+    --primary-text: #fff8ec;
+    --ready-text: #b8dfaa;
     color-scheme: dark;
   }
 }
@@ -102,15 +114,14 @@
 .home-page .button-primary,
 .form-page .button-primary,
 .online-page .button-primary {
-  border-color: #3d2f35;
-  background: #3d2f35;
-  color: #f7efde;
+  border-color: var(--primary-fill);
+  background: var(--primary-fill);
+  color: var(--primary-text);
 }
 
-:root[data-theme='dark'] :is(.app-dialog, .home-page, .form-page, .online-page) .button-primary {
-  border-color: #a6362a;
-  background: #a6362a;
-  color: #fff8ec;
+.online-page {
+  background-color: var(--page);
+  background-blend-mode: var(--scene-blend);
 }
 
 .app-dialog .button-quiet,

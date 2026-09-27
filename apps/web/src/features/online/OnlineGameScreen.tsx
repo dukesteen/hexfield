@@ -1,5 +1,6 @@
 import type { Seat } from '@cp2p/engine';
 import type { GameSession, LobbyFreezeAgreement } from '@cp2p/protocol';
+import { getGameArtUrl } from '@cp2p/renderer';
 import { useBlocker, useNavigate } from '@tanstack/react-router';
 import { useMutation } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
@@ -85,42 +86,50 @@ export function OnlineGameScreen({ gameId }: { gameId: string }) {
   };
   if (!room || !game || !agreement)
     return (
-      <main className="app-page message-page">
-        <h1>{t('lobby:onlineResumeTitle')}</h1>
-        {halted ? (
-          <p role="alert">{t('lobby:onlineGameHalted')}</p>
-        ) : failed ? (
-          <p role="alert">
-            {unsupportedVersion
-              ? t('lobby:onlineResumeUnsupportedVersion', { version: openError.savedVersion })
-              : t('lobby:onlineResumeFailed')}
-          </p>
-        ) : (
-          <p role="status">{t('lobby:onlineResumeProgress')}</p>
-        )}
-        {room && snapshot && !halted && (
-          <ManualConnectionPanel room={room} snapshot={snapshot} reconnect />
-        )}
-        <div className="dialog-actions">
-          {failed && !halted && !unsupportedVersion && (
+      <main
+        className="app-page online-page online-resume-page"
+        style={{ backgroundImage: `url(${getGameArtUrl('background')})` }}
+      >
+        <section className="online-resume-panel" aria-labelledby="online-resume-title">
+          <h1 id="online-resume-title">{t('lobby:onlineResumeTitle')}</h1>
+          {halted ? (
+            <p role="alert">{t('lobby:onlineGameHalted')}</p>
+          ) : failed ? (
+            <p role="alert">
+              {unsupportedVersion
+                ? t('lobby:onlineResumeUnsupportedVersion', { version: openError.savedVersion })
+                : t('lobby:onlineResumeFailed')}
+            </p>
+          ) : (
+            <p className="online-connection-progress" role="status">
+              <span className="online-connection-spinner" aria-hidden="true" />
+              {t('lobby:onlineResumeProgress')}
+            </p>
+          )}
+          {room && snapshot && !halted && (
+            <ManualConnectionPanel room={room} snapshot={snapshot} reconnect />
+          )}
+          <div className="dialog-actions">
+            {failed && !halted && !unsupportedVersion && (
+              <button
+                className="button button-primary"
+                type="button"
+                disabled={busy}
+                onClick={() => void exitLoading(true)}
+              >
+                {t('lobby:onlineResumeRetry')}
+              </button>
+            )}
             <button
-              className="button button-primary"
+              className="button button-quiet"
               type="button"
               disabled={busy}
-              onClick={() => void exitLoading(true)}
+              onClick={() => void exitLoading(false)}
             >
-              {t('lobby:onlineResumeRetry')}
+              {t('lobby:backHome')}
             </button>
-          )}
-          <button
-            className="button button-quiet"
-            type="button"
-            disabled={busy}
-            onClick={() => void exitLoading(false)}
-          >
-            {t('lobby:backHome')}
-          </button>
-        </div>
+          </div>
+        </section>
       </main>
     );
   return <OnlineGameInstance room={room} game={game} agreement={agreement} />;
@@ -397,12 +406,18 @@ function OnlineGameInstance({
           }
           sessionNotice={
             missing.length > 0 ? (
-              <p className="online-game-notice" role="status">
-                {t('lobby:onlineGameWaitingPeers', {
-                  players: missing
-                    .map((seat) => (seat.kind === 'human' ? seat.name : ''))
-                    .join(', '),
-                })}
+              <div className="online-game-notice">
+                <div className="online-game-notice-heading">
+                  <span className="online-connection-spinner" aria-hidden="true" />
+                  <strong>{t('lobby:onlineReconnecting')}</strong>
+                </div>
+                <p>
+                  {t('lobby:onlineGameWaitingPeers', {
+                    players: missing
+                      .map((seat) => (seat.kind === 'human' ? seat.name : ''))
+                      .join(', '),
+                  })}
+                </p>
                 <button
                   className="button button-quiet"
                   type="button"
@@ -410,12 +425,15 @@ function OnlineGameInstance({
                 >
                   {t('lobby:manualReconnectTitle')}
                 </button>
-              </p>
-            ) : null
+              </div>
+            ) : undefined
           }
         />
       ) : (
-        <p role="status">{t('game:loadingGame')}</p>
+        <div className="online-game-loading online-connection-progress" role="status">
+          <span className="online-connection-spinner" aria-hidden="true" />
+          {t('game:loadingGame')}
+        </div>
       )}
       <dialog
         ref={connectionDialog}
