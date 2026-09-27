@@ -50,6 +50,9 @@ test('public transfer decisions survive reload and cannot switch destination or 
       restored.save({ ...record, authorization: { seq: 3, hash: 'a'.repeat(64) } }),
     ).rejects.toThrow('chosen offer');
     expect(await records.load()).toEqual({ record, finished: false });
+    await expect(records.save({ ...record, importedArchiveId: 'a'.repeat(64) })).rejects.toThrow(
+      /Source transfer/,
+    );
     const changedInvite = createTransferInvite({
       ...invite.body,
       identity: { ...source, dispose: () => source.secretKey.fill(0) },
@@ -65,6 +68,50 @@ test('public transfer decisions survive reload and cannot switch destination or 
     source.secretKey.fill(0);
     destination.secretKey.fill(0);
     other.secretKey.fill(0);
+  }
+});
+
+test('destination public record pins imported archive ID across retry', async () => {
+  const source = identityFromSecret(new Uint8Array(32).fill(91));
+  const destination = identityFromSecret(new Uint8Array(32).fill(92));
+  const store = new MemoryEscrowLifecycleStore();
+  try {
+    const invite = createTransferInvite({
+      identity: { ...source, dispose: () => source.secretKey.fill(0) },
+      attemptId: 'G'.repeat(43),
+      gameId: 'g'.repeat(22),
+      genesisDigest: 'H'.repeat(43),
+      seat: 0,
+      serverUrl: 'wss://example.com',
+      roomId: 'transferac',
+    });
+    const records = new OnlineTransferRecordStore(store, destination.peerId, invite, 'destination');
+    const record: OnlineTransferExchangeRecord = {
+      protocol: 'online-transfer-exchange-v1',
+      role: 'destination',
+      attemptId: invite.body.attemptId,
+      gameId: invite.body.gameId,
+      genesisDigest: invite.body.genesisDigest,
+      sourceDevice: source.peerId,
+      destinationDevice: destination.peerId,
+      seat: 0,
+      importedArchiveId: 'a'.repeat(64),
+      offer: null,
+      approved: null,
+      authorization: null,
+      cancelRequested: false,
+    };
+    await records.save(record);
+    expect((await records.load()).record?.importedArchiveId).toBe(record.importedArchiveId);
+    await expect(records.save({ ...record, importedArchiveId: 'b'.repeat(64) })).rejects.toThrow(
+      /pinned/,
+    );
+    const { importedArchiveId, ...withoutArchive } = record;
+    expect(importedArchiveId).toBe(record.importedArchiveId);
+    await expect(records.save(withoutArchive)).rejects.toThrow(/pinned/);
+  } finally {
+    source.secretKey.fill(0);
+    destination.secretKey.fill(0);
   }
 });
 

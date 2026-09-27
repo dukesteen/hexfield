@@ -487,6 +487,9 @@ export class OnlineWorkerRuntime {
         store: this.store,
         signal: this.destinationAbort.signal,
         ...(body.bootstrapBytes === undefined ? {} : { bootstrapBytes: body.bootstrapBytes }),
+        ...(body.importedArchiveId === undefined
+          ? {}
+          : { importedArchiveId: body.importedArchiveId }),
       });
       if (this.closed) throw new Error('Worker closed during transfer initialization');
       this.identity = identity;

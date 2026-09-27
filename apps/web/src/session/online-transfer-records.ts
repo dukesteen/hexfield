@@ -27,6 +27,7 @@ const recordSchema = v.strictObject({
   sourceDevice: token,
   destinationDevice: token,
   seat: v.picklist([0, 1, 2, 3, 4, 5] as const),
+  importedArchiveId: v.optional(v.pipe(v.string(), v.regex(/^[0-9a-f]{64}$/))),
   offer: v.nullable(v.unknown()),
   approved: v.nullable(v.unknown()),
   authorization: v.nullable(ref),
@@ -51,6 +52,8 @@ export interface OnlineTransferExchangeRecord {
   readonly sourceDevice: string;
   readonly destinationDevice: string;
   readonly seat: Seat;
+  /** A read-only HXFS1 checkpoint, pinned only on destination attempts. */
+  readonly importedArchiveId?: string;
   readonly offer: SeatTransferAuthorization | null;
   readonly approved: SeatTransferAuthorization | null;
   readonly authorization: { readonly seq: number; readonly hash: string } | null;
@@ -78,6 +81,8 @@ function checkedRecord(raw: unknown): OnlineTransferExchangeRecord {
   parsePeerId(value.destinationDevice);
   if (value.sourceDevice === value.destinationDevice)
     throw new TypeError('Transfer devices must differ');
+  if (value.role === 'source' && value.importedArchiveId !== undefined)
+    throw new TypeError('Source transfer cannot bind a destination archive');
   for (const entry of [offer, approved]) {
     if (!entry) continue;
     const statement = entry.statement;
@@ -94,7 +99,13 @@ function checkedRecord(raw: unknown): OnlineTransferExchangeRecord {
     throw new TypeError('Certified transfer reference requires the chosen offer');
   if (value.role === 'source' && value.authorization && !approved)
     throw new TypeError('Source transfer reference requires the durable approval');
-  return { ...value, offer, approved };
+  const { importedArchiveId, ...rest } = value;
+  return {
+    ...rest,
+    ...(importedArchiveId === undefined ? {} : { importedArchiveId }),
+    offer,
+    approved,
+  };
 }
 
 /** Durable browser progress is a locator, never evidence of certified activation. */
@@ -141,6 +152,7 @@ export class OnlineTransferRecordStore {
           'sourceDevice',
           'destinationDevice',
           'seat',
+          'importedArchiveId',
         ] as const;
         if (pins.some((key) => previous[key] !== next[key]))
           throw new Error('Transfer browser attempt cannot change its pinned destination');

@@ -91,7 +91,18 @@ function validBody(body: Record<string, unknown>): boolean {
         /^[A-Za-z0-9_-]{22}$/.test(expected.gameId) &&
         token(expected.genesisDigest) &&
         (body.bootstrapBytes === undefined || bootstrap(body.bootstrapBytes)) &&
-        onlyKeys(body, ['kind', 'self', 'attemptId', 'mode', 'expected', 'bootstrapBytes'])
+        (body.importedArchiveId === undefined ||
+          (typeof body.importedArchiveId === 'string' &&
+            /^[0-9a-f]{64}$/.test(body.importedArchiveId))) &&
+        onlyKeys(body, [
+          'kind',
+          'self',
+          'attemptId',
+          'mode',
+          'expected',
+          'bootstrapBytes',
+          'importedArchiveId',
+        ])
       );
     }
     case 'transferSnapshot':

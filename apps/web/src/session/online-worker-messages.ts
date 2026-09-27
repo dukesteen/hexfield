@@ -36,6 +36,7 @@ export type OnlineWorkerRequestBody =
       readonly mode: 'new' | 'resume' | 'open';
       readonly expected: ExpectedOnlineTransferGame;
       readonly bootstrapBytes?: Uint8Array;
+      readonly importedArchiveId?: string;
     }
   | { readonly kind: 'transferSnapshot' }
   | { readonly kind: 'prepareTransferOffer'; readonly seat: Seat; readonly mode: 'live' | 'return' }

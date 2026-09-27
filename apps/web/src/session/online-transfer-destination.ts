@@ -31,6 +31,7 @@ import {
   type OnlineTransferCredentialScope,
 } from './online-transfer-credentials.js';
 import { loadActiveOnlineResume } from './online-resume-binding.js';
+import { verifyImportedTransferCheckpoint } from './online-transfer-imported-checkpoint.js';
 import {
   validateOnlineTransferBootstrap,
   type ExpectedOnlineTransferGame,
@@ -79,6 +80,8 @@ const locatorSchema = v.strictObject({
   gameId: v.pipe(v.string(), v.regex(/^[A-Za-z0-9_-]{22}$/)),
   genesisDigest: token,
   devicePeer: token,
+  importedArchiveId: v.optional(v.pipe(v.string(), v.regex(/^[0-9a-f]{64}$/))),
+  importedSeat: v.optional(seatSchema),
   bootstrapKey: v.string(),
   refreshes: v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(MAX_REFRESHES)),
   scope: v.nullable(scopeSchema),
@@ -105,6 +108,7 @@ export interface OnlineTransferDestinationOptions {
   readonly store: IndexedDbByteStore;
   readonly bootstrapBytes?: Uint8Array;
   readonly importStore?: TransferImportStore;
+  readonly importedArchiveId?: string;
   /** Worker lifetime; abort prevents output after an asynchronous bootstrap step. */
   readonly signal?: AbortSignal;
 }
@@ -192,6 +196,8 @@ function parseLocator(bytes: Uint8Array, key: string): Locator {
       throw new TypeError('Transfer attempt locator is not canonical');
     if (!key.endsWith(`/${parsed.attemptId}`))
       throw new TypeError('Transfer attempt locator is misplaced');
+    if ((parsed.importedArchiveId === undefined) !== (parsed.importedSeat === undefined))
+      throw new TypeError('Transfer attempt has an incomplete imported checkpoint');
     return parsed;
   } finally {
     canonical.fill(0);
@@ -309,6 +315,11 @@ export class OnlineTransferDestination {
       if (options.signal?.aborted) throw new TypeError('Transfer destination was cancelled');
     };
     ensureActive();
+    if (
+      options.importedArchiveId !== undefined &&
+      !/^[0-9a-f]{64}$/.test(options.importedArchiveId)
+    )
+      throw new TypeError('Imported full-save identifier is malformed');
     const key = locatorKey(options.expected, options.attemptId);
     const identity = identityFromSecret(new Uint8Array(options.identity.secretKey));
     try {
@@ -329,7 +340,16 @@ export class OnlineTransferDestination {
       } else {
         if (!options.bootstrapBytes)
           throw new TypeError('New transfer requires certified bootstrap');
-        verified(options.bootstrapBytes, options.expected);
+        const initial = verified(options.bootstrapBytes, options.expected);
+        const importedSeat =
+          options.importedArchiveId === undefined
+            ? undefined
+            : await verifyImportedTransferCheckpoint(
+                options.store,
+                options.importedArchiveId,
+                options.expected,
+                initial,
+              );
         const image = new Uint8Array(options.bootstrapBytes);
         const imageKey = bootstrapKey(image, options.attemptId);
         try {
@@ -359,6 +379,9 @@ export class OnlineTransferDestination {
               gameId: options.expected.gameId,
               genesisDigest: options.expected.genesisDigest,
               devicePeer: options.identity.peerId,
+              ...(options.importedArchiveId === undefined
+                ? {}
+                : { importedArchiveId: options.importedArchiveId, importedSeat }),
               bootstrapKey: imageKey,
               refreshes: 0,
               scope: null,
@@ -397,7 +420,8 @@ export class OnlineTransferDestination {
       locator.gameId !== options.expected.gameId ||
       locator.genesisDigest !== options.expected.genesisDigest ||
       locator.devicePeer !== options.identity.peerId ||
-      locator.attemptId !== options.attemptId
+      locator.attemptId !== options.attemptId ||
+      locator.importedArchiveId !== options.importedArchiveId
     )
       throw new TypeError('Transfer attempt belongs to another game or device');
     const bootstrapBytes = await options.store.load(locator.bootstrapKey);
@@ -406,12 +430,18 @@ export class OnlineTransferDestination {
     try {
       if (locator.bootstrapKey !== bootstrapKey(bootstrapBytes, options.attemptId))
         throw new TypeError('Transfer attempt bootstrap key differs from its bytes');
-      const participant = new OnlineTransferDestination(
-        options,
-        key,
-        locator,
-        verified(bootstrapBytes, options.expected),
-      );
+      const initial = verified(bootstrapBytes, options.expected);
+      if (locator.importedArchiveId !== undefined) {
+        const seat = await verifyImportedTransferCheckpoint(
+          options.store,
+          locator.importedArchiveId,
+          options.expected,
+          initial,
+        );
+        if (seat !== locator.importedSeat)
+          throw new TypeError('Imported full-save seat differs from pinned transfer attempt');
+      }
+      const participant = new OnlineTransferDestination(options, key, locator, initial);
       if (locator.scope) {
         const credentials = await participant.#reservedCredentials(locator.scope);
         credentials.dispose();
@@ -440,6 +470,7 @@ export class OnlineTransferDestination {
           if (bootstrapKey(bytes, this.#options.attemptId) !== this.#locator.finalBootstrapKey)
             throw new TypeError('Final certified transfer bootstrap key is invalid');
           final = verified(bytes, this.#options.expected);
+          await this.#checkImportedCheckpoint(final);
         } finally {
           bytes.fill(0);
         }
@@ -512,6 +543,20 @@ export class OnlineTransferDestination {
   #ensureActive(): void {
     if (this.#closed || this.#options.signal?.aborted)
       throw new TypeError('Transfer destination is closed');
+  }
+
+  async #checkImportedCheckpoint(bootstrap: VerifiedOnlineTransferBootstrap): Promise<void> {
+    const id = this.#locator.importedArchiveId;
+    if (id === undefined) return;
+    const seat = await verifyImportedTransferCheckpoint(
+      this.#options.store,
+      id,
+      this.#options.expected,
+      bootstrap,
+    );
+    this.#ensureActive();
+    if (seat !== this.#locator.importedSeat)
+      throw new TypeError('Imported full-save seat differs from pinned transfer attempt');
   }
 
   async #reservedCredentials(scope: OnlineTransferCredentialScope) {
@@ -665,6 +710,9 @@ export class OnlineTransferDestination {
     readonly mode: TransferMode;
   }): Promise<SeatTransferAuthorization> {
     return this.#run(async () => {
+      await this.#checkImportedCheckpoint(this.#bootstrap);
+      if (this.#locator.importedSeat !== undefined && input.seat !== this.#locator.importedSeat)
+        throw new TypeError('Transfer offer differs from imported full-save seat');
       if (this.#phase === 'promoted' || this.#phase === 'cancelled')
         throw new TypeError('Finalized transfer cannot prepare another offer');
       const scope: OnlineTransferCredentialScope =
@@ -733,6 +781,7 @@ export class OnlineTransferDestination {
       if (this.#phase === 'promoted' || this.#phase === 'cancelled')
         throw new TypeError('Finalized transfer cannot refresh its parent');
       const next = verified(bytes, this.#options.expected);
+      await this.#checkImportedCheckpoint(next);
       this.#ensureActive();
       const oldEntries = this.#bootstrap.entries;
       if (
@@ -952,6 +1001,7 @@ export class OnlineTransferDestination {
     readonly replacementChecks: readonly { readonly seat: Seat; readonly sig: string }[];
   }> {
     return this.#run(async () => {
+      await this.#checkImportedCheckpoint(this.#bootstrap);
       if (this.#phase === 'promoted' || this.#phase === 'cancelled')
         throw new TypeError('Finalized transfer cannot sign readiness');
       const scope = this.#locator.scope;
@@ -1028,6 +1078,7 @@ export class OnlineTransferDestination {
     return this.#run(async () => {
       if (this.#phase === 'promoted' && this.#locator.outcome?.outcome === 'activated') {
         const repeated = verified(bytes, this.#options.expected);
+        await this.#checkImportedCheckpoint(repeated);
         if (
           repeated.entries.length !== this.#bootstrap.entries.length ||
           repeated.entries.some(
@@ -1041,6 +1092,7 @@ export class OnlineTransferDestination {
       const authorization = this.#locator.authorization;
       if (!stageKey || !authorization) throw new TypeError('Transfer import is not staged');
       const next = verified(bytes, this.#options.expected);
+      await this.#checkImportedCheckpoint(next);
       const outcome = await this.#imports.readOutcome(this.#options.expected.gameId, authorization);
       if (outcome.kind === 'cancelled') {
         this.#phase = 'cancelled';
@@ -1207,6 +1259,7 @@ export class OnlineTransferDestination {
     return this.#run(async () => {
       if (this.#phase === 'cancelled' && this.#locator.outcome?.outcome === 'cancelled') {
         const repeated = verified(bytes, this.#options.expected);
+        await this.#checkImportedCheckpoint(repeated);
         if (
           repeated.entries.length !== this.#bootstrap.entries.length ||
           repeated.entries.some(
@@ -1224,6 +1277,7 @@ export class OnlineTransferDestination {
       if (!prior) throw new TypeError('Transfer credentials are absent');
       prior.fill(0);
       const next = verified(bytes, this.#options.expected);
+      await this.#checkImportedCheckpoint(next);
       if (
         next.entries.length <= this.#bootstrap.entries.length ||
         this.#bootstrap.entries.some((entry, index) => !sameCanonical(entry, next.entries[index]))

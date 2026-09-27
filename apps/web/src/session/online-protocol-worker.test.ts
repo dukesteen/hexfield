@@ -93,6 +93,7 @@ test('dispatches every transfer request kind instead of silently dropping it', a
       mode: 'open',
       expected: { gameId: 'g'.repeat(22), genesisDigest: token },
       bootstrapBytes,
+      importedArchiveId: 'a'.repeat(64),
     },
     { kind: 'transferSnapshot' },
     { kind: 'prepareTransferOffer', seat: 0, mode: 'live' },
@@ -127,10 +128,24 @@ test('rejects malformed transfer bodies promptly without echoing private content
   send({
     protocol: ONLINE_WORKER_PROTOCOL,
     generation: 'generation-one',
+    id: 203,
+    body: {
+      kind: 'initializeTransfer',
+      self: 'A'.repeat(43),
+      attemptId: 'A'.repeat(43),
+      mode: 'open',
+      expected: { gameId: 'g'.repeat(22), genesisDigest: 'A'.repeat(43) },
+      importedArchiveId: 'not-a-content-hash',
+    },
+  });
+  send({
+    protocol: ONLINE_WORKER_PROTOCOL,
+    generation: 'generation-one',
     id: 201,
     body: { kind: 'exportTransferBootstrap', throughSeq: -1, payload: privateText },
   });
   expect(replies).toMatchObject([
+    { kind: 'initializeTransfer', result: { ok: false, error: { code: 'online-worker-request' } } },
     { kind: 'initializeTransfer', result: { ok: false, error: { code: 'online-worker-request' } } },
     {
       kind: 'exportTransferBootstrap',
