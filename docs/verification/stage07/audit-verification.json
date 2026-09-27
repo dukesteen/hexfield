@@ -1,0 +1,85 @@
+{
+  "verifiedAt": "2026-09-27T03:25:51.960877+00:00",
+  "manifest": "audit-source.json",
+  "sourceFiles": 623,
+  "changedSourceFiles": [],
+  "check": {
+    "command": "pnpm check",
+    "exitCode": 1,
+    "log": "audit-check.log",
+    "testsPassed": 1121,
+    "testsFailed": 1,
+    "testsSkipped": 1,
+    "testFilesPassed": 188,
+    "testFilesFailed": 1,
+    "durationSeconds": 230.8,
+    "failure": "Worker adapter test ran in Node without ErrorEvent; corrected to happy-dom and focused rerun passed 5/5."
+  },
+  "browserAutomationRun": false,
+  "acceptance": "Implementation checkpoint; production lobby, recovered full-game audit and milestones C/D remain incomplete",
+  "claudeImplementationReview": "pending; not claimed by this checkpoint",
+  "sourceUnchangedDuringFullCheck": true,
+  "followup": {
+    "verifiedAt": "2026-09-27T03:30:09.963803+00:00",
+    "manifest": "audit-final-source.json",
+    "sourceUnchangedDuringChecks": true,
+    "changedSourceFiles": [],
+    "changesSinceFullRun": [
+      "apps/web/src/session/audit-worker-client.test.ts",
+      "packages/protocol/src/master-reveal.test.ts",
+      "packages/protocol/src/master-reveal.ts"
+    ],
+    "commands": [
+      {
+        "command": "pnpm typecheck",
+        "exitCode": 0,
+        "log": "audit-final-typecheck.log"
+      },
+      {
+        "command": "pnpm lint",
+        "exitCode": 0,
+        "log": "audit-final-lint.log"
+      },
+      {
+        "command": "pnpm format:check",
+        "exitCode": 0,
+        "log": "audit-final-format-check.log"
+      },
+      {
+        "command": "pnpm deps:check",
+        "exitCode": 0,
+        "log": "audit-final-deps-check.log"
+      },
+      {
+        "command": "pnpm purity:check",
+        "exitCode": 0,
+        "log": "audit-final-purity-check.log"
+      },
+      {
+        "command": "pnpm i18n:check",
+        "exitCode": 0,
+        "log": "audit-final-i18n-check.log"
+      },
+      {
+        "command": "pnpm build",
+        "exitCode": 0,
+        "log": "audit-final-build.log"
+      }
+    ],
+    "focusedTests": [
+      {
+        "file": "apps/web/src/session/audit-worker-client.test.ts",
+        "testsPassed": 5,
+        "durationSeconds": 1.2,
+        "evidence": "Coordinator-run focused Vitest; corrected DOM environment."
+      },
+      {
+        "file": "packages/protocol/src/master-reveal.test.ts",
+        "testsPassed": 4,
+        "durationSeconds": 50.63,
+        "evidence": "Implementation agent focused Vitest; deferred journal/source/store/restore disposal regression."
+      }
+    ],
+    "fullUnitSuiteRepeated": false
+  }
+}

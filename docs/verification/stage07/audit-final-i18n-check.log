@@ -1,0 +1,36 @@
+
+> hexfield@ i18n:check /Users/duke/Dev/Personal/colonist-p2p
+> node tools/check-i18n-keys.mjs
+
+Unused English translation: common:welcome
+Unused English translation: common:pageMissing
+Unused English translation: common:pageError
+Unused English translation: game:devCardsShort
+Unused English translation: game:victoryPoints
+Unused English translation: game:finalScore
+Unused English translation: game:piece.road
+Unused English translation: game:piece.settlement
+Unused English translation: game:piece.city
+Unused English translation: game:confirm.road
+Unused English translation: game:confirm.settlement
+Unused English translation: game:confirm.city
+Unused English translation: game:buildAction.settlement
+Unused English translation: game:buildAction.road
+Unused English translation: game:buildAction.city
+Unused English translation: game:buildAction.freeRoad
+Unused English translation: game:buildAction.robber
+Unused English translation: game:targetOption
+Unused English translation: game:terrain.hills
+Unused English translation: game:terrain.forest
+Unused English translation: game:terrain.pasture
+Unused English translation: game:terrain.fields
+Unused English translation: game:terrain.mountains
+Unused English translation: game:terrain.desert
+Unused English translation: game:command.SKIP
+Unused English translation: lobby:savedTurn
+Unused English translation: lobby:saveFailed
+Unused English translation: rules:plenty.first
+Unused English translation: rules:plenty.second
+Unused English translation: log:tradeAccepted
+Unused English translation: log:tradeDeclined
+Checked 380 translation keys across 6 namespaces.

@@ -9,6 +9,7 @@ import type {
   Seat,
 } from '@cp2p/engine';
 import type { ProtocolClock, Unsubscribe } from './transport.js';
+import type { SessionAuditState } from './session-audit-types.js';
 
 export type SessionStatus =
   | { kind: 'running' }
@@ -33,6 +34,7 @@ export interface SessionUpdate {
   pending: readonly Pending[];
   timers: readonly SessionTimer[];
   status: SessionStatus;
+  audit?: SessionAuditState;
 }
 
 export interface SubmitOptions {
@@ -49,6 +51,8 @@ export interface GameSession<Save = unknown> {
   getLegalCommands(seat: Seat): LegalCommandSet;
   validate(seat: Seat, command: CommandShape): Result<void>;
   getEvents(): readonly GameEvent[];
+  getAudit?(): SessionAuditState;
+  retryAudit?(): boolean;
   controllableSeats(): Seat[];
   submit(seat: Seat, command: CommandShape, options?: SubmitOptions): Promise<Result<void>>;
   /** Cancel preparation that has not entered consensus; accepted commands cannot be cancelled. */

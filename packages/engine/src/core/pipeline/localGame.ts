@@ -86,8 +86,9 @@ export class LocalGame {
     private readonly engine: Engine,
     config: GameConfig,
     genesisSeed: Uint8Array,
-    private readonly randomSource: LocalRandomSource,
+    private readonly randomSource: LocalRandomSource | null,
     options: LocalGameOptions,
+    private readonly recordedMode: boolean,
   ) {
     this.verifyInvariants = options.verifyInvariants !== false;
     this.current = freezeTree(engine.createGame(config, genesisSeed));
@@ -104,8 +105,23 @@ export class LocalGame {
     options: LocalGameOptions = {},
   ): Result<LocalGame> {
     try {
-      const game = new LocalGame(engine, config, genesisSeed, randomSource, options);
+      const game = new LocalGame(engine, config, genesisSeed, randomSource, options, false);
       const initialized = game.run();
+      return initialized.ok ? success(game) : initialized;
+    } catch (error) {
+      return failure('genesis-failed', String(error));
+    }
+  }
+
+  /** Start at untouched genesis for auditing an exact recorded input sequence. */
+  static createRecorded(
+    engine: Engine,
+    config: GameConfig,
+    genesisSeed: Uint8Array,
+  ): Result<LocalGame> {
+    try {
+      const game = new LocalGame(engine, config, genesisSeed, null, {}, true);
+      const initialized = game.run(undefined, undefined, false);
       return initialized.ok ? success(game) : initialized;
     } catch (error) {
       return failure('genesis-failed', String(error));
@@ -149,13 +165,27 @@ export class LocalGame {
 
   /** Commit the input and all generated inputs as one batch. Source failure is terminal after rollback. */
   submit(input: Input, privateData?: Partial<Record<Seat, PrivateInputData>>): Result<LocalStep> {
+    if (this.recordedMode)
+      return failure('recorded-game-input', 'Recorded games accept inputs through applyRecorded');
     if (this.terminalError) return failure('driver-terminal', this.terminalError);
     return this.run(input, privateData);
+  }
+
+  /** Apply exactly one certified engine input without generating automatic or system inputs. */
+  applyRecorded(
+    input: Input,
+    privateData?: Partial<Record<Seat, PrivateInputData>>,
+  ): Result<LocalStep> {
+    if (!this.recordedMode)
+      return failure('recorded-game-mode', 'applyRecorded requires a recorded game');
+    if (this.terminalError) return failure('driver-terminal', this.terminalError);
+    return this.run(input, privateData, false);
   }
 
   private run(
     initial?: Input,
     initialPrivateData?: Partial<Record<Seat, PrivateInputData>>,
+    settleAutomatically = true,
   ): Result<LocalStep> {
     let state = this.current;
     let privates = this.privateBySeat;
@@ -199,8 +229,9 @@ export class LocalGame {
         const applied = applyOne(initial, initialPrivateData);
         if (!applied.ok) return applied;
       }
-      let settled = false;
-      for (let step = 0; step < 10_000; step++) {
+      let settled = !settleAutomatically;
+      const maxSteps = settleAutomatically ? 10_000 : 0;
+      for (let step = 0; step < maxSteps; step++) {
         if (state.result) {
           settled = true;
           break;
@@ -217,6 +248,7 @@ export class LocalGame {
         if (system?.kind === 'random' || system?.kind === 'reveal') {
           let answer: LocalRandomAnswer;
           try {
+            if (!this.randomSource) throw new Error('Random source is unavailable');
             answer = this.randomSource.resolve(system, state, new Map(privates));
           } catch (error) {
             return this.terminate(failure('system-source-error', String(error)));

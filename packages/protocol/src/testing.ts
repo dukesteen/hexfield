@@ -5,3 +5,4 @@ export type { VirtualClockOptions } from './testing/virtual-clock.js';
 export { SimulationDriver } from './testing/simulation-driver.js';
 export { createSimulationGenesis } from './testing/simulation-genesis.js';
 export type { SimulationGenesisOptions, SimulationGenesis } from './testing/simulation-genesis.js';
+export { createTerminalAuditFixture } from './testing/audit-fixture.js';

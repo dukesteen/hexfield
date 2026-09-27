@@ -57,6 +57,12 @@ import type {
 } from './recovery-participant.js';
 import type { RecoveryRelease } from './recovery-release.js';
 import type { SignedRecoveryCheck } from './recovery-check.js';
+import { MasterRevealCoordinator } from './master-reveal.js';
+import type {
+  MasterRevealOptions,
+  MasterRevealVerdict,
+  SignedMasterReveal,
+} from './master-reveal.js';
 import {
   advanceContext,
   objectiveProofParentHash,
@@ -172,6 +178,9 @@ export interface ReplicatedLogOptions {
   onAuthorityChange?: (
     current: ProposalContext,
   ) => Promise<Result<RecoveredReplicaOwnership | null>>;
+  /** Secrets may be published only after the durable certified history contains a result. */
+  masterReveal?: Pick<MasterRevealOptions, 'store' | 'loadOwnedMaster' | 'recoveryPrivateStore'>;
+  onMasterReveal?: (reveal: { packet: SignedMasterReveal; verdict: MasterRevealVerdict }) => void;
   systemInput?: (
     context: ProposalContext,
   ) => { input: SystemInput; evidence: SystemEvidence } | null;
@@ -218,6 +227,14 @@ export class ReplicatedLog {
   private readonly rejectedProposals = new Set<string>();
   private readonly beaconInbox = new BeaconInbox();
   private recoveryParticipant: RecoveryParticipant | null = null;
+  private masterRevealCoordinator: MasterRevealCoordinator | null = null;
+  private masterRevealsRestored = false;
+  private readonly acceptedMasterSeats = new Set<Seat>();
+  private readonly localMasterReveals = new Map<
+    Seat,
+    { headHash: string; packet: SignedMasterReveal; verdict: MasterRevealVerdict }
+  >();
+  private readonly rejectedMasterReveals = new Set<string>();
   private readonly beaconSources = new Map<Seat, BeaconSecretSource>();
   private createDeckSource: DeckSourceFactory | undefined;
   private preparedRecovery: { headHash: string; packets: PreparedRecoveryPackets } | null = null;
@@ -569,6 +586,11 @@ export class ReplicatedLog {
     this.cheatCandidates.clear();
     this.recoveryParticipant?.dispose();
     this.recoveryParticipant = null;
+    this.masterRevealCoordinator?.dispose();
+    this.masterRevealCoordinator = null;
+    this.acceptedMasterSeats.clear();
+    this.localMasterReveals.clear();
+    this.rejectedMasterReveals.clear();
     this.preparedRecovery = null;
     this.sentRecoveryPackets.clear();
     this.recoveryReleasesByPeer.clear();
@@ -1122,6 +1144,140 @@ export class ReplicatedLog {
     return remembered.value ? this.offerAvailableInput() : success(undefined);
   }
 
+  private revealCoordinator(): MasterRevealCoordinator | null {
+    if (!this.options.masterReveal || this.context.log.state.result === null) return null;
+    this.masterRevealCoordinator ??= new MasterRevealCoordinator({
+      ...this.options.masterReveal,
+      journal: this.options.journal,
+      engine: this.options.engine,
+      policy: this.options.policy,
+      localSeat: this.options.seat,
+      signingKey: this.secretKey,
+    });
+    return this.masterRevealCoordinator;
+  }
+
+  private rememberMasterReveal(reveal: {
+    packet: SignedMasterReveal;
+    verdict: MasterRevealVerdict;
+  }): void {
+    const seat = reveal.packet.body.originalSeat;
+    if (this.acceptedMasterSeats.has(seat)) return;
+    try {
+      this.options.onMasterReveal?.({
+        packet: structuredReveal(reveal.packet),
+        verdict: reveal.verdict,
+      });
+      this.acceptedMasterSeats.add(seat);
+    } catch {
+      this.status({ kind: 'rejected', code: 'master-reveal-observer' });
+    }
+  }
+
+  private async restoreMasterReveals(coordinator: MasterRevealCoordinator): Promise<Result<void>> {
+    if (!this.masterRevealsRestored) {
+      const restored = await coordinator.restoreAccepted();
+      if (this.disposed) return failure('replica-disposed', 'Replica closed during reveal restore');
+      if (!restored.ok) return restored;
+      this.masterRevealsRestored = true;
+    }
+    for (const reveal of coordinator.reveals()) this.rememberMasterReveal(reveal);
+    return success(undefined);
+  }
+
+  private async receiveMasterReveal(
+    from: PeerId,
+    packet: SignedMasterReveal,
+  ): Promise<Result<void>> {
+    if (
+      !this.context.log.state.result ||
+      packet.body.genesisDigest !== this.context.membership.genesisDigest ||
+      this.acceptedMasterSeats.has(packet.body.originalSeat)
+    )
+      return success(undefined);
+    const publisher = this.context.membership.voters.find(
+      (voter) => voter.seat === packet.body.publisherSeat,
+    );
+    if (publisher?.publicKey !== from)
+      return failure('master-reveal-publisher', 'Reveal did not come from its current publisher');
+    const coordinator = this.revealCoordinator();
+    if (!coordinator) return success(undefined);
+    const restored = await this.restoreMasterReveals(coordinator);
+    if (!restored.ok) return restored;
+    if (this.acceptedMasterSeats.has(packet.body.originalSeat)) return success(undefined);
+    const hash = toHex(hashValue(packet));
+    if (
+      this.rejectedMasterReveals.has(hash) ||
+      !this.admitExpensiveRequest(from, `master-reveal/${hash}`)
+    )
+      return success(undefined);
+    const checked = await coordinator.receive(packet);
+    if (this.disposed) return failure('replica-disposed', 'Replica closed during master reveal');
+    if (!checked.ok) {
+      if (
+        [
+          'master-reveal-publisher',
+          'master-reveal-signature',
+          'master-reveal-result',
+          'master-reveal-f0',
+          'master-reveal-conflict',
+        ].includes(checked.error.code)
+      ) {
+        rememberRejection(this.rejectedMasterReveals, hash);
+        this.strikePeer(from);
+      }
+      return checked;
+    }
+    this.rememberMasterReveal(checked.value);
+    return success(undefined);
+  }
+
+  private async prepareMasterReveals(retransmit: boolean): Promise<Result<void>> {
+    const coordinator = this.revealCoordinator();
+    if (!coordinator) return success(undefined);
+    const restored = await this.restoreMasterReveals(coordinator);
+    if (!restored.ok) return restored;
+    const headHash = entryHash(this.context.log.head);
+    const eligible = await coordinator.eligibleSeats();
+    if (this.disposed) return failure('replica-disposed', 'Replica closed during master reveal');
+    if (!eligible.ok) return eligible;
+    const metadata = await coordinator.metadata();
+    if (this.disposed) return failure('replica-disposed', 'Replica closed during master reveal');
+    if (!metadata.ok) return metadata;
+    if (metadata.value.head.hash !== headHash)
+      return failure('master-reveal-stale', 'Durable journal differs from the active replica');
+    for (const seat of eligible.value) {
+      const saved = this.localMasterReveals.get(seat);
+      if (saved?.headHash === headHash) {
+        this.rememberMasterReveal(saved);
+        if (retransmit) {
+          const sent = this.broadcast({ t: 'MASTER_REVEAL', reveal: saved.packet });
+          if (!sent.ok) return sent;
+        }
+        continue;
+      }
+      // oxlint-disable-next-line eslint/no-await-in-loop -- Keep secret publication serialized with durable journal operations.
+      const prepared = await coordinator.prepare(seat);
+      if (this.disposed)
+        return failure('replica-disposed', 'Replica closed during master preparation');
+      if (!prepared.ok) {
+        // One unavailable master must not suppress the other hosted seats' reveals.
+        this.status({ kind: 'rejected', code: prepared.error.code });
+        continue;
+      }
+      if (entryHash(this.context.log.head) !== headHash)
+        return failure(
+          'master-reveal-stale',
+          'Certified history advanced during reveal preparation',
+        );
+      this.localMasterReveals.set(seat, { headHash, ...prepared.value });
+      this.rememberMasterReveal(prepared.value);
+      const sent = this.broadcast({ t: 'MASTER_REVEAL', reveal: prepared.value.packet });
+      if (!sent.ok) return sent;
+    }
+    return success(undefined);
+  }
+
   private async receive(from: PeerId, bytes: Uint8Array): Promise<Result<void>> {
     if (this.blockedPeers.has(from)) return success(undefined);
     const voter = this.context.membership.voters.some((item) => item.publicKey === from);
@@ -1133,6 +1289,8 @@ export class ReplicatedLog {
     if (!voter && message.t !== 'SYNC_REQ')
       return failure('replica-peer', 'Former voters may only request certified history');
     switch (message.t) {
+      case 'MASTER_REVEAL':
+        return this.receiveMasterReveal(from, message.reveal);
       case 'RECOVERY_RELEASE':
         return this.receiveRecoveryRelease(from, message.release, message.genesisDigest);
       case 'RECOVERY_CHECK':
@@ -1542,6 +1700,8 @@ export class ReplicatedLog {
     const state = this.activeController().snapshot();
     if (!state.ok) return state;
     if (state.value.halted) return success(undefined);
+    const revealsPrepared = await this.prepareMasterReveals(retransmit);
+    if (!revealsPrepared.ok) return revealsPrepared;
     const recoveryPrepared = await this.prepareRecovery(retransmit);
     if (!recoveryPrepared.ok) return recoveryPrepared;
     const deckPrepared = await this.prepareDeck(retransmit);
@@ -2935,6 +3095,10 @@ export class ReplicatedLog {
 
 function commandHash(command: SignedCommand): string {
   return toHex(hashValue(command));
+}
+
+function structuredReveal(packet: SignedMasterReveal): SignedMasterReveal {
+  return { ...packet, body: { ...packet.body, result: { ...packet.body.result } } };
 }
 
 /** Exact retries stay cheap and cannot turn one local failure into repeated strikes. */

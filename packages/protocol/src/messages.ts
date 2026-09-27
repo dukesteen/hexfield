@@ -26,10 +26,15 @@ import { cheatClaimSchema } from './cheat-schema.js';
 import { recoveryChangeSchema } from './recovery-membership.js';
 import { recoveryReleaseSchema } from './recovery-release.js';
 import { signedRecoveryCheckSchema } from './recovery-inbox.js';
+import { signedMasterRevealSchema } from './master-reveal.js';
 import { decodeMessage, encodeMessage } from './wire.js';
 import type { Result } from '@cp2p/engine';
 
 const submitSchema = v.strictObject({ t: v.literal('SUBMIT'), cmd: signedCommandSchema });
+const masterRevealMessageSchema = v.strictObject({
+  t: v.literal('MASTER_REVEAL'),
+  reveal: signedMasterRevealSchema,
+});
 const recoverySubmitSchema = v.strictObject({
   t: v.literal('RECOVERY_SUBMIT'),
   change: recoveryChangeSchema,
@@ -142,6 +147,7 @@ const pongSchema = v.strictObject({ t: v.literal('PONG'), n: nonnegativeIntegerS
 /** Strict message envelope; signatures and operation contexts are checked before use. */
 export const protocolMessageSchema = v.variant('t', [
   submitSchema,
+  masterRevealMessageSchema,
   recoverySubmitSchema,
   recoveryReleaseMessageSchema,
   recoveryCheckMessageSchema,

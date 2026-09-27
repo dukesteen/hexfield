@@ -1,0 +1,8 @@
+
+> hexfield@ format:check /Users/duke/Dev/Personal/colonist-p2p
+> oxfmt --check .
+
+Checking formatting...
+
+All matched files use the correct format.
+Finished in 1186ms on 912 files using 12 threads.

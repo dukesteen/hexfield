@@ -147,6 +147,15 @@ Work on 2026-09-27 adds durable live cheat candidates and signed master/escrow t
 
 The [recovery groundwork checkpoint](verification/stage07/recovery-local-checks.md) adds a ceremony coordinator with durable accepted shares, exact outbound retries, irrevocable genesis consent and completed/retired lifecycle states. A reproduced crash between saving a complaint and retiring the ceremony is fixed and covered by a real signed bad-share regression. Browser IndexedDB records and cross-context locks pass unit tests and a [native Chrome check](verification/stage07/native-storage-check.md). Private reconstruction authenticates the certified prefix, verifies supplied masters and every owned beacon extension, and rebuilds hands/slots; real draw and steal traces match their retained private state. The full local gate passes 1,031 tests in 170 files, with one opt-in timing test skipped. The [design review](verification/stage07/recovery-integration-review.md) is complete; the attempted implementation review hit Claude's session limit and remains pending. The coordinator and storage are not yet wired into an online lobby. Recovery authorization, share release, controller activation, full audit and stage acceptance remain unfinished.
 
+The [audit checkpoint](verification/stage07/audit-checkpoint.md) adds exact recorded
+engine replay, signed post-result master exchange, durable incoming/outgoing
+reveals, independent full-hand auditing and a browser worker adapter. A real
+certified victory passes the audit; the live trace covers lost reveals, retry,
+worker cancellation and restoration after the other peer leaves. Audit status is
+separate from the certified game result. The production lobby and results view
+do not consume this path yet. Complete recovered-game audits, adversarial
+acceptance, performance and the Claude implementation review remain open.
+
 - [ ] P2P games over memnet with real crypto pass the stage-06 chaos suite (200 seeds per scenario in CI).
 - [ ] Every row in the cheat table is covered by a passing test that checks the cheat is caught at the listed time.
 - [ ] Every completed honest game has no `CHEAT_PROOF` entries and produces `AuditReport.ok === true` (1,000 simulated games).

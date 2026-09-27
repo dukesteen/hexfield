@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { createEngine } from './engine.js';
 import { exactResourceBounds, gainHidden } from '../resources/index.js';
+import type { GameState, PrivateState } from '../state/types.js';
 import { LocalGame } from './localGame.js';
 import type { LocalRandomAnswer, LocalRandomSource } from './localGame.js';
 import type { Input } from './types.js';
@@ -490,6 +491,78 @@ describe('pipeline and local driver', () => {
       created.value.log.map((input) => (input.kind === 'system' ? input.type : input.command.type)),
     ).toEqual(['START_SEAT', 'INC', 'BONUS_RESULT', 'REVEAL_RESULT']);
     expect(seen).toEqual(['random:0', 'random:1', 'reveal:2']);
+  });
+
+  test('recorded games start at genesis and apply exactly one input without settling', () => {
+    const base = createEngine([testCounter()]);
+    const invariantSeats: Seat[][] = [];
+    const engine = {
+      ...base,
+      checkPrivateInvariants: (state: GameState, privates: ReadonlyMap<Seat, PrivateState>) => {
+        invariantSeats.push([...privates.keys()].toSorted((left, right) => left - right));
+        return base.checkPrivateInvariants(state, privates);
+      },
+    };
+    const autoConfig = { ...config, options: { 'test-counter': { auto: true, goal: 3 } } };
+    const created = LocalGame.createRecorded(engine, autoConfig, seed);
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    const game = created.value;
+    expect(game.log).toEqual([]);
+    expect(game.state.ext['test-counter']).toMatchObject({ value: 0, started: false });
+    expect(game.getPending()).toMatchObject([{ kind: 'random', systemType: 'START_SEAT' }]);
+    expect(invariantSeats).toEqual([[0, 1]]);
+
+    const start = { kind: 'system', type: 'START_SEAT', seat: 0 } as const;
+    const applied = game.applyRecorded(start);
+    expect(applied.ok).toBe(true);
+    if (!applied.ok) return;
+    expect(applied.value.inputs).toEqual([start]);
+    expect(game.log).toEqual([start]);
+    expect(game.state.ext['test-counter']).toMatchObject({ value: 0, started: true });
+    expect(game.state.result).toBeNull();
+    expect(game.getPending()).toMatchObject([{ kind: 'player', seat: 0 }]);
+    expect(invariantSeats).toEqual([
+      [0, 1],
+      [0, 1],
+      [0, 1],
+    ]);
+  });
+
+  test('recorded application rolls back invariant failures and guards the wrong mode', () => {
+    const module = testCounter();
+    module.privateInvariants = (state) => {
+      const value = state.ext['test-counter'];
+      return typeof value === 'object' && value !== null && 'value' in value && value.value === 1
+        ? ['recorded private invariant failed']
+        : [];
+    };
+    const recorded = LocalGame.createRecorded(createEngine([module]), config, seed);
+    expect(recorded.ok).toBe(true);
+    if (!recorded.ok) return;
+    const game = recorded.value;
+    const start = { kind: 'system', type: 'START_SEAT', seat: 0 } as const;
+    expect(game.applyRecorded(start).ok).toBe(true);
+    const before = game.snapshot();
+    const failed = game.applyRecorded(inc);
+    expect(failed).toMatchObject({
+      ok: false,
+      error: { code: 'private-invariant', message: 'recorded private invariant failed' },
+    });
+    expect(game.snapshot()).toEqual(before);
+    expect(game.log).toEqual([start]);
+    expect(game.submit(inc)).toMatchObject({
+      ok: false,
+      error: { code: 'recorded-game-input' },
+    });
+
+    const normal = LocalGame.create(createEngine([testCounter()]), config, seed, source());
+    expect(normal.ok).toBe(true);
+    if (!normal.ok) return;
+    expect(normal.value.applyRecorded(start)).toMatchObject({
+      ok: false,
+      error: { code: 'recorded-game-mode' },
+    });
   });
 
   test('source failure is terminal and cannot silently retry consumed randomness', () => {

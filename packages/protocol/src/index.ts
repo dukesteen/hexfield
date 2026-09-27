@@ -219,3 +219,23 @@ export type {
   RecoveryParticipantOptions,
   PreparedRecoveryPackets,
 } from './recovery-participant.js';
+export { auditCertifiedGame } from './audit.js';
+export type { AuditCertifiedGameInput } from './audit.js';
+export type { AuditReport, AuditViolation, AuditInputError, AuditEntryRef } from './audit-types.js';
+export {
+  MasterRevealCoordinator,
+  signedMasterRevealSchema,
+  verifyMasterReveal,
+} from './master-reveal.js';
+export type {
+  MasterRevealOptions,
+  MasterRevealStore,
+  MasterRevealVerdict,
+  SignedMasterReveal,
+} from './master-reveal.js';
+export type {
+  SessionAuditInput,
+  SessionAuditJob,
+  SessionAuditRunner,
+  SessionAuditState,
+} from './session-audit-types.js';

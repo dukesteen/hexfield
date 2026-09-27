@@ -1,0 +1,19 @@
+
+> hexfield@ typecheck /Users/duke/Dev/Personal/colonist-p2p
+> pnpm --filter @cp2p/web routes:generate && tsc -b && pnpm typecheck:tests && pnpm typecheck:engine
+
+
+> @cp2p/web@0.0.0 routes:generate /Users/duke/Dev/Personal/colonist-p2p/apps/web
+> tsr generate
+
+(node:38842) Warning: Accessing non-existent property 'replaceRouteChunk' of module exports inside circular dependency
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+> hexfield@ typecheck:tests /Users/duke/Dev/Personal/colonist-p2p
+> tsc -p tsconfig.test.json --noEmit
+
+
+> hexfield@ typecheck:engine /Users/duke/Dev/Personal/colonist-p2p
+> node tools/check-engine-types.mjs
+
+Engine production types reject document and process.

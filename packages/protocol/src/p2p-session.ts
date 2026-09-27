@@ -1,5 +1,5 @@
 import { identityFromSecret } from '@cp2p/crypto';
-import { canonicalDecode, canonicalEncode } from '@cp2p/codec';
+import { canonicalDecode, canonicalEncode, fromBase64Url } from '@cp2p/codec';
 import { failure, success } from '@cp2p/engine';
 import type {
   CommandShape,
@@ -51,6 +51,13 @@ import type {
 } from './trade-proof-delivery.js';
 
 import type { SessionDriver } from './session-driver.js';
+import type { SignedMasterReveal } from './master-reveal.js';
+import type {
+  SessionAuditInput,
+  SessionAuditJob,
+  SessionAuditRunner,
+  SessionAuditState,
+} from './session-audit-types.js';
 export type { SessionDriver } from './session-driver.js';
 
 export interface P2PSessionOptions extends Omit<
@@ -64,7 +71,9 @@ export interface P2PSessionOptions extends Omit<
   | 'tradeProof'
   | 'onTradeProofResponse'
   | 'onAuthorityChange'
+  | 'onMasterReveal'
 > {
+  auditRunner?: SessionAuditRunner;
   /** Fresh driver on both create and restore. Restore replays private consequences. */
   createDriver: (
     engine: Engine,
@@ -127,6 +136,14 @@ export class P2PSession implements GameSession<CertifiedHistory> {
   private recoveryInstalling = false;
   private botTimer: unknown = null;
   private botParent: string | null = null;
+  private readonly auditReveals = new Map<Seat, SignedMasterReveal>();
+  private auditState: SessionAuditState = { kind: 'not-started' };
+  private auditJob: {
+    headHash: string;
+    job: SessionAuditJob;
+    masters: SessionAuditInput['masters'];
+  } | null = null;
+  private auditedHead: string | null = null;
 
   private constructor(
     private readonly options: P2PSessionOptions,
@@ -235,6 +252,7 @@ export class P2PSession implements GameSession<CertifiedHistory> {
       Reflect.deleteProperty(safeOptions, 'tradeProof');
       Reflect.deleteProperty(safeOptions, 'onTradeProofResponse');
       Reflect.deleteProperty(safeOptions, 'onAuthorityChange');
+      Reflect.deleteProperty(safeOptions, 'onMasterReveal');
       const replicaOptions: ReplicatedLogOptions = {
         ...safeOptions,
         ...(options.createDeckSource
@@ -282,6 +300,10 @@ export class P2PSession implements GameSession<CertifiedHistory> {
           : {}),
         onTradeProofResponse: (response) => openedSession.receiveTradeProof(response),
         onAuthorityChange: (current) => openedSession.installRecovery(current),
+        onMasterReveal: ({ packet }) => {
+          openedSession.auditReveals.set(packet.body.originalSeat, copyCanonical(packet));
+          openedSession.maybeAudit();
+        },
         onCommit: (validated, previous, next) => {
           const applied = openedSession.applyCommit(validated, next, previous.log);
           if (!applied.ok) {
@@ -302,15 +324,18 @@ export class P2PSession implements GameSession<CertifiedHistory> {
             );
           if (activating) openedSession.recoveryInstalling = true;
           openedSession.emit(validated.events);
+          openedSession.maybeAudit();
           if (!activating) openedSession.maybeAutomatic();
         },
         onStatus: (status) => {
           openedSession.protocolStatus = status;
           if (status.kind === 'halted') {
+            openedSession.cancelAudit();
             openedSession.status = { kind: 'error', message: status.code };
             for (const seat of openedSession.tradeIntents.keys()) openedSession.cancelPending(seat);
             openedSession.clearBotTimer();
           } else if (status.kind === 'retired') {
+            openedSession.cancelAudit();
             openedSession.status = {
               kind: 'error',
               message: 'This seat was replaced by a bot. Its previous signing key is retired.',
@@ -336,6 +361,7 @@ export class P2PSession implements GameSession<CertifiedHistory> {
         return failure('session-replay-head', 'Certified journal changed during private replay');
       }
       session.maybeAutomatic();
+      session.maybeAudit();
       return success(session);
     } catch (error) {
       session?.dispose();
@@ -367,6 +393,15 @@ export class P2PSession implements GameSession<CertifiedHistory> {
   }
   getProtocolStatus(): ReplicatedLogStatus | null {
     return this.protocolStatus;
+  }
+  getAudit(): SessionAuditState {
+    return copyCanonical(this.auditState);
+  }
+  retryAudit(): boolean {
+    if (this.status.kind !== 'complete' || this.auditState.kind !== 'error') return false;
+    this.auditedHead = null;
+    this.maybeAudit();
+    return true;
   }
   controllableSeats(): Seat[] {
     return this.keys.has(this.options.seat) ? [this.options.seat] : [];
@@ -711,6 +746,8 @@ export class P2PSession implements GameSession<CertifiedHistory> {
     for (const seat of this.tradeIntents.keys()) this.cancelPending(seat);
     this.clearAutomaticRetry();
     this.clearBotTimer();
+    this.cancelAudit();
+    this.auditReveals.clear();
     this.replica?.dispose();
     this.status = { kind: 'disposed' };
     this.releasePrivateState();
@@ -818,6 +855,87 @@ export class P2PSession implements GameSession<CertifiedHistory> {
         this.status = { kind: 'error', message: 'Could not restore the recovered bot.' };
         this.clearAutomaticRetry();
         this.clearBotTimer();
+      }
+    }
+  }
+
+  private cancelAudit(): void {
+    const running = this.auditJob;
+    this.auditJob = null;
+    for (const { master } of running?.masters ?? []) if (master.byteLength) master.fill(0);
+    try {
+      running?.job.cancel();
+    } catch {
+      // Audit cleanup cannot interfere with certified gameplay or private-state disposal.
+    }
+  }
+
+  private maybeAudit(): void {
+    if (!this.replica || this.status.kind !== 'complete') return;
+    const runner = this.options.auditRunner;
+    if (!runner || !this.options.masterReveal) {
+      this.auditState = { kind: 'unavailable' };
+      return;
+    }
+    const headHash = entryHash(this.context.log.head);
+    if (this.auditJob?.headHash === headHash || this.auditedHead === headHash) return;
+    this.cancelAudit();
+    const missingSeats = this.context.log.genesis.seats
+      .filter(({ seat }) => !this.auditReveals.has(seat))
+      .map(({ seat }) => seat);
+    if (missingSeats.length > 0) {
+      this.auditState = { kind: 'awaiting-reveals', missingSeats };
+      this.emit([]);
+      return;
+    }
+    const input: SessionAuditInput = {
+      genesisEntry: copyCanonical(this.genesisEntry),
+      entries: this.replica.getEntries(),
+      masters: [...this.auditReveals].map(([seat, packet]) => ({
+        seat,
+        master: fromBase64Url(packet.body.master),
+      })),
+    };
+    try {
+      const job = runner(input);
+      this.auditJob = { headHash, job, masters: input.masters };
+      this.auditState = { kind: 'verifying' };
+      this.emit([]);
+      void this.finishAudit(this.auditJob, input);
+    } catch {
+      for (const { master } of input.masters) if (master.byteLength) master.fill(0);
+      this.auditedHead = headHash;
+      this.auditState = { kind: 'error', code: 'audit-worker-start' };
+      this.emit([]);
+    }
+  }
+
+  private async finishAudit(
+    running: { headHash: string; job: SessionAuditJob },
+    input: SessionAuditInput,
+  ): Promise<void> {
+    try {
+      const report = await running.job.result;
+      if (this.auditJob !== running || this.status.kind !== 'complete') return;
+      const result = this.auditReveals.values().next().value?.body.result;
+      if (
+        !result ||
+        report.terminal?.seq !== result.seq ||
+        report.terminal.hash !== result.hash ||
+        report.finalHead?.seq !== this.context.log.head.seq ||
+        report.finalHead.hash !== running.headHash
+      ) {
+        this.auditState = { kind: 'error', code: 'audit-report-context' };
+      } else this.auditState = { kind: 'complete', report: copyCanonical(report) };
+    } catch {
+      if (this.auditJob !== running || this.status.kind !== 'complete') return;
+      this.auditState = { kind: 'error', code: 'audit-worker' };
+    } finally {
+      for (const { master } of input.masters) if (master.byteLength) master.fill(0);
+      if (this.auditJob === running) {
+        this.auditedHead = running.headHash;
+        this.auditJob = null;
+        this.emit([]);
       }
     }
   }
@@ -1068,6 +1186,7 @@ export class P2PSession implements GameSession<CertifiedHistory> {
       pending: this.getPending(),
       timers: this.getTimers(),
       status: this.status,
+      audit: this.getAudit(),
     };
   }
   private emit(events: readonly GameEvent[]): void {

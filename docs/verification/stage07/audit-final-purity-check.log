@@ -1,0 +1,5 @@
+
+> hexfield@ purity:check /Users/duke/Dev/Personal/colonist-p2p
+> node tools/check-engine-purity.mjs
+
+Engine purity check passed.

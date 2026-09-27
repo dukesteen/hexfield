@@ -1,0 +1,22 @@
+
+> hexfield@ deps:check /Users/duke/Dev/Personal/colonist-p2p
+> depcruise --config .dependency-cruiser.cjs apps packages tools && node tools/check-boundaries.mjs
+
+
+✔ no dependency violations found (578 modules, 3587 dependencies cruised)
+
+engine → react is rejected: passed.
+engine → node:fs is rejected: passed.
+package → app is rejected: passed.
+renderer runtime package import is rejected: passed.
+renderer engine type-only package import is allowed: passed.
+renderer geometry entry stays isolated from engine rules: passed.
+pipeline → genesis RNG is rejected: passed.
+pipeline → RNG type-only import is allowed: passed.
+undeclared sibling module import is rejected: passed.
+module setup → genesis RNG is allowed: passed.
+module entry → setup binding is allowed: passed.
+rule handler → RNG setup reexport is rejected: passed.
+rule handler → module entry reexport is rejected: passed.
+resolved React import outside web is rejected: passed.
+codec → @noble/hashes is allowed: passed.

@@ -1,0 +1,4 @@
+
+> hexfield@ lint /Users/duke/Dev/Personal/colonist-p2p
+> oxlint --type-aware --deny-warnings .
+
