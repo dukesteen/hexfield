@@ -12,7 +12,7 @@ import {
 } from '@cp2p/p2p';
 import type { ManualBridge, ManualOffer, WebRtcPeerStats } from '@cp2p/p2p';
 import type { ServerSignalingOptions, WebRtcTransportOptions } from '@cp2p/p2p';
-import { LobbyController } from '@cp2p/protocol';
+import { genesisDigest, LobbyController } from '@cp2p/protocol';
 import type {
   LobbyDiagnostic,
   LobbyFreezeAgreement,
@@ -31,7 +31,12 @@ import type { OnlineInvite } from './online-invite.js';
 import { OnlineStartup } from './online-startup.js';
 import type { OnlineStartupSnapshot } from './online-startup.js';
 import type { OnlineGame } from './online-game.js';
-import { createOnlineLobbyTransport } from './online-lobby-transport.js';
+import {
+  createOnlineLobbyTransport,
+  createOnlineNonChatTransport,
+} from './online-lobby-transport.js';
+import { OnlineChat } from './online-chat.js';
+import type { ChatContent, ChatSnapshot } from './online-chat.js';
 import { loadOnlineGameRecord } from './online-game-records.js';
 import type { SavedOnlineGameRecord } from './online-game-records.js';
 import { planPregameRoster } from './online-room-roster.js';
@@ -61,6 +66,7 @@ export interface OnlineRoomSnapshot {
   readonly diagnostic: LobbyDiagnostic | null;
   readonly connectionError: string | null;
   readonly startup: OnlineStartupSnapshot | null;
+  readonly chat?: ChatSnapshot;
   readonly closed: boolean;
 }
 
@@ -79,6 +85,10 @@ const idleManual: ManualSnapshot = {
   gatheringComplete: null,
   error: null,
 };
+
+function humanChatPeers(state: LobbyState): PeerId[] {
+  return state.seats.flatMap((seat) => (seat.kind === 'human' ? [seat.peer] : []));
+}
 
 export interface OnlineRoomRuntime {
   readonly store?: EscrowCeremonyStore;
@@ -126,6 +136,11 @@ export class OnlineRoom {
   private snapshot: OnlineRoomSnapshot;
   private closing: Promise<void> | null = null;
   private readonly startup: OnlineStartup;
+  private readonly chat: OnlineChat;
+  private chatAllowedPeers: readonly PeerId[] = [];
+  private readonly resumedChatState: LobbyState | null;
+  private chatSwitching = false;
+  private chatSwitchFailed = false;
   private manualOffer: ManualOffer | null = null;
   private manualBridge: ManualBridge | null = null;
   private unsubscribeManualBridgeClose: Unsubscribe | null = null;
@@ -151,6 +166,21 @@ export class OnlineRoom {
     private readonly manualRtcFactory: () => RTCPeerConnection,
   ) {
     this.lobby = controller;
+    this.resumedChatState = resume?.agreement.state ?? null;
+    const initialState = this.resumedChatState ?? controller?.state();
+    this.chatAllowedPeers = initialState
+      ? [...humanChatPeers(initialState), ...(resume ? [] : initialState.spectators)]
+      : [];
+    this.chat = new OnlineChat({
+      transport,
+      clock,
+      store,
+      secretKey: identity.secretKey,
+      scope: resume
+        ? { kind: 'game', roomId: invite.roomId, genesisDigest: resume.genesisDigest }
+        : { kind: 'lobby', roomId: invite.roomId },
+      allowedSenders: () => this.chatAllowedPeers,
+    });
     this.snapshot = detachedSnapshot({
       invite: { ...invite },
       self: identity.peerId,
@@ -162,9 +192,17 @@ export class OnlineRoom {
       diagnostic: null,
       connectionError: null,
       startup: null,
+      chat: this.chat.snapshot(),
       closed: false,
     });
-    const common = { invite, identity, transport, store, clock, engine: createBaseEngine() };
+    const common = {
+      invite,
+      identity,
+      transport: createOnlineNonChatTransport(transport),
+      store,
+      clock,
+      engine: createBaseEngine(),
+    };
     this.startup = new OnlineStartup(
       resume
         ? { ...common, resume }
@@ -180,6 +218,7 @@ export class OnlineRoom {
     );
     this.unsubscribers.push(
       this.startup.subscribe(() => this.refresh()),
+      this.chat.subscribe(() => this.refresh()),
       transport.onPeerChange((peer, online) => {
         if (
           online &&
@@ -198,6 +237,7 @@ export class OnlineRoom {
         ...(signaling ? [signaling.onRoomPeers((peers) => this.discover(peers))] : []),
       );
     }
+    void this.chat.start().catch(() => this.refresh());
     this.refresh();
   }
 
@@ -351,6 +391,15 @@ export class OnlineRoom {
   retryStart = () => this.startup.retryFailed();
 
   getGame = (): OnlineGame | null => this.startup.game();
+
+  sendChat = (content: ChatContent): Promise<Result<void>> => {
+    if (this.startup.game() && this.chat.scopeKind() !== 'game')
+      return Promise.resolve(failure('chat-transition', 'Game chat is still opening'));
+    return this.chat.send(content);
+  };
+
+  muteChat = (peer: PeerId, muted: boolean): Promise<Result<void>> =>
+    this.chat.setMuted(peer, muted);
 
   getPeerStats = (): Promise<readonly WebRtcPeerStats[]> => this.transport.peerStats();
 
@@ -657,6 +706,7 @@ export class OnlineRoom {
     // Publish the promise before notifying views, which may call close again.
     this.closing = Promise.resolve().then(() => this.releaseResources());
     this.cancelManualInvitation();
+    this.chat.dispose();
     this.update({ closed: true });
     for (const unsubscribe of this.unsubscribers) unsubscribe();
     this.listeners.clear();
@@ -670,6 +720,7 @@ export class OnlineRoom {
     try {
       try {
         await this.startup.close();
+        await this.chat.flush();
       } finally {
         try {
           this.lobby?.dispose();
@@ -710,6 +761,33 @@ export class OnlineRoom {
     if (this.snapshot.closed || this.closing) return;
     const agreement = this.startup.agreement() ?? this.lobby?.freezeAgreement() ?? null;
     const state = this.lobby?.state();
+    const game = this.startup.game();
+    const gameChat = this.chat.scopeKind() === 'game' || game !== null;
+    const chatState = gameChat ? (agreement?.state ?? this.resumedChatState) : state;
+    this.chatAllowedPeers = chatState
+      ? [...humanChatPeers(chatState), ...(gameChat || agreement ? [] : chatState.spectators)]
+      : [];
+    if (
+      game &&
+      !this.chatSwitching &&
+      !this.chatSwitchFailed &&
+      this.chat.scopeKind() === 'lobby' &&
+      agreement
+    ) {
+      this.chatSwitching = true;
+      void this.chat
+        .enterGame(
+          { kind: 'game', roomId: this.invite.roomId, genesisDigest: genesisDigest(game.genesis) },
+          () => this.chatAllowedPeers,
+        )
+        .catch(() => {
+          this.chatSwitchFailed = true;
+        })
+        .finally(() => {
+          this.chatSwitching = false;
+          this.refresh();
+        });
+    }
     if (this.lobby && !this.frozenRoster && !agreement && (!state || state.status === 'open'))
       this.syncPregameRoster(state ?? null);
     this.update({
@@ -717,6 +795,7 @@ export class OnlineRoom {
       lobby: agreement?.state ?? state ?? null,
       agreement,
       startup: this.startup.snapshot(),
+      chat: this.chat.snapshot(),
       diagnostic: this.lobby?.getDiagnostic() ?? null,
     });
   }

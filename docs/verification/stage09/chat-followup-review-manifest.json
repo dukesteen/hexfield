@@ -1,0 +1,40 @@
+{
+  "review": "stage09-chat-followup",
+  "files": [
+    {
+      "path": "docs/verification/stage09/chat-followup-review-prompt.md",
+      "sha256": "94c6ae5ca22a80e1017fcd3842951d06117b409093d17f21d1dd67e4d5540911",
+      "bytes": 1306
+    },
+    {
+      "path": "apps/web/src/session/online-chat.ts",
+      "sha256": "531bb9879005835dc6e1fb82ecb55b9ff41b0b67656fed597b2fe9b1e990ca7a",
+      "bytes": 17367
+    },
+    {
+      "path": "apps/web/src/session/online-chat.test.ts",
+      "sha256": "d427f3b38c257104df0e1c3b85c73c547ec78835105327fe15580243b9276b81",
+      "bytes": 13884
+    },
+    {
+      "path": "apps/web/src/session/online-room.ts",
+      "sha256": "31a8ece6af4cf2fa3f3d00c5dad322ccde131c0456a066ada6700e1275299cc5",
+      "bytes": 29728
+    },
+    {
+      "path": "apps/web/src/features/online/ChatPanel.tsx",
+      "sha256": "0eb7ac008370cc6aabb6a446d16e8276831a3b023437072187975be87519d0a9",
+      "bytes": 5274
+    },
+    {
+      "path": "docs/verification/stage09/chat-review-disposition.md",
+      "sha256": "1b70f14953dbd511291f84c49e429ff6868e06bd459849d016288c2a6040df20",
+      "bytes": 5370
+    },
+    {
+      "path": "docs/verification/stage09/chat-followup-review-input.md",
+      "sha256": "4764e71b631a4712f860ea1f3c5b64244d0acb86dba10b9c4094481ca716fd5e",
+      "bytes": 73242
+    }
+  ]
+}

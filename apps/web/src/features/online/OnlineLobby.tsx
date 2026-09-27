@@ -15,6 +15,7 @@ import { ManualConnectionPanel } from './ManualConnectionPanel';
 import { ConnectionDiagnostics } from './ConnectionDiagnostics';
 import { OnlineConfiguration } from './OnlineConfiguration';
 import { LobbyNameEditor } from './LobbyNameEditor';
+import { ChatPanel } from './ChatPanel';
 import './online.css';
 
 const SEAT_SHAPES: readonly ('circle' | 'triangle' | 'square' | 'diamond')[] = [
@@ -75,6 +76,8 @@ export function OnlineLobby({
       seat.kind === 'human' ? [[seat.peer, seat.name] as const] : [],
     ),
   );
+  for (const peer of state?.spectators ?? [])
+    peerLabels.set(peer, t('lobby:chatSpectator', { id: peer.slice(0, 8) }));
   const connectedHumans = humanSeats.filter(
     (seat) =>
       seat.kind === 'human' &&
@@ -337,6 +340,8 @@ export function OnlineLobby({
                 {t('lobby:onlineStartAction')}
               </button>
             </section>
+
+            <ChatPanel room={room} chat={snapshot.chat} labels={peerLabels} self={snapshot.self} />
           </>
         )}
       </div>

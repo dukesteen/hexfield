@@ -9,6 +9,8 @@ import type { Unsubscribe } from '@cp2p/protocol';
 import type { OnlineGame } from '../../session/online-game.js';
 import type { WebRtcPeerStats } from '@cp2p/p2p';
 import type { Result } from '@cp2p/engine';
+import type { PeerId } from '@cp2p/protocol';
+import type { ChatContent } from '../../session/online-chat.js';
 
 type OnlineLobbyController = Pick<
   LobbyController,
@@ -26,6 +28,8 @@ export interface OnlineRoomHandleValue {
   retryStart: () => Promise<Result<void>>;
   getGame: () => OnlineGame | null;
   getPeerStats?: () => Promise<readonly WebRtcPeerStats[]>;
+  sendChat?: (content: ChatContent) => Promise<Result<void>>;
+  muteChat?: (peer: PeerId, muted: boolean) => Promise<Result<void>>;
   getSnapshot: () => OnlineRoomSnapshot;
   subscribe: (listener: () => void) => Unsubscribe;
   close: () => Promise<void>;

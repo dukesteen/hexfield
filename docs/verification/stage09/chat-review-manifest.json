@@ -1,0 +1,70 @@
+{
+  "review": "stage09-chat",
+  "files": [
+    {
+      "path": "docs/verification/stage09/chat-review-prompt.md",
+      "sha256": "5617d7cb983eb1eb7b1045d59230510f46665e1e720aa92f5888fab8eacac8fe",
+      "bytes": 1284
+    },
+    {
+      "path": "apps/web/src/session/online-chat.ts",
+      "sha256": "061bfe3e18713c4548d07730b0d040bab32e03f787155e52366d47e9f9cb39b0",
+      "bytes": 16063
+    },
+    {
+      "path": "apps/web/src/session/online-chat.test.ts",
+      "sha256": "95980f108f6dac23de71fec46aa1ad90458e81dafe02a931558f9a5f175d3e53",
+      "bytes": 8304
+    },
+    {
+      "path": "apps/web/src/session/online-lobby-transport.ts",
+      "sha256": "c82b3dc839aba0f23bf5428c23c7f315013576a10c73c37476281f9e276a9824",
+      "bytes": 2123
+    },
+    {
+      "path": "apps/web/src/session/online-room.ts",
+      "sha256": "42d2f73a1ca235b2ed50d9f76e9c2fc6f6310bb491331fa7a1ca6be044c49219",
+      "bytes": 29378
+    },
+    {
+      "path": "apps/web/src/features/online/ChatPanel.tsx",
+      "sha256": "378ed7b404d9ad61eb4341d75a5a8e5ead726643e2056498c7214717058c65c8",
+      "bytes": 5254
+    },
+    {
+      "path": "apps/web/src/features/online/ChatPanel.test.tsx",
+      "sha256": "2ebe39500ff26232fca7d02b8f407050354acc6ac3d1fe9c3b19cbbe7e179591",
+      "bytes": 2304
+    },
+    {
+      "path": "apps/web/src/features/online/OnlineLobby.tsx",
+      "sha256": "38a2f37ba68b0b6c82ceeb7450e99318fe17ad631634b5979e52f007e32de49e",
+      "bytes": 21455
+    },
+    {
+      "path": "apps/web/src/features/online/OnlineGameScreen.tsx",
+      "sha256": "c496f87de068e7288f5b5a0f0e8c7a38ddd4ed6f31563b12b950020d2f924bd4",
+      "bytes": 16158
+    },
+    {
+      "path": "apps/web/src/features/online/room-registry.ts",
+      "sha256": "46e1c2235c7380186c8832674df1419d4d1a72c6d5d5e3d11669d923a3f015da",
+      "bytes": 7821
+    },
+    {
+      "path": "apps/web/src/features/online/online.css",
+      "sha256": "0bd458079d59eb91c8baaa205686d460740a907d6b1cb37a5689ae2d5e5127b0",
+      "bytes": 6424
+    },
+    {
+      "path": "apps/web/src/i18n/locales/en/lobby.json",
+      "sha256": "6bbfbd717af70c6b12ff7804662a0ca483409260f85bd2f39229b02154f53574",
+      "bytes": 16210
+    },
+    {
+      "path": "docs/verification/stage09/chat-review-input.md",
+      "sha256": "95574000ffb9da76b853b85072805aabd8df7d2d9e76be71a21d3d37a5ac3d2c",
+      "bytes": 133428
+    }
+  ]
+}

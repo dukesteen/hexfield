@@ -13,6 +13,7 @@ import type { OnlineGame } from '../../session/online-game.js';
 import { UnsupportedOnlineGameVersionError } from '../../session/online-game-records.js';
 import { ManualConnectionPanel } from './ManualConnectionPanel';
 import { ConnectionDiagnostics } from './ConnectionDiagnostics';
+import { ChatPanel } from './ChatPanel';
 import { useRequestPersistentStorage } from '../../queries/storage-persistence';
 import './online.css';
 
@@ -141,7 +142,9 @@ function OnlineGameInstance({
   const [leaveError, setLeaveError] = useState(false);
   const [busy, setBusy] = useState(false);
   const [connectionOpen, setConnectionOpen] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
   const connectionDialog = useRef<HTMLDialogElement>(null);
+  const chatDialog = useRef<HTMLDialogElement>(null);
   const allowNavigation = useRef(false);
   const leaveDialog = useRef<HTMLDialogElement>(null);
   const haltedDialog = useRef<HTMLDialogElement>(null);
@@ -153,6 +156,14 @@ function OnlineGameInstance({
       if (element?.open) element.close();
     };
   }, [connectionOpen]);
+  useEffect(() => {
+    const element = chatDialog.current;
+    if (chatOpen && !element?.open) element?.showModal();
+    if (!chatOpen && element?.open) element.close();
+    return () => {
+      if (element?.open) element.close();
+    };
+  }, [chatOpen]);
   const halted = snapshot.startup?.phase === 'halted';
   const blocker = useBlocker({
     shouldBlockFn: ({ current, next }) =>
@@ -303,13 +314,22 @@ function OnlineGameInstance({
           onExportReplay={() => exported.mutateAsync()}
           resultNotice={resultNotice}
           menuActions={
-            <button
-              className="button button-quiet"
-              type="button"
-              onClick={() => setConnectionOpen(true)}
-            >
-              {t('lobby:connectionDiagnosticsTitle')}
-            </button>
+            <>
+              <button
+                className="button button-quiet"
+                type="button"
+                onClick={() => setChatOpen(true)}
+              >
+                {t('lobby:chatTitle')}
+              </button>
+              <button
+                className="button button-quiet"
+                type="button"
+                onClick={() => setConnectionOpen(true)}
+              >
+                {t('lobby:connectionDiagnosticsTitle')}
+              </button>
+            </>
           }
           sessionNotice={
             missing.length > 0 ? (
@@ -360,6 +380,17 @@ function OnlineGameInstance({
             <ManualConnectionPanel room={room} snapshot={snapshot} reconnect />
           </>
         )}
+      </dialog>
+      <dialog
+        ref={chatDialog}
+        className="app-dialog online-chat-dialog"
+        aria-label={t('lobby:chatTitle')}
+        onCancel={() => setChatOpen(false)}
+      >
+        <button className="button button-quiet" type="button" onClick={() => setChatOpen(false)}>
+          {t('lobby:manualClose')}
+        </button>
+        <ChatPanel room={room} chat={snapshot.chat} labels={peerLabels} self={snapshot.self} />
       </dialog>
       <dialog
         ref={haltedDialog}

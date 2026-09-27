@@ -269,5 +269,23 @@
   "connectionDiagnosticsRoute_host": "Direct LAN",
   "connectionDiagnosticsRoute_srflx": "Direct internet",
   "connectionDiagnosticsRoute_relay": "Relayed",
-  "connectionDiagnosticsRtt": "{{ms}} ms round trip"
+  "connectionDiagnosticsRtt": "{{ms}} ms round trip",
+  "chatTitle": "Chat",
+  "chatMessage": "Message",
+  "chatPlaceholder": "Say something to the room",
+  "chatSend": "Send",
+  "chatLength": "{{count}}/300 characters",
+  "chatTooLong": "Keep your message to 300 characters or fewer.",
+  "chatMutePlayer": "Mute {{player}}",
+  "chatUnmute": "Unmute {{player}}",
+  "chatEmotes": "Quick reactions",
+  "chatEmote": {
+    "wave": "Wave",
+    "cheer": "Celebrate",
+    "laugh": "Laugh",
+    "wow": "Surprised",
+    "thanks": "Love it"
+  },
+  "chatSpectator": "Spectator {{id}}",
+  "chatFailed": "Chat could not save or send that message. Try again."
 }

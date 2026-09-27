@@ -1,6 +1,23 @@
 import { canonicalDecode } from '@cp2p/codec';
 import { MAX_MESSAGE_BYTES } from '@cp2p/protocol';
 import type { Transport } from '@cp2p/protocol';
+import { hasChatMagic } from './online-chat.js';
+
+/** Ceremony and gameplay share the device link, but chat has its own signed namespace. */
+export function createOnlineNonChatTransport(device: Transport): Transport {
+  return {
+    self: device.self,
+    peers: () => device.peers(),
+    send: (to, bytes) => device.send(to, bytes),
+    broadcast: (bytes) => device.broadcast(bytes),
+    disconnect: (peer) => device.disconnect(peer),
+    onPeerChange: (listener) => device.onPeerChange(listener),
+    onMessage: (listener) =>
+      device.onMessage((from, bytes) => {
+        if (!hasChatMagic(bytes)) listener(from, bytes);
+      }),
+  };
+}
 
 /** Keep lobby diagnostics separate from the ceremony and gameplay on the same links. */
 export function createOnlineLobbyTransport(device: Transport): Transport {
@@ -13,6 +30,7 @@ export function createOnlineLobbyTransport(device: Transport): Transport {
     onPeerChange: (listener) => device.onPeerChange(listener),
     onMessage: (listener) =>
       device.onMessage((from, bytes) => {
+        if (hasChatMagic(bytes)) return;
         if (bytes[0] === 0x43 && bytes[1] === 0x50 && bytes[2] === 0x32 && bytes[3] === 0x47)
           return;
         if (bytes.byteLength <= MAX_MESSAGE_BYTES) {
