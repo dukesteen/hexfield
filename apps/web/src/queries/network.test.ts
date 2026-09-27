@@ -1,7 +1,12 @@
 import { QueryClient } from '@tanstack/react-query';
 import { afterEach, expect, test, vi } from 'vitest';
 import * as v from 'valibot';
-import { DEFAULT_NETWORK_SETTINGS, networkSettingsSchema } from './network-config';
+import {
+  DEFAULT_NETWORK_SETTINGS,
+  deploymentNetworkDefaults,
+  effectiveNetworkSettings,
+  networkSettingsSchema,
+} from './network-config';
 import {
   fetchTurnCredentials,
   loadOnlineConnectionSettings,
@@ -67,6 +72,51 @@ test('validates ICE URLs and requires usable TURN settings for relay-only mode',
       turnCredentialsUrl: 'http://remote.example.org/credentials',
     }).success,
   ).toBe(false);
+});
+
+test('deployment URLs are validated and empty saved defaults inherit them without replacing custom settings', () => {
+  const deployed = deploymentNetworkDefaults({
+    VITE_SIGNALING_URL: 'wss://hexfield.steenbakkers.cc',
+    VITE_TURN_CREDENTIALS_URL: 'https://hexfield.steenbakkers.cc/api/turn',
+  });
+  expect(deployed.signalingUrl).toBe('wss://hexfield.steenbakkers.cc');
+  expect(deployed.turnCredentialsUrl).toBe('https://hexfield.steenbakkers.cc/api/turn');
+  expect(deployed.stunUrls).toContain('stun:stun.cloudflare.com:3478');
+  expect(() =>
+    deploymentNetworkDefaults({ VITE_SIGNALING_URL: 'https://not-a-websocket.example' }),
+  ).toThrow('Invalid input');
+  expect(() =>
+    deploymentNetworkDefaults({ VITE_TURN_CREDENTIALS_URL: 'http://remote.example/turn' }),
+  ).toThrow('Use HTTPS');
+
+  const original = deploymentNetworkDefaults({});
+  expect(effectiveNetworkSettings(original, deployed)).toMatchObject({
+    signalingUrl: deployed.signalingUrl,
+    turnCredentialsUrl: deployed.turnCredentialsUrl,
+  });
+  expect(
+    effectiveNetworkSettings(
+      {
+        ...original,
+        signalingUrl: 'wss://custom.example',
+        turnCredentialsUrl: 'https://custom.example/turn',
+      },
+      deployed,
+    ),
+  ).toMatchObject({
+    signalingUrl: 'wss://custom.example',
+    turnCredentialsUrl: 'https://custom.example/turn',
+  });
+  expect(
+    effectiveNetworkSettings(
+      {
+        ...original,
+        turnCredentialsUrl: '',
+        turn: { urls: ['turn:custom.example:3478'], username: 'u', credential: 'c' },
+      },
+      deployed,
+    ).turnCredentialsUrl,
+  ).toBe('');
 });
 
 test('loads only bounded, validated temporary credentials without ambient cookies or redirects', async () => {

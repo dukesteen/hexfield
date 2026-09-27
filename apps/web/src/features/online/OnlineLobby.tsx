@@ -14,6 +14,7 @@ import { InvitationCode } from './InvitationCode';
 import { ManualConnectionPanel } from './ManualConnectionPanel';
 import { ConnectionDiagnostics } from './ConnectionDiagnostics';
 import { OnlineConfiguration } from './OnlineConfiguration';
+import { LobbyNameEditor } from './LobbyNameEditor';
 import './online.css';
 
 const SEAT_SHAPES: readonly ('circle' | 'triangle' | 'square' | 'diamond')[] = [
@@ -46,8 +47,9 @@ export function OnlineLobby({
   const [leaveError, setLeaveError] = useState(false);
   const [startError, setStartError] = useState(false);
   const [startBusy, setStartBusy] = useState(false);
+  const [namePending, setNamePending] = useState(false);
+  const [settingsPending, setSettingsPending] = useState(false);
   const [leaveBusy, setLeaveBusy] = useState(false);
-  const [nameDraft, setNameDraft] = useState('');
   const allowNavigation = useRef(false);
   const blocker = useBlocker({
     shouldBlockFn: ({ current, next }) =>
@@ -67,7 +69,6 @@ export function OnlineLobby({
   const ownSeat = state?.seats.find(
     (seat) => seat.kind === 'human' && seat.peer === snapshot?.self,
   );
-  const ownName = ownSeat?.kind === 'human' ? ownSeat.name : '';
   const humanSeats = state?.seats.filter((seat) => seat.kind === 'human') ?? [];
   const peerLabels = new Map(
     (state?.seats ?? []).flatMap((seat) =>
@@ -79,9 +80,6 @@ export function OnlineLobby({
       seat.kind === 'human' &&
       (seat.peer === snapshot?.self || snapshot?.peers.includes(seat.peer)),
   ).length;
-  useEffect(() => {
-    if (ownName) setNameDraft(ownName);
-  }, [ownName]);
   const allHumansConnected =
     !!state &&
     state.seats
@@ -97,7 +95,9 @@ export function OnlineLobby({
     !!state &&
     state.seats.every((seat) => seat.kind !== 'open') &&
     state.seats.every((seat) => seat.kind !== 'human' || seat.ready) &&
-    allHumansConnected;
+    allHumansConnected &&
+    !namePending &&
+    !settingsPending;
 
   const report = (result: Result<void>) => {
     setActionError(!result.ok);
@@ -300,8 +300,10 @@ export function OnlineLobby({
                     seat={seat}
                     isHost={isHost}
                     ownSeat={ownSeat?.seat === seat.seat}
-                    nameDraft={nameDraft}
-                    setNameDraft={setNameDraft}
+                    editable={state.status === 'open' && !snapshot.startup && !startBusy}
+                    namePending={namePending}
+                    settingsPending={settingsPending}
+                    onNamePendingChange={setNamePending}
                     report={report}
                   />
                 ))}
@@ -309,13 +311,13 @@ export function OnlineLobby({
             </section>
 
             <OnlineConfiguration
-              key={JSON.stringify([state.config, state.seedMode])}
               config={state.config}
               seedMode={state.seedMode}
-              editable={isHost && state.status === 'open'}
+              editable={isHost && state.status === 'open' && !snapshot.startup && !startBusy}
               onSave={(config, seed) =>
                 room.lobby?.configure(config, seed) ?? failure('lobby-closed', 'The room is closed')
               }
+              onPendingChange={setSettingsPending}
             />
 
             <section className="online-start-panel">
@@ -387,8 +389,10 @@ function LobbySeatRow({
   seat,
   isHost,
   ownSeat,
-  nameDraft,
-  setNameDraft,
+  editable,
+  namePending,
+  settingsPending,
+  onNamePendingChange,
   report,
 }: {
   room: OnlineRoomHandleValue;
@@ -396,8 +400,10 @@ function LobbySeatRow({
   seat: LobbySeat;
   isHost: boolean;
   ownSeat: boolean;
-  nameDraft: string;
-  setNameDraft: (value: string) => void;
+  editable: boolean;
+  namePending: boolean;
+  settingsPending: boolean;
+  onNamePendingChange: (pending: boolean) => void;
   report: (result: Result<void>) => void;
 }) {
   const { t } = useTranslation('lobby');
@@ -434,22 +440,13 @@ function LobbySeatRow({
           </small>
         )}
         {ownSeat && member && (
-          <form
-            className="online-seat-edit"
-            onSubmit={(event) => {
-              event.preventDefault();
-              report(lobby.request({ kind: 'setName', name: nameDraft.trim() }));
-            }}
-          >
-            <label>
-              {t('lobby:onlineYourName')}
-              <input
-                maxLength={40}
-                required
-                value={nameDraft}
-                onChange={(event) => setNameDraft(event.target.value)}
-              />
-            </label>
+          <div className="online-seat-edit">
+            <LobbyNameEditor
+              name={member.name}
+              editable={editable}
+              onSave={(newName) => lobby.request({ kind: 'setName', name: newName })}
+              onPendingChange={onNamePendingChange}
+            />
             <label>
               {t('lobby:playerColor', { number: seat.seat + 1 })}
               <select
@@ -466,12 +463,10 @@ function LobbySeatRow({
                 ))}
               </select>
             </label>
-            <button className="button button-quiet" type="submit">
-              {t('lobby:onlineSaveName')}
-            </button>
             <button
               className="button button-quiet"
               type="button"
+              disabled={namePending || (isHost && settingsPending)}
               onClick={() => request({ kind: 'setReady', ready: !seat.ready })}
             >
               {seat.ready ? t('lobby:onlineMarkNotReady') : t('lobby:onlineMarkReady')}
@@ -483,7 +478,7 @@ function LobbySeatRow({
             >
               {t('lobby:onlineLeaveSeat')}
             </button>
-          </form>
+          </div>
         )}
       </div>
       <div className="online-seat-actions">

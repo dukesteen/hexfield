@@ -470,7 +470,8 @@ input[type='checkbox'] {
   text-align: center;
 }
 
-.local-game-page {
+.local-game-page,
+.online-game-page {
   height: 100dvh;
   min-height: 0;
   display: flex;

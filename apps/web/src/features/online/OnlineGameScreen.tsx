@@ -292,7 +292,7 @@ function OnlineGameInstance({
     </div>
   );
   return (
-    <>
+    <main className="app-page online-game-page">
       {attached ? (
         <GameReadOnly
           presentation={presentation}
@@ -422,6 +422,6 @@ function OnlineGameInstance({
           </button>
         </div>
       </dialog>
-    </>
+    </main>
   );
 }

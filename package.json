@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "pnpm --filter @cp2p/web dev",
     "build": "pnpm -r --if-present build",
-    "typecheck": "pnpm --filter @cp2p/web routes:generate && tsc -b && pnpm typecheck:tests && pnpm typecheck:engine",
+    "typecheck": "pnpm --filter @cp2p/web routes:generate && tsc -b && pnpm typecheck:tests && pnpm typecheck:engine && pnpm --filter @cp2p/signaling worker:check",
     "typecheck:tests": "tsc -p tsconfig.test.json --noEmit",
     "typecheck:engine": "node tools/check-engine-types.mjs",
     "lint": "oxlint --type-aware --deny-warnings .",
@@ -19,7 +19,9 @@
     "i18n:check": "node tools/check-i18n-keys.mjs",
     "check": "pnpm typecheck && pnpm lint && pnpm format:check && pnpm deps:check && pnpm purity:check && pnpm i18n:check && pnpm test",
     "ci": "pnpm check && pnpm build && pnpm test:coverage && pnpm test:e2e",
-    "sim": "tsc -b tools/sim && node tools/sim/dist/index.js"
+    "sim": "tsc -b tools/sim && node tools/sim/dist/index.js",
+    "build:cloudflare": "VITE_SIGNALING_URL=wss://hexfield.steenbakkers.cc VITE_TURN_CREDENTIALS_URL= pnpm --filter @cp2p/web build",
+    "deploy:cloudflare": "pnpm build:cloudflare && pnpm --filter @cp2p/signaling worker:check && pnpm --filter @cp2p/signaling worker:deploy"
   },
   "devDependencies": {
     "@playwright/test": "^1.63.0",

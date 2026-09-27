@@ -1,15 +1,20 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render } from '@testing-library/react';
-import { toBase64Url } from '@cp2p/codec';
+import { act, cleanup, fireEvent, render } from '@testing-library/react';
+import { canonicalDecode, canonicalEncode, toBase64Url } from '@cp2p/codec';
 import { baseModule, success } from '@cp2p/engine';
 import type { GameConfig, Result } from '@cp2p/engine';
 import type { GenesisSeedMode } from '@cp2p/protocol';
 import { standardFixedBoard } from '@cp2p/maps';
+import { genesisSchema } from '@cp2p/protocol';
 import { afterEach, expect, test, vi } from 'vitest';
+import * as v from 'valibot';
 import { OnlineConfiguration } from './OnlineConfiguration';
 
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+});
 
 const config: GameConfig = {
   modules: [{ id: 'base', version: baseModule().version }],
@@ -18,12 +23,14 @@ const config: GameConfig = {
 };
 
 test('the host can save every schema rule, timer and a fixed seed without losing other settings', () => {
+  vi.useFakeTimers();
   const save = vi.fn<(config: GameConfig, seed: GenesisSeedMode) => Result<void>>(() =>
     success(undefined),
   );
   const page = render(
     <OnlineConfiguration config={config} seedMode={{ kind: 'joint' }} editable onSave={save} />,
   );
+  expect(save).not.toHaveBeenCalled();
   fireEvent.change(page.getByLabelText('lobby:vpTarget'), { target: { value: '12' } });
   fireEvent.change(page.getByLabelText('lobby:discardLimit'), { target: { value: '9' } });
   fireEvent.change(page.getByLabelText('lobby:mapLayout'), { target: { value: 'random' } });
@@ -38,7 +45,9 @@ test('the host can save every schema rule, timer and a fixed seed without losing
   fireEvent.change(page.getByLabelText('lobby:onlineSeedValue'), {
     target: { value: 'aB'.repeat(32) },
   });
-  fireEvent.click(page.getByRole('button', { name: 'lobby:onlineSaveSettings' }));
+  void act(() => vi.advanceTimersByTime(399));
+  expect(save).not.toHaveBeenCalled();
+  void act(() => vi.advanceTimersByTime(1));
   expect(save).toHaveBeenCalledExactlyOnceWith(
     {
       ...config,
@@ -88,6 +97,7 @@ test('guests can read the signed rules and timers but cannot change or submit th
 });
 
 test('fixed islands retain their board, random maps remove it, and malformed seeds are not submitted', () => {
+  vi.useFakeTimers();
   const board = standardFixedBoard();
   const save = vi.fn<(config: GameConfig, seed: GenesisSeedMode) => Result<void>>(() =>
     success(undefined),
@@ -100,18 +110,125 @@ test('fixed islands retain their board, random maps remove it, and malformed see
       onSave={save}
     />,
   );
-  fireEvent.click(page.getByRole('button', { name: 'lobby:onlineSaveSettings' }));
+  expect(save).not.toHaveBeenCalled();
+  fireEvent.change(page.getByLabelText('lobby:vpTarget'), { target: { value: '11' } });
+  void act(() => vi.advanceTimersByTime(400));
   expect(save).toHaveBeenLastCalledWith(expect.objectContaining({ board }), { kind: 'joint' });
   fireEvent.change(page.getByLabelText('lobby:mapLayout'), {
     target: { value: 'balanced-random' },
   });
-  fireEvent.click(page.getByRole('button', { name: 'lobby:onlineSaveSettings' }));
+  void act(() => vi.advanceTimersByTime(400));
   expect(save.mock.lastCall?.[0]).not.toHaveProperty('board');
   fireEvent.change(page.getByLabelText('lobby:onlineBoardSeed'), { target: { value: 'fixed' } });
   fireEvent.change(page.getByLabelText('lobby:onlineSeedValue'), { target: { value: 'invalid' } });
-  const form = page.container.querySelector('form');
-  if (!form) throw new Error('Missing configuration form');
-  fireEvent.submit(form);
+  void act(() => vi.advanceTimersByTime(400));
   expect(save).toHaveBeenCalledTimes(2);
   expect(page.getByRole('alert')).toBeTruthy();
+});
+
+test('a pending edit is cancelled when the lobby freezes or the editor unmounts', () => {
+  vi.useFakeTimers();
+  const save = vi.fn<(config: GameConfig, seed: GenesisSeedMode) => Result<void>>(() =>
+    success(undefined),
+  );
+  const page = render(
+    <OnlineConfiguration config={config} seedMode={{ kind: 'joint' }} editable onSave={save} />,
+  );
+  fireEvent.change(page.getByLabelText('lobby:vpTarget'), { target: { value: '12' } });
+  page.rerender(
+    <OnlineConfiguration
+      config={config}
+      seedMode={{ kind: 'joint' }}
+      editable={false}
+      onSave={save}
+    />,
+  );
+  void act(() => vi.advanceTimersByTime(500));
+  expect(save).not.toHaveBeenCalled();
+  page.unmount();
+});
+
+test('reverting a configuration edit before the debounce does not save or reset readiness', () => {
+  vi.useFakeTimers();
+  const save = vi.fn<(config: GameConfig, seed: GenesisSeedMode) => Result<void>>(() =>
+    success(undefined),
+  );
+  const pending = vi.fn<(value: boolean) => void>();
+  const page = render(
+    <OnlineConfiguration
+      config={config}
+      seedMode={{ kind: 'joint' }}
+      editable
+      onSave={save}
+      onPendingChange={pending}
+    />,
+  );
+  const vpTarget = page.getByLabelText('lobby:vpTarget');
+  fireEvent.change(vpTarget, { target: { value: '12' } });
+  fireEvent.change(vpTarget, { target: { value: '10' } });
+  void act(() => vi.advanceTimersByTime(500));
+  expect(save).not.toHaveBeenCalled();
+  expect(pending).toHaveBeenLastCalledWith(false);
+});
+
+test('a parsed lobby acknowledgement clears saving despite reordered configuration keys', () => {
+  vi.useFakeTimers();
+  const save = vi.fn<(config: GameConfig, seed: GenesisSeedMode) => Result<void>>(() =>
+    success(undefined),
+  );
+  const pending = vi.fn<(value: boolean) => void>();
+  const page = render(
+    <OnlineConfiguration
+      config={config}
+      seedMode={{ kind: 'joint' }}
+      editable
+      onSave={save}
+      onPendingChange={pending}
+    />,
+  );
+  fireEvent.change(page.getByLabelText('lobby:vpTarget'), { target: { value: '12' } });
+  void act(() => vi.advanceTimersByTime(400));
+  const sent = save.mock.lastCall?.[0];
+  if (!sent) throw new Error('Expected a configuration write');
+  const parsed = v.parse(v.pick(genesisSchema, ['config']), {
+    config: canonicalDecode(canonicalEncode(sent)),
+  }).config;
+  expect(JSON.stringify(parsed)).not.toBe(JSON.stringify(sent));
+  page.rerender(
+    <OnlineConfiguration
+      config={parsed}
+      seedMode={{ kind: 'joint' }}
+      editable
+      onSave={save}
+      onPendingChange={pending}
+    />,
+  );
+  expect(pending).toHaveBeenLastCalledWith(false);
+  expect(page.queryByRole('status')).toBeNull();
+  void act(() => vi.advanceTimersByTime(400));
+  expect(save).toHaveBeenCalledTimes(1);
+});
+
+test('changing only fixed-seed hex casing clears pending without a no-op save', () => {
+  vi.useFakeTimers();
+  const save = vi.fn<(config: GameConfig, seed: GenesisSeedMode) => Result<void>>(() =>
+    success(undefined),
+  );
+  const pending = vi.fn<(value: boolean) => void>();
+  const page = render(
+    <OnlineConfiguration
+      config={config}
+      seedMode={{ kind: 'fixed', seed: toBase64Url(new Uint8Array(32).fill(171)) }}
+      editable
+      onSave={save}
+      onPendingChange={pending}
+    />,
+  );
+  fireEvent.change(page.getByLabelText('lobby:onlineSeedValue'), {
+    target: { value: 'AB'.repeat(32) },
+  });
+  void act(() => vi.advanceTimersByTime(400));
+  expect(save).not.toHaveBeenCalled();
+  expect(pending).toHaveBeenLastCalledWith(false);
+  expect(page.queryByRole('status')).toBeNull();
 });

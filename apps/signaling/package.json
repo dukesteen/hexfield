@@ -12,7 +12,11 @@
   },
   "scripts": {
     "build": "tsc -b",
-    "start": "node dist/server.js"
+    "start": "node dist/server.js",
+    "worker:types": "wrangler types worker/worker-configuration.d.ts",
+    "worker:check": "tsc -p worker/tsconfig.json",
+    "worker:dev": "wrangler dev",
+    "worker:deploy": "wrangler deploy"
   },
   "dependencies": {
     "@cp2p/codec": "workspace:^",
@@ -22,6 +26,7 @@
     "ws": "^8.21.3"
   },
   "devDependencies": {
-    "@types/ws": "^8.18.1"
+    "@types/ws": "^8.18.1",
+    "wrangler": "4.141.0"
   }
 }

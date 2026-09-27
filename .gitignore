@@ -9,3 +9,9 @@ reports/
 *.local
 *.tsbuildinfo
 apps/web/dev/recovered-audit-fixture.json
+
+.wrangler/
+.dev.vars
+.dev.vars.*
+.env
+.env.*

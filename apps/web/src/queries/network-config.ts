@@ -99,13 +99,36 @@ export const networkSettingsSchema = v.pipe(
 
 export type NetworkSettings = v.InferOutput<typeof networkSettingsSchema>;
 
-export const DEFAULT_NETWORK_SETTINGS: NetworkSettings = {
-  signalingUrl: '',
-  stunUrls: ['stun:stun.cloudflare.com:3478', 'stun:stun.l.google.com:19302'],
-  turn: { urls: [], username: '', credential: '' },
-  turnCredentialsUrl: '',
-  iceTransportPolicy: 'all',
-};
+export function deploymentNetworkDefaults(environment: {
+  readonly VITE_SIGNALING_URL?: string;
+  readonly VITE_TURN_CREDENTIALS_URL?: string;
+}): NetworkSettings {
+  return v.parse(networkSettingsSchema, {
+    signalingUrl: environment.VITE_SIGNALING_URL ?? '',
+    stunUrls: ['stun:stun.cloudflare.com:3478', 'stun:stun.l.google.com:19302'],
+    turn: { urls: [], username: '', credential: '' },
+    turnCredentialsUrl: environment.VITE_TURN_CREDENTIALS_URL ?? '',
+    iceTransportPolicy: 'all',
+  });
+}
+
+export const DEFAULT_NETWORK_SETTINGS = deploymentNetworkDefaults({
+  VITE_SIGNALING_URL: import.meta.env.VITE_SIGNALING_URL,
+  VITE_TURN_CREDENTIALS_URL: import.meta.env.VITE_TURN_CREDENTIALS_URL,
+});
+
+/** Older saved defaults may be empty; explicit nonempty device settings take precedence. */
+export function effectiveNetworkSettings(
+  saved: NetworkSettings,
+  defaults: NetworkSettings = DEFAULT_NETWORK_SETTINGS,
+): NetworkSettings {
+  const useSavedTurn = saved.turnCredentialsUrl !== '' || saved.turn.urls.length > 0;
+  return v.parse(networkSettingsSchema, {
+    ...saved,
+    signalingUrl: saved.signalingUrl || defaults.signalingUrl,
+    turnCredentialsUrl: useSavedTurn ? saved.turnCredentialsUrl : defaults.turnCredentialsUrl,
+  });
+}
 
 const endpointIceServerSchema = v.strictObject({
   urls: v.union([turnUrlSchema, v.pipe(v.array(turnUrlSchema), v.minLength(1), v.maxLength(8))]),

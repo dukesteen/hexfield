@@ -2,6 +2,7 @@ import { queryOptions, useQuery } from '@tanstack/react-query';
 import type { QueryClient } from '@tanstack/react-query';
 import * as v from 'valibot';
 import {
+  effectiveNetworkSettings,
   networkSettingsSchema,
   turnCredentialsEndpointSchema,
   turnCredentialsResponseSchema,
@@ -117,7 +118,7 @@ export async function loadOnlineConnectionSettings(
     queryFn: () => repository.get(),
     staleTime: 0,
   });
-  const network = v.parse(networkSettingsSchema, saved.network);
+  const network = effectiveNetworkSettings(v.parse(networkSettingsSchema, saved.network));
   const servers: RTCIceServer[] = [];
   if (network.iceTransportPolicy === 'all' && network.stunUrls.length > 0)
     servers.push({ urls: network.stunUrls });

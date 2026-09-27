@@ -221,4 +221,53 @@ describe('signaling room core', () => {
     f.core.sweep();
     expect(f.core.peers(ROOM)).toEqual([]);
   });
+
+  test('trusted snapshots restore membership, challenge and rolling rate state', () => {
+    const f = fixture();
+    const a = f.join(1);
+    for (let index = 0; index < 29; index++)
+      f.core.receive(a.id, JSON.stringify({ type: 'signal', to: 'unknown', envelope: 'x' }));
+    const snapshot = f.core.snapshotSession(a.id);
+    expect(snapshot).toMatchObject({
+      peerId: a.identity.peerId,
+      challenge: a.socket.challenge,
+      arrivals: expect.arrayContaining([0]),
+    });
+
+    const restored = new RoomCore(
+      () => 0,
+      (length) => new Uint8Array(length).fill(99),
+    );
+    const socket = new Socket();
+    const id = restored.restoreSession(snapshot, socket);
+    expect(restored.peers(ROOM)).toEqual([a.identity.peerId]);
+    restored.receive(id, JSON.stringify({ type: 'signal', to: 'unknown', envelope: 'x' }));
+    expect(socket.closed.at(-1)?.reason).toBe('rate-limit');
+
+    const replay = new Socket();
+    const replayId = restored.open(ROOM, replay);
+    restored.receive(
+      replayId,
+      JSON.stringify(signRoomJoin(ROOM, a.socket.challenge, a.identity.secretKey)),
+    );
+    expect(replay.closed.at(-1)?.reason).toBe('invalid-join');
+  });
+
+  test('restored pending sockets retain their original authentication deadline', () => {
+    let now = 0;
+    const source = new RoomCore(
+      () => now,
+      (length) => new Uint8Array(length).fill(4),
+    );
+    const original = new Socket();
+    const originalId = source.open(ROOM, original);
+    const snapshot = source.snapshotSession(originalId);
+    if (!snapshot) throw new Error('Missing pending room session');
+    now = 10_000;
+    const restored = new RoomCore(() => now);
+    const socket = new Socket();
+    restored.restoreSession(snapshot, socket);
+    restored.sweep();
+    expect(socket.closed.at(-1)?.reason).toBe('join-timeout');
+  });
 });

@@ -9,6 +9,7 @@ import {
 import type { PeerId } from '@cp2p/protocol';
 
 export const MAX_ROOM_PEERS = 8;
+export const MAX_ROOM_SOCKETS = 16;
 export const ROOM_IDLE_MS = 24 * 60 * 60 * 1_000;
 const RATE_WINDOW_MS = 1_000;
 const MAX_RATE = 30;
@@ -36,6 +37,19 @@ interface Room {
   lastActivity: number;
 }
 
+/** Versioned, validated state stored in a hibernatable WebSocket attachment. */
+export interface RoomSessionSnapshot {
+  readonly version: 1;
+  readonly id: number;
+  readonly roomId: string;
+  readonly challenge: string;
+  readonly openedAt: number;
+  readonly arrivals: readonly number[];
+  readonly lastNow: number;
+  readonly peerId: PeerId | null;
+  readonly roomLastActivity: number | null;
+}
+
 function record(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
@@ -49,7 +63,7 @@ function exact(value: Record<string, unknown>, fields: readonly string[]): boole
 
 function defaultRandomBytes(length: number): Uint8Array {
   const bytes = new Uint8Array(length);
-  globalThis.crypto.getRandomValues(bytes);
+  crypto.getRandomValues(bytes);
   return bytes;
 }
 
@@ -153,6 +167,67 @@ export class RoomCore {
     room.peers.delete(session.peerId);
     if (room.peers.size === 0) this.rooms.delete(session.roomId);
     else this.announce(room);
+  }
+
+  snapshotSession(id: number): RoomSessionSnapshot | undefined {
+    const session = this.sessions.get(id);
+    if (!session) return undefined;
+    return {
+      version: 1,
+      id: session.id,
+      roomId: session.roomId,
+      challenge: session.challenge,
+      openedAt: session.openedAt,
+      arrivals: [...session.arrivals],
+      lastNow: session.lastNow,
+      peerId: session.peerId,
+      roomLastActivity: this.rooms.get(session.roomId)?.lastActivity ?? null,
+    };
+  }
+
+  /** Restore only validated attachment state created by this adapter. */
+  restoreSession(value: unknown, socket: RoomSocket): number {
+    if (!isRoomSessionSnapshot(value)) throw new TypeError('Invalid room session attachment');
+    const snapshot = value;
+    if (this.sessions.has(snapshot.id)) throw new TypeError('Duplicate room session attachment');
+    const now = this.now();
+    if (
+      !Number.isFinite(now) ||
+      now < snapshot.lastNow ||
+      (snapshot.roomLastActivity !== null && now < snapshot.roomLastActivity)
+    )
+      throw new TypeError('Room session attachment is from the future');
+    const session: Session = {
+      id: snapshot.id,
+      roomId: snapshot.roomId,
+      socket,
+      challenge: snapshot.challenge,
+      openedAt: snapshot.openedAt,
+      arrivals: [...snapshot.arrivals],
+      lastNow: snapshot.lastNow,
+      peerId: snapshot.peerId,
+    };
+    if (session.peerId) {
+      const room = this.rooms.get(session.roomId) ?? {
+        peers: new Map<PeerId, Session>(),
+        lastActivity: snapshot.roomLastActivity ?? now,
+      };
+      if (room.peers.has(session.peerId) || room.peers.size >= MAX_ROOM_PEERS)
+        throw new TypeError('Conflicting room session attachment');
+      room.lastActivity = Math.max(room.lastActivity, snapshot.roomLastActivity ?? 0);
+      room.peers.set(session.peerId, session);
+      this.rooms.set(session.roomId, room);
+    } else if (snapshot.roomLastActivity !== null) {
+      const room = this.rooms.get(session.roomId) ?? {
+        peers: new Map<PeerId, Session>(),
+        lastActivity: snapshot.roomLastActivity,
+      };
+      room.lastActivity = Math.max(room.lastActivity, snapshot.roomLastActivity);
+      this.rooms.set(session.roomId, room);
+    }
+    this.sessions.set(session.id, session);
+    this.nextId = Math.max(this.nextId, session.id);
+    return session.id;
   }
 
   sweep(): void {
@@ -283,5 +358,62 @@ export class RoomCore {
     } catch {
       /* Membership was already removed. */
     }
+  }
+}
+
+function isRoomSessionSnapshot(value: unknown): value is RoomSessionSnapshot {
+  if (!record(value)) return false;
+  const openedAt = value.openedAt;
+  const lastNow = value.lastNow;
+  const arrivals = value.arrivals;
+  if (
+    !exact(value, [
+      'version',
+      'id',
+      'roomId',
+      'challenge',
+      'openedAt',
+      'arrivals',
+      'lastNow',
+      'peerId',
+      'roomLastActivity',
+    ]) ||
+    value.version !== 1 ||
+    typeof value.id !== 'number' ||
+    !Number.isSafeInteger(value.id) ||
+    value.id < 1 ||
+    typeof value.roomId !== 'string' ||
+    !roomIdPattern.test(value.roomId) ||
+    typeof value.challenge !== 'string' ||
+    !validRoomChallenge(value.challenge) ||
+    typeof openedAt !== 'number' ||
+    !Number.isFinite(openedAt) ||
+    typeof lastNow !== 'number' ||
+    !Number.isFinite(lastNow) ||
+    lastNow < openedAt ||
+    !Array.isArray(arrivals) ||
+    arrivals.length > MAX_RATE ||
+    (value.peerId !== null && typeof value.peerId !== 'string') ||
+    (value.roomLastActivity !== null &&
+      (typeof value.roomLastActivity !== 'number' || !Number.isFinite(value.roomLastActivity)))
+  )
+    return false;
+  if (
+    !arrivals.every(
+      (arrival) =>
+        typeof arrival === 'number' &&
+        Number.isFinite(arrival) &&
+        arrival >= openedAt &&
+        arrival <= lastNow,
+    )
+  )
+    return false;
+  if (value.peerId === null) return true;
+  if (value.roomLastActivity === null || typeof value.peerId !== 'string') return false;
+  try {
+    parsePeerId(value.peerId);
+    return true;
+  } catch {
+    return false;
   }
 }

@@ -1,42 +1,143 @@
-import { fromBase64Url, toBase64Url, toHex } from '@cp2p/codec';
+import { fromBase64Url, hashValue, toBase64Url, toHex } from '@cp2p/codec';
 import { baseModule } from '@cp2p/engine';
 import type { GameConfig, OptionSpec, Result, TurnTimer } from '@cp2p/engine';
 import { standardFixedBoard } from '@cp2p/maps';
 import type { GenesisSeedMode } from '@cp2p/protocol';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 const rules = baseModule();
 const seats = [0, 1, 2, 3] as const;
 const defaultTimer: TurnTimer = { preRollSec: 60, mainSec: 180, discardSec: 60, robberSec: 60 };
+const SAVE_DELAY_MS = 400;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-/** The parent keys this form by the signed configuration, so external edits replace its draft. */
+function initialOptions(config: GameConfig): Record<string, unknown> {
+  return {
+    ...Object.fromEntries(rules.optionsSchema.map((spec) => [spec.key, spec.default])),
+    ...(isRecord(config.options.base) ? config.options.base : {}),
+  };
+}
+
+/** Keep a newer local draft when an earlier signed configuration arrives. */
 export function OnlineConfiguration({
   config,
   seedMode,
   editable,
   onSave,
+  onPendingChange,
 }: {
   config: GameConfig;
   seedMode: GenesisSeedMode;
   editable: boolean;
   onSave: (config: GameConfig, seed: GenesisSeedMode) => Result<void>;
+  onPendingChange?: (pending: boolean) => void;
 }) {
   const { t } = useTranslation('lobby');
   const [seatCount, setSeatCount] = useState(config.seats.length);
-  const [options, setOptions] = useState<Record<string, unknown>>(() => ({
-    ...Object.fromEntries(rules.optionsSchema.map((spec) => [spec.key, spec.default])),
-    ...(isRecord(config.options.base) ? config.options.base : {}),
-  }));
+  const [options, setOptions] = useState<Record<string, unknown>>(() => initialOptions(config));
   const [fixedSeed, setFixedSeed] = useState(seedMode.kind === 'fixed');
   const [seedHex, setSeedHex] = useState(() =>
     seedMode.kind === 'fixed' ? toHex(fromBase64Url(seedMode.seed)) : '',
   );
   const [error, setError] = useState(false);
+  const [revision, setRevision] = useState(0);
+  const baseline = useRef(JSON.stringify([seatCount, options, fixedSeed, seedHex]));
+  const externalKey = toHex(hashValue([config, seedMode]));
+  const previousExternal = useRef(externalKey);
+  const latestSubmitted = useRef<{ revision: number; key: string } | null>(null);
+  const currentConfig = useRef(config);
+  const save = useRef(onSave);
+  const pendingChange = useRef(onPendingChange);
+  currentConfig.current = config;
+  save.current = onSave;
+  pendingChange.current = onPendingChange;
+
+  useEffect(() => {
+    pendingChange.current?.(revision !== 0);
+  }, [revision]);
+  useEffect(() => () => pendingChange.current?.(false), []);
+
+  useEffect(() => {
+    if (previousExternal.current === externalKey) return;
+    previousExternal.current = externalKey;
+    if (
+      revision !== 0 &&
+      (latestSubmitted.current?.revision !== revision ||
+        latestSubmitted.current.key !== externalKey)
+    )
+      return;
+    setSeatCount(config.seats.length);
+    setOptions(initialOptions(config));
+    setFixedSeed(seedMode.kind === 'fixed');
+    setSeedHex(seedMode.kind === 'fixed' ? toHex(fromBase64Url(seedMode.seed)) : '');
+    baseline.current = JSON.stringify([
+      config.seats.length,
+      initialOptions(config),
+      seedMode.kind === 'fixed',
+      seedMode.kind === 'fixed' ? toHex(fromBase64Url(seedMode.seed)) : '',
+    ]);
+    setRevision(0);
+    setError(false);
+    latestSubmitted.current = null;
+  }, [externalKey, config, seedMode, revision]);
+
+  useEffect(() => {
+    if (!editable || revision === 0) return undefined;
+    if (
+      !latestSubmitted.current &&
+      JSON.stringify([seatCount, options, fixedSeed, seedHex]) === baseline.current
+    ) {
+      setRevision(0);
+      return undefined;
+    }
+    if (fixedSeed && !/^[0-9a-f]{64}$/i.test(seedHex)) {
+      setError(true);
+      return undefined;
+    }
+    const timer = window.setTimeout(() => {
+      const selectedSeed: GenesisSeedMode = fixedSeed
+        ? {
+            kind: 'fixed',
+            seed: toBase64Url(
+              Uint8Array.from(seedHex.match(/.{2}/g) ?? [], (pair) => Number.parseInt(pair, 16)),
+            ),
+          }
+        : { kind: 'joint' };
+      const { board: previousBoard, ...previous } = currentConfig.current;
+      const next: GameConfig = {
+        ...previous,
+        seats: seats.slice(0, seatCount),
+        options: { ...currentConfig.current.options, base: options },
+        ...(options.mapLayout === 'standard-fixed'
+          ? { board: previousBoard ?? standardFixedBoard() }
+          : {}),
+      };
+      const key = toHex(hashValue([next, selectedSeed]));
+      const draftKey = JSON.stringify([seatCount, options, fixedSeed, seedHex.toLowerCase()]);
+      if (key === externalKey || draftKey === baseline.current) {
+        baseline.current = draftKey;
+        latestSubmitted.current = null;
+        setRevision(0);
+        setError(false);
+        return;
+      }
+      latestSubmitted.current = { revision, key };
+      const result = save.current(next, selectedSeed);
+      if (!result.ok) latestSubmitted.current = null;
+      setError(!result.ok);
+    }, SAVE_DELAY_MS);
+    return () => window.clearTimeout(timer);
+  }, [editable, externalKey, fixedSeed, options, revision, seatCount, seedHex]);
+
+  const changed = () => {
+    setRevision((current) => current + 1);
+    setError(false);
+    pendingChange.current?.(true);
+  };
   const labels: Record<string, string> = {
     vpTarget: t('lobby:vpTarget'),
     discardLimit: t('lobby:discardLimit'),
@@ -58,7 +159,7 @@ export function OnlineConfiguration({
   };
   const patch = (key: string, value: unknown) => {
     setOptions((current) => ({ ...current, [key]: value }));
-    setError(false);
+    changed();
   };
 
   return (
@@ -70,44 +171,17 @@ export function OnlineConfiguration({
       <p className="muted">
         {editable ? t('lobby:onlineSettingsReadyReset') : t('lobby:onlineSettingsReadOnly')}
       </p>
-      <form
-        className="online-rules-form"
-        onSubmit={(event) => {
-          event.preventDefault();
-          if (!editable) return;
-          if (fixedSeed && !/^[0-9a-f]{64}$/i.test(seedHex)) {
-            setError(true);
-            return;
-          }
-          const selectedSeed: GenesisSeedMode = fixedSeed
-            ? {
-                kind: 'fixed',
-                seed: toBase64Url(
-                  Uint8Array.from(seedHex.match(/.{2}/g) ?? [], (pair) =>
-                    Number.parseInt(pair, 16),
-                  ),
-                ),
-              }
-            : { kind: 'joint' };
-          const { board: previousBoard, ...previous } = config;
-          const next: GameConfig = {
-            ...previous,
-            seats: seats.slice(0, seatCount),
-            options: { ...config.options, base: options },
-            ...(options.mapLayout === 'standard-fixed'
-              ? { board: previousBoard ?? standardFixedBoard() }
-              : {}),
-          };
-          setError(!onSave(next, selectedSeed).ok);
-        }}
-      >
+      <form className="online-rules-form" onSubmit={(event) => event.preventDefault()}>
         <fieldset disabled={!editable} className="online-rule-fields">
           <legend className="sr-only">{t('lobby:boardAndRules')}</legend>
           <label>
             {t('lobby:playerCount')}
             <select
               value={seatCount}
-              onChange={(event) => setSeatCount(Number(event.target.value))}
+              onChange={(event) => {
+                setSeatCount(Number(event.target.value));
+                changed();
+              }}
             >
               {[2, 3, 4].map((count) => (
                 <option key={count} value={count}>
@@ -132,7 +206,10 @@ export function OnlineConfiguration({
               {t('lobby:onlineBoardSeed')}
               <select
                 value={fixedSeed ? 'fixed' : 'joint'}
-                onChange={(event) => setFixedSeed(event.target.value === 'fixed')}
+                onChange={(event) => {
+                  setFixedSeed(event.target.value === 'fixed');
+                  changed();
+                }}
               >
                 <option value="joint">{t('lobby:onlineSeedJoint')}</option>
                 <option value="fixed">{t('lobby:onlineSeedFixed')}</option>
@@ -151,7 +228,10 @@ export function OnlineConfiguration({
                     spellCheck={false}
                     autoCapitalize="off"
                     aria-describedby="online-seed-hint"
-                    onChange={(event) => setSeedHex(event.target.value.trim())}
+                    onChange={(event) => {
+                      setSeedHex(event.target.value.trim());
+                      changed();
+                    }}
                   />
                 </label>
                 <small id="online-seed-hint" className="muted">
@@ -162,10 +242,8 @@ export function OnlineConfiguration({
           </div>
         </fieldset>
         {error && <p role="alert">{t('lobby:onlineActionFailed')}</p>}
-        {editable && (
-          <button className="button button-quiet" type="submit">
-            {t('lobby:onlineSaveSettings')}
-          </button>
+        {editable && revision > 0 && !error && (
+          <small role="status">{t('lobby:onlineSaving')}</small>
         )}
       </form>
     </section>

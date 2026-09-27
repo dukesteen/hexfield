@@ -5,6 +5,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from '@tanstack/react-router';
 import { useSettings } from '../../queries/hooks';
+import { DEFAULT_NETWORK_SETTINGS, effectiveNetworkSettings } from '../../queries/network-config';
 import { beginOnlineRoomOpen, closeOnlineRoom } from './room-registry.js';
 import './online.css';
 
@@ -30,8 +31,13 @@ export function OnlineCreate() {
   const [name, setName] = useState('');
   const [hostName, setHostName] = useState('');
   const [serverInput, setServerInput] = useState<string | null>(null);
-  const serverUrl = serverInput ?? settings.data?.network.signalingUrl ?? '';
-  const [connection, setConnection] = useState<'manual' | 'server'>('manual');
+  const serverUrl =
+    serverInput ??
+    (settings.data
+      ? effectiveNetworkSettings(settings.data.network).signalingUrl
+      : DEFAULT_NETWORK_SETTINGS.signalingUrl);
+  const [connectionInput, setConnectionInput] = useState<'manual' | 'server' | null>(null);
+  const connection = connectionInput ?? (serverUrl ? 'server' : 'manual');
   const [seatCount, setSeatCount] = useState(4);
   const [mapLayout, setMapLayout] = useState<BaseOptions['mapLayout']>('balanced-random');
   const [vpTarget, setVpTarget] = useState(10);
@@ -121,7 +127,7 @@ export function OnlineCreate() {
               <select
                 value={connection}
                 onChange={(event) =>
-                  setConnection(event.target.value === 'server' ? 'server' : 'manual')
+                  setConnectionInput(event.target.value === 'server' ? 'server' : 'manual')
                 }
               >
                 <option value="manual">{t('lobby:manualConnectionCodes')}</option>
@@ -189,7 +195,11 @@ export function OnlineCreate() {
             </label>
           </fieldset>
           {error && <p role="alert">{t('lobby:onlineOpenFailed')}</p>}
-          <button className="button button-primary" type="submit" disabled={busy}>
+          <button
+            className="button button-primary"
+            type="submit"
+            disabled={busy || settings.isLoading}
+          >
             {busy ? t('lobby:onlineOpening') : t('lobby:onlineCreateAction')}
           </button>
         </form>

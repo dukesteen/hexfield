@@ -1,0 +1,26 @@
+{
+  "checkedAt": "2026-09-27T09:48:00Z",
+  "origin": "https://hexfield.steenbakkers.cc",
+  "checks": [
+    {
+      "viewport": { "width": 3440, "height": 1267 },
+      "gameSize": { "width": 3440, "height": 1267 },
+      "documentSize": { "width": 3440, "height": 1267 },
+      "result": "Desktop uses full viewport; board above hand/actions, players on right."
+    },
+    {
+      "viewport": { "width": 390, "height": 844 },
+      "gameSize": { "width": 390, "height": 844 },
+      "documentSize": { "width": 390, "height": 844 },
+      "result": "Portrait board fills remaining height; player strip, hand and compact Actions control remain at bottom."
+    },
+    {
+      "viewport": { "width": 844, "height": 390 },
+      "result": "Landscape board on left and compact hand/actions on right. Game info opens Bank and Event log."
+    }
+  ],
+  "notes": [
+    "Verified through Chrome and in-app browser screenshots and DOM measurements.",
+    "Temporary viewport overrides reset after checks."
+  ]
+}

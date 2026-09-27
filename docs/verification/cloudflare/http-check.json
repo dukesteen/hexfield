@@ -1,0 +1,90 @@
+{
+  "checkedAt": "2026-09-27T09:50:31.673Z",
+  "origin": "https://hexfield.steenbakkers.cc",
+  "results": [
+    {
+      "path": "/",
+      "status": 200,
+      "type": "text/html",
+      "cache": "public, max-age=0, must-revalidate"
+    },
+    {
+      "path": "/healthz",
+      "status": 200,
+      "type": "text/plain;charset=UTF-8",
+      "cache": "no-store"
+    },
+    {
+      "path": "/online/create",
+      "status": 200,
+      "type": "text/html",
+      "cache": "public, max-age=0, must-revalidate"
+    },
+    {
+      "path": "/api/turn",
+      "status": 503,
+      "type": "application/json",
+      "cache": "no-store"
+    },
+    {
+      "path": "/assets/index-djXJWgKt.js",
+      "status": 200,
+      "type": "text/javascript",
+      "cache": "public, max-age=0, must-revalidate"
+    },
+    {
+      "path": "/assets/rolldown-runtime-hePW80VL.js",
+      "status": 200,
+      "type": "text/javascript",
+      "cache": "public, max-age=0, must-revalidate"
+    },
+    {
+      "path": "/assets/jsx-runtime-BNakU3Ej.js",
+      "status": 200,
+      "type": "text/javascript",
+      "cache": "public, max-age=0, must-revalidate"
+    },
+    {
+      "path": "/assets/hooks-DvKXhJu5.js",
+      "status": 200,
+      "type": "text/javascript",
+      "cache": "public, max-age=0, must-revalidate"
+    },
+    {
+      "path": "/assets/useTranslation-FzNzs4eM.js",
+      "status": 200,
+      "type": "text/javascript",
+      "cache": "public, max-age=0, must-revalidate"
+    },
+    {
+      "path": "/assets/link-9aXGfblY.js",
+      "status": 200,
+      "type": "text/javascript",
+      "cache": "public, max-age=0, must-revalidate"
+    },
+    {
+      "path": "/assets/useNavigate-D68hlEpu.js",
+      "status": 200,
+      "type": "text/javascript",
+      "cache": "public, max-age=0, must-revalidate"
+    },
+    {
+      "path": "/assets/lazyRouteComponent-Bk_wOHig.js",
+      "status": 200,
+      "type": "text/javascript",
+      "cache": "public, max-age=0, must-revalidate"
+    },
+    {
+      "path": "/assets/preload-helper-BZ1Pz5am.js",
+      "status": 200,
+      "type": "text/javascript",
+      "cache": "public, max-age=0, must-revalidate"
+    },
+    {
+      "path": "/assets/index-BOJj3Xt0.css",
+      "status": 200,
+      "type": "text/css",
+      "cache": "public, max-age=0, must-revalidate"
+    }
+  ]
+}

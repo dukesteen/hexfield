@@ -4,13 +4,13 @@ The user narrowed the immediate release goal on 2026-09-27 to playing with frien
 
 ## What ships
 
-- The GitHub Pages app creates and joins rooms through manually shared invitation and answer codes. Public STUN services help discover direct routes. A deployed Hexfield signaling service is optional and is not a release prerequisite.
+- The app at [hexfield.steenbakkers.cc](https://hexfield.steenbakkers.cc/) creates rooms with hosted WebSocket signaling by default. Friends join through the invitation link. The GitHub Pages build retains manual invitation and answer codes. Public STUN services help discover direct routes.
 - Two to four human players can play the base game, with existing hosted bots filling seats when wanted.
 - Players can finish a game and inspect the result and audit.
 - Closing and reopening the same browser profile restores the existing seat. Reconnecting can require another exchange of connection codes.
 - A missing player is not replaced automatically. The game waits whenever the current agreement or private-card protocol needs that player.
 
-The no-hosting requirement does not guarantee a direct connection through every router. The current app has no default TURN relay. If direct connectivity fails, the UI explains that a relay or another network is needed. A relay forwards encrypted traffic; browsers still execute and verify the game. External-network connectivity remains unverified in this beta; same-laptop browser checks cannot establish it.
+The no-hosting requirement does not guarantee a direct connection through every router. The free-only deployment has no default TURN relay. Workers Free stops service when its allowances are exhausted; Cloudflare TURN is disabled because its traffic can incur overage charges. If direct connectivity fails, the UI explains that a relay or another network is needed. A relay forwards encrypted traffic; browsers still execute and verify the game. External-network connectivity remains unverified in this beta; same-laptop browser checks cannot establish it.
 
 ## Work required before publishing
 
@@ -31,8 +31,10 @@ Use a small scenario matrix and retain the existing passing evidence. Do not run
 - Exhaustive cross-browser certification, QR camera scanning and invitation-size optimization. Publish the browsers actually verified.
 - A connection check between separate physical devices on different networks. Record direct or relayed connectivity when devices are available; do not infer it from the same-laptop checks or claim general network compatibility before then.
 - The eight-resource proof-performance target and broad statistical or simulation acceptance from the full milestones. Fix hangs and failed correctness checks; additional optimization can follow the beta.
-- Deploying and operating a Hexfield signaling service or TURN service as a prerequisite for this release.
+- A default TURN relay. The hosted app and signaling service are deployed on Cloudflare Free; TURN requires a verified provider-enforced zero-overage limit to meet the user's cost requirement.
 
 ## Existing evidence
 
 The [current browser check](verification/stage09/beta-browser-check.md) covers four-human protocol-v3 startup, all setup placements, dice, a player trade and same-browser reconnect in the Pages production build. The [v3 ten-point game](verification/stage09/beta-v3-game-check.md) completed 332 legal commands with two humans and two hosted bots, development cards, hidden steals and matching successful audits. These are local checks; external-network connectivity is unverified. The [M-C gap matrix](verification/stage09/mc-remaining-acceptance.md) preserves the broader milestone gaps.
+
+The [Cloudflare deployment record](verification/cloudflare/deployment.md) covers the custom domain, hosted signaling, free-only restrictions and live checks.
