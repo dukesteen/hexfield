@@ -184,7 +184,9 @@ async function startFourPlayerRoom(pages: readonly Page[], mode: 'signaling' | '
   await host.getByText('Advanced connection options', { exact: true }).click();
   await host.getByLabel('Player count', { exact: true }).selectOption('4');
   await host.getByLabel('Victory points to win', { exact: true }).fill('3');
-  await host.getByLabel('Invite friends with', { exact: true }).selectOption(mode);
+  await host
+    .getByLabel('Invite friends with', { exact: true })
+    .selectOption(mode === 'signaling' ? 'server' : 'manual');
   if (mode === 'signaling')
     await host.getByLabel('Custom room server', { exact: true }).fill(signalingUrl);
   await host.getByRole('button', { name: 'Create room', exact: true }).click();
