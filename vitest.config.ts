@@ -1,5 +1,6 @@
 import { defineConfig } from 'vitest/config';
 import { defaultClientConditions, defaultExternalConditions, defaultServerConditions } from 'vite';
+import { availableParallelism } from 'node:os';
 
 export default defineConfig({
   resolve: { conditions: ['@cp2p/source', ...defaultClientConditions] },
@@ -11,6 +12,9 @@ export default defineConfig({
   },
   test: {
     environment: 'node',
+    // Concurrent curve-proof replicas otherwise compete for CPU and hit their
+    // wall-clock deadlines. Preserve the deadlines and bound worker contention.
+    maxWorkers: Math.max(1, Math.min(4, Math.floor(availableParallelism() / 2))),
     exclude: ['**/node_modules/**', '**/dist/**', '**/tests/**'],
     coverage: {
       provider: 'v8',

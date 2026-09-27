@@ -1,0 +1,130 @@
+{
+  "files": [
+    {
+      "path": "docs/verification/stage07/step6-cheat-design.md",
+      "sha256": "82ed77eb3966ff776b1f8abd87f79896df79afd22c6d2ec9bc554c3049b69793"
+    },
+    {
+      "path": "packages/protocol/src/cheat-proof.ts",
+      "sha256": "8724813c1a138a69c5015cc4329ee01de87e13bb1b5eba4e08662440f09e013f"
+    },
+    {
+      "path": "packages/protocol/src/cheat-proof.test.ts",
+      "sha256": "be89c094440aa42ffa54e5d140046b005a9284c86f0fc7ce61c355b25707f358"
+    },
+    {
+      "path": "packages/protocol/src/cheat-schema.ts",
+      "sha256": "3b83a9f9f2e8b20a0733c28a97eaa2134c2231414d98dfa3e5fd66b386257e5c"
+    },
+    {
+      "path": "packages/protocol/src/command-validation.ts",
+      "sha256": "987fc3ecd88f8eae9ac9599cdcb55187f78d6b93aa3b180a574f2dcd7109a58e"
+    },
+    {
+      "path": "packages/protocol/src/types.ts",
+      "sha256": "818234f00bd384a8ff733ce5bcb3f04dd666b62644b84788b2f83edcb433d927"
+    },
+    {
+      "path": "packages/protocol/src/schemas.ts",
+      "sha256": "0644605fd0e0cd35ededac28e9a52524eb122e8b73839bc94f729fdee160f606"
+    },
+    {
+      "path": "packages/protocol/src/log.ts",
+      "sha256": "478b71412cd399b334e2f7bf90fcbb5867e2c267a2f813a85483f90265e2d2c2"
+    },
+    {
+      "path": "packages/protocol/src/crypto-context.ts",
+      "sha256": "95274b001837b43feb89758af1081a5321887ec4a929704719de790f24e75fa7"
+    },
+    {
+      "path": "packages/protocol/src/proposal.ts",
+      "sha256": "4211e661de712a986388a0f7a6bcf6da65f90dd9989d2e96100ba8556c24cfb7"
+    },
+    {
+      "path": "packages/protocol/src/replay.ts",
+      "sha256": "f1f0c9081341fec93e71cc783f10fa031e603a400ea1b77f96f79d4ed5a62442"
+    },
+    {
+      "path": "packages/protocol/src/command-proofs.ts",
+      "sha256": "22cbc03bb2341ffb22eb1bac418466fcd8b8268f711e818ea8cb50774b28d230"
+    },
+    {
+      "path": "packages/protocol/src/hand-transition.ts",
+      "sha256": "ecf804c47dc2b75483df54b1a61acd334ce17a338aa0dfaee6485201584d147a"
+    },
+    {
+      "path": "packages/protocol/src/beacon.ts",
+      "sha256": "5d04d5861933dd7f05e6f450871287f491c94fbc1e3185e06a8bb5d39a6904e1"
+    },
+    {
+      "path": "packages/protocol/src/deck-setup.ts",
+      "sha256": "2b836901748302678c4e927a87d293d17be73e65223132a34a2e19cdfe7cd840"
+    },
+    {
+      "path": "packages/protocol/src/deck-draw.ts",
+      "sha256": "c4f382015d96bb28d432199d2fda07356859a330e1ac5f78a4a7e05d15962495"
+    },
+    {
+      "path": "packages/protocol/src/count-reveal.ts",
+      "sha256": "bf62d46e587f01e1eb395c7ca02fe526bd8d5da60b91ef1ea512f9a2c525b041"
+    },
+    {
+      "path": "packages/protocol/src/steal-delivery.ts",
+      "sha256": "57865cf44a366a2266120ada993237fe5e19b7e9734cea33abaa073da8b7e1b4"
+    },
+    {
+      "path": "packages/protocol/src/control.ts",
+      "sha256": "c16b96a3556b87f82319be862668e407f14f2a1b445a9c62c9775f5b854bbbe2"
+    },
+    {
+      "path": "packages/protocol/src/validation.ts",
+      "sha256": "bb646520abbab0596ff5d99f1b7f6ffaeed264260c3030917725a050acef5f23"
+    },
+    {
+      "path": "docs/verification/stage07/step6-cheat-review.md",
+      "sha256": "00448aa73403bbaf1cb6f07b3fcf5dcb4b16844f5228c5329a4ad38bc0cfe453"
+    },
+    {
+      "path": "docs/verification/stage07/step6-continuation-plan.md",
+      "sha256": "f091ee672e940a212043924875e392ff56c0c5ebd12d0d2f1899a849d162c82d"
+    },
+    {
+      "path": "packages/protocol/src/cheat-log.test.ts",
+      "sha256": "c0dd9293be809ed42a89b0dd868afa6115ada1188361c226701ebacb448345ae"
+    },
+    {
+      "path": "packages/protocol/src/replicated-log.ts",
+      "sha256": "e26284b410618623b7f411c12ffe40758a8fae6477e490e221969fd17d3696d1"
+    },
+    {
+      "path": "packages/protocol/src/genesis.ts",
+      "sha256": "200ce39353d8e4b809b8638c6b1f888aa534c90b794adcac5c052acb7ae5ea81"
+    },
+    {
+      "path": "packages/protocol/src/beacon-state.ts",
+      "sha256": "a280956782550a92a1272bb3b34b87fac1c6016910b06ba3ba48e16272e27671"
+    },
+    {
+      "path": "packages/protocol/src/deck-ledger.ts",
+      "sha256": "2c3e9778c88b790e9afbe42d5446c29caff44a77abf86655a583851174d82e8d"
+    },
+    {
+      "path": "docs/verification/stage07/step6-cheat-followup-review.md",
+      "sha256": "3fe68ad214e9b28c67539ba47338914fb71fd6fe06ec1291521018f1dfd90ce3"
+    },
+    {
+      "path": "packages/protocol/src/cheat-candidates.ts",
+      "sha256": "1d4dd4e60c0d61a57c1a2ebdde3c9c9260bc0280e9140cfc459c991d8369b354"
+    },
+    {
+      "path": "packages/protocol/src/messages.ts",
+      "sha256": "316d7e421c136b08ed306275ba905a83621c6b79e576931fa4ae43a15b2a8a69"
+    },
+    {
+      "path": "packages/protocol/src/index.ts",
+      "sha256": "7a0f3200f9bc90a1916385e5da54eaff5b275c17f17207e4e1f98afde3a73b5e"
+    }
+  ],
+  "packetBytes": 425503,
+  "packetSha256": "e40e6b94d63108c2d1cd669d43ae933ff56f82ea5d46bb6db4825df0d358db2a"
+}

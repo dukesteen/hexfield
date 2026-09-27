@@ -1,0 +1,114 @@
+{
+  "files": [
+    {
+      "path": "docs/verification/stage07/step6-cheat-design.md",
+      "sha256": "0a08f89cea1306a34bf88d9d42154fe8631ecca0671300361bcc0a067c366056"
+    },
+    {
+      "path": "packages/protocol/src/cheat-proof.ts",
+      "sha256": "2d0ab76b0950bee495719e9e2ceb8f010e0ddc03b24bae8f777fd5aec95e6ffd"
+    },
+    {
+      "path": "packages/protocol/src/cheat-proof.test.ts",
+      "sha256": "21dee775b3aedbefb73cd6a48b590a9d1d623df8bb00e218cab4623e193ea444"
+    },
+    {
+      "path": "packages/protocol/src/cheat-schema.ts",
+      "sha256": "3b83a9f9f2e8b20a0733c28a97eaa2134c2231414d98dfa3e5fd66b386257e5c"
+    },
+    {
+      "path": "packages/protocol/src/command-validation.ts",
+      "sha256": "987fc3ecd88f8eae9ac9599cdcb55187f78d6b93aa3b180a574f2dcd7109a58e"
+    },
+    {
+      "path": "packages/protocol/src/types.ts",
+      "sha256": "818234f00bd384a8ff733ce5bcb3f04dd666b62644b84788b2f83edcb433d927"
+    },
+    {
+      "path": "packages/protocol/src/schemas.ts",
+      "sha256": "0644605fd0e0cd35ededac28e9a52524eb122e8b73839bc94f729fdee160f606"
+    },
+    {
+      "path": "packages/protocol/src/log.ts",
+      "sha256": "30e4904b00200789d847b8dfaa936d279751bd5dc8271432920388876ea1c7c3"
+    },
+    {
+      "path": "packages/protocol/src/crypto-context.ts",
+      "sha256": "95274b001837b43feb89758af1081a5321887ec4a929704719de790f24e75fa7"
+    },
+    {
+      "path": "packages/protocol/src/proposal.ts",
+      "sha256": "4211e661de712a986388a0f7a6bcf6da65f90dd9989d2e96100ba8556c24cfb7"
+    },
+    {
+      "path": "packages/protocol/src/replay.ts",
+      "sha256": "75b25cd358117d3eb70276a3479b703ea1be2e4c67d5be787b36d933dae1be95"
+    },
+    {
+      "path": "packages/protocol/src/command-proofs.ts",
+      "sha256": "22cbc03bb2341ffb22eb1bac418466fcd8b8268f711e818ea8cb50774b28d230"
+    },
+    {
+      "path": "packages/protocol/src/hand-transition.ts",
+      "sha256": "ecf804c47dc2b75483df54b1a61acd334ce17a338aa0dfaee6485201584d147a"
+    },
+    {
+      "path": "packages/protocol/src/beacon.ts",
+      "sha256": "5d04d5861933dd7f05e6f450871287f491c94fbc1e3185e06a8bb5d39a6904e1"
+    },
+    {
+      "path": "packages/protocol/src/deck-setup.ts",
+      "sha256": "2b836901748302678c4e927a87d293d17be73e65223132a34a2e19cdfe7cd840"
+    },
+    {
+      "path": "packages/protocol/src/deck-draw.ts",
+      "sha256": "c4f382015d96bb28d432199d2fda07356859a330e1ac5f78a4a7e05d15962495"
+    },
+    {
+      "path": "packages/protocol/src/count-reveal.ts",
+      "sha256": "bf62d46e587f01e1eb395c7ca02fe526bd8d5da60b91ef1ea512f9a2c525b041"
+    },
+    {
+      "path": "packages/protocol/src/steal-delivery.ts",
+      "sha256": "57865cf44a366a2266120ada993237fe5e19b7e9734cea33abaa073da8b7e1b4"
+    },
+    {
+      "path": "packages/protocol/src/control.ts",
+      "sha256": "c16b96a3556b87f82319be862668e407f14f2a1b445a9c62c9775f5b854bbbe2"
+    },
+    {
+      "path": "packages/protocol/src/validation.ts",
+      "sha256": "bb646520abbab0596ff5d99f1b7f6ffaeed264260c3030917725a050acef5f23"
+    },
+    {
+      "path": "docs/verification/stage07/step6-cheat-review.md",
+      "sha256": "00448aa73403bbaf1cb6f07b3fcf5dcb4b16844f5228c5329a4ad38bc0cfe453"
+    },
+    {
+      "path": "docs/verification/stage07/step6-continuation-plan.md",
+      "sha256": "f5f08644b6a618844200468ce530723eb348e6a5e7cd917b22c3c25d4d481ab5"
+    },
+    {
+      "path": "packages/protocol/src/cheat-log.test.ts",
+      "sha256": "bad18966b34a9c59e15f4b6da46ba52afb154429151e85e9b4196bcce0fc18f7"
+    },
+    {
+      "path": "packages/protocol/src/replicated-log.ts",
+      "sha256": "6be9b01144d9403ffd3ce84a218edd5249244c564b52c76d1098961a92e9c73a"
+    },
+    {
+      "path": "packages/protocol/src/genesis.ts",
+      "sha256": "200ce39353d8e4b809b8638c6b1f888aa534c90b794adcac5c052acb7ae5ea81"
+    },
+    {
+      "path": "packages/protocol/src/beacon-state.ts",
+      "sha256": "a280956782550a92a1272bb3b34b87fac1c6016910b06ba3ba48e16272e27671"
+    },
+    {
+      "path": "packages/protocol/src/deck-ledger.ts",
+      "sha256": "2c3e9778c88b790e9afbe42d5446c29caff44a77abf86655a583851174d82e8d"
+    }
+  ],
+  "packetBytes": 382427,
+  "packetSha256": "532611fddc6912ee44688b0d18f706f7ecdeab8d5daa91114485ff18a38570b6"
+}

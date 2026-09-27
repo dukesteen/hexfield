@@ -1,6 +1,7 @@
 import type { CommandShape, GameConfig, Seat, SystemInput } from '@cp2p/engine';
 import type { PeerId } from './transport.js';
 import type { SignedVote } from './votes.js';
+import type { CheatClaim } from './cheat-types.js';
 
 export const PROTOCOL_VERSION = 1;
 
@@ -94,6 +95,7 @@ export type EntryPayload =
   | { kind: 'genesis'; genesis: Genesis }
   | { kind: 'command'; signed: SignedCommand }
   | { kind: 'system'; input: SystemInput; evidence: SystemEvidence }
+  | { kind: 'cheat-proof'; claim: CheatClaim }
   | {
       kind: 'crypto';
       action: 'beacon-extend' | 'beacon-fixed' | 'deck-pass' | 'steal-fixed' | 'steal-dispute';

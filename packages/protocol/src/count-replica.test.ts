@@ -1,9 +1,10 @@
-import { canonicalEncode, fromBase64Url } from '@cp2p/codec';
+import { canonicalEncode, fromBase64Url, toBase64Url } from '@cp2p/codec';
 import { scalarToBytes } from '@cp2p/crypto';
 import { RESOURCES } from '@cp2p/engine';
 import type { CommandShape, GameState, Result, Seat } from '@cp2p/engine';
 import { describe, expect, test } from 'vitest';
 import { MemoryBeaconContributionStore } from './beacon-contributions.js';
+import { MemoryCheatCandidateStore } from './cheat-candidates.js';
 import { MemoryCountContributionStore } from './count-contributions.js';
 import { MemoryStealDeliveryStore } from './steal-contributions.js';
 import type { SignedCountContribution } from './count-reveal.js';
@@ -137,9 +138,9 @@ function quietRobber(
 
 describe('live verified Monopoly count replication', () => {
   test('certifies owner count contributions and folds private hands after a legal Monopoly', async () => {
-    // Seed 16 puts Monopoly first under the encryption-key-bound ceremony.
-    // Keep the original board so this test still exercises the same legal path.
+    // Keep the original board/game seed; nonce 7 selects a Monopoly-first private permutation.
     const fixture = createVerifiedDeckSession(16, 2, 128, {
+      ceremonyNonce: toBase64Url(new Uint8Array(32).fill(7)),
       boardSeed: fromBase64Url(
         createSimulationGenesis({ seed: 14, humanCount: 2 }).genesis.genesisSeed,
       ),
@@ -167,6 +168,7 @@ describe('live verified Monopoly count replication', () => {
         transport: gatedTransport(network.transport(peer), gate),
         clock: network.clock,
         journal: required(journals[index]),
+        cheatCandidateStore: new MemoryCheatCandidateStore(),
         beaconSource: fixture.beaconSourceFor(seat),
         beaconContributions: new MemoryBeaconContributionStore(),
         deckSetupPasses: fixture.deckSetupPasses,
@@ -217,7 +219,7 @@ describe('live verified Monopoly count replication', () => {
         } else if (slotId === null) {
           const slots = required(live[hostIndex(fixture, buyer)]).getPrivate(buyer)?.slots;
           if (Object.values(slots ?? {}).some((card) => card !== 'monopoly'))
-            throw new Error('Seed 16 first card was not Monopoly');
+            throw new Error('The nonce-7 first card was not Monopoly');
           const ownedSlot = Object.entries(slots ?? {}).find(([, card]) => card === 'monopoly');
           if (ownedSlot) slotId = ownedSlot[0];
         }
@@ -229,15 +231,14 @@ describe('live verified Monopoly count replication', () => {
               command.card === 'monopoly',
           );
           if (playable) {
-            const victims = fixture.genesis.config.seats.filter((seat) => seat !== buyer);
             chosenResource =
-              RESOURCES.find((resource) =>
-                victims.some(
-                  (seat) =>
-                    (required(live[hostIndex(fixture, seat)]).getPrivate(seat)?.hand[resource] ??
-                      0) > 0,
-                ),
-              ) ?? 'brick';
+              RESOURCES.map((resource) => ({
+                resource,
+                possibleVictims: state.seats.filter(
+                  (seat) => seat.seat !== buyer && seat.resources.max[resource] > 0,
+                ).length,
+              })).toSorted((left, right) => right.possibleVictims - left.possibleVictims)[0]
+                ?.resource ?? 'brick';
             expectedVictims = state.seats
               .filter(
                 (seat) => seat.seat !== buyer && seat.resources.max[required(chosenResource)] > 0,
@@ -382,7 +383,7 @@ describe('live verified Monopoly count replication', () => {
       for (const session of live) session.dispose();
       for (const session of restored) session.dispose();
     }
-    // This one fixed ceremony/play/restore trace takes about 29 s alone. Allow
-    // CPU contention in the normal two-worker suite without adding game loops.
+    // This fixed ceremony/play/restore trace takes about 42 s in isolation;
+    // keep suite concurrency bounded so crypto-heavy replicas can finish.
   }, 60_000);
 });

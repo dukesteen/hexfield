@@ -32,6 +32,7 @@ import {
   validateStealState,
 } from './steal-state.js';
 import type { StealState } from './steal-state.js';
+import type { CheatFinding } from './cheat-types.js';
 
 /** Public cryptographic metadata, derived only by replaying the certified log. */
 export interface CryptoContext {
@@ -41,6 +42,8 @@ export interface CryptoContext {
   hands: PublicHandCommitments;
   counts: CountState | null;
   steal: StealState | null;
+  /** First certified finding per seat and evidence kind, derived from log replay. */
+  cheats: readonly CheatFinding[];
 }
 
 export const BEACON_EVIDENCE_PROTOCOL = 'beacon-v1';
@@ -128,6 +131,7 @@ export function initializeCryptoContext(
       hands: hands.value,
       counts: null,
       steal: null,
+      cheats: [],
     },
     genesis,
     engine,
@@ -205,8 +209,10 @@ export function validateCryptoTransition(
     hands: hands.value,
     counts: counts.value,
     steal: steal.value,
+    cheats: current.cheats,
   };
-  if (payload.kind === 'control') return success({ crypto, handled: false, input: null });
+  if (payload.kind === 'control' || payload.kind === 'cheat-proof')
+    return success({ crypto, handled: false, input: null });
   if (payload.kind === 'crypto' && payload.action === 'deck-pass') {
     const applied = applyDeckSetupEntry(crypto.decks, payload.evidence);
     return applied.ok

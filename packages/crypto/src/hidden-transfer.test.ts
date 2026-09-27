@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'vitest';
+import { hashValue, toHex } from '@cp2p/codec';
 import { verifyCdsOr } from './cds.js';
 import type { CdsOrStatement } from './cds.js';
 import { DERIVATION_LABELS, deriveBytes } from './derivation.js';
@@ -84,6 +85,10 @@ describe('hidden card transfer proofs', () => {
   test('supports the maximum eight resource components', () => {
     const { statement, proof } = prove([10, 11, 12, 13, 14, 15, 16, 17], 107);
     expect(verifyHiddenTransfer(statement, proof, CONTEXT)).toBe(true);
+    // Recorded before fixed-H precomputation; hashes the exact canonical proof bytes.
+    expect(toHex(hashValue(proof))).toBe(
+      'b1e86a98ef84995fee4601548728a63045e165d999447a77fd1fd7b201eb573a',
+    );
   });
 
   test('binds the proof to index, context, payload, parent commitments and transfer points', () => {

@@ -298,7 +298,10 @@ describe('genesis validation', () => {
       validateGenesis(verified.genesis, verified.engine, { verifyCommitments: callback }).ok,
     ).toBe(true);
     expect(callback).toHaveBeenCalledOnce();
-    const noDeckBody: GenesisBody = { ...verified.ceremony.body, commitments: { decks: [] } };
+    const noDeckBody: GenesisBody = {
+      ...verified.ceremony.body,
+      commitments: { ...verified.ceremony.body.commitments, decks: [] },
+    };
     const noDeck: Genesis = {
       ...noDeckBody,
       gameId: genesisId(noDeckBody),
@@ -409,6 +412,7 @@ describe('genesis validation', () => {
     const changedBody: GenesisBody = {
       ...ceremony.body,
       commitments: {
+        ...ceremony.body.commitments,
         decks: [
           { ...original, passHashes: [deckPassHash(resigned), ...original.passHashes.slice(1)] },
         ],

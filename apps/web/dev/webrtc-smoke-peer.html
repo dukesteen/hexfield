@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>WebRTC smoke peer</title>
+  </head>
+  <body>
+    <script type="module">
+      import * as harness from '/src/dev/web-rtc-browser-harness.ts';
+
+      window.cp2pSignalSend = async (to, value) => {
+        parent.postMessage({ kind: 'signal', to, value }, location.origin);
+      };
+
+      window.addEventListener('message', async (event) => {
+        if (event.origin !== location.origin || event.source !== parent) return;
+        const message = event.data;
+        if (!message || typeof message !== 'object') return;
+        if (message.kind === 'signal') {
+          harness.receiveSignal(message.from, message.value);
+          return;
+        }
+        if (message.kind !== 'request') return;
+        try {
+          let result;
+          switch (message.action) {
+            case 'identity':
+              result = harness.identity(message.seed);
+              break;
+            case 'start':
+              result = harness.start(message.seed, message.roster);
+              break;
+            case 'status':
+              result = harness.status();
+              break;
+            case 'send':
+              result = harness.send(message.to, message.bulk);
+              break;
+            case 'loss':
+              result = harness.forceLoss(message.peer);
+              break;
+            case 'stop':
+              result = harness.stop();
+              break;
+            default:
+              throw new Error('Unknown smoke action');
+          }
+          parent.postMessage({ kind: 'reply', id: message.id, result }, location.origin);
+        } catch (error) {
+          parent.postMessage(
+            {
+              kind: 'reply',
+              id: message.id,
+              error: error instanceof Error ? error.message : String(error),
+            },
+            location.origin,
+          );
+        }
+      });
+      parent.postMessage({ kind: 'ready' }, location.origin);
+    </script>
+  </body>
+</html>

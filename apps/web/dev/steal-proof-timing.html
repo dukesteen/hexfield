@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Hidden transfer timing</title>
+  </head>
+  <body>
+    <h1>Eight-type hidden transfer timing</h1>
+    <p>
+      Three bounded samples in a worker. Proof generation and verification are timed separately.
+      This diagnostic does not include network or session delivery.
+    </p>
+    <button id="run" type="button">Run three samples</button>
+    <pre id="result" aria-live="polite">Ready.</pre>
+    <script type="module" src="/src/dev/steal-proof-timing.ts"></script>
+  </body>
+</html>

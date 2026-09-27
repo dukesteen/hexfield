@@ -8,6 +8,8 @@ import type { GenesisPolicy } from './genesis.js';
 import type { ValidatedEntry } from './log.js';
 import { advanceContext, proposerFor, validateCertifiedEntry } from './proposal.js';
 import type { CertifiedEntry, ProposalContext } from './proposal.js';
+import { authenticatedCheatSigner, verifyCheatProof } from './cheat-proof.js';
+import type { CheatFinding } from './cheat-proof.js';
 
 const MAX_HISTORICAL_CONTEXTS = 16;
 
@@ -62,23 +64,69 @@ export function replayCertifiedPrefix(
   policy: ReplayPolicy,
   onEntry?: (entry: ValidatedEntry & CertifiedEntry, next: ProposalContext) => Result<void>,
 ): Result<ReplayedPrefix> {
+  return replayCertifiedPrefixWithCache(genesisEntry, entries, engine, policy, new Map(), onEntry);
+}
+
+/** Successful findings are shared only within this certified ancestry. */
+function replayCertifiedPrefixWithCache(
+  genesisEntry: unknown,
+  entries: readonly unknown[],
+  engine: Engine,
+  policy: ReplayPolicy,
+  verifiedFindings: Map<string, CheatFinding>,
+  onEntry?: (entry: ValidatedEntry & CertifiedEntry, next: ProposalContext) => Result<void>,
+): Result<ReplayedPrefix> {
   const initial = initialProposalContext(genesisEntry, engine, policy);
   if (!initial.ok) return initial;
   const certified: CertifiedEntry[] = [];
   const historical = new Map<number, ProposalContext>();
+  const cheatHistorical = new Map<number, ProposalContext>();
   let context: ProposalContext = {
     ...initial.value,
+    verifyHistoricalCheat: (claim) => {
+      const atSeq = claim.evidence.at.seq;
+      if (atSeq > certified.length)
+        return failure('cheat-history', 'Certified evidence parent is unavailable');
+      const parentEntry = atSeq === 0 ? initial.value.log.head : certified[atSeq - 1]?.entry;
+      if (!parentEntry || claim.evidence.at.hash !== entryHash(parentEntry))
+        return failure('cheat-history', 'Certified evidence parent hash does not match');
+      if (!authenticatedCheatSigner(claim, initial.value.log.genesis))
+        return failure('cheat-signature', 'Cheat evidence has no authenticated genesis signer');
+      const key = toHex(hashValue({ domain: 'cp2p/v1/cheat-claim-cache', claim }));
+      const previous = verifiedFindings.get(key);
+      if (previous) return success(previous);
+      let parent = cheatHistorical.get(atSeq);
+      if (!parent) {
+        const replayed = replayCertifiedPrefixWithCache(
+          genesisEntry,
+          certified.slice(0, atSeq),
+          engine,
+          policy,
+          verifiedFindings,
+        );
+        if (!replayed.ok) return replayed;
+        parent = replayed.value.context;
+      }
+      cheatHistorical.delete(atSeq);
+      cheatHistorical.set(atSeq, parent);
+      if (cheatHistorical.size > MAX_HISTORICAL_CONTEXTS) {
+        const oldest = cheatHistorical.keys().next().value;
+        if (oldest !== undefined) cheatHistorical.delete(oldest);
+      }
+      return verifyCheatProof(claim, parent.log);
+    },
     verifyHistoricalAccusation: (control) => {
       const atSeq = objectiveEvidenceSeq(control);
       if (atSeq < 1 || atSeq - 1 > certified.length)
         return failure('control-history', 'Certified evidence parent is unavailable');
       let parent = historical.get(atSeq);
       if (!parent) {
-        const replayed = replayCertifiedPrefix(
+        const replayed = replayCertifiedPrefixWithCache(
           genesisEntry,
           certified.slice(0, atSeq - 1),
           engine,
           policy,
+          verifiedFindings,
         );
         if (!replayed.ok) return replayed;
         parent = replayed.value.context;
@@ -108,6 +156,18 @@ export function replayCertifiedPrefix(
     const checked = validateCertifiedEntry(entry, context);
     if (!checked.ok) return checked;
     const next = checked.value;
+    if (next.entry.payload.kind === 'cheat-proof') {
+      const claim = next.entry.payload.claim;
+      const finding = next.crypto?.cheats.find(
+        (item) => item.seat === claim.seat && item.kind === claim.evidence.kind,
+      );
+      if (!finding)
+        return failure('cheat-replay', 'Certified cheat record has no replayed finding');
+      verifiedFindings.set(
+        toHex(hashValue({ domain: 'cp2p/v1/cheat-claim-cache', claim })),
+        finding,
+      );
+    }
     certified.push({ entry: next.entry, certificate: next.certificate });
     if (next.input !== null) inputs.push(next.input);
     events.push(...next.events);

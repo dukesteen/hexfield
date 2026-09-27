@@ -63,7 +63,27 @@ importers:
         specifier: ^3
         version: 3.2.7(@types/node@22.20.4)(happy-dom@20.14.5)(jiti@2.7.0)(lightningcss@1.33.0)
 
-  apps/signaling: {}
+  apps/signaling:
+    dependencies:
+      '@cp2p/codec':
+        specifier: workspace:^
+        version: link:../../packages/codec
+      '@cp2p/crypto':
+        specifier: workspace:^
+        version: link:../../packages/crypto
+      '@cp2p/p2p':
+        specifier: workspace:^
+        version: link:../../packages/p2p
+      '@cp2p/protocol':
+        specifier: workspace:^
+        version: link:../../packages/protocol
+      ws:
+        specifier: ^8.21.3
+        version: 8.21.3
+    devDependencies:
+      '@types/ws':
+        specifier: ^8.18.1
+        version: 8.18.1
 
   apps/web:
     dependencies:
@@ -187,6 +207,12 @@ importers:
 
   packages/p2p:
     dependencies:
+      '@cp2p/codec':
+        specifier: workspace:*
+        version: link:../codec
+      '@cp2p/crypto':
+        specifier: workspace:*
+        version: link:../crypto
       '@cp2p/engine':
         specifier: workspace:*
         version: link:../engine

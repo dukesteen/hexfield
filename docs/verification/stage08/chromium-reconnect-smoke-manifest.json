@@ -1,0 +1,54 @@
+[
+  {
+    "path": "packages/p2p/src/framing.ts",
+    "sha256": "b5e58ae5e41d37f2062a2c78c34a48c581d4aded94f015f7fa50aa4a879568c5"
+  },
+  {
+    "path": "packages/p2p/src/peer-link.ts",
+    "sha256": "18c37c369b55438d5f477fa8ea61829b8801f89a49f65da57569fa617d8ef74d"
+  },
+  {
+    "path": "packages/p2p/src/signaling.ts",
+    "sha256": "63ab105f84c6da364335130c61d2bc7c71d1273b1cea4dd4f0d2fbb64c591f7c"
+  },
+  {
+    "path": "packages/p2p/src/signaling-envelope.ts",
+    "sha256": "ea1e87c568529f2ec750bd264144e62675f0cd52f368c6a758f891e2ee4025a1"
+  },
+  {
+    "path": "packages/p2p/src/in-process-signaling.ts",
+    "sha256": "c6b05b67f625740470ebdb2dbfc461c147ea9e42ebf765afe010b13664a454ff"
+  },
+  {
+    "path": "packages/p2p/src/web-rtc-transport.ts",
+    "sha256": "6e89ef6bc40d68e05d9b57f12d717cc017d518060a2c3791bb221fa38fa9db2c"
+  },
+  {
+    "path": "packages/p2p/src/index.ts",
+    "sha256": "fcafaa8625826f09d3e1b0af9152044f1dcc7dad721e7b18762c185c542841c9"
+  },
+  {
+    "path": "apps/web/src/dev/web-rtc-browser-harness.ts",
+    "sha256": "53febb3bffc371cb02ca98b28e08f1b0042b2e3c1ac379d4bd044184f5695499"
+  },
+  {
+    "path": "apps/web/tests/webrtc-transport.e2e.ts",
+    "sha256": "207965294d5648c4317a5120b7e1843aeefb806af3f630d0eb9731739cca950c"
+  },
+  {
+    "path": "apps/web/dev/webrtc-smoke.html",
+    "sha256": "f74a7eac10fee8a4c4c224361695de7a1efde78fcff15fd304432ff792cd1847"
+  },
+  {
+    "path": "apps/web/dev/webrtc-smoke-peer.html",
+    "sha256": "375d495365b779a42cb5fb505b7978268b5ec69eb2bc03d3816d74bcae8c47d0"
+  },
+  {
+    "path": "apps/web/vite.config.ts",
+    "sha256": "d3815fcdbd46bad1e345b4e50e1d34d8c62e0db309c7db71ca59c751dc1175b5"
+  },
+  {
+    "path": "apps/web/playwright.config.ts",
+    "sha256": "0b81dd8bc6472a8e43196da87e88f8d65b483d7b6fec9c88f82f9f817944540f"
+  }
+]

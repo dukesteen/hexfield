@@ -1,0 +1,56 @@
+{
+  "packetSha256": "0b5e9e936d00ca30d4643661fdca6d0dd0d8c01f5729fb4a4dbb3245953cbb70",
+  "packetBytes": 52447,
+  "files": [
+    {
+      "path": "apps/signaling/src/room-core.ts",
+      "sha256": "2dcc3c6789d0786a35afea15727a235eda4fc860ce971d2b36d77835efcc2650",
+      "bytes": 8341
+    },
+    {
+      "path": "apps/signaling/src/room-core.test.ts",
+      "sha256": "ef4fe9abd8ef7194e2961b1cdf558bf76e5688cbe10539edc272e30f1fc16d05",
+      "bytes": 5187
+    },
+    {
+      "path": "apps/signaling/src/server.ts",
+      "sha256": "9754115f17994d5962caa4cb8216dc36fa21fa3c24e85f59dd7fa5e8736335ec",
+      "bytes": 4589
+    },
+    {
+      "path": "apps/signaling/src/server.test.ts",
+      "sha256": "f2d1dc4ebcc13b72ef0eeb8be39f97ffee2421ffffb35fa26018128033a1a543",
+      "bytes": 3658
+    },
+    {
+      "path": "packages/p2p/src/server-signaling.ts",
+      "sha256": "63f26980bfe16f78b6055b88f1833dc449ef447ac74b575a436949cab63024d1",
+      "bytes": 8148
+    },
+    {
+      "path": "packages/p2p/src/server-signaling.test.ts",
+      "sha256": "3a81d2506f1f98ea01bdf6d066e4f74c4c7f9a166e2178fca0fc0c84d07f8fe8",
+      "bytes": 4825
+    },
+    {
+      "path": "packages/p2p/src/server-signaling-wire.ts",
+      "sha256": "4ffa5e5fb9cdc8cd0cddf93036abbbf8365fb479afb7fa6b1b43fd787099fba8",
+      "bytes": 1418
+    },
+    {
+      "path": "packages/p2p/src/signaling-envelope.ts",
+      "sha256": "ea1e87c568529f2ec750bd264144e62675f0cd52f368c6a758f891e2ee4025a1",
+      "bytes": 4813
+    },
+    {
+      "path": "packages/p2p/src/signaling.ts",
+      "sha256": "63ab105f84c6da364335130c61d2bc7c71d1273b1cea4dd4f0d2fbb64c591f7c",
+      "bytes": 842
+    },
+    {
+      "path": "docs/08-webrtc-networking.md",
+      "sha256": "ef1b2f2e9bac178d9ddb42baaab1a4f482f10c2355de4a98cc06625b7a973e62",
+      "bytes": 8979
+    }
+  ]
+}

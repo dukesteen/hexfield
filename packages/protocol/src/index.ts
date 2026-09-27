@@ -4,6 +4,8 @@ export { createBeaconSecretSource } from './beacon-source.js';
 export type { BeaconSecretProvider, BeaconSecretSourceContext } from './beacon-source.js';
 
 export { MemoryBeaconContributionStore } from './beacon-contributions.js';
+export { MemoryCheatCandidateStore } from './cheat-candidates.js';
+export type { CheatCandidateStore } from './cheat-candidates.js';
 export type {
   BeaconContribution,
   BeaconContributionStore,

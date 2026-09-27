@@ -3,6 +3,7 @@ import { RESOURCES } from '@cp2p/engine';
 import type { CommandShape, Result, Seat } from '@cp2p/engine';
 import { expect, test } from 'vitest';
 import { MemoryBeaconContributionStore } from './beacon-contributions.js';
+import { MemoryCheatCandidateStore } from './cheat-candidates.js';
 import { MemoryCountContributionStore } from './count-contributions.js';
 import { genesisDigest } from './genesis.js';
 import { createHandSecretSource } from './hand-source.js';
@@ -119,6 +120,7 @@ test('a live hidden steal survives a dropped delivery and restart with one priva
       transport: gated(network.transport(human.publicKey), gate),
       clock: network.clock,
       journal: new MemoryProtocolJournal(),
+      cheatCandidateStore: new MemoryCheatCandidateStore(),
       beaconSource: fixture.beaconSourceFor(human.seat),
       beaconContributions: new MemoryBeaconContributionStore(),
       deckSetupPasses: fixture.deckSetupPasses,

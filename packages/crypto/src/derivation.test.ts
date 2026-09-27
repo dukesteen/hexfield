@@ -36,6 +36,22 @@ describe('Stage 07 HKDF derivation', () => {
     expect(deriveBytes(SEED, label, { game: 'g', ordinal: 2 }, 64)).toEqual(reordered);
   });
 
+  test('keeps escrow distribution retry entropy in its own registered domain', () => {
+    const context = {
+      protocol: 'escrow-distribution-retry-entropy-v1',
+      ceremonyId: 'ceremony',
+      seat: 2,
+    };
+    const entropy = deriveBytes(SEED, DERIVATION_LABELS.escrowDistributionEntropy, context, 32);
+    expect(entropy).toHaveLength(32);
+    expect(entropy).not.toEqual(
+      deriveBytes(SEED, DERIVATION_LABELS.escrowCoefficient, context, 32),
+    );
+    expect(
+      deriveBytes(SEED, DERIVATION_LABELS.escrowDistributionEntropy, { ...context, seat: 3 }, 32),
+    ).not.toEqual(entropy);
+  });
+
   test('derives nonzero field scalars with domain and operation separation', () => {
     const context = { deck: 'development', epoch: 2, position: 4 };
     const shuffle = deriveScalar(SEED, DERIVATION_LABELS.deckShuffle, context);

@@ -17,6 +17,7 @@ export const DERIVATION_LABELS = Object.freeze({
   proofRandomness: 'proof-randomness',
   sealEphemeral: 'seal-ephemeral',
   escrowCoefficient: 'escrow-coefficient',
+  escrowDistributionEntropy: 'escrow-distribution-entropy',
 } as const);
 
 export type DerivationLabel = (typeof DERIVATION_LABELS)[keyof typeof DERIVATION_LABELS];

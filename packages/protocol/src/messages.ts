@@ -22,6 +22,7 @@ import {
 } from './schema-values.js';
 import { excludeProposerControlSchema, signedCommandSchema } from './schemas.js';
 import { signedVoteSchema } from './votes.js';
+import { cheatClaimSchema } from './cheat-schema.js';
 import { decodeMessage, encodeMessage } from './wire.js';
 import type { Result } from '@cp2p/engine';
 
@@ -71,6 +72,10 @@ const commitSchema = v.strictObject({ t: v.literal('COMMIT'), certified: certifi
 const accuseSchema = v.strictObject({
   t: v.literal('ACCUSE'),
   control: excludeProposerControlSchema,
+});
+const cheatClaimMessageSchema = v.strictObject({
+  t: v.literal('CHEAT_CLAIM'),
+  claim: cheatClaimSchema,
 });
 const syncRequestSchema = v.strictObject({
   t: v.literal('SYNC_REQ'),
@@ -131,6 +136,7 @@ export const protocolMessageSchema = v.variant('t', [
   voteMessageSchema,
   commitSchema,
   accuseSchema,
+  cheatClaimMessageSchema,
   syncRequestSchema,
   syncResponseSchema,
   snapshotRequestSchema,

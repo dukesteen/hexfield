@@ -17,6 +17,7 @@ import type { ExcludeProposerControl, LogEntry, ProposalBody, SignedProposal } f
 import { parseCanonical } from './validation.js';
 import { signedVoteSchema, verifyCertificate } from './votes.js';
 import type { SignedVote, VoteContext } from './votes.js';
+import type { CheatClaim, CheatFinding } from './cheat-proof.js';
 
 export type { ProposalBody, SignedProposal } from './types.js';
 
@@ -28,6 +29,7 @@ export interface ProposalContext {
   policy: Omit<EntryPolicy, 'term' | 'sequencer'>;
   /** Internal resolver built from replayed certified entries; never from wire metadata. */
   verifyHistoricalAccusation?: (control: ExcludeProposerControl) => Result<string>;
+  verifyHistoricalCheat?: (claim: CheatClaim) => Result<CheatFinding>;
 }
 
 export function objectiveProofParentHash(
@@ -184,6 +186,9 @@ function validateEntry(entry: LogEntry, context: ProposalContext): Result<Valida
     term: entry.term,
     sequencer: proposer.publicKey,
     verifyControl: (control) => validateControlForProposal(control, context),
+    ...(context.verifyHistoricalCheat
+      ? { verifyHistoricalCheat: context.verifyHistoricalCheat }
+      : {}),
   });
 }
 

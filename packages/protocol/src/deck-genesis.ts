@@ -31,6 +31,7 @@ export function deckCeremonyId(genesis: GenesisBody): string {
       config: genesis.config,
       seats: genesis.seats,
       ceremonyNonce: genesis.ceremonyNonce,
+      masters: genesis.commitments.masters ?? [],
     }),
   );
 }

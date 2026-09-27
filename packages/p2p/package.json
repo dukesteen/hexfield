@@ -9,12 +9,19 @@
       "types": "./src/index.ts",
       "@cp2p/source": "./src/index.ts",
       "default": "./dist/index.js"
+    },
+    "./server-signaling-wire": {
+      "types": "./src/server-signaling-wire.ts",
+      "@cp2p/source": "./src/server-signaling-wire.ts",
+      "default": "./dist/server-signaling-wire.js"
     }
   },
   "scripts": {
     "build": "tsc -b"
   },
   "dependencies": {
+    "@cp2p/codec": "workspace:*",
+    "@cp2p/crypto": "workspace:*",
     "@cp2p/engine": "workspace:*",
     "@cp2p/protocol": "workspace:*"
   }

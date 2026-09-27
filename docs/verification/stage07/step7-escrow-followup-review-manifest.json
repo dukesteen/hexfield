@@ -1,0 +1,142 @@
+{
+  "files": [
+    {
+      "path": "docs/07-fair-randomness-hidden-info.md",
+      "sha256": "92bbc982109dfa4affe2ba9c86433b0bc009c9b28278fb55b2d9819d1c94baf5"
+    },
+    {
+      "path": "docs/verification/stage07/step7-escrow-design.md",
+      "sha256": "f12f43882b90f2a42e7e558aba699ffeb906ad50b26c3928b535a962cc64e46d"
+    },
+    {
+      "path": "packages/protocol/src/genesis-masters.ts",
+      "sha256": "1eeace43df40c0b2a5ccaebf6c4d0de5814d18360689654fb02ae22d54b19c6d"
+    },
+    {
+      "path": "packages/protocol/src/genesis-secrets.ts",
+      "sha256": "78472fb7f4f75df6b38fa3d860fd992afe2ee6e5f4b60a6e1e7ed5289a005478"
+    },
+    {
+      "path": "packages/protocol/src/genesis-secrets.test.ts",
+      "sha256": "76855a780605e81487e2a1f0fb49faced62829bc861012906c97cbc7ec11d8c6"
+    },
+    {
+      "path": "packages/protocol/src/genesis-escrow.ts",
+      "sha256": "1f0eff6287fdfd989448e8dded1e389594408699cb6040dcd4b188097a8e450c"
+    },
+    {
+      "path": "packages/protocol/src/genesis-escrow.test.ts",
+      "sha256": "d9db812ac7252c1c0ccf88c95b4047f66c04a27ce213f4faf8aa2e887ef9d71c"
+    },
+    {
+      "path": "packages/protocol/src/escrow-roster.ts",
+      "sha256": "11a7f43e81d8dc627fdb711ffde1a9070870ad1a6c71f62f939e07b0c2e7d9c1"
+    },
+    {
+      "path": "packages/protocol/src/escrow-roster.test.ts",
+      "sha256": "007a800556675871cac298c332bba6cad19ab74911c16c0c1eebd0126532fc03"
+    },
+    {
+      "path": "packages/protocol/src/escrow-distribution.ts",
+      "sha256": "4d375994d23b14101a66a9c128981db87a6358e45aab8e3e5b673a7786ee5648"
+    },
+    {
+      "path": "packages/protocol/src/escrow-distribution.test.ts",
+      "sha256": "dd1ff0e99b6d46c5e0ae4a77c0416ec704eaa4b3345ac0fcb37ba2bdfb2be989"
+    },
+    {
+      "path": "packages/protocol/src/genesis.ts",
+      "sha256": "200ce39353d8e4b809b8638c6b1f888aa534c90b794adcac5c052acb7ae5ea81"
+    },
+    {
+      "path": "packages/protocol/src/genesis-encryption.ts",
+      "sha256": "ae9a7ed8feca820afc61a5de336e8104384c9eb38f525c0b81e86d6493eb2bf9"
+    },
+    {
+      "path": "packages/protocol/src/deck-genesis.ts",
+      "sha256": "6403740e3daf7d1b45faca388adb626845b671d4650b0c84127f00d3e955043a"
+    },
+    {
+      "path": "packages/protocol/src/deck-source.ts",
+      "sha256": "5b27e8a399fdd0124759c5d253a7dd216ce569d3ef3ba0c2eb670575e8cce1eb"
+    },
+    {
+      "path": "packages/protocol/src/beacon-source.ts",
+      "sha256": "a3c0a4a466a1d5b2607f9992636ee380a8a17858ff783ea2beb41fea0b34db84"
+    },
+    {
+      "path": "packages/protocol/src/beacon-state.ts",
+      "sha256": "a280956782550a92a1272bb3b34b87fac1c6016910b06ba3ba48e16272e27671"
+    },
+    {
+      "path": "packages/protocol/src/deck-ledger.ts",
+      "sha256": "2c3e9778c88b790e9afbe42d5446c29caff44a77abf86655a583851174d82e8d"
+    },
+    {
+      "path": "packages/protocol/src/steal-source.ts",
+      "sha256": "a40280be340b065ef079aab38fb9af8d51fd5c149fb9e447d2a615190f799a21"
+    },
+    {
+      "path": "packages/protocol/src/schema-values.ts",
+      "sha256": "5f42a01a0d5a59abc1b93a5462a010ec56609ec44c050edd57e85791f5f0ef96"
+    },
+    {
+      "path": "packages/protocol/src/validation.ts",
+      "sha256": "bb646520abbab0596ff5d99f1b7f6ffaeed264260c3030917725a050acef5f23"
+    },
+    {
+      "path": "packages/protocol/src/schemas.ts",
+      "sha256": "0644605fd0e0cd35ededac28e9a52524eb122e8b73839bc94f729fdee160f606"
+    },
+    {
+      "path": "packages/protocol/src/types.ts",
+      "sha256": "818234f00bd384a8ff733ce5bcb3f04dd666b62644b84788b2f83edcb433d927"
+    },
+    {
+      "path": "packages/crypto/src/seal.ts",
+      "sha256": "2732bbdd7ad064932fac132054c304a96fef4de68b7292b253d84189b662a254"
+    },
+    {
+      "path": "packages/crypto/src/feldman.ts",
+      "sha256": "9579d6b4b0ff4f8be57afc3d4f76dd3ec993571098a656e7f95b5915f0ad7dcd"
+    },
+    {
+      "path": "packages/crypto/src/sigma.ts",
+      "sha256": "e04a49de15d73a54cc4191a4eed4b2dddab6c2e899636c2b7e8decbff3750ea8"
+    },
+    {
+      "path": "packages/crypto/src/group.ts",
+      "sha256": "76081f91735476a2da74bf9ab9c85a94f6d5f70c86760e8f1986b6eb1ec2ad80"
+    },
+    {
+      "path": "packages/crypto/src/derivation.ts",
+      "sha256": "76bfa6e36fb943a462bb09f7b0acb1786235837e6297d4a4275bdcfbff3db30a"
+    },
+    {
+      "path": "packages/crypto/src/identity.ts",
+      "sha256": "a892b57073e7208f99c37480dde87662a6274236f5dc2ad18384a7bcc8c28688"
+    },
+    {
+      "path": "docs/verification/stage07/step7-escrow-review.md",
+      "sha256": "7d6da43740597f352b738f3e7e9a0fe8a46576c6c12502eced82710cf937f0b0"
+    },
+    {
+      "path": "docs/verification/stage07/step7-escrow-review-response.md",
+      "sha256": "e502f9dcce6998afaf7b6bac7f41ae186ac05c9590e8660994957361832df556"
+    },
+    {
+      "path": "packages/protocol/src/escrow-opening.ts",
+      "sha256": "c044d22d3ba48db02167aa36b9ed583858968f9cbc6670ac7415fa65e4c2adce"
+    },
+    {
+      "path": "packages/protocol/src/escrow-dispute.ts",
+      "sha256": "a791fc9f674148ada67268317d9641dbdf2f4e4a9e5efecfa1e404b554e4606e"
+    },
+    {
+      "path": "packages/protocol/src/escrow-dispute.test.ts",
+      "sha256": "1a77ff5cbac90b2777b01e8ed8e3b1d61a134e4befc1d3ae45f3f35afa878d13"
+    }
+  ],
+  "packetBytes": 270241,
+  "packetSha256": "54bca4e5d72f776fdbe67d5f2ec26c11593ba897bc443c3495c1ba222e73d1a4"
+}

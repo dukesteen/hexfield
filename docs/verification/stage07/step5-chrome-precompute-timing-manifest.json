@@ -1,0 +1,122 @@
+[
+  {
+    "path": "apps/web/dev/steal-proof-timing.html",
+    "sha256": "519bd1ef41f6dbeacc1511c1c74f4dce6563a0e05b9d5306a81fd2e1d353cfb8"
+  },
+  {
+    "path": "apps/web/src/dev/steal-proof-timing.ts",
+    "sha256": "e9c9d6304fc780f8008dacdec05cd1dba0594c2b7cf100c79c1eb45503844da0"
+  },
+  {
+    "path": "apps/web/src/dev/steal-proof-timing.worker.ts",
+    "sha256": "3d6fb980ff49c67bb564ec95bab1e17d2e26449158be8b602bd5ce6305b618c6"
+  },
+  {
+    "path": "packages/crypto/src/cds.test.ts",
+    "sha256": "211313ef106f5bb00783dceb730ea7c3c3622efb2bce1062a4e472269bec0b29"
+  },
+  {
+    "path": "packages/crypto/src/cds.ts",
+    "sha256": "01de053528ab6f217d26aa2d7b8904a2c3133b24b7a595b06b3eb3df736404a9"
+  },
+  {
+    "path": "packages/crypto/src/derivation.test.ts",
+    "sha256": "6a97c48994b9ff72327715eae6c88399598bf4cef0ba9ba65bffd8d8716b6da5"
+  },
+  {
+    "path": "packages/crypto/src/derivation.ts",
+    "sha256": "11fb358c9a575f2ece941ecd972468ae985098ed74e0df6b3c4554e3de3271b7"
+  },
+  {
+    "path": "packages/crypto/src/feldman.test.ts",
+    "sha256": "6af53c4eac260fe18c769682fc12a4a326985139f708af949a9877f9e862e46d"
+  },
+  {
+    "path": "packages/crypto/src/feldman.ts",
+    "sha256": "9579d6b4b0ff4f8be57afc3d4f76dd3ec993571098a656e7f95b5915f0ad7dcd"
+  },
+  {
+    "path": "packages/crypto/src/group.test.ts",
+    "sha256": "7b6b93bfb50548e1a72466485de321dfd2fa57e34236255288bb29054414fc3a"
+  },
+  {
+    "path": "packages/crypto/src/group.ts",
+    "sha256": "22c2dcc8d7c334f202026a4d39ef466f63b9ebc0e146fdda84b05c5099818c03"
+  },
+  {
+    "path": "packages/crypto/src/hash-chain.test.ts",
+    "sha256": "4af9370134b5127ac4d40715c96fc855b0f133bdb1d6691ea328decb3b773001"
+  },
+  {
+    "path": "packages/crypto/src/hash-chain.ts",
+    "sha256": "27f704961bc6fc0a7fc8aeb215d46a8c7d5963e20a2cf2bfa33a61898e5f4735"
+  },
+  {
+    "path": "packages/crypto/src/hidden-transfer.test.ts",
+    "sha256": "bf79920571d1e3b9cac1364fdda46cda5ed12af5ed0619a4ccf8df48abf4b2a2"
+  },
+  {
+    "path": "packages/crypto/src/hidden-transfer.ts",
+    "sha256": "59e918a7d8cad0278e2085bfc8a31e2ffab7e78076f85f6be48c43507b36ff61"
+  },
+  {
+    "path": "packages/crypto/src/identity.test.ts",
+    "sha256": "ba28c5e5bc8227349b6a83c4f8d1584e4a7a7fe0ebcdfee267d563b07aec98c0"
+  },
+  {
+    "path": "packages/crypto/src/identity.ts",
+    "sha256": "a892b57073e7208f99c37480dde87662a6274236f5dc2ad18384a7bcc8c28688"
+  },
+  {
+    "path": "packages/crypto/src/index.test.ts",
+    "sha256": "3ff3e1c9745f4c8989af63c4e4a999e75006c845ac505386c607a7a6c26231bd"
+  },
+  {
+    "path": "packages/crypto/src/index.ts",
+    "sha256": "26599a68ac09c8eb2c2f8d144e1450200ddd8f067d9a4c9e9b51757061edcf30"
+  },
+  {
+    "path": "packages/crypto/src/proof-transcript.ts",
+    "sha256": "287c895b9ea527273411632be3a8e61a129f00f8e12272d5c28907344eaeb5c8"
+  },
+  {
+    "path": "packages/crypto/src/range.test.ts",
+    "sha256": "af05895036207bdc45a35a86d79243b8b02733a1d9cb61f13744eccde30e57c3"
+  },
+  {
+    "path": "packages/crypto/src/range.ts",
+    "sha256": "c9c633f02a7da0c590de0bddf529edd2a0b000c60618fcc79812063996345bf7"
+  },
+  {
+    "path": "packages/crypto/src/seal.test.ts",
+    "sha256": "e57c61447179d49015ef0e0c9f4b62f6f29bd39f77b319d5d433139388348061"
+  },
+  {
+    "path": "packages/crypto/src/seal.ts",
+    "sha256": "2732bbdd7ad064932fac132054c304a96fef4de68b7292b253d84189b662a254"
+  },
+  {
+    "path": "packages/crypto/src/shuffle.test.ts",
+    "sha256": "9ca58c5e08f225983960d77d52ae3b39184229081ec9aea6c4ffa19557b79182"
+  },
+  {
+    "path": "packages/crypto/src/shuffle.ts",
+    "sha256": "9dc138197533798261ad90fdf013575efc114b35302e8280857c72b66da966ea"
+  },
+  {
+    "path": "packages/crypto/src/sigma.test.ts",
+    "sha256": "cb185aa48fac42ab3472ba3637f69085ad8f76f0caa6f6ef9f01d4a2197cf27b"
+  },
+  {
+    "path": "packages/crypto/src/sigma.ts",
+    "sha256": "e04a49de15d73a54cc4191a4eed4b2dddab6c2e899636c2b7e8decbff3750ea8"
+  },
+  {
+    "path": "packages/crypto/src/uniform.test.ts",
+    "sha256": "048659f2317da2eeb2a594ef1b1be0f67b00ee223a12e5f54cbd4f2e03eac880"
+  },
+  {
+    "path": "packages/crypto/src/uniform.ts",
+    "sha256": "4259bdc4873e4267e05a96632c0f95cd52ef7b4273f807d083ef8cce7c9cec60"
+  }
+]

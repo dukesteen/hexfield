@@ -1,0 +1,86 @@
+{
+  "files": [
+    {
+      "path": "docs/verification/stage07/step6-cheat-design.md",
+      "sha256": "21ab5bbc890f55b16c6217efb1d5e73f6750e8f45b1535448bbeff7cdfb684b3"
+    },
+    {
+      "path": "packages/protocol/src/cheat-proof.ts",
+      "sha256": "c870f1547f47f21a18bc793fe288f4fe4f582778f8c9865a714406f354328376"
+    },
+    {
+      "path": "packages/protocol/src/cheat-proof.test.ts",
+      "sha256": "bef09299b6d7df9e5c09ccadba84cc63fffe37c6c799c6cf2a07d1eb86be6edc"
+    },
+    {
+      "path": "packages/protocol/src/cheat-schema.ts",
+      "sha256": "3b83a9f9f2e8b20a0733c28a97eaa2134c2231414d98dfa3e5fd66b386257e5c"
+    },
+    {
+      "path": "packages/protocol/src/command-validation.ts",
+      "sha256": "68d15780bee6bed8a4817cbc8dc8d3e79faddaa2a3966b5fe294a4c748e103d4"
+    },
+    {
+      "path": "packages/protocol/src/types.ts",
+      "sha256": "818234f00bd384a8ff733ce5bcb3f04dd666b62644b84788b2f83edcb433d927"
+    },
+    {
+      "path": "packages/protocol/src/schemas.ts",
+      "sha256": "0644605fd0e0cd35ededac28e9a52524eb122e8b73839bc94f729fdee160f606"
+    },
+    {
+      "path": "packages/protocol/src/log.ts",
+      "sha256": "dbd4a4e7bbbfa24650673a55da638b6655c2f018dc05048ca4cbf82baa010620"
+    },
+    {
+      "path": "packages/protocol/src/crypto-context.ts",
+      "sha256": "95274b001837b43feb89758af1081a5321887ec4a929704719de790f24e75fa7"
+    },
+    {
+      "path": "packages/protocol/src/proposal.ts",
+      "sha256": "4211e661de712a986388a0f7a6bcf6da65f90dd9989d2e96100ba8556c24cfb7"
+    },
+    {
+      "path": "packages/protocol/src/replay.ts",
+      "sha256": "6afb32ff3974e3da9a2efc42e167eae321e8731cc92a98b6dbd384c9fe743b32"
+    },
+    {
+      "path": "packages/protocol/src/command-proofs.ts",
+      "sha256": "22cbc03bb2341ffb22eb1bac418466fcd8b8268f711e818ea8cb50774b28d230"
+    },
+    {
+      "path": "packages/protocol/src/hand-transition.ts",
+      "sha256": "ecf804c47dc2b75483df54b1a61acd334ce17a338aa0dfaee6485201584d147a"
+    },
+    {
+      "path": "packages/protocol/src/beacon.ts",
+      "sha256": "5d04d5861933dd7f05e6f450871287f491c94fbc1e3185e06a8bb5d39a6904e1"
+    },
+    {
+      "path": "packages/protocol/src/deck-setup.ts",
+      "sha256": "2b836901748302678c4e927a87d293d17be73e65223132a34a2e19cdfe7cd840"
+    },
+    {
+      "path": "packages/protocol/src/deck-draw.ts",
+      "sha256": "c4f382015d96bb28d432199d2fda07356859a330e1ac5f78a4a7e05d15962495"
+    },
+    {
+      "path": "packages/protocol/src/count-reveal.ts",
+      "sha256": "bf62d46e587f01e1eb395c7ca02fe526bd8d5da60b91ef1ea512f9a2c525b041"
+    },
+    {
+      "path": "packages/protocol/src/steal-delivery.ts",
+      "sha256": "57865cf44a366a2266120ada993237fe5e19b7e9734cea33abaa073da8b7e1b4"
+    },
+    {
+      "path": "packages/protocol/src/control.ts",
+      "sha256": "c16b96a3556b87f82319be862668e407f14f2a1b445a9c62c9775f5b854bbbe2"
+    },
+    {
+      "path": "packages/protocol/src/validation.ts",
+      "sha256": "bb646520abbab0596ff5d99f1b7f6ffaeed264260c3030917725a050acef5f23"
+    }
+  ],
+  "packetBytes": 210994,
+  "packetSha256": "2c742d57c9389a164224dc6ffd38d77d71c9ecd9f54da6609df98205832d73f7"
+}

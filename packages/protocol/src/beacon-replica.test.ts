@@ -1,5 +1,5 @@
 import { canonicalEncode, fromBase64Url, hashValue, toBase64Url, toHex } from '@cp2p/codec';
-import { createHashChain } from '@cp2p/crypto';
+import { createHashChain, signObject } from '@cp2p/crypto';
 import { failure, success } from '@cp2p/engine';
 import type { Result } from '@cp2p/engine';
 import { describe, expect, test, vi } from 'vitest';
@@ -10,6 +10,8 @@ import {
 } from './beacon-contributions.js';
 import { beaconOperationId, signBeaconReveal } from './beacon.js';
 import { getBeaconOperation } from './beacon-state.js';
+import { MemoryCheatCandidateStore } from './cheat-candidates.js';
+import type { CheatClaim } from './cheat-proof.js';
 import { MemoryCountContributionStore } from './count-contributions.js';
 import { MemoryStealDeliveryStore } from './steal-contributions.js';
 import {
@@ -25,6 +27,7 @@ import { signCommand } from './log.js';
 import { decodeProtocolMessage, encodeProtocolMessage } from './messages.js';
 import type { ProtocolMessage } from './messages.js';
 import { ReplicatedLog } from './replicated-log.js';
+import { proposerFor } from './proposal.js';
 import type { ReplicatedLogOptions, ReplicatedLogStatus } from './replicated-log.js';
 import { randomDerivations } from './random-derivations.js';
 import { replayCertifiedPrefix, snapshotFromContext } from './replay.js';
@@ -233,6 +236,7 @@ function optionsFor(
     transport,
     clock,
     journal,
+    cheatCandidateStore: new MemoryCheatCandidateStore(),
     beaconSource: required(fixture.sources[position]),
     beaconContributions: store,
     // This isolated beacon fixture never enters Monopoly.
@@ -667,7 +671,18 @@ describe('verified beacon contribution replication', () => {
     const secondSent: ProtocolMessage[] = [];
     const before: ProtocolMessage[] = [];
     const firstTransport = observe(network.transport(peer), before);
-    const secondTransport = observeWithoutSystemContributions(network.transport(other), secondSent);
+    const secondObserved = observe(network.transport(other), secondSent);
+    const secondTransport = {
+      ...secondObserved,
+      broadcast(bytes: Uint8Array) {
+        const message = value(decodeProtocolMessage(bytes));
+        if (message.t === 'SYS_CONTRIB' || message.t === 'CHEAT_CLAIM') {
+          secondSent.push(message);
+          return;
+        }
+        secondObserved.broadcast(bytes);
+      },
+    };
     const original = value(
       await ReplicatedLog.create(
         optionsFor(fixture, 0, firstTransport, network.clock, journal, store),
@@ -689,6 +704,42 @@ describe('verified beacon contribution replication', () => {
     await settle([original, second], network.clock);
     const setupCount = setupPassCount(fixture);
     expect(original.getContext().log.head.seq).toBe(setupCount);
+    const pending = second.getContext();
+    expect(
+      proposerFor(setupCount + 1, 1, pending.membership, pending.excludedProposers).seat,
+    ).not.toBe(required(fixture.humans[1]).seat);
+    if (!pending.log.crypto) throw new Error('Verified beacon context is missing');
+    const active = value(getBeaconOperation(pending.log.crypto.beacon));
+    const offender = required(fixture.humans[0]);
+    const badRevealBody = {
+      operationId: beaconOperationId(active),
+      seat: offender.seat,
+      index: required(active.participants.find((item) => item.seat === offender.seat)).index,
+      value: toBase64Url(new Uint8Array(32).fill(200)),
+    };
+    const cheat: CheatClaim = {
+      seat: offender.seat,
+      evidence: {
+        kind: 'beacon-reveal',
+        at: { seq: pending.log.head.seq, hash: entryHash(pending.log.head) },
+        artifact: {
+          body: badRevealBody,
+          sig: signObject(
+            'beacon-reveal',
+            badRevealBody,
+            required(fixture.simulation.identities.get(offender.seat)).secretKey,
+          ),
+        },
+      },
+    };
+    secondTransport.inject(peer, { t: 'CHEAT_CLAIM', claim: cheat });
+    await second.flush();
+    expect(secondSent.some((message) => message.t === 'CHEAT_CLAIM')).toBe(true);
+    const owedBeforePulse = secondSent.filter((message) => message.t === 'SYS_CONTRIB').length;
+    value(await second['pulse']());
+    expect(secondSent.filter((message) => message.t === 'SYS_CONTRIB')).toHaveLength(
+      owedBeforePulse + 1,
+    );
     const firstContribution = before.find((message) => message.t === 'SYS_CONTRIB');
     expect(firstContribution).toBeDefined();
     original.dispose();

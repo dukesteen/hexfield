@@ -23,7 +23,8 @@ export function hashToPoint(domain: string, value: unknown): RistrettoPoint {
 }
 
 /** Independent Pedersen generator; no party knows its discrete log relative to G. */
-export const H: RistrettoPoint = hashToPoint('pedersen-h', 'cp2p/pedersen/H');
+// H is public and fixed. Its window table accelerates the same secret-safe multiply path.
+export const H: RistrettoPoint = hashToPoint('pedersen-h', 'cp2p/pedersen/H').precompute(8, false);
 
 export function modScalar(value: bigint): bigint {
   if (typeof value !== 'bigint') throw new TypeError('Scalar must be a bigint.');

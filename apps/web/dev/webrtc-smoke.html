@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>WebRTC iframe smoke</title>
+    <style>
+      body {
+        max-width: 52rem;
+        margin: 2rem auto;
+        padding: 0 1rem;
+        font:
+          16px/1.5 system-ui,
+          sans-serif;
+      }
+      button {
+        padding: 0.5rem 1rem;
+        margin-right: 0.5rem;
+      }
+      pre {
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        background: #111;
+        color: #eee;
+        padding: 1rem;
+        min-height: 18rem;
+      }
+      #frames {
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>WebRTC iframe smoke</h1>
+    <p>
+      Four same-origin iframe globals in this Chrome tab. This checks native WebRTC, not isolated
+      browser contexts or cross-browser behavior.
+    </p>
+    <button id="run" type="button">Run</button><button id="stop" type="button">Stop</button>
+    <pre id="log" aria-live="polite"></pre>
+    <div id="frames"></div>
+    <script type="module">
+      const runButton = document.querySelector('#run');
+      const stopButton = document.querySelector('#stop');
+      const output = document.querySelector('#log');
+      const frameHost = document.querySelector('#frames');
+      const frames = [];
+      const identities = new Map();
+      const pending = new Map();
+      const queuedSignals = [];
+      let nextId = 0;
+      let run = null;
+      let routing = false;
+
+      function routeSignal(from, to, value) {
+        const target = [...identities].find(([, peer]) => peer === to)?.[0];
+        if (target !== undefined)
+          frames[target].contentWindow.postMessage(
+            { kind: 'signal', from, value },
+            location.origin,
+          );
+      }
+
+      function log(value) {
+        output.textContent += `${value}\n`;
+      }
+      function delay(ms) {
+        return new Promise((resolve) => setTimeout(resolve, ms));
+      }
+      function assert(condition, message) {
+        if (!condition) throw new Error(message);
+      }
+      function active(signal) {
+        if (signal.aborted) throw new Error('Stopped');
+      }
+
+      window.addEventListener('message', (event) => {
+        if (event.origin !== location.origin) return;
+        const index = frames.findIndex((frame) => frame.contentWindow === event.source);
+        if (index < 0 || !event.data || typeof event.data !== 'object') return;
+        const message = event.data;
+        if (message.kind === 'ready') {
+          frames[index].ready?.();
+        } else if (message.kind === 'reply') {
+          const request = pending.get(message.id);
+          if (!request || request.index !== index) return;
+          pending.delete(message.id);
+          clearTimeout(request.timeout);
+          if (message.error) request.reject(new Error(message.error));
+          else request.resolve(message.result);
+        } else if (message.kind === 'signal') {
+          const from = identities.get(index);
+          if (from && routing) routeSignal(from, message.to, message.value);
+          else if (from) queuedSignals.push({ from, to: message.to, value: message.value });
+        }
+      });
+
+      function rpc(index, action, args = {}) {
+        const frame = frames[index];
+        if (!frame?.contentWindow) return Promise.reject(new Error('Missing iframe'));
+        const id = ++nextId;
+        return new Promise((resolve, reject) => {
+          const timeout = setTimeout(() => {
+            pending.delete(id);
+            reject(new Error(`${action} timed out`));
+          }, 5_000);
+          pending.set(id, { index, resolve, reject, timeout });
+          frame.contentWindow.postMessage(
+            { kind: 'request', id, action, ...args },
+            location.origin,
+          );
+        });
+      }
+
+      async function waitFor(label, predicate, signal, timeoutMs = 20_000) {
+        const deadline = performance.now() + timeoutMs;
+        while (performance.now() < deadline) {
+          active(signal);
+          if (await predicate()) {
+            log(`PASS ${label}`);
+            return;
+          }
+          await delay(100);
+        }
+        throw new Error(`${label} timed out`);
+      }
+
+      async function cleanup() {
+        for (const request of pending.values()) {
+          clearTimeout(request.timeout);
+          request.reject(new Error('Stopped'));
+        }
+        pending.clear();
+        await Promise.all(frames.map((_, index) => rpc(index, 'stop').catch(() => undefined)));
+        frames.length = 0;
+        identities.clear();
+        queuedSignals.length = 0;
+        routing = false;
+        frameHost.replaceChildren();
+      }
+
+      async function start() {
+        if (run) return;
+        output.textContent = '';
+        const controller = new AbortController();
+        run = controller;
+        runButton.disabled = true;
+        try {
+          for (let index = 0; index < 4; index++) {
+            const iframe = document.createElement('iframe');
+            iframe.src = '/dev/webrtc-smoke-peer.html';
+            const ready = new Promise((resolve) => {
+              iframe.ready = resolve;
+            });
+            frames.push(iframe);
+            frameHost.append(iframe);
+            await Promise.race([
+              ready,
+              delay(5_000).then(() => {
+                throw new Error('Iframe load timed out');
+              }),
+            ]);
+          }
+          const roster = await Promise.all(
+            frames.map((_, index) => rpc(index, 'identity', { seed: index + 1 })),
+          );
+          roster.forEach((peer, index) => identities.set(index, peer));
+          await Promise.all(
+            frames.map((_, index) => rpc(index, 'start', { seed: index + 1, roster })),
+          );
+          routing = true;
+          for (const signal of queuedSignals) routeSignal(signal.from, signal.to, signal.value);
+          queuedSignals.length = 0;
+          await waitFor(
+            'all six native links authenticated',
+            async () =>
+              (await Promise.all(frames.map((_, index) => rpc(index, 'status')))).every(
+                (status) => status.peers.length === 3,
+              ),
+            controller.signal,
+          );
+          await rpc(0, 'send', { to: roster[3], bulk: false });
+          await rpc(0, 'send', { to: roster[3], bulk: true });
+          await waitFor(
+            'small message and 1 MiB bulk pattern delivered',
+            async () => {
+              const messages = (await rpc(3, 'status')).messages;
+              return (
+                messages.length >= 2 &&
+                messages[0].length === 3 &&
+                messages[1].length === 1_048_576 &&
+                messages[1].pattern === true
+              );
+            },
+            controller.signal,
+          );
+          await Promise.all([
+            rpc(0, 'loss', { peer: roster[3] }),
+            rpc(3, 'loss', { peer: roster[0] }),
+          ]);
+          await waitFor(
+            'lost pair reauthenticated once',
+            async () => {
+              const left = await rpc(0, 'status');
+              const right = await rpc(3, 'status');
+              const states = left.changes
+                .filter((change) => change.peer === roster[3])
+                .map((change) => change.online);
+              return (
+                left.peers.length === 3 &&
+                right.peers.length === 3 &&
+                states.length === 3 &&
+                states[0] &&
+                !states[1] &&
+                states[2]
+              );
+            },
+            controller.signal,
+          );
+          log('PASS Chrome iframe smoke complete');
+        } catch (error) {
+          log(`FAIL ${error instanceof Error ? error.message : String(error)}`);
+        } finally {
+          await cleanup();
+          run = null;
+          runButton.disabled = false;
+        }
+      }
+
+      runButton.addEventListener('click', () => {
+        void start();
+      });
+      stopButton.addEventListener('click', () => {
+        run?.abort();
+      });
+      log('Ready. Click Run.');
+    </script>
+  </body>
+</html>

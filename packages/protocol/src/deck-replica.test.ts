@@ -1,4 +1,4 @@
-import { canonicalDecode, fromBase64Url } from '@cp2p/codec';
+import { canonicalDecode, fromBase64Url, toBase64Url } from '@cp2p/codec';
 import { BASE_DEV_CARD_CATALOGUE, RESOURCES, failure } from '@cp2p/engine';
 import { scalarToBytes } from '@cp2p/crypto';
 import type { CommandShape, GameState, Result, Seat } from '@cp2p/engine';
@@ -8,6 +8,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, test, vi } from 'vitest';
 import { MemoryBeaconContributionStore } from './beacon-contributions.js';
+import { MemoryCheatCandidateStore } from './cheat-candidates.js';
 import { MemoryCountContributionStore } from './count-contributions.js';
 import { MemoryStealDeliveryStore } from './steal-contributions.js';
 import { createStealSecretSource } from './steal-source.js';
@@ -170,6 +171,7 @@ function optionsFor(
     transport,
     clock,
     journal,
+    cheatCandidateStore: new MemoryCheatCandidateStore(),
     beaconSource: fixture.beaconSourceFor(seat),
     beaconContributions: new MemoryBeaconContributionStore(),
     // These deck-only cases never enter a Monopoly count phase.
@@ -1012,6 +1014,7 @@ describe('live verified deck replication', () => {
   test('gossips durable unlocks after a legal purchase and restores a dropped unlock', async () => {
     const fixture = createVerifiedDeckSession(3, 2, 128, {
       boardSeed: new Uint8Array(32).fill(50),
+      ceremonyNonce: toBase64Url(new Uint8Array(32).fill(1)),
     });
     expect(value(genesisDeckDefinitions(fixture.deck.body))[0]?.cards).toHaveLength(25);
     const peers = fixture.humans.map(

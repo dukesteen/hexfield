@@ -16,6 +16,7 @@ import {
 import type { DeckDefinition, DeckSetupState, SignedDeckPass } from '../deck-setup.js';
 import type { GenesisBody } from '../types.js';
 import { createStealSecretSource } from '../steal-source.js';
+import { createGenesisEscrowFixture } from './escrow-fixture.js';
 
 const CACHE_LIMIT = 4;
 const cache = new Map<string, CachedDeckFixture>();
@@ -201,6 +202,15 @@ export function createGenesisDeckFixture(
   // Encryption keys are part of the signed roster before any shuffle transcript.
   const keyedBody: GenesisBody = {
     ...body,
+    commitments: {
+      ...body.commitments,
+      masters:
+        body.commitments.masters ??
+        body.seats.map(({ seat }) => ({
+          seat,
+          masterPub: encodePoint(scalePoint(G, BigInt(17 + seat))),
+        })),
+    },
     seats: body.seats.map((seat) => {
       if (seat.encryptionKey !== undefined) return { ...seat };
       const source = createStealSecretSource(
@@ -227,10 +237,13 @@ export function createGenesisDeckFixture(
   });
   const nextBody: GenesisBody = {
     ...keyedBody,
-    commitments: { ...keyedBody.commitments, decks },
+    commitments: {
+      ...keyedBody.commitments,
+      decks,
+    },
   };
   return {
-    body: nextBody,
+    body: createGenesisEscrowFixture(nextBody, identities),
     transcripts,
     createSource(seat) {
       const sourceDefinition = generated.definitions.find((item) =>

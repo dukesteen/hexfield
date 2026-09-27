@@ -1,6 +1,7 @@
 import * as v from 'valibot';
 import type { SignedProposal } from './types.js';
 import { signedVoteSchema } from './votes.js';
+import { cheatClaimSchema } from './cheat-schema.js';
 import {
   hashSchema as hash,
   key32Schema as key32,
@@ -134,6 +135,7 @@ export const excludeProposerControlSchema = v.strictObject({
 const payloadSchema = v.variant('kind', [
   v.strictObject({ kind: v.literal('genesis'), genesis: genesisSchema }),
   v.strictObject({ kind: v.literal('command'), signed: signedCommandSchema }),
+  v.strictObject({ kind: v.literal('cheat-proof'), claim: cheatClaimSchema }),
   v.strictObject({
     kind: v.literal('system'),
     input: systemInputSchema,

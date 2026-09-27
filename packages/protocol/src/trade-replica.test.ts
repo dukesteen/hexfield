@@ -3,6 +3,7 @@ import { RESOURCES, success } from '@cp2p/engine';
 import type { CommandShape, Resource, Result, Seat } from '@cp2p/engine';
 import { expect, test } from 'vitest';
 import { MemoryBeaconContributionStore } from './beacon-contributions.js';
+import { MemoryCheatCandidateStore } from './cheat-candidates.js';
 import { MemoryCountContributionStore } from './count-contributions.js';
 import { genesisDigest } from './genesis.js';
 import type { PublicHandCommitments } from './hand-commitments.js';
@@ -120,6 +121,7 @@ test('live uncertain-hand trade retries fresh parents, survives restart, and rep
       transport: observed(network.transport(human.publicKey), wire),
       clock: network.clock,
       journal: new MemoryProtocolJournal(),
+      cheatCandidateStore: new MemoryCheatCandidateStore(),
       beaconSource: fixture.beaconSourceFor(human.seat),
       beaconContributions: new MemoryBeaconContributionStore(),
       deckSetupPasses: fixture.deckSetupPasses,

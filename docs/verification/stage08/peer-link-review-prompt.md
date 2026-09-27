@@ -1,0 +1,5 @@
+# Stage 08 authenticated peer link review
+
+Read-only security and correctness review of the attached first WebRTC transport slice. Tools are disabled. Do not edit files or claim to run tests. Source is the authority, not design intent.
+
+Review identity binding to the actual stable DTLS SDP fingerprints; handshake freshness and role ordering; signaling glare/revision/ICE handling; unauthenticated bounds; framing/reassembly and queue bounds; backpressure/liveness; resource cleanup and callback failure behavior. Find concrete attacks, deterministic correctness failures and misleading tests. Distinguish defects in this slice from missing later mesh/server/manual/browser work, which is explicitly unfinished. For each finding cite file/function and a reproducible trace, impact and minimal fix. Challenge safety claims but do not invent API behavior. State unknowns rather than inferring unseen callers. Prioritize real protocol faults over stylistic changes. The current 21 fake-RTC/framing tests pass, but real browser integration remains.

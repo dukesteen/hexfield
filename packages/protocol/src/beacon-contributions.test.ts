@@ -64,6 +64,7 @@ function fixture(exhausted = false) {
     hands: emptyHands.value,
     counts: null,
     steal: null,
+    cheats: [],
   };
   const link = vi.fn<BeaconSecretSource['link']>((chainEpoch, index) => {
     if (chainEpoch !== 0 || index !== 1) throw new Error('Unexpected link request');

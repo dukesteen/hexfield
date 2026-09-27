@@ -1,0 +1,122 @@
+{
+  "files": [
+    {
+      "path": "docs/07-fair-randomness-hidden-info.md",
+      "sha256": "92bbc982109dfa4affe2ba9c86433b0bc009c9b28278fb55b2d9819d1c94baf5"
+    },
+    {
+      "path": "docs/verification/stage07/step7-escrow-design.md",
+      "sha256": "214e17035c81a61445d7af8b5934712a0e4fa9901df8e4e3c86f7af589008a37"
+    },
+    {
+      "path": "packages/protocol/src/genesis-masters.ts",
+      "sha256": "0cdec263630bc1f492c2049f528949b3b81e7573562253abebff34b29c408438"
+    },
+    {
+      "path": "packages/protocol/src/genesis-secrets.ts",
+      "sha256": "78472fb7f4f75df6b38fa3d860fd992afe2ee6e5f4b60a6e1e7ed5289a005478"
+    },
+    {
+      "path": "packages/protocol/src/genesis-secrets.test.ts",
+      "sha256": "76855a780605e81487e2a1f0fb49faced62829bc861012906c97cbc7ec11d8c6"
+    },
+    {
+      "path": "packages/protocol/src/genesis-escrow.ts",
+      "sha256": "d8da104480939ebc53749bc6a2ae6a11af716a41334d68fe68b7767a2b1428ea"
+    },
+    {
+      "path": "packages/protocol/src/genesis-escrow.test.ts",
+      "sha256": "ad7e092b3c96e9f2c337ac3568da6e4826a34eba711b7fd6718e60ad156b530a"
+    },
+    {
+      "path": "packages/protocol/src/escrow-roster.ts",
+      "sha256": "11a7f43e81d8dc627fdb711ffde1a9070870ad1a6c71f62f939e07b0c2e7d9c1"
+    },
+    {
+      "path": "packages/protocol/src/escrow-roster.test.ts",
+      "sha256": "007a800556675871cac298c332bba6cad19ab74911c16c0c1eebd0126532fc03"
+    },
+    {
+      "path": "packages/protocol/src/escrow-distribution.ts",
+      "sha256": "54384b8f2e44f8251f119e58bec2260adabb678d86aaffdbe20fd7ec006eea19"
+    },
+    {
+      "path": "packages/protocol/src/escrow-distribution.test.ts",
+      "sha256": "e4c0dfb141a8d90a2af1d7cc4fc3f9e1aa3cc496a0b86fe08c1d9d2024034d98"
+    },
+    {
+      "path": "packages/protocol/src/genesis.ts",
+      "sha256": "200ce39353d8e4b809b8638c6b1f888aa534c90b794adcac5c052acb7ae5ea81"
+    },
+    {
+      "path": "packages/protocol/src/genesis-encryption.ts",
+      "sha256": "ae9a7ed8feca820afc61a5de336e8104384c9eb38f525c0b81e86d6493eb2bf9"
+    },
+    {
+      "path": "packages/protocol/src/deck-genesis.ts",
+      "sha256": "6403740e3daf7d1b45faca388adb626845b671d4650b0c84127f00d3e955043a"
+    },
+    {
+      "path": "packages/protocol/src/deck-source.ts",
+      "sha256": "5b27e8a399fdd0124759c5d253a7dd216ce569d3ef3ba0c2eb670575e8cce1eb"
+    },
+    {
+      "path": "packages/protocol/src/beacon-source.ts",
+      "sha256": "a3c0a4a466a1d5b2607f9992636ee380a8a17858ff783ea2beb41fea0b34db84"
+    },
+    {
+      "path": "packages/protocol/src/beacon-state.ts",
+      "sha256": "a280956782550a92a1272bb3b34b87fac1c6016910b06ba3ba48e16272e27671"
+    },
+    {
+      "path": "packages/protocol/src/deck-ledger.ts",
+      "sha256": "2c3e9778c88b790e9afbe42d5446c29caff44a77abf86655a583851174d82e8d"
+    },
+    {
+      "path": "packages/protocol/src/steal-source.ts",
+      "sha256": "a40280be340b065ef079aab38fb9af8d51fd5c149fb9e447d2a615190f799a21"
+    },
+    {
+      "path": "packages/protocol/src/schema-values.ts",
+      "sha256": "5f42a01a0d5a59abc1b93a5462a010ec56609ec44c050edd57e85791f5f0ef96"
+    },
+    {
+      "path": "packages/protocol/src/validation.ts",
+      "sha256": "bb646520abbab0596ff5d99f1b7f6ffaeed264260c3030917725a050acef5f23"
+    },
+    {
+      "path": "packages/protocol/src/schemas.ts",
+      "sha256": "0644605fd0e0cd35ededac28e9a52524eb122e8b73839bc94f729fdee160f606"
+    },
+    {
+      "path": "packages/protocol/src/types.ts",
+      "sha256": "818234f00bd384a8ff733ce5bcb3f04dd666b62644b84788b2f83edcb433d927"
+    },
+    {
+      "path": "packages/crypto/src/seal.ts",
+      "sha256": "2732bbdd7ad064932fac132054c304a96fef4de68b7292b253d84189b662a254"
+    },
+    {
+      "path": "packages/crypto/src/feldman.ts",
+      "sha256": "9579d6b4b0ff4f8be57afc3d4f76dd3ec993571098a656e7f95b5915f0ad7dcd"
+    },
+    {
+      "path": "packages/crypto/src/sigma.ts",
+      "sha256": "e04a49de15d73a54cc4191a4eed4b2dddab6c2e899636c2b7e8decbff3750ea8"
+    },
+    {
+      "path": "packages/crypto/src/group.ts",
+      "sha256": "76081f91735476a2da74bf9ab9c85a94f6d5f70c86760e8f1986b6eb1ec2ad80"
+    },
+    {
+      "path": "packages/crypto/src/derivation.ts",
+      "sha256": "76bfa6e36fb943a462bb09f7b0acb1786235837e6297d4a4275bdcfbff3db30a"
+    },
+    {
+      "path": "packages/crypto/src/identity.ts",
+      "sha256": "a892b57073e7208f99c37480dde87662a6274236f5dc2ad18384a7bcc8c28688"
+    }
+  ],
+  "packetBytes": 230466,
+  "packetSha256": "f828f790736ab8b60234ec13a2948c50d637e1d70a31c84cbd7fb5a086f79bce"
+}

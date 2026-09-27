@@ -60,6 +60,8 @@ function fixture() {
   );
   const initialBody: GenesisBody = {
     ...genesisBody(source.genesis),
+    // Keep the original board while selecting a Knight-first ceremony permutation.
+    ceremonyNonce: toBase64Url(new Uint8Array(32).fill(1)),
     security: 'verified',
     commitments: {
       beaconChains: humans.map((seat, index) => ({

@@ -10,6 +10,8 @@ import { validateDeckCeremony, validateDeckGenesisCommitments } from './deck-gen
 import type { SignedDeckPass } from './deck-setup.js';
 import * as v from 'valibot';
 import { validateGenesisEncryption } from './genesis-encryption.js';
+import { validateGenesisMasters } from './genesis-masters.js';
+import { validateGenesisEscrow } from './genesis-escrow.js';
 
 export const GENESIS_PREVIOUS_HASH = '0'.repeat(64);
 
@@ -73,6 +75,10 @@ export function signVerifiedGenesis(
     return failure('genesis-security', 'Verified consent requires verified genesis');
   const encryption = validateGenesisEncryption(parsed.value);
   if (!encryption.ok) return encryption;
+  const masters = validateGenesisMasters(parsed.value);
+  if (!masters.ok) return masters;
+  const escrow = validateGenesisEscrow(parsed.value);
+  if (!escrow.ok) return escrow;
   const decks = validateDeckCeremony(parsed.value, transcripts);
   if (!decks.ok) return decks;
   try {
@@ -150,6 +156,10 @@ export function validateGenesis(
       );
     const encryption = validateGenesisEncryption(genesis);
     if (!encryption.ok) return encryption;
+    const masters = validateGenesisMasters(genesis);
+    if (!masters.ok) return masters;
+    const escrow = validateGenesisEscrow(genesis);
+    if (!escrow.ok) return escrow;
     try {
       const verified = policy.verifyCommitments(genesis);
       if (!verified.ok) return verified;

@@ -30,9 +30,9 @@ export function createVerifiedDeckSession(
   seed = 317,
   humanCount = 2,
   chainLength = 128,
-  options: { vpTarget?: number; boardSeed?: Uint8Array } = {},
+  options: { vpTarget?: number; boardSeed?: Uint8Array; ceremonyNonce?: string } = {},
 ) {
-  const { vpTarget, boardSeed } = options;
+  const { vpTarget, boardSeed, ceremonyNonce } = options;
   const simulation = createSimulationGenesis({
     seed,
     humanCount,
@@ -52,6 +52,7 @@ export function createVerifiedDeckSession(
   );
   const bodyBeforeDeck: GenesisBody = {
     ...genesisBody(simulation.genesis),
+    ...(ceremonyNonce === undefined ? {} : { ceremonyNonce }),
     ...(boardSeed === undefined ? {} : { genesisSeed: toBase64Url(boardSeed) }),
     security: 'verified',
     commitments: {

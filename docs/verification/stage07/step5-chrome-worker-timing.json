@@ -1,0 +1,27 @@
+{
+  "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36",
+  "types": 8,
+  "samples": [
+    {
+      "sample": 1,
+      "proveMs": 868.3000001907349,
+      "verifyMs": 449.09999990463257,
+      "totalMs": 1317.4000000953674,
+      "valid": true
+    },
+    {
+      "sample": 2,
+      "proveMs": 780,
+      "verifyMs": 399.59999990463257,
+      "totalMs": 1179.5999999046326,
+      "valid": true
+    },
+    {
+      "sample": 3,
+      "proveMs": 757.1000001430511,
+      "verifyMs": 399.89999985694885,
+      "totalMs": 1157,
+      "valid": true
+    }
+  ]
+}

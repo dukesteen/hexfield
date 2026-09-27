@@ -72,6 +72,15 @@ import type {
 import { genesisSchema, logEntrySchema } from './schemas.js';
 import { MAX_MESSAGE_BYTES, parseCanonical } from './validation.js';
 import { validateVote, verifyCertificate } from './votes.js';
+import { authenticatedCheatSigner, verifyCheatProof } from './cheat-proof.js';
+import type { CheatClaim, CheatFinding } from './cheat-proof.js';
+import {
+  cheatCandidateId,
+  cheatClaimHash,
+  decodeCheatCandidate,
+  encodeCheatCandidate,
+} from './cheat-candidates.js';
+import type { CheatCandidateStore } from './cheat-candidates.js';
 import * as v from 'valibot';
 
 const MAX_QUEUED_MESSAGES_PER_PEER = 8;
@@ -102,6 +111,8 @@ export interface ReplicatedLogOptions {
   transport: Transport;
   clock: ProtocolClock;
   journal: ProtocolJournal;
+  /** Durable candidate outbox; without it no cheat claim may be gossiped. */
+  cheatCandidateStore?: CheatCandidateStore;
   /** Required in verified sessions. Only this human's chain secrets are exposed here. */
   beaconSource?: BeaconSecretSource;
   /** Durable, immutable outgoing contributions, retained alongside the voting journal. */
@@ -193,11 +204,18 @@ export class ReplicatedLog {
   private sentDeckPrefix: string | null = null;
   private sentBeaconOperation: string | null = null;
   private accusation: ExcludeProposerControl | null = null;
+  private readonly cheatCandidates = new Map<string, CheatClaim>();
   private readonly unsubscribers: Unsubscribe[] = [];
   private readonly queuedByPeer = new Map<PeerId, number>();
   private readonly invalidByPeer = new Map<PeerId, number>();
   private readonly blockedPeers = new Set<PeerId>();
   private readonly expensiveByPeer = new Map<PeerId, { startedAt: number; seen: Set<string> }>();
+  private readonly cheatWorkByPeer = new Map<PeerId, { startedAt: number; seen: Set<string> }>();
+  private readonly historicalCheatWorkByPeer = new Map<
+    PeerId,
+    { startedAt: number; seen: Set<string> }
+  >();
+  private cheatGossipCursor = 0;
   private lastSyncRequest: { fromSeq: number; sentAt: number } | null = null;
   private queuedMessages = 0;
   private pulseTimer: unknown = null;
@@ -284,7 +302,10 @@ export class ReplicatedLog {
     const initialized = await replica.enqueue(async () => {
       const recovered = await replica.recoverPersistedAccusation();
       if (!recovered.ok) return recovered;
+      const cheats = await replica.recoverCheatCandidates();
+      if (!cheats.ok) return cheats;
       replica.attachTransport();
+      replica.broadcastNextCheatClaim();
       const resumed = await replica.activeController().resume();
       if (!resumed.ok) return resumed;
       return replica.offerAvailableInput();
@@ -416,6 +437,9 @@ export class ReplicatedLog {
     this.tradeProofResponses.clear();
     this.tradeProofRequestsByFinalizer.clear();
     this.tradeProofWorkByPeer.clear();
+    this.cheatWorkByPeer.clear();
+    this.historicalCheatWorkByPeer.clear();
+    this.cheatCandidates.clear();
     this.preparedSteal = null;
     this.sentStealStage = null;
     this.controller?.dispose();
@@ -573,10 +597,17 @@ export class ReplicatedLog {
   private admitExpensiveRequest(
     peer: PeerId,
     key: string,
-    category: 'repair' | 'trade' = 'repair',
+    category: 'repair' | 'trade' | 'cheat' | 'historical-cheat' = 'repair',
   ): boolean {
     const now = this.options.clock.now();
-    const budgets = category === 'trade' ? this.tradeProofWorkByPeer : this.expensiveByPeer;
+    const budgets =
+      category === 'trade'
+        ? this.tradeProofWorkByPeer
+        : category === 'cheat'
+          ? this.cheatWorkByPeer
+          : category === 'historical-cheat'
+            ? this.historicalCheatWorkByPeer
+            : this.expensiveByPeer;
     const limit =
       category === 'trade' ? TRADE_PROOF_REQUESTS_PER_WINDOW : EXPENSIVE_REQUESTS_PER_WINDOW;
     let budget = budgets.get(peer);
@@ -830,6 +861,21 @@ export class ReplicatedLog {
           )
             return success(undefined);
         }
+        if (
+          entry.payload.kind === 'cheat-proof' &&
+          entry.payload.claim.evidence.at.seq < this.context.log.head.seq
+        ) {
+          const authenticated = authenticateSignedProposal(message.proposal, this.context);
+          if (!authenticated.ok) return authenticated;
+          if (
+            !this.admitExpensiveRequest(
+              from,
+              `historical-cheat/${toHex(hashValue(message.proposal))}`,
+              'historical-cheat',
+            )
+          )
+            return success(undefined);
+        }
         let received = await this.activeController().dispatch({
           kind: 'proposal',
           proposal: message.proposal,
@@ -882,6 +928,24 @@ export class ReplicatedLog {
         if (!this.admitExpensiveRequest(from, `accuse/${toHex(hashValue(message.control))}`))
           return success(undefined);
         return this.rememberAccusation(message.control);
+      }
+      case 'CHEAT_CLAIM': {
+        if (!authenticatedCheatSigner(message.claim, this.context.log.genesis))
+          return failure('cheat-signature', 'Cheat evidence has no authenticated genesis signer');
+        if (message.claim.evidence.at.seq > this.context.log.head.seq)
+          return failure('cheat-future', 'Cheat evidence parent is not certified');
+        const id = cheatCandidateId(message.claim);
+        if (this.cheatCandidates.has(id)) return success(undefined);
+        if (
+          this.context.log.crypto?.cheats.some(
+            (finding) =>
+              finding.seat === message.claim.seat && finding.kind === message.claim.evidence.kind,
+          )
+        )
+          return success(undefined);
+        if (!this.admitExpensiveRequest(from, `cheat/${cheatClaimHash(message.claim)}`, 'cheat'))
+          return success(undefined);
+        return this.rememberCheatClaim(message.claim, true);
       }
       case 'PROPOSAL_REQ':
         return this.sendRequestedProposal(from, message);
@@ -1040,6 +1104,7 @@ export class ReplicatedLog {
     if (!prepared.ok) return prepared;
     const available =
       this.accusation !== null ||
+      this.cheatCandidates.size > 0 ||
       (!this.cryptoPending() && this.commands.length > 0) ||
       this.deckSetupCandidate() !== null ||
       this.deckDrawCandidate() !== null ||
@@ -1090,6 +1155,21 @@ export class ReplicatedLog {
           term: state.round,
           prevHash: entryHash(this.context.log.head),
           payload: this.accusation,
+          stateHash: this.context.log.head.stateHash,
+          sequencer: this.self,
+        },
+        this.secretKey,
+      );
+    const firstCheat = [...this.cheatCandidates.entries()].toSorted(([a], [b]) =>
+      a.localeCompare(b),
+    )[0];
+    if (firstCheat)
+      return signEntry(
+        {
+          seq: state.height,
+          term: state.round,
+          prevHash: entryHash(this.context.log.head),
+          payload: { kind: 'cheat-proof', claim: firstCheat[1] },
           stateHash: this.context.log.head.stateHash,
           sequencer: this.self,
         },
@@ -1535,6 +1615,124 @@ export class ReplicatedLog {
     );
   }
 
+  private verifiedCheatClaim(claim: CheatClaim): Result<CheatFinding> {
+    if (!authenticatedCheatSigner(claim, this.context.log.genesis))
+      return failure('cheat-signature', 'Cheat evidence has no authenticated genesis signer');
+    if (claim.evidence.at.seq > this.context.log.head.seq)
+      return failure('cheat-future', 'Cheat evidence parent is not certified');
+    return claim.evidence.at.seq === this.context.log.head.seq &&
+      claim.evidence.at.hash === entryHash(this.context.log.head)
+      ? verifyCheatProof(claim, this.context.log)
+      : (this.context.verifyHistoricalCheat?.(claim) ??
+          failure('cheat-history', 'Certified evidence parent is unavailable'));
+  }
+
+  private async rememberCheatClaim(value: unknown, gossip: boolean): Promise<Result<void>> {
+    const store = this.options.cheatCandidateStore;
+    if (!store)
+      return failure('cheat-store-required', 'Cheat claims need a durable candidate store');
+    const encoded = encodeCheatCandidate(value);
+    if (!encoded.ok) return encoded;
+    const { claim, bytes } = encoded.value;
+    const id = cheatCandidateId(claim);
+    if (
+      this.context.log.crypto?.cheats.some(
+        (finding) => finding.seat === claim.seat && finding.kind === claim.evidence.kind,
+      )
+    )
+      return success(undefined);
+    if (this.cheatCandidates.has(id)) return success(undefined);
+    if (this.cheatCandidates.size >= 48)
+      return failure('cheat-capacity', 'The bounded candidate queue is full');
+    const finding = this.verifiedCheatClaim(claim);
+    if (!finding.ok) return finding;
+    let retained = claim;
+    try {
+      if (!(await store.putIfAbsent(id, bytes))) {
+        const winner = (await store.loadAll()).find((record) => record.id === id);
+        if (!winner) return failure('cheat-store-record', 'Winning cheat candidate is missing');
+        const loaded = decodeCheatCandidate(winner.bytes);
+        if (!loaded.ok || cheatCandidateId(loaded.value) !== id)
+          return failure('cheat-store-record', 'Winning cheat candidate is corrupt');
+        const checked = this.verifiedCheatClaim(loaded.value);
+        if (!checked.ok) return checked;
+        retained = loaded.value;
+      }
+    } catch {
+      return failure('cheat-store-write', 'Could not persist the cheat candidate');
+    }
+    this.cheatCandidates.set(id, retained);
+    if (gossip) {
+      const sent = this.broadcast({ t: 'CHEAT_CLAIM', claim: retained });
+      if (!sent.ok) return sent;
+    }
+    return this.offerAvailableInput();
+  }
+
+  private async recoverCheatCandidates(): Promise<Result<void>> {
+    const store = this.options.cheatCandidateStore;
+    if (!store) return success(undefined);
+    let records: readonly { id: string; bytes: Uint8Array }[];
+    try {
+      records = await store.loadAll();
+    } catch {
+      return failure('cheat-store-read', 'Could not load retained cheat candidates');
+    }
+    if (records.length > 48) this.status({ kind: 'rejected', code: 'cheat-store-capacity' });
+    for (const record of records.slice(0, 48)) {
+      const loaded = decodeCheatCandidate(record.bytes);
+      if (!loaded.ok || cheatCandidateId(loaded.value) !== record.id) {
+        this.status({ kind: 'rejected', code: 'cheat-store-record' });
+        try {
+          // oxlint-disable-next-line no-await-in-loop -- Quarantine each invalid auxiliary record before proceeding.
+          await store.delete(record.id);
+        } catch {
+          this.status({ kind: 'rejected', code: 'cheat-store-delete' });
+        }
+        continue;
+      }
+      const claim = loaded.value;
+      if (
+        this.context.log.crypto?.cheats.some(
+          (finding) => finding.seat === claim.seat && finding.kind === claim.evidence.kind,
+        )
+      ) {
+        try {
+          // oxlint-disable-next-line no-await-in-loop -- Every stale record must be removed before replay resumes.
+          await store.delete(record.id);
+        } catch {
+          this.status({ kind: 'rejected', code: 'cheat-store-delete' });
+        }
+        continue;
+      }
+      const checked = this.verifiedCheatClaim(claim);
+      if (!checked.ok || this.cheatCandidates.has(record.id)) {
+        this.status({ kind: 'rejected', code: 'cheat-store-record' });
+        try {
+          // oxlint-disable-next-line no-await-in-loop -- Quarantine each invalid auxiliary record before proceeding.
+          await store.delete(record.id);
+        } catch {
+          this.status({ kind: 'rejected', code: 'cheat-store-delete' });
+        }
+        continue;
+      }
+      this.cheatCandidates.set(record.id, claim);
+    }
+    return success(undefined);
+  }
+
+  private broadcastNextCheatClaim(): void {
+    const claims = [...this.cheatCandidates.entries()].toSorted(([left], [right]) =>
+      left.localeCompare(right),
+    );
+    if (claims.length === 0) return;
+    const selected = claims[this.cheatGossipCursor % claims.length];
+    if (!selected) return;
+    const sent = this.broadcast({ t: 'CHEAT_CLAIM', claim: selected[1] });
+    if (sent.ok) this.cheatGossipCursor += 1;
+    else this.status({ kind: 'rejected', code: sent.error.code });
+  }
+
   private async rememberAccusation(control: ExcludeProposerControl): Promise<Result<void>> {
     const known = this.activeController().snapshot();
     if (!known.ok) return known;
@@ -1739,6 +1937,15 @@ export class ReplicatedLog {
     this.tradeProofResponses.clear();
     this.tradeProofRequestsByFinalizer.clear();
     this.entries.push({ entry: checked.value.entry, certificate: [...checked.value.certificate] });
+    if (checked.value.entry.payload.kind === 'cheat-proof') {
+      const id = cheatCandidateId(checked.value.entry.payload.claim);
+      this.cheatCandidates.delete(id);
+      try {
+        await this.options.cheatCandidateStore?.delete(id);
+      } catch {
+        // A stale auxiliary record is removed during restore after certified replay.
+      }
+    }
     if (this.lastSyncRequest && next.log.head.seq >= this.lastSyncRequest.fromSeq)
       this.lastSyncRequest = null;
     this.commands.length = 0;
@@ -1846,6 +2053,7 @@ export class ReplicatedLog {
         sig: signObject('heartbeat', body, this.secretKey),
       });
       if (!heartbeat.ok) return heartbeat;
+      this.broadcastNextCheatClaim();
       for (const pending of this.pending)
         this.requireSend(this.broadcast({ t: 'SUBMIT', cmd: pending.signed }));
       const recovered = await this.activeController().resume();
@@ -2117,6 +2325,8 @@ function checkLocalKey(
   options: ReplicatedLogOptions,
   context: ProposalContext,
 ): Result<LocalConfiguration> {
+  if (context.log.genesis.security === 'verified' && !options.cheatCandidateStore)
+    return failure('replica-cheat-store', 'Verified sessions need durable cheat candidates');
   if (
     context.log.genesis.security === 'verified' &&
     (!options.beaconSource || !options.beaconContributions)

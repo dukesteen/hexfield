@@ -71,6 +71,7 @@ function fixture(count: 2 | 3 = 3) {
     hands: value(emptyHandCommitments(protocol.genesis.config.seats)),
     counts: null,
     steal: null,
+    cheats: [],
   });
   const context = (active: DeckDrawOperation | null): LogContext => ({
     genesis: protocol.genesis,

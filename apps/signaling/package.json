@@ -11,6 +11,17 @@
     }
   },
   "scripts": {
-    "build": "tsc -b"
+    "build": "tsc -b",
+    "start": "node dist/server.js"
+  },
+  "dependencies": {
+    "@cp2p/codec": "workspace:^",
+    "@cp2p/crypto": "workspace:^",
+    "@cp2p/p2p": "workspace:^",
+    "@cp2p/protocol": "workspace:^",
+    "ws": "^8.21.3"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.18.1"
   }
 }

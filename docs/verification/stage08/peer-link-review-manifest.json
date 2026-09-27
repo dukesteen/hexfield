@@ -1,0 +1,54 @@
+{
+  "files": [
+    {
+      "path": "docs/08-webrtc-networking.md",
+      "sha256": "ef1b2f2e9bac178d9ddb42baaab1a4f482f10c2355de4a98cc06625b7a973e62"
+    },
+    {
+      "path": "docs/verification/stage08/transport-design.md",
+      "sha256": "7ec47ce8c41788d9e7bff9ba7f9e4bcbd2d4c3baffbb7b6ab9c61e55889b2ffe"
+    },
+    {
+      "path": "packages/p2p/src/peer-link.ts",
+      "sha256": "50581ef103cec3c7be60eab847a873fefe3ce4d1c8655c7961122d3cf259d875"
+    },
+    {
+      "path": "packages/p2p/src/peer-link.test.ts",
+      "sha256": "0644e488c5e115d2393b84c1a07e7d6085215d6ee1933309de226fbb37b1a51c"
+    },
+    {
+      "path": "packages/p2p/src/framing.ts",
+      "sha256": "f3411adc64597b044cf77ca84c876c09cc97b562d98687c9898accbdda6657cd"
+    },
+    {
+      "path": "packages/p2p/src/framing.test.ts",
+      "sha256": "10f6062b65ecd402122f193b3f0ba0bbac8400f98b3430c0d8338ee9ad01dafd"
+    },
+    {
+      "path": "packages/p2p/src/signaling.ts",
+      "sha256": "63ab105f84c6da364335130c61d2bc7c71d1273b1cea4dd4f0d2fbb64c591f7c"
+    },
+    {
+      "path": "packages/p2p/src/index.ts",
+      "sha256": "172b5bd229fec3dbe47afc4a4e61c02c0bb3aa6cf4d833bbfa7a300c6ceca108"
+    },
+    {
+      "path": "packages/p2p/package.json",
+      "sha256": "db77a68550ccd4ac33b21de53c4b376ba4ba9147e5c741df5da9851457261f97"
+    },
+    {
+      "path": "packages/crypto/src/identity.ts",
+      "sha256": "a892b57073e7208f99c37480dde87662a6274236f5dc2ad18384a7bcc8c28688"
+    },
+    {
+      "path": "packages/codec/src/canonical.ts",
+      "sha256": "bc51a4fa7022f6ed6af92b191672526ee91f357395a116e36b9c5c01076b5049"
+    },
+    {
+      "path": "packages/codec/src/hash.ts",
+      "sha256": "e2d516f007606105f6a01e386329f1bdbf6ce3940255204690550f5bb1b64ae8"
+    }
+  ],
+  "packetBytes": 83819,
+  "packetSha256": "a1065f4e5270e6911f95006fe224a0e434932b73f9728fce4e522c33ceb445ac"
+}

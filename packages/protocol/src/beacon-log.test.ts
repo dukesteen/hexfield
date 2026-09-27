@@ -862,6 +862,7 @@ describe('certified beacon log integration', () => {
           hands: baseCrypto.hands,
           counts: null,
           steal: null,
+          cheats: [],
         },
       },
     };
@@ -958,6 +959,7 @@ describe('certified beacon log integration', () => {
           hands: opened.hands,
           counts: null,
           steal: null,
+          cheats: [],
         },
       },
     };
