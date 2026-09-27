@@ -4,14 +4,14 @@
 
 **Fixed.** Every call site that `knownBranch` selects now runs on `scalePoint`. `scalePublicPoint` appears only where both the scalar and the call selection are public.
 
-| Path | Selection | Multiplier | Scalars | Assessment |
-|---|---|---|---|---|
-| `proveCdsOr` → `inspectBranch(branch, proof)` | secret (n−1 simulated) | default `scalePoint` | e, z (published, so a timing oracle would decide which subset was omitted) | OK. This was the original bug. |
-| → `inspectSchnorrProof` / `inspectRangeProof` / `inspectBitProof` | inherited | `scale` passed through, default `scalePoint` | e, z, bit weights | OK |
-| `proveCdsOr` → `simulateSchnorrProof` | secret | `scalePoint` | simulated e, z | OK |
-| `proveCdsOr` → `simulateRangeProof` (range.ts) | secret | `scalePublicPoint` | `2^i` and `inverseLastWeight(bits)` only | OK, see below |
-| `verifyCdsOr` → `inspectBranch(…, scalePublicPoint)` | public (all branches) | public | proof values | OK |
-| `verifyRange` | public | public | proof values | OK |
+| Path                                                              | Selection              | Multiplier                                   | Scalars                                                                    | Assessment                     |
+| ----------------------------------------------------------------- | ---------------------- | -------------------------------------------- | -------------------------------------------------------------------------- | ------------------------------ |
+| `proveCdsOr` → `inspectBranch(branch, proof)`                     | secret (n−1 simulated) | default `scalePoint`                         | e, z (published, so a timing oracle would decide which subset was omitted) | OK. This was the original bug. |
+| → `inspectSchnorrProof` / `inspectRangeProof` / `inspectBitProof` | inherited              | `scale` passed through, default `scalePoint` | e, z, bit weights                                                          | OK                             |
+| `proveCdsOr` → `simulateSchnorrProof`                             | secret                 | `scalePoint`                                 | simulated e, z                                                             | OK                             |
+| `proveCdsOr` → `simulateRangeProof` (range.ts)                    | secret                 | `scalePublicPoint`                           | `2^i` and `inverseLastWeight(bits)` only                                   | OK, see below                  |
+| `verifyCdsOr` → `inspectBranch(…, scalePublicPoint)`              | public (all branches)  | public                                       | proof values                                                               | OK                             |
+| `verifyRange`                                                     | public                 | public                                       | proof values                                                               | OK                             |
 
 **Fixed-weight multiplications in `simulateRangeProof`.** The public multiplications use the same fixed scalar sequence in every simulated branch. The protocol widths are fixed at `RANGE_BITS = 6`, so the `1n` short-circuit at index 0 and the `inverseLastWeight` scalar are identical across branches.
 

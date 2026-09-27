@@ -6,10 +6,10 @@ An in-process Node 22 CPU profile attributed most samples to Noble's curve arith
 
 In one fresh **headless** Chrome 153 run on the strict local server at port 5294, the same browser ran three baseline and three changed eight-type full prove-plus-verify samples. Each sample used an independent nonce input and passed verification. Both variants used the same timing worker and statement; the baseline worker imported the pre-change crypto modules, while the changed worker imported the modified modules. No verification cache was used. This A/B predates the security-review correction described below.
 
-| Variant | Prove + verify samples (ms) | Median (ms) |
-| --- | --- | ---: |
-| Baseline | 237.6, 219.6, 206.4 | 219.6 |
-| Public arithmetic | 179.5, 171.9, 174.9 | 174.9 |
+| Variant           | Prove + verify samples (ms) | Median (ms) |
+| ----------------- | --------------------------- | ----------: |
+| Baseline          | 237.6, 219.6, 206.4         |       219.6 |
+| Public arithmetic | 179.5, 171.9, 174.9         |       174.9 |
 
 The preliminary paired median improved by 44.7 ms, about 20%. The source-only review then found that public-scalar arithmetic in secret-selected simulated CDS branches could disclose the known branch through prover timing. The final patch restored secret-safe arithmetic on that path and made exported inspectors secret-safe by default; only verification of every branch opts into public arithmetic. The preliminary A/B is therefore diagnostic, **not a speedup estimate for the final source**. Its [raw output](step5-public-arithmetic-headless-pre-review-ab.json) is retained for comparison.
 
