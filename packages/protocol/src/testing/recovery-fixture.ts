@@ -57,6 +57,8 @@ export function createRecoveryFixture(
   options: {
     seed?: number;
     masterBackedBeacon?: boolean;
+    /** Model a dealer that signed a beacon tip derived from a different master. */
+    misderivedBeaconSeat?: Seat;
     chainLength?: number;
     vpTarget?: number;
     lobbyId?: string;
@@ -85,7 +87,7 @@ export function createRecoveryFixture(
         link.slice(),
       );
     const provider = createBeaconSecretSource(
-      scalarToBytes(BigInt(17 + seat)),
+      scalarToBytes(BigInt((options.misderivedBeaconSeat === seat ? 29 : 17) + seat)),
       { ceremonyId: deckCeremonyId(deck.body), seat },
       chainLength,
     );

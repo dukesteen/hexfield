@@ -66,6 +66,32 @@ describe('certified public recovery membership', () => {
     const replacement = identityFromSecret(new Uint8Array(32).fill(81));
     const before = data.ready;
     const frozen = required(before.log.crypto?.beacon.active);
+    const originalOperation = value(getBeaconOperation(required(before.log.crypto).beacon));
+    const originalReveals = data.genesis.seats.map((owner) =>
+      signBeaconReveal(
+        originalOperation,
+        owner.seat,
+        required(required(data.chains[owner.seat])[1]),
+        key(data, owner.seat),
+      ),
+    );
+    const resultRef = { seq: before.log.head.seq + 1, hash: 'c'.repeat(64) };
+    expect(
+      completeBeaconState(
+        required(before.log.crypto).beacon,
+        originalReveals.slice(1),
+        before.log.state,
+        resultRef,
+      ),
+    ).toMatchObject({ ok: false, error: { code: 'beacon-incomplete' } });
+    const fixedOutcome = value(
+      completeBeaconState(
+        required(before.log.crypto).beacon,
+        originalReveals,
+        before.log.state,
+        resultRef,
+      ),
+    ).outcome;
     const auth = authorization(
       readiness(data, before, replacement.peerId),
       data,
@@ -114,6 +140,7 @@ describe('certified public recovery membership', () => {
     expect(active.log.authority?.controllers[0]?.publicKey).toBe(replacement.peerId);
     const current = value(artifactSigner(required(active.log.authority), 0));
     const operation = value(getBeaconOperation(required(active.log.crypto).beacon));
+    expect(beaconOperationId(operation)).toBe(beaconOperationId(originalOperation));
     const link = required(required(data.chains[0])[1]);
     const oldReveal = signBeaconReveal(operation, 0, link, key(data, 0));
     const newReveal = signBeaconReveal(operation, 0, link, replacement.secretKey, current);
@@ -141,6 +168,7 @@ describe('certified public recovery membership', () => {
         active.membership.epoch,
       ),
     );
+    expect(result.outcome).toEqual(fixedOutcome);
     if (result.outcome.kind !== 'system') throw new Error('Expected a system beacon outcome');
     const input = result.outcome.input;
     const after = value(data.source.engine.apply(active.log.state, input));

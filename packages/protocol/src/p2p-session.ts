@@ -185,7 +185,8 @@ export class P2PSession implements GameSession<CertifiedHistory> {
   ) {
     this.keys.set(options.seat, new Uint8Array(options.secretKey));
     for (const [seat, key] of options.botKeys ?? []) this.keys.set(seat, new Uint8Array(key));
-    if (context.log.state.result) this.status = { kind: 'complete' };
+    if (context.log.recovery?.void) this.status = { kind: 'void' };
+    else if (context.log.state.result) this.status = { kind: 'complete' };
   }
 
   /**
@@ -1598,7 +1599,11 @@ export class P2PSession implements GameSession<CertifiedHistory> {
     if (this.protocolStatus?.kind === 'halted' || this.protocolStatus?.kind === 'rejected')
       this.protocolStatus = null;
     this.events.push(...entry.events);
-    this.status = next.log.state.result ? { kind: 'complete' } : { kind: 'running' };
+    this.status = next.log.recovery?.void
+      ? { kind: 'void' }
+      : next.log.state.result
+        ? { kind: 'complete' }
+        : { kind: 'running' };
     this.schedulePrivateTimeout();
     return success(undefined);
   }

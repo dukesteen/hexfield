@@ -645,5 +645,6 @@ export function advanceTransferRecovery(
       ),
     });
   }
+  if (change.kind === 'recovery-void') return success(transfer);
   return failure('transfer-return-history', 'Recovery transition is malformed');
 }

@@ -7,15 +7,22 @@ import { resolveArtifactSigner } from './authority.js';
 import { entryHash, genesisDigest } from './genesis.js';
 import type { LogContext } from './log-types.js';
 import type { SignedRecoveryCheck } from './recovery-check.js';
+import { signedRecoveryVoidCheckSchema } from './recovery-void.js';
+import type { SignedRecoveryVoidCheck } from './recovery-void.js';
 import {
   RECOVERY_CHECK_DOMAIN,
+  RECOVERY_VOID_DOMAIN,
   recoveryActivationStatementSchema,
   recoveryChangeSchema,
   recoveryCheckDigest,
 } from './recovery-membership.js';
 import { recoveryReleaseSchema, verifyRecoveryRelease } from './recovery-release.js';
 import type { RecoveryRelease } from './recovery-release.js';
-import type { RecoveryActivation, RecoveryActivationStatement } from './recovery-types.js';
+import type {
+  RecoveryActivation,
+  RecoveryActivationStatement,
+  RecoveryVoid,
+} from './recovery-types.js';
 import { seatSchema, signature64Schema } from './schema-values.js';
 import { parseCanonical } from './validation.js';
 
@@ -64,6 +71,7 @@ export class RecoveryInbox {
   private recoverers: readonly { seat: Seat; publicKey: string }[] = [];
   private releases = new Map<string, RecoveryRelease>();
   private checks = new Map<Seat, SignedRecoveryCheck['check']>();
+  private voidChecks = new Map<Seat, SignedRecoveryVoidCheck>();
 
   refresh(context: LogContext): Result<void> {
     const recovery = context.recovery;
@@ -123,7 +131,10 @@ export class RecoveryInbox {
     const releaseScope = `${digest}/${authorization.entry.seq}/${authorization.entry.hash}/${crypto.epoch}`;
     const checkScope = `${releaseScope}/${parent.seq}/${parent.hash}/${statement.checkDigest}`;
     if (releaseScope !== this.releaseScope) this.releases.clear();
-    if (checkScope !== this.checkScope) this.checks.clear();
+    if (checkScope !== this.checkScope) {
+      this.checks.clear();
+      this.voidChecks.clear();
+    }
     this.context = detachContext(context);
     this.releaseScope = releaseScope;
     this.checkScope = checkScope;
@@ -192,6 +203,8 @@ export class RecoveryInbox {
       return failure('recovery-inbox-signature', 'Check signature is malformed');
     }
     const previous = this.checks.get(signed.check.seat);
+    if (this.voidChecks.has(signed.check.seat))
+      return failure('recovery-inbox-conflict', 'Recoverer already attested to a void');
     if (previous)
       return previous.sig === signed.check.sig
         ? success(false)
@@ -203,9 +216,82 @@ export class RecoveryInbox {
     return success(true);
   }
 
-  candidate(context: LogContext): Result<RecoveryActivation | null> {
+  rememberVoidCheck(value: unknown): Result<boolean> {
+    if (!this.context || !this.statement || !this.checkScope)
+      return failure('recovery-inbox-pending', 'No certified recovery parent is pending');
+    const parsed = parseCanonical(value, signedRecoveryVoidCheckSchema);
+    if (!parsed.ok) return parsed;
+    const signed = parsed.value;
+    const expected = this.statement;
+    const statement = signed.statement;
+    if (
+      statement.genesisDigest !== expected.genesisDigest ||
+      !sameRef(statement.parent, expected.parent) ||
+      !sameRef(statement.authorization, expected.authorization) ||
+      !this.context.recovery?.authorizations
+        .at(-1)
+        ?.statement.replacements.some(({ seat }) => seat === statement.dealerSeat)
+    )
+      return failure('recovery-inbox-binding', 'Void check differs from the certified parent');
+    const recoverer = this.recoverers.find(({ seat }) => seat === signed.check.seat);
+    if (!recoverer)
+      return failure('recovery-inbox-signer', 'Void signer is not a current recoverer');
+    try {
+      if (
+        !verifyObject(
+          RECOVERY_VOID_DOMAIN,
+          statement,
+          signed.check.sig,
+          parsePeerId(recoverer.publicKey),
+        )
+      )
+        return failure('recovery-inbox-signature', 'Void check signature is invalid');
+    } catch {
+      return failure('recovery-inbox-signature', 'Void check signature is malformed');
+    }
+    if (this.checks.has(signed.check.seat))
+      return failure('recovery-inbox-conflict', 'Recoverer already approved activation');
+    const previous = this.voidChecks.get(signed.check.seat);
+    if (previous)
+      return previous.check.sig === signed.check.sig &&
+        previous.statement.dealerSeat === statement.dealerSeat &&
+        previous.statement.reason === statement.reason
+        ? success(false)
+        : failure('recovery-inbox-conflict', 'Recoverer already attested to another void');
+    this.voidChecks.set(signed.check.seat, parsed.value);
+    return success(true);
+  }
+
+  candidate(context: LogContext): Result<RecoveryActivation | RecoveryVoid | null> {
     const refreshed = this.refresh(context);
     if (!refreshed.ok) return refreshed;
+    if (this.voidChecks.size === this.recoverers.length && this.recoverers.length > 0) {
+      const firstRecoverer = this.recoverers[0];
+      const first = firstRecoverer && this.voidChecks.get(firstRecoverer.seat)?.statement;
+      if (!first) return success(null);
+      if (
+        this.recoverers.some(({ seat }) => {
+          const statement = this.voidChecks.get(seat)?.statement;
+          return (
+            !statement ||
+            statement.dealerSeat !== first.dealerSeat ||
+            statement.reason !== first.reason
+          );
+        })
+      )
+        return success(null);
+      const checks = this.recoverers.map(({ seat }) => this.voidChecks.get(seat)?.check);
+      if (checks.some((item) => item === undefined)) return success(null);
+      const candidate = {
+        kind: 'recovery-void' as const,
+        statement: first,
+        checks: checks.filter((item) => item !== undefined),
+      };
+      const detached = v.parse(recoveryChangeSchema, canonicalDecode(canonicalEncode(candidate)));
+      return detached.kind === 'recovery-void'
+        ? success(detached)
+        : failure('recovery-inbox-candidate', 'Void candidate is malformed');
+    }
     if (!this.statement || this.checks.size !== this.recoverers.length) return success(null);
     const checks = this.recoverers.map(({ seat }) => this.checks.get(seat));
     if (checks.some((item) => item === undefined)) return success(null);
@@ -241,5 +327,6 @@ export class RecoveryInbox {
     this.recoverers = [];
     this.releases.clear();
     this.checks.clear();
+    this.voidChecks.clear();
   }
 }

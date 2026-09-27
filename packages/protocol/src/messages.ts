@@ -26,6 +26,7 @@ import { cheatClaimSchema } from './cheat-schema.js';
 import { membershipChangeSchema } from './membership-change.js';
 import { recoveryReleaseSchema } from './recovery-release.js';
 import { signedRecoveryCheckSchema } from './recovery-inbox.js';
+import { signedRecoveryVoidCheckSchema } from './recovery-void.js';
 import { signedMasterRevealSchema } from './master-reveal.js';
 import { decodeMessage, encodeMessage } from './wire.js';
 import type { Result } from '@cp2p/engine';
@@ -48,6 +49,11 @@ const recoveryCheckMessageSchema = v.strictObject({
   t: v.literal('RECOVERY_CHECK'),
   genesisDigest: key32Schema,
   check: signedRecoveryCheckSchema,
+});
+const recoveryVoidCheckMessageSchema = v.strictObject({
+  t: v.literal('RECOVERY_VOID_CHECK'),
+  genesisDigest: key32Schema,
+  check: signedRecoveryVoidCheckSchema,
 });
 const systemContributionSchema = v.strictObject({
   t: v.literal('SYS_CONTRIB'),
@@ -151,6 +157,7 @@ export const protocolMessageSchema = v.variant('t', [
   membershipSubmitSchema,
   recoveryReleaseMessageSchema,
   recoveryCheckMessageSchema,
+  recoveryVoidCheckMessageSchema,
   systemContributionSchema,
   deckContributionSchema,
   countContributionSchema,

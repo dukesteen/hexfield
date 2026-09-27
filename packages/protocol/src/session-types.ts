@@ -19,6 +19,7 @@ export type { SessionTimer } from './session-timer-types.js';
 export type SessionStatus =
   | { kind: 'running' }
   | { kind: 'complete' }
+  | { kind: 'void' }
   | { kind: 'error'; message: string }
   | { kind: 'disposed' };
 

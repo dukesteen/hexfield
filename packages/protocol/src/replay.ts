@@ -63,7 +63,7 @@ export function initialProposalContext(
       crypto: crypto.value,
       timers: timers.value,
       authority: authority.value,
-      recovery: { authorizations: [], pending: null, offline: [], completed: [] },
+      recovery: { authorizations: [], pending: null, offline: [], completed: [], void: null },
       ...(transfer.value ? { transfer: transfer.value } : {}),
     },
     membership: {

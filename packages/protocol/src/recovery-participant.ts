@@ -14,7 +14,12 @@ import { RecoveryInbox, signedRecoveryCheckSchema } from './recovery-inbox.js';
 import { loadRecoveryPrivate } from './recovery-private.js';
 import { prepareRecoveryRelease, recoveryReleaseSchema } from './recovery-release.js';
 import type { RecoveryRelease } from './recovery-release.js';
-import type { RecoveryActivation } from './recovery-types.js';
+import type { RecoveryActivation, RecoveryVoid } from './recovery-types.js';
+import {
+  produceRecoveryVoidCheckFromShares,
+  signedRecoveryVoidCheckSchema,
+} from './recovery-void.js';
+import type { SignedRecoveryVoidCheck } from './recovery-void.js';
 import { replayCertifiedPrefix } from './replay.js';
 import type { ReplayPolicy } from './replay.js';
 import { MAX_MESSAGE_BYTES } from './validation.js';
@@ -34,6 +39,7 @@ export interface RecoveryParticipantOptions {
 export interface PreparedRecoveryPackets {
   readonly releases: readonly RecoveryRelease[];
   readonly check: SignedRecoveryCheck | null;
+  readonly voidCheck: SignedRecoveryVoidCheck | null;
 }
 
 interface Scope {
@@ -54,6 +60,10 @@ function copyRelease(release: RecoveryRelease): RecoveryRelease {
 
 function copyCheck(check: SignedRecoveryCheck): SignedRecoveryCheck {
   return v.parse(signedRecoveryCheckSchema, canonicalDecode(canonicalEncode(check)));
+}
+
+function copyVoidCheck(check: SignedRecoveryVoidCheck): SignedRecoveryVoidCheck {
+  return v.parse(signedRecoveryVoidCheckSchema, canonicalDecode(canonicalEncode(check)));
 }
 
 function sameRef(
@@ -98,6 +108,7 @@ export class RecoveryParticipant {
   private genesisEntryHash: string | null = null;
   private readonly releases = new Map<string, RecoveryRelease>();
   private check: SignedRecoveryCheck | null = null;
+  private voidCheck: SignedRecoveryVoidCheck | null = null;
   private disposed = false;
 
   constructor(options: RecoveryParticipantOptions) {
@@ -123,7 +134,13 @@ export class RecoveryParticipant {
     return refreshed.ok ? this.inbox.rememberCheck(value) : refreshed;
   }
 
-  candidate(context: LogContext): Result<RecoveryActivation | null> {
+  rememberVoidCheck(context: LogContext, value: unknown): Result<boolean> {
+    if (this.disposed) return failure('recovery-participant-disposed', 'Participant is disposed');
+    const refreshed = this.inbox.refresh(context);
+    return refreshed.ok ? this.inbox.rememberVoidCheck(value) : refreshed;
+  }
+
+  candidate(context: LogContext): Result<RecoveryActivation | RecoveryVoid | null> {
     if (this.disposed) return failure('recovery-participant-disposed', 'Participant is disposed');
     return this.inbox.candidate(context);
   }
@@ -137,7 +154,7 @@ export class RecoveryParticipant {
     const scope = scoped.value;
     if (scope === null) {
       this.clear();
-      return success({ releases: [], check: null });
+      return success({ releases: [], check: null, voidCheck: null });
     }
     const releaseScope = `${scope.digest}/${scope.authorization.seq}/${scope.authorization.hash}/${scope.epoch}`;
     const parentScope = `${releaseScope}/${scope.parent.seq}/${scope.parent.hash}`;
@@ -147,6 +164,7 @@ export class RecoveryParticipant {
     }
     if (this.checkScope !== parentScope) {
       this.check = null;
+      this.voidCheck = null;
       this.checkScope = parentScope;
     }
 
@@ -208,7 +226,7 @@ export class RecoveryParticipant {
       }
     }
 
-    if (!this.check) {
+    if (!this.check && !this.voidCheck) {
       const key = `recovery-check/${scope.gameId}/${scope.authorization.seq}-${scope.authorization.hash}/${scope.parent.seq}-${scope.parent.hash}/${this.localSeat}`;
       let stored: Uint8Array | null;
       try {
@@ -221,14 +239,22 @@ export class RecoveryParticipant {
         if (stored.byteLength > MAX_MESSAGE_BYTES)
           return failure('recovery-participant-store', 'Durable recovery check exceeds its limit');
         try {
-          const signed = v.parse(signedRecoveryCheckSchema, canonicalDecode(stored));
-          const remembered = this.inbox.rememberCheck(signed);
-          if (!remembered.ok) return remembered;
-          const retained = await this.verifyStoredPrivate(scope);
-          if (this.disposed)
-            return failure('recovery-participant-disposed', 'Participant is disposed');
-          if (!retained.ok) return retained;
-          this.check = copyCheck(signed);
+          const decoded = canonicalDecode(stored);
+          const voided = v.safeParse(signedRecoveryVoidCheckSchema, decoded);
+          if (voided.success) {
+            const remembered = this.inbox.rememberVoidCheck(voided.output);
+            if (!remembered.ok) return remembered;
+            this.voidCheck = copyVoidCheck(voided.output);
+          } else {
+            const signed = v.parse(signedRecoveryCheckSchema, decoded);
+            const remembered = this.inbox.rememberCheck(signed);
+            if (!remembered.ok) return remembered;
+            const retained = await this.verifyStoredPrivate(scope);
+            if (this.disposed)
+              return failure('recovery-participant-disposed', 'Participant is disposed');
+            if (!retained.ok) return retained;
+            this.check = copyCheck(signed);
+          }
         } catch {
           return failure('recovery-participant-store', 'Durable recovery check is malformed');
         }
@@ -260,13 +286,40 @@ export class RecoveryParticipant {
               if (produced.ok) produced.value.reconstructed.dispose();
               return failure('recovery-participant-disposed', 'Participant is disposed');
             }
-            if (!produced.ok) return produced;
-            try {
-              const remembered = this.inbox.rememberCheck(produced.value.signed);
+            if (!produced.ok) {
+              if (
+                ![
+                  'master-encryption-key',
+                  'master-beacon-tip',
+                  'master-shuffle-key',
+                  'master-lock-key',
+                ].includes(produced.error.code)
+              )
+                return produced;
+              const voided = await produceRecoveryVoidCheckFromShares({
+                journal: this.journal,
+                engine: this.engine,
+                policy: this.policy,
+                store: this.store,
+                localSeat: this.localSeat,
+                signingKey: checkSigningKey,
+                recipientEncryptionSecret: this.encryptionSecret(),
+                releases: localReleases,
+              });
+              if (this.disposed)
+                return failure('recovery-participant-disposed', 'Participant is disposed');
+              if (!voided.ok) return voided;
+              const remembered = this.inbox.rememberVoidCheck(voided.value);
               if (!remembered.ok) return remembered;
-              this.check = copyCheck(produced.value.signed);
-            } finally {
-              produced.value.reconstructed.dispose();
+              this.voidCheck = copyVoidCheck(voided.value);
+            } else {
+              try {
+                const remembered = this.inbox.rememberCheck(produced.value.signed);
+                if (!remembered.ok) return remembered;
+                this.check = copyCheck(produced.value.signed);
+              } finally {
+                produced.value.reconstructed.dispose();
+              }
             }
           } finally {
             checkSigningKey.fill(0);
@@ -285,6 +338,7 @@ export class RecoveryParticipant {
     return success({
       releases: [...this.releases.values()].map(copyRelease),
       check: this.check ? copyCheck(this.check) : null,
+      voidCheck: this.voidCheck ? copyVoidCheck(this.voidCheck) : null,
     });
   }
 
@@ -424,5 +478,6 @@ export class RecoveryParticipant {
     this.checkScope = null;
     this.releases.clear();
     this.check = null;
+    this.voidCheck = null;
   }
 }

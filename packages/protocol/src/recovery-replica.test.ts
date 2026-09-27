@@ -24,7 +24,7 @@ import { deckCeremonyId } from './deck-genesis.js';
 import { createDeckSecretSource } from './deck-source.js';
 import { createHandSecretSource } from './hand-source.js';
 import type { DeckContributionStore } from './deck-outbox.js';
-import { entryHash } from './genesis.js';
+import { entryHash, genesisDigest } from './genesis.js';
 import { MemoryGenesisConsentStore } from './genesis-outbox.js';
 import { MemoryProtocolJournal } from './journal.js';
 import { decodeProtocolMessage, encodeProtocolMessage } from './messages.js';
@@ -34,7 +34,13 @@ import { ReplicatedLog } from './replicated-log.js';
 import { P2PSession } from './p2p-session.js';
 import { VerifiedSessionDriver } from './verified-session-driver.js';
 import type { ReplicatedLogOptions } from './replicated-log.js';
-import { RECOVERY_READINESS_DOMAIN, recoveryChangeSchema } from './recovery-membership.js';
+import {
+  RECOVERY_CHECK_DOMAIN,
+  RECOVERY_READINESS_DOMAIN,
+  RECOVERY_VOID_DOMAIN,
+  recoveryChangeSchema,
+  recoveryCheckDigest,
+} from './recovery-membership.js';
 import { restoreRetiredSafety } from './retired-safety.js';
 import { MemoryStealDeliveryStore } from './steal-contributions.js';
 import { createStealSecretSource } from './steal-source.js';
@@ -223,6 +229,131 @@ describe('live certified recovery', () => {
   let fixture: RecoveryFixture;
   beforeAll(() => {
     fixture = createRecoveryFixture({ masterBackedBeacon: true });
+  }, 30_000);
+
+  test('out-of-parent recovery checks never strike an honest current recoverer', async () => {
+    const replacement = recoveryFixtureReplacement(89);
+    const peers = ([1, 2, 3] as const).map(
+      (seat) => required(fixture.source.identities.get(seat)).peerId,
+    );
+    const receiverPeer = required(peers[0]);
+    const senderPeer = required(peers[1]);
+    const network = createMemnet({ peers });
+    let replica: ReplicatedLog | null = null;
+    try {
+      const change = signRecoveryFixtureAuthorization(
+        fixture,
+        recoveryFixtureReadiness(fixture, fixture.ready, replacement.peerId),
+        replacement.secretKey,
+      );
+      const entry = signRecoveryFixtureEntry(
+        fixture,
+        fixture.ready,
+        { kind: 'membership', change },
+        fixture.ready.log.head.stateHash,
+      );
+      const certified = certifyRecoveryFixtureEntry(fixture, fixture.ready, entry, [1, 2, 3]);
+      const authorized = advanceRecoveryFixture(fixture.ready, certified);
+      const journal = await journalAtReady(fixture, 1);
+      expect(
+        await journal.commit(
+          certified.entry.seq,
+          0,
+          certified,
+          canonicalEncode(value(createConsensusState(authorized, 1))),
+        ),
+      ).toBe(true);
+      const inner = network.transport(receiverPeer);
+      let disconnected = 0;
+      const transport: Transport = {
+        self: inner.self,
+        peers: () => inner.peers(),
+        send: (to, bytes) => inner.send(to, bytes),
+        broadcast: (bytes) => inner.broadcast(bytes),
+        onMessage: (listener) => inner.onMessage(listener),
+        onPeerChange: (listener) => inner.onPeerChange(listener),
+        disconnect: (peer) => {
+          disconnected += 1;
+          inner.disconnect(peer);
+        },
+      };
+      replica = value(
+        await ReplicatedLog.restore({
+          ...optionsFor(fixture, 1, transport, network.clock, journal),
+          recoveryParticipant: {
+            encryptionSecret: () => encryptionSecret(fixture, 1),
+            privateEntropy: () => new Uint8Array(32).fill(91),
+            store: new MemoryGenesisConsentStore(),
+          },
+        }),
+      );
+      const authorization = required(authorized.log.recovery?.pending);
+      const digest = genesisDigest(fixture.genesis);
+      const sender = network.transport(senderPeer);
+      for (let offset = 1; offset <= 6; offset += 1) {
+        const parent = {
+          seq: authorized.log.head.seq + offset,
+          hash: entryHash(authorized.log.head),
+        };
+        const activation = {
+          genesisDigest: digest,
+          parent,
+          nextEpoch: required(authorized.log.authority).epoch + 1,
+          authorization,
+          checkDigest: recoveryCheckDigest(authorized.log, authorization),
+        };
+        const voided = {
+          genesisDigest: digest,
+          parent,
+          authorization,
+          dealerSeat: 0 as const,
+          reason: 'master-beacon-tip' as const,
+        };
+        sender.send(
+          receiverPeer,
+          value(
+            encodeProtocolMessage({
+              t: 'RECOVERY_CHECK',
+              genesisDigest: digest,
+              check: {
+                statement: activation,
+                check: {
+                  seat: 2,
+                  sig: signObject(
+                    RECOVERY_CHECK_DOMAIN,
+                    activation,
+                    recoveryFixtureKey(fixture, 2),
+                  ),
+                },
+              },
+            }),
+          ),
+        );
+        sender.send(
+          receiverPeer,
+          value(
+            encodeProtocolMessage({
+              t: 'RECOVERY_VOID_CHECK',
+              genesisDigest: digest,
+              check: {
+                statement: voided,
+                check: {
+                  seat: 2,
+                  sig: signObject(RECOVERY_VOID_DOMAIN, voided, recoveryFixtureKey(fixture, 2)),
+                },
+              },
+            }),
+          ),
+        );
+      }
+      network.clock.advanceBy(1_000);
+      await replica.flush();
+      expect(disconnected).toBe(0);
+    } finally {
+      replica?.dispose();
+      replacement.secretKey.fill(0);
+      network.dispose();
+    }
   }, 30_000);
 
   test('does not durably vote for a valid takeover until this voter approves that parent', async () => {

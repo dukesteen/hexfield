@@ -134,6 +134,11 @@ export function validateNextEntry(
   if (entry.seq <= context.head.seq) return failure('stale-entry', 'Entry was already superseded');
   if (entry.seq !== context.head.seq + 1)
     return failure('missing-ancestor', 'Fetch missing log entries before validating this entry');
+  if (context.recovery?.void)
+    return failure(
+      'game-void',
+      'Certified void ends the game; only history sync remains available',
+    );
   if (entry.term !== policy.term || entry.sequencer !== policy.sequencer)
     return failure('wrong-term', 'Entry does not belong to the verified sequencer term');
   if (entry.prevHash !== entryHash(context.head))

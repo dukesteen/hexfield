@@ -37,7 +37,28 @@ export interface RecoveryActivation {
   readonly checks: readonly SeatSignature[];
 }
 
-export type RecoveryChange = RecoveryAuthorization | RecoveryActivation;
+export type RecoveryVoidReason =
+  | 'master-encryption-key'
+  | 'master-beacon-tip'
+  | 'master-shuffle-key'
+  | 'master-lock-key';
+
+/** Private recoverers attest to the same failed derived-key check, without publishing a master. */
+export interface RecoveryVoidStatement {
+  readonly genesisDigest: string;
+  readonly parent: EntryRef;
+  readonly authorization: EntryRef;
+  readonly dealerSeat: Seat;
+  readonly reason: RecoveryVoidReason;
+}
+
+export interface RecoveryVoid {
+  readonly kind: 'recovery-void';
+  readonly statement: RecoveryVoidStatement;
+  readonly checks: readonly SeatSignature[];
+}
+
+export type RecoveryChange = RecoveryAuthorization | RecoveryActivation | RecoveryVoid;
 
 export interface AuthorizedRecovery {
   readonly entry: EntryRef;
@@ -55,4 +76,11 @@ export interface RecoveryState {
     readonly activation: EntryRef;
     readonly checkDigest: string;
   }[];
+  /** A certified terminal quorum decision, not a public proof against the dealer. */
+  readonly void: {
+    readonly entry: EntryRef;
+    readonly authorization: EntryRef;
+    readonly dealerSeat: Seat;
+    readonly reason: RecoveryVoidReason;
+  } | null;
 }

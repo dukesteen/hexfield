@@ -23,6 +23,7 @@ import type {
   RecoveryChange,
   RecoveryReadiness,
   RecoveryState,
+  RecoveryVoid,
 } from './recovery-types.js';
 import {
   hashSchema,
@@ -38,6 +39,7 @@ import { quorumSize } from './votes.js';
 
 export const RECOVERY_READINESS_DOMAIN = 'recovery-readiness';
 export const RECOVERY_CHECK_DOMAIN = 'recovery-check';
+export const RECOVERY_VOID_DOMAIN = 'recovery-void-check';
 const refSchema = v.strictObject({ seq: nonnegativeIntegerSchema, hash: hashSchema });
 const membersSchema = v.pipe(
   v.array(v.strictObject({ seat: seatSchema, publicKey: key32Schema })),
@@ -67,6 +69,18 @@ export const recoveryActivationStatementSchema = v.strictObject({
   authorization: refSchema,
   checkDigest: hashSchema,
 });
+export const recoveryVoidStatementSchema = v.strictObject({
+  genesisDigest: key32Schema,
+  parent: refSchema,
+  authorization: refSchema,
+  dealerSeat: seatSchema,
+  reason: v.picklist([
+    'master-encryption-key',
+    'master-beacon-tip',
+    'master-shuffle-key',
+    'master-lock-key',
+  ]),
+});
 export const recoveryChangeSchema = v.variant('kind', [
   v.strictObject({
     kind: v.literal('recovery-authorize'),
@@ -77,6 +91,11 @@ export const recoveryChangeSchema = v.variant('kind', [
   v.strictObject({
     kind: v.literal('recovery-activate'),
     statement: recoveryActivationStatementSchema,
+    checks: signaturesSchema,
+  }),
+  v.strictObject({
+    kind: v.literal('recovery-void'),
+    statement: recoveryVoidStatementSchema,
     checks: signaturesSchema,
   }),
 ]);
@@ -214,6 +233,8 @@ export function validateRecoveryTransition(
     );
   if (context.state.result !== null)
     return failure('recovery-finished', 'A finished game cannot change controllers');
+  if (context.recovery?.void)
+    return failure('recovery-void', 'A certified void ends recovery and gameplay');
   if (context.transfer?.pending)
     return failure('recovery-transfer-pending', 'Cancel the certified transfer before recovery');
   const parsed = parseCanonical(change, recoveryChangeSchema);
@@ -230,8 +251,9 @@ export function validateRecoveryTransition(
   if (
     body.genesisDigest !== current.genesisDigest ||
     !same(body.parent, ref(context.head)) ||
-    body.nextEpoch !== current.epoch + 1 ||
-    !Number.isSafeInteger(current.epoch + 1)
+    (parsed.value.kind !== 'recovery-void' &&
+      (parsed.value.statement.nextEpoch !== current.epoch + 1 ||
+        !Number.isSafeInteger(current.epoch + 1)))
   )
     return failure(
       'recovery-parent',
@@ -248,12 +270,60 @@ export function validateRecoveryTransition(
     return failure('recovery-history', 'Pending authorization is missing from replayed history');
   if (parsed.value.kind === 'recovery-authorize' && history.authorizations.length >= 256)
     return failure('recovery-history-limit', 'Recovery authorization history is full');
+  const prepared = { ...context, crypto };
+  if (parsed.value.kind === 'recovery-void')
+    return certifyVoid(parsed.value, entry, prepared, current, history, pending);
   const carried = carriedOperations(crypto);
   if (!carried.ok) return carried;
-  const prepared = { ...context, crypto };
   return parsed.value.kind === 'recovery-authorize'
     ? authorize(parsed.value, entry, prepared, current, history, pending, carried.value)
     : activate(parsed.value, entry, prepared, current, history, pending, carried.value);
+}
+
+function certifyVoid(
+  change: RecoveryVoid,
+  entry: LogEntry,
+  context: LogContext & { crypto: CryptoContext },
+  current: SeatAuthorities,
+  history: RecoveryState,
+  pending: AuthorizedRecovery | undefined,
+): Result<RecoveryTransition> {
+  const statement = change.statement;
+  if (
+    !pending ||
+    !same(statement.authorization, pending.entry) ||
+    !pending.statement.replacements.some(({ seat }) => seat === statement.dealerSeat)
+  )
+    return failure('recovery-void-authorization', 'Void must name a pending affected dealer');
+  const recoverers = current.controllers
+    .filter((item) => item.kind === 'human' && item.status === 'active')
+    .map(({ seat, publicKey }) => ({ seat, publicKey }));
+  if (
+    !same(recoverers, pending.statement.recoverers) ||
+    !signedByAll(RECOVERY_VOID_DOMAIN, statement, change.checks, recoverers)
+  )
+    return failure('recovery-void-check', 'Every named current recoverer must attest to the void');
+  if (
+    entry.stateHash !== context.head.stateHash ||
+    toHex(hashValue(context.state)) !== context.head.stateHash
+  )
+    return failure('recovery-void-state', 'Void must preserve the certified engine state');
+  return success({
+    authority: current,
+    recovery: {
+      ...history,
+      pending: null,
+      void: {
+        entry: ref(entry),
+        authorization: pending.entry,
+        dealerSeat: statement.dealerSeat,
+        reason: statement.reason,
+      },
+    },
+    crypto: context.crypto,
+    state: context.state,
+    input: null,
+  });
 }
 
 function authorize(

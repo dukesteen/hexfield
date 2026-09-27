@@ -271,6 +271,9 @@ export type {
   RecoveryChange,
   RecoveryReadiness,
   RecoveryState,
+  RecoveryVoid,
+  RecoveryVoidReason,
+  RecoveryVoidStatement,
 } from './recovery-types.js';
 export { recoveryCheckDigest } from './recovery-membership.js';
 export {
@@ -292,6 +295,8 @@ export {
 } from './recovery-release.js';
 export type { RecoveryRelease, RecoveryReleaseStore } from './recovery-release.js';
 export { produceRecoveryCheck, produceRecoveryCheckFromShares } from './recovery-check.js';
+export { produceRecoveryVoidCheckFromShares } from './recovery-void.js';
+export type { SignedRecoveryVoidCheck, RecoveryVoidCheckInput } from './recovery-void.js';
 export type {
   ProducedRecoveryCheck,
   RecoveryCheckInput,

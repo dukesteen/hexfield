@@ -71,6 +71,7 @@ import type {
 } from './recovery-participant.js';
 import type { RecoveryRelease } from './recovery-release.js';
 import type { SignedRecoveryCheck } from './recovery-check.js';
+import type { SignedRecoveryVoidCheck } from './recovery-void.js';
 import { MasterRevealCoordinator } from './master-reveal.js';
 import type {
   MasterRevealOptions,
@@ -1472,6 +1473,16 @@ export class ReplicatedLog {
       this.recoverySender(check.check.seat) !== from
     )
       return success(undefined);
+    const parent = { seq: this.context.log.head.seq, hash: entryHash(this.context.log.head) };
+    const pending = this.context.log.recovery.pending;
+    if (
+      check.statement.parent.seq !== parent.seq ||
+      check.statement.parent.hash !== parent.hash ||
+      check.statement.authorization.seq !== pending.seq ||
+      check.statement.authorization.hash !== pending.hash ||
+      check.statement.genesisDigest !== digest
+    )
+      return success(undefined);
     const participant = this.participant();
     if (!participant) return success(undefined);
     const hash = toHex(hashValue(check));
@@ -1482,6 +1493,45 @@ export class ReplicatedLog {
       return failure('recovery-check-invalid', 'Authenticated recovery check is invalid', {
         cause: remembered.error.code,
       });
+    }
+    return remembered.value ? this.offerAvailableInput() : success(undefined);
+  }
+
+  private async receiveRecoveryVoidCheck(
+    from: PeerId,
+    check: SignedRecoveryVoidCheck,
+    digest: string,
+  ): Promise<Result<void>> {
+    if (
+      digest !== this.context.membership.genesisDigest ||
+      !this.context.log.recovery?.pending ||
+      this.recoverySender(check.check.seat) !== from
+    )
+      return success(undefined);
+    const parent = { seq: this.context.log.head.seq, hash: entryHash(this.context.log.head) };
+    const pending = this.context.log.recovery.pending;
+    if (
+      check.statement.parent.seq !== parent.seq ||
+      check.statement.parent.hash !== parent.hash ||
+      check.statement.authorization.seq !== pending.seq ||
+      check.statement.authorization.hash !== pending.hash ||
+      check.statement.genesisDigest !== digest
+    )
+      return success(undefined);
+    const participant = this.participant();
+    if (!participant) return success(undefined);
+    const hash = toHex(hashValue(check));
+    if (!this.admitRecoveryPacket(from, hash, true)) return success(undefined);
+    const remembered = participant.rememberVoidCheck(this.context.log, check);
+    if (!remembered.ok) {
+      this.strikePeer(from);
+      return failure(
+        'recovery-void-check-invalid',
+        'Authenticated recovery void check is invalid',
+        {
+          cause: remembered.error.code,
+        },
+      );
     }
     return remembered.value ? this.offerAvailableInput() : success(undefined);
   }
@@ -1578,6 +1628,7 @@ export class ReplicatedLog {
   }
 
   private async prepareMasterReveals(retransmit: boolean): Promise<Result<void>> {
+    if (this.context.log.recovery?.void) return success(undefined);
     const coordinator = this.revealCoordinator();
     if (!coordinator) return success(undefined);
     const restored = await this.restoreMasterReveals(coordinator);
@@ -1651,6 +1702,8 @@ export class ReplicatedLog {
         return this.receiveRecoveryRelease(from, message.release, message.genesisDigest);
       case 'RECOVERY_CHECK':
         return this.receiveRecoveryCheck(from, message.check, message.genesisDigest);
+      case 'RECOVERY_VOID_CHECK':
+        return this.receiveRecoveryVoidCheck(from, message.check, message.genesisDigest);
       case 'SYS_CONTRIB': {
         if (message.genesisDigest !== this.context.membership.genesisDigest)
           return failure('replica-beacon-genesis', 'Beacon contribution belongs to another game');
@@ -1758,6 +1811,7 @@ export class ReplicatedLog {
             (parent.seq !== this.context.log.head.seq ||
               parent.hash !== entryHash(this.context.log.head))) ||
           (change.kind !== 'transfer-cancel' &&
+            change.kind !== 'recovery-void' &&
             change.statement.nextEpoch !== this.context.membership.epoch + 1)
         )
           return success(undefined);
@@ -2132,6 +2186,7 @@ export class ReplicatedLog {
   }
 
   private async offerAvailableInput(retransmit = false): Promise<Result<void>> {
+    if (this.context.log.recovery?.void) return success(undefined);
     const state = this.activeController().snapshot();
     if (!state.ok) return state;
     if (state.value.halted) return success(undefined);
@@ -2171,6 +2226,7 @@ export class ReplicatedLog {
   }
 
   private async maybePropose(): Promise<Result<void>> {
+    if (this.context.log.recovery?.void) return success(undefined);
     const snapshot = this.activeController().snapshot();
     if (!snapshot.ok) return snapshot;
     const state = snapshot.value;
@@ -2291,10 +2347,23 @@ export class ReplicatedLog {
         else this.status({ kind: 'rejected', code: sent.error.code });
       }
     }
+    if (packets.voidCheck) {
+      const hash = toHex(hashValue(packets.voidCheck));
+      if (retransmit || !this.sentRecoveryPackets.has(hash)) {
+        const sent = this.broadcast({
+          t: 'RECOVERY_VOID_CHECK',
+          genesisDigest: this.context.membership.genesisDigest,
+          check: packets.voidCheck,
+        });
+        if (sent.ok) this.sentRecoveryPackets.add(hash);
+        else this.status({ kind: 'rejected', code: sent.error.code });
+      }
+    }
     return success(undefined);
   }
 
   private candidate(state: ConsensusState): LogEntry | null {
+    if (this.context.log.recovery?.void) return null;
     if (this.accusation)
       return signEntry(
         {
