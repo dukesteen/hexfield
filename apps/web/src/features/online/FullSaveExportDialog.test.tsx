@@ -39,11 +39,11 @@ test('private material requires an explicit choice and a passphrase before expor
   render(<FullSaveExportDialog gameId={'g'.repeat(22)} onClose={mocks.close} />);
   fireEvent.click(screen.getByRole('checkbox', { name: 'lobby:fullSaveIncludePrivate' }));
   const submit = screen.getByRole('button', { name: 'lobby:fullSaveExport' });
-  expect((submit as HTMLButtonElement).disabled).toBe(true);
+  expect(submit.hasAttribute('disabled')).toBe(true);
   fireEvent.change(screen.getByLabelText('lobby:fullSavePassphrase'), {
     target: { value: 'a-long-safe-passphrase' },
   });
-  expect((submit as HTMLButtonElement).disabled).toBe(false);
+  expect(submit.hasAttribute('disabled')).toBe(false);
   fireEvent.click(submit);
   await waitFor(() =>
     expect(mocks.export).toHaveBeenCalledWith({

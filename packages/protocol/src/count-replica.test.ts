@@ -1,4 +1,4 @@
-import { canonicalEncode, fromBase64Url, toBase64Url } from '@cp2p/codec';
+import { canonicalEncode, toBase64Url } from '@cp2p/codec';
 import { scalarToBytes } from '@cp2p/crypto';
 import { RESOURCES } from '@cp2p/engine';
 import type { CommandShape, GameState, Result, Seat } from '@cp2p/engine';
@@ -16,7 +16,6 @@ import { decodeProtocolMessage } from './messages.js';
 import { P2PSession } from './p2p-session.js';
 import type { P2PSessionOptions } from './p2p-session.js';
 import { createMemnet } from './testing/memnet.js';
-import { createSimulationGenesis } from './testing/simulation-genesis.js';
 import { createVerifiedDeckSession } from './testing/verified-deck-session.js';
 import type { VerifiedDeckSession } from './testing/verified-deck-session.js';
 import type { VirtualClock } from './testing/virtual-clock.js';
@@ -139,12 +138,21 @@ function quietRobber(
 
 describe('live verified Monopoly count replication', () => {
   test('certifies owner count contributions and folds private hands after a legal Monopoly', async () => {
-    // Keep the original board/game seed; nonce 14 selects the current protocol's Monopoly-first permutation.
+    // This legal setup supplies a development-card cost without waiting for random production.
+    const settlementOrder = [
+      'v:-1,-1,N',
+      'v:-1,-1,S',
+      'v:-1,0,S',
+      'v:-1,1,S',
+      'v:0,-1,S',
+      'v:0,0,S',
+      'v:0,2,N',
+      'v:1,1,N',
+    ];
+    // Nonce 8 selects the v5 Monopoly-first permutation.
     const fixture = createVerifiedDeckSession(16, 2, 128, {
-      ceremonyNonce: toBase64Url(new Uint8Array(32).fill(14)),
-      boardSeed: fromBase64Url(
-        createSimulationGenesis({ seed: 14, humanCount: 2 }).genesis.genesisSeed,
-      ),
+      ceremonyNonce: toBase64Url(new Uint8Array(32).fill(8)),
+      boardSeed: new Uint8Array(32).fill(50),
     });
     const peers = fixture.humans.map(
       (human) => required(fixture.simulation.identities.get(human.seat)).peerId,
@@ -220,7 +228,7 @@ describe('live verified Monopoly count replication', () => {
         } else if (slotId === null) {
           const slots = required(live[hostIndex(fixture, buyer)]).getPrivate(buyer)?.slots;
           if (Object.values(slots ?? {}).some((card) => card !== 'monopoly'))
-            throw new Error('The nonce-7 first card was not Monopoly');
+            throw new Error('The fixture first card was not Monopoly');
           const ownedSlot = Object.entries(slots ?? {}).find(([, card]) => card === 'monopoly');
           if (ownedSlot) slotId = ownedSlot[0];
         }
@@ -271,6 +279,11 @@ describe('live verified Monopoly count replication', () => {
             ? discard(state, pending.seat)
             : undefined) ??
           quietRobber(fixture, state, pending.seat, legal) ??
+          legal.find(
+            (command) =>
+              command.type === 'PLACE_SETTLEMENT' &&
+              command.vertex === settlementOrder[state.board.buildings.length],
+          ) ??
           legal.find((command) => command.type !== 'STEAL' && command.type !== 'BUY_DEV_CARD');
         if (!choice) throw new Error(`No safe legal choice at step ${step}`);
         const completion: { current: Result<void> | null } = { current: null };

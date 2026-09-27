@@ -100,6 +100,9 @@ export async function createTerminalAuditFixture(
   options: {
     /** Omit the VP override so the base engine uses its default ten-point target. */
     defaultVpTarget?: boolean;
+    /** Deterministic test board and deck entropy overrides for focused audit scenarios. */
+    boardSeed?: Uint8Array;
+    ceremonyNonce?: Uint8Array;
     prioritizeDevBuy?: boolean;
     maxElapsedMs?: number;
     onProgress?: (step: number, state: GameState) => void;
@@ -140,15 +143,15 @@ export async function createTerminalAuditFixture(
       },
     },
   });
-  const boardSeed = fromBase64Url(
-    createSimulationGenesis({ seed: 0, humanCount: 2 }).genesis.genesisSeed,
-  );
+  const boardSeed =
+    options.boardSeed?.slice() ??
+    fromBase64Url(createSimulationGenesis({ seed: 0, humanCount: 2 }).genesis.genesisSeed);
   const humans = simulation.genesis.seats.filter((seat) => seat.kind === 'human');
   const raw = {
     ...genesisBody(simulation.genesis),
     genesisSeed: toBase64Url(boardSeed),
     // This signed nonce gives a reproducible honest deck order.
-    ceremonyNonce: toBase64Url(new Uint8Array(32).fill(3)),
+    ceremonyNonce: toBase64Url(options.ceremonyNonce?.slice() ?? new Uint8Array(32).fill(3)),
     security: 'verified' as const,
     commitments: {},
   };

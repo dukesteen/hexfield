@@ -61,7 +61,7 @@ function fixture() {
   const initialBody: GenesisBody = {
     ...genesisBody(source.genesis),
     // Keep the original board while selecting a Knight-first ceremony permutation.
-    ceremonyNonce: toBase64Url(new Uint8Array(32).fill(1)),
+    ceremonyNonce: toBase64Url(new Uint8Array(32).fill(0)),
     security: 'verified',
     commitments: {
       beaconChains: humans.map((seat, index) => ({
@@ -282,6 +282,18 @@ function quietRobberMove(
   return undefined;
 }
 
+function publicDiscard(context: ProposalContext, seat: Seat): CommandShape {
+  const hand = need(context.log.state.seats.find((item) => item.seat === seat)).resources;
+  let remaining = Math.floor(hand.total / 2);
+  const cards = { brick: 0, lumber: 0, wool: 0, grain: 0, ore: 0 };
+  for (const resource of RESOURCES) {
+    cards[resource] = Math.min(hand.min[resource], remaining);
+    remaining -= cards[resource];
+  }
+  if (remaining !== 0) throw new Error('Fixture discard requires an exact public hand');
+  return { type: 'DISCARD', cards };
+}
+
 function driveToDraw(
   data: Fixture,
   start: ProposalContext,
@@ -307,6 +319,7 @@ function driveToDraw(
       throw new Error('No legal player choice on certified path');
     const legal = data.source.engine.getLegalCommands(context.log.state, player.seat).commands;
     const choice =
+      (player.allowed.includes('DISCARD') ? publicDiscard(context, player.seat) : undefined) ??
       legal.find((item) => item.type === 'BUY_DEV_CARD') ??
       legal.find((item) => item.type === 'ROLL_DICE') ??
       legal.find((item) => item.type === 'END_TURN') ??
@@ -358,6 +371,7 @@ function driveToPlayableKnight(
     }
     if (!player || player.kind !== 'player') throw new Error('Expected a pending player');
     const choice =
+      (player.allowed.includes('DISCARD') ? publicDiscard(context, player.seat) : undefined) ??
       legal.find((item) => item.type === 'ROLL_DICE') ??
       legal.find((item) => item.type === 'END_TURN') ??
       quietRobberMove(data, context, player.seat, legal) ??

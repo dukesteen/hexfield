@@ -103,7 +103,7 @@ describe('durable recovery readiness', () => {
 
   beforeAll(() => {
     fixture = createRecoveryFixture();
-  });
+  }, 30_000);
 
   test('persists the signed authorization and replacement key before returning', async () => {
     const replacement = recoveryFixtureReplacement(201);

@@ -7,13 +7,43 @@ import { createTerminalAuditFixture } from './testing/audit-fixture.js';
 
 type Fixture = Awaited<ReturnType<typeof createTerminalAuditFixture>>;
 let fixture: Fixture;
+const setupVertices = [
+  'v:-1,-1,N',
+  'v:-1,-1,S',
+  'v:-1,0,S',
+  'v:-1,1,S',
+  'v:0,-1,S',
+  'v:0,0,S',
+  'v:0,2,N',
+  'v:1,1,N',
+];
 
 beforeAll(async () => {
   const bot = new RandomBot();
   const rng = createBotRng(new Uint8Array(32).fill(59));
+  let setupIndex = 0;
   fixture = await createTerminalAuditFixture({
+    boardSeed: new Uint8Array(32).fill(50),
+    ceremonyNonce: new Uint8Array(32).fill(2),
     yieldTask: () => new Promise<void>((resolve) => setImmediate(resolve)),
     chooseCommand(host, pending) {
+      const commands = host.getLegalCommands(pending.seat).commands;
+      if (host.getState().turn.phase.at(-1)?.id === 'setup') {
+        const settlement = commands.find((command) => command.type === 'PLACE_SETTLEMENT');
+        if (settlement) {
+          const vertex = setupVertices[setupIndex];
+          setupIndex += 1;
+          const selected = commands.find(
+            (command) => command.type === 'PLACE_SETTLEMENT' && command.vertex === vertex,
+          );
+          if (!selected) throw new Error(`Audit setup vertex ${vertex} is not legal`);
+          return selected;
+        }
+        const road = commands.find((command) => command.type === 'PLACE_ROAD');
+        if (road) return road;
+      }
+      const endTurn = commands.find((command) => command.type === 'END_TURN');
+      if (endTurn) return endTurn;
       const priv = host.getPrivate(pending.seat);
       if (!priv) throw new Error('Audit bot lacks its private seat');
       return bot.decide({ state: host.getState(), priv, seat: pending.seat }, pending, rng);
@@ -23,6 +53,11 @@ beforeAll(async () => {
 
 describe('certified end-game audit', () => {
   test('passes a complete certified victory and identifies the first result', () => {
+    expect(
+      fixture.entries.some(
+        ({ entry }) => entry.payload.kind === 'system' && entry.payload.input.type === 'CARD_DEALT',
+      ),
+    ).toBe(true);
     const report = auditCertifiedGame(fixture);
     expect(report).toMatchObject({
       ok: true,
@@ -76,6 +111,10 @@ describe('certified end-game audit', () => {
   });
 
   test('detects a false private draw at the certified victory claim', () => {
+    const draw = fixture.entries.find(
+      ({ entry }) => entry.payload.kind === 'system' && entry.payload.input.type === 'CARD_DEALT',
+    );
+    expect(draw).toBeDefined();
     const original = fixture.engine;
     const altered: Engine = {
       ...original,
@@ -119,6 +158,7 @@ describe('certified end-game audit', () => {
     const draw = fixture.entries.find(
       ({ entry }) => entry.payload.kind === 'system' && entry.payload.input.type === 'CARD_DEALT',
     );
+    expect(draw).toBeDefined();
     expect(report).toMatchObject({
       ok: false,
       complete: false,

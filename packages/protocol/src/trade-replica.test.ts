@@ -175,6 +175,19 @@ test('live uncertain-hand trade retries fresh parents, survives restart, and rep
     }
     value(required(completion.current));
   }
+  function discardFor(seat: Seat): CommandShape {
+    const state = required(live[0]).getState();
+    const hand = required(required(live[ownerIndex(seat)]).getPrivate(seat)).hand;
+    let remaining = Math.floor(
+      required(state.seats.find((item) => item.seat === seat)).resources.total / 2,
+    );
+    const cards = { brick: 0, lumber: 0, wool: 0, grain: 0, ore: 0 };
+    for (const resource of RESOURCES) {
+      cards[resource] = Math.min(hand[resource] ?? 0, remaining);
+      remaining -= cards[resource];
+    }
+    return { type: 'DISCARD', cards };
+  }
   try {
     await settle(live, network.clock, 32);
     let stole = false;
@@ -189,18 +202,8 @@ test('live uncertain-hand trade retries fresh parents, survives restart, and rep
       const host = required(live[ownerIndex(pending.seat)]);
       const legal = host.getLegalCommands(pending.seat);
       let command: CommandShape | undefined;
-      if (legal.templates.some((item) => item.type === 'DISCARD')) {
-        const hand = required(host.getPrivate(pending.seat)).hand;
-        let remaining = Math.floor(
-          required(state.seats.find((item) => item.seat === pending.seat)).resources.total / 2,
-        );
-        const cards = { brick: 0, lumber: 0, wool: 0, grain: 0, ore: 0 };
-        for (const resource of RESOURCES) {
-          cards[resource] = Math.min(hand[resource] ?? 0, remaining);
-          remaining -= cards[resource];
-        }
-        command = { type: 'DISCARD', cards };
-      }
+      if (legal.templates.some((item) => item.type === 'DISCARD'))
+        command = discardFor(pending.seat);
       command ??= legal.commands.find((item) => item.type === 'STEAL');
       if (command?.type === 'STEAL') stole = true;
       command ??= legal.commands.find((item) => {
@@ -268,10 +271,16 @@ test('live uncertain-hand trade retries fresh parents, survives restart, and rep
       const nextHost = required(live[ownerIndex(pending.seat)]);
       const nextLegal = nextHost.getLegalCommands(pending.seat);
       const command =
+        (nextLegal.templates.some((item) => item.type === 'DISCARD')
+          ? discardFor(pending.seat)
+          : undefined) ??
         nextLegal.commands.find((item) => item.type === 'ROLL_DICE') ??
         nextLegal.commands.find((item) => item.type === 'END_TURN') ??
         nextLegal.commands[0];
-      if (!command) throw new Error(`Cannot advance to trade at ${step}`);
+      if (!command)
+        throw new Error(
+          `Cannot advance to trade at ${step}: ${JSON.stringify({ pending, legal: nextLegal })}`,
+        );
       // oxlint-disable-next-line no-await-in-loop -- The next state depends on this certificate.
       await submit(pending.seat, command);
     }
