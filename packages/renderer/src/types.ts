@@ -96,6 +96,7 @@ export interface ScreenPoint {
 /** A rules-neutral visual cue. IDs are stable per public event and deduplicated briefly. */
 export type BoardEffect =
   | { readonly id: string; readonly kind: 'dice-roll'; readonly dice: readonly [number, number] }
+  | { readonly id: string; readonly kind: 'production-pulse'; readonly hexes: readonly HexId[] }
   | {
       readonly id: string;
       readonly kind: 'piece-pop';

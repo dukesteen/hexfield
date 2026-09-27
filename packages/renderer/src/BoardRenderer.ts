@@ -9,7 +9,14 @@ import { assignTerrainVariants } from './assets/terrainVariants.js';
 import { roadVariantForEdge } from './roadVariant.js';
 import type { BoardTextures } from './assets/terrainTextures.js';
 import { sameAppearance } from './appearance.js';
-import { diceMotion, robberPosition } from './effectMotion.js';
+import {
+  DICE_ROLL_DURATION_MS,
+  PRODUCTION_TOKEN_PULSE_MS,
+  diceMotion,
+  productionPulseProgress,
+  productionTokenMotion,
+  robberPosition,
+} from './effectMotion.js';
 import { harborLayout } from './harborLayout.js';
 import type {
   BoardAppearance,
@@ -112,6 +119,7 @@ export class PixiBoardRenderer implements BoardRenderer {
   private readonly screenEffects = new Container();
   private readonly layers: Record<LayerName, Container>;
   private readonly buildingNodes = new Map<VertexId, Container>();
+  private readonly tokenSprites = new Map<HexId, Sprite>();
   private readonly detachedChildren: Container[] = [];
   private readonly activeEffects = new Map<
     string,
@@ -119,6 +127,7 @@ export class PixiBoardRenderer implements BoardRenderer {
       readonly kind: BoardEffect['kind'];
       readonly node: Container;
       readonly update: (progress: number) => boolean;
+      readonly cleanup?: () => void;
       readonly started: number;
       readonly duration: number;
     }
@@ -451,6 +460,7 @@ export class PixiBoardRenderer implements BoardRenderer {
       }
       if (this.reducedMotion) continue;
       if (effect.kind === 'robber-move') this.cancelRobberMove();
+      if (effect.kind === 'production-pulse') this.cancelProductionPulse();
       const active = this.createEffect(effect);
       if (active)
         this.activeEffects.set(effect.id, {
@@ -466,7 +476,10 @@ export class PixiBoardRenderer implements BoardRenderer {
   skipAnimations(): void {
     if (this.effectFrame !== 0) cancelAnimationFrame(this.effectFrame);
     this.effectFrame = 0;
-    for (const { node } of this.activeEffects.values()) this.retireNode(node);
+    for (const { node, cleanup } of this.activeEffects.values()) {
+      cleanup?.();
+      this.retireNode(node);
+    }
     this.activeEffects.clear();
     this.setRobberMoveActive(false);
     this.renderFrame();
@@ -485,9 +498,15 @@ export class PixiBoardRenderer implements BoardRenderer {
     readonly node: Container;
     readonly update: (progress: number) => boolean;
     readonly duration: number;
+    readonly cleanup?: () => void;
   } | null {
     const node = new Container();
-    const duration = effect.kind === 'dice-roll' ? 700 : 420;
+    const duration =
+      effect.kind === 'dice-roll'
+        ? DICE_ROLL_DURATION_MS
+        : effect.kind === 'production-pulse'
+          ? DICE_ROLL_DURATION_MS + PRODUCTION_TOKEN_PULSE_MS
+          : 420;
     if (effect.kind === 'dice-roll') {
       if (effect.dice.some((face) => !Number.isInteger(face) || face < 1 || face > 6)) return null;
       const faceSize = Math.min(64, Math.max(56, this.app.screen.width * 0.07));
@@ -517,6 +536,42 @@ export class PixiBoardRenderer implements BoardRenderer {
           node.children.forEach((child, index) => {
             child.rotation = motion.rotation * (index === 0 ? 1 : -1);
           });
+          return progress >= 1;
+        },
+      };
+    }
+    if (effect.kind === 'production-pulse') {
+      const originals = [...new Set(effect.hexes)]
+        .map((id) => this.tokenSprites.get(id))
+        .filter((sprite): sprite is Sprite => sprite !== undefined);
+      if (originals.length === 0) return null;
+      const sprites = originals.map((original) => {
+        const sprite = new Sprite(original.texture);
+        sprite.anchor.set(0.5);
+        sprite.position.copyFrom(original.position);
+        sprite.width = original.width;
+        sprite.height = original.height;
+        node.addChild(sprite);
+        return { sprite, y: original.position.y, scaleX: sprite.scale.x, scaleY: sprite.scale.y };
+      });
+      node.visible = false;
+      this.layers.effects.addChild(node);
+      return {
+        node,
+        duration,
+        cleanup: () => {
+          for (const original of originals) original.visible = true;
+        },
+        update: (progress) => {
+          const pulseProgress = productionPulseProgress(progress * duration);
+          if (pulseProgress === null) return false;
+          node.visible = true;
+          for (const original of originals) original.visible = false;
+          const lift = productionTokenMotion(pulseProgress);
+          for (const { sprite, y, scaleX, scaleY } of sprites) {
+            sprite.scale.set(scaleX * (1 + lift * 0.6), scaleY * (1 + lift * 0.6));
+            sprite.position.y = y - lift * this.hexSize * 0.12;
+          }
           return progress >= 1;
         },
       };
@@ -587,6 +642,7 @@ export class PixiBoardRenderer implements BoardRenderer {
     if (this.destroyed) return;
     for (const [id, effect] of this.activeEffects) {
       if (effect.update(Math.min(1, (now - effect.started) / effect.duration))) {
+        effect.cleanup?.();
         this.retireNode(effect.node);
         this.activeEffects.delete(id);
         if (effect.kind === 'robber-move') this.setRobberMoveActive(false);
@@ -618,6 +674,15 @@ export class PixiBoardRenderer implements BoardRenderer {
       this.activeEffects.delete(id);
     }
     this.setRobberMoveActive(false);
+  }
+
+  private cancelProductionPulse(): void {
+    for (const [id, effect] of this.activeEffects) {
+      if (effect.kind !== 'production-pulse') continue;
+      effect.cleanup?.();
+      this.retireNode(effect.node);
+      this.activeEffects.delete(id);
+    }
   }
 
   private pointForHit(hit: BoardHit): Point | null {
@@ -894,7 +959,10 @@ export class PixiBoardRenderer implements BoardRenderer {
     if (this.pulseFrame !== 0) cancelAnimationFrame(this.pulseFrame);
     if (this.renderFrameId !== 0) cancelAnimationFrame(this.renderFrameId);
     if (this.effectFrame !== 0) cancelAnimationFrame(this.effectFrame);
-    for (const { node } of this.activeEffects.values()) node.destroy({ children: true });
+    for (const { node, cleanup } of this.activeEffects.values()) {
+      cleanup?.();
+      node.destroy({ children: true });
+    }
     this.activeEffects.clear();
     this.viewChangeListeners.clear();
     this.app.destroy(true, { children: true, texture: false, textureSource: false });
@@ -904,6 +972,7 @@ export class PixiBoardRenderer implements BoardRenderer {
   private drawChanged(name: LayerName, value: unknown): void {
     const signature = JSON.stringify(value);
     if (this.signatures.get(name) === signature) return;
+    if (name === 'tokens') this.cancelProductionPulse();
     this.signatures.set(name, signature);
     this.rebuiltLayers += 1;
     const layer = this.layers[name];
@@ -954,6 +1023,7 @@ export class PixiBoardRenderer implements BoardRenderer {
     } else if (name === 'harbors') {
       for (const harbor of model.harbors) this.drawHarbor(layer, harbor.edge, harbor.kind);
     } else if (name === 'tokens') {
+      this.tokenSprites.clear();
       for (const hex of model.hexes) {
         if (hex.token === null) continue;
         const center = hexToPixel(hex.q, hex.r, this.hexSize);
@@ -964,6 +1034,7 @@ export class PixiBoardRenderer implements BoardRenderer {
         face.position.set(center.x, center.y);
         face.width = this.hexSize * 0.625;
         face.height = this.hexSize * 0.625;
+        this.tokenSprites.set(hex.id, face);
         layer.addChild(face);
       }
     } else if (name === 'focus') {

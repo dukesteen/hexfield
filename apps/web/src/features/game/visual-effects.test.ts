@@ -44,11 +44,41 @@ test('public production gains create exact flights from a producing tile', () =>
       ],
       20,
     );
-    expect(effects.board.map((effect) => effect.kind)).toEqual(['dice-roll']);
+    expect(effects.board.map((effect) => effect.kind)).toEqual(['dice-roll', 'production-pulse']);
+    expect(effects.board[1]).toEqual({
+      id: '20:production',
+      kind: 'production-pulse',
+      hexes: state.board.hexes
+        .filter((hex) => hex.token === source.token && hex.id !== state.board.robberHex)
+        .map((hex) => hex.id),
+    });
     expect(effects.flights).toEqual([
       { id: '20:1:0:grain:0', seat: 0, resource: 'grain', count: 2, fromHex: source.id },
     ]);
     expect(effects.productionGains).toEqual([{ id: '20:1:0', seat: 0, resources: { grain: 2 } }]);
+    const blocked = { ...state, board: { ...state.board, robberHex: source.id } };
+    const blockedEffects = deriveVisualEffects(
+      blocked,
+      blocked,
+      [
+        { type: 'diceRolled', roll: source.token, dice: [first, source.token - first] },
+        { type: 'resourcesProduced', bySeat: { '0': { grain: 0 } } },
+      ],
+      25,
+    );
+    const blockedPulse = blockedEffects.board.find((effect) => effect.kind === 'production-pulse');
+    expect(blockedPulse?.hexes).not.toContain(source.id);
+    expect(blockedEffects.flights).toEqual([]);
+    const noPayout = deriveVisualEffects(
+      before,
+      before,
+      [{ type: 'diceRolled', roll: source.token, dice: [first, source.token - first] }],
+      26,
+    );
+    expect(noPayout.board.find((effect) => effect.kind === 'production-pulse')?.hexes).toContain(
+      source.id,
+    );
+    expect(noPayout.flights).toEqual([]);
     expect(
       deriveVisualEffects(
         state,
