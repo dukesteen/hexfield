@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { invitationQr } from './qr-code';
 import { scanInvitationQr } from './qr-scanner';
@@ -8,6 +8,10 @@ export function InvitationCode({ value, label }: { value: string; label: string 
   const { t } = useTranslation('lobby');
   const [copied, setCopied] = useState(false);
   const [copyError, setCopyError] = useState(false);
+  const [qrOpen, setQrOpen] = useState(false);
+  const qrTitleId = useId();
+  const qrDialog = useRef<HTMLDialogElement>(null);
+  const qrTrigger = useRef<HTMLButtonElement>(null);
   const qr = useMemo(() => {
     try {
       return invitationQr(value);
@@ -19,25 +23,53 @@ export function InvitationCode({ value, label }: { value: string; label: string 
     setCopied(false);
     setCopyError(false);
   }, [value]);
+  useEffect(() => {
+    const dialog = qrDialog.current;
+    if (!dialog) return undefined;
+    if (qrOpen && !dialog.open) {
+      if (typeof dialog.showModal === 'function') dialog.showModal();
+      else dialog.open = true;
+    } else if (!qrOpen && dialog.open) {
+      dialog.close?.();
+    }
+    return () => {
+      if (dialog.open) dialog.close?.();
+    };
+  }, [qrOpen]);
+
+  const qrImage = (className: string) =>
+    qr && (
+      <svg
+        className={className}
+        viewBox={`0 0 ${qr.size} ${qr.size}`}
+        role="img"
+        aria-label={t('lobby:invitationQrLabel', { label })}
+        shapeRendering="crispEdges"
+      >
+        <rect width={qr.size} height={qr.size} fill="#fff" />
+        <path d={qr.path} fill="#000" />
+      </svg>
+    );
 
   return (
     <div className="invitation-code">
       {qr && (
-        <svg
-          className="invitation-qr"
-          viewBox={`0 0 ${qr.size} ${qr.size}`}
-          role="img"
-          aria-label={t('lobby:invitationQrLabel', { label })}
-          shapeRendering="crispEdges"
+        <button
+          ref={qrTrigger}
+          className="invitation-qr-trigger"
+          type="button"
+          aria-label={t('lobby:invitationQrEnlarge', { label })}
+          aria-haspopup="dialog"
+          onClick={() => setQrOpen(true)}
         >
-          <rect width={qr.size} height={qr.size} fill="#fff" />
-          <path d={qr.path} fill="#000" />
-        </svg>
+          {qrImage('invitation-qr')}
+        </button>
       )}
       <div className="invitation-code-text">
         <label>
           {label}
           <textarea
+            aria-label={label}
             value={value}
             readOnly
             rows={3}
@@ -80,6 +112,39 @@ export function InvitationCode({ value, label }: { value: string; label: string 
         {copyError && <p role="alert">{t('lobby:onlineCopyFailed')}</p>}
         {(!qr || qr.version > 25) && <p className="muted">{t('lobby:invitationDenseQr')}</p>}
       </div>
+      {qr && (
+        <dialog
+          ref={qrDialog}
+          className="app-dialog invitation-qr-dialog"
+          aria-labelledby={qrTitleId}
+          onCancel={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            setQrOpen(false);
+          }}
+          onClick={(event) => {
+            if (event.target === event.currentTarget) setQrOpen(false);
+          }}
+          onClose={(event) => {
+            event.stopPropagation();
+            setQrOpen(false);
+            qrTrigger.current?.focus();
+          }}
+        >
+          <header className="section-heading">
+            <h2 id={qrTitleId}>{t('lobby:invitationQrEnlarged', { label })}</h2>
+            <button
+              className="button button-quiet"
+              type="button"
+              aria-label={t('lobby:invitationQrClose')}
+              onClick={() => setQrOpen(false)}
+            >
+              {t('lobby:invitationQrClose')}
+            </button>
+          </header>
+          {qrImage('invitation-qr-large')}
+        </dialog>
+      )}
     </div>
   );
 }

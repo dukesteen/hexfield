@@ -1120,6 +1120,12 @@ export class P2PSession implements GameSession<CertifiedHistory> {
     this.replica?.clearRecoveryApproval();
   }
 
+  canRequestTakeover(departedSeat: Seat): Promise<Result<void>> {
+    return this.replica && this.status.kind === 'running' && !this.recoveryInstalling
+      ? this.replica.canRequestTakeover(departedSeat)
+      : Promise.resolve(failure('session-recovery-unavailable', 'The game session is unavailable'));
+  }
+
   /** Explicit vote-mode takeover request; fresh bot keys are reserved before gossip. */
   async requestTakeover(
     departedSeat: Seat,

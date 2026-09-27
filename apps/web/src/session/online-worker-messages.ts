@@ -100,6 +100,7 @@ export type OnlineWorkerRequestBody =
   | { readonly kind: 'ackSession'; readonly snapshotId: number }
   | { readonly kind: 'approveRecoveryAuthorization'; readonly change: unknown }
   | { readonly kind: 'clearRecoveryApproval' }
+  | { readonly kind: 'canRequestTakeover'; readonly departedSeat: Seat }
   | {
       readonly kind: 'requestTakeover';
       readonly departedSeat: Seat;
@@ -160,6 +161,7 @@ export interface OnlineWorkerReplyByKind {
   ackSession: void;
   approveRecoveryAuthorization: RecoveryApprovalPreview;
   clearRecoveryApproval: void;
+  canRequestTakeover: void;
   requestTakeover: void;
   cancelPending: boolean;
   shutdown: void;

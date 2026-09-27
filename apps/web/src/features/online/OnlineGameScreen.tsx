@@ -1,8 +1,9 @@
 import type { Seat } from '@cp2p/engine';
+import { failure } from '@cp2p/engine';
 import type { GameSession, LobbyFreezeAgreement } from '@cp2p/protocol';
 import { getGameArtUrl } from '@cp2p/renderer';
 import { useBlocker, useNavigate } from '@tanstack/react-router';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { useTranslation } from 'react-i18next';
 import { GameReadOnly } from '../game/GameReadOnly.js';
@@ -16,10 +17,13 @@ import { ManualConnectionPanel } from './ManualConnectionPanel';
 import { ConnectionDiagnostics } from './ConnectionDiagnostics';
 import { ChatPanel } from './ChatPanel';
 import { TransferPanel } from './TransferPanel';
+import { RecoveryPanel } from './RecoveryPanel';
+import { useReconnectFallback } from './use-reconnect-fallback';
 import { useSourceTransfer } from '../../queries/online-transfers';
 import type { OnlineTransferBrowser } from '../../session/online-transfer-browser';
 import { createTransferInviteUrl } from '../../session/online-transfer-link';
 import { useRequestPersistentStorage } from '../../queries/storage-persistence';
+import { queryKeys } from '../../queries/keys';
 import './online.css';
 
 const SHAPES = ['circle', 'triangle', 'square', 'diamond'] as const;
@@ -37,6 +41,7 @@ export function OnlineGameScreen({ gameId }: { gameId: string }) {
     () => room?.getSnapshot() ?? null,
     () => null,
   );
+  const reconnectFallback = useReconnectFallback(snapshot);
   useEffect(() => {
     const generation = ++lifetime.current;
     let live = true;
@@ -107,7 +112,12 @@ export function OnlineGameScreen({ gameId }: { gameId: string }) {
             </p>
           )}
           {room && snapshot && !halted && (
-            <ManualConnectionPanel room={room} snapshot={snapshot} reconnect />
+            <ManualConnectionPanel
+              room={room}
+              snapshot={snapshot}
+              reconnect
+              reconnectFallback={reconnectFallback}
+            />
           )}
           <div className="dialog-actions">
             {failed && !halted && !unsupportedVersion && (
@@ -132,23 +142,34 @@ export function OnlineGameScreen({ gameId }: { gameId: string }) {
         </section>
       </main>
     );
-  return <OnlineGameInstance room={room} game={game} agreement={agreement} />;
+  return (
+    <OnlineGameInstance
+      room={room}
+      game={game}
+      agreement={agreement}
+      reconnectFallback={reconnectFallback}
+    />
+  );
 }
 
 function OnlineGameInstance({
   room,
   game,
   agreement,
+  reconnectFallback,
 }: {
   room: OnlineRoomHandleValue;
   game: OnlineGame<GameSession>;
   agreement: LobbyFreezeAgreement;
+  reconnectFallback: boolean;
 }) {
   const { t } = useTranslation(['game', 'lobby']);
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const snapshot = useSyncExternalStore(room.subscribe, room.getSnapshot, room.getSnapshot);
   const audit = useSessionStore((store) => store.audit);
   const status = useSessionStore((store) => store.status);
+  const recoveryCandidate = useSessionStore((store) => store.recoveryCandidate);
   const { mutate: requestPersistentStorage } = useRequestPersistentStorage();
   const [attached, setAttached] = useState(false);
   const [leaving, setLeaving] = useState(false);
@@ -210,6 +231,10 @@ function OnlineGameInstance({
     requestPersistentStorage();
   }, [requestPersistentStorage]);
   useEffect(() => {
+    if (status?.kind === 'complete')
+      void queryClient.invalidateQueries({ queryKey: queryKeys.onlineGames(), exact: true });
+  }, [queryClient, status?.kind, audit]);
+  useEffect(() => {
     const element = haltedDialog.current;
     if (halted && !element?.open) element?.showModal();
     return () => {
@@ -267,6 +292,18 @@ function OnlineGameInstance({
       devicePeer !== null && devicePeer !== snapshot.self && !snapshot.peers.includes(devicePeer)
     );
   });
+  const missingHumans = missing.flatMap((seat) =>
+    seat.kind === 'human' ? [{ seat: seat.seat, name: seat.name }] : [],
+  );
+  const currentHumans = snapshot.deviceRoutes
+    ? snapshot.deviceRoutes.seats
+        .filter((seat) => seat.devicePeer !== null)
+        .map((seat) => seat.seat)
+    : agreement.state.seats.flatMap((seat) => (seat.kind === 'human' ? [seat.seat] : []));
+  const canInitiateTakeover =
+    currentHumans.length === 4 &&
+    missingHumans.length === 1 &&
+    game.seat === Math.min(...currentHumans.filter((seat) => seat !== missingHumans[0]?.seat));
   for (const seat of agreement.state.seats) {
     const devicePeer = currentDeviceForSeat(seat.seat);
     if (devicePeer !== null)
@@ -314,6 +351,7 @@ function OnlineGameInstance({
     setLeaveError(false);
     try {
       await closeOnlineRoom(room.invite.roomId);
+      await queryClient.invalidateQueries({ queryKey: queryKeys.onlineGames(), exact: true });
       allowNavigation.current = true;
       setLeaving(false);
       if (blocker.status === 'blocked') blocker.proceed?.();
@@ -405,27 +443,53 @@ function OnlineGameInstance({
             </>
           }
           sessionNotice={
-            missing.length > 0 ? (
-              <div className="online-game-notice">
-                <div className="online-game-notice-heading">
-                  <span className="online-connection-spinner" aria-hidden="true" />
-                  <strong>{t('lobby:onlineReconnecting')}</strong>
-                </div>
-                <p>
-                  {t('lobby:onlineGameWaitingPeers', {
-                    players: missing
-                      .map((seat) => (seat.kind === 'human' ? seat.name : ''))
-                      .join(', '),
-                  })}
-                </p>
-                <button
-                  className="button button-quiet"
-                  type="button"
-                  onClick={() => setConnectionOpen(true)}
-                >
-                  {t('lobby:manualReconnectTitle')}
-                </button>
-              </div>
+            missing.length > 0 || recoveryCandidate ? (
+              <>
+                {missing.length > 0 && (
+                  <div className="online-game-notice">
+                    <div className="online-game-notice-heading">
+                      <span className="online-connection-spinner" aria-hidden="true" />
+                      <strong>{t('lobby:onlineReconnecting')}</strong>
+                    </div>
+                    <p>
+                      {t('lobby:onlineGameWaitingPeers', {
+                        players: missing
+                          .map((seat) => (seat.kind === 'human' ? seat.name : ''))
+                          .join(', '),
+                      })}
+                    </p>
+                    <button
+                      className="button button-quiet"
+                      type="button"
+                      onClick={() => setConnectionOpen(true)}
+                    >
+                      {t('lobby:manualReconnectTitle')}
+                    </button>
+                  </div>
+                )}
+                <RecoveryPanel
+                  policy={game.genesis.takeover}
+                  candidate={recoveryCandidate}
+                  missing={missingHumans}
+                  takeoverAvailable={currentHumans.length === 4}
+                  canInitiate={canInitiateTakeover}
+                  onEligibility={(seat) =>
+                    game.session.canRequestTakeover?.(seat) ??
+                    Promise.resolve(failure('session-unavailable', 'Takeover is unavailable'))
+                  }
+                  onApprove={(change) =>
+                    game.session.approveRecoveryAuthorization?.(change) ??
+                    Promise.resolve(
+                      failure('session-unavailable', 'Takeover voting is unavailable'),
+                    )
+                  }
+                  onDecline={() => game.session.clearRecoveryApproval?.()}
+                  onRequest={(seat, level) =>
+                    game.session.requestTakeover?.(seat, level) ??
+                    Promise.resolve(failure('session-unavailable', 'Takeover is unavailable'))
+                  }
+                />
+              </>
             ) : undefined
           }
         />
@@ -459,7 +523,12 @@ function OnlineGameInstance({
               {...(room.getPeerStats ? { loadPeerStats: room.getPeerStats } : {})}
               peerLabels={peerLabels}
             />
-            <ManualConnectionPanel room={room} snapshot={snapshot} reconnect />
+            <ManualConnectionPanel
+              room={room}
+              snapshot={snapshot}
+              reconnect
+              reconnectFallback={reconnectFallback}
+            />
           </>
         )}
       </dialog>

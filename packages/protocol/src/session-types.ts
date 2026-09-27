@@ -63,6 +63,8 @@ export interface GameSession<Save = unknown> {
   getRecoveryCandidate?(): RecoveryApprovalCandidate | null;
   approveRecoveryAuthorization?(change: unknown): Promise<Result<RecoveryApprovalPreview>>;
   clearRecoveryApproval?(): void;
+  /** Reads this device's quorum-qualified takeover eligibility; certification still rechecks. */
+  canRequestTakeover?(departedSeat: Seat): Promise<Result<void>>;
   requestTakeover?(departedSeat: Seat, botLevel: 'easy' | 'medium' | 'hard'): Promise<Result<void>>;
   controllableSeats(): Seat[];
   submit(seat: Seat, command: CommandShape, options?: SubmitOptions): Promise<Result<void>>;

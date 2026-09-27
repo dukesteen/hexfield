@@ -48,6 +48,7 @@ import { createOnlineGameTransport } from './online-game-transport.js';
 import type { OnlineDeviceRoutes, OnlineGameTransport } from './online-game-transport.js';
 import { createOnlineGameCandidateStore } from './online-game-candidates.js';
 import { createSessionAuditRunner } from './audit-worker-client.js';
+import { createOnlineGameHistoryWriter } from './online-game-history-writer.js';
 import { browserEntropy, randomIndex, randomSeed } from './random.js';
 
 type OnlineJournal = ProtocolJournal & { close(): Promise<void> };
@@ -75,6 +76,8 @@ export interface OnlineGameInput {
   readonly signal?: AbortSignal;
   /** Immediate fatal fence for an unexpectedly lost exclusive game writer. */
   readonly onFatal?: (error: Error) => void;
+  /** Reports local history-metadata persistence failures without affecting gameplay. */
+  readonly onHistoryMetadataError?: (error: Error) => void;
   readonly onDeviceRoutes?: (routes: OnlineDeviceRoutes) => void;
   /** Resume preserves history; the built-in journal may initialize only an atomically proven unused slot. */
   readonly journalMode?: 'fresh-or-restore' | 'restore-only';
@@ -110,6 +113,8 @@ export async function openOnlineGame(
   let lease: GameWriterLease | null = null;
   let transport: OnlineGameTransport | null = null;
   let session: P2PSession | null = null;
+  let historyWriter: ReturnType<typeof createOnlineGameHistoryWriter> | null = null;
+  let terminalHead: { seq: number; hash: string } | null = null;
   let leaseLost = false;
   const providers = new Map<Seat, BeaconSecretProvider>();
   const checkCancelled = () => {
@@ -120,10 +125,12 @@ export async function openOnlineGame(
   input.signal?.addEventListener('abort', stopOutput, { once: true });
   const cleanup = async () => {
     input.signal?.removeEventListener('abort', stopOutput);
+    historyWriter?.stop();
     try {
       session?.dispose();
       await session?.flush();
     } finally {
+      await historyWriter?.flush();
       transport?.dispose();
       for (const provider of providers.values()) provider.dispose();
       for (const item of material) {
@@ -208,6 +215,8 @@ export async function openOnlineGame(
           input.engine,
           policy,
           (_entry, next) => {
+            if (!terminalHead && next.log.state.result)
+              terminalHead = { seq: next.log.head.seq, hash: entryHash(next.log.head) };
             const key = next.log.authority?.controllers.find(
               (seat) => seat.seat === local.seat,
             )?.publicKey;
@@ -475,6 +484,15 @@ export async function openOnlineGame(
     if (!opened.ok) throw new Error(opened.error.message);
     session = opened.value;
     checkCancelled();
+    historyWriter = createOnlineGameHistoryWriter({
+      store: input.store,
+      gameId: genesis.gameId,
+      genesisDigest: digest,
+      session,
+      localHumanSeat: human.seat,
+      terminalHead,
+      ...(input.onHistoryMetadataError ? { onError: input.onHistoryMetadataError } : {}),
+    });
     const routes = projection.value.deviceRoutes();
     if (routes) input.onDeviceRoutes?.(routes);
     let closing: Promise<void> | null = null;

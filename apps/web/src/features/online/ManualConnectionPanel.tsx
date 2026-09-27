@@ -4,38 +4,31 @@ import { useTranslation } from 'react-i18next';
 import type { OnlineRoomSnapshot } from '../../session/online-room';
 import type { OnlineRoomHandleValue } from './room-registry';
 import { InvitationCode, ScanInvitation } from './InvitationCode';
+import { reconnectPlayers } from './use-reconnect-fallback';
 
 export function ManualConnectionPanel({
   room,
   snapshot,
   reconnect = false,
+  reconnectFallback = false,
 }: {
   room: OnlineRoomHandleValue;
   snapshot: OnlineRoomSnapshot;
   reconnect?: boolean;
+  reconnectFallback?: boolean;
 }) {
   const { t } = useTranslation('lobby');
   const [input, setInput] = useState('');
   const [target, setTarget] = useState('');
   const manual = snapshot.manual;
   const canInvite = reconnect || snapshot.self === snapshot.invite.hostPeer;
-  const roster = snapshot.agreement?.state ?? snapshot.lobby;
-  const namesBySeat = new Map(
-    roster?.seats.flatMap((seat) =>
-      seat.kind === 'open' ? [] : [[seat.seat, seat.name] as const],
-    ) ?? [],
-  );
-  const deviceRoutes =
-    snapshot.deviceRoutes?.seats ??
-    roster?.seats.flatMap((seat) =>
-      seat.kind === 'human' ? [{ seat: seat.seat, devicePeer: seat.peer }] : [],
-    ) ??
-    [];
-  const members = deviceRoutes.flatMap(({ seat, devicePeer }) => {
-    const name = namesBySeat.get(seat);
-    return devicePeer && devicePeer !== snapshot.self && name ? [{ peer: devicePeer, name }] : [];
-  });
-  const selectedTarget = members.some((member) => member.peer === target) ? target : '';
+  const members = reconnectPlayers(snapshot);
+  const missing = members.filter(({ peer }) => !snapshot.peers.includes(peer));
+  const selectedTarget = missing.some((member) => member.peer === target)
+    ? target
+    : missing.length === 1
+      ? (missing[0]?.peer ?? '')
+      : '';
   const action = useMutation({
     mutationFn: async (kind: 'invite' | 'answer' | 'accept') => {
       const result =
@@ -53,11 +46,12 @@ export function ManualConnectionPanel({
     action.reset();
     setInput('');
   };
-  if (!room.startManualInvitation || !manual) return null;
+  if (!room.startManualInvitation || !manual || snapshot.closed) return null;
   const receivingAnswer =
     manual.phase === 'offering' || (manual.phase === 'error' && manual.code !== null);
   const connected = manual.peer !== null && snapshot.peers.includes(manual.peer);
   const hasCode = manual.code !== null && !connected;
+  const automatic = reconnect && !reconnectFallback && !hasCode && !receivingAnswer;
 
   return (
     <section
@@ -65,7 +59,16 @@ export function ManualConnectionPanel({
       aria-label={t(reconnect ? 'lobby:manualReconnectTitle' : 'lobby:manualTitle')}
     >
       <h2>{t(reconnect ? 'lobby:manualReconnectTitle' : 'lobby:manualTitle')}</h2>
-      {connected ? (
+      {automatic ? (
+        <p role="status" className="online-connection-progress">
+          {missing.length > 0 && <span className="online-connection-spinner" aria-hidden="true" />}
+          {missing.length > 0
+            ? t('lobby:manualAutomaticReconnect', {
+                players: missing.map(({ name }) => name).join(', '),
+              })
+            : t('lobby:manualAllConnected')}
+        </p>
+      ) : connected ? (
         <p role="status">{reconnect ? t('lobby:manualReconnected') : t('lobby:manualConnected')}</p>
       ) : (
         <p className="muted">
@@ -133,14 +136,14 @@ export function ManualConnectionPanel({
           </div>
         </form>
       )}
-      {canInvite && (!hasCode || connected) && !receivingAnswer && (
+      {canInvite && !automatic && (!hasCode || connected) && !receivingAnswer && (
         <div className="manual-connection-form">
           {reconnect && (
             <label>
               {t('lobby:manualChoosePlayer')}
               <select value={selectedTarget} onChange={(event) => setTarget(event.target.value)}>
                 <option value="">{t('lobby:manualChoosePlayer')}</option>
-                {members.map((member) => (
+                {missing.map((member) => (
                   <option key={member.peer} value={member.peer}>
                     {member.name}
                   </option>

@@ -2,7 +2,7 @@ import { fromBase64Url, hashValue, toBase64Url, toHex } from '@cp2p/codec';
 import { baseModule } from '@cp2p/engine';
 import type { GameConfig, OptionSpec, Result, TurnTimer } from '@cp2p/engine';
 import { standardFixedBoard } from '@cp2p/maps';
-import type { GenesisSeedMode } from '@cp2p/protocol';
+import type { GenesisSeedMode, TakeoverPolicy } from '@cp2p/protocol';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -26,27 +26,32 @@ function initialOptions(config: GameConfig): Record<string, unknown> {
 export function OnlineConfiguration({
   config,
   seedMode,
+  takeover,
+  humanCount,
   editable,
   onSave,
   onPendingChange,
 }: {
   config: GameConfig;
   seedMode: GenesisSeedMode;
+  takeover: TakeoverPolicy;
+  humanCount: number;
   editable: boolean;
-  onSave: (config: GameConfig, seed: GenesisSeedMode) => Result<void>;
+  onSave: (config: GameConfig, seed: GenesisSeedMode, takeover: TakeoverPolicy) => Result<void>;
   onPendingChange?: (pending: boolean) => void;
 }) {
   const { t } = useTranslation('lobby');
   const [seatCount, setSeatCount] = useState(config.seats.length);
   const [options, setOptions] = useState<Record<string, unknown>>(() => initialOptions(config));
   const [fixedSeed, setFixedSeed] = useState(seedMode.kind === 'fixed');
+  const [takeoverDraft, setTakeoverDraft] = useState<TakeoverPolicy>(takeover);
   const [seedHex, setSeedHex] = useState(() =>
     seedMode.kind === 'fixed' ? toHex(fromBase64Url(seedMode.seed)) : '',
   );
   const [error, setError] = useState(false);
   const [revision, setRevision] = useState(0);
-  const baseline = useRef(JSON.stringify([seatCount, options, fixedSeed, seedHex]));
-  const externalKey = toHex(hashValue([config, seedMode]));
+  const baseline = useRef(JSON.stringify([seatCount, options, fixedSeed, seedHex, takeoverDraft]));
+  const externalKey = toHex(hashValue([config, seedMode, takeover]));
   const previousExternal = useRef(externalKey);
   const latestSubmitted = useRef<{ revision: number; key: string } | null>(null);
   const currentConfig = useRef(config);
@@ -73,23 +78,25 @@ export function OnlineConfiguration({
     setSeatCount(config.seats.length);
     setOptions(initialOptions(config));
     setFixedSeed(seedMode.kind === 'fixed');
+    setTakeoverDraft(takeover);
     setSeedHex(seedMode.kind === 'fixed' ? toHex(fromBase64Url(seedMode.seed)) : '');
     baseline.current = JSON.stringify([
       config.seats.length,
       initialOptions(config),
       seedMode.kind === 'fixed',
       seedMode.kind === 'fixed' ? toHex(fromBase64Url(seedMode.seed)) : '',
+      takeover,
     ]);
     setRevision(0);
     setError(false);
     latestSubmitted.current = null;
-  }, [externalKey, config, seedMode, revision]);
+  }, [externalKey, config, seedMode, takeover, revision]);
 
   useEffect(() => {
     if (!editable || revision === 0) return undefined;
     if (
       !latestSubmitted.current &&
-      JSON.stringify([seatCount, options, fixedSeed, seedHex]) === baseline.current
+      JSON.stringify([seatCount, options, fixedSeed, seedHex, takeoverDraft]) === baseline.current
     ) {
       setRevision(0);
       return undefined;
@@ -116,8 +123,14 @@ export function OnlineConfiguration({
           ? { board: previousBoard ?? standardFixedBoard() }
           : {}),
       };
-      const key = toHex(hashValue([next, selectedSeed]));
-      const draftKey = JSON.stringify([seatCount, options, fixedSeed, seedHex.toLowerCase()]);
+      const key = toHex(hashValue([next, selectedSeed, takeoverDraft]));
+      const draftKey = JSON.stringify([
+        seatCount,
+        options,
+        fixedSeed,
+        seedHex.toLowerCase(),
+        takeoverDraft,
+      ]);
       if (key === externalKey || draftKey === baseline.current) {
         baseline.current = draftKey;
         latestSubmitted.current = null;
@@ -126,12 +139,12 @@ export function OnlineConfiguration({
         return;
       }
       latestSubmitted.current = { revision, key };
-      const result = save.current(next, selectedSeed);
+      const result = save.current(next, selectedSeed, takeoverDraft);
       if (!result.ok) latestSubmitted.current = null;
       setError(!result.ok);
     }, SAVE_DELAY_MS);
     return () => window.clearTimeout(timer);
-  }, [editable, externalKey, fixedSeed, options, revision, seatCount, seedHex]);
+  }, [editable, externalKey, fixedSeed, options, revision, seatCount, seedHex, takeoverDraft]);
 
   const changed = () => {
     setRevision((current) => current + 1);
@@ -240,7 +253,51 @@ export function OnlineConfiguration({
               </div>
             )}
           </div>
+          <div className="online-takeover-fields">
+            <label>
+              {t('lobby:onlineTakeoverDelay')}
+              <select
+                value={takeoverDraft.afterSeconds}
+                onChange={(event) => {
+                  const delay = event.target.value;
+                  setTakeoverDraft(
+                    delay === 'never'
+                      ? { mode: 'vote', afterSeconds: 'never' }
+                      : { mode: takeoverDraft.mode, afterSeconds: Number(delay) },
+                  );
+                  changed();
+                }}
+              >
+                <option value="never">{t('lobby:onlineTakeoverNever')}</option>
+                {[30, 60, 120, 300].map((seconds) => (
+                  <option key={seconds} value={seconds}>
+                    {t('lobby:onlineTakeoverSeconds', { count: seconds })}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {takeoverDraft.afterSeconds !== 'never' && (
+              <label>
+                {t('lobby:onlineTakeoverMode')}
+                <select
+                  value={takeoverDraft.mode}
+                  onChange={(event) => {
+                    setTakeoverDraft({
+                      mode: event.target.value === 'auto' ? 'auto' : 'vote',
+                      afterSeconds: takeoverDraft.afterSeconds,
+                    });
+                    changed();
+                  }}
+                >
+                  <option value="vote">{t('lobby:onlineTakeoverVote')}</option>
+                  <option value="auto">{t('lobby:onlineTakeoverAuto')}</option>
+                </select>
+              </label>
+            )}
+          </div>
         </fieldset>
+        <p className="muted">{t('lobby:onlineTakeoverDisclosure')}</p>
+        {humanCount < 4 && <p className="muted">{t('lobby:onlineTakeoverFourHumans')}</p>}
         {error && <p role="alert">{t('lobby:onlineActionFailed')}</p>}
         {editable && revision > 0 && !error && (
           <small role="status">{t('lobby:onlineSaving')}</small>

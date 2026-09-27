@@ -363,11 +363,12 @@ storage/query tests and the online game-screen lifecycle tests pass.
 
 The [takeover review](verification/stage10/takeover-policy-review-disposition.md)
 identified voting-progress, competing-request and returning-target defects in
-the local approval facade. Corrections are in progress. The signed takeover
-policy and certified online/offline entries are not implemented yet. The
-[seat-transfer design](verification/stage10/seat-transfer-design.md) defines the
-remaining fresh-key transfer and recovered-human return work; it is not
-implementation or acceptance evidence.
+the local approval facade. The corrected implementation binds takeover policy
+to signed lobby configuration and genesis, certifies presence changes, and
+measures absence only while the required quorum is reachable. The
+[product review](verification/stage10/takeover-product-review-disposition.md)
+covers policy controls, eligibility checks and approval of the exact current
+candidate. These checks do not establish a complete browser takeover.
 
 The local [v4 transfer core checkpoint](verification/stage10/transfer-core-check.md)
 adds certified authorization, cancellation, activation and same-seat key
@@ -382,6 +383,15 @@ that seat's keys and private state while retaining its own hand. The
 [runtime integration map](verification/stage10/transfer-runtime-integration-map.md)
 tracks the remaining bootstrap, device admission, worker orchestration and user
 controls. This checkpoint is not deployed and does not complete Stage 10.
+
+The [product checkpoint](verification/stage10/product-acceptance-checkpoint.md)
+adds two-/three-human departure and restart traces, automatic-first reconnect
+controls, and enlarged QR views. Finished-game outcome metadata now follows the
+verified session and audit lifecycle; the home list shows winner/audit status
+and derives local statistics only from complete successful audits. General save
+import/export, read-only replay and deletion remain open. Native transfer testing
+found and corrected omitted worker ingress requests; complete handoff acceptance
+still depends on the startup and transfer checks recorded in that checkpoint.
 
 - [ ] All chaos additions pass on 500 seeds each.
 - [ ] Refresh-resume takes < 3 s to be back in play on a typical laptop (measured).

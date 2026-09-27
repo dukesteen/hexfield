@@ -1,9 +1,6 @@
-import { canonicalEncode } from '@cp2p/codec';
-import {
-  MAX_ONLINE_WORKER_REQUEST_BYTES,
-  ONLINE_WORKER_PROTOCOL,
-} from './online-worker-messages.js';
-import type { OnlineWorkerRequest } from './online-worker-messages.js';
+import { ONLINE_WORKER_PROTOCOL } from './online-worker-messages.js';
+import type { OnlineWorkerRequest, OnlineWorkerRequestBody } from './online-worker-messages.js';
+import { prepareOnlineWorkerRequest } from './online-worker-request-size.js';
 import { OnlineWorkerRuntime } from './online-worker-runtime.js';
 
 // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- This entry runs only inside a dedicated worker, whose postMessage has no target origin.
@@ -12,24 +9,38 @@ const scope = globalThis as unknown as {
   addEventListener(type: 'message', listener: (event: MessageEvent<unknown>) => void): void;
 };
 
-const kinds = new Set<string>([
-  'initialize',
-  'attachTransport',
-  'pinFreeze',
-  'startCeremony',
-  'retryStart',
-  'validate',
-  'submit',
-  'setPrivateVisible',
-  'exportSave',
-  'retryAudit',
-  'ackSession',
-  'approveRecoveryAuthorization',
-  'clearRecoveryApproval',
-  'requestTakeover',
-  'cancelPending',
-  'shutdown',
-]);
+const kinds = {
+  initializeTransfer: true,
+  transferSnapshot: true,
+  prepareTransferOffer: true,
+  refreshTransferBootstrap: true,
+  importTransferPacket: true,
+  prepareTransferReadiness: true,
+  observeTransferActivation: true,
+  observeTransferCancellation: true,
+  exportTransferBootstrap: true,
+  transferStatus: true,
+  authorizeLiveTransfer: true,
+  submitTransfer: true,
+  prepareTransferPrivate: true,
+  initialize: true,
+  attachTransport: true,
+  pinFreeze: true,
+  startCeremony: true,
+  retryStart: true,
+  validate: true,
+  submit: true,
+  setPrivateVisible: true,
+  exportSave: true,
+  retryAudit: true,
+  ackSession: true,
+  approveRecoveryAuthorization: true,
+  clearRecoveryApproval: true,
+  canRequestTakeover: true,
+  requestTakeover: true,
+  cancelPending: true,
+  shutdown: true,
+} satisfies Record<OnlineWorkerRequestBody['kind'], true>;
 
 function object(value: unknown): Record<string, unknown> | null {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return null;
@@ -45,8 +56,79 @@ function seat(value: unknown): boolean {
   return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 && value <= 5;
 }
 
+function token(value: unknown): boolean {
+  return typeof value === 'string' && /^[A-Za-z0-9_-]{43}$/.test(value);
+}
+
+function head(value: unknown): boolean {
+  const ref = object(value);
+  return (
+    !!ref &&
+    onlyKeys(ref, ['seq', 'hash']) &&
+    Number.isSafeInteger(ref.seq) &&
+    typeof ref.seq === 'number' &&
+    ref.seq >= 0 &&
+    typeof ref.hash === 'string' &&
+    /^[0-9a-f]{64}$/.test(ref.hash)
+  );
+}
+
+function bootstrap(value: unknown): boolean {
+  return value instanceof Uint8Array && value.buffer instanceof ArrayBuffer;
+}
+
 function validBody(body: Record<string, unknown>): boolean {
   switch (body.kind) {
+    case 'initializeTransfer': {
+      const expected = object(body.expected);
+      return (
+        token(body.self) &&
+        token(body.attemptId) &&
+        ['new', 'resume', 'open'].includes(String(body.mode)) &&
+        !!expected &&
+        onlyKeys(expected, ['gameId', 'genesisDigest']) &&
+        typeof expected.gameId === 'string' &&
+        /^[A-Za-z0-9_-]{22}$/.test(expected.gameId) &&
+        token(expected.genesisDigest) &&
+        (body.bootstrapBytes === undefined || bootstrap(body.bootstrapBytes)) &&
+        onlyKeys(body, ['kind', 'self', 'attemptId', 'mode', 'expected', 'bootstrapBytes'])
+      );
+    }
+    case 'transferSnapshot':
+    case 'prepareTransferReadiness':
+      return onlyKeys(body, ['kind']);
+    case 'prepareTransferOffer':
+      return (
+        seat(body.seat) &&
+        ['live', 'return'].includes(String(body.mode)) &&
+        onlyKeys(body, ['kind', 'seat', 'mode'])
+      );
+    case 'refreshTransferBootstrap':
+    case 'observeTransferActivation':
+    case 'observeTransferCancellation':
+      return bootstrap(body.bootstrapBytes) && onlyKeys(body, ['kind', 'bootstrapBytes']);
+    case 'importTransferPacket':
+      return !!object(body.packet) && onlyKeys(body, ['kind', 'packet']);
+    case 'exportTransferBootstrap':
+      return (
+        (body.throughSeq === undefined ||
+          (Number.isSafeInteger(body.throughSeq) &&
+            typeof body.throughSeq === 'number' &&
+            body.throughSeq >= 0)) &&
+        onlyKeys(body, ['kind', 'throughSeq'])
+      );
+    case 'transferStatus':
+      return (
+        (body.authorization === undefined || head(body.authorization)) &&
+        (body.statement === undefined || !!object(body.statement)) &&
+        onlyKeys(body, ['kind', 'authorization', 'statement'])
+      );
+    case 'authorizeLiveTransfer':
+      return !!object(body.offer) && head(body.head) && onlyKeys(body, ['kind', 'offer', 'head']);
+    case 'submitTransfer':
+      return !!object(body.change) && head(body.head) && onlyKeys(body, ['kind', 'change', 'head']);
+    case 'prepareTransferPrivate':
+      return head(body.authorization) && onlyKeys(body, ['kind', 'authorization']);
     case 'initialize':
       return (
         typeof body.self === 'string' &&
@@ -76,16 +158,10 @@ function validBody(body: Record<string, unknown>): boolean {
       return !!object(body.agreement) && onlyKeys(body, ['kind', 'agreement']);
     case 'validate':
     case 'submit': {
-      const head = object(body.head);
       const command = object(body.command);
       return (
         seat(body.seat) &&
-        !!head &&
-        Number.isSafeInteger(head.seq) &&
-        typeof head.seq === 'number' &&
-        head.seq >= 0 &&
-        typeof head.hash === 'string' &&
-        /^[0-9a-f]{64}$/.test(head.hash) &&
+        head(body.head) &&
         !!command &&
         typeof command.type === 'string' &&
         onlyKeys(body, ['kind', 'seat', 'head', 'command'])
@@ -108,6 +184,8 @@ function validBody(body: Record<string, unknown>): boolean {
       );
     case 'approveRecoveryAuthorization':
       return 'change' in body && onlyKeys(body, ['kind', 'change']);
+    case 'canRequestTakeover':
+      return seat(body.departedSeat) && onlyKeys(body, ['kind', 'departedSeat']);
     case 'requestTakeover':
       return (
         seat(body.departedSeat) &&
@@ -141,34 +219,26 @@ function checkedHeader(value: unknown) {
     candidate.id <= 0 ||
     !body ||
     typeof body.kind !== 'string' ||
-    !kinds.has(body.kind)
+    !Object.hasOwn(kinds, body.kind)
   )
     return null;
   return { candidate, body, generation: candidate.generation, id: candidate.id, kind: body.kind };
 }
 
-function checkedRequest(
-  value: unknown,
-  { candidate, body }: NonNullable<ReturnType<typeof checkedHeader>>,
-): OnlineWorkerRequest | null {
+function checkedRequest({
+  body,
+  generation,
+  id,
+}: NonNullable<ReturnType<typeof checkedHeader>>): OnlineWorkerRequest | null {
   if (!validBody(body)) return null;
   try {
-    // MessagePort is transferred separately; the remaining request is canonical data.
-    const measurable =
-      body.kind === 'attachTransport'
-        ? {
-            protocol: candidate.protocol,
-            generation: candidate.generation,
-            id: candidate.id,
-            body: { kind: body.kind, self: body.self, peers: body.peers },
-          }
-        : candidate;
-    if (canonicalEncode(measurable).byteLength > MAX_ONLINE_WORKER_REQUEST_BYTES) return null;
+    // The same bounds and detached-copy rules apply on both sides of the worker port.
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- validBody checked the discriminant and required fields above.
+    const checked = prepareOnlineWorkerRequest(body as OnlineWorkerRequestBody);
+    return { protocol: ONLINE_WORKER_PROTOCOL, generation, id, body: checked.body };
   } catch {
     return null;
   }
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The worker applies per-operation domain checks before using any field.
-  return value as OnlineWorkerRequest;
 }
 
 // oxlint-disable-next-line unicorn/require-post-message-target-origin -- DedicatedWorkerGlobalScope.postMessage has no target origin.
@@ -176,7 +246,7 @@ const runtime = new OnlineWorkerRuntime({ emit: (event) => scope.postMessage(eve
 scope.addEventListener('message', (event) => {
   const header = checkedHeader(event.data);
   if (!header) return;
-  const request = checkedRequest(event.data, header);
+  const request = checkedRequest(header);
   if (!request) {
     // Only trusted primitive header fields are echoed; malformed bodies never leave the worker.
     const reply = {

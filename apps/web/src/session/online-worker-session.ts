@@ -152,6 +152,10 @@ export class OnlineWorkerSession implements GameSession {
     void this.client.request({ kind: 'clearRecoveryApproval' });
   }
 
+  canRequestTakeover(departedSeat: Seat) {
+    return this.client.request({ kind: 'canRequestTakeover', departedSeat });
+  }
+
   requestTakeover(departedSeat: Seat, botLevel: 'easy' | 'medium' | 'hard') {
     return this.client.request({ kind: 'requestTakeover', departedSeat, botLevel });
   }

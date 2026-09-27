@@ -3,7 +3,7 @@ import { act, cleanup, fireEvent, render } from '@testing-library/react';
 import { canonicalDecode, canonicalEncode, toBase64Url } from '@cp2p/codec';
 import { baseModule, success } from '@cp2p/engine';
 import type { GameConfig, Result } from '@cp2p/engine';
-import type { GenesisSeedMode } from '@cp2p/protocol';
+import type { GenesisSeedMode, TakeoverPolicy } from '@cp2p/protocol';
 import { standardFixedBoard } from '@cp2p/maps';
 import { genesisSchema } from '@cp2p/protocol';
 import { afterEach, expect, test, vi } from 'vitest';
@@ -21,6 +21,7 @@ const config: GameConfig = {
   seats: [0, 1, 2, 3],
   options: { base: { vpTarget: 10, mapLayout: 'balanced-random' } },
 };
+const takeover: TakeoverPolicy = { mode: 'vote', afterSeconds: 120 };
 
 test('the host can save every schema rule, timer and a fixed seed without losing other settings', () => {
   vi.useFakeTimers();
@@ -28,7 +29,14 @@ test('the host can save every schema rule, timer and a fixed seed without losing
     success(undefined),
   );
   const page = render(
-    <OnlineConfiguration config={config} seedMode={{ kind: 'joint' }} editable onSave={save} />,
+    <OnlineConfiguration
+      takeover={takeover}
+      humanCount={4}
+      config={config}
+      seedMode={{ kind: 'joint' }}
+      editable
+      onSave={save}
+    />,
   );
   expect(save).not.toHaveBeenCalled();
   fireEvent.change(page.getByLabelText('lobby:vpTarget'), { target: { value: '12' } });
@@ -66,6 +74,7 @@ test('the host can save every schema rule, timer and a fixed seed without losing
       },
     },
     { kind: 'fixed', seed: toBase64Url(new Uint8Array(32).fill(171)) },
+    takeover,
   );
 });
 
@@ -75,6 +84,8 @@ test('guests can read the signed rules and timers but cannot change or submit th
   );
   const page = render(
     <OnlineConfiguration
+      takeover={takeover}
+      humanCount={4}
       config={{
         ...config,
         options: {
@@ -104,6 +115,8 @@ test('fixed islands retain their board, random maps remove it, and malformed see
   );
   const page = render(
     <OnlineConfiguration
+      takeover={takeover}
+      humanCount={4}
       config={{ ...config, board, options: { base: { mapLayout: 'standard-fixed' } } }}
       seedMode={{ kind: 'joint' }}
       editable
@@ -113,7 +126,11 @@ test('fixed islands retain their board, random maps remove it, and malformed see
   expect(save).not.toHaveBeenCalled();
   fireEvent.change(page.getByLabelText('lobby:vpTarget'), { target: { value: '11' } });
   void act(() => vi.advanceTimersByTime(400));
-  expect(save).toHaveBeenLastCalledWith(expect.objectContaining({ board }), { kind: 'joint' });
+  expect(save).toHaveBeenLastCalledWith(
+    expect.objectContaining({ board }),
+    { kind: 'joint' },
+    takeover,
+  );
   fireEvent.change(page.getByLabelText('lobby:mapLayout'), {
     target: { value: 'balanced-random' },
   });
@@ -132,11 +149,20 @@ test('a pending edit is cancelled when the lobby freezes or the editor unmounts'
     success(undefined),
   );
   const page = render(
-    <OnlineConfiguration config={config} seedMode={{ kind: 'joint' }} editable onSave={save} />,
+    <OnlineConfiguration
+      takeover={takeover}
+      humanCount={4}
+      config={config}
+      seedMode={{ kind: 'joint' }}
+      editable
+      onSave={save}
+    />,
   );
   fireEvent.change(page.getByLabelText('lobby:vpTarget'), { target: { value: '12' } });
   page.rerender(
     <OnlineConfiguration
+      takeover={takeover}
+      humanCount={4}
       config={config}
       seedMode={{ kind: 'joint' }}
       editable={false}
@@ -156,6 +182,8 @@ test('reverting a configuration edit before the debounce does not save or reset 
   const pending = vi.fn<(value: boolean) => void>();
   const page = render(
     <OnlineConfiguration
+      takeover={takeover}
+      humanCount={4}
       config={config}
       seedMode={{ kind: 'joint' }}
       editable
@@ -179,6 +207,8 @@ test('a parsed lobby acknowledgement clears saving despite reordered configurati
   const pending = vi.fn<(value: boolean) => void>();
   const page = render(
     <OnlineConfiguration
+      takeover={takeover}
+      humanCount={4}
       config={config}
       seedMode={{ kind: 'joint' }}
       editable
@@ -196,6 +226,8 @@ test('a parsed lobby acknowledgement clears saving despite reordered configurati
   expect(JSON.stringify(parsed)).not.toBe(JSON.stringify(sent));
   page.rerender(
     <OnlineConfiguration
+      takeover={takeover}
+      humanCount={4}
       config={parsed}
       seedMode={{ kind: 'joint' }}
       editable
@@ -217,6 +249,8 @@ test('changing only fixed-seed hex casing clears pending without a no-op save', 
   const pending = vi.fn<(value: boolean) => void>();
   const page = render(
     <OnlineConfiguration
+      takeover={takeover}
+      humanCount={4}
       config={config}
       seedMode={{ kind: 'fixed', seed: toBase64Url(new Uint8Array(32).fill(171)) }}
       editable
@@ -231,4 +265,58 @@ test('changing only fixed-seed hex casing clears pending without a no-op save', 
   expect(save).not.toHaveBeenCalled();
   expect(pending).toHaveBeenLastCalledWith(false);
   expect(page.queryByRole('status')).toBeNull();
+});
+
+test('host policy changes are saved with the same signed lobby configuration', () => {
+  vi.useFakeTimers();
+  const save = vi.fn<
+    (config: GameConfig, seed: GenesisSeedMode, policy: TakeoverPolicy) => Result<void>
+  >(() => success(undefined));
+  const page = render(
+    <OnlineConfiguration
+      config={config}
+      seedMode={{ kind: 'joint' }}
+      takeover={takeover}
+      humanCount={4}
+      editable
+      onSave={save}
+    />,
+  );
+  fireEvent.change(page.getByLabelText('lobby:onlineTakeoverMode'), {
+    target: { value: 'auto' },
+  });
+  fireEvent.change(page.getByLabelText('lobby:onlineTakeoverDelay'), {
+    target: { value: '30' },
+  });
+  void act(() => vi.advanceTimersByTime(400));
+  expect(save).toHaveBeenLastCalledWith(
+    expect.objectContaining({ seats: config.seats }),
+    { kind: 'joint' },
+    {
+      mode: 'auto',
+      afterSeconds: 30,
+    },
+  );
+  page.rerender(
+    <OnlineConfiguration
+      config={config}
+      seedMode={{ kind: 'joint' }}
+      takeover={{ mode: 'auto', afterSeconds: 30 }}
+      humanCount={4}
+      editable
+      onSave={save}
+    />,
+  );
+  fireEvent.change(page.getByLabelText('lobby:onlineTakeoverDelay'), {
+    target: { value: 'never' },
+  });
+  void act(() => vi.advanceTimersByTime(400));
+  expect(save).toHaveBeenLastCalledWith(
+    expect.objectContaining({ seats: config.seats }),
+    { kind: 'joint' },
+    {
+      mode: 'vote',
+      afterSeconds: 'never',
+    },
+  );
 });

@@ -11,6 +11,43 @@
   aspect-ratio: 1;
   background: #fff;
 }
+.invitation-qr-trigger {
+  display: block;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  cursor: zoom-in;
+}
+.invitation-qr-trigger:focus-visible {
+  outline: 3px solid var(--focus, #70b7ff);
+  outline-offset: 4px;
+}
+.invitation-qr-dialog {
+  width: min(680px, calc(100vw - 32px));
+  max-width: calc(100vw - 32px);
+  max-height: calc(100dvh - 32px);
+  overflow: auto;
+}
+.invitation-qr-dialog > .section-heading {
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+.invitation-qr-dialog h2 {
+  margin: 0;
+}
+.invitation-qr-large {
+  display: block;
+  width: min(100%, 560px);
+  max-height: calc(100dvh - 150px);
+  aspect-ratio: 1;
+  margin-inline: auto;
+  border: 12px solid #fff;
+  border-radius: 12px;
+  background: #fff;
+}
 .invitation-code-text {
   min-width: 0;
   display: grid;
@@ -149,6 +186,11 @@
 
   :is(.connection-dialog, .online-resume-panel) .invitation-qr {
     width: 180px;
+  }
+
+  .invitation-qr-dialog > .section-heading {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }
 

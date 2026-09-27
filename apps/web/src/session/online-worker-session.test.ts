@@ -193,6 +193,22 @@ describe('OnlineWorkerSession', () => {
     client.fail(new Error('test complete'));
   });
 
+  test('forwards local takeover eligibility without exposing recovery keys', async () => {
+    const { worker, client, session } = setup();
+    const checking = session.canRequestTakeover(1);
+    const request = latestRequest(worker, 'canRequestTakeover');
+    expect(request.body).toEqual({ kind: 'canRequestTakeover', departedSeat: 1 });
+    worker.reply(request, {
+      ok: false,
+      error: { code: 'recovery-too-early', message: 'Wait for the signed policy delay' },
+    });
+    await expect(checking).resolves.toMatchObject({
+      ok: false,
+      error: { code: 'recovery-too-early' },
+    });
+    client.fail(new Error('test complete'));
+  });
+
   test('hide clears private data immediately and an older visibility token cannot restore it', async () => {
     const { worker, client, session } = setup();
     session.setPrivateVisible(false);

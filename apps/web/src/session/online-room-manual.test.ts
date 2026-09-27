@@ -127,7 +127,7 @@ test('manual host publishes one signed room-bound offer and cancels its owned RT
   );
   try {
     expect(room.invite.serverUrl).toBe('');
-    expect(room.getSnapshot().lobby?.takeover).toEqual({ mode: 'vote', afterSeconds: 'never' });
+    expect(room.getSnapshot().lobby?.takeover).toEqual({ mode: 'vote', afterSeconds: 120 });
     const offered = await room.startManualInvitation();
     if (!offered.ok) throw new Error(offered.error.message);
     const hint = await readManualLobbyOffer(offered.value.code);

@@ -389,6 +389,12 @@ export class OnlineWorkerRuntime {
       case 'clearRecoveryApproval':
         this.requireSession().clearRecoveryApproval();
         return undefined;
+      case 'canRequestTakeover': {
+        const result = await this.requireSession().canRequestTakeover(body.departedSeat);
+        if (!result.ok)
+          throw Object.assign(new Error(result.error.message), { code: result.error.code });
+        return undefined;
+      }
       case 'requestTakeover': {
         const result = await this.requireSession().requestTakeover(
           body.departedSeat,

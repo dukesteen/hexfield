@@ -330,9 +330,11 @@ export function OnlineLobby({
                 <OnlineConfiguration
                   config={state.config}
                   seedMode={state.seedMode}
+                  takeover={state.takeover}
+                  humanCount={humanSeats.length}
                   editable={isHost && state.status === 'open' && !snapshot.startup && !startBusy}
-                  onSave={(config, seed) =>
-                    room.lobby?.configure(config, seed) ??
+                  onSave={(config, seed, takeover) =>
+                    room.lobby?.configure(config, seed, takeover) ??
                     failure('lobby-closed', 'The room is closed')
                   }
                   onPendingChange={setSettingsPending}
@@ -342,9 +344,16 @@ export function OnlineLobby({
                   <div>
                     <h2>{t('lobby:onlineStartTitle')}</h2>
                     <p className="muted">{t('lobby:onlineStartPreparation')}</p>
-                    {state.takeover.afterSeconds === 'never' && (
-                      <p className="muted">{t('lobby:onlineDisconnectPolicy')}</p>
-                    )}
+                    <p className="muted">
+                      {state.takeover.afterSeconds === 'never'
+                        ? t('lobby:onlineDisconnectPolicy')
+                        : t(
+                            state.takeover.mode === 'auto'
+                              ? 'lobby:onlineTakeoverSummaryAuto'
+                              : 'lobby:onlineTakeoverSummaryVote',
+                            { count: state.takeover.afterSeconds },
+                          )}
+                    </p>
                   </div>
                   <button
                     className="button button-primary"

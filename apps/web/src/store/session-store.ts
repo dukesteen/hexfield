@@ -8,7 +8,7 @@ import type {
   Seat,
 } from '@cp2p/engine';
 import type { GameSession, SessionStatus, SessionTimer } from '../session';
-import type { SessionAuditState, SessionFairness } from '@cp2p/protocol';
+import type { RecoveryApprovalCandidate, SessionAuditState, SessionFairness } from '@cp2p/protocol';
 import type { EdgeId, VertexId } from '@cp2p/engine/geometry';
 import { requiredHumanSeat } from './pending-actors';
 
@@ -25,6 +25,7 @@ interface SessionView {
   status: SessionStatus | null;
   audit: SessionAuditState | null;
   fairness: SessionFairness | null;
+  recoveryCandidate: RecoveryApprovalCandidate | null;
   revision: number;
   waitingSeat: Seat | null;
   revealedSeat: Seat | null;
@@ -66,6 +67,7 @@ const emptyView: SessionView = {
   status: null,
   audit: null,
   fairness: null,
+  recoveryCandidate: null,
   revision: 0,
   waitingSeat: null,
   revealedSeat: null,
@@ -300,6 +302,7 @@ export function attachSession(gameId: string, session: GameSession): () => void 
       status: update.status,
       audit: update.audit ?? null,
       fairness: update.fairness ?? null,
+      recoveryCandidate: update.recoveryCandidate ?? null,
       revision: update.revision,
       waitingSeat: coverSeat,
       revealedSeat: visibleSeat,

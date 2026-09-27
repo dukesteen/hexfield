@@ -201,6 +201,37 @@ test('source transfer RPC rejects stale submission and wipes worker-generated en
   }
 });
 
+test('takeover eligibility RPC returns only the local certified gate result', async () => {
+  const store = Object.assign(new MemoryEscrowLifecycleStore(), { close: async () => undefined });
+  const worker = new OnlineWorkerRuntime({ store, emit: () => undefined });
+  const checked: number[] = [];
+  Reflect.set(worker, 'startup', {
+    game: () => ({
+      session: {
+        async canRequestTakeover(seat: number) {
+          checked.push(seat);
+          return seat === 2
+            ? success(undefined)
+            : { ok: false as const, error: { code: 'recovery-quorum', message: 'No quorum' } };
+        },
+        dispose: () => undefined,
+      },
+    }),
+    close: async () => undefined,
+  });
+  try {
+    expect(
+      (await worker.handle(request(1, { kind: 'canRequestTakeover', departedSeat: 2 }))).result,
+    ).toMatchObject({ ok: true, value: undefined });
+    expect(
+      (await worker.handle(request(2, { kind: 'canRequestTakeover', departedSeat: 1 }))).result,
+    ).toMatchObject({ ok: false, error: { code: 'recovery-quorum' } });
+    expect(checked).toEqual([2, 1]);
+  } finally {
+    await worker.close();
+  }
+});
+
 test('worker loads the durable device identity and refuses replayed or changed generations', async () => {
   const store = Object.assign(new MemoryEscrowLifecycleStore(), { close: async () => undefined });
   const identity = await loadOrCreateOnlineIdentity(store, (length) =>

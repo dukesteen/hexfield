@@ -378,7 +378,7 @@ export class OnlineRoom {
                 name: request.name,
                 hostName: request.hostName,
                 config: request.config,
-                takeover: { mode: 'vote', afterSeconds: 'never' },
+                takeover: { mode: 'vote', afterSeconds: 120 },
               })
             : LobbyController.join({ ...common, hostPeer: invite.hostPeer });
         if (!created.ok) throw new Error(created.error.message);

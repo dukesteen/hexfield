@@ -1,0 +1,58 @@
+.saved-game-row.online-history-row {
+  grid-template-columns: minmax(0, 1fr) 18px;
+}
+
+.online-history-description {
+  display: grid;
+  gap: 6px;
+}
+
+.online-history-result {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  font-size: 0.8rem;
+}
+
+.online-history-audit {
+  padding: 3px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--muted);
+  background: var(--raised);
+  font-size: 0.7rem;
+}
+
+.online-history-audit[data-audit='verified'] {
+  color: var(--text);
+}
+
+.online-history-stats {
+  margin-block: 16px;
+  padding-block: 12px;
+  border-block: 1px solid var(--border);
+}
+
+.online-history-stats > p {
+  margin: 0 0 12px;
+  font-size: 0.72rem;
+}
+
+.online-history-stats dl {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0;
+}
+
+.online-history-stats dt {
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.online-history-stats dd {
+  margin: 6px 0 0;
+  font-size: 1.1rem;
+  font-weight: 650;
+}
