@@ -1,9 +1,10 @@
-import { toBase64Url } from '@cp2p/codec';
+import { canonicalEncode, toBase64Url } from '@cp2p/codec';
 import { identityFromSecret } from '@cp2p/crypto';
 import { BASE_VERSION } from '@cp2p/engine';
 import { MemoryEscrowLifecycleStore, VirtualClock } from '@cp2p/protocol/testing';
 import type { PeerId } from '@cp2p/protocol';
 import { expect, test } from 'vitest';
+import { WebRtcTransport } from '@cp2p/p2p';
 import { OnlineRoom } from './online-room.js';
 import { planPregameRoster } from './online-room-roster.js';
 
@@ -126,5 +127,94 @@ test('a departed server-discovered peer frees a room slot for a new device', asy
   } finally {
     await room.close();
     for (const identity of identities) identity.secretKey.fill(0);
+  }
+});
+
+test('frozen room forwards only newly present admitted peers as bounded reconnect hints', async () => {
+  const socket = new SignalingSocket();
+  const pair = [81, 82].map((byte) => identityFromSecret(new Uint8Array(32).fill(byte)));
+  const [host, target] = pair.toSorted((left, right) => left.peerId.localeCompare(right.peerId));
+  if (!host || !target) throw new Error('Missing reconnect identities');
+  const outsider = identityFromSecret(new Uint8Array(32).fill(83));
+  const store = new MemoryEscrowLifecycleStore();
+  expect(
+    await store.putIfAbsent(
+      'online-credentials/device-identity/v1',
+      canonicalEncode({
+        protocol: 'cp2p/online-device-identity/v1',
+        peerId: host.peerId,
+        secretKey: host.secretKey,
+      }),
+    ),
+  ).toBe(true);
+  let attempts = 0;
+  const room = await OnlineRoom.open(
+    {
+      kind: 'host',
+      serverUrl: 'ws://localhost:3009',
+      name: 'Reconnect test',
+      hostName: 'Host',
+      config: {
+        modules: [{ id: 'base', version: BASE_VERSION }],
+        seats: [0, 1],
+        options: { base: { mapLayout: 'random', vpTarget: 3 } },
+      },
+    },
+    {
+      store,
+      clock: new VirtualClock(),
+      socketFactory: () => socket.browserSocket(),
+      rtcFactory: () => {
+        attempts++;
+        throw new Error('Connection unavailable');
+      },
+      manualRtcFactory: () => {
+        throw new Error('Manual connection unavailable');
+      },
+      acquireLease: async () => ({
+        lockName: 'reconnect-test',
+        run: async <T>(task: () => T | PromiseLike<T>) => task(),
+        close: async () => undefined,
+      }),
+    },
+  );
+  try {
+    const self = room.getSnapshot().self;
+    expect(self).toBe(host.peerId);
+    const transport: unknown = Reflect.get(room, 'transport');
+    if (!(transport instanceof WebRtcTransport)) throw new Error('Missing room transport');
+    transport.updatePreGameRoster([self, target.peerId]);
+    transport.freezeRoster();
+    Reflect.set(room, 'frozenRoster', true);
+    const initialAttempts = attempts;
+    socket.emit(
+      'message',
+      JSON.stringify({
+        type: 'challenge',
+        roomId: room.invite.roomId,
+        challenge: toBase64Url(new Uint8Array(32).fill(7)),
+      }),
+    );
+    const peers = (members: readonly PeerId[]) =>
+      socket.emit('message', JSON.stringify({ type: 'peers', peers: [self, ...members] }));
+    peers([]);
+    peers([target.peerId]);
+    expect(attempts).toBe(initialAttempts + 1);
+    peers([target.peerId]);
+    expect(attempts).toBe(initialAttempts + 1);
+    peers([outsider.peerId]);
+    expect(attempts).toBe(initialAttempts + 1);
+    transport.updateCertifiedRoster({
+      head: { seq: 0, hash: 'a'.repeat(64) },
+      activeDevices: [self],
+      catchupDevices: [],
+    });
+    peers([target.peerId]);
+    expect(attempts).toBe(initialAttempts + 1);
+  } finally {
+    await room.close();
+    host.secretKey.fill(0);
+    target.secretKey.fill(0);
+    outsider.secretKey.fill(0);
   }
 });

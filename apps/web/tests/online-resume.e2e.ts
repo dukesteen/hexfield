@@ -18,7 +18,8 @@ async function inspect(page: Page, gameId: string, submit = false) {
         /* @vite-ignore */ path
       )) as typeof import('../src/features/online/room-registry.js');
       // oxlint-enable typescript/no-unsafe-type-assertion
-      const session = getOnlineGameRoom(id)?.getGame()?.session;
+      const room = getOnlineGameRoom(id);
+      const session = room?.getGame()?.session;
       if (!session) return null;
       const seats = session.controllableSeats();
       const move = seats.flatMap((seat) => {
@@ -32,6 +33,7 @@ async function inspect(page: Page, gameId: string, submit = false) {
       }
       return {
         head,
+        devicePeer: room?.getSnapshot().self,
         seats,
         activeSeat: session.getState().turn.activeSeat,
         legal: !!move,
@@ -96,12 +98,18 @@ test('refresh and reverse-order reopening preserve the certified game and accept
         { timeout: 30_000 },
       )
       .toBe(true);
-    // The ceremony chooses first player; the room creator need not act first.
-    const firstIsHost = (await inspect(host, gameId))?.legal;
-    const first = firstIsHost ? host : guest;
-    const second = firstIsHost ? guest : host;
-    await certifyMove(first, second, gameId);
-    await certifyMove(first, second, gameId);
+    // Refresh the higher-ID responder, which cannot send a canonical opening
+    // offer itself. This exercises the survivor's lost-offer retry path.
+    const hostPeer = (await inspect(host, gameId))?.devicePeer;
+    const guestPeer = (await inspect(guest, gameId))?.devicePeer;
+    if (!hostPeer || !guestPeer) throw new Error('Missing device peer identifiers');
+    const second = hostPeer > guestPeer ? host : guest;
+    const first = second === host ? guest : host;
+    if (!(await inspect(second, gameId))?.legal) {
+      await certifyMove(first, second, gameId);
+      await certifyMove(first, second, gameId);
+    }
+    await certifyMove(second, first, gameId);
     const beforeRefresh = (await inspect(second, gameId))?.head;
     const refreshSeats = (await inspect(second, gameId))?.seats;
     const guestSeats = (await inspect(guest, gameId))?.seats;
@@ -134,15 +142,13 @@ test('refresh and reverse-order reopening preserve the certified game and accept
       .poll(async () => (await inspect(host, gameId))?.head, { timeout: 20_000 })
       .toEqual(savedHead);
     expect((await inspect(host, gameId))?.seats).toEqual(hostSeats);
-    const finalHead = await certifyMove(
-      firstIsHost ? guest : host,
-      firstIsHost ? host : guest,
-      gameId,
-    );
+    const hostActs = (await inspect(host, gameId))?.legal;
+    const finalHead = await certifyMove(hostActs ? host : guest, hostActs ? guest : host, gameId);
     expect(errors).toEqual([]);
     const measurements = JSON.stringify(
       {
         gameId,
+        refreshedTransportRole: 'higher-ID responder',
         savedHead,
         finalHead,
         refreshToRestoredMs,

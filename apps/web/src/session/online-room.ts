@@ -141,6 +141,7 @@ export class OnlineRoom {
   private readonly unsubscribers: Unsubscribe[] = [];
   private readonly listeners = new Set<() => void>();
   private readonly serverCandidates = new Map<PeerId, true>();
+  private readonly signalingPresent = new Set<PeerId>();
   private readonly manualCandidates = new Map<PeerId, ManualBridge>();
   private manualRetryPeer: PeerId | null = null;
   private snapshot: OnlineRoomSnapshot;
@@ -257,11 +258,11 @@ export class OnlineRoom {
       }),
       transport.onDiagnostic((_peer, reason) => this.update({ connectionError: reason })),
     );
+    if (signaling) this.unsubscribers.push(signaling.onRoomPeers((peers) => this.discover(peers)));
     if (controller) {
       this.unsubscribers.push(
         controller.onChange(() => this.refresh()),
         controller.onDiagnostic(() => this.refresh()),
-        ...(signaling ? [signaling.onRoomPeers((peers) => this.discover(peers))] : []),
       );
     }
     void this.chat.start().catch(() => this.refresh());
@@ -839,14 +840,17 @@ export class OnlineRoom {
   }
 
   private discover(peers: readonly PeerId[] | null): void {
+    if (this.snapshot.closed || this.closing) return;
+    const roster = new Set(this.transport.roster());
+    const present = new Set(
+      (peers ?? []).filter((peer) => peer !== this.identity.peerId && roster.has(peer)),
+    );
+    for (const peer of present)
+      if (!this.signalingPresent.has(peer)) this.transport.hintPeerAvailable(peer);
+    this.signalingPresent.clear();
+    for (const peer of present) this.signalingPresent.add(peer);
     const state = this.lobby?.state();
-    if (
-      this.snapshot.closed ||
-      this.closing ||
-      this.startup.agreement() ||
-      (state && state.status !== 'open')
-    )
-      return;
+    if (!state || state.status !== 'open' || this.startup.agreement()) return;
     const current = new Set(peers ?? []);
     for (const peer of this.serverCandidates.keys())
       if (!current.has(peer)) this.serverCandidates.delete(peer);

@@ -814,6 +814,63 @@ describe('authenticated WebRTC mesh', () => {
     }
   });
 
+  test('a rostered peer availability hint replaces a lost offer before its 30-second deadline', async () => {
+    const f = mesh(2);
+    try {
+      const initiator = member(f.roster, 0) < member(f.roster, 1) ? 0 : 1;
+      const responder = 1 - initiator;
+      const source = member(f.roster, initiator);
+      const target = member(f.roster, responder);
+      const offers: SignedSignalEnvelope[] = [];
+      f.signaling.setDrop((from, to, envelope) => {
+        if (
+          from !== source ||
+          to !== target ||
+          envelope.body.blob.kind !== 'description' ||
+          envelope.body.blob.description.type !== 'offer'
+        )
+          return false;
+        offers.push(envelope);
+        return offers.length <= 2;
+      });
+      for (const peer of f.peers) {
+        peer.freezeRoster();
+        peer.start();
+      }
+      await settle();
+      expect(offers).toHaveLength(1);
+      expect(f.peers.map((peer) => peer.peers().length)).toEqual([0, 0]);
+      f.clock.advanceBy(5_000);
+      await settle();
+      expect(f.peers.map((peer) => peer.peers().length)).toEqual([0, 0]);
+
+      member(f.peers, initiator).hintPeerAvailable(target);
+      await settle();
+      expect(offers).toHaveLength(2);
+      expect(f.peers.map((peer) => peer.peers().length)).toEqual([0, 0]);
+      member(f.peers, initiator).hintPeerAvailable(target);
+      expect(offers).toHaveLength(2);
+      f.clock.advanceBy(1_000);
+      member(f.peers, initiator).hintPeerAvailable(target);
+      await settle();
+      expect(offers).toHaveLength(3);
+      expect(f.peers.map((peer) => peer.peers().length)).toEqual([1, 1]);
+      await member(f.adapters, initiator).send(target, member(offers, 0));
+      await settle();
+      expect(f.peers.map((peer) => peer.peers().length)).toEqual([1, 1]);
+      const sentBeforeDuplicateHint = offers.length;
+      member(f.peers, initiator).hintPeerAvailable(target);
+      expect(offers).toHaveLength(sentBeforeDuplicateHint);
+      member(f.peers, initiator).hintPeerAvailable(member(f.roster, initiator));
+      expect(offers).toHaveLength(sentBeforeDuplicateHint);
+      member(f.peers, initiator).disconnect(target);
+      member(f.peers, initiator).hintPeerAvailable(target);
+      expect(offers).toHaveLength(sentBeforeDuplicateHint);
+    } finally {
+      f.dispose();
+    }
+  });
+
   test.each([false, true])(
     'a fresh attempt replaces a stale unanswered offer with descending IDs=%s',
     async (descendingIds) => {

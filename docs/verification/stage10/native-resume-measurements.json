@@ -1,14 +1,15 @@
 {
-  "gameId": "sTqPkmhAV9gfEX-Rl4RgL2",
+  "gameId": "Z9yYGSVvvptXVs6JcrY2C5",
+  "refreshedTransportRole": "higher-ID responder",
   "savedHead": {
-    "hash": "00fc7fba60d20098ecc09d4a82cab6577888d2570fbc0e025849c42d6a76274c",
-    "seq": 8
-  },
-  "finalHead": {
-    "hash": "8821ef85ed6de0689d4e5a6b35d7b856c8515c9c05399f0d5bcdc28bce12c208",
+    "hash": "f327c62406e054c79ab07834ad01cf5de3abbd80b9804c5549949f5293bad3a3",
     "seq": 9
   },
-  "refreshToRestoredMs": 2207.685958,
-  "refreshToPeerAcceptedMoveMs": 32827.13525,
-  "withinThreeSecondTarget": false
+  "finalHead": {
+    "hash": "0aceb2da0e5ab821bd75dd7b7cf62358b1310eefa86013f92fb49734a9afeb3c",
+    "seq": 10
+  },
+  "refreshToRestoredMs": 2276.94175,
+  "refreshToPeerAcceptedMoveMs": 2438.2048750000013,
+  "withinThreeSecondTarget": true
 }

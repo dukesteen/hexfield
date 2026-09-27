@@ -14,6 +14,7 @@ const MANUAL_ATTEMPT_TIMEOUT_MS = 5 * 60_000;
 const EARLY_CANDIDATE_MS = 5_000;
 const EARLY_CANDIDATE_LIMIT = 8;
 const REPLACEMENT_INTERVAL_MS = 250;
+const AVAILABILITY_RETRY_INTERVAL_MS = 1_000;
 const RETRY_MIN_MS = 250;
 const RETRY_MAX_MS = 4_000;
 
@@ -138,6 +139,7 @@ export class WebRtcTransport implements Transport {
   private readonly offerHighwater = new Map<PeerId, Map<string, number>>();
   private readonly earlyCandidates = new Map<PeerId, EarlyCandidates>();
   private readonly lastReplacement = new Map<PeerId, number>();
+  private readonly lastAvailabilityRetry = new Map<PeerId, number>();
   private readonly retries = new Map<PeerId, unknown>();
   private readonly retryDelay = new Map<PeerId, number>();
   private readonly manualDisconnects = new Set<PeerId>();
@@ -287,6 +289,7 @@ export class WebRtcTransport implements Transport {
       this.retireLink(peer);
       this.manualDisconnects.delete(peer);
       this.lastReplacement.delete(peer);
+      this.lastAvailabilityRetry.delete(peer);
       this.retryDelay.delete(peer);
       this.removedPeerHistory.delete(peer);
       this.removedPeerHistory.add(peer);
@@ -312,6 +315,37 @@ export class WebRtcTransport implements Transport {
     if (this.disposed) throw new Error('WebRTC transport is disposed');
     this.rosterFrozen = true;
     return this.roster();
+  }
+
+  /**
+   * Retry a lost offer when signaling reports an already-admitted peer online. Server presence
+   * grants no roster authority, and never replaces an authenticated or manually blocked link.
+   */
+  hintPeerAvailable(peer: PeerId): void {
+    if (
+      this.disposed ||
+      !this.started ||
+      !this.rosterFrozen ||
+      !this.expected.has(peer) ||
+      this.self > peer ||
+      this.manualDisconnects.has(peer) ||
+      this.online.has(peer)
+    )
+      return;
+    const primary = this.links.get(peer);
+    const pending = this.pendingLinks.get(peer);
+    if (primary?.link.isAuthenticated || pending?.link.isAuthenticated) return;
+    const now = this.options.clock.now();
+    const previous = this.lastAvailabilityRetry.get(peer);
+    if (previous !== undefined && now - previous < AVAILABILITY_RETRY_INTERVAL_MS) return;
+    this.lastAvailabilityRetry.set(peer, now);
+    this.retirePending(peer);
+    this.retireLink(peer);
+    try {
+      this.connect(peer);
+    } catch {
+      this.scheduleRetry(peer);
+    }
   }
 
   connect(peer: PeerId): void {
