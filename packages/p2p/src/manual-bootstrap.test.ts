@@ -194,7 +194,7 @@ test('two signed codes bootstrap an unknown joiner, then carry exact verified si
     const received: unknown[] = [];
     const envelope = signSignalEnvelope(
       {
-        version: 1,
+        version: 2,
         scope: common.scope,
         from: host.peerId,
         to: guest.peerId,

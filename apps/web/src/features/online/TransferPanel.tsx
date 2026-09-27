@@ -17,6 +17,7 @@ export type TransferPanelPhase =
 
 export interface TransferPanelProps {
   readonly role: 'source' | 'destination';
+  readonly mode?: 'live' | 'return';
   readonly invitationUrl?: string;
   readonly selfDevice: string;
   readonly candidates: readonly string[];
@@ -51,6 +52,7 @@ function fingerprint(peer: string): string {
 
 export function TransferPanel({
   role,
+  mode = 'live',
   invitationUrl,
   selfDevice,
   candidates,
@@ -69,7 +71,11 @@ export function TransferPanel({
   const completed = phase === 'activated';
   const terminal = completed || phase === 'cancelled' || phase === 'cancelled-awaiting-receipt';
   const title = t(
-    role === 'source' ? 'lobby:transferSourceTitle' : 'lobby:transferDestinationTitle',
+    role === 'source' && mode === 'return'
+      ? 'lobby:transferReturnTitle'
+      : role === 'source'
+        ? 'lobby:transferSourceTitle'
+        : 'lobby:transferDestinationTitle',
   );
   const displayCandidates = selectedDevice === null ? candidates : [selectedDevice];
   const phaseKey =
@@ -83,7 +89,15 @@ export function TransferPanel({
     <section className="online-transfer-panel" aria-labelledby={titleId}>
       <h2 id={titleId}>{title}</h2>
       <p className="online-transfer-explanation">
-        {t(role === 'source' ? 'lobby:transferSourceHint' : 'lobby:transferDestinationHint')}
+        {t(
+          role === 'source' && mode === 'return'
+            ? 'lobby:transferReturnHint'
+            : role === 'destination' && mode === 'return'
+              ? 'lobby:transferReturnDestinationHint'
+              : role === 'source'
+                ? 'lobby:transferSourceHint'
+                : 'lobby:transferDestinationHint',
+        )}
       </p>
       <p className="online-transfer-self">
         <strong>{t('lobby:transferThisDevice')}</strong>

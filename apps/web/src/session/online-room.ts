@@ -1,6 +1,6 @@
 import { hashValue, toHex } from '@cp2p/codec';
 import { failure, success } from '@cp2p/engine';
-import type { GameConfig, Result } from '@cp2p/engine';
+import type { GameConfig, Result, Seat } from '@cp2p/engine';
 import {
   answerManualOffer,
   createManualOffer,
@@ -174,6 +174,8 @@ export class OnlineRoom {
   private lobbyDetached = false;
   private transfer: OnlineTransferBrowser | null = null;
   private transferOpening: Promise<OnlineTransferBrowser> | null = null;
+  private transferOpeningTarget: { readonly seat: Seat; readonly mode: 'live' | 'return' } | null =
+    null;
 
   private constructor(
     readonly invite: OnlineInvite,
@@ -822,32 +824,62 @@ export class OnlineRoom {
     };
   };
 
+  returnableSeats = async (): Promise<readonly Seat[]> => {
+    if (this.closing || !this.startup.game()) return [];
+    const result = await this.startup.transferClient().request({ kind: 'transferStatus' });
+    if (!result.ok) throw new Error(result.error.message);
+    return result.value.returnableSeats;
+  };
+
   startTransfer = (
     network: Pick<OnlineTransferLinkOptions, 'iceServers' | 'iceTransportPolicy'>,
+    target?: { readonly seat: Seat; readonly mode: 'live' | 'return' },
   ): Promise<OnlineTransferBrowser> => {
-    if (this.transfer && !this.transfer.getSnapshot().closed) {
-      const snapshot = this.transfer.getSnapshot();
-      if (
-        (snapshot.phase !== 'cancelled' && snapshot.phase !== 'cancelled-awaiting-receipt') ||
-        snapshot.busy
-      )
-        return Promise.resolve(this.transfer);
-      void this.transfer.close();
-    }
-    if (this.transferOpening) return this.transferOpening;
     const game = this.startup.game();
     if (this.closing || !game) return Promise.reject(new Error('Online game is unavailable'));
-    this.transferOpening = OnlineTransferBrowser.openSource({
-      identity: this.identity,
-      store: this.store,
-      clock: this.clock,
-      worker: this.startup.transferClient(),
-      gameId: game.gameId,
-      genesisDigest: genesisDigest(game.genesis),
-      seat: game.seat,
-      serverUrl: this.invite.serverUrl,
-      network,
-    })
+    const seat = target?.seat ?? game.seat;
+    const mode = target?.mode ?? 'live';
+    let completed: OnlineTransferBrowser | null = null;
+    if (this.transfer && !this.transfer.getSnapshot().closed) {
+      const snapshot = this.transfer.getSnapshot();
+      if (snapshot.phase === 'cancelled' && !snapshot.busy) completed = this.transfer;
+      else if (snapshot.invite.body.seat !== seat || snapshot.invite.body.mode !== mode)
+        return Promise.reject(new Error('Another transfer attempt is already open'));
+      else return Promise.resolve(this.transfer);
+    }
+    if (this.transferOpening)
+      return this.transferOpeningTarget?.seat === seat && this.transferOpeningTarget.mode === mode
+        ? this.transferOpening
+        : Promise.reject(new Error('Another transfer attempt is opening'));
+    if (mode === 'live' && seat !== game.seat)
+      return Promise.reject(new Error('Live transfer must move this device’s active human'));
+    if (
+      mode === 'return' &&
+      (!game.genesis.seats.some((item) => item.seat === seat && item.kind === 'human') ||
+        game.session.getState().seats.find((item) => item.seat === seat)?.status !== 'bot')
+    )
+      return Promise.reject(new Error('Return target is not a recovered human seat'));
+    this.transferOpeningTarget = { seat, mode };
+    this.transferOpening = (async () => {
+      if (completed) {
+        await completed.close();
+        if (this.transfer === completed) this.transfer = null;
+      }
+      if (mode === 'return' && !(await this.returnableSeats()).includes(seat))
+        throw new Error('This device is not the certified host of that recovered seat');
+      return OnlineTransferBrowser.openSource({
+        identity: this.identity,
+        store: this.store,
+        clock: this.clock,
+        worker: this.startup.transferClient(),
+        gameId: game.gameId,
+        genesisDigest: genesisDigest(game.genesis),
+        seat,
+        mode,
+        serverUrl: this.invite.serverUrl,
+        network,
+      });
+    })()
       .then(async (transfer) => {
         if (this.closing) {
           await transfer.close();
@@ -858,6 +890,7 @@ export class OnlineRoom {
       })
       .finally(() => {
         this.transferOpening = null;
+        this.transferOpeningTarget = null;
       });
     return this.transferOpening;
   };

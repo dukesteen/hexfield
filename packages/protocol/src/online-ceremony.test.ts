@@ -349,11 +349,13 @@ describe('online genesis ceremony', () => {
     await settle(room, [host]);
     const result = required(host.result());
     host.dispose();
+    room.network.clock.advanceBy(20_001);
     const restored = room.create(0, required(room.stores[0]), undefined, result);
     active.push(restored);
     expect((await restored.start()).ok).toBe(true);
     await restored.flush();
     expect(restored.result()).toEqual(result);
+    expect(restored.snapshot()).toMatchObject({ phase: 'ready', locallyConsented: true });
     restored.dispose();
     const store = required(room.stores[0]);
     const originalLoad = store.load.bind(store);
@@ -451,6 +453,7 @@ describe('online genesis ceremony', () => {
 
   test('restarts a dropped private share and a dropped public ACK with exact bytes', async () => {
     const room = setup({ kind: 'joint' }, 4);
+    let holdApproval = true;
     let dropShare = true;
     let dropAccepted = true;
     let share: Uint8Array | null = null;
@@ -472,6 +475,7 @@ describe('online genesis ceremony', () => {
       return false;
     });
     const holderTransport = interceptTransport(room, 1, (_to, bytes, packet) => {
+      if (holdApproval && packet.body.kind === 'approval') return true;
       if (
         packet.body.kind !== 'escrow-accepted' ||
         packet.body.seat !== 1 ||
@@ -500,7 +504,13 @@ describe('online genesis ceremony', () => {
       // oxlint-disable-next-line no-await-in-loop -- Ordered joins expose restart gaps deterministically.
       expect((await peer.start()).ok).toBe(true);
     }
+    await until(room, () => dealer.snapshot().phase === 'approvals');
+    room.network.clock.advanceBy(15_000);
+    holdApproval = false;
+    room.network.clock.advanceBy(1_001);
     await until(room, () => share !== null);
+    room.network.clock.advanceBy(10_000);
+    expect(holder.snapshot().phase).toBe('escrow');
     dealer.dispose();
     await dealer.flush();
     dropShare = false;
@@ -1046,4 +1056,128 @@ describe('online genesis ceremony', () => {
       error: { code: 'online-ceremony-retired' },
     });
   });
+
+  test('a preconsent timeout retains its bounded phase diagnostic after restart', async () => {
+    const room = setup();
+    const store = new MemoryEscrowLifecycleStore();
+    const first = room.create(0, store);
+    active.push({
+      dispose() {
+        first.dispose();
+        room.network.dispose();
+      },
+    });
+    expect((await first.start()).ok).toBe(true);
+    expect(first.snapshot().phase).toBe('bindings');
+    room.network.clock.advanceBy(20_001);
+    await until(room, () => first.snapshot().phase === 'retired');
+    expect(first.snapshot().error).toBe('online-ceremony-timeout:bindings');
+    first.dispose();
+    const restored = room.create(0, store);
+    active.push(restored);
+    expect(await restored.start()).toMatchObject({
+      ok: false,
+      error: { code: 'online-ceremony-timeout' },
+    });
+  });
+
+  test('later signed phases get their own 20-second window without renewing earlier phases', async () => {
+    const room = setup();
+    let holdGuestCommit = true;
+    const guestTransport = interceptTransport(
+      room,
+      1,
+      (_to, _bytes, packet) => holdGuestCommit && packet.body.kind === 'seed-commit',
+    );
+    const host = room.create(0);
+    const guest = room.create(1, required(room.stores[1]), guestTransport);
+    active.push({
+      dispose() {
+        host.dispose();
+        guest.dispose();
+        room.network.dispose();
+      },
+    });
+    expect((await host.start()).ok).toBe(true);
+    expect(host.snapshot().phase).toBe('bindings');
+    room.network.clock.advanceBy(15_000);
+    expect((await guest.start()).ok).toBe(true);
+    await until(room, () => host.snapshot().phase === 'seed-commits');
+    room.network.clock.advanceBy(10_000);
+    await until(room, () => host.snapshot().phase === 'seed-commits');
+    expect(host.snapshot().phase).not.toBe('retired');
+    holdGuestCommit = false;
+    room.network.clock.advanceBy(1_001);
+    await settle(room, [host, guest]);
+    expect(host.snapshot().phase).toBe('ready');
+    expect(guest.snapshot().phase).toBe('ready');
+  }, 60_000);
+
+  test('same-phase retries and restart retain the original deadline', async () => {
+    const room = setup();
+    const store = new MemoryEscrowLifecycleStore();
+    const first = room.create(0, store);
+    active.push({
+      dispose() {
+        first.dispose();
+        room.network.dispose();
+      },
+    });
+    expect((await first.start()).ok).toBe(true);
+    room.network.clock.advanceBy(10_000);
+    await until(room, () => first.snapshot().phase === 'bindings');
+    first.dispose();
+    const restored = room.create(0, store);
+    active.push(restored);
+    expect((await restored.start()).ok).toBe(true);
+    room.network.clock.advanceBy(9_999);
+    await until(room, () => restored.snapshot().phase === 'bindings');
+    room.network.clock.advanceBy(1);
+    await until(room, () => restored.snapshot().phase === 'retired');
+    expect(restored.snapshot().error).toBe('online-ceremony-timeout:bindings');
+  });
+
+  test('a persisted private packet cannot send after waiting for the escrow lock past deadline', async () => {
+    const room = setup({ kind: 'joint' }, 4);
+    const store = required(room.stores[0]);
+    const originalPut = store.putIfAbsent.bind(store);
+    const originalLock = store.withCeremonyLock.bind(store);
+    let expireNextLock = false;
+    let envelopeSends = 0;
+    store.putIfAbsent = async (id, bytes) => {
+      const saved = await originalPut(id, bytes);
+      if (saved && id.includes('/escrow-envelope/')) expireNextLock = true;
+      return saved;
+    };
+    store.withCeremonyLock = (id, task) => {
+      if (expireNextLock) {
+        expireNextLock = false;
+        room.network.clock.advanceBy(20_000);
+      }
+      return originalLock(id, task);
+    };
+    const dealerTransport = interceptTransport(room, 0, (_to, _bytes, packet) => {
+      if (packet.body.kind === 'escrow-envelope') envelopeSends += 1;
+      return false;
+    });
+    const peers = [
+      room.create(0, store, dealerTransport),
+      room.create(1),
+      room.create(2),
+      room.create(3),
+    ];
+    active.push({
+      dispose() {
+        for (const peer of peers) peer.dispose();
+        room.network.dispose();
+      },
+    });
+    for (const peer of peers) {
+      // oxlint-disable-next-line no-await-in-loop -- Start the frozen roster before withholding the local send lock.
+      expect((await peer.start()).ok).toBe(true);
+    }
+    await until(room, () => peers[0]?.snapshot().phase === 'retired');
+    expect(peers[0]?.snapshot().error).toBe('online-ceremony-timeout:escrow');
+    expect(envelopeSends).toBe(0);
+  }, 60_000);
 });

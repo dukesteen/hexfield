@@ -7,6 +7,8 @@ export type SignalBlob =
       readonly generation: number;
       readonly revision: number;
       readonly description: RTCSessionDescriptionInit;
+      /** Answers name the exact revision of the local offer they answer. */
+      readonly inReplyTo?: number;
     }
   | {
       readonly kind: 'candidate';

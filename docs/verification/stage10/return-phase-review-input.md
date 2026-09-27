@@ -1,3 +1,12 @@
+Read-only security and liveness review. Tools and MCP are disabled. The attached source is the current OnlineCeremony implementation, with a diff of its focused tests. The rule in docs/09 is a 20-second timeout for each pre-consent ceremony step. A consented signer must keep waiting; a timeout cannot revoke its signed digest.
+
+Inspect the durable phase deadline change for concrete defects. In particular, check that a duplicate or replayed packet cannot extend a deadline, restart retains the remaining interval, an expired old phase cannot transition into a fresh window, stale queued timer callbacks cannot retire a newer phase, and no new signed output escapes after expiry. Check the attempt-lock and escrow-lock order and the consent race. Review the diagnostic reason as local status only, not authority. Cite code locations and give the smallest repair for any defect. Do not ask for broader protocol or UI redesign.
+
+## docs/09 timeout rule
+Before local genesis consent, a step timeout (20 s) aborts the ceremony and returns to the lobby with an error. Once a client durably promises and signs an exact genesis digest, timeout cannot revoke the signature.
+
+## packages/protocol/src/online-ceremony.ts
+```ts
 import {
   canonicalDecode,
   canonicalEncode,
@@ -141,7 +150,6 @@ const attemptSchema = v.strictObject({
     ] as const),
   ),
 });
-type AttemptRecord = v.InferOutput<typeof attemptSchema>;
 const createdAtSchema = v.strictObject({ createdAt: nonnegativeIntegerSchema });
 const bindingSchema = v.strictObject({
   body: v.strictObject({
@@ -477,11 +485,6 @@ export class OnlineCeremony {
       if (this.#restoreExpected) {
         if (initialized.value.status !== 'active')
           return failure('online-ceremony-restore', 'Completed attempt was retired');
-        const consented = await this.#restoreConsentBarrier();
-        if (!consented.ok) return consented;
-        if (!consented.value)
-          return failure('online-ceremony-restore', 'Certified escrow completion is missing');
-        this.#locallyConsented = true;
         this.#started = true;
         this.#offMessage = this.#options.transport.onMessage((from, bytes) => {
           void this.#enqueue(() => this.#receive(from, bytes.slice()));
@@ -536,11 +539,12 @@ export class OnlineCeremony {
         this.#scheduleRetry();
         return success(undefined);
       }
-      const consented = await this.#restoreConsentBarrier();
-      if (!consented.ok) return consented;
-      if (consented.value) this.#locallyConsented = true;
-      else if (elapsed < 0 || elapsed >= TIMEOUT_MS)
-        return this.#abortUnsafe('online-ceremony-timeout');
+      if (elapsed < 0 || elapsed >= TIMEOUT_MS) {
+        const consented = await this.#restoreConsentBarrier();
+        if (!consented.ok) return consented;
+        if (!consented.value) return this.#abortUnsafe('online-ceremony-timeout');
+        this.#locallyConsented = true;
+      }
       this.#scheduleRetry();
       return this.#advance();
     });
@@ -564,7 +568,9 @@ export class OnlineCeremony {
     }, RETRY_MS);
   }
 
-  async #attempt<T>(task: (record: AttemptRecord) => Promise<Result<T>>): Promise<Result<T>> {
+  async #attempt<T>(
+    task: (record: v.InferOutput<typeof attemptSchema>) => Promise<Result<T>>,
+  ): Promise<Result<T>> {
     try {
       return await this.#options.store.withCeremonyLock(this.#attemptId, async () => {
         const id = `online-attempt/${this.#attemptId}`;
@@ -787,7 +793,11 @@ export class OnlineCeremony {
         ))
       )
         return failure('online-ceremony-record', 'Phase transition lost its durable race');
-      return success({ phase, startedAt: next.startedAt, expired: false });
+      return success({
+        phase,
+        startedAt: next.startedAt,
+        expired: !this.#locallyConsented && this.#phaseExpired(record.startedAt),
+      });
     });
     if (!entered.ok) {
       if (entered.error.code !== 'online-ceremony-retired') return entered;
@@ -864,15 +874,10 @@ export class OnlineCeremony {
     slot: Slot<T>,
     key: string,
     bytes: Uint8Array,
-    record: AttemptRecord,
   ): Promise<Result<void>> {
-    if (record.status === 'retired')
-      return failure('online-ceremony-retired', 'Ceremony attempt was durably retired');
     if (this.#restoreExpected && !this.#restoreValidated) return success(undefined);
     const manifest = slot.escrowManifest;
     if (!manifest) {
-      if (!this.#locallyConsented && this.#phaseExpired(record.startedAt))
-        return failure('online-ceremony-timeout', 'Ceremony phase expired before send');
       this.#broadcast(key, bytes, slot.escrowRecipients);
       return success(undefined);
     }
@@ -890,8 +895,6 @@ export class OnlineCeremony {
             return success(undefined);
           return active;
         }
-        if (!this.#locallyConsented && this.#phaseExpired(record.startedAt))
-          return failure('online-ceremony-timeout', 'Ceremony phase expired before send');
         this.#broadcast(key, bytes, slot.escrowRecipients);
         return success(undefined);
       });
@@ -925,7 +928,7 @@ export class OnlineCeremony {
         if (slot.kind === 'consent') this.#locallyConsented = true;
         if (!this.#locallyConsented && this.#phaseExpired(record.startedAt))
           return failure('online-ceremony-timeout', 'Ceremony phase expired before output');
-        const sent = await this.#sendSlotWithinAttempt(slot, key, prior, record);
+        const sent = await this.#sendSlotWithinAttempt(slot, key, prior);
         return sent.ok ? checked : sent;
       }
       if (!this.#locallyConsented && this.#phaseExpired(record.startedAt))
@@ -962,7 +965,7 @@ export class OnlineCeremony {
       }
       if (slot.kind === 'consent') this.#locallyConsented = true;
       if (this.#disposed) return failure('online-ceremony-disposed', 'Ceremony is disposed');
-      const sent = await this.#sendSlotWithinAttempt(slot, key, signed.value.bytes, record);
+      const sent = await this.#sendSlotWithinAttempt(slot, key, signed.value.bytes);
       return sent.ok ? checked : sent;
     });
   }
@@ -990,8 +993,12 @@ export class OnlineCeremony {
           const bytes = await this.#options.store.load(key);
           if (bytes) {
             // oxlint-disable-next-line no-await-in-loop -- Escrow output is ordered under the attempt then ceremony locks.
-            const sent = await this.#attempt((record) =>
-              this.#sendSlotWithinAttempt(slot, key, bytes, record),
+            const sent = await this.#attempt(async (record) =>
+              record.status === 'retired'
+                ? failure('online-ceremony-retired', 'Ceremony attempt was durably retired')
+                : !this.#locallyConsented && this.#phaseExpired(record.startedAt)
+                  ? failure('online-ceremony-timeout', 'Ceremony phase expired before retry')
+                  : this.#sendSlotWithinAttempt(slot, key, bytes),
             );
             if (!sent.ok) return sent;
           }
@@ -1016,8 +1023,12 @@ export class OnlineCeremony {
           this.#locallyConsented = true;
         if (slot.ownerDevice === this.#self) {
           // oxlint-disable-next-line no-await-in-loop -- Retried escrow output must respect the retirement barrier.
-          const sent = await this.#attempt((record) =>
-            this.#sendSlotWithinAttempt(slot, key, bytes, record),
+          const sent = await this.#attempt(async (record) =>
+            record.status === 'retired'
+              ? failure('online-ceremony-retired', 'Ceremony attempt was durably retired')
+              : !this.#locallyConsented && this.#phaseExpired(record.startedAt)
+                ? failure('online-ceremony-timeout', 'Ceremony phase expired before retry')
+                : this.#sendSlotWithinAttempt(slot, key, bytes),
           );
           if (!sent.ok) return sent;
         }
@@ -1839,9 +1850,6 @@ export class OnlineCeremony {
     manifest: GenesisBody,
     approvals: readonly EscrowManifestApproval[],
   ): Promise<Result<readonly EscrowDealerCommitment[] | null>> {
-    const entered = await this.#enterPhase('escrow');
-    if (!entered.ok) return entered;
-    if (!entered.value) return success(null);
     const rosters = this.#escrowRosters.filter((roster) => roster.eligible);
     for (const roster of rosters) {
       if (this.#ownerDevice(roster.dealer.seat) !== this.#self) continue;
@@ -2511,3 +2519,98 @@ export class OnlineCeremony {
     return success(undefined);
   }
 }
+
+```
+## Focused test diff
+```diff
+diff --git a/packages/protocol/src/online-ceremony.test.ts b/packages/protocol/src/online-ceremony.test.ts
+index 01e68dc..b0ba54e 100644
+--- a/packages/protocol/src/online-ceremony.test.ts
++++ b/packages/protocol/src/online-ceremony.test.ts
+@@ -1046,4 +1046,84 @@ describe('online genesis ceremony', () => {
+       error: { code: 'online-ceremony-retired' },
+     });
+   });
++
++  test('a preconsent timeout retains its bounded phase diagnostic after restart', async () => {
++    const room = setup();
++    const store = new MemoryEscrowLifecycleStore();
++    const first = room.create(0, store);
++    active.push({
++      dispose() {
++        first.dispose();
++        room.network.dispose();
++      },
++    });
++    expect((await first.start()).ok).toBe(true);
++    expect(first.snapshot().phase).toBe('bindings');
++    room.network.clock.advanceBy(20_001);
++    await until(room, () => first.snapshot().phase === 'retired');
++    expect(first.snapshot().error).toBe('online-ceremony-timeout:bindings');
++    first.dispose();
++    const restored = room.create(0, store);
++    active.push(restored);
++    expect(await restored.start()).toMatchObject({
++      ok: false,
++      error: { code: 'online-ceremony-timeout' },
++    });
++  });
++
++  test('later signed phases get their own 20-second window without renewing earlier phases', async () => {
++    const room = setup();
++    let holdGuestCommit = true;
++    const guestTransport = interceptTransport(
++      room,
++      1,
++      (_to, _bytes, packet) => holdGuestCommit && packet.body.kind === 'seed-commit',
++    );
++    const host = room.create(0);
++    const guest = room.create(1, required(room.stores[1]), guestTransport);
++    active.push({
++      dispose() {
++        host.dispose();
++        guest.dispose();
++        room.network.dispose();
++      },
++    });
++    expect((await host.start()).ok).toBe(true);
++    expect(host.snapshot().phase).toBe('bindings');
++    room.network.clock.advanceBy(15_000);
++    expect((await guest.start()).ok).toBe(true);
++    await until(room, () => host.snapshot().phase === 'seed-commits');
++    room.network.clock.advanceBy(10_000);
++    await until(room, () => host.snapshot().phase === 'seed-commits');
++    expect(host.snapshot().phase).not.toBe('retired');
++    holdGuestCommit = false;
++    room.network.clock.advanceBy(1_001);
++    await settle(room, [host, guest]);
++    expect(host.snapshot().phase).toBe('ready');
++    expect(guest.snapshot().phase).toBe('ready');
++  }, 60_000);
++
++  test('same-phase retries and restart retain the original deadline', async () => {
++    const room = setup();
++    const store = new MemoryEscrowLifecycleStore();
++    const first = room.create(0, store);
++    active.push({
++      dispose() {
++        first.dispose();
++        room.network.dispose();
++      },
++    });
++    expect((await first.start()).ok).toBe(true);
++    room.network.clock.advanceBy(10_000);
++    await until(room, () => first.snapshot().phase === 'bindings');
++    first.dispose();
++    const restored = room.create(0, store);
++    active.push(restored);
++    expect((await restored.start()).ok).toBe(true);
++    room.network.clock.advanceBy(9_999);
++    await until(room, () => restored.snapshot().phase === 'bindings');
++    room.network.clock.advanceBy(1);
++    await until(room, () => restored.snapshot().phase === 'retired');
++    expect(restored.snapshot().error).toBe('online-ceremony-timeout:bindings');
++  });
+ });
+
+```

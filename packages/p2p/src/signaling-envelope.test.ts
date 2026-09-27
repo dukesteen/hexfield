@@ -1,13 +1,18 @@
 import { identityFromSecret } from '@cp2p/crypto';
 import { describe, expect, test } from 'vitest';
-import { signSignalEnvelope, validAttemptId, verifySignalEnvelope } from './signaling-envelope.js';
+import {
+  signSignalEnvelope,
+  validAttemptId,
+  validSignalEnvelopeBody,
+  verifySignalEnvelope,
+} from './signaling-envelope.js';
 import type { SignalEnvelopeBody } from './signaling-envelope.js';
 
 function fixture() {
   const sender = identityFromSecret(new Uint8Array(32).fill(1));
   const receiver = identityFromSecret(new Uint8Array(32).fill(2));
   const body: SignalEnvelopeBody = {
-    version: 1,
+    version: 2,
     scope: 'lobby-A',
     from: sender.peerId,
     to: receiver.peerId,
@@ -25,6 +30,34 @@ function fixture() {
 }
 
 describe('signed per-attempt signaling', () => {
+  test('binds every answer to an exact signed offer revision', () => {
+    const { sender, receiver, body } = fixture();
+    const answer: SignalEnvelopeBody = {
+      ...body,
+      blob: {
+        kind: 'description',
+        generation: 1,
+        revision: 2,
+        description: { type: 'answer', sdp: 'v=0\r\n' },
+        inReplyTo: 1,
+      },
+    };
+    const signed = signSignalEnvelope(answer, sender.secretKey);
+    expect(
+      verifySignalEnvelope(signed, body.scope, receiver.peerId, new Set([sender.peerId])),
+    ).toEqual(signed);
+    expect(
+      validSignalEnvelopeBody({ ...answer, blob: { ...answer.blob, inReplyTo: undefined } }),
+    ).toBe(false);
+    expect(
+      verifySignalEnvelope(
+        { ...signed, body: { ...answer, version: 1 } },
+        body.scope,
+        receiver.peerId,
+        new Set([sender.peerId]),
+      ),
+    ).toBeNull();
+  });
   test('authenticates exact scope, route, attempt and body', () => {
     const { sender, receiver, body } = fixture();
     const signed = signSignalEnvelope(body, sender.secretKey);

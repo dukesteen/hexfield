@@ -148,6 +148,13 @@ class FakePc {
     const gate = this.remoteGate;
     this.remoteGate = null;
     if (gate) await gate;
+    if (description.type === 'answer' && this.signalingState !== 'have-local-offer')
+      throw new DOMException(
+        'Failed to set remote answer sdp: Called in wrong state: stable',
+        'InvalidStateError',
+      );
+    if (description.type === 'answer' && description.sdp?.includes('a=malformed'))
+      throw new DOMException('Invalid remote answer SDP', 'OperationError');
     this.currentRemoteDescription = this.remoteDescription = description;
     this.signalingState = description.type === 'offer' ? 'have-remote-offer' : 'stable';
     this.emit('signalingstatechange');
@@ -373,6 +380,7 @@ describe('authenticated peer link', () => {
           generation: 1,
           revision: 1,
           description: { type: 'answer', sdp: sdp('AA') },
+          inReplyTo: 1,
         },
       ]);
     } finally {
@@ -730,6 +738,26 @@ describe('authenticated peer link', () => {
     }
   });
 
+  test('a current bound answer with a changed fingerprint closes an authenticated link', async () => {
+    const f = pair();
+    try {
+      f.open();
+      f.leftPc.emit('negotiationneeded');
+      await Promise.resolve();
+      expect(f.leftPc.signalingState).toBe('have-local-offer');
+      await f.left.receiveSignal({
+        kind: 'description',
+        generation: 1,
+        revision: 2,
+        description: { type: 'answer', sdp: sdp('EE') },
+        inReplyTo: 1,
+      });
+      expect(f.leftDown).toContain('fingerprint-changed');
+    } finally {
+      f.close();
+    }
+  });
+
   test('simultaneous offers make only the polite peer accept the collision', async () => {
     const f = pair();
     try {
@@ -797,6 +825,176 @@ describe('authenticated peer link', () => {
       expect(politePc.localDescription?.type).toBe('answer');
       expect(impolitePc.signalingState).toBe('have-local-offer');
       expect(impolitePc.localDescription?.type).toBe('offer');
+    } finally {
+      f.close();
+    }
+  });
+
+  test('an answer without a local offer and a delayed repeat do not close a link', async () => {
+    const f = pair();
+    try {
+      const answer = { type: 'answer' as const, sdp: sdp('BB') };
+      await f.left.receiveSignal({
+        kind: 'description',
+        generation: 1,
+        revision: 1,
+        description: answer,
+        inReplyTo: 1,
+      });
+      expect(f.leftPc.currentRemoteDescription).toEqual({ type: 'offer', sdp: sdp('BB') });
+      f.leftPc.emit('negotiationneeded');
+      await Promise.resolve();
+      expect(f.leftPc.signalingState).toBe('have-local-offer');
+      await f.left.receiveSignal({
+        kind: 'description',
+        generation: 1,
+        revision: 2,
+        description: answer,
+        inReplyTo: 1,
+      });
+      expect(f.leftPc.signalingState).toBe('stable');
+      await f.left.receiveSignal({
+        kind: 'description',
+        generation: 1,
+        revision: 3,
+        description: answer,
+        inReplyTo: 1,
+      });
+      expect(f.leftPc.currentRemoteDescription).toEqual(answer);
+      expect(f.leftDown).toEqual([]);
+    } finally {
+      f.close();
+    }
+  });
+
+  test('a second answer during asynchronous answer application is ignored', async () => {
+    const f = pair();
+    try {
+      f.leftPc.emit('negotiationneeded');
+      await Promise.resolve();
+      const release = f.leftPc.holdNextRemoteDescription();
+      const first = f.left.receiveSignal({
+        kind: 'description',
+        generation: 1,
+        revision: 1,
+        description: { type: 'answer', sdp: sdp('BB') },
+        inReplyTo: 1,
+      });
+      await f.left.receiveSignal({
+        kind: 'description',
+        generation: 1,
+        revision: 2,
+        description: { type: 'answer', sdp: sdp('BB') },
+        inReplyTo: 1,
+      });
+      release();
+      await first;
+      expect(f.leftPc.signalingState).toBe('stable');
+      expect(f.leftDown).toEqual([]);
+    } finally {
+      f.close();
+    }
+  });
+
+  test('a repeated answer with a fresh revision cannot satisfy a newer local offer', async () => {
+    const f = pair();
+    try {
+      f.leftPc.emit('negotiationneeded');
+      await Promise.resolve();
+      const oldAnswer = { type: 'answer' as const, sdp: sdp('BB') };
+      await f.left.receiveSignal({
+        kind: 'description',
+        generation: 1,
+        revision: 1,
+        description: oldAnswer,
+        inReplyTo: 1,
+      });
+      expect(f.leftPc.signalingState).toBe('stable');
+      f.leftPc.emit('negotiationneeded');
+      await Promise.resolve();
+      expect(f.leftPc.signalingState).toBe('have-local-offer');
+      await f.left.receiveSignal({
+        kind: 'description',
+        generation: 1,
+        revision: 2,
+        description: oldAnswer,
+        inReplyTo: 1,
+      });
+      expect(f.leftPc.signalingState).toBe('have-local-offer');
+      await f.left.receiveSignal({
+        kind: 'description',
+        generation: 1,
+        revision: 3,
+        description: { type: 'answer', sdp: `${sdp('BB')}a=ice-ufrag:new\r\n` },
+        inReplyTo: 1,
+      });
+      expect(f.leftPc.signalingState).toBe('have-local-offer');
+      await f.left.receiveSignal({
+        kind: 'description',
+        generation: 1,
+        revision: 4,
+        description: oldAnswer,
+        inReplyTo: 2,
+      });
+      expect(f.leftPc.signalingState).toBe('stable');
+      expect(f.leftDown).toEqual([]);
+    } finally {
+      f.close();
+    }
+  });
+
+  test('candidates arriving after a dropped answer cannot consume the valid answer budget', async () => {
+    const f = pair();
+    try {
+      f.leftPc.emit('negotiationneeded');
+      await Promise.resolve();
+      await f.left.receiveSignal({
+        kind: 'description',
+        generation: 1,
+        revision: 1,
+        description: { type: 'answer', sdp: sdp('BB') },
+        inReplyTo: 99,
+      });
+      await f.left.receiveSignal({
+        kind: 'candidate',
+        generation: 1,
+        revision: 1,
+        candidate: { candidate: 'discarded' },
+      });
+      await f.left.receiveSignal({
+        kind: 'candidate',
+        generation: 1,
+        revision: 2,
+        candidate: { candidate: 'valid' },
+      });
+      await f.left.receiveSignal({
+        kind: 'description',
+        generation: 1,
+        revision: 2,
+        description: { type: 'answer', sdp: sdp('BB') },
+        inReplyTo: 1,
+      });
+      expect(f.leftPc.candidates).toEqual([{ candidate: 'valid' }]);
+      expect(f.leftDown).toEqual([]);
+    } finally {
+      f.close();
+    }
+  });
+
+  test('a malformed answer to the current local offer still fails negotiation', async () => {
+    const f = pair();
+    try {
+      f.leftPc.emit('negotiationneeded');
+      await Promise.resolve();
+      expect(f.leftPc.signalingState).toBe('have-local-offer');
+      await f.left.receiveSignal({
+        kind: 'description',
+        generation: 1,
+        revision: 1,
+        description: { type: 'answer', sdp: `${sdp('BB')}a=malformed\r\n` },
+        inReplyTo: 1,
+      });
+      expect(f.leftDown).toContain('negotiation-error');
     } finally {
       f.close();
     }

@@ -264,6 +264,61 @@ test('source waits for explicit consent, durably records approval, and retries e
   expect(sent.slice(-2).map((item) => item.kind)).toEqual(['authorized', 'activated']);
 });
 
+test('return source submits the destination offer with its retired-key intent and never signs a live owner intent', async () => {
+  const calls: string[] = [];
+  const submitted: unknown[] = [];
+  let pending = false;
+  const returnStatement = { ...offer.statement, mode: 'return' as const };
+  const returnOffer: SeatTransferAuthorization = {
+    ...offer,
+    statement: returnStatement,
+    destinationDeviceSig: signObject(
+      TRANSFER_DEVICE_DOMAIN,
+      returnStatement,
+      deviceIdentity.secretKey,
+    ),
+    destinationGameSig: signObject(
+      TRANSFER_GAME_KEY_DOMAIN,
+      returnStatement,
+      gameIdentity.secretKey,
+    ),
+    returnIntent: { signer: 'last-human-game-key', sig },
+  };
+  const source = new SourceTransferExchange({
+    mode: 'return',
+    record: sourceRecord(),
+    channel: { async send() {} },
+    worker: worker((body) => {
+      calls.push(body.kind);
+      if (body.kind === 'exportTransferBootstrap') return Uint8Array.of(1);
+      if (body.kind === 'transferStatus')
+        return {
+          head: pending ? authorization : head(10),
+          pending: pending ? { entry: authorization, statement: returnOffer.statement } : null,
+          matchedAuthorization: pending
+            ? { entry: authorization, statement: returnOffer.statement }
+            : null,
+          expiredBeforeCertification: false,
+          outcome: null,
+        };
+      if (body.kind === 'submitTransfer') {
+        submitted.push(body.change);
+        pending = true;
+        return undefined;
+      }
+      if (body.kind === 'prepareTransferPrivate') return packet;
+      throw new Error(`Unexpected return source request ${body.kind}`);
+    }),
+    async savePublicRecord() {},
+  });
+  await source.start();
+  await source.receive(artifact('offer', returnOffer));
+  expect(source.snapshot().phase).toBe('awaiting-confirmation');
+  await source.confirm();
+  expect(submitted).toEqual([returnOffer]);
+  expect(calls).not.toContain('authorizeLiveTransfer');
+});
+
 test('source rejects offer replacement and a failed durable approval before any submit or private disclosure', async () => {
   const calls: string[] = [];
   const sent: OnlineTransferArtifact[] = [];

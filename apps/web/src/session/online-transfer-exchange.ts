@@ -38,6 +38,8 @@ export interface TransferExchangeChannel {
 export type { OnlineTransferExchangeRecord } from './online-transfer-records.js';
 
 interface CommonOptions {
+  /** Signed temporary invitation mode; omitted only by older direct unit fixtures. */
+  readonly mode?: 'live' | 'return';
   readonly worker: TransferExchangeWorker;
   readonly channel: TransferExchangeChannel;
   readonly record: OnlineTransferExchangeRecord;
@@ -258,10 +260,12 @@ export class SourceTransferExchange extends Exchange {
       const offer = parsedChange(artifact.bytes);
       if (
         offer.kind !== 'transfer-authorize' ||
-        offer.statement.mode !== 'live' ||
+        offer.statement.mode !== (this.options.mode ?? 'live') ||
         offer.ownerIntent !== undefined ||
-        offer.returnIntent !== undefined ||
         offer.humanApprovals !== undefined ||
+        (offer.statement.mode === 'live'
+          ? offer.returnIntent !== undefined
+          : offer.returnIntent?.signer !== 'last-human-game-key') ||
         offer.statement.seat !== this.record.seat ||
         offer.statement.genesisDigest !== this.record.genesisDigest ||
         offer.statement.destination.devicePeer !== this.record.destinationDevice
@@ -327,13 +331,16 @@ export class SourceTransferExchange extends Exchange {
       if (!this.record.approved) {
         const status = value(await this.options.worker.request({ kind: 'transferStatus' }));
         if (status.pending) throw new TypeError('Another transfer is pending');
-        const approved = value(
-          await this.options.worker.request({
-            kind: 'authorizeLiveTransfer',
-            offer,
-            head: status.head,
-          }),
-        );
+        const approved =
+          offer.statement.mode === 'live'
+            ? value(
+                await this.options.worker.request({
+                  kind: 'authorizeLiveTransfer',
+                  offer,
+                  head: status.head,
+                }),
+              )
+            : offer;
         if (!equal(approved.statement, offer.statement))
           throw new TypeError('Source authorization changed the signed destination offer');
         await this.save({ ...this.record, approved });
@@ -723,7 +730,7 @@ export class DestinationTransferExchange extends Exchange {
       await this.options.worker.request({
         kind: 'prepareTransferOffer',
         seat: this.record.seat,
-        mode: 'live',
+        mode: this.options.mode ?? 'live',
       }),
     );
     if (

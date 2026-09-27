@@ -1,0 +1,10 @@
+{
+  "files": {
+    "packages/p2p/src/signaling.ts": "94e7c2e235ce81aac23f9436ae5e9cbcd10548e562bb5b5368f8f5f4a7938e21",
+    "packages/p2p/src/signaling-envelope.ts": "ec419713064945df12c3de26e04fa04befbd57053c9ce93697431f087988546e",
+    "packages/p2p/src/signaling-envelope.test.ts": "e127f0b0219e4251d8fb47ae166c9415f8f14e3f24aa0fcd50898b5228fa0a6f",
+    "packages/p2p/src/peer-link.ts": "adeb14022ff52d99fc0c36ec231a77cb2f5476bfe06cd4524a4bca4f7b8ea965",
+    "packages/p2p/src/peer-link.test.ts": "d7131e98189444ff2fdb2fb63080df37233e2bc3b9b0536169c8167be03e8357",
+    "packages/p2p/src/web-rtc-transport.ts": "b197d436accb0a30c218c42a881093b21a849856dd59f157cd74165f6beb1d2b"
+  }
+}

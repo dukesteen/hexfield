@@ -41,7 +41,11 @@ afterEach(async () => {
   queryClient.clear();
 });
 
-function restoringRoom(roomId: string, gameId: string): OnlineRoomHandleValue {
+function restoringRoom(
+  roomId: string,
+  gameId: string,
+  haltedError?: string,
+): OnlineRoomHandleValue {
   roomIds.push(roomId);
   let snapshot: OnlineRoomSnapshot = {
     invite: { roomId, hostPeer: 'fixture-host', serverUrl: 'ws://localhost:3009' },
@@ -53,7 +57,13 @@ function restoringRoom(roomId: string, gameId: string): OnlineRoomHandleValue {
     agreement: null,
     diagnostic: null,
     connectionError: null,
-    startup: { phase: 'opening', gameId, awaitingSeats: [], locallyConsented: true, error: null },
+    startup: {
+      phase: haltedError ? 'halted' : 'opening',
+      gameId,
+      awaitingSeats: [],
+      locallyConsented: true,
+      error: haltedError ?? null,
+    },
     closed: false,
   };
   return {
@@ -69,6 +79,23 @@ function restoringRoom(roomId: string, gameId: string): OnlineRoomHandleValue {
     }),
   };
 }
+
+test.each([
+  ['worker connection failed', 'lobby:onlineGameStopped'],
+  ['online-ceremony-disputed', 'lobby:onlineGameHalted'],
+])('halt reason %s uses the matching public message', async (reason, title) => {
+  const room = restoringRoom(`halt-${title}`, `game-${title}`, reason);
+  vi.spyOn(OnlineRoom, 'open').mockImplementation(async () => {
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Only the public room handle is used by this component.
+    return room as OnlineRoom;
+  });
+  render(
+    <QueryClientProvider client={queryClient}>
+      <OnlineGameScreen gameId={`game-${title}`} />
+    </QueryClientProvider>,
+  );
+  expect((await screen.findByRole('alert')).textContent).toBe(title);
+});
 
 test('leaving a StrictMode resume loading screen closes its connection and releases the registry', async () => {
   const room = restoringRoom('loadingone', 'game-resume-one');

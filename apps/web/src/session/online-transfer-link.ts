@@ -16,8 +16,8 @@ import { createRoomId } from './online-invite.js';
 import { OnlineTransferChannel } from './online-transfer-channel.js';
 import type { OnlineTransferArtifact } from './online-transfer-channel.js';
 
-const INVITE_PROTOCOL = 'cp2p/online-transfer-invite/v4';
-const INVITE_DOMAIN = 'online-transfer-invite-v4';
+const INVITE_PROTOCOL = 'cp2p/online-transfer-invite/v6';
+const INVITE_DOMAIN = 'online-transfer-invite-v6';
 const SCOPE_DOMAIN = 'cp2p/online-transfer-channel/v1';
 const MAX_CODE_BYTES = 2_048;
 const token = v.pipe(v.string(), v.regex(/^[A-Za-z0-9_-]{43}$/));
@@ -27,6 +27,7 @@ const bodySchema = v.strictObject({
   attemptId: token,
   gameId: v.pipe(v.string(), v.regex(/^[A-Za-z0-9_-]{22}$/)),
   seat: v.picklist([0, 1, 2, 3, 4, 5] as const),
+  mode: v.picklist(['live', 'return']),
   genesisDigest: token,
   sourceDevice: token,
   serverUrl: v.pipe(v.string(), v.maxLength(512)),
@@ -67,6 +68,7 @@ export function createTransferInvite(input: {
   readonly attemptId: string;
   readonly gameId: string;
   readonly seat: Seat;
+  readonly mode?: 'live' | 'return';
   readonly genesisDigest: string;
   readonly serverUrl: string;
   readonly identity: DisposableOnlineIdentity;
@@ -86,6 +88,7 @@ export function createTransferInvite(input: {
     attemptId: input.attemptId,
     gameId: input.gameId,
     seat: input.seat,
+    mode: input.mode ?? 'live',
     genesisDigest: input.genesisDigest,
     sourceDevice: input.identity.peerId,
     serverUrl: serverOrigin(input.serverUrl),

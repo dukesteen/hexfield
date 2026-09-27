@@ -8,7 +8,7 @@ const MAX_DESCRIPTION_BYTES = 65_536;
 const MAX_CANDIDATE_BYTES = 4_096;
 
 export interface SignalEnvelopeBody {
-  readonly version: 1;
+  readonly version: 2;
   readonly scope: string;
   readonly from: PeerId;
   readonly to: PeerId;
@@ -66,7 +66,7 @@ export function validSignalEnvelopeBody(value: unknown): value is SignalEnvelope
       'attemptSeq',
       'blob',
     ]) ||
-    value.version !== 1 ||
+    value.version !== 2 ||
     typeof value.scope !== 'string' ||
     value.scope.length < 1 ||
     value.scope.length > 128 ||
@@ -96,7 +96,6 @@ export function validSignalEnvelopeBody(value: unknown): value is SignalEnvelope
     return false;
   if (blob.kind === 'description') {
     if (
-      !exact(blob, ['kind', 'generation', 'revision', 'description']) ||
       !record(blob.description) ||
       !exact(blob.description, ['type', 'sdp']) ||
       !['offer', 'answer'].includes(String(blob.description.type)) ||
@@ -104,6 +103,14 @@ export function validSignalEnvelopeBody(value: unknown): value is SignalEnvelope
       blob.description.sdp.length > MAX_DESCRIPTION_BYTES
     )
       return false;
+    if (blob.description.type === 'answer') {
+      if (
+        !exact(blob, ['kind', 'generation', 'revision', 'description', 'inReplyTo']) ||
+        !Number.isSafeInteger(blob.inReplyTo) ||
+        Number(blob.inReplyTo) < 1
+      )
+        return false;
+    } else if (!exact(blob, ['kind', 'generation', 'revision', 'description'])) return false;
   } else if (blob.kind === 'candidate') {
     if (!exact(blob, ['kind', 'generation', 'revision', 'candidate'])) return false;
     if (

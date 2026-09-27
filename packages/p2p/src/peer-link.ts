@@ -63,6 +63,7 @@ export class PeerLink {
   private remoteNonce: string | null = null;
   private remoteGeneration: number | null = null;
   private localRevision = 0;
+  private localOfferRevision: number | null = null;
   private remoteRevision = -1;
   private acceptedRemoteRevision = -1;
   private ignoredRevision = -1;
@@ -203,14 +204,28 @@ export class PeerLink {
           description.sdp.length > 65_536
         )
           return;
+        const candidateKey = `${blob.generation}/${blob.revision}`;
+        // Only the answer to the currently outstanding local offer may change SDP.
+        if (
+          description.type === 'answer' &&
+          (this.pc.signalingState !== 'have-local-offer' ||
+            this.isSettingRemoteAnswerPending ||
+            blob.inReplyTo !== this.localOfferRevision)
+        ) {
+          this.ignoredRevision = Math.max(this.ignoredRevision, blob.revision);
+          this.earlyCandidates.delete(candidateKey);
+          return;
+        }
         if (this.authenticated) {
           try {
             const current = this.pc.currentRemoteDescription?.sdp;
             if (
               !current ||
               applicationFingerprint(description.sdp) !== applicationFingerprint(current)
-            )
+            ) {
+              if (description.type === 'answer') this.fail('fingerprint-changed');
               return;
+            }
           } catch {
             return;
           }
@@ -221,7 +236,6 @@ export class PeerLink {
           (this.pc.signalingState === 'stable' || this.isSettingRemoteAnswerPending);
         const collision = description.type === 'offer' && !readyForOffer;
         this.ignoreOffer = collision && !this.polite;
-        const candidateKey = `${blob.generation}/${blob.revision}`;
         if (this.ignoreOffer) {
           this.ignoredRevision = Math.max(this.ignoredRevision, blob.revision);
           this.earlyCandidates.delete(candidateKey);
@@ -230,6 +244,7 @@ export class PeerLink {
         this.isSettingRemoteAnswerPending = description.type === 'answer';
         await this.pc.setRemoteDescription(description);
         this.isSettingRemoteAnswerPending = false;
+        this.localOfferRevision = null;
         this.remoteRevision = blob.revision;
         this.acceptedRemoteRevision = blob.revision;
         const early = this.earlyCandidates.get(candidateKey) ?? [];
@@ -244,6 +259,7 @@ export class PeerLink {
             generation: this.options.generation,
             revision: this.localRevision,
             description: { type: answer.type, sdp: answer.sdp ?? '' },
+            inReplyTo: blob.revision,
           });
         }
         for (const candidate of early) {
@@ -317,6 +333,7 @@ export class PeerLink {
       this.localRevision++;
       await this.pc.setLocalDescription();
       if (!this.pc.localDescription) throw new Error('Missing local description');
+      if (this.pc.localDescription.type === 'offer') this.localOfferRevision = this.localRevision;
       this.sendSignal({
         kind: 'description',
         generation: this.options.generation,
@@ -325,6 +342,9 @@ export class PeerLink {
           type: this.pc.localDescription.type,
           sdp: this.pc.localDescription.sdp ?? '',
         },
+        ...(this.pc.localDescription.type === 'answer'
+          ? { inReplyTo: this.acceptedRemoteRevision }
+          : {}),
       });
     } catch {
       this.fail('negotiation-error');

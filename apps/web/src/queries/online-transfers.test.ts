@@ -63,12 +63,13 @@ vi.mock('../session/online-transfer-browser.js', () => ({
 
 const invite = {
   body: {
-    protocol: 'cp2p/online-transfer-invite/v4' as const,
+    protocol: 'cp2p/online-transfer-invite/v6' as const,
     roomId: 'transferaa',
     attemptId: 'A'.repeat(43),
     gameId: 'g'.repeat(22),
     genesisDigest: 'B'.repeat(43),
     seat: 0 as const,
+    mode: 'live' as const,
     sourceDevice: 'C'.repeat(43),
     serverUrl: 'wss://example.com',
   },

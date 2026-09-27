@@ -12,6 +12,7 @@ import {
   entryHash,
   genesisDigest,
   replayCertifiedPrefix,
+  restoreConsensusState,
 } from '@cp2p/protocol';
 import type { CertifiedEntry } from '@cp2p/protocol';
 import {
@@ -856,6 +857,13 @@ test('promotes after the old journal has certified activation and persisted its 
   });
   await database.put('games', canonicalEncode(data.fixture.genesisEntry), gameId);
   const full = [...data.entries, data.activationCertificate];
+  const first = full[0];
+  if (!first || first.certificate.length < 4) throw new Error('Four-voter certificate missing');
+  full[0] = { ...first, certificate: first.certificate.slice(0, 3) };
+  const importedFirst = data.entries[0];
+  if (!importedFirst) throw new Error('Imported certificate missing');
+  expect(entryHash(full[0].entry)).toBe(entryHash(importedFirst.entry));
+  expect(canonicalEncode(full[0])).not.toEqual(canonicalEncode(importedFirst));
   await Promise.all(
     full.map((entry, index) =>
       database.put('entries', canonicalEncode(entry), [gameId, index + 1]),
@@ -923,8 +931,167 @@ test('promotes after the old journal has certified activation and persisted its 
   );
   corrected.close();
   expect(await journal.promoteTransfer(options)).toBe(true);
+  expect((await journal.load())?.entries[0]).toEqual(full[0]);
   expect((await journal.load())?.safety).toMatchObject({ revision: 0 });
   expect(await stage.load(stageKey)).toBeNull();
+  await journal.close();
+  await stage.close();
+}, 30_000);
+
+test('refuses a different valid certified entry at the same stored height', async () => {
+  installFactory();
+  const data = verifiedTransfer(true);
+  const alternateEntry = signRecoveryFixtureEntry(
+    data.fixture,
+    data.fixture.ready,
+    { kind: 'membership', change: { kind: 'seat-offline', seat: 1 } },
+    data.fixture.ready.log.head.stateHash,
+  );
+  const alternate = certifyRecoveryFixtureEntry(
+    data.fixture,
+    data.fixture.ready,
+    alternateEntry,
+    [0, 1, 2, 3],
+  );
+  const existing = [...data.fixture.deckEntries, alternate];
+  const replayed = replayCertifiedPrefix(
+    data.fixture.genesisEntry,
+    existing,
+    data.fixture.source.engine,
+    data.fixture.policy,
+  );
+  if (!replayed.ok) throw new Error(`Alternate certified entry: ${replayed.error.code}`);
+  const priorSafety = createConsensusState(replayed.value.context, 0);
+  if (!priorSafety.ok) throw new Error(`Old controller safety: ${priorSafety.error.code}`);
+  const pendingEntry = signRecoveryFixtureEntry(
+    data.fixture,
+    replayed.value.context,
+    { kind: 'membership', change: { kind: 'seat-offline', seat: 2 } },
+    replayed.value.context.log.head.stateHash,
+  );
+  const conflictingDecision = certifyRecoveryFixtureEntry(
+    data.fixture,
+    replayed.value.context,
+    pendingEntry,
+    [1, 2, 3],
+  );
+  const pendingSafety = {
+    ...priorSafety.value,
+    decision: conflictingDecision,
+  };
+  const checkedSafety = restoreConsensusState(pendingSafety, replayed.value.context, 0);
+  if (!checkedSafety.ok) throw new Error(`Pending decision: ${checkedSafety.error.message}`);
+  expect(alternate.entry.seq).toBe(data.entries.at(-1)?.entry.seq);
+  const importedLast = data.entries.at(-1);
+  if (!importedLast) throw new Error('Imported head missing');
+  expect(entryHash(alternate.entry)).not.toBe(entryHash(importedLast.entry));
+
+  const gameId = data.fixture.genesis.gameId;
+  const recordKey = `online-game/${genesisDigest(data.fixture.genesis)}/keys`;
+  const database = await openDB('cp2p', 3, {
+    upgrade(db) {
+      db.createObjectStore('bytes');
+      db.createObjectStore('games');
+      db.createObjectStore('entries');
+      db.createObjectStore('consensus');
+      db.createObjectStore('deletedGames');
+    },
+  });
+  await database.put('games', canonicalEncode(data.fixture.genesisEntry), gameId);
+  await Promise.all(
+    existing.map((entry, index) =>
+      database.put('entries', canonicalEncode(entry), [gameId, index + 1]),
+    ),
+  );
+  await database.put(
+    'consensus',
+    canonicalEncode({
+      height: existing.length + 1,
+      revision: 0,
+      safety: canonicalEncode(pendingSafety),
+    }),
+    gameId,
+  );
+  await database.put('bytes', data.oldBindingBytes, recordKey);
+  database.close();
+
+  const stage = new TransferImportStore();
+  const stageKey = await stage.stage(
+    {
+      gameId,
+      authorization: data.authorizationRef,
+      destinationGameKey: data.game.peerId,
+      bindingBytes: data.bindingBytes,
+      sealedPackage: Uint8Array.of(1),
+      privateReplayBytes: Uint8Array.of(2),
+      genesis: data.fixture.genesisEntry,
+      entries: data.entries,
+    },
+    data.fixture.source.engine,
+    data.fixture.policy,
+  );
+  await stage.saveReadiness(stageKey, {
+    protocol: 'seat-transfer-readiness-v1',
+    statement: data.activationStatement,
+    destinationCheck: data.destinationCheck,
+    replacementChecks: [],
+  });
+  const journal = new IndexedDbProtocolJournal(gameId, {
+    keyBinding: { recordKey, bytes: data.bindingBytes },
+  });
+  const options = {
+    stageKey,
+    activation: data.activationCertificate,
+    engine: data.fixture.source.engine,
+    policy: data.fixture.policy,
+    expectedActive: {
+      head: transferEntryRef(alternate.entry),
+      bindingBytes: data.oldBindingBytes,
+    },
+    leaseOptions: { lockManager: new TestLocks() },
+  };
+  await expect(journal.promoteTransfer(options)).rejects.toThrow('conflicting certified decision');
+  const cleared = await openDB('cp2p');
+  await cleared.put(
+    'consensus',
+    canonicalEncode({
+      height: existing.length + 1,
+      revision: 0,
+      safety: canonicalEncode(priorSafety.value),
+    }),
+    gameId,
+  );
+  cleared.close();
+  const corrupted = await openDB('cp2p');
+  await corrupted.put(
+    'consensus',
+    canonicalEncode({
+      height: existing.length + 1,
+      revision: 0,
+      safety: canonicalEncode({ ...priorSafety.value, localPublicKey: data.game.peerId }),
+    }),
+    gameId,
+  );
+  corrupted.close();
+  await expect(journal.promoteTransfer(options)).rejects.toThrow('controller safety is invalid');
+  const repaired = await openDB('cp2p');
+  await repaired.put(
+    'consensus',
+    canonicalEncode({
+      height: existing.length + 1,
+      revision: 0,
+      safety: canonicalEncode(priorSafety.value),
+    }),
+    gameId,
+  );
+  repaired.close();
+  await expect(journal.promoteTransfer(options)).rejects.toThrow('conflicts with certified import');
+  const unchanged = await openDB('cp2p');
+  expect(await unchanged.get('entries', [gameId, alternate.entry.seq])).toEqual(
+    canonicalEncode(alternate),
+  );
+  unchanged.close();
+  expect(await stage.load(stageKey)).not.toBeNull();
   await journal.close();
   await stage.close();
 }, 30_000);

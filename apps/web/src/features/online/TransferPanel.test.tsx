@@ -33,6 +33,14 @@ const baseProps: TransferPanelProps = {
   onDismiss: vi.fn<() => void>(),
 };
 
+test('return mode warns both devices about disclosed hands and retired-key authority', () => {
+  const source = render(<TransferPanel {...baseProps} mode="return" />);
+  expect(source.getByRole('heading', { name: 'lobby:transferReturnTitle' })).toBeTruthy();
+  expect(source.getByText('lobby:transferReturnHint')).toBeTruthy();
+  source.rerender(<TransferPanel {...baseProps} role="destination" mode="return" />);
+  expect(source.getByText('lobby:transferReturnDestinationHint')).toBeTruthy();
+});
+
 test('requires an explicit destination choice before confirming and disables actions while busy', () => {
   const onSelectDevice = vi.fn<(peer: string) => void>();
   const onConfirm = vi.fn<() => void>();

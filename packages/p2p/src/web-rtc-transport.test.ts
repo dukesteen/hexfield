@@ -423,7 +423,7 @@ describe('authenticated WebRTC mesh', () => {
       expect(closedBridgePc).toBe(false);
       const routeProof = signSignalEnvelope(
         {
-          version: 1,
+          version: 2,
           scope: 'test-lobby',
           from: b,
           to: a,
@@ -449,7 +449,7 @@ describe('authenticated WebRTC mesh', () => {
       });
       const signal = signSignalEnvelope(
         {
-          version: 1,
+          version: 2,
           scope: 'test-lobby',
           from: a,
           to: c,
@@ -970,7 +970,7 @@ describe('authenticated WebRTC mesh', () => {
       const makeOffer = (seq: number) =>
         signSignalEnvelope(
           {
-            version: 1,
+            version: 2,
             scope: 'test-lobby',
             from: member(f.roster, initiator),
             to: member(f.roster, responder),

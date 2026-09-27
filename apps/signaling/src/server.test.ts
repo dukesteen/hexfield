@@ -52,7 +52,7 @@ describe('localhost signaling host', () => {
     try {
       const first = signSignalEnvelope(
         {
-          version: 1,
+          version: 2,
           scope: 'test-lobby',
           from: a.identity.peerId,
           to: b.identity.peerId,

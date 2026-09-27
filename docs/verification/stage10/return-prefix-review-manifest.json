@@ -1,0 +1,12 @@
+{
+  "files": {
+    "apps/web/src/session/online-transfer-destination.ts": "850ccc7330ebfd0eef7ea14fde2aa826bf84cb5bd5b2eb30cdc75ea91ff590a9",
+    "apps/web/src/session/online-transfer-destination.test.ts": "a942ec8bb4d42297be876d57743b6d4a12da0aacc554025050ad30a60ce11788",
+    "packages/storage/src/indexed-db-protocol-journal.ts": "381e0257256859890bb0483014dfb2c26cf70e5d15b82888ffe9c711cd12c794",
+    "packages/storage/src/transfer-import-store.test.ts": "41b8fe585508e3c9dc3c6b6d87b974cf5e0cc78313f56586e3c56d4e5bbc3764",
+    "packages/p2p/src/peer-link.ts": "c12c105bc1a5707720f6ea572a290b42aabd12c32e8f8061a645d44a7f10e708",
+    "packages/p2p/src/peer-link.test.ts": "8658b80291a19497c7818add7941d9d30bd3be9ad8738c879044f00c95a1d9d1",
+    "packages/protocol/src/retired-safety.ts": "2a693ad8fb22aa0f13717277084ed326b4fc32ea72b15572759f0ee6a37b7418",
+    "packages/protocol/src/consensus.ts": "b973f0e90953b0c801b73704f7778d70087a5c6dc1f69b7d766021c38081d2da"
+  }
+}

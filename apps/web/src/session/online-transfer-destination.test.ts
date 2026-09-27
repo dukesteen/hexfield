@@ -8,6 +8,7 @@ import {
   genesisDigest,
   MemoryProtocolJournal,
   prepareTransferPrivate,
+  restoreConsensusState,
   validateDeckCeremony,
   validateGenesisEntry,
   validateGenesisOnlineStart,
@@ -551,221 +552,316 @@ test('certified cancellation crosses ordinary children after the local refresh b
   identity.dispose();
 }, 120_000);
 
-test('returned human promotes over the same device only after its old journal retired', async () => {
-  installFactory();
-  const fixture = createRecoveryFixture({ masterBackedBeacon: true, lobbyId: 'returnroom' });
-  const record = publicRecord(fixture);
-  const oldGameKey = recoveryFixtureKey(fixture, 0);
-  const oldDevice = identityFromSecret(
-    hashValue({
-      domain: 'cp2p/test/online-device/v1',
-      gamePeer: fixture.genesis.seats[0]?.publicKey,
-    }),
-  );
-  const identity = {
-    ...oldDevice,
-    dispose() {
-      this.secretKey.fill(0);
-    },
-  };
-  const bot = identityFromSecret(new Uint8Array(32).fill(81));
-  const recoveryStatement = recoveryFixtureReadiness(fixture, fixture.ready, bot.peerId);
-  const recoveryAuthorization = signRecoveryFixtureAuthorization(
-    fixture,
-    recoveryStatement,
-    bot.secretKey,
-  );
-  const recoveryAuthEntry = signRecoveryFixtureEntry(
-    fixture,
-    fixture.ready,
-    { kind: 'membership', change: recoveryAuthorization },
-    fixture.ready.log.head.stateHash,
-  );
-  const recoveryAuth = certifyRecoveryFixtureEntry(
-    fixture,
-    fixture.ready,
-    recoveryAuthEntry,
-    [1, 2, 3],
-  );
-  const recoveryPending = advanceRecoveryFixture(fixture.ready, recoveryAuth);
-  const recoveryActivation = signRecoveryFixtureActivation(
-    fixture,
-    recoveryPending,
-    recoveryAuthEntry,
-  );
-  const botStatus = value(
-    fixture.source.engine.apply(recoveryPending.log.state, {
-      kind: 'system',
-      type: 'SEAT_STATUS',
-      seat: 0,
-      status: 'bot',
-    }),
-  );
-  const recoveryActivationEntry = signRecoveryFixtureEntry(
-    fixture,
-    recoveryPending,
-    { kind: 'membership', change: recoveryActivation },
-    toHex(hashValue(botStatus.state)),
-  );
-  const recoveryActivated = certifyRecoveryFixtureEntry(
-    fixture,
-    recoveryPending,
-    recoveryActivationEntry,
-    [1, 2, 3],
-  );
-  const recovered = advanceRecoveryFixture(recoveryPending, recoveryActivated);
-  expect(recovered.log.authority?.controllers[0]).toMatchObject({
-    kind: 'bot',
-    publicKey: bot.peerId,
-  });
-
-  // Preserve the real former-human binding and certified removal history. We
-  // deliberately delay its retired marker to prove promotion refuses that gap.
-  const oldBinding = canonicalEncode({
-    protocol: 'online-game-keys-v1',
-    genesisDigest: record.genesisDigest,
-    devicePeer: oldDevice.peerId,
-    humanSeat: 0,
-    seats: [
-      {
-        seat: 0,
-        kind: 'human',
-        peerId: fixture.genesis.seats[0]?.publicKey,
-        signingKey: oldGameKey,
-        master: scalarToBytes(17n),
-      },
-    ],
-  });
-  const priorSafety = value(createConsensusState(fixture.ready, 0));
-  const retired = value(createRetiredSafety(fixture.ready, recoveryAuth, 0, priorSafety));
-  const oldEntries = [...fixture.deckEntries, recoveryAuth];
-  const oldJournal = new IndexedDbProtocolJournal(record.gameId, {
-    keyBinding: {
-      recordKey: `online-game/${record.genesisDigest}/keys`,
-      bytes: oldBinding,
-    },
-  });
-  expect(await oldJournal.initialize(fixture.genesisEntry, Uint8Array.of(1))).toBe(true);
-  for (const certified of oldEntries)
-    // oxlint-disable-next-line no-await-in-loop -- Build one exact certified retired source journal.
-    expect(await oldJournal.commit(certified.entry.seq, 0, certified, Uint8Array.of(1))).toBe(true);
-  await oldJournal.close();
-
-  const store = new IndexedDbByteStore({ lockProvider: async (_name, task) => task() });
-  const imports = new TransferImportStore(store);
-  const expected = { gameId: record.gameId, genesisDigest: record.genesisDigest };
-  const entries = [...oldEntries, recoveryActivated];
-  const participant = await OnlineTransferDestination.create({
-    attemptId: toBase64Url(new Uint8Array(32).fill(7)),
-    mode: 'new',
-    expected,
-    identity,
-    store,
-    importStore: imports,
-    bootstrapBytes: value(encodeOnlineTransferBootstrap({ start: record, entries })),
-  });
-  const offer = await participant.prepareOffer({ seat: 0, mode: 'return' });
-  const returnAuthorization = {
-    ...offer,
-    returnIntent: {
-      signer: 'last-human-game-key' as const,
-      sig: signObject('seat-transfer-return-intent-v1', offer.statement, oldGameKey),
-    },
-  };
-  const transferAuthEntry = signRecoveryFixtureEntry(
-    fixture,
-    recovered,
-    { kind: 'membership', change: returnAuthorization },
-    recovered.log.head.stateHash,
-  );
-  const transferAuth = certifyRecoveryFixtureEntry(
-    fixture,
-    recovered,
-    transferAuthEntry,
-    [1, 2, 3],
-  );
-  const transferPending = advanceRecoveryFixture(recovered, transferAuth);
-  entries.push(transferAuth);
-  await participant.refreshBootstrap(
-    value(encodeOnlineTransferBootstrap({ start: record, entries })),
-  );
-  const sourceJournal = new MemoryProtocolJournal();
-  expect(await sourceJournal.initialize(fixture.genesisEntry, Uint8Array.of(1))).toBe(true);
-  for (const certified of entries)
-    // oxlint-disable-next-line no-await-in-loop -- Preserve the real certified source ancestry.
-    expect(await sourceJournal.commit(certified.entry.seq, 0, certified, Uint8Array.of(1))).toBe(
-      true,
+test.each(['pre-removal', 'retired'] as const)(
+  'returned human promotes over a valid %s journal on the same device',
+  async (oldJournalPhase) => {
+    installFactory();
+    const fixture = createRecoveryFixture({ masterBackedBeacon: true, lobbyId: 'returnroom' });
+    const record = publicRecord(fixture);
+    const oldGameKey = recoveryFixtureKey(fixture, 0);
+    const oldDevice = identityFromSecret(
+      hashValue({
+        domain: 'cp2p/test/online-device/v1',
+        gamePeer: fixture.genesis.seats[0]?.publicKey,
+      }),
     );
-  const recoveryStore = new IndexedDbByteStore({ lockProvider: async (_name, task) => task() });
-  value(
-    await persistRecoveryPrivate(
-      recovered.log,
-      transferEntryRef(recoveryAuthEntry),
-      1,
-      [{ seat: 0, master: scalarToBytes(17n) }],
-      recoveryStore,
-    ),
-  );
-  const packet = value(
-    await prepareTransferPrivate({
-      journal: sourceJournal,
-      engine: createBaseEngine(),
-      policy: fixture.policy,
-      authorization: transferEntryRef(transferAuthEntry),
-      sourceSeat: 1,
-      sourceKind: 'current-controller',
-      signingKey: recoveryFixtureKey(fixture, 1),
-      entropy: new Uint8Array(32).fill(33),
-      nonce: new Uint8Array(32).fill(34),
-      outbox: store,
-      recoveryPrivateStore: recoveryStore,
-    }),
-  );
-  await participant.importPacket(packet);
-  const readiness = await participant.prepareReadiness();
-  const humanStatus = value(
-    fixture.source.engine.apply(transferPending.log.state, {
-      kind: 'system',
-      type: 'SEAT_STATUS',
-      seat: 0,
-      status: 'active',
-    }),
-  );
-  const activationEntry = signRecoveryFixtureEntry(
-    fixture,
-    transferPending,
-    { kind: 'membership', change: readiness },
-    toHex(hashValue(humanStatus.state)),
-  );
-  const activation = certifyRecoveryFixtureEntry(
-    fixture,
-    transferPending,
-    activationEntry,
-    [1, 2, 3],
-  );
-  advanceRecoveryFixture(transferPending, activation);
-  entries.push(activation);
-  const activatedBootstrap = value(encodeOnlineTransferBootstrap({ start: record, entries }));
-  await expect(participant.observeActivation(activatedBootstrap)).rejects.toThrow(/not retired/);
-  const retiringJournal = new IndexedDbProtocolJournal(record.gameId, {
-    keyBinding: {
-      recordKey: `online-game/${record.genesisDigest}/keys`,
-      bytes: oldBinding,
-    },
-  });
-  const incomplete = await retiringJournal.load();
-  if (!incomplete) throw new Error('Former voter journal is missing');
-  expect(
-    await retiringJournal.saveSafety(
-      incomplete.height,
-      incomplete.safety.revision,
-      canonicalEncode(retired),
-    ),
-  ).toBe(true);
-  await retiringJournal.close();
-  expect(await participant.observeActivation(activatedBootstrap)).toBe(record.gameId);
-  expect(participant.snapshot().phase).toBe('promoted');
-  await participant.close();
-  identity.dispose();
-  oldBinding.fill(0);
-}, 120_000);
+    const identity = {
+      ...oldDevice,
+      dispose() {
+        this.secretKey.fill(0);
+      },
+    };
+    const bot = identityFromSecret(new Uint8Array(32).fill(81));
+    const recoveryStatement = recoveryFixtureReadiness(fixture, fixture.ready, bot.peerId);
+    const recoveryAuthorization = signRecoveryFixtureAuthorization(
+      fixture,
+      recoveryStatement,
+      bot.secretKey,
+    );
+    const recoveryAuthEntry = signRecoveryFixtureEntry(
+      fixture,
+      fixture.ready,
+      { kind: 'membership', change: recoveryAuthorization },
+      fixture.ready.log.head.stateHash,
+    );
+    const recoveryAuth = certifyRecoveryFixtureEntry(
+      fixture,
+      fixture.ready,
+      recoveryAuthEntry,
+      [1, 2, 3],
+    );
+    const recoveryPending = advanceRecoveryFixture(fixture.ready, recoveryAuth);
+    const recoveryActivation = signRecoveryFixtureActivation(
+      fixture,
+      recoveryPending,
+      recoveryAuthEntry,
+    );
+    const botStatus = value(
+      fixture.source.engine.apply(recoveryPending.log.state, {
+        kind: 'system',
+        type: 'SEAT_STATUS',
+        seat: 0,
+        status: 'bot',
+      }),
+    );
+    const recoveryActivationEntry = signRecoveryFixtureEntry(
+      fixture,
+      recoveryPending,
+      { kind: 'membership', change: recoveryActivation },
+      toHex(hashValue(botStatus.state)),
+    );
+    const recoveryActivated = certifyRecoveryFixtureEntry(
+      fixture,
+      recoveryPending,
+      recoveryActivationEntry,
+      [1, 2, 3],
+    );
+    const recovered = advanceRecoveryFixture(recoveryPending, recoveryActivated);
+    expect(recovered.log.authority?.controllers[0]).toMatchObject({
+      kind: 'bot',
+      publicKey: bot.peerId,
+    });
+
+    // Preserve the real former-human binding and certified removal history. We
+    // deliberately delay its retired marker to prove promotion refuses that gap.
+    const oldBinding = canonicalEncode({
+      protocol: 'online-game-keys-v1',
+      genesisDigest: record.genesisDigest,
+      devicePeer: oldDevice.peerId,
+      humanSeat: 0,
+      seats: [
+        {
+          seat: 0,
+          kind: 'human',
+          peerId: fixture.genesis.seats[0]?.publicKey,
+          signingKey: oldGameKey,
+          master: scalarToBytes(17n),
+        },
+      ],
+    });
+    const priorSafety = value(createConsensusState(fixture.ready, 0));
+    const retired = value(createRetiredSafety(fixture.ready, recoveryAuth, 0, priorSafety));
+    const oldEntries =
+      oldJournalPhase === 'pre-removal'
+        ? [...fixture.deckEntries]
+        : [...fixture.deckEntries, recoveryAuth];
+    const first = oldEntries[0];
+    if (!first || first.certificate.length < 4) throw new Error('Four-voter certificate missing');
+    const alternateFirst = { ...first, certificate: first.certificate.slice(0, 3) };
+    expect(entryHash(alternateFirst.entry)).toBe(entryHash(first.entry));
+    expect(canonicalEncode(alternateFirst)).not.toEqual(canonicalEncode(first));
+    const oldJournal = new IndexedDbProtocolJournal(record.gameId, {
+      keyBinding: {
+        recordKey: `online-game/${record.genesisDigest}/keys`,
+        bytes: oldBinding,
+      },
+    });
+    expect(await oldJournal.initialize(fixture.genesisEntry, Uint8Array.of(1))).toBe(true);
+    for (const certified of [alternateFirst, ...oldEntries.slice(1)])
+      // oxlint-disable-next-line no-await-in-loop -- Build one exact certified retired source journal.
+      expect(await oldJournal.commit(certified.entry.seq, 0, certified, Uint8Array.of(1))).toBe(
+        true,
+      );
+    await oldJournal.close();
+
+    if (oldJournalPhase === 'pre-removal') {
+      const saved = new IndexedDbProtocolJournal(record.gameId, {
+        keyBinding: {
+          recordKey: `online-game/${record.genesisDigest}/keys`,
+          bytes: oldBinding,
+        },
+      });
+      const current = await saved.load();
+      if (!current) throw new Error('Former voter journal is missing');
+      if (
+        !(await saved.saveSafety(
+          current.height,
+          current.safety.revision,
+          canonicalEncode(priorSafety),
+        ))
+      )
+        throw new Error('Could not persist the former active voter safety');
+      await saved.close();
+    }
+
+    const store = new IndexedDbByteStore({ lockProvider: async (_name, task) => task() });
+    expect(await store.load(`online-game/${record.genesisDigest}/keys`)).toEqual(oldBinding);
+    const imports = new TransferImportStore(store);
+    const expected = { gameId: record.gameId, genesisDigest: record.genesisDigest };
+    const entries = [...fixture.deckEntries, recoveryAuth, recoveryActivated];
+    const participant = await OnlineTransferDestination.create({
+      attemptId: toBase64Url(new Uint8Array(32).fill(7)),
+      mode: 'new',
+      expected,
+      identity,
+      store,
+      importStore: imports,
+      bootstrapBytes: value(encodeOnlineTransferBootstrap({ start: record, entries })),
+    });
+    const offer = await participant.prepareOffer({ seat: 0, mode: 'return' });
+    expect(offer.returnIntent?.signer).toBe('last-human-game-key');
+    const transferAuthEntry = signRecoveryFixtureEntry(
+      fixture,
+      recovered,
+      { kind: 'membership', change: offer },
+      recovered.log.head.stateHash,
+    );
+    const transferAuth = certifyRecoveryFixtureEntry(
+      fixture,
+      recovered,
+      transferAuthEntry,
+      [1, 2, 3],
+    );
+    const transferPending = advanceRecoveryFixture(recovered, transferAuth);
+    entries.push(transferAuth);
+    await participant.refreshBootstrap(
+      value(encodeOnlineTransferBootstrap({ start: record, entries })),
+    );
+    const sourceJournal = new MemoryProtocolJournal();
+    expect(await sourceJournal.initialize(fixture.genesisEntry, Uint8Array.of(1))).toBe(true);
+    for (const certified of entries)
+      // oxlint-disable-next-line no-await-in-loop -- Preserve the real certified source ancestry.
+      expect(await sourceJournal.commit(certified.entry.seq, 0, certified, Uint8Array.of(1))).toBe(
+        true,
+      );
+    const recoveryStore = new IndexedDbByteStore({ lockProvider: async (_name, task) => task() });
+    value(
+      await persistRecoveryPrivate(
+        recovered.log,
+        transferEntryRef(recoveryAuthEntry),
+        1,
+        [{ seat: 0, master: scalarToBytes(17n) }],
+        recoveryStore,
+      ),
+    );
+    const packet = value(
+      await prepareTransferPrivate({
+        journal: sourceJournal,
+        engine: createBaseEngine(),
+        policy: fixture.policy,
+        authorization: transferEntryRef(transferAuthEntry),
+        sourceSeat: 1,
+        sourceKind: 'current-controller',
+        signingKey: recoveryFixtureKey(fixture, 1),
+        entropy: new Uint8Array(32).fill(33),
+        nonce: new Uint8Array(32).fill(34),
+        outbox: store,
+        recoveryPrivateStore: recoveryStore,
+      }),
+    );
+    await participant.importPacket(packet);
+    const readiness = await participant.prepareReadiness();
+    const humanStatus = value(
+      fixture.source.engine.apply(transferPending.log.state, {
+        kind: 'system',
+        type: 'SEAT_STATUS',
+        seat: 0,
+        status: 'active',
+      }),
+    );
+    const activationEntry = signRecoveryFixtureEntry(
+      fixture,
+      transferPending,
+      { kind: 'membership', change: readiness },
+      toHex(hashValue(humanStatus.state)),
+    );
+    const activation = certifyRecoveryFixtureEntry(
+      fixture,
+      transferPending,
+      activationEntry,
+      [1, 2, 3],
+    );
+    advanceRecoveryFixture(transferPending, activation);
+    entries.push(activation);
+    const activatedBootstrap = value(encodeOnlineTransferBootstrap({ start: record, entries }));
+    if (oldJournalPhase === 'pre-removal') {
+      const conflictingEntry = signRecoveryFixtureEntry(
+        fixture,
+        fixture.ready,
+        { kind: 'membership', change: { kind: 'seat-offline', seat: 1 } },
+        fixture.ready.log.head.stateHash,
+      );
+      const conflicting = certifyRecoveryFixtureEntry(
+        fixture,
+        fixture.ready,
+        conflictingEntry,
+        [1, 2, 3],
+      );
+      const checkedDecision = restoreConsensusState(
+        { ...priorSafety, decision: conflicting },
+        fixture.ready,
+        0,
+      );
+      if (!checkedDecision.ok)
+        throw new Error(`Conflicting decision fixture: ${checkedDecision.error.message}`);
+      const safetyJournal = new IndexedDbProtocolJournal(record.gameId, {
+        keyBinding: {
+          recordKey: `online-game/${record.genesisDigest}/keys`,
+          bytes: oldBinding,
+        },
+      });
+      const current = await safetyJournal.load();
+      if (!current) throw new Error('Former voter journal is missing');
+      if (
+        !(await safetyJournal.saveSafety(
+          current.height,
+          current.safety.revision,
+          canonicalEncode({ ...priorSafety, decision: conflicting }),
+        ))
+      )
+        throw new Error('Could not persist conflicting decision');
+      let rejected = false;
+      let rejection = '';
+      try {
+        await participant.observeActivation(activatedBootstrap);
+      } catch (error) {
+        rejection = String(error);
+        rejected = /conflicting certified decision/.test(rejection);
+      }
+      if (!rejected) throw new Error(`Conflicting certified decision was discarded: ${rejection}`);
+      const persisted = await safetyJournal.load();
+      if (!persisted) throw new Error('Former voter journal disappeared');
+      if (
+        !(await safetyJournal.saveSafety(
+          persisted.height,
+          persisted.safety.revision,
+          canonicalEncode(priorSafety),
+        ))
+      )
+        throw new Error('Could not restore original voter safety');
+      await safetyJournal.close();
+    }
+    if (oldJournalPhase === 'retired') {
+      let rejected = false;
+      try {
+        await participant.observeActivation(activatedBootstrap);
+      } catch (error) {
+        rejected = /not retired/.test(String(error));
+      }
+      if (!rejected) throw new Error('Unretired post-removal journal was accepted');
+      const retiringJournal = new IndexedDbProtocolJournal(record.gameId, {
+        keyBinding: {
+          recordKey: `online-game/${record.genesisDigest}/keys`,
+          bytes: oldBinding,
+        },
+      });
+      const incomplete = await retiringJournal.load();
+      if (!incomplete) throw new Error('Former voter journal is missing');
+      if (
+        !(await retiringJournal.saveSafety(
+          incomplete.height,
+          incomplete.safety.revision,
+          canonicalEncode(retired),
+        ))
+      )
+        throw new Error('Could not persist the certified retirement marker');
+      await retiringJournal.close();
+    }
+    expect(await participant.observeActivation(activatedBootstrap)).toBe(record.gameId);
+    expect(participant.snapshot().phase).toBe('promoted');
+    await participant.close();
+    identity.dispose();
+    oldBinding.fill(0);
+  },
+  120_000,
+);

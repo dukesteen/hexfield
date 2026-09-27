@@ -804,6 +804,8 @@ export class P2PSession implements GameSession<CertifiedHistory> {
     statement?: unknown,
   ): {
     head: EntryRef;
+    /** Recovered original humans currently hosted by this local human controller. */
+    returnableSeats: readonly Seat[];
     pending: AuthorizedTransfer | null;
     matchedAuthorization: AuthorizedTransfer | null;
     expiredBeforeCertification: boolean;
@@ -858,6 +860,33 @@ export class P2PSession implements GameSession<CertifiedHistory> {
       throw new Error('Certified pending transfer authorization is unavailable');
     return {
       head: { seq: log.head.seq, hash: entryHash(log.head) },
+      returnableSeats:
+        log.authority?.controllers
+          .flatMap((controller) => {
+            if (
+              controller.kind !== 'bot' ||
+              controller.status !== 'active' ||
+              controller.hostSeat !== this.options.seat ||
+              !log.genesis.seats.some(
+                (original) => original.seat === controller.seat && original.kind === 'human',
+              )
+            )
+              return [];
+            const root = transfer.returnRoots
+              .toReversed()
+              .find((item) => item.departedSeat === controller.seat);
+            if (!root?.activation) return [];
+            const first = root.affectedSeats.find((seat) => {
+              const current = log.authority?.controllers.find((item) => item.seat === seat);
+              return (
+                current?.kind === 'bot' &&
+                current.status === 'active' &&
+                current.hostSeat === controller.hostSeat
+              );
+            });
+            return first === controller.seat ? [controller.seat] : [];
+          })
+          .toSorted((left, right) => left - right) ?? [],
       pending: pending ? copyCanonical(pending) : null,
       matchedAuthorization: matchedAuthorization ? copyCanonical(matchedAuthorization) : null,
       expiredBeforeCertification:

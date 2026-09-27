@@ -141,6 +141,7 @@ export function TransferDestinationScreen({
           <section className="online-transfer-panel">
             <h1>{t('lobby:transferDestinationTitle')}</h1>
             <p>{t('lobby:transferStartHint')}</p>
+            {invite.body.mode === 'return' && <p>{t('lobby:transferReturnDestinationHint')}</p>}
             {importedArchiveId && (
               <p className="online-transfer-checkpoint-hint">
                 {t('lobby:importTransferCheckpointHint')}
@@ -171,6 +172,7 @@ export function TransferDestinationScreen({
           <>
             <TransferPanel
               role="destination"
+              mode={invite.body.mode}
               selfDevice={snapshot.selfDevice}
               candidates={[]}
               selectedDevice={snapshot.selectedDevice}

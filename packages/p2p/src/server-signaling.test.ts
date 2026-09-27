@@ -69,7 +69,7 @@ function fixture() {
   function offer(sdp = 'v=0\r\n') {
     return signSignalEnvelope(
       {
-        version: 1,
+        version: 2,
         scope: 'lobby',
         from: identity.peerId,
         to: peer.peerId,

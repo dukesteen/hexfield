@@ -201,6 +201,8 @@ export class OnlineTransferRecordStore {
       record.attemptId !== body.attemptId ||
       record.gameId !== body.gameId ||
       record.seat !== body.seat ||
+      (record.offer !== null && record.offer.statement.mode !== body.mode) ||
+      (record.approved !== null && record.approved.statement.mode !== body.mode) ||
       record.genesisDigest !== body.genesisDigest ||
       record.sourceDevice !== body.sourceDevice ||
       (this.role === 'destination' && record.destinationDevice !== this.self)

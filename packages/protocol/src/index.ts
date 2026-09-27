@@ -84,6 +84,7 @@ export type {
   SeatTransferAuthorizationStatement,
   TransferReplacement,
 } from './transfer-types.js';
+export { TRANSFER_RETURN_INTENT_DOMAIN } from './transfer-readiness.js';
 export {
   prepareTransferPrivate,
   importTransferPrivate,

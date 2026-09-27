@@ -1,0 +1,12 @@
+# Returning-human source review disposition
+
+The read-only review used the exact source hashes in `return-flow-review-manifest.sha256`. The raw response is `return-flow-review-raw.md`. Changes below followed that frozen snapshot.
+
+- **Saved invitation liveness:** Fixed. A cancelled, non-busy browser attempt closes before a different seat/mode opens. In-flight openings reject a different target. A persisted, unapproved invitation is durably finished when the user explicitly starts another seat/mode; an approved or certified attempt cannot be replaced. `online-transfer-browser.test.ts` covers both branches.
+- **Secret ownership:** `validateRetiredTransferBinding` copies each signing key and master into its result. Cleanup now wipes only those owned fields, the separately decoded binding, and the loaded bytes; it never traverses the certified context.
+- **Return eligibility:** The session's read-only `returnableSeats` now takes the last certified root and the first currently eligible recovered seat, matching the validator's ordering. The existing recovered-host session test checks its result; the retired original source sees none.
+- **Local return precheck:** The source checks signed invitation mode and destination possession signatures before showing confirmation. The worker's certified `submitTransfer` validator remains the authority for last-root lineage, retired-key intent and current host. No private packet is prepared until that authorization is certified. We did not add a second partial validator that could drift from the protocol rule.
+- **Early reservation:** The destination verifies and signs from the retired binding before writing the offer locator. Durable fresh credential reservation may precede this check, but no offer is emitted and it cannot acquire game authority on failure.
+- **Other boundaries:** Destination exchange mode comes from the verified signed invitation. Return scope pins the last certified root's authorization and activation. Source retry submits the return offer through the same certified membership path as live transfers. Same-device promotion replaces the binding only after certified activation and validation of the old generation's safety at its saved head; a still-open old game writer blocks promotion.
+
+The review did not assess native browser acceptance. `native-takeover-acceptance.md` records the bounded partial checks and remaining gaps.

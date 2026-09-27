@@ -6,6 +6,7 @@ import {
   genesisDigest,
   logEntrySchema,
   replayCertifiedPrefix,
+  restoreConsensusState,
   restoreRetiredSafety,
   validateRetiredTransferBinding,
   validateTransferOwnedMaterial,
@@ -755,22 +756,6 @@ export class IndexedDbProtocolJournal implements ProtocolJournal {
           );
           if (oldSafety.height !== existingKeys.length + 1)
             throw new TypeError('Existing active journal safety is incomplete');
-          if (existingKeys.length === options.activation.entry.seq) {
-            const retiredKey = oldMaterialKey(approved, before.value.context.log.transfer);
-            const markerBytes = canonicalDecode(oldSafety.safety);
-            try {
-              const marker = restoreRetiredSafety(
-                markerBytes,
-                after.value.context,
-                destinationSeat,
-                retiredKey,
-              );
-              if (!marker.ok)
-                throw new TypeError(`Existing controller was not retired: ${marker.error.code}`);
-            } finally {
-              wipeDecodedBytes(markerBytes);
-            }
-          }
           const oldHead =
             existingKeys.length === 0
               ? staged.genesis
@@ -778,13 +763,58 @@ export class IndexedDbProtocolJournal implements ProtocolJournal {
                   .entry;
           if (entryHash(oldHead) !== expected.head.hash)
             throw new TypeError('Existing active journal head is stale');
-          for (const [index, stored] of existingEntries.entries()) {
+          const persistedPrefix = existingEntries.map((stored) =>
+            decodeRecord(stored, certifiedEntrySchema, this.#maxRecordBytes),
+          );
+          const persistedReplay = replayCertifiedPrefix(
+            staged.genesis,
+            persistedPrefix,
+            options.engine,
+            options.policy,
+          );
+          if (!persistedReplay.ok)
+            throw new TypeError('Existing active journal has invalid certified history');
+          const retiredKey = oldMaterialKey(approved, before.value.context.log.transfer);
+          const storedContext = persistedReplay.value.context;
+          const safetyValue = canonicalDecode(oldSafety.safety);
+          try {
+            if (storedContext.membership.voters.some((voter) => voter.publicKey === retiredKey)) {
+              const active = restoreConsensusState(safetyValue, storedContext, destinationSeat);
+              if (!active.ok || active.value.localPublicKey !== retiredKey)
+                throw new TypeError('Existing controller safety is invalid');
+              const importedNext = fullEntries[existingKeys.length];
+              if (
+                [active.value.decision, active.value.unappliedCertificate].some(
+                  (certified) =>
+                    certified &&
+                    (!importedNext || entryHash(certified.entry) !== entryHash(importedNext.entry)),
+                )
+              )
+                throw new TypeError('Existing controller retains conflicting certified decision');
+            } else {
+              const retired = restoreRetiredSafety(
+                safetyValue,
+                storedContext,
+                destinationSeat,
+                retiredKey,
+              );
+              if (!retired.ok)
+                throw new TypeError(`Existing controller was not retired: ${retired.error.code}`);
+            }
+          } finally {
+            wipeDecodedBytes(safetyValue);
+          }
+          // Different valid voter quorums can certify the same signed entry.
+          // Keep the verified local certificates and append only the imported suffix.
+          for (const [index, persisted] of persistedPrefix.entries()) {
             const key = existingKeys[index];
+            const imported = fullEntries[index];
             if (
               !Array.isArray(key) ||
               key[0] !== this.#gameId ||
               key[1] !== index + 1 ||
-              !equalBytes(stored, canonicalEncode(fullEntries[index]))
+              !imported ||
+              entryHash(persisted.entry) !== entryHash(imported.entry)
             )
               throw new TypeError('Existing active journal conflicts with certified import');
           }

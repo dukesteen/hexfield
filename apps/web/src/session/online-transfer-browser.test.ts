@@ -381,6 +381,96 @@ function sourceLink(candidates: readonly string[] = [], failSelect?: Error) {
   return link;
 }
 
+test('an unapproved saved live invitation cannot strand a later certified return attempt', async () => {
+  const source = identityFromSecret(new Uint8Array(32).fill(120));
+  const destination = identityFromSecret(new Uint8Array(32).fill(121));
+  const store = new MemoryEscrowLifecycleStore();
+  const old = createTransferInvite({
+    identity: { ...source, dispose: () => source.secretKey.fill(0) },
+    attemptId: 'E'.repeat(43),
+    gameId: 'e'.repeat(22),
+    genesisDigest: testKey(7),
+    seat: 0,
+    mode: 'live',
+    serverUrl: 'wss://signal.example/',
+    roomId: 'transferaf',
+  });
+  await saveCurrentTransferInvite(store, source.peerId, old);
+  const prior = new OnlineTransferRecordStore(store, source.peerId, old, 'source');
+  await prior.save({
+    ...sourceRecord(old, destination.peerId),
+    offer: null,
+    approved: null,
+    authorization: null,
+  });
+  vi.spyOn(OnlineTransferLink, 'openSource').mockReturnValue(asTestLink(sourceLink()));
+  let browser: OnlineTransferBrowser | undefined;
+  try {
+    browser = await OnlineTransferBrowser.openSource({
+      identity: { ...source, dispose: () => source.secretKey.fill(0) },
+      store,
+      worker: asTestWorker({
+        async request() {
+          throw new Error('No game work expected');
+        },
+      }),
+      clock: new VirtualClock(),
+      network: {},
+      gameId: old.body.gameId,
+      genesisDigest: old.body.genesisDigest,
+      seat: 0,
+      mode: 'return',
+      serverUrl: old.body.serverUrl,
+    });
+    expect(browser.getSnapshot().invite.body.mode).toBe('return');
+    expect(browser.getSnapshot().invite.body.attemptId).not.toBe(old.body.attemptId);
+    expect((await prior.load()).finished).toBe(true);
+  } finally {
+    await browser?.close();
+    source.secretKey.fill(0);
+    destination.secretKey.fill(0);
+  }
+});
+
+test('an approved saved invitation cannot be silently replaced by a return attempt', async () => {
+  const source = identityFromSecret(new Uint8Array(32).fill(122));
+  const destination = identityFromSecret(new Uint8Array(32).fill(123));
+  const store = new MemoryEscrowLifecycleStore();
+  const old = createTransferInvite({
+    identity: { ...source, dispose: () => source.secretKey.fill(0) },
+    attemptId: 'F'.repeat(43),
+    gameId: 'f'.repeat(22),
+    genesisDigest: testKey(8),
+    seat: 0,
+    mode: 'live',
+    serverUrl: 'wss://signal.example/',
+    roomId: 'transferag',
+  });
+  await saveCurrentTransferInvite(store, source.peerId, old);
+  const prior = new OnlineTransferRecordStore(store, source.peerId, old, 'source');
+  await prior.save(sourceRecord(old, destination.peerId));
+  try {
+    await expect(
+      OnlineTransferBrowser.openSource({
+        identity: { ...source, dispose: () => source.secretKey.fill(0) },
+        store,
+        worker: asTestWorker({}),
+        clock: new VirtualClock(),
+        network: {},
+        gameId: old.body.gameId,
+        genesisDigest: old.body.genesisDigest,
+        seat: 0,
+        mode: 'return',
+        serverUrl: old.body.serverUrl,
+      }),
+    ).rejects.toThrow('Finish the approved transfer');
+    expect((await prior.load()).finished).toBe(false);
+  } finally {
+    source.secretKey.fill(0);
+    destination.secretKey.fill(0);
+  }
+});
+
 test('reopened certified source cancellation commits locally when outcome delivery is unavailable', async () => {
   const source = identityFromSecret(new Uint8Array(32).fill(91));
   const destination = identityFromSecret(new Uint8Array(32).fill(92));

@@ -76,6 +76,7 @@ export function OnlineGameScreen({ gameId }: { gameId: string }) {
   const game = room?.getGame();
   const agreement = snapshot?.agreement;
   const halted = snapshot?.startup?.phase === 'halted';
+  const disclosed = snapshot?.startup?.error === 'online-ceremony-disputed';
   const failed = openError !== null || snapshot?.startup?.phase === 'error';
   const unsupportedVersion = openError instanceof UnsupportedOnlineGameVersionError;
   const exitLoading = async (retry: boolean) => {
@@ -101,7 +102,9 @@ export function OnlineGameScreen({ gameId }: { gameId: string }) {
         <section className="online-resume-panel" aria-labelledby="online-resume-title">
           <h1 id="online-resume-title">{t('lobby:onlineResumeTitle')}</h1>
           {halted ? (
-            <p role="alert">{t('lobby:onlineGameHalted')}</p>
+            <p role="alert">
+              {t(disclosed ? 'lobby:onlineGameHalted' : 'lobby:onlineGameStopped')}
+            </p>
           ) : failed ? (
             <p role="alert">
               {unsupportedVersion
@@ -172,6 +175,7 @@ function OnlineGameInstance({
   const snapshot = useSyncExternalStore(room.subscribe, room.getSnapshot, room.getSnapshot);
   const audit = useSessionStore((store) => store.audit);
   const status = useSessionStore((store) => store.status);
+  const headHash = useSessionStore((store) => store.fairness?.head.hash ?? null);
   const recoveryCandidate = useSessionStore((store) => store.recoveryCandidate);
   const { mutate: requestPersistentStorage } = useRequestPersistentStorage();
   const [attached, setAttached] = useState(false);
@@ -188,6 +192,24 @@ function OnlineGameInstance({
     if (voided) setVoidOpen(true);
   }, [voided]);
   const [transferBrowser, setTransferBrowser] = useState<OnlineTransferBrowser | null>(null);
+  const [returnSeats, setReturnSeats] = useState<readonly Seat[]>([]);
+  useEffect(() => {
+    let active = true;
+    if (!room.returnableSeats) return undefined;
+    void room.returnableSeats().then(
+      (seats) => {
+        if (active) setReturnSeats(seats);
+        return undefined;
+      },
+      () => {
+        if (active) setReturnSeats([]);
+        return undefined;
+      },
+    );
+    return () => {
+      active = false;
+    };
+  }, [room, headHash]);
   const sourceTransfer = useSourceTransfer(room);
   const transfer = useSyncExternalStore(
     (listener) => transferBrowser?.subscribe(listener) ?? (() => undefined),
@@ -225,6 +247,7 @@ function OnlineGameInstance({
     };
   }, [transferOpen]);
   const halted = snapshot.startup?.phase === 'halted';
+  const disclosed = snapshot.startup?.error === 'online-ceremony-disputed';
   const blocker = useBlocker({
     shouldBlockFn: ({ current, next }) =>
       !allowNavigation.current && !snapshot.closed && current.pathname !== next.pathname,
@@ -359,10 +382,10 @@ function OnlineGameInstance({
       setBusy(false);
     }
   };
-  const openTransfer = async () => {
+  const openTransfer = async (target?: { readonly seat: Seat; readonly mode: 'return' }) => {
     setTransferOpen(true);
     try {
-      setTransferBrowser(await sourceTransfer.mutateAsync());
+      setTransferBrowser(await sourceTransfer.mutateAsync(target));
     } catch {
       // The mutation error is shown in the open dialog.
     }
@@ -444,6 +467,19 @@ function OnlineGameInstance({
                   {t('lobby:transferSourceTitle')}
                 </button>
               )}
+              {room.startTransfer &&
+                !halted &&
+                !voided &&
+                returnSeats.map((seat) => (
+                  <button
+                    key={seat}
+                    className="button button-quiet"
+                    type="button"
+                    onClick={() => void openTransfer({ seat, mode: 'return' })}
+                  >
+                    {t('lobby:transferReturnSourceTitle', { seat: seat + 1 })}
+                  </button>
+                ))}
             </>
           }
           sessionNotice={
@@ -562,12 +598,17 @@ function OnlineGameInstance({
       <dialog
         ref={transferDialog}
         className="app-dialog online-transfer-dialog"
-        aria-label={t('lobby:transferSourceTitle')}
+        aria-label={t(
+          transfer?.invite.body.mode === 'return'
+            ? 'lobby:transferReturnTitle'
+            : 'lobby:transferSourceTitle',
+        )}
         onCancel={() => setTransferOpen(false)}
       >
         {transfer && transferInvite ? (
           <TransferPanel
             role="source"
+            mode={transfer.invite.body.mode}
             invitationUrl={transferInvite}
             selfDevice={transfer.selfDevice}
             candidates={transfer.candidates}
@@ -605,8 +646,16 @@ function OnlineGameInstance({
         aria-labelledby="online-game-halted-title"
         onCancel={(event) => event.preventDefault()}
       >
-        <h2 id="online-game-halted-title">{t('lobby:onlineGameHalted')}</h2>
-        <p>{t('lobby:onlineGameHaltedBody')}</p>
+        <h2 id="online-game-halted-title">
+          {t(disclosed ? 'lobby:onlineGameHalted' : 'lobby:onlineGameStopped')}
+        </h2>
+        <p>{t(disclosed ? 'lobby:onlineGameHaltedBody' : 'lobby:onlineGameStoppedBody')}</p>
+        {!disclosed && snapshot.startup?.error && (
+          <details>
+            <summary>{t('lobby:onlineErrorDetails')}</summary>
+            <p>{snapshot.startup.error}</p>
+          </details>
+        )}
         {leaveError && <p role="alert">{t('lobby:onlineLeaveFailed')}</p>}
         {exported.isError && <p role="alert">{t('lobby:publicReplayExportFailed')}</p>}
         <div className="dialog-actions">

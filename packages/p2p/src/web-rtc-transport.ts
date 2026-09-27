@@ -594,7 +594,7 @@ export class WebRtcTransport implements Transport {
           peer,
           signSignalEnvelope(
             {
-              version: 1,
+              version: 2,
               scope: this.options.scope,
               from: this.self,
               to: peer,

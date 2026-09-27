@@ -137,7 +137,7 @@ test('v4 transfer invite pins source, attempt and server origin with a bounded c
       roomId: 'abcdefghij',
       identity: source,
     });
-    expect(invite.body.protocol).toBe('cp2p/online-transfer-invite/v4');
+    expect(invite.body.protocol).toBe('cp2p/online-transfer-invite/v6');
     const code = encodeTransferInvite(invite);
     expect(decodeTransferInvite(code)).toEqual(invite);
     expect(
@@ -155,6 +155,9 @@ test('v4 transfer invite pins source, attempt and server origin with a bounded c
       encodeTransferInvite({ ...invite, body: { ...invite.body, attemptId: 'd'.repeat(43) } }),
     ).toThrow(/signature/);
     expect(() =>
+      encodeTransferInvite({ ...invite, body: { ...invite.body, mode: 'return' } }),
+    ).toThrow(/signature/);
+    expect(() =>
       createTransferInvite({
         attemptId: 'a'.repeat(43),
         gameId: 'b'.repeat(22),
@@ -169,7 +172,7 @@ test('v4 transfer invite pins source, attempt and server origin with a bounded c
       expect(() =>
         encodeTransferInvite({
           body: { ...invite.body, sourceDevice: attacker.peerId },
-          sig: signObject('online-transfer-invite-v4', invite.body, source.secretKey),
+          sig: signObject('online-transfer-invite-v6', invite.body, source.secretKey),
         }),
       ).toThrow(/signature/);
     } finally {

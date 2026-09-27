@@ -1,22 +1,27 @@
 import { canonicalDecode, canonicalEncode, sha256, toHex } from '@cp2p/codec';
 import { identityFromSecret, signObject } from '@cp2p/crypto';
-import { createBaseEngine } from '@cp2p/engine';
+import { createBaseEngine, success } from '@cp2p/engine';
 import type { Seat } from '@cp2p/engine';
 import {
   genesisDigest,
   importTransferPrivate,
+  initialProposalContext,
   replayCertifiedPrefix,
+  restoreConsensusState,
   restoreRetiredSafety,
   transferCheckDigest,
   transferEntryRef,
   TRANSFER_BOT_CHECK_DOMAIN,
   TRANSFER_DESTINATION_CHECK_DOMAIN,
+  TRANSFER_RETURN_INTENT_DOMAIN,
   transferAuthorizationStatementSchema,
   transferChangeSchema,
   transferPrivateEnvelopeSchema,
   validateDeckCeremony,
+  validateRetiredTransferBinding,
 } from '@cp2p/protocol';
 import type {
+  LogContext,
   ReplayPolicy,
   SeatTransferAuthorization,
   SeatTransferAuthorizationStatement,
@@ -41,6 +46,7 @@ import {
 
 const PROTOCOL = 'online-transfer-destination-v1';
 const MAX_REFRESHES = 8;
+const MAX_RETIRED_BINDING_BYTES = 16 * 1024;
 const token = v.pipe(v.string(), v.regex(/^[A-Za-z0-9_-]{43}$/));
 const ref = v.strictObject({
   seq: v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(Number.MAX_SAFE_INTEGER)),
@@ -129,6 +135,12 @@ export interface OnlineTransferDestinationSnapshot {
 
 function equal(left: Uint8Array, right: Uint8Array): boolean {
   return left.length === right.length && left.every((byte, index) => byte === right[index]);
+}
+
+function wipePrivate(value: unknown): void {
+  if (value instanceof Uint8Array) value.fill(0);
+  else if (Array.isArray(value)) value.forEach(wipePrivate);
+  else if (value && typeof value === 'object') Object.values(value).forEach(wipePrivate);
 }
 
 function wipeStage(stage: import('@cp2p/storage').TransferImportRecord | null): void {
@@ -782,15 +794,96 @@ export class OnlineTransferDestination {
           if (!approved || !sameCanonical(approved.statement, credentials.authorization.statement))
             throw new TypeError('Certified authorization differs from reserved credentials');
         }
+        const returnIntent =
+          scope.mode === 'return'
+            ? await this.#returnIntent(credentials.authorization.statement)
+            : null;
+        this.#ensureActive();
         if (this.#locator.scope === null) {
           await this.#replace((current) => ({ ...current, scope: v.parse(scopeSchema, scope) }));
           this.#phase = 'offered';
         }
+        if (returnIntent)
+          return {
+            ...credentials.authorization,
+            returnIntent,
+          };
         return credentials.authorization;
       } finally {
         credentials.dispose();
       }
     });
+  }
+
+  async #returnIntent(statement: SeatTransferAuthorizationStatement): Promise<{
+    signer: 'last-human-game-key';
+    sig: string;
+  }> {
+    const current = this.#bootstrap.replay.context.log;
+    const root = current.transfer?.returnRoots
+      .toReversed()
+      .find((item) => item.departedSeat === statement.seat);
+    if (
+      !root?.activation ||
+      root.lastHumanDevice !== this.#options.identity.peerId ||
+      statement.mode !== 'return'
+    )
+      throw new TypeError('Return requires the certified former human device');
+    const bytes = await this.#options.store.load(
+      `online-game/${this.#options.expected.genesisDigest}/keys`,
+    );
+    if (!bytes) throw new TypeError('Former human game binding is unavailable');
+    let decoded: unknown;
+    let owned: import('@cp2p/protocol').TransferOwnedMaterial | null = null;
+    try {
+      if (bytes.length > MAX_RETIRED_BINDING_BYTES)
+        throw new TypeError('Former human game binding is oversized');
+      decoded = canonicalDecode(bytes);
+      const initial = initialProposalContext(
+        this.#bootstrap.record.result.entry,
+        createBaseEngine(),
+        policyFor(this.#bootstrap),
+      );
+      if (!initial.ok) throw new TypeError(initial.error.message);
+      const humanSeat = statement.seat;
+      const controllerKey = (context: LogContext) =>
+        context.authority?.controllers.find((item) => item.seat === humanSeat)?.publicKey;
+      let installed: LogContext | null =
+        controllerKey(initial.value.log) === root.lastHumanGameKey ? initial.value.log : null;
+      let previous = controllerKey(initial.value.log);
+      const replayed = replayCertifiedPrefix(
+        this.#bootstrap.record.result.entry,
+        this.#bootstrap.entries,
+        createBaseEngine(),
+        policyFor(this.#bootstrap),
+        (_entry, next) => {
+          const key = controllerKey(next.log);
+          if (key !== previous && key === root.lastHumanGameKey) installed = next.log;
+          previous = key;
+          return success(undefined);
+        },
+      );
+      if (!replayed.ok || !installed)
+        throw new TypeError('Former human key lacks a certified installed generation');
+      this.#ensureActive();
+      const checked = validateRetiredTransferBinding(decoded, installed, current);
+      if (!checked.ok) throw new TypeError(checked.error.message);
+      owned = checked.value;
+      const human = owned.seats.find((seat) => seat.seat === humanSeat && seat.kind === 'human');
+      if (owned.devicePeer !== root.lastHumanDevice || human?.peerId !== root.lastHumanGameKey)
+        throw new TypeError('Former human binding differs from certified return lineage');
+      return {
+        signer: 'last-human-game-key',
+        sig: signObject(TRANSFER_RETURN_INTENT_DOMAIN, statement, human.signingKey),
+      };
+    } finally {
+      for (const seat of owned?.seats ?? []) {
+        seat.signingKey.fill(0);
+        seat.master.fill(0);
+      }
+      wipePrivate(decoded);
+      bytes.fill(0);
+    }
   }
 
   refreshBootstrap(bytes: Uint8Array): Promise<void> {
@@ -1203,7 +1296,14 @@ export class OnlineTransferDestination {
                 !saved ||
                 !sameCanonical(saved.genesis, stage.genesis) ||
                 saved.entries.length > next.entries.length ||
-                saved.entries.some((entry, index) => !sameCanonical(entry, next.entries[index]))
+                saved.entries.some(
+                  (entry, index) =>
+                    !next.entries[index] ||
+                    !sameRef(
+                      transferEntryRef(entry.entry),
+                      transferEntryRef(next.entries[index].entry),
+                    ),
+                )
               )
                 throw new TypeError('Existing journal is not a certified prefix of activation');
               const replayed = replayCertifiedPrefix(
@@ -1217,31 +1317,65 @@ export class OnlineTransferDestination {
               const approved = next.replay.context.log.transfer?.authorizations.find((item) =>
                 sameRef(item.entry, authorization),
               );
+              if (!approved)
+                throw new TypeError('Certified retired controller identity is unavailable');
               const oldKey =
-                approved?.statement.mode === 'live'
+                approved.statement.mode === 'live'
                   ? approved.statement.currentController.publicKey
-                  : next.replay.context.log.transfer?.returnRoots
-                      .toReversed()
-                      .find((item) => item.departedSeat === approved?.statement.seat)
-                      ?.lastHumanGameKey;
-              if (!oldKey || !approved)
+                  : next.replay.context.log.transfer?.returnRoots.find(
+                      (item) =>
+                        item.departedSeat === approved.statement.seat &&
+                        item.activation !== null &&
+                        approved.statement.recovery !== null &&
+                        sameRef(item.activation, approved.statement.recovery.activation),
+                    )?.lastHumanGameKey;
+              if (!oldKey)
                 throw new TypeError('Certified retired controller identity is unavailable');
               let marker: unknown;
               try {
                 marker = canonicalDecode(saved.safety.bytes);
               } catch {
                 throw new TypeError('Existing journal is not retired');
+              }
+              try {
+                const storedContext = replayed.value.context;
+                if (storedContext.membership.voters.some((voter) => voter.publicKey === oldKey)) {
+                  const active = restoreConsensusState(
+                    marker,
+                    storedContext,
+                    approved.statement.seat,
+                  );
+                  if (!active.ok || active.value.localPublicKey !== oldKey)
+                    throw new TypeError('Existing journal has invalid active controller safety');
+                  const importedNext = next.entries[saved.entries.length];
+                  if (
+                    [active.value.decision, active.value.unappliedCertificate].some(
+                      (certified) =>
+                        certified &&
+                        (!importedNext ||
+                          !sameRef(
+                            transferEntryRef(certified.entry),
+                            transferEntryRef(importedNext.entry),
+                          )),
+                    )
+                  )
+                    throw new TypeError(
+                      'Existing controller retains conflicting certified decision',
+                    );
+                } else {
+                  const retired = restoreRetiredSafety(
+                    marker,
+                    storedContext,
+                    approved.statement.seat,
+                    oldKey,
+                  );
+                  if (!retired.ok)
+                    throw new TypeError(`Existing journal is not retired: ${retired.error.code}`);
+                }
               } finally {
                 saved.safety.bytes.fill(0);
+                wipePrivate(marker);
               }
-              const retired = restoreRetiredSafety(
-                marker,
-                replayed.value.context,
-                approved.statement.seat,
-                oldKey,
-              );
-              if (!retired.ok)
-                throw new TypeError(`Existing journal is not retired: ${retired.error.code}`);
               const prior = saved.entries.at(-1)?.entry ?? saved.genesis;
               expectedActive = { head: transferEntryRef(prior), bindingBytes: oldBinding };
             } finally {

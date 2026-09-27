@@ -96,6 +96,7 @@ export class OnlineTransferBrowser {
       readonly gameId: string;
       readonly genesisDigest: string;
       readonly seat: Seat;
+      readonly mode?: 'live' | 'return';
       readonly serverUrl: string;
     },
   ): Promise<OnlineTransferBrowser> {
@@ -111,7 +112,16 @@ export class OnlineTransferBrowser {
         invite,
         'source',
       );
-      if ((await records.load()).finished) invite = null;
+      const progress = await records.load();
+      if (progress.finished) invite = null;
+      else if (invite.body.seat !== options.seat || invite.body.mode !== (options.mode ?? 'live')) {
+        // A prior unapproved invitation has no source signature or certified authority.
+        // An approved one must be resumed or certified before another attempt can replace it.
+        if (progress.record?.approved || progress.record?.authorization)
+          throw new Error('Finish the approved transfer before opening another seat');
+        await records.finish();
+        invite = null;
+      }
     }
     if (!invite) {
       invite = createTransferInvite({
@@ -119,12 +129,17 @@ export class OnlineTransferBrowser {
         gameId: options.gameId,
         genesisDigest: options.genesisDigest,
         seat: options.seat,
+        mode: options.mode ?? 'live',
         serverUrl: options.serverUrl,
         attemptId: toBase64Url(crypto.getRandomValues(new Uint8Array(32))),
       });
       await saveCurrentTransferInvite(options.store, options.identity.peerId, invite);
     }
-    if (invite.body.genesisDigest !== options.genesisDigest || invite.body.seat !== options.seat)
+    if (
+      invite.body.genesisDigest !== options.genesisDigest ||
+      invite.body.seat !== options.seat ||
+      invite.body.mode !== (options.mode ?? 'live')
+    )
       throw new Error('Saved transfer invitation differs from this game and seat');
     const progress = await new OnlineTransferRecordStore(
       options.store,
@@ -374,6 +389,7 @@ export class OnlineTransferBrowser {
     const record = this.#record;
     if (!record) throw new Error('Transfer destination has not been selected');
     const common = {
+      mode: this.#snapshot.invite.body.mode,
       worker: this.options.worker,
       channel: {
         send: async (artifact: Parameters<OnlineTransferChannel['send']>[0]) => {

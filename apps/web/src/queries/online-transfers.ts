@@ -1,4 +1,5 @@
 import { useMutation } from '@tanstack/react-query';
+import type { Seat } from '@cp2p/engine';
 import { acquireGameWriterLease, IndexedDbByteStore } from '@cp2p/storage';
 import { loadOnlineConnectionSettings } from './network.js';
 import { loadOrCreateOnlineIdentity } from '../session/online-credentials.js';
@@ -10,9 +11,9 @@ import type { OnlineRoomHandleValue } from '../features/online/room-registry.js'
 
 export function useSourceTransfer(room: OnlineRoomHandleValue) {
   return useMutation({
-    mutationFn: async () => {
+    mutationFn: async (target?: { readonly seat: Seat; readonly mode: 'live' | 'return' }) => {
       if (!room.startTransfer) throw new Error('Device transfer is unavailable');
-      return room.startTransfer(await loadOnlineConnectionSettings());
+      return room.startTransfer(await loadOnlineConnectionSettings(), target);
     },
   });
 }

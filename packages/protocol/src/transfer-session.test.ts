@@ -734,6 +734,7 @@ test('fresh host takes a recovered bot only with its current key and original be
     const status = sourceSession.getTransferStatus();
     expect(status).toEqual({
       head: authorizationRef,
+      returnableSeats: [0],
       pending: { entry: authorizationRef, statement },
       matchedAuthorization: null,
       expiredBeforeCertification: false,
@@ -743,6 +744,7 @@ test('fresh host takes a recovered bot only with its current key and original be
     Reflect.set(required(status.pending).statement.destination, 'devicePeer', 'tampered');
     expect(sourceSession.getTransferStatus()).toEqual({
       head: authorizationRef,
+      returnableSeats: [0],
       pending: { entry: authorizationRef, statement },
       matchedAuthorization: null,
       expiredBeforeCertification: false,
@@ -1212,6 +1214,7 @@ test('a second-generation retired human can request only certified history', asy
     const retiredStatus = stale.getTransferStatus();
     expect(retiredStatus).toEqual({
       head: transferEntryRef(secondActivated.log.head),
+      returnableSeats: [],
       pending: null,
       matchedAuthorization: null,
       expiredBeforeCertification: false,

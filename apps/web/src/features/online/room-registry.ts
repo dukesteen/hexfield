@@ -9,6 +9,7 @@ import type { Unsubscribe } from '@cp2p/protocol';
 import type { OnlineGame } from '../../session/online-game.js';
 import type { WebRtcPeerStats } from '@cp2p/p2p';
 import type { Result } from '@cp2p/engine';
+import type { Seat } from '@cp2p/engine';
 import type { PeerId } from '@cp2p/protocol';
 import type { ChatContent } from '../../session/online-chat.js';
 
@@ -29,6 +30,7 @@ export interface OnlineRoomHandleValue {
   getGame: () => OnlineGame<GameSession> | null;
   getPeerStats?: () => Promise<readonly WebRtcPeerStats[]>;
   startTransfer?: OnlineRoom['startTransfer'];
+  returnableSeats?: () => Promise<readonly Seat[]>;
   sendChat?: (content: ChatContent) => Promise<Result<void>>;
   muteChat?: (peer: PeerId, muted: boolean) => Promise<Result<void>>;
   getSnapshot: () => OnlineRoomSnapshot;

@@ -1,0 +1,7 @@
+{
+  "files": {
+    "packages/protocol/src/online-ceremony.ts": "079a1b0de7b6f30c20908a8cefc8c4d787daa1e1c45f4c0afd218c5ac1829cdc",
+    "packages/protocol/src/online-ceremony.test.ts": "1e4db6bd7410b1e7f06f83c29b292b505ba16419f2c04a66d92520d9c892588c"
+  },
+  "testDiffSha256": "b462c891ba575ca6711f58692fda2809b9e9243ffd61c15520b93fe6ca7d1fed"
+}
