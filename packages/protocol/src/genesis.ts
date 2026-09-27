@@ -1,4 +1,5 @@
-import { fromBase64Url, hashValue, toBase64Url, toHex } from '@cp2p/codec';
+import { genesisDigest, genesisId } from './genesis-identity.js';
+import { fromBase64Url, hashValue, toHex } from '@cp2p/codec';
 import { identityFromSecret, parsePeerId, signObject, verifyObject } from '@cp2p/crypto';
 import { ENGINE_VERSION, RESOURCES, failure, success } from '@cp2p/engine';
 import type { Engine, GameState, Result } from '@cp2p/engine';
@@ -26,29 +27,7 @@ export interface ValidatedGenesis {
   state: GameState;
 }
 
-/** Explicit fields prevent gameId or signatures becoming part of their own hash. */
-export function genesisBody(genesis: GenesisBody): GenesisBody {
-  return {
-    protocolVersion: genesis.protocolVersion,
-    engineVersion: genesis.engineVersion,
-    config: genesis.config,
-    seats: genesis.seats,
-    genesisSeed: genesis.genesisSeed,
-    ceremonyNonce: genesis.ceremonyNonce,
-    security: genesis.security,
-    commitments: genesis.commitments,
-    createdAt: genesis.createdAt,
-  };
-}
-
-export function genesisId(body: GenesisBody): string {
-  return genesisDigest(body).slice(0, 22);
-}
-
-/** The full digest binds protocol signatures; gameId is only its routing alias. */
-export function genesisDigest(body: GenesisBody): string {
-  return toBase64Url(hashValue({ domain: 'cp2p/v1/genesis-body', body: genesisBody(body) }));
-}
+export { genesisBody, genesisDigest, genesisId } from './genesis-identity.js';
 
 /** Every human signs the same draft, including its derived identifier. */
 export function signGenesis(

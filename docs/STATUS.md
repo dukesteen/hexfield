@@ -180,6 +180,15 @@ Source: [09-lobby-and-game-setup.md](09-lobby-and-game-setup.md)
 
 Source: [10-persistence-reconnection.md](10-persistence-reconnection.md)
 
+The [certified recovery checkpoint](verification/stage10/recovery-checkpoint.md)
+adds recovery authorization and activation, durable share release, verified
+private reconstruction, replacement-key restoration and retired-voter records.
+A live four-voter test certifies recovery while a beacon is pending; a delayed
+client catches up and retires its previous key. Native Chrome checks cover the
+atomic journal and cross-worker writer lease. Live share/check routing, active
+bot hosting, browser session integration and complete recovery/audit acceptance
+are still unfinished. No Stage 10 acceptance item is checked by this checkpoint.
+
 - [ ] All chaos additions pass on 500 seeds each.
 - [ ] Refresh-resume takes < 3 s to be back in play on a typical laptop (measured).
 - [ ] Four-human takeover and audit pass; two-/three-human departure pauses safely and resumes when the required voter returns.

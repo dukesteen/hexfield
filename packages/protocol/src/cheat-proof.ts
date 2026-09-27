@@ -3,6 +3,8 @@ import { decodePoint, parsePeerId, verifyObject } from '@cp2p/crypto';
 import { failure, success } from '@cp2p/engine';
 import type { Result, Seat } from '@cp2p/engine';
 import * as v from 'valibot';
+import { permitsFrozenOperation, resolveArtifactSigner } from './authority.js';
+import type { ArtifactSigner, SeatAuthorities } from './authority-types.js';
 import { beaconOperationId, verifyBeaconReveal } from './beacon.js';
 import { getBeaconOperation } from './beacon-state.js';
 import type { EntryRef } from './beacon-state.js';
@@ -94,7 +96,12 @@ function validSealedEphemeral(point: string): boolean {
 }
 
 /** Cheap historical gate; the full verifier checks the signer’s frozen role. */
-export function authenticatedCheatSigner(claim: CheatClaim, genesis: Genesis): boolean {
+export function authenticatedCheatSigner(
+  claim: CheatClaim,
+  genesis: Genesis,
+  authority?: SeatAuthorities,
+  epoch = authority?.epoch ?? 0,
+): boolean {
   const domain =
     claim.evidence.kind === 'command-proof'
       ? 'cmd'
@@ -109,21 +116,36 @@ export function authenticatedCheatSigner(claim: CheatClaim, genesis: Genesis): b
               : claim.evidence.kind === 'steal-contribution'
                 ? 'steal-contribution'
                 : 'steal-dispute';
-  const signers =
+  const seats =
     claim.evidence.kind === 'bad-steal-delivery'
       ? genesis.seats
       : genesis.seats.filter((seat) => seat.seat === claim.seat);
-  return signers.some((seat) => authenticated(claim.evidence.artifact, domain, seat.publicKey));
+  return seats.some(({ seat }) => {
+    const signer = resolveArtifactSigner(authority, genesis, epoch, seat);
+    return signer.ok && authenticated(claim.evidence.artifact, domain, signer.value.publicKey);
+  });
 }
 
 function frozenAtParent(
   operation: { genesisDigest: string; epoch: number; anchor: EntryRef },
   context: LogContext,
+  kind: 'beacon' | 'deck' | 'count' | 'steal',
+  id: string,
 ): boolean {
   return (
     operation.genesisDigest === genesisDigest(context.genesis) &&
-    operation.epoch === context.crypto?.epoch &&
+    context.crypto !== null &&
+    permitsFrozenOperation(context.authority, kind, id, operation, context.crypto.epoch) &&
     operation.anchor.seq <= context.head.seq
+  );
+}
+
+function currentSigner(context: LogContext, seat: Seat): Result<ArtifactSigner> {
+  return resolveArtifactSigner(
+    context.authority,
+    context.genesis,
+    context.crypto?.epoch ?? context.authority?.epoch ?? 0,
+    seat,
   );
 }
 
@@ -177,14 +199,15 @@ export function verifyCheatProof(value: unknown, context: LogContext): Result<Ch
       const route = operationRoute(artifact);
       if (
         operation.ok &&
-        frozenAtParent(operation.value, context) &&
         route.ok &&
-        route.value.operationId === beaconOperationId(operation.value)
+        route.value.operationId === beaconOperationId(operation.value) &&
+        frozenAtParent(operation.value, context, 'beacon', route.value.operationId)
       ) {
         const owner = operation.value.participants.find((item) => item.seat === route.value.seat);
-        if (owner && authenticated(artifact, 'beacon-reveal', owner.publicKey)) {
-          const checked = verifyBeaconReveal(artifact, operation.value);
-          if (!checked.ok && checked.error.code === 'beacon-link') offender = owner.seat;
+        const signer = owner && currentSigner(context, owner.seat);
+        if (signer?.ok && authenticated(artifact, 'beacon-reveal', signer.value.publicKey)) {
+          const checked = verifyBeaconReveal(artifact, operation.value, signer.value);
+          if (!checked.ok && checked.error.code === 'beacon-link') offender = signer.value.seat;
         }
       }
     } else if (evidence.kind === 'deck-pass') {
@@ -215,24 +238,35 @@ export function verifyCheatProof(value: unknown, context: LogContext): Result<Ch
       const route = operationRoute(artifact);
       if (
         operation &&
-        frozenAtParent(operation, context) &&
         route.ok &&
         route.value.operationId === deckDrawOperationId(operation) &&
+        frozenAtParent(operation, context, 'deck', route.value.operationId) &&
         evidence.prefix.length < operation.participants.length
       ) {
         const owner = operation.participants.filter((item) => item.seat !== operation.seat)[
           evidence.prefix.length
         ];
         const shaped = parseCanonical(artifact.body, unlockBodyRouteSchema);
+        const expected = operation.participants.filter((item) => item.seat !== operation.seat);
+        const signers = expected.map((item) => currentSigner(context, item.seat));
+        const signer = signers[evidence.prefix.length];
         if (
           owner?.seat === route.value.seat &&
           shaped.ok &&
           shaped.value.step === evidence.prefix.length &&
-          authenticated(artifact, 'deck-unlock', owner.publicKey)
+          signer?.ok &&
+          authenticated(artifact, 'deck-unlock', signer.value.publicKey) &&
+          signers.every((item) => item.ok)
         ) {
-          const prefix = verifyDeckUnlockPrefix(operation, evidence.prefix);
+          const activeSigners = signers.flatMap((item) => (item.ok ? [item.value] : []));
+          const prefix = verifyDeckUnlockPrefix(operation, evidence.prefix, activeSigners);
           if (!prefix.ok) return unproven();
-          const checked = verifyDeckUnlock(operation, prefix.value.unlocks, artifact);
+          const checked = verifyDeckUnlock(
+            operation,
+            prefix.value.unlocks,
+            artifact,
+            activeSigners,
+          );
           if (!checked.ok && ['deck-unlock-proof', 'invalid-envelope'].includes(checked.error.code))
             offender = owner.seat;
         }
@@ -242,17 +276,22 @@ export function verifyCheatProof(value: unknown, context: LogContext): Result<Ch
       const route = operationRoute(artifact);
       if (
         pending &&
-        frozenAtParent(pending.operation, context) &&
         route.ok &&
         pending.remaining.includes(route.value.seat) &&
-        route.value.operationId === countOperationId(pending.operation)
+        route.value.operationId === countOperationId(pending.operation) &&
+        frozenAtParent(pending.operation, context, 'count', route.value.operationId)
       ) {
         const owner = pending.operation.victims.find((item) => item.seat === route.value.seat);
         const shaped = parseCanonical(artifact.body, countBodyRouteSchema);
-        if (owner && shaped.ok && authenticated(artifact, 'monopoly-count', owner.publicKey)) {
-          const checked = verifyCountContribution(artifact, pending.operation);
+        const signer = owner && currentSigner(context, owner.seat);
+        if (
+          signer?.ok &&
+          shaped.ok &&
+          authenticated(artifact, 'monopoly-count', signer.value.publicKey)
+        ) {
+          const checked = verifyCountContribution(artifact, pending.operation, signer.value);
           if (!checked.ok && ['count-proof', 'invalid-envelope'].includes(checked.error.code))
-            offender = owner.seat;
+            offender = signer.value.seat;
         }
       }
     } else if (evidence.kind === 'steal-contribution') {
@@ -260,22 +299,27 @@ export function verifyCheatProof(value: unknown, context: LogContext): Result<Ch
       const route = operationRoute(artifact);
       if (
         pending &&
-        frozenAtParent(pending.operation, context) &&
         !pending.fixed &&
         !pending.dispute &&
         route.ok &&
         route.value.seat === pending.operation.victim.seat &&
-        route.value.operationId === stealOperationId(pending.operation)
+        route.value.operationId === stealOperationId(pending.operation) &&
+        frozenAtParent(pending.operation, context, 'steal', route.value.operationId)
       ) {
         const owner = pending.operation.victim;
         const shaped = parseCanonical(artifact.body, stealBodyRouteSchema);
-        if (shaped.ok && authenticated(artifact, 'steal-contribution', owner.publicKey)) {
+        const signer = currentSigner(context, owner.seat);
+        if (
+          signer.ok &&
+          shaped.ok &&
+          authenticated(artifact, 'steal-contribution', signer.value.publicKey)
+        ) {
           const complete = parseCanonical(artifact, signedStealContributionSchema);
           if (!complete.ok) offender = owner.seat;
           else if (!validSealedEphemeral(complete.value.body.sealed.ephemeral))
             offender = owner.seat;
           else {
-            const checked = verifyStealContribution(artifact, pending.operation);
+            const checked = verifyStealContribution(artifact, pending.operation, signer.value);
             if (
               !checked.ok &&
               ['steal-ephemeral-proof', 'steal-transfer-proof', 'invalid-envelope'].includes(
@@ -288,26 +332,38 @@ export function verifyCheatProof(value: unknown, context: LogContext): Result<Ch
       }
     } else {
       const pending = crypto.steal;
-      if (pending?.fixed && frozenAtParent(pending.operation, context)) {
+      if (
+        pending?.fixed &&
+        frozenAtParent(pending.operation, context, 'steal', stealOperationId(pending.operation))
+      ) {
         const shaped = parseCanonical(artifact, signedStealDisputeSchema);
+        const signer = currentSigner(context, pending.operation.thief.seat);
         if (
           !shaped.ok ||
           toHex(hashValue(shaped.value.body.binding)) !==
             toHex(hashValue(stealReceiptBinding(pending.fixed))) ||
-          !authenticated(artifact, 'steal-dispute', pending.operation.thief.publicKey)
+          !signer.ok ||
+          !authenticated(artifact, 'steal-dispute', signer.value.publicKey) ||
+          (crypto.epoch > 0 && !pending.fixed.signer)
         )
           return unproven();
-        if (!verifyStealContribution(pending.fixed.contribution, pending.operation).ok)
+        if (
+          !verifyStealContribution(
+            pending.fixed.contribution,
+            pending.operation,
+            pending.fixed.signer,
+          ).ok
+        )
           return unproven();
         if (evidence.kind === 'bad-steal-delivery') {
           if (
             pending.dispute &&
             toHex(hashValue(pending.dispute)) === toHex(hashValue(artifact)) &&
-            verifyStealDispute(artifact, pending.fixed).ok
+            verifyStealDispute(artifact, pending.fixed, signer.value).ok
           )
             offender = pending.operation.victim.seat;
         } else if (!pending.dispute) {
-          const checked = verifyStealDispute(artifact, pending.fixed);
+          const checked = verifyStealDispute(artifact, pending.fixed, signer.value);
           if (!checked.ok && checked.error.code === 'steal-good-delivery')
             offender = pending.operation.thief.seat;
         }

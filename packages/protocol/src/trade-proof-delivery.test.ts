@@ -1,8 +1,10 @@
 import { toBase64Url } from '@cp2p/codec';
-import { encodeScalar, pedersenCommit } from '@cp2p/crypto';
+import { encodeScalar, identityFromSecret, pedersenCommit } from '@cp2p/crypto';
 import { RESOURCES, createResourceBounds, zeroCounts } from '@cp2p/engine';
 import type { GameState, Input, Result, Seat } from '@cp2p/engine';
 import { describe, expect, test } from 'vitest';
+import { initialSeatAuthorities } from './authority.js';
+import type { SeatAuthorities } from './authority-types.js';
 import type { CryptoContext } from './crypto-context.js';
 import { entryHash, genesisDigest } from './genesis.js';
 import { emptyHandCommitments } from './hand-commitments.js';
@@ -132,7 +134,18 @@ function scenario(proposer: Seat) {
     ),
   }));
   const response = signTradeProofResponse(request, 1, proofs, owner.secretKey);
-  return { fixture, context, body, request, response, planned, finalizer, owner };
+  return {
+    fixture,
+    context,
+    body,
+    request,
+    response,
+    planned,
+    finalizer,
+    owner,
+    counts,
+    blindings,
+  };
 }
 
 describe('authenticated trade proof delivery', () => {
@@ -251,5 +264,122 @@ describe('authenticated trade proof delivery', () => {
         command: body.command,
       }).ok,
     ).toBe(true);
+  });
+
+  test('current controllers sign both trade messages after an epoch change', () => {
+    const { context, body, request, response, finalizer, owner, counts, blindings } = scenario(0);
+    const newFinalizer = identityFromSecret(new Uint8Array(32).fill(78));
+    const newOwner = identityFromSecret(new Uint8Array(32).fill(79));
+    const original = value(initialSeatAuthorities(context.genesis));
+    const authority: SeatAuthorities = {
+      ...original,
+      epoch: 1,
+      usedPublicKeys: [...original.usedPublicKeys, newFinalizer.peerId, newOwner.peerId],
+      controllers: original.controllers.map((controller) =>
+        controller.seat === 0 || controller.seat === 1
+          ? {
+              ...controller,
+              publicKey: controller.seat === 0 ? newFinalizer.peerId : newOwner.peerId,
+              activatedAt: { seq: context.head.seq, hash: entryHash(context.head) },
+            }
+          : controller,
+      ),
+    };
+    if (!context.crypto) throw new Error('Missing trade proof context');
+    const current = { ...context, authority, crypto: { ...context.crypto, epoch: 1 } };
+    const freshRequest = signTradeProofRequest(body, newFinalizer.secretKey);
+    const planned = value(authorizeTradeProof(body, 1, current));
+    const proofs = planned.indices.map((index) => ({
+      index,
+      proof: value(
+        proveHandObligation(
+          planned.plan,
+          index,
+          counts,
+          blindings,
+          new Uint8Array(32).fill(9),
+          planned.binding,
+        ),
+      ),
+    }));
+    const freshResponse = signTradeProofResponse(freshRequest, 1, proofs, newOwner.secretKey);
+    expect(verifyTradeProofRequest(freshRequest, current).ok).toBe(true);
+    expect(verifyTradeProofResponse(freshResponse, freshRequest, current).ok).toBe(true);
+    expect(verifyTradeProofRequest(request, { ...context, crypto: current.crypto })).toMatchObject({
+      ok: false,
+      error: { code: 'authority-required' },
+    });
+    expect(
+      authorizeTradeProof(body, 1, {
+        ...current,
+        authority: { ...authority, epoch: 2 },
+      }).ok,
+    ).toBe(false);
+    expect(verifyTradeProofRequest(request, current)).toMatchObject({
+      ok: false,
+      error: { code: 'trade-proof-signature' },
+    });
+    expect(verifyTradeProofResponse(response, freshRequest, current)).toMatchObject({
+      ok: false,
+      error: { code: 'trade-proof-response-signature' },
+    });
+    expect(tradeProofHost(context.genesis, 0, authority)).toBe(newFinalizer.peerId);
+    expect(tradeProofHost(context.genesis, 1, authority)).toBe(newOwner.peerId);
+    expect(context.genesis.seats[0]?.publicKey).toBe(finalizer.peerId);
+    expect(context.genesis.seats[1]?.publicKey).toBe(owner.peerId);
+  });
+
+  test('pending recovery freezes trade authorization and routing', () => {
+    const { context, body, request, response } = scenario(0);
+    const original = value(initialSeatAuthorities(context.genesis));
+    if (!context.crypto) throw new Error('Missing trade proof context');
+    for (const pendingSeat of [0, 1] as const) {
+      const authority: SeatAuthorities = {
+        ...original,
+        epoch: 1,
+        controllers: original.controllers.map((controller) =>
+          controller.seat === pendingSeat
+            ? {
+                ...controller,
+                kind: 'bot',
+                status: 'pending-recovery',
+                hostSeat: pendingSeat === 0 ? 1 : 0,
+              }
+            : controller.hostSeat === pendingSeat
+              ? { ...controller, hostSeat: pendingSeat === 0 ? 1 : 0 }
+              : controller,
+        ),
+      };
+      const current = { ...context, authority, crypto: { ...context.crypto, epoch: 1 } };
+      expect(authorizeTradeProof(body, 1, current)).toMatchObject({
+        ok: false,
+        error: { code: 'authority-pending' },
+      });
+      expect(verifyTradeProofRequest(request, current).ok).toBe(false);
+      expect(verifyTradeProofResponse(response, request, current).ok).toBe(false);
+      expect(tradeProofHost(context.genesis, pendingSeat, authority)).toBeNull();
+    }
+  });
+
+  test('host transfer routes a bot to its current human controller', () => {
+    const { context, finalizer, owner } = scenario(0);
+    const original = value(initialSeatAuthorities(context.genesis));
+    const authority: SeatAuthorities = {
+      ...original,
+      epoch: 1,
+      controllers: original.controllers.map((controller) =>
+        controller.seat === 2 ? { ...controller, hostSeat: 1 } : controller,
+      ),
+    };
+    expect(tradeProofHost(context.genesis, 2)).toBe(finalizer.peerId);
+    expect(tradeProofHost(context.genesis, 2, authority)).toBe(owner.peerId);
+    expect(
+      tradeProofHost(context.genesis, 2, {
+        ...authority,
+        controllers: authority.controllers.map((controller) =>
+          controller.seat === 2 ? { ...controller, hostSeat: 3 } : controller,
+        ),
+      }),
+    ).toBeNull();
   });
 });

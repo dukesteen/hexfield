@@ -1,0 +1,21 @@
+{
+  "capturedAt": "2026-09-27T01:42:36.458483+00:00",
+  "files": {
+    "apps/web/dev/storage-smoke.html": "6c5b43685f033fe6e5e48dd8169f74741a77b6d413342e41f2dade5cb5695c91",
+    "apps/web/src/dev/storage-smoke.ts": "56ea526a79aac5cee6c1c60c72f2f352ca56863c0f433de8695832fc3d598706",
+    "apps/web/src/dev/storage-smoke.worker.ts": "fe6b8432208e82e4b19a48175de24d91774eb5c449cf773acf5052f9a3c5ea25",
+    "packages/protocol/src/schemas.ts": "0644605fd0e0cd35ededac28e9a52524eb122e8b73839bc94f729fdee160f606",
+    "packages/storage/package.json": "127ffda643d58a0fa88993c05d73470f40a34fdc01be74388fa49e9de838a283",
+    "packages/storage/src/database.ts": "ce9c966a702bfc298363fdbe4f092629aa1736271ce17555690de512860ab770",
+    "packages/storage/src/index.test.ts": "b55a0fb822232319b2c44c9fe5477e08fb105ab26c694dbb3e8670f1c0ad1061",
+    "packages/storage/src/index.ts": "642b2bf252a8dad5ad139cf8576e981623431a3df81402df4e3c41dd25b3853c",
+    "packages/storage/src/indexed-db-byte-store.test.ts": "76c419292b33f2590be165676c3642b4c0f9b8370c9ef97ac1019ad7f559b7f1",
+    "packages/storage/src/indexed-db-byte-store.ts": "70070a3e3c1a0a3febf86a8a0d6917a4314f45f68a776577ff3b0ac8916cec48",
+    "packages/storage/src/indexed-db-protocol-journal.test.ts": "c69a0915910e234f7862bd76dc2888dfb2824d056185766a664709c2e0b821e7",
+    "packages/storage/src/indexed-db-protocol-journal.ts": "8ec021eba8fa700ce8d93afe8206f3277b18868929412cd4e53085ab2809baed",
+    "pnpm-lock.yaml": "073573839bd129e1801a656934dfe1ba9086bf74dac4a46c5f6e0f01aa121bca"
+  },
+  "verifiedAt": "2026-09-27T01:45:30.549415+00:00",
+  "browser": "Chrome, existing user profile; two dedicated workers",
+  "result": "PASS: insert/CAS, byte reopen, Web Locks, journal initialization/CAS/commit races, exact journal reopen and stale-height refusal"
+}

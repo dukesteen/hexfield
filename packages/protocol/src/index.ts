@@ -51,6 +51,8 @@ export type {
   ValidatedProposal,
 } from './proposal.js';
 export { advanceContext } from './proposal.js';
+export { certifiedEntrySchema } from './proposal.js';
+export { logEntrySchema } from './schemas.js';
 export { MemorySafetyStore } from './safety-store.js';
 export type { SafetyStore, StoredSafety } from './safety-store.js';
 export { MemoryProtocolJournal, journalSafetyStore } from './journal.js';
@@ -169,3 +171,44 @@ export type {
   SignedTradeProofResponse,
   TradeProofBody,
 } from './trade-proof-delivery.js';
+
+export { artifactSigner, resolveArtifactSigner } from './authority.js';
+export type { ArtifactSigner, ControllerRecord, SeatAuthorities } from './authority-types.js';
+export type {
+  AuthorizedRecovery,
+  RecoveryActivation,
+  RecoveryActivationStatement,
+  RecoveryAuthorization,
+  RecoveryChange,
+  RecoveryReadiness,
+  RecoveryState,
+} from './recovery-types.js';
+export { recoveryCheckDigest } from './recovery-membership.js';
+export { prepareRecoveryReadiness, loadActivatedRecoveryKeys } from './recovery-readiness.js';
+export type {
+  ActivatedRecoveryKeySet,
+  RecoveryReadinessReplacement,
+  RecoveryReadinessStore,
+} from './recovery-readiness.js';
+export {
+  prepareRecoveryRelease,
+  verifyRecoveryRelease,
+  openRecoveryRelease,
+  recoverAuthorizedMaster,
+} from './recovery-release.js';
+export type { RecoveryRelease, RecoveryReleaseStore } from './recovery-release.js';
+export { produceRecoveryCheck, produceRecoveryCheckFromShares } from './recovery-check.js';
+export type {
+  ProducedRecoveryCheck,
+  RecoveryCheckInput,
+  RecoveryCheckStore,
+  SignedRecoveryCheck,
+} from './recovery-check.js';
+export { RecoveryInbox } from './recovery-inbox.js';
+export { loadRecoveryPrivate } from './recovery-private.js';
+export type { RecoveryPrivateStore } from './recovery-private.js';
+export { RecoveryParticipant } from './recovery-participant.js';
+export type {
+  RecoveryParticipantOptions,
+  PreparedRecoveryPackets,
+} from './recovery-participant.js';

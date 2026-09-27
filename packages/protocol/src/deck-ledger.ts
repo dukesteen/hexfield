@@ -20,6 +20,7 @@ import type { Genesis, SignedCommand } from './types.js';
 import { parseCanonical } from './validation.js';
 import type { EntryRef } from './beacon-state.js';
 import type { RandomPending } from './random-derivations.js';
+import type { ArtifactSigner } from './authority-types.js';
 
 export const DECK_DRAW_PROTOCOL = 'deck-draw-v1';
 export const DECK_REVEAL_PROTOCOL = 'deck-reveal-v1';
@@ -379,6 +380,7 @@ export function completeDeckDeal(
   input: SystemInput,
   evidence: unknown,
   deal: EntryRef,
+  signers?: readonly ArtifactSigner[],
 ): Result<DeckLedger> {
   const current = validateDeckLedger(ledger);
   if (!current.ok) return current;
@@ -409,7 +411,7 @@ export function completeDeckDeal(
     deal.seq <= active.anchor.seq
   )
     return failure('deck-deal-context', 'Deal does not match the frozen request');
-  const receipt = completeDeckDraw(active, proof.value.data);
+  const receipt = completeDeckDraw(active, proof.value.data, signers);
   if (!receipt.ok) return receipt;
   const decks = current.value.decks.map((item, index) =>
     index === deckIndex

@@ -11,6 +11,7 @@ import { planHandTransition, verifyHandProofs } from './hand-transition.js';
 import type { HandTransitionPlan } from './hand-transition.js';
 import type { CryptoContext } from './crypto-context.js';
 import type { EntryPolicy, LogContext } from './log-types.js';
+import { resolveArtifactSigner } from './authority.js';
 
 export function signCommand(body: CommandBody, secretKey: Uint8Array): SignedCommand {
   return { body, sig: signObject('cmd', body, secretKey) };
@@ -28,9 +29,16 @@ export function validateSignedCommand(value: unknown, context: LogContext): Resu
       body.genesisDigest !== genesisDigest(context.genesis)
     )
       return failure('wrong-game', 'Command belongs to another game');
-    const owner = context.genesis.seats.find((seat) => seat.seat === body.seat);
-    if (!owner) return failure('unknown-seat', 'Command has no genesis seat');
-    if (!verifyObject('cmd', body, signed.sig, parsePeerId(owner.publicKey)))
+    if (!context.genesis.seats.some((owner) => owner.seat === body.seat))
+      return failure('unknown-seat', 'Command has no genesis seat');
+    const signer = resolveArtifactSigner(
+      context.authority,
+      context.genesis,
+      context.crypto?.epoch ?? context.authority?.epoch ?? 0,
+      body.seat,
+    );
+    if (!signer.ok) return signer;
+    if (!verifyObject('cmd', body, signed.sig, parsePeerId(signer.value.publicKey)))
       return failure('command-signature', 'Command signature does not match its seat');
     if (body.nonce <= (context.lastNonces.get(body.seat) ?? 0))
       return failure('replayed-nonce', 'Command nonce has already been applied');

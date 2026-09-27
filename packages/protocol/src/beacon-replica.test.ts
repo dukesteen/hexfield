@@ -9,6 +9,7 @@ import {
   type BeaconSecretSource,
 } from './beacon-contributions.js';
 import { beaconOperationId, signBeaconReveal } from './beacon.js';
+import { resolveArtifactSigner } from './authority.js';
 import { getBeaconOperation } from './beacon-state.js';
 import { MemoryCheatCandidateStore } from './cheat-candidates.js';
 import type { CheatClaim } from './cheat-proof.js';
@@ -825,9 +826,20 @@ describe('verified beacon contribution replication', () => {
     const operation = getBeaconOperation(beacon);
     if (!operation.ok || !delivered || delivered.t !== 'SYS_CONTRIB')
       throw new Error('Persisted contribution was not retried');
-    expect(await store.load(beaconOperationId(operation.value))).toEqual(
-      canonicalEncode(delivered.contribution),
+    const log = replica.getContext().log;
+    const signer = value(
+      resolveArtifactSigner(
+        log.authority,
+        log.genesis,
+        log.crypto?.epoch ?? 0,
+        required(fixture.humans[0]).seat,
+      ),
     );
+    expect(
+      await store.load(
+        `${beaconOperationId(operation.value)}/${signer.generation.seq}/${signer.generation.hash}`,
+      ),
+    ).toEqual(canonicalEncode(delivered.contribution));
     expect(replica.getContext().log.head.seq).toBe(setupCount);
     replica.dispose();
     second.dispose();

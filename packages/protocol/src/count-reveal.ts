@@ -17,6 +17,7 @@ import type { SchnorrProof } from '@cp2p/crypto';
 import { RESOURCES, failure, success } from '@cp2p/engine';
 import type { Resource, Result, Seat, SystemInput } from '@cp2p/engine';
 import * as v from 'valibot';
+import type { ArtifactSigner } from './authority-types.js';
 import type { EntryRef } from './beacon-state.js';
 import { MAX_HAND_RESOURCE_COUNT } from './hand-commitments.js';
 import type { HandTransitionPlan } from './hand-transition.js';
@@ -179,11 +180,14 @@ export function signCountContribution(
   count: number,
   proof: SchnorrProof,
   key: Uint8Array,
+  signer?: ArtifactSigner,
 ): SignedCountContribution {
   const checked = checkedOperation(operation);
   const victim = checked.victims.find((item) => item.seat === seat);
   const identity = identityFromSecret(key);
-  const matches = identity.peerId === victim?.publicKey;
+  const matches =
+    identity.peerId === (signer?.publicKey ?? victim?.publicKey) &&
+    (signer === undefined || signer.seat === seat);
   identity.secretKey.fill(0);
   if (!matches) throw new RangeError('Count signing key does not belong to the frozen victim');
   const context = countProofContext(checked, seat, count);
@@ -201,6 +205,7 @@ export function signCountContribution(
 export function verifyCountContribution(
   value: unknown,
   operation: CountOperation,
+  signer?: ArtifactSigner,
 ): Result<SignedCountContribution> {
   try {
     const checked = validateCountOperation(operation);
@@ -214,7 +219,16 @@ export function verifyCountContribution(
         'count-operation',
         'Count contribution belongs to another operation or victim',
       );
-    if (!verifyObject('monopoly-count', signed.body, signed.sig, parsePeerId(victim.publicKey)))
+    if (signer && signer.seat !== victim.seat)
+      return failure('count-signature', 'Count signer is not the frozen victim');
+    if (
+      !verifyObject(
+        'monopoly-count',
+        signed.body,
+        signed.sig,
+        parsePeerId(signer?.publicKey ?? victim.publicKey),
+      )
+    )
       return failure('count-signature', 'Count contribution signature is invalid');
     if (
       !verifySchnorr(
@@ -235,6 +249,7 @@ export function verifyCountInput(
   current: CountState | null,
   input: SystemInput,
   evidence: SystemEvidence,
+  signer?: ArtifactSigner,
 ): Result<SignedCountContribution> {
   const parsed = parseCanonical(input, countInputSchema);
   if (!parsed.ok) return parsed;
@@ -246,7 +261,7 @@ export function verifyCountInput(
     evidence.protocol !== COUNT_EVIDENCE_PROTOCOL
   )
     return failure('count-pending', 'Count input must answer a remaining frozen request');
-  const signed = verifyCountContribution(evidence.data, current.operation);
+  const signed = verifyCountContribution(evidence.data, current.operation, signer);
   if (!signed.ok) return signed;
   return signed.value.body.seat === parsed.value.seat &&
     signed.value.body.count === parsed.value.count

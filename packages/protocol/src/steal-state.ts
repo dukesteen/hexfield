@@ -6,6 +6,8 @@ import * as v from 'valibot';
 import { beaconOperationId } from './beacon.js';
 import { consumeFixedBeacon } from './beacon-state.js';
 import type { BeaconState, EntryRef } from './beacon-state.js';
+import { permitsFrozenOperation, resolveArtifactSigner } from './authority.js';
+import type { ArtifactSigner, SeatAuthorities } from './authority-types.js';
 import { genesisDigest } from './genesis.js';
 import { MAX_HAND_RESOURCE_COUNT, validateHandCommitments } from './hand-commitments.js';
 import type { PublicHandCommitments } from './hand-commitments.js';
@@ -52,6 +54,8 @@ function operationFromBeacon(
   hands: PublicHandCommitments,
   state: GameState,
   epoch: number,
+  authority?: SeatAuthorities,
+  frozen?: StealOperation,
 ): Result<StealOperation | null> {
   const fixed = beacon.fixed;
   if (!fixed) return success(null);
@@ -75,25 +79,33 @@ function operationFromBeacon(
     !victimHand ||
     !victimState ||
     victimState.resources.total !== handSize ||
-    fixed.operation.epoch !== epoch ||
+    fixed.operation.epoch > epoch ||
     fixed.operation.genesisDigest !== genesisDigest(genesis)
   )
     return failure(
       'steal-freeze-context',
       'Frozen steal differs from the certified roster or hand',
     );
+  const thiefSigner = frozen
+    ? success({ publicKey: frozen.thief.publicKey })
+    : resolveArtifactSigner(authority, genesis, epoch, thief);
+  if (!thiefSigner.ok) return thiefSigner;
+  const victimSigner = frozen
+    ? success({ publicKey: frozen.victim.publicKey })
+    : resolveArtifactSigner(authority, genesis, epoch, victim);
+  if (!victimSigner.ok) return victimSigner;
   return validateStealOperation({
     protocol: 'hidden-steal-v1',
     genesisDigest: genesisDigest(genesis),
-    epoch,
+    epoch: frozen?.epoch ?? epoch,
     anchor: fixed.entry,
     beaconOperationId: beaconOperationId(fixed.operation),
     thief: {
       seat: thief,
-      publicKey: thiefSeat.publicKey,
+      publicKey: thiefSigner.value.publicKey,
       encryptionKey: thiefSeat.encryptionKey,
     },
-    victim: { seat: victim, publicKey: victimSeat.publicKey },
+    victim: { seat: victim, publicKey: victimSigner.value.publicKey },
     handSize,
     index,
     commitments: victimHand.commitments,
@@ -107,8 +119,9 @@ export function freezeStealState(
   hands: PublicHandCommitments,
   state: GameState,
   epoch: number,
+  authority?: SeatAuthorities,
 ): Result<StealState> {
-  const operation = operationFromBeacon(genesis, beacon, hands, state, epoch);
+  const operation = operationFromBeacon(genesis, beacon, hands, state, epoch, authority);
   if (!operation.ok) return operation;
   if (!operation.value) return failure('steal-freeze-beacon', 'No certified steal index is fixed');
   return success({ operation: operation.value, fixed: null, dispute: null });
@@ -122,8 +135,17 @@ export function validateStealState(
   hands: PublicHandCommitments,
   state: GameState,
   epoch: number,
+  authority?: SeatAuthorities,
 ): Result<StealState | null> {
-  const expected = operationFromBeacon(genesis, beacon, hands, state, epoch);
+  const expected = operationFromBeacon(
+    genesis,
+    beacon,
+    hands,
+    state,
+    epoch,
+    authority,
+    value?.operation,
+  );
   if (!expected.ok) return expected;
   if (!expected.value)
     return value === null
@@ -132,6 +154,16 @@ export function validateStealState(
   if (!value) return failure('steal-state-required', 'Fixed beacon needs a steal state');
   const operation = validateStealOperation(value.operation);
   if (!operation.ok) return operation;
+  if (
+    !permitsFrozenOperation(
+      authority,
+      'steal',
+      stealOperationId(operation.value),
+      operation.value,
+      epoch,
+    )
+  )
+    return failure('steal-state-epoch', 'Frozen steal is not carried by certified membership');
   if (!same(operation.value, expected.value))
     return failure('steal-state-operation', 'Steal operation differs from the certified context');
   if (value.dispute && !value.fixed)
@@ -149,7 +181,17 @@ export function validateStealState(
       entry.value.seq <= operation.value.anchor.seq
     )
       return failure('steal-state-fixed', 'Fixed contribution differs from the frozen operation');
-    fixed = { operation: operation.value, contribution: contribution.value, entry: entry.value };
+    const signer = value.fixed.signer;
+    if (signer && signer.seat !== operation.value.victim.seat)
+      return failure('steal-state-signer', 'Certified fixed signer differs from victim');
+    const verified = verifyStealContribution(contribution.value, operation.value, signer);
+    if (!verified.ok) return verified;
+    fixed = {
+      operation: operation.value,
+      contribution: verified.value,
+      entry: entry.value,
+      ...(signer ? { signer } : {}),
+    };
   }
   let dispute: SignedStealDispute | null = null;
   if (value.dispute) {
@@ -166,24 +208,34 @@ export function fixStealContribution(
   state: StealState,
   evidence: unknown,
   entry: EntryRef,
+  signer?: ArtifactSigner,
 ): Result<StealState> {
   if (state.fixed || state.dispute)
     return failure('steal-already-fixed', 'Steal contribution is already fixed');
   if (entry.seq <= state.operation.anchor.seq)
     return failure('steal-fixed-entry', 'Fixed contribution must follow the beacon result');
-  const contribution = verifyStealContribution(evidence, state.operation);
+  const contribution = verifyStealContribution(evidence, state.operation, signer);
   return contribution.ok
     ? success({
         ...state,
-        fixed: { operation: state.operation, contribution: contribution.value, entry },
+        fixed: {
+          operation: state.operation,
+          contribution: contribution.value,
+          entry,
+          ...(signer ? { signer } : {}),
+        },
       })
     : contribution;
 }
 
-export function disputeStealContribution(state: StealState, evidence: unknown): Result<StealState> {
+export function disputeStealContribution(
+  state: StealState,
+  evidence: unknown,
+  signer?: ArtifactSigner,
+): Result<StealState> {
   if (!state.fixed || state.dispute)
     return failure('steal-dispute-state', 'Dispute needs one undisputed fixed contribution');
-  const dispute = verifyStealDispute(evidence, state.fixed);
+  const dispute = verifyStealDispute(evidence, state.fixed, signer);
   return dispute.ok ? success({ ...state, dispute: dispute.value }) : dispute;
 }
 
@@ -191,6 +243,7 @@ export function verifyStealResult(
   state: StealState | null,
   input: unknown,
   evidence: unknown,
+  signer?: ArtifactSigner,
 ): Result<SignedStealReceipt> {
   if (!state?.fixed || state.dispute)
     return failure('steal-result-state', 'Steal result needs an undisputed fixed contribution');
@@ -220,7 +273,7 @@ export function verifyStealResult(
     !('data' in evidence)
   )
     return failure('steal-result-evidence', 'Hidden steal needs its signed receipt');
-  return verifyStealReceipt(evidence.data, state.fixed);
+  return verifyStealReceipt(evidence.data, state.fixed, signer);
 }
 
 /** Applies the publicly proven one-hot transfer only after engine accounting agrees. */

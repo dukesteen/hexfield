@@ -3,6 +3,7 @@ import {
   IDBDatabase,
   IDBFactory,
   IDBIndex,
+  IDBKeyRange,
   IDBObjectStore,
   IDBRequest,
   IDBTransaction,
@@ -19,6 +20,12 @@ interface FutureDatabase extends SeedDatabase {
   future: { key: string; value: string };
 }
 
+interface Version2Database extends SeedDatabase {
+  games: { key: string; value: Uint8Array };
+  entries: { key: [string, number]; value: Uint8Array };
+  consensus: { key: string; value: Uint8Array };
+}
+
 afterEach(() => vi.unstubAllGlobals());
 
 function installFactory(): IDBFactory {
@@ -27,6 +34,7 @@ function installFactory(): IDBFactory {
   vi.stubGlobal('IDBCursor', IDBCursor);
   vi.stubGlobal('IDBDatabase', IDBDatabase);
   vi.stubGlobal('IDBIndex', IDBIndex);
+  vi.stubGlobal('IDBKeyRange', IDBKeyRange);
   vi.stubGlobal('IDBObjectStore', IDBObjectStore);
   vi.stubGlobal('IDBRequest', IDBRequest);
   vi.stubGlobal('IDBTransaction', IDBTransaction);
@@ -99,7 +107,7 @@ describe('IndexedDbByteStore', () => {
     const store = new IndexedDbByteStore();
     await store.putIfAbsent('settings/value', new Uint8Array([3]));
 
-    const upgraded = await openDB<FutureDatabase>('cp2p', 2, {
+    const upgraded = await openDB<FutureDatabase>('cp2p', 3, {
       upgrade(database) {
         database.createObjectStore('future');
       },
@@ -109,6 +117,31 @@ describe('IndexedDbByteStore', () => {
     expect(await upgraded.get('bytes', 'settings/value')).toEqual(new Uint8Array([3]));
     upgraded.close();
     await store.close();
+  });
+
+  test('upgrades v1 databases while preserving byte records', async () => {
+    installFactory();
+    const legacy = await openDB<SeedDatabase>('cp2p', 1, {
+      upgrade(database) {
+        database.createObjectStore('bytes');
+      },
+    });
+    await legacy.put('bytes', new Uint8Array([5, 6, 7]), 'settings/value');
+    legacy.close();
+
+    const store = new IndexedDbByteStore();
+    expect(await store.load('settings/value')).toEqual(new Uint8Array([5, 6, 7]));
+    await store.close();
+
+    const upgraded = await openDB<Version2Database>('cp2p', 2);
+    expect([...upgraded.objectStoreNames].toSorted()).toEqual([
+      'bytes',
+      'consensus',
+      'entries',
+      'games',
+    ]);
+    expect(await upgraded.get('bytes', 'settings/value')).toEqual(new Uint8Array([5, 6, 7]));
+    upgraded.close();
   });
 
   test('rejects aborted writes and preserves the last committed bytes after reopen', async () => {
@@ -179,7 +212,7 @@ describe('IndexedDbByteStore', () => {
     open.mockRestore();
     expect(await store.load('private/seat/1')).toBeNull();
 
-    const database = await openDB<SeedDatabase>('cp2p', 1);
+    const database = await openDB<SeedDatabase>('cp2p', 2);
     const transaction = database.transaction('bytes', 'readwrite');
     await transaction.store.put('not a byte record', 'private/corrupt');
     await transaction.done;

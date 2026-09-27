@@ -1,19 +1,9 @@
-import { openDB } from 'idb';
-import type { DBSchema, IDBPDatabase, IDBPTransaction } from 'idb';
+import type { IDBPDatabase } from 'idb';
+import { BYTE_STORE, MAX_RECORD_BYTES, openDatabase, strictWriteTransaction } from './database.js';
+import type { CP2PDatabase } from './database.js';
 
-const DATABASE_NAME = 'cp2p';
-const DATABASE_VERSION = 1;
-const BYTE_STORE = 'bytes';
 const MAX_KEY_LENGTH = 512;
-const MAX_RECORD_BYTES = 16 * 1024 * 1024;
 const KEY_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:/-]*$/;
-
-interface CP2PDatabase extends DBSchema {
-  bytes: {
-    key: string;
-    value: Uint8Array;
-  };
-}
 
 export type CeremonyLockProvider = <T>(name: string, task: () => Promise<T>) => Promise<T>;
 
@@ -65,15 +55,16 @@ export class IndexedDbByteStore {
     const key = validateKey(id);
     const value = copyBytes(bytes, this.#maxRecordBytes);
     const database = await this.#database();
-    const transaction = strictWriteTransaction(database);
+    const transaction = strictWriteTransaction(database, [BYTE_STORE]);
     try {
-      const existing = await transaction.store.get(key);
+      const store = transaction.objectStore(BYTE_STORE);
+      const existing = await store.get(key);
       if (existing !== undefined) {
         await transaction.done;
         validateStoredBytes(existing, this.#maxRecordBytes);
         return false;
       }
-      await transaction.store.add(value, key);
+      await store.add(value, key);
       await transaction.done;
       return true;
     } catch (error) {
@@ -92,9 +83,10 @@ export class IndexedDbByteStore {
     const expectedCopy = copyBytes(expected, this.#maxRecordBytes);
     const replacementCopy = copyBytes(replacement, this.#maxRecordBytes);
     const database = await this.#database();
-    const transaction = strictWriteTransaction(database);
+    const transaction = strictWriteTransaction(database, [BYTE_STORE]);
     try {
-      const existing = await transaction.store.get(key);
+      const store = transaction.objectStore(BYTE_STORE);
+      const existing = await store.get(key);
       if (existing === undefined) {
         await transaction.done;
         return false;
@@ -104,7 +96,7 @@ export class IndexedDbByteStore {
         await transaction.done;
         return false;
       }
-      await transaction.store.put(replacementCopy, key);
+      await store.put(replacementCopy, key);
       await transaction.done;
       return true;
     } catch (error) {
@@ -136,23 +128,15 @@ export class IndexedDbByteStore {
 
   #database(): Promise<IDBPDatabase<CP2PDatabase>> {
     if (this.#databasePromise) return this.#databasePromise;
-    const factory = globalThis.indexedDB;
-    if (!factory) return Promise.reject(new Error('IndexedDB is unavailable'));
-
     let opening: Promise<IDBPDatabase<CP2PDatabase>>;
-    opening = openDB<CP2PDatabase>(DATABASE_NAME, DATABASE_VERSION, {
-      upgrade(database, oldVersion) {
-        // Add each schema change as an explicit oldVersion migration.
-        if (oldVersion < 1) database.createObjectStore(BYTE_STORE);
-      },
-      blocking: () => {
-        opening.then((database) => database.close()).catch(() => undefined);
+    opening = openDatabase(
+      () => {
         if (this.#databasePromise === opening) this.#databasePromise = null;
       },
-      terminated: () => {
+      () => {
         if (this.#databasePromise === opening) this.#databasePromise = null;
       },
-    }).catch((error: unknown) => {
+    ).catch((error: unknown) => {
       if (this.#databasePromise === opening) this.#databasePromise = null;
       throw error;
     });
@@ -186,17 +170,6 @@ function validateStoredBytes(value: unknown, maxBytes: number): Uint8Array {
 
 function equalBytes(left: Uint8Array, right: Uint8Array): boolean {
   return left.length === right.length && left.every((byte, index) => byte === right[index]);
-}
-
-function strictWriteTransaction(
-  database: IDBPDatabase<CP2PDatabase>,
-): IDBPTransaction<CP2PDatabase, [typeof BYTE_STORE], 'readwrite'> {
-  try {
-    return database.transaction(BYTE_STORE, 'readwrite', { durability: 'strict' });
-  } catch (error) {
-    if (!(error instanceof TypeError)) throw error;
-    return database.transaction(BYTE_STORE, 'readwrite');
-  }
 }
 
 const browserLockProvider: CeremonyLockProvider = async (name, task) => {

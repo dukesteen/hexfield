@@ -144,6 +144,7 @@ export class P2PSession implements GameSession<CertifiedHistory> {
   private automaticRetryDelay = 250;
   private readonly inflight = new Set<Seat>();
   private readonly tradeIntents = new Map<Seat, TradeIntent>();
+  private privateStateReleased = false;
 
   private constructor(
     private readonly options: P2PSessionOptions,
@@ -299,6 +300,14 @@ export class P2PSession implements GameSession<CertifiedHistory> {
           if (status.kind === 'halted') {
             openedSession.status = { kind: 'error', message: status.code };
             for (const seat of openedSession.tradeIntents.keys()) openedSession.cancelPending(seat);
+          } else if (status.kind === 'retired') {
+            openedSession.status = {
+              kind: 'error',
+              message: 'This seat was replaced by a bot. Its previous signing key is retired.',
+            };
+            for (const seat of openedSession.tradeIntents.keys()) openedSession.cancelPending(seat);
+            openedSession.clearAutomaticRetry();
+            openedSession.releasePrivateState();
           }
           openedSession.emit([]);
         },
@@ -349,7 +358,7 @@ export class P2PSession implements GameSession<CertifiedHistory> {
     return this.protocolStatus;
   }
   controllableSeats(): Seat[] {
-    return [this.options.seat];
+    return this.keys.has(this.options.seat) ? [this.options.seat] : [];
   }
 
   getLegalCommands(seat: Seat): LegalCommandSet {
@@ -682,6 +691,14 @@ export class P2PSession implements GameSession<CertifiedHistory> {
     this.clearAutomaticRetry();
     this.replica?.dispose();
     this.status = { kind: 'disposed' };
+    this.releasePrivateState();
+    this.emit([]);
+    this.listeners.clear();
+  }
+
+  private releasePrivateState(): void {
+    if (this.privateStateReleased) return;
+    this.privateStateReleased = true;
     for (const key of this.keys.values()) key.fill(0);
     this.keys.clear();
     try {
@@ -689,8 +706,6 @@ export class P2PSession implements GameSession<CertifiedHistory> {
     } catch {
       // Session keys and public lifecycle must still close if private cleanup fails.
     }
-    this.emit([]);
-    this.listeners.clear();
   }
 
   private applyCommit(

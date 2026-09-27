@@ -14,6 +14,11 @@ import { completeStealResult, verifyStealResult } from './steal-state.js';
 import { firstCheatFindings, verifyCheatProof } from './cheat-proof.js';
 import { validateCommandForEntry } from './command-validation.js';
 import type { EntryPolicy, LogContext } from './log-types.js';
+import { resolveArtifactSigner } from './authority.js';
+import { seatSchema } from './schema-values.js';
+import { validateRecoveryTransition } from './recovery-membership.js';
+import type { SeatAuthorities } from './authority-types.js';
+import type { RecoveryState } from './recovery-types.js';
 
 export {
   signCommand,
@@ -30,6 +35,8 @@ export interface ValidatedEntry {
   events: readonly GameEvent[];
   lastNonces: ReadonlyMap<Seat, number>;
   crypto: CryptoContext | null;
+  authority?: SeatAuthorities;
+  recovery?: RecoveryState;
 }
 
 /** Binds simulation evidence to exactly one game, parent and system input. */
@@ -120,13 +127,19 @@ export function validateNextEntry(
     return failure('wrong-term', 'Entry does not belong to the verified sequencer term');
   if (entry.prevHash !== entryHash(context.head))
     return failure('previous-hash', 'Entry does not extend this log prefix');
-  const sequencer = context.genesis.seats.find(
+  const sequencer = (context.authority?.controllers ?? context.genesis.seats).find(
     (seat) => seat.kind === 'human' && seat.publicKey === policy.sequencer,
   );
-  if (
-    !sequencer ||
-    !verifyObject('entry', entryBody(entry), entry.sig, parsePeerId(sequencer.publicKey))
-  )
+  if (!sequencer)
+    return failure('sequencer-signature', 'Entry signature does not match the sequencer');
+  const signer = resolveArtifactSigner(
+    context.authority,
+    context.genesis,
+    context.crypto?.epoch ?? context.authority?.epoch ?? 0,
+    sequencer.seat,
+  );
+  if (!signer.ok) return signer;
+  if (!verifyObject('entry', entryBody(entry), entry.sig, parsePeerId(signer.value.publicKey)))
     return failure('sequencer-signature', 'Entry signature does not match the sequencer');
   try {
     const transition = validateCryptoTransition(
@@ -136,8 +149,25 @@ export function validateNextEntry(
       context.state,
       entry,
       policy.randomDerivations,
+      context.authority,
     );
     if (!transition.ok) return transition;
+    if (entry.payload.kind === 'membership') {
+      const recovered = validateRecoveryTransition(
+        entry.payload.change,
+        entry,
+        context,
+        transition.value.crypto,
+      );
+      if (!recovered.ok) return recovered;
+      return success({
+        ...recovered.value,
+        entry,
+        hash: entryHash(entry),
+        events: [],
+        lastNonces: new Map(context.lastNonces),
+      });
+    }
     if (entry.payload.kind === 'cheat-proof') {
       const priorHash = toHex(hashValue(context.state));
       if (priorHash !== context.head.stateHash || entry.stateHash !== priorHash)
@@ -229,7 +259,21 @@ export function validateNextEntry(
     if (crypto && input.kind === 'system' && input.type === 'REVEAL_COUNT') {
       if (entry.payload.kind !== 'system')
         return failure('count-evidence', 'Count inputs require system evidence');
-      const checked = verifyCountInput(crypto.counts, input, entry.payload.evidence);
+      const seat = parseCanonical(input.seat, seatSchema);
+      if (!seat.ok) return seat;
+      const inputSigner = resolveArtifactSigner(
+        context.authority,
+        context.genesis,
+        crypto.epoch,
+        seat.value,
+      );
+      if (!inputSigner.ok) return inputSigner;
+      const checked = verifyCountInput(
+        crypto.counts,
+        input,
+        entry.payload.evidence,
+        inputSigner.value,
+      );
       if (!checked.ok) return checked;
     }
     if (
@@ -239,7 +283,21 @@ export function validateNextEntry(
     ) {
       if (entry.payload.kind !== 'system')
         return failure('steal-result-evidence', 'Steal results require system evidence');
-      const checked = verifyStealResult(crypto?.steal ?? null, input, entry.payload.evidence);
+      const seat = parseCanonical(input.thief, seatSchema);
+      if (!seat.ok) return seat;
+      const inputSigner = resolveArtifactSigner(
+        context.authority,
+        context.genesis,
+        crypto?.epoch ?? 0,
+        seat.value,
+      );
+      if (!inputSigner.ok) return inputSigner;
+      const checked = verifyStealResult(
+        crypto?.steal ?? null,
+        input,
+        entry.payload.evidence,
+        inputSigner.value,
+      );
       if (!checked.ok) return checked;
     }
     const applied = selected.value.applied
@@ -302,6 +360,7 @@ export function validateNextEntry(
             applied.value.state,
             { seq: entry.seq, hash: entryHash(entry) },
             policy.randomDerivations,
+            context.authority,
           );
     if (!captured.ok) return captured;
     const lastNonces = new Map(context.lastNonces);

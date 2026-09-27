@@ -1,0 +1,41 @@
+{
+  "verifiedAt": "2026-09-27T02:37:10.472804+00:00",
+  "sourceBefore": "recovery-source-before.json",
+  "sourceFinal": "recovery-source-final.json",
+  "changedBetweenRuns": ["packages/protocol/src/log.test.ts"],
+  "fullCheck": {
+    "command": "pnpm check",
+    "exitCode": 1,
+    "staticChecks": "passed",
+    "filesPassed": 180,
+    "filesFailed": 1,
+    "testsPassed": 1090,
+    "testsFailed": 1,
+    "testsSkipped": 1,
+    "unitDurationSeconds": 162.68,
+    "log": "recovery-full-check.log",
+    "failure": "Outdated expected error code in log.test.ts: membership-unavailable instead of recovery-context"
+  },
+  "correction": {
+    "change": "Update expected rejection code for membership input in a stub context; no implementation change",
+    "command": "pnpm exec vitest run packages/protocol/src/log.test.ts",
+    "exitCode": 0,
+    "testsPassed": 6,
+    "log": "recovery-log-recheck.log",
+    "lint": "passed",
+    "format": "passed"
+  },
+  "build": {
+    "command": "pnpm build",
+    "exitCode": 0,
+    "log": "recovery-build.log"
+  },
+  "combinedCoverage": {
+    "passingTests": 1091,
+    "testFiles": 181,
+    "skippedTests": 1,
+    "fullCheckRepeatedAfterCorrection": false
+  },
+  "acceptance": "Implementation checkpoint only; milestones C and D remain incomplete",
+  "claudeImplementationReview": "pending usage-limit reset"
+}

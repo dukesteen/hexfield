@@ -19,6 +19,8 @@ import {
 import { genesisSchema } from './schemas.js';
 import type { Genesis } from './types.js';
 import { parseCanonical } from './validation.js';
+import { resolveArtifactSigner } from './authority.js';
+import type { ArtifactSigner, SeatAuthorities } from './authority-types.js';
 
 const MAX_CHAIN_LENGTH = 65_536;
 const chainLengthSchema = v.pipe(positiveIntegerSchema, v.maxValue(MAX_CHAIN_LENGTH));
@@ -308,12 +310,29 @@ export function getBeaconExtensionOperation(value: BeaconState): Result<BeaconOp
 }
 
 /** Prospective pure transition; only the certified extension entry may install it. */
-export function extendBeaconState(value: BeaconState, extensions: unknown): Result<BeaconState> {
+export function extendBeaconState(
+  value: BeaconState,
+  extensions: unknown,
+  authority?: SeatAuthorities,
+  genesis?: Genesis,
+  epoch?: number,
+): Result<BeaconState> {
   const state = validateBeaconState(value);
   if (!state.ok) return state;
   const operation = getBeaconExtensionOperation(state.value);
   if (!operation.ok) return operation;
-  const complete = completeBeaconExtension(operation.value, extensions);
+  const signers: ArtifactSigner[] = [];
+  for (const participant of operation.value.participants) {
+    if (!genesis || epoch === undefined) break;
+    const signer = resolveArtifactSigner(authority, genesis, epoch, participant.seat);
+    if (!signer.ok) return signer;
+    signers.push(signer.value);
+  }
+  const complete = completeBeaconExtension(
+    operation.value,
+    extensions,
+    signers.length === operation.value.participants.length ? signers : undefined,
+  );
   if (!complete.ok) return complete;
   const replacements = new Map(complete.value.commitments.map((item) => [item.seat, item]));
   const chains = state.value.chains.map((chain) => {
@@ -334,6 +353,9 @@ export function completeBeaconState(
   publicState: GameState,
   entryRef: EntryRef,
   registry: BeaconDerivations = randomDerivations,
+  authority?: SeatAuthorities,
+  genesis?: Genesis,
+  epoch?: number,
 ): Result<{ state: BeaconState; outcome: BeaconOutcome }> {
   const state = validateBeaconState(value);
   if (!state.ok) return state;
@@ -343,7 +365,18 @@ export function completeBeaconState(
   if (!entry.ok) return entry;
   if (entry.value.seq <= operation.value.anchor.seq)
     return failure('beacon-result-entry', 'Beacon result must follow its frozen request');
-  const completed = completeBeacon(operation.value, reveals);
+  const signers: ArtifactSigner[] = [];
+  for (const participant of operation.value.participants) {
+    if (!genesis || epoch === undefined) break;
+    const signer = resolveArtifactSigner(authority, genesis, epoch, participant.seat);
+    if (!signer.ok) return signer;
+    signers.push(signer.value);
+  }
+  const completed = completeBeacon(
+    operation.value,
+    reveals,
+    signers.length === operation.value.participants.length ? signers : undefined,
+  );
   if (!completed.ok) return completed;
   const active = state.value.active;
   if (!active) return failure('beacon-inactive', 'No beacon request is pending');

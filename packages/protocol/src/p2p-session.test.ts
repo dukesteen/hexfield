@@ -14,6 +14,7 @@ import {
 import { MemoryProtocolJournal } from './journal.js';
 import type { JournalRecord, ProtocolJournal } from './journal.js';
 import { P2PSession } from './p2p-session.js';
+import { ReplicatedLog } from './replicated-log.js';
 import type { P2PSessionOptions, SessionDriver } from './p2p-session.js';
 import type { ReplayPolicy } from './replay.js';
 import { replayCertifiedPrefix } from './replay.js';
@@ -385,6 +386,39 @@ function voteEquivocationControl(fixture: SessionFixture, seq: number): ExcludeP
 }
 
 describe('P2PSession', () => {
+  test('a certified replica retirement clears private ownership and disables actions', async () => {
+    const create = vi.spyOn(ReplicatedLog, 'create');
+    const fixture = twoHumanFixture();
+    const opened = await openTwoHumanSessions(fixture);
+    try {
+      const session = opened.sessions[0];
+      if (!session) throw new Error('Missing local session');
+      const callback = create.mock.calls.find(([options]) => options.seat === 0)?.[0].onStatus;
+      if (!callback) throw new Error('Missing replica status callback');
+      const privateBefore = session.getPrivate(0);
+      expect(privateBefore).not.toBeNull();
+      const snapshot = session.getState();
+      const statuses: string[] = [];
+      session.subscribe((update) => statuses.push(update.status.kind));
+      // Replica tests establish certificate validation and durable retirement;
+      // this test exercises its application callback boundary.
+      callback({ kind: 'retired', seat: 0 });
+      expect(statuses.at(-1)).toBe('error');
+      expect(session.getProtocolStatus()).toEqual({ kind: 'retired', seat: 0 });
+      expect(session.controllableSeats()).toEqual([]);
+      expect(session.getPrivate(0)).toBeNull();
+      expect(session.getPending()).toEqual([]);
+      expect(session.getTimers()).toEqual([]);
+      expect(session.getLegalCommands(0)).toEqual({ commands: [], templates: [] });
+      expect(session.getState()).toEqual(snapshot);
+      expect(session.exportSave().mode).toBe('p2p');
+    } finally {
+      create.mockRestore();
+      opened.sessions.forEach((session) => session.dispose());
+      opened.net.dispose();
+    }
+  });
+
   test('contains subscriber exceptions so later subscribers receive commits and consensus continues', async () => {
     const fixture = twoHumanFixture();
     const opened = await openTwoHumanSessions(fixture);

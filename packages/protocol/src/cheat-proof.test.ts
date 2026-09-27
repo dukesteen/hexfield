@@ -6,6 +6,7 @@ import {
   deriveScalar,
   encodePoint,
   encodeScalar,
+  identityFromSecret,
   pedersenCommit,
   proveDleq,
   proveHiddenTransfer,
@@ -22,10 +23,13 @@ import {
 } from '@cp2p/engine';
 import type { Engine, Resource, Result, Seat } from '@cp2p/engine';
 import { describe, expect, test } from 'vitest';
+import { initialSeatAuthorities, resolveArtifactSigner } from './authority.js';
+import type { SeatAuthorities } from './authority-types.js';
 import { beaconOperationId } from './beacon.js';
 import { getBeaconOperation } from './beacon-state.js';
 import type { BeaconState } from './beacon-state.js';
-import { firstCheatFindings, verifyCheatProof } from './cheat-proof.js';
+import { authenticatedCheatSigner, firstCheatFindings, verifyCheatProof } from './cheat-proof.js';
+import type { CheatClaim, CheatKind } from './cheat-proof.js';
 import { composeCommandProofs } from './command-proofs.js';
 import type { CryptoContext } from './crypto-context.js';
 import { countOperationId, proveCountOpening } from './count-reveal.js';
@@ -134,14 +138,16 @@ function context(): {
 }
 
 function claim(
-  kind: string,
+  kind: Exclude<CheatKind, 'deck-unlock'>,
   ctx: LogContext,
   artifact: { body: unknown; sig: string },
   seat: Seat,
-) {
+): CheatClaim {
+  const at = { seq: ctx.head.seq, hash: entryHash(ctx.head) };
+  if (kind === 'bad-steal-delivery') return { seat, evidence: { kind, at, artifact } };
   return {
     seat,
-    evidence: { kind, at: { seq: ctx.head.seq, hash: entryHash(ctx.head) }, artifact },
+    evidence: { kind, at, artifact },
   };
 }
 
@@ -320,6 +326,46 @@ describe('objective cheat proofs', () => {
     };
     expect(verifyCheatProof(claim('count-proof', ctx, malformed, 0), ctx).ok).toBe(true);
     expect(verifyCheatProof(claim('count-proof', ctx, { ...bad, sig: good.sig }, 0), ctx).ok).toBe(
+      false,
+    );
+
+    const replacement = identityFromSecret(new Uint8Array(32).fill(78));
+    const initial = value(initialSeatAuthorities(ctx.genesis));
+    const authority: SeatAuthorities = {
+      ...initial,
+      epoch: 1,
+      usedPublicKeys: [...initial.usedPublicKeys, replacement.peerId],
+      controllers: initial.controllers.map((controller) =>
+        controller.seat === 0
+          ? {
+              ...controller,
+              publicKey: replacement.peerId,
+              activatedAt: { seq: ctx.head.seq, hash: entryHash(ctx.head) },
+            }
+          : controller,
+      ),
+      carriedOperations: [
+        { kind: 'count', id: countOperationId(operation), epoch: 0, anchor: operation.anchor },
+      ],
+    };
+    const current = { ...ctx, authority, crypto: { ...required(ctx.crypto), epoch: 1 } };
+    const freshBad = {
+      body: wrongBody,
+      sig: signObject('monopoly-count', wrongBody, replacement.secretKey),
+    };
+    expect(verifyCheatProof(claim('count-proof', current, freshBad, 0), current).ok).toBe(true);
+    expect(verifyCheatProof(claim('count-proof', current, bad, 0), current).ok).toBe(false);
+    expect(authenticatedCheatSigner(claim('count-proof', ctx, bad, 0), ctx.genesis, initial)).toBe(
+      true,
+    );
+    expect(
+      authenticatedCheatSigner(claim('count-proof', current, freshBad, 0), ctx.genesis, authority),
+    ).toBe(true);
+    expect(
+      authenticatedCheatSigner(claim('count-proof', current, bad, 0), ctx.genesis, authority),
+    ).toBe(false);
+    const uncarried = { ...current, authority: { ...authority, carriedOperations: [] } };
+    expect(verifyCheatProof(claim('count-proof', uncarried, freshBad, 0), uncarried).ok).toBe(
       false,
     );
   });
@@ -775,6 +821,67 @@ describe('objective cheat proofs', () => {
       verifyCheatProof(
         claim('false-steal-dispute', ctx, { ...falseDispute, sig: good.sig }, 1),
         ctx,
+      ).ok,
+    ).toBe(false);
+
+    const replacementVictim = identityFromSecret(new Uint8Array(32).fill(78));
+    const replacementThief = identityFromSecret(new Uint8Array(32).fill(79));
+    const initial = value(initialSeatAuthorities(ctx.genesis));
+    const authority: SeatAuthorities = {
+      ...initial,
+      epoch: 1,
+      usedPublicKeys: [
+        ...initial.usedPublicKeys,
+        replacementVictim.peerId,
+        replacementThief.peerId,
+      ],
+      controllers: initial.controllers.map((controller) =>
+        controller.seat === 0 || controller.seat === 1
+          ? {
+              ...controller,
+              publicKey: controller.seat === 0 ? replacementVictim.peerId : replacementThief.peerId,
+              activatedAt: { seq: ctx.head.seq, hash: entryHash(ctx.head) },
+            }
+          : controller,
+      ),
+      carriedOperations: [
+        { kind: 'steal', id: stealOperationId(operation), epoch: 0, anchor: operation.anchor },
+      ],
+    };
+    const certifiedFixed = {
+      ...goodFixed,
+      signer: value(resolveArtifactSigner(initial, ctx.genesis, 0, 0)),
+    };
+    const current = {
+      ...ctx,
+      authority,
+      crypto: {
+        ...required(ctx.crypto),
+        epoch: 1,
+        steal: { operation, fixed: certifiedFixed, dispute: null },
+      },
+    };
+    const freshDispute = {
+      body: falseBody,
+      sig: signObject('steal-dispute', falseBody, replacementThief.secretKey),
+    };
+    expect(
+      verifyCheatProof(claim('false-steal-dispute', current, freshDispute, 1), current).ok,
+    ).toBe(true);
+    expect(
+      verifyCheatProof(claim('false-steal-dispute', current, falseDispute, 1), current).ok,
+    ).toBe(false);
+    const missingFixedSigner = {
+      ...current,
+      crypto: {
+        ...current.crypto,
+        steal: { operation, fixed: goodFixed, dispute: null },
+      },
+    };
+    expect(
+      verifyCheatProof(
+        claim('false-steal-dispute', missingFixedSigner, freshDispute, 1),
+        missingFixedSigner,
       ).ok,
     ).toBe(false);
 

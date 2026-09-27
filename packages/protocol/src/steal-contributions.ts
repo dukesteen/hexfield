@@ -20,8 +20,10 @@ import type {
   StealOperation,
 } from './steal-delivery.js';
 import type { LogContext } from './log.js';
-import { hashSchema, nonnegativeIntegerSchema } from './schema-values.js';
+import { hashSchema, key32Schema, nonnegativeIntegerSchema, seatSchema } from './schema-values.js';
 import { MAX_MESSAGE_BYTES, parseCanonical } from './validation.js';
+import { resolveArtifactSigner } from './authority.js';
+import type { ArtifactSigner } from './authority-types.js';
 
 export interface StealDeliveryStore {
   load(id: string): Promise<Uint8Array | null>;
@@ -69,6 +71,13 @@ const fixedStealSchema = v.strictObject({
   operation: v.unknown(),
   contribution: v.unknown(),
   entry: v.unknown(),
+  signer: v.optional(
+    v.strictObject({
+      seat: seatSchema,
+      publicKey: key32Schema,
+      generation: entryRefSchema,
+    }),
+  ),
 });
 const responseSchema = v.variant('kind', [
   v.strictObject({ kind: v.literal('receipt'), value: signedStealReceiptSchema }),
@@ -86,11 +95,12 @@ function contributionRecord(
   bytes: Uint8Array,
   operation: StealOperation,
   seat: Seat,
+  signer?: ArtifactSigner,
 ): Result<SignedStealContribution> {
   try {
     if (bytes.byteLength > MAX_MESSAGE_BYTES)
       return failure('steal-outbox-record', 'Stored steal contribution exceeds its byte limit');
-    const verified = verifyStealContribution(canonicalDecode(bytes), operation);
+    const verified = verifyStealContribution(canonicalDecode(bytes), operation, signer);
     return verified.ok && verified.value.body.seat === seat
       ? verified
       : failure('steal-outbox-record', 'Stored steal contribution is corrupt or misplaced');
@@ -105,7 +115,11 @@ function fixedSteal(value: FixedSteal): Result<FixedSteal> {
     if (!parsed.ok) return parsed;
     const operation = validateStealOperation(parsed.value.operation);
     if (!operation.ok) return operation;
-    const contribution = verifyStealContribution(parsed.value.contribution, operation.value);
+    const contribution = verifyStealContribution(
+      parsed.value.contribution,
+      operation.value,
+      parsed.value.signer,
+    );
     if (!contribution.ok) return contribution;
     const entry = parseCanonical(parsed.value.entry, entryRefSchema);
     if (!entry.ok) return entry;
@@ -113,6 +127,7 @@ function fixedSteal(value: FixedSteal): Result<FixedSteal> {
       operation: operation.value,
       contribution: contribution.value,
       entry: entry.value,
+      ...(parsed.value.signer ? { signer: parsed.value.signer } : {}),
     };
     if (checked.entry.seq <= checked.operation.anchor.seq)
       return failure('steal-response-fixed', 'Fixed contribution must follow its beacon anchor');
@@ -122,19 +137,24 @@ function fixedSteal(value: FixedSteal): Result<FixedSteal> {
   }
 }
 
-function responseRecord(bytes: Uint8Array, fixed: FixedSteal, seat: Seat): Result<StealResponse> {
+function responseRecord(
+  bytes: Uint8Array,
+  fixed: FixedSteal,
+  seat: Seat,
+  signer?: ArtifactSigner,
+): Result<StealResponse> {
   try {
     if (bytes.byteLength > MAX_MESSAGE_BYTES)
       return failure('steal-response-record', 'Stored steal response exceeds its byte limit');
     const parsed = parseCanonical(canonicalDecode(bytes), responseSchema);
     if (!parsed.ok) return parsed;
     if (parsed.value.kind === 'receipt') {
-      const verified = verifyStealReceipt(parsed.value.value, fixed);
+      const verified = verifyStealReceipt(parsed.value.value, fixed, signer);
       return verified.ok && verified.value.body.seat === seat
         ? success({ kind: 'receipt', value: verified.value })
         : failure('steal-response-record', 'Stored steal receipt is corrupt or misplaced');
     }
-    const verified = verifyStealDispute(parsed.value.value, fixed);
+    const verified = verifyStealDispute(parsed.value.value, fixed, signer);
     return verified.ok && verified.value.body.binding.seat === seat
       ? success({ kind: 'dispute', value: verified.value })
       : failure('steal-response-record', 'Stored steal dispute is corrupt or misplaced');
@@ -156,6 +176,11 @@ export async function prepareStealContribution(
   if (!checked.ok) return checked;
   if (seat !== checked.value.victim.seat)
     return failure('steal-outbox-seat', 'Seat is not the frozen victim');
+  const signer =
+    context.authority || (context.crypto?.epoch ?? 0) > 0
+      ? resolveArtifactSigner(context.authority, context.genesis, context.crypto?.epoch ?? 0, seat)
+      : success(undefined);
+  if (!signer.ok) return signer;
   let signingKey: Uint8Array;
   try {
     if (!(key instanceof Uint8Array) || key.length !== 32)
@@ -167,20 +192,24 @@ export async function prepareStealContribution(
   try {
     let matches = false;
     try {
-      matches = signerMatches(signingKey, checked.value.victim.publicKey);
+      matches = signerMatches(
+        signingKey,
+        signer.value?.publicKey ?? checked.value.victim.publicKey,
+      );
     } catch {
       return failure('steal-outbox-key', 'The local signer key is invalid');
     }
     if (!matches)
       return failure('steal-outbox-key', 'The local signer key does not match the frozen victim');
-    const id = `steal-contribution/${stealOperationId(checked.value)}/${seat}`;
+    const generation = signer.value?.generation;
+    const id = `steal-contribution/${stealOperationId(checked.value)}/${seat}${generation ? `/${generation.seq}/${generation.hash}` : ''}`;
     const existing = await store.load(id);
-    if (existing !== null) return contributionRecord(existing, checked.value, seat);
+    if (existing !== null) return contributionRecord(existing, checked.value, seat, signer.value);
     let signed: SignedStealContribution;
     try {
       const produced = produce(checked.value, seat, context, signingKey);
       if (!produced.ok) return produced;
-      const verified = verifyStealContribution(produced.value, checked.value);
+      const verified = verifyStealContribution(produced.value, checked.value, signer.value);
       if (!verified.ok) return verified;
       signed = verified.value;
     } catch {
@@ -195,7 +224,7 @@ export async function prepareStealContribution(
     if (await store.putIfAbsent(id, bytes)) return success(signed);
     const winner = await store.load(id);
     return winner
-      ? contributionRecord(winner, checked.value, seat)
+      ? contributionRecord(winner, checked.value, seat, signer.value)
       : failure('steal-outbox-record', 'The winning steal contribution is missing');
   } catch {
     return failure('steal-outbox-write', 'Could not persist the outgoing steal contribution');
@@ -218,6 +247,11 @@ export async function prepareStealResponse(
   const thief = checkedFixed.value.operation.thief;
   if (seat !== thief.seat)
     return failure('steal-response-seat', 'Seat is not the frozen recipient');
+  const signer =
+    context.authority || (context.crypto?.epoch ?? 0) > 0
+      ? resolveArtifactSigner(context.authority, context.genesis, context.crypto?.epoch ?? 0, seat)
+      : success(undefined);
+  if (!signer.ok) return signer;
   let signingKey: Uint8Array;
   try {
     if (!(key instanceof Uint8Array) || key.length !== 32)
@@ -229,7 +263,7 @@ export async function prepareStealResponse(
   try {
     let matches = false;
     try {
-      matches = signerMatches(signingKey, thief.publicKey);
+      matches = signerMatches(signingKey, signer.value?.publicKey ?? thief.publicKey);
     } catch {
       return failure('steal-response-key', 'The local signer key is invalid');
     }
@@ -239,14 +273,20 @@ export async function prepareStealResponse(
         'The local signer key does not match the frozen recipient',
       );
     const operationId = stealOperationId(checkedFixed.value.operation);
-    const id = `steal-response/${operationId}/${checkedFixed.value.entry.hash}/${seat}`;
+    const generation = signer.value?.generation;
+    const id = `steal-response/${operationId}/${checkedFixed.value.entry.hash}/${seat}${generation ? `/${generation.seq}/${generation.hash}` : ''}`;
     const existing = await store.load(id);
-    if (existing !== null) return responseRecord(existing, checkedFixed.value, seat);
+    if (existing !== null) return responseRecord(existing, checkedFixed.value, seat, signer.value);
     let response: StealResponse;
     try {
       const produced = produce(checkedFixed.value, seat, context, signingKey);
       if (!produced.ok) return produced;
-      const verified = responseRecord(canonicalEncode(produced.value), checkedFixed.value, seat);
+      const verified = responseRecord(
+        canonicalEncode(produced.value),
+        checkedFixed.value,
+        seat,
+        signer.value,
+      );
       if (!verified.ok) return verified;
       response = verified.value;
     } catch {
@@ -258,7 +298,7 @@ export async function prepareStealResponse(
     if (await store.putIfAbsent(id, bytes)) return success(response);
     const winner = await store.load(id);
     return winner
-      ? responseRecord(winner, checkedFixed.value, seat)
+      ? responseRecord(winner, checkedFixed.value, seat, signer.value)
       : failure('steal-response-record', 'The winning steal response is missing');
   } catch {
     return failure('steal-response-write', 'Could not persist the outgoing steal response');

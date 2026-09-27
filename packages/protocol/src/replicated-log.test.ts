@@ -2052,6 +2052,8 @@ describe('replicated certified log adapter', () => {
       onCommit: (_validated: unknown, _before: unknown, next: ProposalContext) => {
         notifications.push(next.log.head.seq);
         mutateNonceMap(next.log.lastNonces);
+        Reflect.set(next.log.authority?.controllers[0] ?? {}, 'status', 'pending-recovery');
+        Reflect.set(next.log.recovery ?? {}, 'pending', { seq: 999, hash: '0'.repeat(64) });
       },
     };
     const replica = value(await ReplicatedLog.create(options));
@@ -2174,7 +2176,12 @@ describe('replicated certified log adapter', () => {
 
     const detached = replica.getContext();
     mutateNonceMap(detached.log.lastNonces);
+    Reflect.set(detached.log.authority?.controllers[0] ?? {}, 'publicKey', second.peerId);
+    Reflect.set(detached.log.recovery ?? {}, 'pending', { seq: 999, hash: '0'.repeat(64) });
     expect(replica.getContext().log.lastNonces.get(0)).toBe(1);
+    expect(replica.getContext().log.authority?.controllers[0]?.publicKey).toBe(first.peerId);
+    expect(replica.getContext().log.authority?.controllers[0]?.status).toBe('active');
+    expect(replica.getContext().log.recovery?.pending).toBeNull();
     const detachedEntries = replica.getEntries();
     expect(detachedEntries).toHaveLength(2);
     Reflect.set(detachedEntries[0]?.entry ?? {}, 'seq', 999);

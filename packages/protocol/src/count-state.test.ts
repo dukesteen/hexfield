@@ -16,6 +16,7 @@ import { freezeBeaconRequest, getBeaconOperation } from './beacon-state.js';
 import { signBeaconReveal } from './beacon.js';
 import { createRandomDerivations } from './random-derivations.js';
 import { validateCryptoTransition } from './crypto-context.js';
+import { initialSeatAuthorities } from './authority.js';
 
 function value<T>(result: Result<T>): T {
   if (!result.ok) throw new Error(`${result.error.code}: ${result.error.message}`);
@@ -176,6 +177,47 @@ function fixture() {
 }
 
 describe('replayed Monopoly count state', () => {
+  test('retains a frozen count across recovery only with its exact certified carry record', () => {
+    const data = fixture();
+    const crypto = data.context.crypto;
+    const counts = crypto?.counts;
+    if (!counts || !crypto) throw new Error('Missing frozen count');
+    const initial = value(initialSeatAuthorities(data.context.genesis));
+    const authority = {
+      ...initial,
+      epoch: 1,
+      carriedOperations: [
+        {
+          kind: 'count' as const,
+          id: countOperationId(counts.operation),
+          epoch: counts.operation.epoch,
+          anchor: counts.operation.anchor,
+        },
+      ],
+    };
+    const args = [
+      counts,
+      data.context.genesis,
+      data.context.engine,
+      data.context.state,
+      crypto.hands,
+      1,
+    ] as const;
+    expect(validateCountState(...args, authority).ok).toBe(true);
+    expect(validateCountState(...args, { ...authority, carriedOperations: [] })).toMatchObject({
+      ok: false,
+      error: { code: 'count-context' },
+    });
+    const carried = authority.carriedOperations[0];
+    if (!carried) throw new Error('Missing carried fixture operation');
+    expect(
+      validateCountState(...args, {
+        ...authority,
+        carriedOperations: [{ ...carried, id: 'a'.repeat(64) }],
+      }),
+    ).toMatchObject({ ok: false, error: { code: 'count-context' } });
+  });
+
   test('consumes zero and positive reveals once, preserving frozen proofs across a control entry', () => {
     const data = fixture();
     const first = value(
@@ -245,7 +287,8 @@ describe('replayed Monopoly count state', () => {
         },
         'count-pending',
       ],
-      [{ ...valid, evidence: { ...valid.evidence, data: data.zeroReveal } }, 'count-input'],
+      // The substituted victim's signature fails current controller authority first.
+      [{ ...valid, evidence: { ...valid.evidence, data: data.zeroReveal } }, 'count-signature'],
     ] as const)
       expect(
         validateNextEntry(

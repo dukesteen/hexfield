@@ -18,6 +18,8 @@ import { parseCanonical } from './validation.js';
 import { signedVoteSchema, verifyCertificate } from './votes.js';
 import type { SignedVote, VoteContext } from './votes.js';
 import type { CheatClaim, CheatFinding } from './cheat-proof.js';
+import { validateSeatAuthorities } from './authority.js';
+import { advanceCarriedOperations } from './recovery-membership.js';
 
 export type { ProposalBody, SignedProposal } from './types.js';
 
@@ -170,11 +172,38 @@ export function signProposal(body: ProposalBody, secretKey: Uint8Array): SignedP
   return { body: parsed.value, sig: signObject('proposal', parsed.value, secretKey) };
 }
 
+function validateControllerContext(context: ProposalContext): Result<void> {
+  const authority = context.log.authority;
+  if (!authority)
+    return context.membership.epoch === 0
+      ? success(undefined)
+      : failure('authority-required', 'Membership epoch requires certified controller state');
+  const checked = validateSeatAuthorities(
+    authority,
+    genesisDigest(context.log.genesis),
+    context.membership.epoch,
+    context.log.genesis.seats.map(({ seat }) => seat),
+  );
+  if (!checked.ok) return checked;
+  const voters = checked.value.controllers.filter(({ kind }) => kind === 'human');
+  if (
+    voters.length !== context.membership.voters.length ||
+    voters.some((voter, index) => {
+      const expected = context.membership.voters[index];
+      return voter.seat !== expected?.seat || voter.publicKey !== expected.publicKey;
+    })
+  )
+    return failure('authority-voters', 'Voters differ from the certified human controllers');
+  return success(undefined);
+}
+
 function validateEntry(entry: LogEntry, context: ProposalContext): Result<ValidatedEntry> {
   if (context.membership.genesisDigest !== genesisDigest(context.log.genesis))
     return failure('proposal-context', 'Membership does not match the game genesis');
   if (context.log.crypto && context.log.crypto.epoch !== context.membership.epoch)
     return failure('proposal-context', 'Cryptographic state does not match the membership epoch');
+  const authority = validateControllerContext(context);
+  if (!authority.ok) return authority;
   let proposer: VoteContext['voters'][number];
   try {
     proposer = proposerFor(entry.seq, entry.term, context.membership, context.excludedProposers);
@@ -212,6 +241,12 @@ export function advanceContext(
     payload.kind === 'control'
       ? [...context.excludedProposers, payload.offender].toSorted((a, b) => a - b)
       : context.excludedProposers;
+  let authority = validated.authority ?? context.log.authority;
+  if (authority && validated.crypto) {
+    const carried = advanceCarriedOperations(authority, validated.crypto);
+    if (!carried.ok) return carried;
+    authority = carried.value;
+  }
   return success({
     ...context,
     log: {
@@ -220,7 +255,18 @@ export function advanceContext(
       state: validated.state,
       lastNonces: validated.lastNonces,
       crypto: validated.crypto,
+      ...(authority ? { authority } : {}),
+      ...(validated.recovery ? { recovery: validated.recovery } : {}),
     },
+    membership: validated.authority
+      ? {
+          genesisDigest: validated.authority.genesisDigest,
+          epoch: validated.authority.epoch,
+          voters: validated.authority.controllers
+            .filter((controller) => controller.kind === 'human' && controller.status === 'active')
+            .map(({ seat, publicKey }) => ({ seat, publicKey })),
+        }
+      : context.membership,
     excludedProposers,
   });
 }
@@ -279,6 +325,8 @@ export function authenticateCertifiedEntry(
   const { entry, certificate } = parsed.value;
   if (context.membership.genesisDigest !== genesisDigest(context.log.genesis))
     return failure('proposal-context', 'Membership does not match the game genesis');
+  const authority = validateControllerContext(context);
+  if (!authority.ok) return authority;
   const proof = verifyCertificate(certificate, context.membership, {
     seq: entry.seq,
     term: entry.term,
@@ -294,10 +342,10 @@ export function authenticateCertifiedEntry(
   }
   if (entry.sequencer !== proposer.publicKey)
     return failure('wrong-term', 'Entry does not belong to the verified sequencer term');
-  const genesisProposer = context.log.genesis.seats.find(
+  const currentProposer = (context.log.authority?.controllers ?? context.log.genesis.seats).find(
     (seat) => seat.kind === 'human' && seat.publicKey === proposer.publicKey,
   );
-  if (!genesisProposer)
+  if (!currentProposer)
     return failure('sequencer-signature', 'Entry signature does not match the sequencer');
   try {
     if (!verifyObject('entry', entryBody(entry), entry.sig, parsePeerId(proposer.publicKey)))

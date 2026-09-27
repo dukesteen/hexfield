@@ -22,6 +22,7 @@ import type { VerifiedDeckSession } from './testing/verified-deck-session.js';
 import type { VirtualClock } from './testing/virtual-clock.js';
 import type { PeerId, Transport } from './transport.js';
 import { VerifiedSessionDriver } from './verified-session-driver.js';
+import { initialSeatAuthorities } from './authority.js';
 
 function value<T>(result: Result<T>): T {
   if (!result.ok) throw new Error(`${result.error.code}: ${result.error.message}`);
@@ -319,9 +320,13 @@ describe('live verified Monopoly count replication', () => {
       expect(revealSeats(live)).toEqual(expectedVictims.slice(0, -1));
       expect(gate.dropped.length).toBeGreaterThan(0);
       const original = required(gate.dropped[0]);
-      const stored = await required(countStores[hostIndex(fixture, target)]).load(
-        `count-contribution/${original.body.operationId}/${target}`,
-      );
+      const generation = required(
+        value(initialSeatAuthorities(fixture.genesis)).controllers.find(
+          (owner) => owner.seat === target,
+        ),
+      ).activatedAt;
+      const recordId = `count-contribution/${original.body.operationId}/${target}/${generation.seq}/${generation.hash}`;
+      const stored = await required(countStores[hostIndex(fixture, target)]).load(recordId);
       expect(stored).toEqual(canonicalEncode(original));
       const midHeads = live.map((session) => session.getCommittedHead());
       const midHands = new Map(
@@ -348,11 +353,9 @@ describe('live verified Monopoly count replication', () => {
       }
       expect(gate.dropped.length).toBeGreaterThan(droppedBeforeRestore);
       expect(canonicalEncode(required(gate.dropped.at(-1)))).toEqual(canonicalEncode(original));
-      expect(
-        await required(countStores[hostIndex(fixture, target)]).load(
-          `count-contribution/${original.body.operationId}/${target}`,
-        ),
-      ).toEqual(stored);
+      expect(await required(countStores[hostIndex(fixture, target)]).load(recordId)).toEqual(
+        stored,
+      );
       gate.active = false;
       await settle(restored, network.clock, 32);
       for (

@@ -275,5 +275,14 @@ describe('certified protocol replay', () => {
       ok: false,
       error: { code: 'snapshot-mismatch' },
     });
+
+    const recoveryTamper = {
+      ...record(snapshot),
+      recovery: { ...record(record(snapshot).recovery), completed: ['other-recovery'] },
+    };
+    expect(verifyReplaySnapshot(recoveryTamper, replayed.context)).toMatchObject({
+      ok: false,
+      error: { code: 'snapshot-mismatch' },
+    });
   });
 });

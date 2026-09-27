@@ -3,6 +3,8 @@ import type { BeaconDerivations } from './beacon-state.js';
 import type { CheatClaim, CheatFinding } from './cheat-types.js';
 import type { CryptoContext } from './crypto-context.js';
 import type { PeerId } from './transport.js';
+import type { SeatAuthorities } from './authority-types.js';
+import type { RecoveryState } from './recovery-types.js';
 import type {
   ExcludeProposerControl,
   Genesis,
@@ -18,6 +20,9 @@ export interface LogContext {
   state: GameState;
   lastNonces: ReadonlyMap<Seat, number>;
   crypto: CryptoContext | null;
+  /** Replayed controller authority. Legacy epoch-zero fixtures may omit it. */
+  authority?: SeatAuthorities;
+  recovery?: RecoveryState;
 }
 
 export interface EntryPolicy {

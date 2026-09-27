@@ -1,3 +1,5 @@
+import { resolveArtifactSigner } from './authority.js';
+import type { ArtifactSigner } from './authority-types.js';
 import { canonicalDecode, canonicalEncode, hashValue, toHex } from '@cp2p/codec';
 import { identityFromSecret, parsePeerId, signObject, verifyObject } from '@cp2p/crypto';
 import { failure, success } from '@cp2p/engine';
@@ -40,11 +42,14 @@ import { createConsensusState } from './consensus.js';
 import { objectiveEvidenceSeq, validateObjectiveAccusation } from './control.js';
 import { entryBody, entryHash, signEntry } from './genesis.js';
 import { journalSafetyStore } from './journal.js';
+import { createRetiredSafety, restoreRetiredSafety } from './retired-safety.js';
 import type { ProtocolJournal } from './journal.js';
 import { validateNextEntry, validateSignedCommand } from './log.js';
 import type { LogContext, ValidatedEntry } from './log.js';
 import { decodeProtocolMessage, encodeProtocolMessage } from './messages.js';
 import type { ProtocolMessage } from './messages.js';
+import { recoveryChangeSchema } from './recovery-membership.js';
+import type { RecoveryChange } from './recovery-types.js';
 import {
   advanceContext,
   objectiveProofParentHash,
@@ -98,7 +103,8 @@ export type ReplicatedLogStatus =
   | { kind: 'pending'; commandHash: string }
   | { kind: 'sync'; fromSeq: number }
   | { kind: 'rejected'; code: string }
-  | { kind: 'halted'; code: string };
+  | { kind: 'halted'; code: string }
+  | { kind: 'retired'; seat: Seat };
 
 export interface ReplicatedLogOptions {
   genesisEntry: unknown;
@@ -157,6 +163,14 @@ interface PendingCommand {
   pendingTimer: unknown;
 }
 
+interface PendingRecovery {
+  hash: string;
+  change: RecoveryChange;
+  parentHash: string;
+  resolve?: (result: Result<void>) => void;
+  pendingTimer?: unknown;
+}
+
 interface LocalConfiguration {
   passes: ReadonlyMap<string, { deckId: string; pass: unknown }>;
   keys: ReadonlyMap<Seat, Uint8Array>;
@@ -171,6 +185,7 @@ export class ReplicatedLog {
   private readonly self: PeerId;
   private readonly timers = new Map<string, unknown>();
   private readonly pending: PendingCommand[] = [];
+  private recoveryIntent: PendingRecovery | null = null;
   private readonly commands: SignedCommand[] = [];
   private readonly rejectedCommands = new Set<string>();
   private readonly rejectedProposals = new Set<string>();
@@ -285,6 +300,25 @@ export class ReplicatedLog {
     const context = replayed.value.context;
     if (record.height !== context.log.head.seq + 1 || !record.safety)
       return failure('replica-journal', 'Certified prefix and active safety height disagree');
+    if (!context.membership.voters.some((voter) => voter.seat === options.seat)) {
+      let marker: unknown;
+      try {
+        marker = canonicalDecode(record.safety.bytes);
+      } catch {
+        return failure('replica-retirement', 'Retired signing record is malformed');
+      }
+      let publicKey: string;
+      try {
+        const identity = identityFromSecret(options.secretKey);
+        publicKey = identity.peerId;
+        identity.secretKey.fill(0);
+      } catch {
+        return failure('replica-key', 'Local signing key is invalid');
+      }
+      const checked = restoreRetiredSafety(marker, context, options.seat, publicKey);
+      if (!checked.ok) return checked;
+      return failure('replica-retired', 'This signing key was retired by a certified recovery');
+    }
     const key = checkLocalKey(options, context);
     if (!key.ok) return key;
     const replica = new ReplicatedLog(
@@ -420,6 +454,57 @@ export class ReplicatedLog {
     });
   }
 
+  /** Gossip one parent-bound membership change and resolve when it is certified. */
+  submitRecovery(value: unknown): Promise<Result<void>> {
+    return new Promise((resolve) => {
+      let accepted = false;
+      void this.enqueue(async () => {
+        const parsed = parseCanonical(value, recoveryChangeSchema);
+        if (!parsed.ok) return parsed;
+        const state = this.activeController().snapshot();
+        if (!state.ok) return state;
+        if (state.value.halted)
+          return failure('replica-halted', 'Voting is halted until certified repair');
+        const checked = this.deriveCandidate(state.value, {
+          kind: 'membership',
+          change: parsed.value,
+        });
+        if (!checked.ok) return checked;
+        const hash = toHex(hashValue(parsed.value));
+        const existing = this.recoveryIntent;
+        if (existing) {
+          if (existing.hash !== hash || existing.resolve)
+            return failure('recovery-intent-pending', 'A recovery change is already pending');
+          existing.resolve = resolve;
+          accepted = true;
+        } else {
+          const pendingTimer = this.options.clock.setTimeout(
+            () => this.status({ kind: 'pending', commandHash: hash }),
+            10_000,
+          );
+          this.recoveryIntent = {
+            hash,
+            change: parsed.value,
+            parentHash: entryHash(this.context.log.head),
+            resolve,
+            pendingTimer,
+          };
+          accepted = true;
+        }
+        const sent = this.broadcast({ t: 'RECOVERY_SUBMIT', change: parsed.value });
+        if (!sent.ok) this.status({ kind: 'pending', commandHash: hash });
+        return this.offerAvailableInput();
+      }).then((result) => {
+        if (!result.ok) {
+          if (accepted)
+            this.status({ kind: 'pending', commandHash: this.recoveryIntent?.hash ?? '' });
+          else resolve(result);
+        }
+        return undefined;
+      });
+    });
+  }
+
   /** Waits until all previously queued messages/transitions have settled. */
   async flush(): Promise<void> {
     let current: Promise<unknown>;
@@ -457,6 +542,16 @@ export class ReplicatedLog {
         ),
       );
     }
+    const recovery = this.recoveryIntent;
+    this.recoveryIntent = null;
+    if (recovery?.pendingTimer !== undefined)
+      this.options.clock.clearTimeout(recovery.pendingTimer);
+    recovery?.resolve?.(
+      failure(
+        'replica-outcome-unknown',
+        'Accepted recovery may have committed; restore and inspect the certified log',
+      ),
+    );
     this.secretKey.fill(0);
   }
 
@@ -466,8 +561,16 @@ export class ReplicatedLog {
     const checked = verifyTradeProofRequest(value, this.context.log);
     if (!checked.ok) return checked;
     const request = checked.value;
-    const finalizerHost = tradeProofHost(this.context.log.genesis, request.body.seat);
-    const ownerHost = tradeProofHost(this.context.log.genesis, request.body.command.withSeat);
+    const finalizerHost = tradeProofHost(
+      this.context.log.genesis,
+      request.body.seat,
+      this.context.log.authority,
+    );
+    const ownerHost = tradeProofHost(
+      this.context.log.genesis,
+      request.body.command.withSeat,
+      this.context.log.authority,
+    );
     if (
       !this.deckKeys.has(request.body.seat) ||
       finalizerHost !== this.self ||
@@ -532,7 +635,7 @@ export class ReplicatedLog {
     this.unsubscribers.push(
       this.options.transport.onMessage((from, bytes) => {
         if (this.blockedPeers.has(from)) return;
-        if (!this.context.membership.voters.some((voter) => voter.publicKey === from)) {
+        if (!this.knownSyncPeer(from)) {
           this.rejectPeer(from);
           return;
         }
@@ -574,6 +677,19 @@ export class ReplicatedLog {
       this.options.transport.onPeerChange((_peer, online) => {
         if (online) void this.enqueue(() => this.pulse());
       }),
+    );
+  }
+
+  private formerHumanPeer(peer: PeerId): boolean {
+    return this.context.log.genesis.seats.some(
+      (seat) => seat.kind === 'human' && seat.publicKey === peer,
+    );
+  }
+
+  private knownSyncPeer(peer: PeerId): boolean {
+    return (
+      this.context.membership.voters.some((voter) => voter.publicKey === peer) ||
+      this.formerHumanPeer(peer)
     );
   }
 
@@ -626,7 +742,11 @@ export class ReplicatedLog {
 
   private receiveTradeProofRequest(from: PeerId, value: SignedTradeProofRequest): Result<void> {
     const body = value.body;
-    const finalizerHost = tradeProofHost(this.context.log.genesis, body.seat);
+    const finalizerHost = tradeProofHost(
+      this.context.log.genesis,
+      body.seat,
+      this.context.log.authority,
+    );
     if (finalizerHost !== from) return success(undefined);
     if (body.headSeq < this.context.log.head.seq) return success(undefined);
     if (body.headSeq > this.context.log.head.seq) return success(undefined);
@@ -662,7 +782,7 @@ export class ReplicatedLog {
     }
     const request = verified.value;
     const owner = request.body.command.withSeat;
-    const ownerHost = tradeProofHost(this.context.log.genesis, owner);
+    const ownerHost = tradeProofHost(this.context.log.genesis, owner, this.context.log.authority);
     const key = this.deckKeys.get(owner);
     if (!key || ownerHost !== this.self || !this.options.tradeProof) return success(undefined);
 
@@ -741,16 +861,24 @@ export class ReplicatedLog {
 
   private async receive(from: PeerId, bytes: Uint8Array): Promise<Result<void>> {
     if (this.blockedPeers.has(from)) return success(undefined);
-    if (!this.context.membership.voters.some((voter) => voter.publicKey === from))
-      return failure('replica-peer', 'Sender is not a certified voter');
+    const voter = this.context.membership.voters.some((item) => item.publicKey === from);
+    if (!voter && !this.formerHumanPeer(from))
+      return failure('replica-peer', 'Sender is not a certified voter or original human');
     const decoded = decodeProtocolMessage(bytes);
     if (!decoded.ok) return decoded;
     const message = decoded.value;
+    if (!voter && message.t !== 'SYNC_REQ')
+      return failure('replica-peer', 'Former voters may only request certified history');
     switch (message.t) {
       case 'SYS_CONTRIB': {
         if (message.genesisDigest !== this.context.membership.genesisDigest)
           return failure('replica-beacon-genesis', 'Beacon contribution belongs to another game');
-        const refreshed = this.beaconInbox.refresh(this.context.log.crypto);
+        if (this.beaconFrozen()) return success(undefined);
+        const refreshed = this.beaconInbox.refresh(
+          this.context.log.crypto,
+          this.context.log.genesis,
+          this.context.log.authority,
+        );
         if (!refreshed.ok) return refreshed;
         const remembered = this.beaconInbox.remember(message.contribution);
         if (!remembered.ok) return remembered;
@@ -759,7 +887,12 @@ export class ReplicatedLog {
       case 'DECK_CONTRIB': {
         if (message.genesisDigest !== this.context.membership.genesisDigest)
           return failure('replica-deck-genesis', 'Deck contribution belongs to another game');
-        const refreshed = this.deckInbox.refresh(this.context.log.crypto);
+        if (this.deckFrozen()) return success(undefined);
+        const refreshed = this.deckInbox.refresh(
+          this.context.log.crypto,
+          this.context.log.genesis,
+          this.context.log.authority,
+        );
         if (!refreshed.ok) return refreshed;
         // Old operation retries cannot alter the certified request or spend proof work.
         if (message.contribution.operationId !== this.deckInbox.operationId())
@@ -777,7 +910,12 @@ export class ReplicatedLog {
       case 'COUNT_CONTRIB': {
         if (message.genesisDigest !== this.context.membership.genesisDigest)
           return failure('replica-count-genesis', 'Count contribution belongs to another game');
-        const refreshed = this.countInbox.refresh(this.context.log.crypto);
+        if (this.countFrozen()) return success(undefined);
+        const refreshed = this.countInbox.refresh(
+          this.context.log.crypto,
+          this.context.log.genesis,
+          this.context.log.authority,
+        );
         if (!refreshed.ok) return refreshed;
         if (message.contribution.body.operationId !== this.countInbox.operationId())
           return success(undefined);
@@ -795,7 +933,12 @@ export class ReplicatedLog {
       case 'STEAL_RESPONSE': {
         if (message.genesisDigest !== this.context.membership.genesisDigest)
           return failure('replica-steal-genesis', 'Steal delivery belongs to another game');
-        const refreshed = this.stealInbox.refresh(this.context.log.crypto);
+        if (this.stealFrozen()) return success(undefined);
+        const refreshed = this.stealInbox.refresh(
+          this.context.log.crypto,
+          this.context.log.genesis,
+          this.context.log.authority,
+        );
         if (!refreshed.ok) return refreshed;
         const hash = toHex(hashValue(message));
         if (this.rejectedStealMessages.has(hash)) return success(undefined);
@@ -814,6 +957,30 @@ export class ReplicatedLog {
         return this.receiveTradeProofRequest(from, message.request);
       case 'TRADE_PROOF_RESPONSE':
         return this.receiveTradeProofResponse(from, message.response);
+      case 'RECOVERY_SUBMIT': {
+        const change = message.change;
+        const parent = change.statement.parent;
+        if (
+          change.statement.genesisDigest !== this.context.membership.genesisDigest ||
+          parent.seq !== this.context.log.head.seq ||
+          parent.hash !== entryHash(this.context.log.head) ||
+          change.statement.nextEpoch !== this.context.membership.epoch + 1
+        )
+          return success(undefined);
+        const hash = toHex(hashValue(change));
+        if (this.recoveryIntent) return success(undefined);
+        if (!this.admitExpensiveRequest(from, `recovery/${hash}`)) return success(undefined);
+        const checked = this.deriveCandidate(
+          { height: this.context.log.head.seq + 1, round: 1 },
+          { kind: 'membership', change },
+        );
+        if (!checked.ok)
+          return failure('recovery-proof-invalid', 'Recovery change failed at certified parent', {
+            cause: checked.error.code,
+          });
+        this.recoveryIntent = { hash, change, parentHash: parent.hash };
+        return this.offerAvailableInput();
+      }
       case 'SUBMIT': {
         const hash = commandHash(message.cmd);
         if (this.rejectedCommands.has(hash)) return success(undefined);
@@ -1007,7 +1174,7 @@ export class ReplicatedLog {
       // A repeat of our committed logical value has no effect or new authority.
       // Only a conflicting value needs historical certificate verification.
       if (local && entryHash(local.entry) === entryHash(certified.entry)) return success(undefined);
-      const envelope = this.precheckCertifiedEnvelope(certified);
+      const envelope = this.precheckCertifiedEntrySignature(certified);
       if (!envelope.ok) return envelope;
       if (
         from &&
@@ -1025,7 +1192,15 @@ export class ReplicatedLog {
       );
       if (!previous.ok) return previous;
       const checked = validateCertifiedEntry(certified, previous.value.context);
-      if (!checked.ok) return this.haltForHistoricalConflict();
+      if (!checked.ok) {
+        const votes = verifyCertificate(certified.certificate, previous.value.context.membership, {
+          seq: certified.entry.seq,
+          term: certified.entry.term,
+          phase: 'precommit',
+          valueHash: entryHash(certified.entry),
+        });
+        return votes.ok ? this.haltForHistoricalConflict() : checked;
+      }
       if (local && entryHash(local.entry) === checked.value.hash) return success(undefined);
       const halted = await this.activeController().dispatch({
         kind: 'terminal-halt',
@@ -1036,7 +1211,7 @@ export class ReplicatedLog {
         : halted;
     }
     if (certified.entry.seq > height) {
-      const envelope = this.precheckCertifiedEnvelope(certified);
+      const envelope = this.precheckCertifiedEntrySignature(certified);
       if (!envelope.ok) return envelope;
       if (
         from &&
@@ -1051,21 +1226,26 @@ export class ReplicatedLog {
     return this.activeController().dispatch({ kind: 'commit', certified });
   }
 
-  /** Cheap Stage 06 fixed-voter signature gate before replay or sync work.
-   * A future membership epoch will need the replayed historical voter set here.
-   */
-  private precheckCertifiedEnvelope(certified: CertifiedEntry): Result<void> {
+  /** A cheap gate only; the certified parent decides the authoritative voter set. */
+  private precheckCertifiedEntrySignature(certified: CertifiedEntry): Result<void> {
     try {
       const entry = certified.entry;
       if (!verifyObject('entry', entryBody(entry), entry.sig, parsePeerId(entry.sequencer)))
         return failure('replica-certificate', 'Certified entry signature is invalid');
-      const votes = verifyCertificate(certified.certificate, this.context.membership, {
-        seq: entry.seq,
-        term: entry.term,
-        phase: 'precommit',
-        valueHash: entryHash(entry),
-      });
-      return votes.ok ? success(undefined) : votes;
+      // A matching epoch has the same certified voter set, so reject malformed
+      // same-epoch votes cheaply. Cross-epoch votes wait for parent replay.
+      if (
+        certified.certificate.every((vote) => vote.body.epoch === this.context.membership.epoch)
+      ) {
+        const votes = verifyCertificate(certified.certificate, this.context.membership, {
+          seq: entry.seq,
+          term: entry.term,
+          phase: 'precommit',
+          valueHash: entryHash(entry),
+        });
+        if (!votes.ok) return votes;
+      }
+      return success(undefined);
     } catch {
       return failure('replica-certificate', 'Certified envelope is malformed');
     }
@@ -1081,6 +1261,7 @@ export class ReplicatedLog {
     const certified = entries[index];
     if (certified) {
       const accepted = await this.acceptCertified(certified, from);
+      if (this.disposed) return accepted;
       return accepted.ok
         ? this.acceptCertifiedBatch(entries, more, from, index + 1, headBefore)
         : accepted;
@@ -1105,6 +1286,7 @@ export class ReplicatedLog {
     const available =
       this.accusation !== null ||
       this.cheatCandidates.size > 0 ||
+      this.recoveryIntent !== null ||
       (!this.cryptoPending() && this.commands.length > 0) ||
       this.deckSetupCandidate() !== null ||
       this.deckDrawCandidate() !== null ||
@@ -1175,6 +1357,13 @@ export class ReplicatedLog {
         },
         this.secretKey,
       );
+    if (this.recoveryIntent) {
+      const candidate = this.entryCandidate(state, {
+        kind: 'membership',
+        change: this.recoveryIntent.change,
+      });
+      if (candidate) return candidate;
+    }
     const crypto =
       this.deckSetupCandidate() ??
       this.deckDrawCandidate() ??
@@ -1202,7 +1391,7 @@ export class ReplicatedLog {
 
   private entryCandidate(
     state: ConsensusState,
-    payload: Extract<EntryPayload, { kind: 'command' | 'system' | 'crypto' }>,
+    payload: Extract<EntryPayload, { kind: 'command' | 'system' | 'crypto' | 'membership' }>,
   ): LogEntry | null {
     const checked = this.deriveCandidate(state, payload);
     if (!checked.ok) {
@@ -1214,11 +1403,30 @@ export class ReplicatedLog {
 
   private deriveCandidate(
     state: Pick<ConsensusState, 'height' | 'round'>,
-    payload: Extract<EntryPayload, { kind: 'command' | 'system' | 'crypto' }>,
+    payload: Extract<EntryPayload, { kind: 'command' | 'system' | 'crypto' | 'membership' }>,
   ): Result<LogEntry> {
     try {
       let stateHash = this.context.log.head.stateHash;
-      if (payload.kind !== 'crypto') {
+      const recovery =
+        payload.kind === 'membership' ? parseCanonical(payload.change, recoveryChangeSchema) : null;
+      if (recovery && !recovery.ok) return recovery;
+      if (recovery?.ok && recovery.value.kind === 'recovery-activate') {
+        const pending = this.context.log.recovery?.authorizations.find(
+          (item) =>
+            item.entry.seq === this.context.log.recovery?.pending?.seq &&
+            item.entry.hash === this.context.log.recovery?.pending?.hash,
+        );
+        if (!pending)
+          return failure('recovery-authorization', 'Activation needs certified authorization');
+        const applied = this.context.log.engine.apply(this.context.log.state, {
+          kind: 'system',
+          type: 'SEAT_STATUS',
+          seat: pending.statement.departedSeat,
+          status: 'bot',
+        });
+        if (!applied.ok) return applied;
+        stateHash = toHex(hashValue(applied.value.state));
+      } else if (payload.kind === 'command' || payload.kind === 'system') {
         const input =
           payload.kind === 'command'
             ? {
@@ -1269,6 +1477,7 @@ export class ReplicatedLog {
   }
 
   private beaconCandidate() {
+    if (this.beaconFrozen()) return null;
     const candidate = this.beaconInbox.candidate(
       this.context.log,
       this.options.policy.entry.randomDerivations,
@@ -1291,6 +1500,7 @@ export class ReplicatedLog {
   }
 
   private deckDrawCandidate(): Extract<EntryPayload, { kind: 'system' }> | null {
+    if (this.deckFrozen()) return null;
     const candidate = this.deckInbox.candidate(this.context.log);
     if (!candidate.ok) {
       this.status({ kind: 'rejected', code: candidate.error.code });
@@ -1300,7 +1510,12 @@ export class ReplicatedLog {
   }
 
   private countCandidate(): Extract<EntryPayload, { kind: 'system' }> | null {
-    const candidate = this.countInbox.candidate(this.context.log.crypto);
+    if (this.countFrozen()) return null;
+    const candidate = this.countInbox.candidate(
+      this.context.log.crypto,
+      this.context.log.genesis,
+      this.context.log.authority,
+    );
     if (!candidate.ok) {
       this.status({ kind: 'rejected', code: candidate.error.code });
       return null;
@@ -1309,7 +1524,12 @@ export class ReplicatedLog {
   }
 
   private async prepareCount(retransmit: boolean): Promise<Result<void>> {
-    const refreshed = this.countInbox.refresh(this.context.log.crypto);
+    if (this.countFrozen()) return success(undefined);
+    const refreshed = this.countInbox.refresh(
+      this.context.log.crypto,
+      this.context.log.genesis,
+      this.context.log.authority,
+    );
     if (!refreshed.ok) return this.failClosed(refreshed.error.code, refreshed.error.message);
     const active = this.context.log.crypto?.counts;
     const operationId = this.countInbox.operationId();
@@ -1344,7 +1564,11 @@ export class ReplicatedLog {
       if (this.disposed)
         return failure('replica-disposed', 'Replica closed during count preparation');
       if (!prepared.ok) return this.failClosed(prepared.error.code, prepared.error.message);
-      const stillPending = this.countInbox.refresh(this.context.log.crypto);
+      const stillPending = this.countInbox.refresh(
+        this.context.log.crypto,
+        this.context.log.genesis,
+        this.context.log.authority,
+      );
       if (!stillPending.ok)
         return this.failClosed(stillPending.error.code, stillPending.error.message);
       const current = this.context.log.crypto?.counts;
@@ -1370,7 +1594,12 @@ export class ReplicatedLog {
   }
 
   private stealCandidate(): Extract<EntryPayload, { kind: 'crypto' | 'system' }> | null {
-    const candidate = this.stealInbox.candidate(this.context.log.crypto);
+    if (this.stealFrozen()) return null;
+    const candidate = this.stealInbox.candidate(
+      this.context.log.crypto,
+      this.context.log.genesis,
+      this.context.log.authority,
+    );
     if (!candidate.ok) {
       this.status({ kind: 'rejected', code: candidate.error.code });
       return null;
@@ -1379,7 +1608,12 @@ export class ReplicatedLog {
   }
 
   private async prepareSteal(retransmit: boolean): Promise<Result<void>> {
-    const refreshed = this.stealInbox.refresh(this.context.log.crypto);
+    if (this.stealFrozen()) return success(undefined);
+    const refreshed = this.stealInbox.refresh(
+      this.context.log.crypto,
+      this.context.log.genesis,
+      this.context.log.authority,
+    );
     if (!refreshed.ok) return this.failClosed(refreshed.error.code, refreshed.error.message);
     const active = this.context.log.crypto?.steal;
     const stage = this.stealInbox.stageId();
@@ -1427,7 +1661,11 @@ export class ReplicatedLog {
     if (this.disposed)
       return failure('replica-disposed', 'Replica closed during steal preparation');
     if (!prepared.ok) return this.failClosed(prepared.error.code, prepared.error.message);
-    const current = this.stealInbox.refresh(this.context.log.crypto);
+    const current = this.stealInbox.refresh(
+      this.context.log.crypto,
+      this.context.log.genesis,
+      this.context.log.authority,
+    );
     if (!current.ok) return this.failClosed(current.error.code, current.error.message);
     if (this.stealInbox.stageId() !== stage) return success(undefined);
     const outgoing = prepared.value;
@@ -1459,15 +1697,25 @@ export class ReplicatedLog {
   }
 
   private refreshPreparedStealStage(): void {
-    const refreshed = this.stealInbox.refresh(this.context.log.crypto);
+    if (this.stealFrozen()) return;
+    const refreshed = this.stealInbox.refresh(
+      this.context.log.crypto,
+      this.context.log.genesis,
+      this.context.log.authority,
+    );
     const stage = refreshed.ok ? this.stealInbox.stageId() : null;
     if (this.preparedSteal?.stage !== stage) this.preparedSteal = null;
     if (this.sentStealStage !== stage) this.sentStealStage = null;
   }
 
   private async prepareDeck(retransmit: boolean): Promise<Result<void>> {
+    if (this.deckFrozen()) return success(undefined);
     const crypto = this.context.log.crypto;
-    const refreshed = this.deckInbox.refresh(crypto);
+    const refreshed = this.deckInbox.refresh(
+      crypto,
+      this.context.log.genesis,
+      this.context.log.authority,
+    );
     if (!refreshed.ok) return this.failClosed(refreshed.error.code, refreshed.error.message);
     const active = crypto?.decks.active;
     const operationId = this.deckInbox.operationId();
@@ -1485,7 +1733,18 @@ export class ReplicatedLog {
         'replica-deck-store',
         'Verified draws need local sources and durable contributions',
       );
-    const prefixKey = () => `${operationId}/${this.deckInbox.prefix().length}`;
+    const signers: ArtifactSigner[] = [];
+    for (const participant of active.participants.filter((item) => item.seat !== active.seat)) {
+      const signer = resolveArtifactSigner(
+        this.context.log.authority,
+        this.context.log.genesis,
+        crypto.epoch,
+        participant.seat,
+      );
+      if (!signer.ok) return signer;
+      signers.push(signer.value);
+    }
+    const prefixKey = () => `${operationId}/${crypto.epoch}/${this.deckInbox.prefix().length}`;
     if (this.preparedDeckPrefix !== prefixKey()) {
       const request = {
         genesisDigest: active.genesisDigest,
@@ -1500,6 +1759,13 @@ export class ReplicatedLog {
       for (const participant of active.participants) {
         const key = this.deckKeys.get(participant.seat);
         if (!key) continue;
+        const localSigner = resolveArtifactSigner(
+          this.context.log.authority,
+          this.context.log.genesis,
+          crypto.epoch,
+          participant.seat,
+        );
+        if (!localSigner.ok) return localSigner;
         let source: ReturnType<DeckSourceFactory> | undefined;
         try {
           source = createDeckSource(active.deckId, participant.seat);
@@ -1512,6 +1778,8 @@ export class ReplicatedLog {
             key,
             source,
             deckContributions,
+            signers,
+            localSigner.value,
           );
           if (this.disposed)
             return failure('replica-disposed', 'Replica closed during deck preparation');
@@ -1561,12 +1829,54 @@ export class ReplicatedLog {
     );
   }
 
+  private seatFrozen(seat: Seat): boolean {
+    return (
+      this.context.log.authority?.controllers.some(
+        (controller) => controller.seat === seat && controller.status === 'pending-recovery',
+      ) ?? false
+    );
+  }
+
+  private deckFrozen(): boolean {
+    return (
+      this.context.log.crypto?.decks.active?.participants.some((item) =>
+        this.seatFrozen(item.seat),
+      ) ?? false
+    );
+  }
+
+  private beaconFrozen(): boolean {
+    return (
+      this.context.log.crypto?.beacon.active?.participants.some((item) =>
+        this.seatFrozen(item.seat),
+      ) ?? false
+    );
+  }
+
+  private countFrozen(): boolean {
+    return (
+      this.context.log.crypto?.counts?.remaining.some((seat) => this.seatFrozen(seat)) ?? false
+    );
+  }
+
+  private stealFrozen(): boolean {
+    const active = this.context.log.crypto?.steal;
+    if (!active) return false;
+    const seat = active.fixed ? active.operation.thief.seat : active.operation.victim.seat;
+    return this.seatFrozen(seat);
+  }
+
   private async prepareBeacon(retransmit: boolean): Promise<Result<void>> {
+    if (this.beaconFrozen()) return success(undefined);
     const crypto = this.context.log.crypto;
-    const refreshed = this.beaconInbox.refresh(crypto);
+    const refreshed = this.beaconInbox.refresh(
+      crypto,
+      this.context.log.genesis,
+      this.context.log.authority,
+    );
     if (!refreshed.ok) return this.failClosed(refreshed.error.code, refreshed.error.message);
     if (!crypto?.beacon.active || !decksReady(crypto.decks)) return success(undefined);
-    const operationId = this.beaconInbox.operationId();
+    const operationId = `${this.beaconInbox.operationId()}/${crypto.epoch}`;
     if (!retransmit && operationId === this.sentBeaconOperation) return success(undefined);
     const { beaconSource, beaconContributions } = this.options;
     if (!beaconSource || !beaconContributions)
@@ -1574,12 +1884,20 @@ export class ReplicatedLog {
         'replica-beacon-store',
         'Verified sessions need durable beacon contributions',
       );
+    const signer = resolveArtifactSigner(
+      this.context.log.authority,
+      this.context.log.genesis,
+      crypto.epoch,
+      this.options.seat,
+    );
+    if (!signer.ok) return signer;
     const prepared = await prepareBeaconContribution(
       crypto,
       this.options.seat,
       this.secretKey,
       beaconSource,
       beaconContributions,
+      signer.value,
     );
     if (this.disposed)
       return failure('replica-disposed', 'Replica closed during beacon preparation');
@@ -1909,12 +2227,10 @@ export class ReplicatedLog {
         : null);
     const pendingAccusation =
       checked.value.entry.payload.kind === 'control' ? null : prior.value.pendingAccusation;
-    const nextSafety = createConsensusState(
-      next,
-      this.options.seat,
-      provenOffender,
-      pendingAccusation,
-    );
+    const retired = !next.membership.voters.some((voter) => voter.seat === this.options.seat);
+    const nextSafety = retired
+      ? createRetiredSafety(previous, certified, this.options.seat, prior.value)
+      : createConsensusState(next, this.options.seat, provenOffender, pendingAccusation);
     if (!nextSafety.ok) throw new Error(`Next voting state failed: ${nextSafety.error.code}`);
     const current = await this.options.journal.loadSafety(certified.entry.seq);
     const snapshot = this.activeController().snapshot();
@@ -1958,8 +2274,10 @@ export class ReplicatedLog {
     this.accusation = pendingAccusation;
     this.clearConsensusTimers();
     this.refreshPreparedStealStage();
-    const opened = await this.openController();
-    if (!opened.ok) throw new Error(`Next voting controller failed: ${opened.error.code}`);
+    if (!retired) {
+      const opened = await this.openController();
+      if (!opened.ok) throw new Error(`Next voting controller failed: ${opened.error.code}`);
+    }
     try {
       this.options.onCommit?.(
         detachedValidated(checked.value),
@@ -1972,6 +2290,14 @@ export class ReplicatedLog {
       throw new Error('Committed private-state application failed');
     }
     this.settlePending(certified);
+    this.settleRecovery(certified);
+    if (retired) {
+      const sent = this.broadcast({ t: 'COMMIT', certified });
+      if (!sent.ok) this.status({ kind: 'rejected', code: sent.error.code });
+      this.status({ kind: 'retired', seat: this.options.seat });
+      this.dispose();
+      return;
+    }
     if (pendingAccusation)
       this.requireSend(this.broadcast({ t: 'ACCUSE', control: pendingAccusation }));
     this.requireSend(this.broadcast({ t: 'COMMIT', certified }));
@@ -1994,6 +2320,20 @@ export class ReplicatedLog {
             ),
       );
     }
+  }
+
+  private settleRecovery(certified: CertifiedEntry): void {
+    const pending = this.recoveryIntent;
+    this.recoveryIntent = null;
+    if (!pending) return;
+    if (pending.pendingTimer !== undefined) this.options.clock.clearTimeout(pending.pendingTimer);
+    const payload = certified.entry.payload;
+    const committed = payload.kind === 'membership' ? toHex(hashValue(payload.change)) : null;
+    pending.resolve?.(
+      committed === pending.hash
+        ? success(undefined)
+        : failure('renewed-intent', 'Recovery changed at the certified parent'),
+    );
   }
 
   private resolvePending(hash: string, result: Result<void>): void {
@@ -2056,6 +2396,10 @@ export class ReplicatedLog {
       this.broadcastNextCheatClaim();
       for (const pending of this.pending)
         this.requireSend(this.broadcast({ t: 'SUBMIT', cmd: pending.signed }));
+      if (this.recoveryIntent)
+        this.requireSend(
+          this.broadcast({ t: 'RECOVERY_SUBMIT', change: this.recoveryIntent.change }),
+        );
       const recovered = await this.activeController().resume();
       if (!recovered.ok) return recovered;
       const offered = await this.offerAvailableInput(true);
@@ -2074,13 +2418,16 @@ export class ReplicatedLog {
       !owner ||
       owner.publicKey !== from ||
       !verifyObject('heartbeat', message.body, message.sig, parsePeerId(from)) ||
-      message.body.genesisDigest !== this.context.membership.genesisDigest ||
-      message.body.epoch !== this.context.membership.epoch
+      message.body.genesisDigest !== this.context.membership.genesisDigest
     )
       return failure('replica-heartbeat', 'Heartbeat signature or membership is invalid');
-    if (message.body.head.seq > this.context.log.head.seq)
+    if (
+      message.body.epoch >= this.context.membership.epoch &&
+      message.body.head.seq > this.context.log.head.seq
+    )
       return this.requestSync(this.context.log.head.seq + 1);
     if (
+      message.body.epoch === this.context.membership.epoch &&
       message.body.head.seq === this.context.log.head.seq &&
       message.body.head.hash !== entryHash(this.context.log.head)
     )
@@ -2449,6 +2796,8 @@ function detachedContext(context: ProposalContext): ProposalContext {
       genesis: v.parse(genesisSchema, canonicalDecode(canonicalEncode(context.log.genesis))),
       head: v.parse(logEntrySchema, canonicalDecode(canonicalEncode(context.log.head))),
       state: copyCanonical(context.log.state),
+      ...(context.log.authority ? { authority: copyCanonical(context.log.authority) } : {}),
+      ...(context.log.recovery ? { recovery: copyCanonical(context.log.recovery) } : {}),
       lastNonces: new Map(context.log.lastNonces),
       crypto: copyCanonical(context.log.crypto),
     },
@@ -2473,6 +2822,8 @@ function detachedValidated(
     events: copyCanonical([...value.events]),
     lastNonces: new Map(value.lastNonces),
     crypto: copyCanonical(value.crypto),
+    ...(value.authority ? { authority: copyCanonical(value.authority) } : {}),
+    ...(value.recovery ? { recovery: copyCanonical(value.recovery) } : {}),
   };
 }
 

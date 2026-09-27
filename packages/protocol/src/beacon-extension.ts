@@ -13,6 +13,7 @@ import {
   signature64Schema,
 } from './schema-values.js';
 import { parseCanonical } from './validation.js';
+import type { ArtifactSigner } from './authority-types.js';
 
 /** The same frozen random request and participants, at their exhausted chain tips. */
 export type BeaconExtensionOperation = BeaconOperation;
@@ -82,6 +83,7 @@ export function signBeaconExtension(
   length: number,
   tip: Uint8Array,
   key: Uint8Array,
+  signer?: ArtifactSigner,
 ): SignedBeaconExtension {
   const checked = checkedOperation(operation);
   const participant = checked.participants.find((item) => item.seat === seat);
@@ -94,7 +96,9 @@ export function signBeaconExtension(
   if (encodedTip === participant.previous)
     throw new RangeError('Beacon extension must commit a new tip');
   const identity = identityFromSecret(key);
-  const matches = identity.peerId === participant.publicKey;
+  const matches =
+    identity.peerId === (signer?.publicKey ?? participant.publicKey) &&
+    (!signer || signer.seat === seat);
   identity.secretKey.fill(0);
   if (!matches) throw new RangeError('Beacon key does not belong to the frozen seat');
   const body = {
@@ -110,6 +114,7 @@ export function signBeaconExtension(
 export function verifyBeaconExtension(
   value: unknown,
   operation: BeaconExtensionOperation,
+  signer?: ArtifactSigner,
 ): Result<SignedBeaconExtension> {
   const checked = validateBeaconExtensionOperation(operation);
   if (!checked.ok) return checked;
@@ -117,6 +122,8 @@ export function verifyBeaconExtension(
   if (!parsed.ok) return parsed;
   const extension = parsed.value;
   const participant = checked.value.participants.find((item) => item.seat === extension.body.seat);
+  if (signer && signer.seat !== extension.body.seat)
+    return failure('beacon-extension-authority', 'Extension signer belongs to another seat');
   if (!participant || extension.body.chainEpoch !== participant.chainEpoch + 1)
     return failure(
       'beacon-extension-seat',
@@ -131,7 +138,7 @@ export function verifyBeaconExtension(
       'beacon-extension',
       extension.body,
       extension.sig,
-      parsePeerId(participant.publicKey),
+      parsePeerId(signer?.publicKey ?? participant.publicKey),
     )
   )
     return failure('beacon-extension-signature', 'Beacon extension signature is invalid');
@@ -162,6 +169,7 @@ function exactExtensions(value: unknown, count: number): unknown[] | null {
 export function completeBeaconExtension(
   operation: BeaconExtensionOperation,
   extensions: unknown,
+  signers?: readonly ArtifactSigner[],
 ): Result<{
   commitments: readonly BeaconChainCommitment[];
   extensions: readonly SignedBeaconExtension[];
@@ -169,19 +177,25 @@ export function completeBeaconExtension(
   const checked = validateBeaconExtensionOperation(operation);
   if (!checked.ok) return checked;
   const entries = exactExtensions(extensions, checked.value.participants.length);
+  if (
+    signers &&
+    (signers.length !== checked.value.participants.length ||
+      signers.some((signer, index) => signer.seat !== checked.value.participants[index]?.seat))
+  )
+    return failure('beacon-extension-authority', 'Extension signers differ from participants');
   if (!entries)
     return failure('beacon-extension-incomplete', 'Beacon needs one extension per participant');
   const ordered: SignedBeaconExtension[] = [];
   const commitments: BeaconChainCommitment[] = [];
   for (const [index, participant] of checked.value.participants.entries()) {
-    const verified = verifyBeaconExtension(entries[index], checked.value);
+    const verified = verifyBeaconExtension(entries[index], checked.value, signers?.[index]);
     if (!verified.ok) return verified;
     if (verified.value.body.seat !== participant.seat)
       return failure('beacon-extension-order', 'Beacon extensions must be in frozen seat order');
     ordered.push(verified.value);
     commitments.push({
       seat: participant.seat,
-      publicKey: participant.publicKey,
+      publicKey: signers?.[index]?.publicKey ?? participant.publicKey,
       chainEpoch: verified.value.body.chainEpoch,
       length: verified.value.body.length,
       tip: verified.value.body.tip,

@@ -14,6 +14,10 @@ import { parseCanonical } from './validation.js';
 import type { CryptoContext } from './crypto-context.js';
 import type { LogContext } from './log.js';
 import type { EntryPayload } from './types.js';
+import type { Genesis } from './types.js';
+import type { SeatAuthorities, ArtifactSigner } from './authority-types.js';
+import { resolveArtifactSigner } from './authority.js';
+import { failure } from '@cp2p/engine';
 
 export const deckUnlockContributionSchema = v.strictObject({
   kind: v.literal('deck-unlock'),
@@ -45,13 +49,19 @@ function copyUnlock(unlock: SignedDeckUnlock): SignedDeckUnlock {
 export class DeckInbox {
   private operation: DeckDrawOperation | null = null;
   private id: string | null = null;
+  private generationId: string | null = null;
   private unlocks: SignedDeckUnlock[] = [];
+  private signers: ArtifactSigner[] | undefined;
 
   operationId(): string | null {
     return this.id;
   }
 
-  refresh(crypto: CryptoContext | null): Result<void> {
+  refresh(
+    crypto: CryptoContext | null,
+    genesis?: Genesis,
+    authority?: SeatAuthorities,
+  ): Result<void> {
     const active = crypto?.decks.active;
     if (!active) {
       this.clear();
@@ -62,10 +72,27 @@ export class DeckInbox {
       this.clear();
       return checked;
     }
+    let signers: ArtifactSigner[] | undefined;
+    if (genesis && (authority || crypto.epoch > 0)) {
+      signers = [];
+      for (const participant of checked.value.participants.filter(
+        (item) => item.seat !== checked.value.seat,
+      )) {
+        const signer = resolveArtifactSigner(authority, genesis, crypto.epoch, participant.seat);
+        if (!signer.ok) return signer;
+        signers.push(signer.value);
+      }
+    } else if (crypto.epoch > 0) {
+      return failure('deck-inbox-authority', 'Recovered inbox needs current authority');
+    }
     const id = deckDrawOperationId(checked.value);
-    if (id !== this.id) this.unlocks = [];
+    const generationId =
+      signers?.map((item) => `${item.generation.seq}:${item.generation.hash}`).join('/') ?? '';
+    if (id !== this.id || generationId !== this.generationId) this.unlocks = [];
     this.operation = checked.value;
+    this.signers = signers;
     this.id = id;
+    this.generationId = generationId;
     return success(undefined);
   }
 
@@ -79,7 +106,7 @@ export class DeckInbox {
       parsed.value.unlocks.length <= this.unlocks.length
     )
       return success(false);
-    const verified = verifyDeckUnlockPrefix(operation, parsed.value.unlocks);
+    const verified = verifyDeckUnlockPrefix(operation, parsed.value.unlocks, this.signers);
     if (!verified.ok) return verified;
     this.unlocks = verified.value.unlocks.map(copyUnlock);
     return success(true);
@@ -90,7 +117,7 @@ export class DeckInbox {
   }
 
   candidate(context: LogContext): Result<DealPayload | null> {
-    const refreshed = this.refresh(context.crypto);
+    const refreshed = this.refresh(context.crypto, context.genesis, context.authority);
     if (!refreshed.ok) return refreshed;
     const operation = this.operation;
     if (!operation || this.unlocks.length !== operation.participants.length - 1)
@@ -113,6 +140,8 @@ export class DeckInbox {
   private clear(): void {
     this.operation = null;
     this.id = null;
+    this.generationId = null;
     this.unlocks = [];
+    this.signers = undefined;
   }
 }

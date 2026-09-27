@@ -6,6 +6,8 @@ import {
   extendBeaconState,
   freezeBeaconRequest,
   initializeBeaconState,
+  getBeaconOperation,
+  getBeaconExtensionOperation,
   validateBeaconState,
 } from './beacon-state.js';
 import type { BeaconDerivations, BeaconState, EntryRef } from './beacon-state.js';
@@ -33,6 +35,11 @@ import {
 } from './steal-state.js';
 import type { StealState } from './steal-state.js';
 import type { CheatFinding } from './cheat-types.js';
+import { permitsFrozenOperation, resolveArtifactSigner } from './authority.js';
+import type { SeatAuthorities } from './authority-types.js';
+import { deckDrawOperationId } from './deck-draw.js';
+import { beaconOperationId } from './beacon.js';
+import { beaconExtensionOperationId } from './beacon-extension.js';
 
 /** Public cryptographic metadata, derived only by replaying the certified log. */
 export interface CryptoContext {
@@ -60,6 +67,7 @@ export function captureCryptoPending(
   state: GameState,
   anchor: EntryRef,
   registry: BeaconDerivations = randomDerivations,
+  authority?: SeatAuthorities,
 ): Result<CryptoContext> {
   const random = engine.getPending(state).filter((pending) => pending.kind === 'random');
   if (random.length > 1)
@@ -78,6 +86,7 @@ export function captureCryptoPending(
     context.hands,
     context.epoch,
     anchor,
+    authority,
   );
   if (!counts.ok) return counts;
   const next = { ...context, decks: decks.value, counts: counts.value };
@@ -105,6 +114,7 @@ export function initializeCryptoContext(
   state: GameState,
   head: LogEntry,
   registry: BeaconDerivations = randomDerivations,
+  authority?: SeatAuthorities,
 ): Result<CryptoContext | null> {
   if (genesis.security === 'stub') return success(null);
   const beacon = initializeBeaconState(genesis);
@@ -138,6 +148,7 @@ export function initializeCryptoContext(
     state,
     { seq: head.seq, hash: entryHash(head) },
     registry,
+    authority,
   );
 }
 
@@ -156,6 +167,7 @@ export function validateCryptoTransition(
   state: GameState,
   entry: LogEntry,
   registry: BeaconDerivations = randomDerivations,
+  authority?: SeatAuthorities,
 ): Result<CryptoTransition> {
   const payload = entry.payload;
   if (genesis.security === 'stub') {
@@ -184,6 +196,7 @@ export function validateCryptoTransition(
     state,
     hands.value,
     current.epoch,
+    authority,
   );
   if (!counts.ok) return counts;
   const steal = validateStealState(
@@ -193,6 +206,7 @@ export function validateCryptoTransition(
     hands.value,
     state,
     current.epoch,
+    authority,
   );
   if (!steal.ok) return steal;
   if (counts.value && counts.value.operation.anchor.seq >= entry.seq)
@@ -211,6 +225,29 @@ export function validateCryptoTransition(
     steal: steal.value,
     cheats: current.cheats,
   };
+  if (
+    crypto.decks.active &&
+    !permitsFrozenOperation(
+      authority,
+      'deck',
+      deckDrawOperationId(crypto.decks.active),
+      crypto.decks.active,
+      crypto.epoch,
+    )
+  )
+    return failure('deck-authority', 'Frozen draw is not carried by certified membership');
+  if (crypto.beacon.active) {
+    const exhausted = crypto.beacon.active.participants.some((item) => item.index === item.length);
+    const operation = exhausted
+      ? getBeaconExtensionOperation(crypto.beacon)
+      : getBeaconOperation(crypto.beacon);
+    if (!operation.ok) return operation;
+    const id = exhausted
+      ? beaconExtensionOperationId(operation.value)
+      : beaconOperationId(operation.value);
+    if (!permitsFrozenOperation(authority, 'beacon', id, operation.value, crypto.epoch))
+      return failure('beacon-authority', 'Frozen beacon is not carried by certified membership');
+  }
   if (payload.kind === 'control' || payload.kind === 'cheat-proof')
     return success({ crypto, handled: false, input: null });
   if (payload.kind === 'crypto' && payload.action === 'deck-pass') {
@@ -221,12 +258,23 @@ export function validateCryptoTransition(
   }
   if (!decksReady(crypto.decks))
     return failure('deck-setup-pending', 'Every committed deck pass must be replayed before play');
+  if (payload.kind === 'membership') return success({ crypto, handled: false, input: null });
   if (payload.kind === 'system' && payload.input.type === 'CARD_DEALT') {
     if (crypto.beacon.active || crypto.beacon.fixed)
       return failure('beacon-pending', 'A deck deal cannot answer a beacon request');
     const pending = engine.getPending(state).filter((item) => item.kind === 'random');
     if (pending.length !== 1)
       return failure('deck-pending', 'A deal requires exactly one certified random pending');
+    const unlockers =
+      crypto.decks.active?.participants.filter(
+        (participant) => participant.seat !== crypto.decks.active?.seat,
+      ) ?? [];
+    const signers = [];
+    for (const participant of unlockers) {
+      const signer = resolveArtifactSigner(authority, genesis, crypto.epoch, participant.seat);
+      if (!signer.ok) return signer;
+      signers.push(signer.value);
+    }
     const completed = completeDeckDeal(
       crypto.decks,
       state,
@@ -234,6 +282,7 @@ export function validateCryptoTransition(
       payload.input,
       payload.evidence,
       { seq: entry.seq, hash: entryHash(entry) },
+      signers,
     );
     return completed.ok
       ? success({
@@ -248,10 +297,22 @@ export function validateCryptoTransition(
   if (payload.kind === 'crypto' && payload.action === 'steal-fixed') {
     if (!crypto.steal)
       return failure('steal-state-required', 'No certified steal operation is pending');
-    const fixed = fixStealContribution(crypto.steal, payload.evidence, {
-      seq: entry.seq,
-      hash: entryHash(entry),
-    });
+    const signer = resolveArtifactSigner(
+      authority,
+      genesis,
+      crypto.epoch,
+      crypto.steal.operation.victim.seat,
+    );
+    if (!signer.ok) return signer;
+    const fixed = fixStealContribution(
+      crypto.steal,
+      payload.evidence,
+      {
+        seq: entry.seq,
+        hash: entryHash(entry),
+      },
+      signer.value,
+    );
     return fixed.ok
       ? success({ crypto: { ...crypto, steal: fixed.value }, handled: true, input: null })
       : fixed;
@@ -259,7 +320,14 @@ export function validateCryptoTransition(
   if (payload.kind === 'crypto' && payload.action === 'steal-dispute') {
     if (!crypto.steal)
       return failure('steal-state-required', 'No certified steal operation is pending');
-    const disputed = disputeStealContribution(crypto.steal, payload.evidence);
+    const signer = resolveArtifactSigner(
+      authority,
+      genesis,
+      crypto.epoch,
+      crypto.steal.operation.thief.seat,
+    );
+    if (!signer.ok) return signer;
+    const disputed = disputeStealContribution(crypto.steal, payload.evidence, signer.value);
     return disputed.ok
       ? success({ crypto: { ...crypto, steal: disputed.value }, handled: true, input: null })
       : disputed;
@@ -268,7 +336,13 @@ export function validateCryptoTransition(
     return success({ crypto, handled: true, input: payload.input });
   }
   if (payload.kind === 'crypto' && payload.action === 'beacon-extend') {
-    const extended = extendBeaconState(crypto.beacon, payload.evidence);
+    const extended = extendBeaconState(
+      crypto.beacon,
+      payload.evidence,
+      authority,
+      genesis,
+      crypto.epoch,
+    );
     return extended.ok
       ? success({ crypto: { ...crypto, beacon: extended.value }, handled: true, input: null })
       : extended;
@@ -296,6 +370,9 @@ export function validateCryptoTransition(
       state,
       { seq: entry.seq, hash: entryHash(entry) },
       registry,
+      authority,
+      genesis,
+      crypto.epoch,
     );
     if (!completed.ok) return completed;
     const outcome = completed.value.outcome;
@@ -308,6 +385,7 @@ export function validateCryptoTransition(
         crypto.hands,
         state,
         crypto.epoch,
+        authority,
       );
       if (!frozen.ok) return frozen;
       return success({

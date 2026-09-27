@@ -12,6 +12,7 @@ import {
 import type { CountOperation, SignedCountContribution } from './count-reveal.js';
 import type { LogContext } from './log.js';
 import { MAX_MESSAGE_BYTES } from './validation.js';
+import { resolveArtifactSigner } from './authority.js';
 
 export interface CountContributionStore {
   load(id: string): Promise<Uint8Array | null>;
@@ -52,6 +53,11 @@ export async function prepareCountContribution(
   if (!checked.ok) return checked;
   const victim = checked.value.victims.find((item) => item.seat === seat);
   if (!victim) return failure('count-outbox-seat', 'Seat is not a frozen Monopoly victim');
+  const signer =
+    context.authority || (context.crypto?.epoch ?? 0) > 0
+      ? resolveArtifactSigner(context.authority, context.genesis, context.crypto?.epoch ?? 0, seat)
+      : success(undefined);
+  if (!signer.ok) return signer;
   let signingKey: Uint8Array;
   try {
     if (!(key instanceof Uint8Array) || key.length !== 32)
@@ -63,18 +69,23 @@ export async function prepareCountContribution(
   try {
     const identity = identityFromSecret(signingKey);
     try {
-      if (identity.peerId !== victim.publicKey)
+      if (identity.peerId !== (signer.value?.publicKey ?? victim.publicKey))
         return failure('count-outbox-key', 'The local signer key does not match this victim');
     } finally {
       identity.secretKey.fill(0);
     }
     const operationId = countOperationId(checked.value);
-    const id = `count-contribution/${operationId}/${seat}`;
+    const generation = signer.value?.generation;
+    const id = `count-contribution/${operationId}/${seat}${generation ? `/${generation.seq}/${generation.hash}` : ''}`;
     const stored = (bytes: Uint8Array): Result<SignedCountContribution> => {
       try {
         if (bytes.byteLength > MAX_MESSAGE_BYTES)
           return failure('count-outbox-record', 'Stored count contribution exceeds its byte limit');
-        const verified = verifyCountContribution(canonicalDecode(bytes), checked.value);
+        const verified = verifyCountContribution(
+          canonicalDecode(bytes),
+          checked.value,
+          signer.value,
+        );
         return verified.ok && verified.value.body.seat === seat
           ? verified
           : failure('count-outbox-record', 'Stored count contribution is corrupt or misplaced');
@@ -94,8 +105,9 @@ export async function prepareCountContribution(
         proof.value.count,
         proof.value.proof,
         signingKey,
+        signer.value,
       );
-      const verified = verifyCountContribution(signed, checked.value);
+      const verified = verifyCountContribution(signed, checked.value, signer.value);
       if (!verified.ok) return verified;
       signed = verified.value;
     } catch {

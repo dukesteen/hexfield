@@ -1,0 +1,22 @@
+{
+  "verifiedAt": "2026-09-27T02:26:38.820365+00:00",
+  "browser": "Chrome via existing user profile; two dedicated workers at http://127.0.0.1:5187/dev/storage-smoke.html",
+  "result": "PASS: nine visible completion lines including native game writer lease exclusion and release on close",
+  "files": {
+    "apps/web/dev/storage-smoke.html": "6c5b43685f033fe6e5e48dd8169f74741a77b6d413342e41f2dade5cb5695c91",
+    "apps/web/src/dev/storage-smoke.ts": "d27cea71f6e413b45d28aacb133289bdc25084bd0bd303c472fe8e3c9af84899",
+    "apps/web/src/dev/storage-smoke.worker.ts": "1105ac32b157d068e165654ad43501c70c5f19782582709732be9ff9ad91085b",
+    "packages/storage/package.json": "127ffda643d58a0fa88993c05d73470f40a34fdc01be74388fa49e9de838a283",
+    "packages/protocol/src/schemas.ts": "0644605fd0e0cd35ededac28e9a52524eb122e8b73839bc94f729fdee160f606",
+    "pnpm-lock.yaml": "073573839bd129e1801a656934dfe1ba9086bf74dac4a46c5f6e0f01aa121bca",
+    "packages/storage/src/database.ts": "ce9c966a702bfc298363fdbe4f092629aa1736271ce17555690de512860ab770",
+    "packages/storage/src/game-writer.test.ts": "5a5e6406e04275718885e7af4dec10b8067401987636262f5d1a3676486cb96e",
+    "packages/storage/src/game-writer.ts": "fa266fa55c469fd8be97f6f1a4fa610c727e5870bd32cafc26d5a1d478cbd524",
+    "packages/storage/src/index.test.ts": "b55a0fb822232319b2c44c9fe5477e08fb105ab26c694dbb3e8670f1c0ad1061",
+    "packages/storage/src/index.ts": "0b605e4d738cd14ddfeca1c16d2caf623e03d09990784cf4cdb93429ea427399",
+    "packages/storage/src/indexed-db-byte-store.test.ts": "76c419292b33f2590be165676c3642b4c0f9b8370c9ef97ac1019ad7f559b7f1",
+    "packages/storage/src/indexed-db-byte-store.ts": "70070a3e3c1a0a3febf86a8a0d6917a4314f45f68a776577ff3b0ac8916cec48",
+    "packages/storage/src/indexed-db-protocol-journal.test.ts": "c69a0915910e234f7862bd76dc2888dfb2824d056185766a664709c2e0b821e7",
+    "packages/storage/src/indexed-db-protocol-journal.ts": "8ec021eba8fa700ce8d93afe8206f3277b18868929412cd4e53085ab2809baed"
+  }
+}

@@ -4,6 +4,7 @@ import * as v from 'valibot';
 import type { EntryRef } from './beacon-state.js';
 import {
   COUNT_EVIDENCE_PROTOCOL,
+  countOperationId,
   countOperationSchema,
   validateCountOperation,
 } from './count-reveal.js';
@@ -13,6 +14,8 @@ import { MAX_HAND_RESOURCE_COUNT } from './hand-commitments.js';
 import type { PublicHandCommitments } from './hand-commitments.js';
 import { nonnegativeIntegerSchema, seatSchema } from './schema-values.js';
 import type { Genesis } from './types.js';
+import type { SeatAuthorities } from './authority-types.js';
+import { permitsFrozenOperation, resolveArtifactSigner } from './authority.js';
 import { parseCanonical } from './validation.js';
 
 const remainingSchema = v.pipe(v.array(seatSchema), v.minLength(1), v.maxLength(5));
@@ -83,7 +86,10 @@ export function validateCountState(
   state: GameState,
   hands: PublicHandCommitments,
   epoch: number,
+  authority?: SeatAuthorities,
 ): Result<CountState | null> {
+  if (authority && authority.epoch !== epoch)
+    return failure('count-authority', 'Controller authority epoch differs from crypto state');
   const pending = pendingCounts(engine, state);
   if (!pending.ok) return pending;
   if (value === null)
@@ -99,14 +105,10 @@ export function validateCountState(
   if (
     !requested ||
     operation.genesisDigest !== genesisDigest(genesis) ||
-    operation.epoch !== epoch ||
+    !permitsFrozenOperation(authority, 'count', countOperationId(operation), operation, epoch) ||
     operation.monopolist !== requested.monopolist ||
     operation.resource !== requested.resource ||
     !genesis.config.seats.includes(operation.monopolist) ||
-    operation.victims.some(
-      (victim) =>
-        genesis.seats.find((seat) => seat.seat === victim.seat)?.publicKey !== victim.publicKey,
-    ) ||
     parsed.value.remaining.length !== requested.remaining.length ||
     parsed.value.remaining.some((seat, index) => seat !== requested.remaining[index])
   )
@@ -138,20 +140,26 @@ export function captureCountPending(
   hands: PublicHandCommitments,
   epoch: number,
   anchor: EntryRef,
+  authority?: SeatAuthorities,
 ): Result<CountState | null> {
   if (state.result !== null) return success(null);
-  if (current !== null) return validateCountState(current, genesis, engine, state, hands, epoch);
+  if (current !== null)
+    return validateCountState(current, genesis, engine, state, hands, epoch, authority);
   const pending = pendingCounts(engine, state);
   if (!pending.ok) return pending;
   if (!pending.value) return success(null);
   const { monopolist, resource, remaining } = pending.value;
   const victims = [];
   for (const seat of remaining) {
-    const owner = genesis.seats.find((item) => item.seat === seat);
+    const owner = resolveArtifactSigner(authority, genesis, epoch, seat);
     const hand = hands.find((item) => item.seat === seat);
-    if (!owner || !hand)
+    if (!owner.ok || !hand)
       return failure('count-victim', 'Count victim is missing from genesis or hands');
-    victims.push({ seat, publicKey: owner.publicKey, commitment: hand.commitments[resource] });
+    victims.push({
+      seat,
+      publicKey: owner.value.publicKey,
+      commitment: hand.commitments[resource],
+    });
   }
   return validateCountState(
     {
@@ -171,5 +179,6 @@ export function captureCountPending(
     state,
     hands,
     epoch,
+    authority,
   );
 }

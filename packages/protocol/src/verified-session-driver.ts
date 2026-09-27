@@ -53,6 +53,7 @@ import type {
 } from './steal-delivery.js';
 import type { StealSecretSource, StealSourceFactory } from './steal-source.js';
 import { validateStealState, verifyStealResult } from './steal-state.js';
+import { resolveArtifactSigner } from './authority.js';
 
 type CommandWithoutEvidence = Omit<CommandBody, 'evidence'>;
 
@@ -196,6 +197,7 @@ export class VerifiedSessionDriver implements SessionDriver {
       crypto.hands,
       context.state,
       crypto.epoch,
+      context.authority,
     );
     return steal.ok ? success(undefined) : steal;
   }
@@ -244,6 +246,13 @@ export class VerifiedSessionDriver implements SessionDriver {
     const current = this.currentStealContext(context);
     if (!current.ok) return current;
     const pending = context.crypto?.steal;
+    const signer = resolveArtifactSigner(
+      context.authority,
+      context.genesis,
+      context.crypto?.epoch ?? 0,
+      seat,
+    );
+    if (!signer.ok) return signer;
     try {
       if (
         !pending ||
@@ -252,9 +261,7 @@ export class VerifiedSessionDriver implements SessionDriver {
         pending.operation.victim.seat !== seat ||
         stealOperationId(pending.operation) !== stealOperationId(operation) ||
         operation.genesisDigest !== this.digest ||
-        operation.epoch !== context.crypto?.epoch ||
-        operation.victim.publicKey !==
-          this.genesis.seats.find((item) => item.seat === seat)?.publicKey ||
+        operation.epoch > (context.crypto?.epoch ?? -1) ||
         operation.thief.encryptionKey !==
           this.genesis.seats.find((item) => item.seat === operation.thief.seat)?.encryptionKey
       )
@@ -284,6 +291,7 @@ export class VerifiedSessionDriver implements SessionDriver {
           blindings,
           seed,
           signingKey,
+          signer.value,
         );
       } finally {
         seed.fill(0);
@@ -309,6 +317,13 @@ export class VerifiedSessionDriver implements SessionDriver {
     const current = this.currentStealContext(context);
     if (!current.ok) return current;
     const pending = context.crypto?.steal;
+    const signer = resolveArtifactSigner(
+      context.authority,
+      context.genesis,
+      context.crypto?.epoch ?? 0,
+      seat,
+    );
+    if (!signer.ok) return signer;
     try {
       if (
         !pending?.fixed ||
@@ -317,7 +332,7 @@ export class VerifiedSessionDriver implements SessionDriver {
         stealOperationId(pending.operation) !== stealOperationId(fixed.operation) ||
         toHex(hashValue(pending.fixed)) !== toHex(hashValue(fixed)) ||
         fixed.operation.genesisDigest !== this.digest ||
-        fixed.operation.epoch !== context.crypto?.epoch ||
+        fixed.operation.epoch > (context.crypto?.epoch ?? -1) ||
         fixed.operation.thief.encryptionKey !==
           this.genesis.seats.find((item) => item.seat === seat)?.encryptionKey
       )
@@ -333,7 +348,7 @@ export class VerifiedSessionDriver implements SessionDriver {
     const source = sourceResult.value;
     try {
       const secret = source.encryptionSecret();
-      const receipt = createStealReceipt(fixed, secret, signingKey);
+      const receipt = createStealReceipt(fixed, secret, signingKey, signer.value);
       if (receipt.ok) return success({ kind: 'receipt', value: receipt.value });
       if (
         ![
@@ -350,7 +365,7 @@ export class VerifiedSessionDriver implements SessionDriver {
         fixed: fixed.entry,
       });
       try {
-        const dispute = createStealDispute(fixed, secret, signingKey, seed);
+        const dispute = createStealDispute(fixed, secret, signingKey, seed, signer.value);
         return dispute.ok ? success({ kind: 'dispute', value: dispute.value }) : dispute;
       } finally {
         seed.fill(0);
@@ -389,6 +404,7 @@ export class VerifiedSessionDriver implements SessionDriver {
       context.state,
       crypto.hands,
       crypto.epoch,
+      context.authority,
     );
     if (!validPending.ok) return validPending;
     let sameOperation = false;
@@ -405,7 +421,7 @@ export class VerifiedSessionDriver implements SessionDriver {
       !sameOperation ||
       !pending.remaining.includes(seat) ||
       operation.genesisDigest !== this.digest ||
-      operation.epoch !== crypto.epoch ||
+      operation.epoch > crypto.epoch ||
       !victim ||
       victim.commitment !== hand?.commitments[operation.resource]
     )
@@ -706,7 +722,14 @@ export class VerifiedSessionDriver implements SessionDriver {
           'verified-hidden-steal',
           'Certified hidden steal is missing its fixed operation',
         );
-      const receipt = verifyStealResult(steal, input, payload.evidence);
+      const signer = resolveArtifactSigner(
+        before.authority,
+        before.genesis,
+        before.crypto?.epoch ?? 0,
+        steal.operation.thief.seat,
+      );
+      if (!signer.ok) return signer;
+      const receipt = verifyStealResult(steal, input, payload.evidence, signer.value);
       if (!receipt.ok) return receipt;
       const { operation, fixed } = steal;
       let victimOpening: StealOpening | null = null;
@@ -756,6 +779,7 @@ export class VerifiedSessionDriver implements SessionDriver {
             operation,
             fixed.contribution,
             source.encryptionSecret(),
+            fixed.signer,
           );
           if (!opened.ok) return opened;
           thiefOpening = opened.value;

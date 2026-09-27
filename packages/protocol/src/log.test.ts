@@ -283,9 +283,7 @@ describe('signed commands and next log entries', () => {
         }),
       ),
     ).toBe('membership-required');
-    expect(validate(payload({ kind: 'membership', change: { seat: 0 } }))).toBe(
-      'membership-unavailable',
-    );
+    expect(validate(payload({ kind: 'membership', change: { seat: 0 } }))).toBe('recovery-context');
     expect(validate(payload({ kind: 'genesis', genesis: context.genesis }))).toBe(
       'duplicate-genesis',
     );

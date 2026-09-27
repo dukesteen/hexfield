@@ -10,6 +10,7 @@ import { advanceContext, proposerFor, validateCertifiedEntry } from './proposal.
 import type { CertifiedEntry, ProposalContext } from './proposal.js';
 import { authenticatedCheatSigner, verifyCheatProof } from './cheat-proof.js';
 import type { CheatFinding } from './cheat-proof.js';
+import { initialSeatAuthorities } from './authority.js';
 
 const MAX_HISTORICAL_CONTEXTS = 16;
 
@@ -34,16 +35,28 @@ export function initialProposalContext(
   const checked = validateGenesisEntry(genesisEntry, engine, policy.genesis);
   if (!checked.ok) return checked;
   const { genesis, state, entry } = checked.value;
+  const authority = initialSeatAuthorities(genesis);
+  if (!authority.ok) return authority;
   const crypto = initializeCryptoContext(
     genesis,
     engine,
     state,
     entry,
     policy.entry.randomDerivations,
+    authority.value,
   );
   if (!crypto.ok) return crypto;
   return success({
-    log: { genesis, engine, state, head: entry, lastNonces: new Map(), crypto: crypto.value },
+    log: {
+      genesis,
+      engine,
+      state,
+      head: entry,
+      lastNonces: new Map(),
+      crypto: crypto.value,
+      authority: authority.value,
+      recovery: { authorizations: [], pending: null, completed: [] },
+    },
     membership: {
       genesisDigest: genesisDigest(genesis),
       epoch: 0,
@@ -81,6 +94,13 @@ function replayCertifiedPrefixWithCache(
   const certified: CertifiedEntry[] = [];
   const historical = new Map<number, ProposalContext>();
   const cheatHistorical = new Map<number, ProposalContext>();
+  const controllerTimeline = [
+    {
+      atSeq: 0,
+      authority: initial.value.log.authority,
+      epoch: initial.value.log.crypto?.epoch ?? initial.value.log.authority?.epoch ?? 0,
+    },
+  ];
   let context: ProposalContext = {
     ...initial.value,
     verifyHistoricalCheat: (claim) => {
@@ -90,8 +110,17 @@ function replayCertifiedPrefixWithCache(
       const parentEntry = atSeq === 0 ? initial.value.log.head : certified[atSeq - 1]?.entry;
       if (!parentEntry || claim.evidence.at.hash !== entryHash(parentEntry))
         return failure('cheat-history', 'Certified evidence parent hash does not match');
-      if (!authenticatedCheatSigner(claim, initial.value.log.genesis))
-        return failure('cheat-signature', 'Cheat evidence has no authenticated genesis signer');
+      const parentAuthority = controllerTimeline.findLast((item) => item.atSeq <= atSeq);
+      if (
+        !parentAuthority ||
+        !authenticatedCheatSigner(
+          claim,
+          initial.value.log.genesis,
+          parentAuthority.authority,
+          parentAuthority.epoch,
+        )
+      )
+        return failure('cheat-signature', 'Cheat evidence has no authenticated controller');
       const key = toHex(hashValue({ domain: 'cp2p/v1/cheat-claim-cache', claim }));
       const previous = verifiedFindings.get(key);
       if (previous) return success(previous);
@@ -173,6 +202,13 @@ function replayCertifiedPrefixWithCache(
     events.push(...next.events);
     const advanced = advanceContext(context, next);
     if (!advanced.ok) return advanced;
+    if (advanced.value.log.authority !== context.log.authority) {
+      controllerTimeline.push({
+        atSeq: next.entry.seq,
+        authority: advanced.value.log.authority,
+        epoch: advanced.value.log.crypto?.epoch ?? advanced.value.log.authority?.epoch ?? 0,
+      });
+    }
     const visited = onEntry?.(next, advanced.value);
     if (visited && !visited.ok) return visited;
     context = advanced.value;
@@ -189,6 +225,8 @@ export function snapshotFromContext(context: ProposalContext) {
       hash: entryHash(context.log.head),
       state: context.log.state,
       crypto: context.log.crypto,
+      authority: context.log.authority ?? null,
+      recovery: context.log.recovery ?? null,
       lastNonces: [...context.log.lastNonces].toSorted(([a], [b]) => a - b),
       membership: context.membership,
       excludedProposers: context.excludedProposers,

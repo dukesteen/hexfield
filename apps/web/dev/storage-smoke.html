@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Native escrow storage check</title>
+    <title>Native storage and journal check</title>
     <style>
       body {
         max-width: 48rem;
@@ -25,12 +25,13 @@
     </style>
   </head>
   <body>
-    <h1>Native escrow storage check</h1>
+    <h1>Native storage and journal check</h1>
     <p>
       Two workers share native IndexedDB and Web Locks on this origin. This creates a few uniquely
-      named verification records. It does not use real game keys.
+      named verification records and a synthetic signed protocol journal. It does not use real game
+      keys or store private test keys.
     </p>
-    <button id="run" type="button">Run storage check</button>
+    <button id="run" type="button">Run native storage check</button>
     <pre id="output" aria-live="polite">Ready.</pre>
     <script type="module" src="/src/dev/storage-smoke.ts"></script>
   </body>

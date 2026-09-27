@@ -53,6 +53,27 @@ function prove(
 }
 
 describe('monopoly count reveal helpers', () => {
+  test('uses a replacement controller only when its seat matches the frozen victim', () => {
+    const operation = makeOperation();
+    const replacement = identityFromSecret(new Uint8Array(32).fill(71));
+    const signer = {
+      seat: 0,
+      publicKey: replacement.peerId,
+      generation: { seq: 20, hash: 'cd'.repeat(32) },
+    } as const;
+    const signed = signCountContribution(
+      operation,
+      0,
+      0,
+      prove(operation, 0, 0, 5n, seeds[0] ?? new Uint8Array(32)),
+      replacement.secretKey,
+      signer,
+    );
+    expect(verifyCountContribution(signed, operation, signer).ok).toBe(true);
+    expect(verifyCountContribution(signed, operation).ok).toBe(false);
+    expect(verifyCountContribution(signed, operation, { ...signer, seat: 1 }).ok).toBe(false);
+  });
+
   test('proves and verifies zero and positive counts with nonzero blindings', () => {
     const operation = makeOperation();
     const zero = signCountContribution(

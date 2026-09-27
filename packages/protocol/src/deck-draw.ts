@@ -27,6 +27,7 @@ import {
   signature64Schema,
 } from './schema-values.js';
 import { parseCanonical } from './validation.js';
+import type { ArtifactSigner } from './authority-types.js';
 
 export interface DeckDrawRequest {
   genesisDigest: string;
@@ -235,11 +236,18 @@ function verifiedUnlockProof(
 export function verifyDeckUnlockPrefix(
   operation: DeckDrawOperation,
   value: unknown,
+  signers?: readonly ArtifactSigner[],
 ): Result<{ operation: DeckDrawOperation; point: string; unlocks: SignedDeckUnlock[] }> {
   const parsedOperation = validateDeckDrawOperation(operation);
   if (!parsedOperation.ok) return parsedOperation;
   const op = parsedOperation.value;
   const expected = op.participants.filter((participant) => participant.seat !== op.seat);
+  if (
+    signers &&
+    (signers.length !== expected.length ||
+      signers.some((signer, index) => signer.seat !== expected[index]?.seat))
+  )
+    return failure('deck-unlock-authority', 'Unlock signer roster differs from the frozen draw');
   const parsed = parseCanonical(
     value,
     v.pipe(v.array(deckUnlockSchema), v.maxLength(expected.length)),
@@ -256,7 +264,14 @@ export function verifyDeckUnlockPrefix(
       unlock.body.operationId !== operationId
     )
       return failure('deck-unlock-order', 'Unlocks must follow the frozen draw and seat order');
-    if (!verifyObject('deck-unlock', unlock.body, unlock.sig, parsePeerId(participant.publicKey)))
+    if (
+      !verifyObject(
+        'deck-unlock',
+        unlock.body,
+        unlock.sig,
+        parsePeerId(signers?.[step]?.publicKey ?? participant.publicKey),
+      )
+    )
       return failure('deck-unlock-signature', 'The partial unlock signature is invalid');
     try {
       decodePoint(unlock.body.point, { nonIdentity: true });
@@ -283,15 +298,19 @@ export function signDeckUnlock(
   lock: bigint,
   seed: Uint8Array,
   key: Uint8Array,
+  signers?: readonly ArtifactSigner[],
 ): SignedDeckUnlock {
-  const previous = checked(verifyDeckUnlockPrefix(operation, prefix));
+  const previous = checked(verifyDeckUnlockPrefix(operation, prefix, signers));
   const step = previous.unlocks.length;
   const participant = previous.operation.participants.filter(
     (item) => item.seat !== previous.operation.seat,
   )[step];
   if (!participant) throw new RangeError('This draw has no remaining unlock');
   const identity = identityFromSecret(key);
-  const own = identity.peerId === participant.publicKey;
+  const signer = signers?.[step];
+  const own =
+    identity.peerId === (signer?.publicKey ?? participant.publicKey) &&
+    (!signer || signer.seat === participant.seat);
   identity.secretKey.fill(0);
   if (!own) throw new RangeError('The signer is not the next unlocking seat');
   if (encodePoint(scalePoint(G, lock)) !== participant.lockKey)
@@ -312,18 +331,20 @@ export function verifyDeckUnlock(
   operation: DeckDrawOperation,
   prefix: readonly SignedDeckUnlock[],
   value: unknown,
+  signers?: readonly ArtifactSigner[],
 ): Result<SignedDeckUnlock> {
   const parsed = parseCanonical(value, deckUnlockSchema);
   if (!parsed.ok) return parsed;
-  const verified = verifyDeckUnlockPrefix(operation, [...prefix, parsed.value]);
+  const verified = verifyDeckUnlockPrefix(operation, [...prefix, parsed.value], signers);
   return verified.ok ? success(parsed.value) : verified;
 }
 
 export function completeDeckDraw(
   operation: DeckDrawOperation,
   evidence: unknown,
+  signers?: readonly ArtifactSigner[],
 ): Result<DealtDeckCard> {
-  const verified = verifyDeckUnlockPrefix(operation, evidence);
+  const verified = verifyDeckUnlockPrefix(operation, evidence, signers);
   if (!verified.ok) return verified;
   if (verified.value.unlocks.length !== verified.value.operation.participants.length - 1)
     return failure('deck-unlock-incomplete', 'Every other seat must unlock before dealing');

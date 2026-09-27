@@ -3,6 +3,8 @@ import { parsePeerId, signObject, verifyObject } from '@cp2p/crypto';
 import { RESOURCES, failure, success } from '@cp2p/engine';
 import type { Result, Seat, TradeOffer } from '@cp2p/engine';
 import * as v from 'valibot';
+import { resolveArtifactSigner } from './authority.js';
+import type { SeatAuthorities } from './authority-types.js';
 import { entryHash, genesisDigest } from './genesis.js';
 import { handProofsSchema, planHandTransition, verifyHandProof } from './hand-transition.js';
 import type { HandProof, HandProofBinding, HandTransitionPlan } from './hand-transition.js';
@@ -188,6 +190,16 @@ export function authorizeTradeProof(
   if (!planned.ok) return planned;
   if (owner !== planned.value.owner || planned.value.indices.length === 0)
     return failure('trade-proof-owner', 'This owner has no required proof for the trade');
+  const epoch = context.crypto?.epoch ?? context.authority?.epoch ?? 0;
+  const finalizer = resolveArtifactSigner(
+    context.authority,
+    context.genesis,
+    epoch,
+    planned.value.body.seat,
+  );
+  if (!finalizer.ok) return finalizer;
+  const ownerSigner = resolveArtifactSigner(context.authority, context.genesis, epoch, owner);
+  if (!ownerSigner.ok) return ownerSigner;
   return planned;
 }
 
@@ -213,15 +225,20 @@ export function verifyTradeProofRequest(
   const parsed = parseCanonical(value, signedTradeProofRequestSchema);
   if (!parsed.ok) return parsed;
   const request = parsed.value;
-  const finalizer = context.genesis.seats.find((seat) => seat.seat === request.body.seat);
-  if (!finalizer) return failure('trade-proof-finalizer', 'Request signer has no genesis seat');
+  const finalizer = resolveArtifactSigner(
+    context.authority,
+    context.genesis,
+    context.crypto?.epoch ?? context.authority?.epoch ?? 0,
+    request.body.seat,
+  );
+  if (!finalizer.ok) return finalizer;
   try {
     if (
       !verifyObject(
         'trade-proof-request',
         request.body,
         request.sig,
-        parsePeerId(finalizer.publicKey),
+        parsePeerId(finalizer.value.publicKey),
       )
     )
       return failure('trade-proof-signature', 'Finalizer signature is invalid');
@@ -256,15 +273,20 @@ export function verifyTradeProofResponse(
   const parsed = parseCanonical(value, signedTradeProofResponseSchema);
   if (!parsed.ok) return parsed;
   const response = parsed.value;
-  const owner = context.genesis.seats.find((seat) => seat.seat === response.body.seat);
-  if (!owner) return failure('trade-proof-owner', 'Response signer has no genesis seat');
+  const owner = resolveArtifactSigner(
+    context.authority,
+    context.genesis,
+    context.crypto?.epoch ?? context.authority?.epoch ?? 0,
+    response.body.seat,
+  );
+  if (!owner.ok) return owner;
   try {
     if (
       !verifyObject(
         'trade-proof-response',
         response.body,
         response.sig,
-        parsePeerId(owner.publicKey),
+        parsePeerId(owner.value.publicKey),
       )
     )
       return failure('trade-proof-response-signature', 'Owner signature is invalid');
@@ -292,7 +314,18 @@ export function verifyTradeProofResponse(
   return success(response);
 }
 
-export function tradeProofHost(genesis: Genesis, seat: Seat): string | null {
+export function tradeProofHost(
+  genesis: Genesis,
+  seat: Seat,
+  authority?: SeatAuthorities,
+): string | null {
+  const signer = resolveArtifactSigner(authority, genesis, authority?.epoch ?? 0, seat);
+  if (!signer.ok) return null;
+  if (authority) {
+    const controller = authority.controllers.find((item) => item.seat === seat);
+    const host = authority.controllers.find((item) => item.seat === controller?.hostSeat);
+    return host?.kind === 'human' && host.status === 'active' ? host.publicKey : null;
+  }
   const owner = genesis.seats.find((item) => item.seat === seat);
   return owner ? (owner.kind === 'human' ? owner.publicKey : owner.botHost) : null;
 }

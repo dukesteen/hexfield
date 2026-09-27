@@ -250,12 +250,18 @@ importers:
 
   packages/storage:
     dependencies:
+      '@cp2p/codec':
+        specifier: workspace:*
+        version: link:../codec
       '@cp2p/protocol':
         specifier: workspace:*
         version: link:../protocol
       idb:
         specifier: ^8.0.0
         version: 8.0.3
+      valibot:
+        specifier: ^1.0.0
+        version: 1.5.0(typescript@5.9.3)
     devDependencies:
       fake-indexeddb:
         specifier: ^6.2.5

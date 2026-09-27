@@ -25,6 +25,8 @@ import {
   signature64Schema,
 } from './schema-values.js';
 import { MAX_MESSAGE_BYTES } from './validation.js';
+import type { ArtifactSigner } from './authority-types.js';
+import { identityFromSecret } from '@cp2p/crypto';
 
 export type BeaconContribution =
   | { kind: 'beacon-reveal'; signed: SignedBeaconReveal }
@@ -98,7 +100,9 @@ export async function prepareBeaconContribution(
   key: Uint8Array,
   source: BeaconSecretSource,
   store: BeaconContributionStore,
+  signer?: ArtifactSigner,
 ): Promise<Result<BeaconContribution | null>> {
+  const currentSigner = signer ? { ...signer, generation: { ...signer.generation } } : undefined;
   const decks = validateDeckLedger(crypto.decks);
   if (!decks.ok) return decks;
   if (!decksReady(decks.value)) return success(null);
@@ -114,9 +118,28 @@ export async function prepareBeaconContribution(
   if (!operation.ok) return operation;
   const participant = operation.value.participants.find((item) => item.seat === seat);
   if (!participant) return success(null);
+  if (crypto.epoch > 0 && !currentSigner)
+    return failure('beacon-contribution-authority', 'Recovered contribution needs current signer');
+  if (currentSigner && currentSigner.seat !== seat)
+    return failure('beacon-contribution-authority', 'Signer belongs to another seat');
+  let signingKey: Uint8Array | null = null;
+  try {
+    signingKey = key.slice();
+    const identity = identityFromSecret(signingKey);
+    const matches = identity.peerId === (currentSigner?.publicKey ?? participant.publicKey);
+    identity.secretKey.fill(0);
+    if (!matches) {
+      signingKey.fill(0);
+      return failure('beacon-contribution-key', 'Local signing key differs from controller');
+    }
+  } catch {
+    signingKey?.fill(0);
+    return failure('beacon-contribution-key', 'Local signing key is invalid');
+  }
   const operationId = extensionPending
     ? beaconExtensionOperationId(operation.value)
     : beaconOperationId(operation.value);
+  const id = `${operationId}${currentSigner ? `/${currentSigner.generation.seq}/${currentSigner.generation.hash}` : ''}`;
 
   const verifyStored = (bytes: Uint8Array): Result<BeaconContribution> => {
     try {
@@ -140,12 +163,12 @@ export async function prepareBeaconContribution(
             'beacon-contribution-kind',
             'Stored beacon contribution has the wrong kind',
           );
-        const verified = verifyBeaconExtension(contribution.signed, operation.value);
+        const verified = verifyBeaconExtension(contribution.signed, operation.value, currentSigner);
         return verified.ok ? success(contribution) : verified;
       }
       if (contribution.kind !== 'beacon-reveal')
         return failure('beacon-contribution-kind', 'Stored beacon contribution has the wrong kind');
-      const verified = verifyBeaconReveal(contribution.signed, operation.value);
+      const verified = verifyBeaconReveal(contribution.signed, operation.value, currentSigner);
       return verified.ok ? success(contribution) : verified;
     } catch {
       return failure(
@@ -156,7 +179,7 @@ export async function prepareBeaconContribution(
   };
 
   try {
-    const persisted = await store.load(operationId);
+    const persisted = await store.load(id);
     if (persisted !== null) return verifyStored(persisted);
     let contribution: BeaconContribution;
     try {
@@ -164,7 +187,14 @@ export async function prepareBeaconContribution(
         const next = source.extension(participant.chainEpoch + 1);
         contribution = {
           kind: 'beacon-extension',
-          signed: signBeaconExtension(operation.value, seat, next.length, next.tip, key),
+          signed: signBeaconExtension(
+            operation.value,
+            seat,
+            next.length,
+            next.tip,
+            signingKey,
+            currentSigner,
+          ),
         };
       } else {
         contribution = {
@@ -173,7 +203,8 @@ export async function prepareBeaconContribution(
             operation.value,
             seat,
             source.link(participant.chainEpoch, participant.index),
-            key,
+            signingKey,
+            currentSigner,
           ),
         };
       }
@@ -184,12 +215,14 @@ export async function prepareBeaconContribution(
       );
     }
     const bytes = canonicalEncode(contribution);
-    if (await store.putIfAbsent(operationId, bytes)) return success(contribution);
-    const winner = await store.load(operationId);
+    if (await store.putIfAbsent(id, bytes)) return success(contribution);
+    const winner = await store.load(id);
     return winner === null
       ? failure('beacon-contribution-store', 'Winning beacon contribution is missing')
       : verifyStored(winner);
   } catch {
     return failure('beacon-contribution-prepare', 'Beacon contribution could not be persisted');
+  } finally {
+    signingKey.fill(0);
   }
 }

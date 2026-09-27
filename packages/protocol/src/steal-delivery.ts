@@ -26,6 +26,7 @@ import { RESOURCES, failure, success } from '@cp2p/engine';
 import type { Resource, Result, Seat } from '@cp2p/engine';
 import * as v from 'valibot';
 import type { EntryRef } from './beacon-state.js';
+import type { ArtifactSigner } from './authority-types.js';
 import { MAX_HAND_RESOURCE_COUNT, verifyHandOpening } from './hand-commitments.js';
 import {
   hashSchema,
@@ -70,6 +71,8 @@ export interface FixedSteal {
   operation: StealOperation;
   contribution: SignedStealContribution;
   entry: EntryRef;
+  /** Signer resolved at this certified fixed entry's parent, not at receipt time. */
+  signer?: ArtifactSigner;
 }
 
 export interface StealOpening {
@@ -268,10 +271,13 @@ export function createStealContribution(
   blindings: Readonly<Record<Resource, string>>,
   seed: Uint8Array,
   signingKey: Uint8Array,
+  signer?: ArtifactSigner,
 ): Result<SignedStealContribution> {
   try {
     const op = checked(validateStealOperation(operation));
-    assertSigner(signingKey, op.victim.publicKey);
+    if (signer && signer.seat !== op.victim.seat)
+      return failure('steal-contribution-signer', 'Controller is not the frozen victim');
+    assertSigner(signingKey, signer?.publicKey ?? op.victim.publicKey);
     const ownedCounts = checked(parseCanonical(counts, resourceCounts));
     const ownedBlindings = checked(parseCanonical(blindings, resourcePoints));
     const opening = verifyHandOpening(
@@ -407,6 +413,7 @@ export function recoverStealTransferOpening(
 export function verifyStealContribution(
   value: unknown,
   operation: StealOperation,
+  signer?: ArtifactSigner,
 ): Result<SignedStealContribution> {
   try {
     const op = checked(validateStealOperation(operation));
@@ -415,7 +422,13 @@ export function verifyStealContribution(
       return failure('steal-contribution-operation', 'Contribution belongs to another steal');
     decodePoint(signed.body.sealed.ephemeral, { nonIdentity: true });
     if (
-      !verifyObject('steal-contribution', signed.body, signed.sig, parsePeerId(op.victim.publicKey))
+      (signer !== undefined && signer.seat !== op.victim.seat) ||
+      !verifyObject(
+        'steal-contribution',
+        signed.body,
+        signed.sig,
+        parsePeerId(signer?.publicKey ?? op.victim.publicKey),
+      )
     )
       return failure('steal-contribution-signature', 'Victim signature is invalid');
     if (
@@ -496,10 +509,11 @@ export function openStealContribution(
   operation: StealOperation,
   value: unknown,
   recipientSecret: bigint,
+  signer?: ArtifactSigner,
 ): Result<StealOpening> {
   try {
     const op = checked(validateStealOperation(operation));
-    const contribution = checked(verifyStealContribution(value, op));
+    const contribution = checked(verifyStealContribution(value, op, signer));
     return openChecked(op, contribution, recipientSecret);
   } catch {
     return failure('steal-opening', 'Could not open the verified contribution');
@@ -514,18 +528,32 @@ function parseFixed(value: FixedSteal): FixedSteal {
         operation: operationSchema,
         contribution: signedStealContributionSchema,
         entry: entryRefSchema,
+        signer: v.optional(
+          v.strictObject({
+            seat: seatSchema,
+            publicKey: key32Schema,
+            generation: entryRefSchema,
+          }),
+        ),
       }),
     ),
   );
   const operation = checked(validateStealOperation(parsed.operation));
   if (parsed.entry.seq <= operation.anchor.seq)
     throw new TypeError('Fixed contribution must follow the certified beacon anchor');
-  return { operation, contribution: parsed.contribution, entry: parsed.entry };
+  return {
+    operation,
+    contribution: parsed.contribution,
+    entry: parsed.entry,
+    ...(parsed.signer === undefined ? {} : { signer: parsed.signer }),
+  };
 }
 
 function checkedFixed(value: FixedSteal): FixedSteal {
   const fixed = parseFixed(value);
-  const contribution = checked(verifyStealContribution(fixed.contribution, fixed.operation));
+  const contribution = checked(
+    verifyStealContribution(fixed.contribution, fixed.operation, fixed.signer),
+  );
   return { ...fixed, contribution };
 }
 
@@ -545,10 +573,13 @@ export function createStealReceipt(
   fixed: FixedSteal,
   recipientSecret: bigint,
   signingKey: Uint8Array,
+  signer?: ArtifactSigner,
 ): Result<SignedStealReceipt> {
   try {
     const verified = checkedFixed(fixed);
-    assertSigner(signingKey, verified.operation.thief.publicKey);
+    if (signer && signer.seat !== verified.operation.thief.seat)
+      return failure('steal-receipt-signer', 'Controller is not the frozen recipient');
+    assertSigner(signingKey, signer?.publicKey ?? verified.operation.thief.publicKey);
     const opening = openChecked(verified.operation, verified.contribution, recipientSecret);
     if (!opening.ok) return opening;
     const body = stealReceiptBinding(verified);
@@ -558,7 +589,11 @@ export function createStealReceipt(
   }
 }
 
-export function verifyStealReceipt(value: unknown, fixed: FixedSteal): Result<SignedStealReceipt> {
+export function verifyStealReceipt(
+  value: unknown,
+  fixed: FixedSteal,
+  signer?: ArtifactSigner,
+): Result<SignedStealReceipt> {
   try {
     const signed = checked(parseCanonical(value, signedStealReceiptSchema));
     const verified = parseFixed(fixed);
@@ -572,12 +607,18 @@ export function verifyStealReceipt(value: unknown, fixed: FixedSteal): Result<Si
         'steal-receipt',
         signed.body,
         signed.sig,
-        parsePeerId(verified.operation.thief.publicKey),
+        parsePeerId(signer?.publicKey ?? verified.operation.thief.publicKey),
       )
     )
       return failure('steal-receipt-signature', 'Recipient signature is invalid');
     // Only an authenticated matching recipient reaches the expensive public proof.
-    const contribution = verifyStealContribution(verified.contribution, verified.operation);
+    if (signer && signer.seat !== verified.operation.thief.seat)
+      return failure('steal-receipt-signer', 'Controller is not the frozen recipient');
+    const contribution = verifyStealContribution(
+      verified.contribution,
+      verified.operation,
+      verified.signer,
+    );
     return contribution.ok ? success(signed) : contribution;
   } catch {
     return failure('steal-receipt', 'Receipt could not be verified');
@@ -615,10 +656,13 @@ export function createStealDispute(
   recipientSecret: bigint,
   signingKey: Uint8Array,
   seed: Uint8Array,
+  signer?: ArtifactSigner,
 ): Result<SignedStealDispute> {
   try {
     const verified = checkedFixed(fixed);
-    assertSigner(signingKey, verified.operation.thief.publicKey);
+    if (signer && signer.seat !== verified.operation.thief.seat)
+      return failure('steal-dispute-signer', 'Controller is not the frozen recipient');
+    assertSigner(signingKey, signer?.publicKey ?? verified.operation.thief.publicKey);
     if (encodePoint(scalePoint(G, recipientSecret)) !== verified.operation.thief.encryptionKey)
       return failure('steal-recipient-key', 'Secret does not match the frozen encryption key');
     const sharedPoint = encodePoint(
@@ -644,7 +688,11 @@ export function createStealDispute(
  * Success authenticates bad delivery. Failure alone is never accusation evidence;
  * any false-complaint accusation must separately authenticate its signed context.
  */
-export function verifyStealDispute(value: unknown, fixed: FixedSteal): Result<SignedStealDispute> {
+export function verifyStealDispute(
+  value: unknown,
+  fixed: FixedSteal,
+  signer?: ArtifactSigner,
+): Result<SignedStealDispute> {
   try {
     const signed = checked(parseCanonical(value, signedStealDisputeSchema));
     const verified = parseFixed(fixed);
@@ -655,7 +703,7 @@ export function verifyStealDispute(value: unknown, fixed: FixedSteal): Result<Si
         'steal-dispute',
         signed.body,
         signed.sig,
-        parsePeerId(verified.operation.thief.publicKey),
+        parsePeerId(signer?.publicKey ?? verified.operation.thief.publicKey),
       )
     )
       return failure('steal-dispute-signature', 'Dispute is not signed by the recipient');
@@ -671,7 +719,13 @@ export function verifyStealDispute(value: unknown, fixed: FixedSteal): Result<Si
     // A signed, DLEQ-authenticated good opening already disproves the complaint.
     if (openDisputed(verified, signed.body.sharedPoint).ok)
       return failure('steal-good-delivery', 'The authenticated opening is valid');
-    const contribution = verifyStealContribution(verified.contribution, verified.operation);
+    if (signer && signer.seat !== verified.operation.thief.seat)
+      return failure('steal-dispute-signer', 'Controller is not the frozen recipient');
+    const contribution = verifyStealContribution(
+      verified.contribution,
+      verified.operation,
+      verified.signer,
+    );
     return contribution.ok ? success(signed) : contribution;
   } catch {
     return failure('steal-dispute', 'Dispute could not be verified');

@@ -18,6 +18,7 @@ import {
   signature64Schema,
 } from './schema-values.js';
 import { parseCanonical } from './validation.js';
+import type { ArtifactSigner } from './authority-types.js';
 
 export interface BeaconParticipant {
   seat: Seat;
@@ -116,6 +117,7 @@ export function signBeaconReveal(
   seat: Seat,
   value: Uint8Array,
   key: Uint8Array,
+  signer?: ArtifactSigner,
 ): SignedBeaconReveal {
   const checked = checkedOperation(operation);
   const participant = checked.participants.find((item) => item.seat === seat);
@@ -125,7 +127,9 @@ export function signBeaconReveal(
   if (!verifyHashChainLink(fromBase64Url(participant.previous), value))
     throw new RangeError('Beacon reveal does not advance its frozen chain');
   const identity = identityFromSecret(key);
-  const matches = identity.peerId === participant.publicKey;
+  const matches =
+    identity.peerId === (signer?.publicKey ?? participant.publicKey) &&
+    (!signer || signer.seat === seat);
   identity.secretKey.fill(0);
   if (!matches) throw new RangeError('Beacon key does not belong to the frozen seat');
   const body = {
@@ -140,6 +144,7 @@ export function signBeaconReveal(
 export function verifyBeaconReveal(
   value: unknown,
   operation: BeaconOperation,
+  signer?: ArtifactSigner,
 ): Result<SignedBeaconReveal> {
   const checked = validateBeaconOperation(operation);
   if (!checked.ok) return checked;
@@ -147,11 +152,20 @@ export function verifyBeaconReveal(
   if (!parsed.ok) return parsed;
   const reveal = parsed.value;
   const participant = checked.value.participants.find((item) => item.seat === reveal.body.seat);
+  if (signer && signer.seat !== reveal.body.seat)
+    return failure('beacon-authority', 'Reveal signer belongs to another seat');
   if (!participant || reveal.body.index !== participant.index)
     return failure('beacon-seat', 'Beacon reveal is not for this participant and chain index');
   if (reveal.body.operationId !== beaconOperationId(checked.value))
     return failure('beacon-operation', 'Beacon reveal belongs to another operation');
-  if (!verifyObject('beacon-reveal', reveal.body, reveal.sig, parsePeerId(participant.publicKey)))
+  if (
+    !verifyObject(
+      'beacon-reveal',
+      reveal.body,
+      reveal.sig,
+      parsePeerId(signer?.publicKey ?? participant.publicKey),
+    )
+  )
     return failure('beacon-signature', 'Beacon reveal signature is invalid');
   if (!verifyHashChainLink(fromBase64Url(participant.previous), fromBase64Url(reveal.body.value)))
     return failure('beacon-link', 'Beacon reveal does not advance its frozen chain');
@@ -182,15 +196,22 @@ function exactReveals(value: unknown, count: number): unknown[] | null {
 export function completeBeacon(
   operation: BeaconOperation,
   reveals: unknown,
+  signers?: readonly ArtifactSigner[],
 ): Result<{ seed: string; reveals: readonly SignedBeaconReveal[] }> {
   const checked = validateBeaconOperation(operation);
   if (!checked.ok) return checked;
   const entries = exactReveals(reveals, checked.value.participants.length);
+  if (
+    signers &&
+    (signers.length !== checked.value.participants.length ||
+      signers.some((signer, index) => signer.seat !== checked.value.participants[index]?.seat))
+  )
+    return failure('beacon-authority', 'Beacon signers differ from the frozen participants');
   if (!entries)
     return failure('beacon-incomplete', 'Beacon needs exactly one reveal per participant');
   const ordered: SignedBeaconReveal[] = [];
   for (const [index, participant] of checked.value.participants.entries()) {
-    const verified = verifyBeaconReveal(entries[index], checked.value);
+    const verified = verifyBeaconReveal(entries[index], checked.value, signers?.[index]);
     if (!verified.ok) return verified;
     if (verified.value.body.seat !== participant.seat)
       return failure('beacon-order', 'Beacon reveals must be in frozen seat order');

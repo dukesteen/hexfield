@@ -14,6 +14,7 @@ import { deckSetupId, validateDeckSetupState } from './deck-setup.js';
 import type { DeckSetupState } from './deck-setup.js';
 import type { DeckSecretSource } from './deck-source.js';
 import { MAX_MESSAGE_BYTES } from './validation.js';
+import type { ArtifactSigner } from './authority-types.js';
 
 export interface DeckContributionStore {
   load(id: string): Promise<Uint8Array | null>;
@@ -39,17 +40,36 @@ export async function prepareDeckUnlock(
   key: Uint8Array,
   source: Pick<DeckSecretSource, 'lock' | 'proofSeed'>,
   store: DeckContributionStore,
+  signers?: readonly ArtifactSigner[],
+  localSigner?: ArtifactSigner,
 ): Promise<Result<SignedDeckUnlock | null>> {
+  const frozenSigners = signers?.map((signer) => ({
+    ...signer,
+    generation: { ...signer.generation },
+  }));
+  const frozenLocalSigner = localSigner
+    ? { ...localSigner, generation: { ...localSigner.generation } }
+    : undefined;
   const validatedSetup = validateDeckSetupState(setup);
   if (!validatedSetup.ok) return validatedSetup;
   const frozen = freezeDeckDraw(validatedSetup.value, request);
   if (!frozen.ok) return frozen;
-  const checked = verifyDeckUnlockPrefix(frozen.value, prefix);
+  const checked = verifyDeckUnlockPrefix(frozen.value, prefix, frozenSigners);
   if (!checked.ok) return checked;
   const op = checked.value.operation;
   const participant = op.participants.find((item) => item.seat === seat);
   if (!participant)
     return failure('deck-outbox-seat', 'Only a frozen participant can reserve this position');
+  const unlockers = op.participants.filter((item) => item.seat !== op.seat);
+  const signer = frozenLocalSigner;
+  if (signer && signer.seat !== seat)
+    return failure('deck-outbox-authority', 'Local signer belongs to another seat');
+  if (
+    frozenSigners &&
+    (frozenSigners.length !== unlockers.length ||
+      frozenSigners.some((item, index) => item.seat !== unlockers[index]?.seat))
+  )
+    return failure('deck-outbox-authority', 'Unlock signers differ from frozen seat order');
   let setupId: string;
   try {
     setupId = deckSetupId(validatedSetup.value.definition);
@@ -68,7 +88,7 @@ export async function prepareDeckUnlock(
   try {
     const identity = identityFromSecret(signingKey);
     try {
-      signerMatches = identity.peerId === participant.publicKey;
+      signerMatches = identity.peerId === (signer?.publicKey ?? participant.publicKey);
     } finally {
       identity.secretKey.fill(0);
     }
@@ -85,12 +105,17 @@ export async function prepareDeckUnlock(
   const positionId = `${setupId}/${op.position}/${seat}`;
   const reservationId = `deck-position/${positionId}`;
   const operationId = deckDrawOperationId(op);
-  const id = `deck-unlock/${positionId}`;
+  const id = `deck-unlock/${positionId}${signer ? `/${signer.generation.seq}/${signer.generation.hash}` : ''}`;
   const stored = (bytes: Uint8Array): Result<SignedDeckUnlock> => {
     try {
       if (bytes.byteLength > MAX_MESSAGE_BYTES)
         return failure('deck-outbox-record', 'Stored unlock exceeds its byte limit');
-      const result = verifyDeckUnlock(op, checked.value.unlocks, canonicalDecode(bytes));
+      const result = verifyDeckUnlock(
+        op,
+        checked.value.unlocks,
+        canonicalDecode(bytes),
+        frozenSigners,
+      );
       return result.ok
         ? result
         : failure('deck-outbox-record', 'Stored unlock is corrupt or belongs to another operation');
@@ -134,6 +159,7 @@ export async function prepareDeckUnlock(
           source.lock(op.position),
           seed,
           signingKey,
+          frozenSigners,
         );
       } finally {
         seed.fill(0);
