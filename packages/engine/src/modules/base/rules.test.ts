@@ -902,7 +902,10 @@ describe('base rule handlers', () => {
       ...engine.createPrivateState(0),
       slots: { 'dev:0': 'victoryPoint' },
     };
-    expect(engine.applyPrivate(priv, state, input).ok).toBe(true);
+    const afterClaim = engine.applyPrivate(priv, state, input);
+    expect(afterClaim.ok).toBe(true);
+    if (!afterClaim.ok) throw new Error(afterClaim.error.message);
+    expect(afterClaim.value.slots['dev:0']).toBeUndefined();
     const claimed = engine.apply(state, input);
     expect(claimed.ok).toBe(true);
     if (!claimed.ok) return;

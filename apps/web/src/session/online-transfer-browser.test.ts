@@ -3,12 +3,148 @@ import { identityFromSecret } from '@cp2p/crypto';
 import { MemoryEscrowLifecycleStore, VirtualClock } from '@cp2p/protocol/testing';
 import { afterEach, expect, test, vi } from 'vitest';
 import type { OnlineWorkerClient } from './online-worker-client.js';
+import type { OnlineTransferChannel } from './online-transfer-channel.js';
 import { OnlineTransferBrowser } from './online-transfer-browser.js';
 import { createTransferInvite, OnlineTransferLink } from './online-transfer-link.js';
 import type { OnlineTransferLinkOptions } from './online-transfer-link.js';
 import { OnlineTransferRecordStore, saveCurrentTransferInvite } from './online-transfer-records.js';
 import type { OnlineTransferExchangeRecord } from './online-transfer-records.js';
 import type { OnlineWorkerRequestBody, OnlineWorkerReplyByKind } from './online-worker-messages.js';
+
+test('a finished destination restores only a worker-verified cancellation and retries its receipt', async () => {
+  const source = identityFromSecret(new Uint8Array(32).fill(111));
+  const destination = identityFromSecret(new Uint8Array(32).fill(112));
+  const invite = createTransferInvite({
+    attemptId: 'C'.repeat(43),
+    gameId: 'c'.repeat(22),
+    seat: 0,
+    genesisDigest: testKey(8),
+    roomId: 'transferae',
+    serverUrl: 'wss://signal.example/',
+    identity: { ...source, dispose: () => source.secretKey.fill(0) },
+  });
+  const store = new MemoryEscrowLifecycleStore();
+  const records = new OnlineTransferRecordStore(store, destination.peerId, invite, 'destination');
+  await records.save({
+    ...sourceRecord(invite, destination.peerId),
+    role: 'destination',
+    approved: null,
+  });
+  await records.finish();
+  const callbacks: OnlineTransferLinkOptions[] = [];
+  vi.spyOn(OnlineTransferLink, 'openDestination').mockImplementation((options) => {
+    callbacks.push(options);
+    return asTestLink({ close() {} });
+  });
+  const workerCalls: string[] = [];
+  const worker = asTestWorker({
+    async request(body: OnlineWorkerRequestBody) {
+      workerCalls.push(body.kind);
+      if (body.kind !== 'initializeTransfer')
+        throw new Error('Terminal restore needs no other worker request');
+      return {
+        ok: true,
+        value: {
+          phase: 'cancelled',
+          gameId: invite.body.gameId,
+          head: ref(12),
+          authorization: ref(11),
+          outcome: { authorization: ref(11), entry: ref(12), outcome: 'cancelled' },
+        },
+      };
+    },
+    async shutdown() {
+      workerCalls.push('shutdown');
+    },
+  });
+  let browser: OnlineTransferBrowser | undefined;
+  try {
+    browser = await OnlineTransferBrowser.openDestination({
+      invite,
+      identity: { ...destination, dispose: () => destination.secretKey.fill(0) },
+      store,
+      worker,
+      clock: new VirtualClock(),
+      network: {},
+    });
+    expect(workerCalls).toEqual(['initializeTransfer', 'shutdown']);
+    expect(browser.getSnapshot()).toMatchObject({
+      phase: 'cancelled',
+      promotedGameId: null,
+      error: null,
+    });
+    callbacks[0]?.onError(new Error('Retired source is unavailable'));
+    expect(browser.getSnapshot()).toMatchObject({ phase: 'cancelled', error: null });
+    const sent: string[] = [];
+    callbacks[0]?.onChannel(
+      asTestChannel({
+        async send(artifact: { kind: string }) {
+          sent.push(artifact.kind);
+        },
+      }),
+    );
+    await vi.waitFor(() => expect(sent).toEqual(['received']));
+    expect(browser.getSnapshot()).toMatchObject({ phase: 'cancelled', promotedGameId: null });
+  } finally {
+    await browser?.close();
+    source.secretKey.fill(0);
+    destination.secretKey.fill(0);
+  }
+});
+
+test('a finished destination record cannot assert cancellation without a verified outcome', async () => {
+  const source = identityFromSecret(new Uint8Array(32).fill(113));
+  const destination = identityFromSecret(new Uint8Array(32).fill(114));
+  const invite = createTransferInvite({
+    attemptId: 'D'.repeat(43),
+    gameId: 'd'.repeat(22),
+    seat: 0,
+    genesisDigest: testKey(9),
+    roomId: 'transferaf',
+    serverUrl: 'wss://signal.example/',
+    identity: { ...source, dispose: () => source.secretKey.fill(0) },
+  });
+  const store = new MemoryEscrowLifecycleStore();
+  const records = new OnlineTransferRecordStore(store, destination.peerId, invite, 'destination');
+  await records.save({
+    ...sourceRecord(invite, destination.peerId),
+    role: 'destination',
+    approved: null,
+  });
+  await records.finish();
+  const link = vi.spyOn(OnlineTransferLink, 'openDestination');
+  const worker = asTestWorker({
+    async request() {
+      return {
+        ok: true,
+        value: {
+          phase: 'cancelled',
+          gameId: invite.body.gameId,
+          head: ref(12),
+          authorization: ref(11),
+          outcome: null,
+        },
+      };
+    },
+    async shutdown() {},
+  });
+  try {
+    await expect(
+      OnlineTransferBrowser.openDestination({
+        invite,
+        identity: { ...destination, dispose: () => destination.secretKey.fill(0) },
+        store,
+        worker,
+        clock: new VirtualClock(),
+        network: {},
+      }),
+    ).rejects.toThrow('matching certified terminal result');
+    expect(link).not.toHaveBeenCalled();
+  } finally {
+    source.secretKey.fill(0);
+    destination.secretKey.fill(0);
+  }
+});
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -20,6 +156,11 @@ function asTestLink(value: object): OnlineTransferLink {
 function asTestWorker(value: object): OnlineWorkerClient {
   // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Browser tests provide only the worker requests needed by their scenario.
   return value as unknown as OnlineWorkerClient;
+}
+
+function asTestChannel(value: object): OnlineTransferChannel {
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The mock implements only receipt sending used by terminal retry.
+  return value as OnlineTransferChannel;
 }
 
 test('an error from a replaced transfer link cannot clear the current browser connection', async () => {

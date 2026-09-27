@@ -42,13 +42,11 @@ function required<T>(item: T | null | undefined): T {
 
 const master = (seat: Seat) => scalarToBytes(BigInt(17 + seat));
 
-// The current v4 seed-4 route has not reached 3 VP within this bound. Keep the
-// complete acceptance assertion available without making every unit run wait for it.
+// Keep this complete-game acceptance opt-in so routine unit runs stay bounded.
 test('a recovered game reaches a real result and audits the original master from durable recovery', async ({
   skip,
 }) => {
-  if (process.env.CP2P_RECOVERED_AUDIT_RUN !== '1')
-    skip('Current v4 seed-4 route has not reached 3 VP within 180 seconds');
+  if (process.env.CP2P_RECOVERED_AUDIT_RUN !== '1') skip('Opt-in recovered full-game audit');
   const fixture = createRecoveryFixture({
     seed: 4,
     masterBackedBeacon: true,
@@ -70,6 +68,7 @@ test('a recovered game reaches a real result and audits the original master from
     botRngs.set(seat, createBotRng(hashValue(['cp2p-sim-v1', 4, 0, 'bot', seat])));
   }
   let submittedCommands = 0;
+  const privateDrawAtCommit = new Map<number, Set<Seat>>();
   let privateCommitError: {
     localSeat: Seat;
     seq: number;
@@ -209,6 +208,22 @@ test('a recovered game reaches a real result and audits the original master from
           const committed = driver.committedEntry.bind(driver);
           driver.committedEntry = (entry, before, after) => {
             const result = committed(entry, before, after);
+            const input = entry.input;
+            const drawer = fixture.genesis.config.seats.find(
+              (candidate) => candidate === input?.seat,
+            );
+            if (
+              result.ok &&
+              input?.kind === 'system' &&
+              input.type === 'CARD_DEALT' &&
+              drawer !== undefined &&
+              typeof input.slotId === 'string' &&
+              driver.privateState(drawer)?.slots[input.slotId] !== undefined
+            ) {
+              const owners = privateDrawAtCommit.get(entry.entry.seq) ?? new Set<Seat>();
+              owners.add(seat);
+              privateDrawAtCommit.set(entry.entry.seq, owners);
+            }
             if (!result.ok && !privateCommitError)
               privateCommitError = {
                 localSeat: seat,
@@ -301,8 +316,33 @@ test('a recovered game reaches a real result and audits the original master from
           (session) => session.getCommittedHead().seq >= dealt.entry.seq,
         ),
       );
-      const owner = required(sessions.get(drawer === 0 ? 1 : drawer));
-      expect(owner.getPrivate(drawer)?.slots[slotId]).toBeDefined();
+      const ownerSeat = drawer === 0 ? 1 : drawer;
+      const owner = required(sessions.get(ownerSeat));
+      const privateState = owner.getPrivate(drawer);
+      if (!privateDrawAtCommit.get(dealt.entry.seq)?.has(ownerSeat))
+        throw new Error(
+          `Certified owner did not decode the slot at deal commit: ${JSON.stringify({
+            drawer,
+            ownerSeat,
+            slotId,
+            dealSeq: dealt.entry.seq,
+            observedOwnersAtDeal: [...(privateDrawAtCommit.get(dealt.entry.seq) ?? [])],
+            ownerSeq: owner.getCommittedHead().seq,
+            ownerStatus: owner.getProtocolStatus(),
+            publicSlots: owner.getState().seats.find((seat) => seat.seat === drawer)?.cardSlots,
+            privateSlotIds: Object.keys(privateState?.slots ?? {}),
+            laterInputs: host
+              .exportSave()
+              .entries.filter(({ entry }) => entry.seq > dealt.entry.seq)
+              .map(({ entry }) =>
+                entry.payload.kind === 'command'
+                  ? entry.payload.signed.body.command.type
+                  : entry.payload.kind === 'system'
+                    ? entry.payload.input.type
+                    : entry.payload.kind,
+              ),
+          })}`,
+        );
       firstDrawChecked = true;
     }
 

@@ -388,10 +388,20 @@ The [product checkpoint](verification/stage10/product-acceptance-checkpoint.md)
 adds two-/three-human departure and restart traces, automatic-first reconnect
 controls, and enlarged QR views. Finished-game outcome metadata now follows the
 verified session and audit lifecycle; the home list shows winner/audit status
-and derives local statistics only from complete successful audits. General save
-import/export, read-only replay and deletion remain open. Native transfer testing
-found and corrected omitted worker ingress requests; complete handoff acceptance
-still depends on the startup and transfer checks recorded in that checkpoint.
+and derives local statistics only from complete successful audits. Saved history
+now has public replay export/opening, confirmed local removal and a display-only
+30-day inactivity label. A permanent deletion marker prevents a deleted game
+from reviving its old voting identity. General saves with optional private material
+remain separate from these public replay controls.
+
+The [native v5 handoff](verification/stage10/native-transfer-acceptance.md) certifies
+activation, accepts a move from the new device at matching peer heads and refuses
+retired-source reload. Certified cancellation also passes receipt, continued source
+play and durable destination reload in 46.7 seconds. Post-takeover return browser
+acceptance remains open. The [recovered v5 run](verification/stage10/recovered-v5-acceptance.md)
+finishes a three-point game and all three surviving peers complete clean audits
+in 95.42 seconds. Its crash occurs before survivor startup, so it does not satisfy
+the separate mid-game browser takeover requirement.
 
 - [ ] All chaos additions pass on 500 seeds each.
 - [ ] Refresh-resume takes < 3 s to be back in play on a typical laptop (measured).
@@ -476,7 +486,8 @@ entries, fixes wrapped deck-pass capture, and records the independent review and
 75 focused passing cases. The protocol version is now 5; mixed-version admission
 is rejected. Full cheating/network matrix acceptance remains open.
 
-The frozen v4 three-browser transfer trace now passes activation, old-key
-retirement and a destination move accepted by the survivor at matching head 10.
-A clean v5 rerun is in progress. The earlier reported startup stall was a test
-turn/registry lookup issue; the worker ingress omission was the production bug.
+The [native v5 three-browser transfer trace](verification/stage10/native-transfer-acceptance.md)
+passes activation, a destination move accepted by the survivor at matching heads,
+and retired-source reload refusal in 21.6 seconds. The earlier reported startup
+stall was a test turn/registry lookup issue; the worker ingress omission was the
+production bug. Full takeover-to-victory audit acceptance remains separate.

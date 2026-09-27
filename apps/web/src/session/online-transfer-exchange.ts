@@ -546,6 +546,28 @@ export class DestinationTransferExchange extends Exchange {
     this.destination = options;
   }
 
+  /** Resume a terminal result already verified from the destination's durable worker store. */
+  restoreTerminal(snapshot: OnlineTransferDestinationSnapshot): void {
+    const outcome = snapshot.outcome;
+    if (
+      this.closed ||
+      this.initialized ||
+      !outcome ||
+      !this.record.authorization ||
+      snapshot.gameId !== this.record.gameId ||
+      !sameRef(outcome.authorization, this.record.authorization) ||
+      !sameRef(outcome.entry, snapshot.head) ||
+      (outcome.outcome === 'cancelled'
+        ? snapshot.phase !== 'cancelled'
+        : snapshot.phase !== 'promoted')
+    )
+      throw new TypeError('Restored destination has no matching certified terminal result');
+    this.initialized = true;
+    this.terminal = detached(snapshot);
+    this.promotionNotified = true;
+    this.setPhase(outcome.outcome);
+  }
+
   protected async handle(artifact: OnlineTransferArtifact): Promise<void> {
     if (this.terminal) {
       if (

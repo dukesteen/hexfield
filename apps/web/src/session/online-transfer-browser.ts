@@ -55,6 +55,7 @@ export class OnlineTransferBrowser {
   #exchange: SourceTransferExchange | DestinationTransferExchange | null = null;
   #linkSelected = false;
   #linkGeneration = 0;
+  #restoredTerminal = false;
   #pending = 0;
   #closing: Promise<void> | null = null;
 
@@ -152,12 +153,43 @@ export class OnlineTransferBrowser {
       'destination',
       progress.record,
     );
+    if (progress.finished && (!browser.#record || !browser.#record.authorization))
+      throw new TypeError('Finished transfer has no pinned destination authorization');
     if (!browser.#record) {
       browser.#record = browser.#emptyRecord(options.identity.peerId);
       await records.save(browser.#record);
     }
     try {
-      browser.#connect();
+      if (progress.finished) {
+        const restored = await options.worker.request({
+          kind: 'initializeTransfer',
+          self: options.identity.peerId,
+          attemptId: options.invite.body.attemptId,
+          mode: 'resume',
+          expected: {
+            gameId: options.invite.body.gameId,
+            genesisDigest: options.invite.body.genesisDigest,
+          },
+        });
+        if (!restored.ok) throw new Error(restored.error.message);
+        browser.#ensureExchange();
+        if (!(browser.#exchange instanceof DestinationTransferExchange))
+          throw new TypeError('Finished transfer has no destination exchange');
+        browser.#exchange.restoreTerminal(restored.value);
+        browser.#restoredTerminal = true;
+        if (restored.value.phase === 'promoted')
+          browser.#update({ promotedGameId: options.invite.body.gameId });
+        await options.worker.shutdown();
+      }
+      if (browser.#restoredTerminal) {
+        // Receipt repair is best effort; a retired source need not be online to display
+        // a locally verified terminal result.
+        try {
+          browser.#connect();
+        } catch {
+          browser.#link = null;
+        }
+      } else browser.#connect();
     } catch (error) {
       await browser.close().catch(() => undefined);
       throw error;
@@ -264,6 +296,10 @@ export class OnlineTransferBrowser {
       onChannel: (channel) => {
         if (!current()) return;
         this.#channel = channel;
+        if (this.#restoredTerminal) {
+          void this.#exchange?.retry().catch(() => undefined);
+          return;
+        }
         void this.#perform(async () => {
           this.#ensureExchange();
           if (this.#exchange instanceof SourceTransferExchange) await this.#exchange.start();
@@ -272,6 +308,10 @@ export class OnlineTransferBrowser {
       },
       onArtifact: (artifact) => {
         if (!current()) return;
+        if (this.#restoredTerminal) {
+          void this.#exchange?.receive(artifact).catch(() => undefined);
+          return;
+        }
         void this.#perform(async () => {
           this.#ensureExchange();
           await this.#exchange?.receive(artifact);
@@ -280,6 +320,7 @@ export class OnlineTransferBrowser {
       onError: (error) => {
         if (!current()) return;
         this.#channel = null;
+        if (this.#restoredTerminal) return;
         this.#update({ error: error.message });
       },
     };
