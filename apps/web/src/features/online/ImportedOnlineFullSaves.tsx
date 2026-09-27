@@ -28,6 +28,7 @@ export function ImportedOnlineFullSaves() {
   const chooseFile = async (file: File | undefined) => {
     if (!file || imported.isPending) return;
     setError(null);
+    setPassphrase('');
     try {
       if (file.size < 1 || file.size > MAX_ONLINE_FULL_SAVE_BYTES)
         throw new Error('Full-save file size is invalid');

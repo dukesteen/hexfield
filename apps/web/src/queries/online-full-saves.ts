@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useRef } from 'react';
 import {
   exportStoredOnlineFullSave,
   importOnlineFullSaveFile,
@@ -8,9 +9,39 @@ import {
 
 const catalogueKey = ['online-full-saves'] as const;
 
+/** Passphrases are transient input, never query-devtools mutation variables. */
+function useFullSaveMutation<Input extends { passphrase?: string }, Output>(
+  execute: (input: Input) => Promise<Output>,
+  onSuccess?: () => Promise<void>,
+) {
+  const pending = useRef<Input | null>(null);
+  const mutation = useMutation({
+    gcTime: 0,
+    mutationFn: async () => {
+      const input = pending.current;
+      if (!input) throw new Error('No full-save operation was requested');
+      try {
+        return await execute(input);
+      } finally {
+        if ('passphrase' in input) input.passphrase = '';
+        pending.current = null;
+      }
+    },
+    ...(onSuccess ? { onSuccess } : {}),
+  });
+  return {
+    isPending: mutation.isPending,
+    mutateAsync: async (input: Input) => {
+      if (pending.current) throw new Error('A full-save operation is already running');
+      pending.current = { ...input };
+      return mutation.mutateAsync();
+    },
+  };
+}
+
 export function useExportOnlineFullSave() {
-  return useMutation({
-    mutationFn: ({
+  return useFullSaveMutation(
+    ({
       gameId,
       includePrivate,
       passphrase,
@@ -23,18 +54,18 @@ export function useExportOnlineFullSave() {
         includePrivate,
         ...(passphrase === undefined ? {} : { passphrase }),
       }),
-  });
+  );
 }
 
 export function useImportOnlineFullSave() {
   const client = useQueryClient();
-  return useMutation({
-    mutationFn: ({ bytes, passphrase }: { bytes: Uint8Array; passphrase?: string }) =>
+  return useFullSaveMutation(
+    ({ bytes, passphrase }: { bytes: Uint8Array; passphrase?: string }) =>
       importOnlineFullSaveFile(bytes, passphrase),
-    onSuccess: async () => {
+    async () => {
       await client.invalidateQueries({ queryKey: catalogueKey });
     },
-  });
+  );
 }
 
 export function useImportedOnlineFullSaves() {

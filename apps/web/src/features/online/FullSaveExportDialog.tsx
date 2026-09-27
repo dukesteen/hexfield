@@ -31,6 +31,7 @@ export function FullSaveExportDialog({ gameId, onClose }: { gameId: string; onCl
   const submit = async () => {
     if (exported.isPending) return;
     setError(null);
+    setPassphrase('');
     try {
       const bytes = await exported.mutateAsync({
         gameId,
