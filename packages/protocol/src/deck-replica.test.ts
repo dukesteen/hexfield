@@ -971,12 +971,25 @@ describe('live verified deck replication', () => {
       const ownerPeer = drawer.kind === 'bot' ? drawer.botHost : drawer.publicKey;
       const ownerIndex = peers.indexOf(ownerPeer);
       expect(ownerIndex).toBeGreaterThanOrEqual(0);
-      // Restoring all four peers repeats eight full replays. Preserve owner
-      // reconstruction and one foreign-seat refusal after the live quorum check.
-      const privatePositions =
-        humanCount === 1
-          ? [ownerIndex]
-          : [ownerIndex, peers.findIndex((_, index) => index !== ownerIndex)];
+      if (humanCount === 4) {
+        // This case checks four-voter certification and all required unlocks.
+        // The relay and dropped-unlock cases separately replay owner/foreign seats.
+        const source = fixture.createDeckSourceFor(required(fixture.humans[ownerIndex]).seat)(
+          'dev',
+          draw.seat,
+        );
+        try {
+          // oxlint-disable-next-line vitest/no-conditional-expect -- The other test parameter verifies recovered bot state below.
+          expect(BASE_DEV_CARD_CATALOGUE).toContainEqual(
+            value(decodeDeckCard(deck.setup, slot.receipt, source.lock(draw.position))),
+          );
+        } finally {
+          source.dispose();
+          network.dispose();
+        }
+        return;
+      }
+      const privatePositions = [ownerIndex];
       const sessions = (
         await Promise.all(
           privatePositions.map((position) => {
@@ -1036,7 +1049,9 @@ describe('live verified deck replication', () => {
       sessions.forEach((session) => session.dispose());
       network.dispose();
     },
-    60_000,
+    // This includes real setup proofs and a legal purchase on hosted CI CPUs.
+    // The separate draw benchmark retains its one-second performance target.
+    90_000,
   );
 
   test('gossips durable unlocks after a legal purchase and restores a dropped unlock', async () => {

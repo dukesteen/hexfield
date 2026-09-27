@@ -45,3 +45,20 @@ sees an unrelated untracked `.redesign` directory; its files were left untouched
 and are not included in the push. These local results are not a claim that the
 new full CI run has passed. The next run uses the four unit-test shards and
 `skip_e2e=true` authorized by the user.
+
+## First sharded run
+
+[Run 36345905718](https://github.com/dukesteen/hexfield/actions/runs/36345905718)
+completed all four unit shards in about 15 minutes. Static checks, build, engine
+coverage, simulation and all nine network scenarios passed. The stale fixture
+assertions were fixed. Three real-crypto tests hit wall-clock limits: the
+four-human draw and uncertain trade exceeded 60 seconds, and the three-recoverer
+activation check exceeded Vitest's default five seconds.
+
+The draw now decodes the certified receipt directly after checking all four live
+peers; separate relay and dropped-unlock tests retain owner/foreign restore
+coverage. The trade still restarts both owners at the pending proof, and performs
+one final post-commit restore of the proof supplier. These two focused checks
+pass locally in 50.18 and 44.39 seconds. Their hosted-runner allowance is now
+90 seconds; the recovery activation check gets 15 seconds. Protocol deadlines,
+bounded move counts and the separate performance benchmarks are unchanged.

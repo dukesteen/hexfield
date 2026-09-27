@@ -199,7 +199,7 @@ describe('honest recovery activation check', () => {
     } finally {
       for (const item of checks) item.reconstructed.dispose();
     }
-  });
+  }, 15_000);
 
   test('wrong master, incomplete roster and stale controller never sign', async () => {
     const options = input();
