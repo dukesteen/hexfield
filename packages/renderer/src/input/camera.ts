@@ -3,6 +3,26 @@ export interface CameraPoint {
   readonly y: number;
 }
 
+/** Fit a world rectangle inside the viewport with padding on every side. */
+export function fitZoomToBounds(
+  worldWidth: number,
+  worldHeight: number,
+  viewportWidth: number,
+  viewportHeight: number,
+  padding: number,
+  minZoom: number,
+  maxZoom: number,
+): number {
+  return Math.max(
+    minZoom,
+    Math.min(
+      maxZoom,
+      (viewportWidth - padding * 2) / worldWidth,
+      (viewportHeight - padding * 2) / worldHeight,
+    ),
+  );
+}
+
 /** Place a world point at a screen point after changing zoom. */
 export function cameraPositionAtAnchor(
   worldAnchor: CameraPoint,

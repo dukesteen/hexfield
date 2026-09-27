@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { cameraPositionAtAnchor, clampCameraAxis } from './camera.js';
+import { cameraPositionAtAnchor, clampCameraAxis, fitZoomToBounds } from './camera.js';
 
 test('centers a board smaller than the viewport', () => {
   expect(clampCameraAxis(-900, -50, 50, 400, 1, 24)).toBe(200);
@@ -23,4 +23,13 @@ test('keeps the world point under the previous pinch center under the new center
 
   expect(nextCamera.x + worldAnchor.x * 2.25).toBe(nextCenter.x);
   expect(nextCamera.y + worldAnchor.y * 2.25).toBe(nextCenter.y);
+});
+
+test('fits the complete authored frame with 24 pixels on each side', () => {
+  const frameWidth = (1120 / 80) * 54;
+  const frameHeight = (1040 / 80) * 54;
+  const zoom = fitZoomToBounds(frameWidth, frameHeight, 1440, 748, 24, 0.35, 3.2);
+  expect(zoom).toBeCloseTo(700 / 702);
+  expect((748 - frameHeight * zoom) / 2).toBeCloseTo(24);
+  expect((1440 - frameWidth * zoom) / 2).toBeGreaterThan(24);
 });

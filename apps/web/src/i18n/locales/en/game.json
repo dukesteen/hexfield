@@ -58,6 +58,8 @@
   "optionalTrade": "Optional trade actions",
   "viewOptionalTrade": "View {{player}}'s trade options",
   "eventLog": "Event log",
+  "mobileLog": "Log",
+  "mobileDevCount": "{{count}} dev",
   "noEvents": "Moves will appear here.",
   "gameOver": "Game over",
   "finalScore": "Final score",
@@ -228,5 +230,13 @@
   "fairnessProofCount": "resource count",
   "fairnessProofSteal": "steal selection",
   "fairnessProofDelivery": "stolen card delivery",
-  "fairnessProofDispute": "steal dispute"
+  "fairnessProofDispute": "steal dispute",
+  "vpToWin": "{{count}} VP to win",
+  "you": "You",
+  "handCardCount_one": "{{count}} card",
+  "handCardCount_other": "{{count}} cards",
+  "developmentInBank": "Development cards in bank: {{count}}",
+  "awardUnclaimed": "Unclaimed",
+  "buildPanel": "Build",
+  "tradePanel": "Trade"
 }

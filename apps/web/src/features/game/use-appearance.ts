@@ -4,12 +4,12 @@ import type { GamePresentation } from '../../queries/repositories/saved-games';
 import { useSettings } from '../../queries/hooks';
 
 export const BOARD_PLAYER_COLORS = {
-  blue: 0x0072b2,
-  orange: 0xd55e00,
-  green: 0x009e73,
-  magenta: 0xb35b93,
-  yellow: 0xe6ad26,
-  red: 0xcf4a44,
+  blue: 0x4f7fbf,
+  orange: 0xe59a3c,
+  green: 0x6fa35a,
+  magenta: 0x292528,
+  yellow: 0xf2ebd8,
+  red: 0xc2493a,
 } as const;
 
 export function useBoardAppearance(presentation: GamePresentation): {

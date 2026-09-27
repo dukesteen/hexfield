@@ -1,4 +1,5 @@
 import type { GameEvent } from '@cp2p/engine';
+import { getDieUrl } from '@cp2p/renderer';
 import { useTranslation } from 'react-i18next';
 import './dice-roll-readout.css';
 
@@ -31,27 +32,8 @@ export function latestDiceRoll(events: readonly GameEvent[]): DiceRoll | null {
   return null;
 }
 
-const pipLayout: Readonly<Record<number, readonly number[]>> = {
-  1: [4],
-  2: [0, 8],
-  3: [0, 4, 8],
-  4: [0, 2, 6, 8],
-  5: [0, 2, 4, 6, 8],
-  6: [0, 2, 3, 5, 6, 8],
-};
-
 function DieFace({ value }: { value: number }) {
-  const activePips = pipLayout[value] ?? [];
-  return (
-    <span className="dice-roll-face" aria-hidden="true">
-      {Array.from({ length: 9 }, (_, index) => (
-        <span
-          className={activePips.includes(index) ? 'dice-roll-pip is-active' : 'dice-roll-pip'}
-          key={index}
-        />
-      ))}
-    </span>
-  );
+  return <img className="dice-roll-face" src={getDieUrl(value)} alt="" />;
 }
 
 /** Persistent, public last-roll display; animation controls do not affect it. */
@@ -69,10 +51,12 @@ export function DiceRollReadout({ dice }: { dice: DiceRoll | null }) {
       })}
     >
       <figcaption>{t('game:lastRollLabel')}</figcaption>
+      <span className="dice-roll-total" aria-hidden="true">
+        {dice.total}
+      </span>
       <div className="dice-roll-display" aria-hidden="true">
         <DieFace value={dice.faces[0]} />
         <DieFace value={dice.faces[1]} />
-        <span className="dice-roll-total">{dice.total}</span>
       </div>
     </figure>
   );

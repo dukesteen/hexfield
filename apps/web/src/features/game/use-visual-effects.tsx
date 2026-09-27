@@ -225,7 +225,7 @@ export function useVisualEffects(renderer: BoardRenderer | null, reducedMotion: 
           const hand =
             revealedSeat === null
               ? null
-              : document.querySelector<HTMLElement>('.hand-dock .resource-hand');
+              : document.querySelector<HTMLElement>('.hand-dock .hand-cards');
           const centerForSeat = (seat: Seat) => {
             if (seat === revealedSeat && hand) {
               const center = visibleCenter(hand);

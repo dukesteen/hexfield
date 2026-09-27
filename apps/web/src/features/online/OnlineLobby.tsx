@@ -5,6 +5,7 @@ import { LOBBY_COLOURS } from '@cp2p/protocol';
 import { Link, useBlocker, useNavigate } from '@tanstack/react-router';
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { useTranslation } from 'react-i18next';
+import { getGameArtUrl } from '@cp2p/renderer';
 import { PlayerMarker } from '../../features/game/PlayerMarker.js';
 import { createOnlineInviteUrl } from '../../session/online-invite.js';
 import type { OnlineRoomSnapshot } from '../../session/online-room.js';
@@ -17,13 +18,6 @@ import { OnlineConfiguration } from './OnlineConfiguration';
 import { LobbyNameEditor } from './LobbyNameEditor';
 import { ChatPanel } from './ChatPanel';
 import './online.css';
-
-const SEAT_SHAPES: readonly ('circle' | 'triangle' | 'square' | 'diamond')[] = [
-  'circle',
-  'triangle',
-  'square',
-  'diamond',
-];
 
 export type OnlineStartHandler = (room: OnlineRoomHandleValue) => void | Promise<void>;
 
@@ -153,7 +147,10 @@ export function OnlineLobby({
   }
 
   return (
-    <main className="app-page online-page online-lobby-page">
+    <main
+      className="app-page online-page online-lobby-page"
+      style={{ backgroundImage: `url(${getGameArtUrl('background')})` }}
+    >
       <header className="app-header">
         <Link to="/" className="text-link">
           {t('lobby:backHome')}
@@ -172,6 +169,12 @@ export function OnlineLobby({
       </header>
       <div className="online-lobby-content">
         <section className="online-lobby-heading">
+          <img
+            className="online-room-art"
+            src={getGameArtUrl('preview')}
+            alt=""
+            aria-hidden="true"
+          />
           <div>
             <p className="online-kicker">{t('lobby:onlineLobbyKicker')}</p>
             <h1>{state?.name ?? t('lobby:onlineConnecting')}</h1>
@@ -256,94 +259,106 @@ export function OnlineLobby({
           </section>
         )}
 
-        {snapshot.invite.serverUrl ? (
-          <section className="online-section" aria-labelledby="online-invite-title">
-            <div>
-              <h2 id="online-invite-title">{t('lobby:onlineInviteTitle')}</h2>
-              <p className="muted">{t('lobby:onlineInviteDescription')}</p>
-            </div>
-            <InvitationCode
-              value={createOnlineInviteUrl(window.location.href, snapshot.invite)}
-              label={t('lobby:onlineInvitationUrl')}
-            />
-            {isHost && state?.status === 'open' && (
-              <details className="manual-fallback">
-                <summary>{t('lobby:manualUseCodes')}</summary>
-                <ManualConnectionPanel room={room} snapshot={snapshot} />
-              </details>
-            )}
-          </section>
-        ) : (
-          <section className="online-section">
-            <ManualConnectionPanel room={room} snapshot={snapshot} />
-          </section>
-        )}
-        <ConnectionDiagnostics
-          serverUrl={snapshot.invite.serverUrl}
-          peerStatsKey={snapshot.invite.roomId}
-          {...(room?.getPeerStats ? { loadPeerStats: room.getPeerStats } : {})}
-          peerLabels={peerLabels}
-        />
-
-        {state && (
-          <>
-            <section className="online-section" aria-labelledby="online-seats-title">
-              <div className="section-heading">
-                <h2 id="online-seats-title">{t('lobby:players')}</h2>
-                <span className="muted">
-                  {t('lobby:onlineSeatCount', { count: state.seats.length })}
-                </span>
-              </div>
-              <div className="online-seat-list">
-                {state.seats.map((seat) => (
-                  <LobbySeatRow
-                    key={seat.seat}
-                    room={room}
-                    snapshot={snapshot}
-                    seat={seat}
-                    isHost={isHost}
-                    ownSeat={ownSeat?.seat === seat.seat}
-                    editable={state.status === 'open' && !snapshot.startup && !startBusy}
-                    namePending={namePending}
-                    settingsPending={settingsPending}
-                    onNamePendingChange={setNamePending}
-                    report={report}
-                  />
-                ))}
-              </div>
-            </section>
-
-            <OnlineConfiguration
-              config={state.config}
-              seedMode={state.seedMode}
-              editable={isHost && state.status === 'open' && !snapshot.startup && !startBusy}
-              onSave={(config, seed) =>
-                room.lobby?.configure(config, seed) ?? failure('lobby-closed', 'The room is closed')
-              }
-              onPendingChange={setSettingsPending}
-            />
-
-            <section className="online-start-panel">
-              <div>
-                <h2>{t('lobby:onlineStartTitle')}</h2>
-                <p className="muted">{t('lobby:onlineStartPreparation')}</p>
-                {state.takeover.afterSeconds === 'never' && (
-                  <p className="muted">{t('lobby:onlineDisconnectPolicy')}</p>
+        <div className="online-room-grid">
+          <aside className="online-room-side">
+            {snapshot.invite.serverUrl ? (
+              <section className="online-section" aria-labelledby="online-invite-title">
+                <div>
+                  <h2 id="online-invite-title">{t('lobby:onlineInviteTitle')}</h2>
+                  <p className="muted">{t('lobby:onlineInviteDescription')}</p>
+                </div>
+                <InvitationCode
+                  value={createOnlineInviteUrl(window.location.href, snapshot.invite)}
+                  label={t('lobby:onlineInvitationUrl')}
+                />
+                {isHost && state?.status === 'open' && (
+                  <details className="manual-fallback">
+                    <summary>{t('lobby:manualUseCodes')}</summary>
+                    <ManualConnectionPanel room={room} snapshot={snapshot} />
+                  </details>
                 )}
-              </div>
-              <button
-                className="button button-primary"
-                type="button"
-                disabled={!canStart || startBusy}
-                onClick={() => void start()}
-              >
-                {t('lobby:onlineStartAction')}
-              </button>
-            </section>
+              </section>
+            ) : (
+              <section className="online-section">
+                <ManualConnectionPanel room={room} snapshot={snapshot} />
+              </section>
+            )}
+            <ConnectionDiagnostics
+              serverUrl={snapshot.invite.serverUrl}
+              peerStatsKey={snapshot.invite.roomId}
+              {...(room?.getPeerStats ? { loadPeerStats: room.getPeerStats } : {})}
+              peerLabels={peerLabels}
+            />
+          </aside>
 
-            <ChatPanel room={room} chat={snapshot.chat} labels={peerLabels} self={snapshot.self} />
-          </>
-        )}
+          <div className="online-room-main">
+            {state && (
+              <>
+                <section className="online-section" aria-labelledby="online-seats-title">
+                  <div className="section-heading">
+                    <h2 id="online-seats-title">{t('lobby:players')}</h2>
+                    <span className="muted">
+                      {t('lobby:onlineSeatCount', { count: state.seats.length })}
+                    </span>
+                  </div>
+                  <div className="online-seat-list">
+                    {state.seats.map((seat) => (
+                      <LobbySeatRow
+                        key={seat.seat}
+                        room={room}
+                        snapshot={snapshot}
+                        seat={seat}
+                        isHost={isHost}
+                        ownSeat={ownSeat?.seat === seat.seat}
+                        editable={state.status === 'open' && !snapshot.startup && !startBusy}
+                        namePending={namePending}
+                        settingsPending={settingsPending}
+                        onNamePendingChange={setNamePending}
+                        report={report}
+                      />
+                    ))}
+                  </div>
+                </section>
+
+                <OnlineConfiguration
+                  config={state.config}
+                  seedMode={state.seedMode}
+                  editable={isHost && state.status === 'open' && !snapshot.startup && !startBusy}
+                  onSave={(config, seed) =>
+                    room.lobby?.configure(config, seed) ??
+                    failure('lobby-closed', 'The room is closed')
+                  }
+                  onPendingChange={setSettingsPending}
+                />
+
+                <section className="online-start-panel">
+                  <div>
+                    <h2>{t('lobby:onlineStartTitle')}</h2>
+                    <p className="muted">{t('lobby:onlineStartPreparation')}</p>
+                    {state.takeover.afterSeconds === 'never' && (
+                      <p className="muted">{t('lobby:onlineDisconnectPolicy')}</p>
+                    )}
+                  </div>
+                  <button
+                    className="button button-primary"
+                    type="button"
+                    disabled={!canStart || startBusy}
+                    onClick={() => void start()}
+                  >
+                    {t('lobby:onlineStartAction')}
+                  </button>
+                </section>
+
+                <ChatPanel
+                  room={room}
+                  chat={snapshot.chat}
+                  labels={peerLabels}
+                  self={snapshot.self}
+                />
+              </>
+            )}
+          </div>
+        </div>
       </div>
 
       <LeaveDialog
@@ -414,7 +429,6 @@ function LobbySeatRow({
   const { t } = useTranslation('lobby');
   const member = seat.kind === 'human' ? seat : null;
   const name = seat.kind === 'open' ? t('lobby:onlineOpenSeat') : seat.name;
-  const shape = SEAT_SHAPES[seat.seat] ?? 'circle';
   const lobby = room.lobby;
   if (!lobby) return null;
 
@@ -423,7 +437,7 @@ function LobbySeatRow({
   return (
     <article className={`online-seat-row online-seat-${seat.kind}`}>
       <span className={`online-marker color-${seat.colour}`}>
-        <PlayerMarker shape={shape} color="blue" />
+        <PlayerMarker shape="circle" color={seat.colour} />
       </span>
       <div className="online-seat-main">
         <div className="online-seat-title">
@@ -512,7 +526,7 @@ function LobbySeatRow({
                   }}
                 >
                   <option value="" disabled>
-                    {t('lobby:onlineAddRandomBot', { number: seat.seat + 1 })}
+                    {t('lobby:onlineAddBot')}
                   </option>
                   <option value="easy">{t('lobby:onlineRandomBot')}</option>
                 </select>

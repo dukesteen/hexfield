@@ -3,64 +3,57 @@
   z-index: 4;
   top: 12px;
   right: 12px;
-  display: block;
   margin: 0;
-  padding: 7px 9px;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  background: var(--surface);
-  box-shadow: 0 2px 8px #090b0e33;
-  color: var(--text);
+  display: grid;
+  grid-template-columns: auto auto;
+  grid-template-rows: auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border: 1px solid #e0d5c2;
+  border-radius: 14px;
+  background: #f7efde;
+  box-shadow: 0 3px 0 #d6c7a8;
+  color: #3d2f35;
   pointer-events: none;
 }
 
 .dice-roll-readout figcaption {
-  margin-bottom: 4px;
-  color: var(--muted);
+  grid-column: 1;
+  grid-row: 1;
+  color: #8c7b6d;
   font-size: 0.625rem;
-  font-weight: 700;
-  line-height: 1;
-  text-align: center;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  line-height: 1.2;
+  text-transform: uppercase;
 }
 
 .dice-roll-display {
   display: flex;
+  grid-column: 2;
+  grid-row: 1 / span 2;
   align-items: center;
   justify-content: center;
-  gap: 7px;
+  gap: 8px;
 }
 
 .dice-roll-face {
-  display: grid;
-  width: 26px;
-  height: 26px;
-  grid-template: repeat(3, 1fr) / repeat(3, 1fr);
-  padding: 3px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: #fff;
-  box-shadow: 0 1px 2px rgb(23 44 55 / 14%);
-}
-
-.dice-roll-pip {
-  width: 4px;
-  height: 4px;
-  align-self: center;
-  justify-self: center;
-  border-radius: 50%;
-}
-
-.dice-roll-pip.is-active {
-  background: #203946;
+  display: block;
+  width: 38px;
+  height: 38px;
+  flex: none;
+  object-fit: contain;
 }
 
 .dice-roll-total {
-  min-width: 1.1em;
-  margin-left: 1px;
-  color: var(--text);
-  font-size: 1.1rem;
-  font-weight: 800;
-  line-height: 1;
+  grid-column: 1;
+  grid-row: 2;
+  color: #3d2f35;
+  font-family: var(--font-display, Georgia, serif);
+  font-size: 1.375rem;
+  font-weight: 500;
+  line-height: 1.15;
   text-align: center;
 }
 
@@ -68,12 +61,9 @@
   .dice-roll-readout {
     top: 7px;
     right: 7px;
-    padding: 5px 6px;
-    border-radius: 10px;
-  }
-
-  .dice-roll-readout figcaption {
-    margin-bottom: 3px;
+    gap: 6px;
+    padding: 6px 8px;
+    border-radius: 12px;
   }
 
   .dice-roll-display {
@@ -81,17 +71,11 @@
   }
 
   .dice-roll-face {
-    width: 23px;
-    height: 23px;
-    padding: 2px;
-  }
-
-  .dice-roll-pip {
-    width: 3.5px;
-    height: 3.5px;
+    width: 30px;
+    height: 30px;
   }
 
   .dice-roll-total {
-    font-size: 1rem;
+    font-size: 1.15rem;
   }
 }

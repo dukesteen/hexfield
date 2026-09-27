@@ -122,32 +122,52 @@ export function OnlineCreate() {
                 onChange={(event) => setHostName(event.target.value)}
               />
             </label>
-            <label>
-              {t('lobby:manualConnectionMethod')}
-              <select
-                value={connection}
-                onChange={(event) =>
-                  setConnectionInput(event.target.value === 'server' ? 'server' : 'manual')
-                }
-              >
-                <option value="manual">{t('lobby:manualConnectionCodes')}</option>
-                <option value="server">{t('lobby:manualConnectionServer')}</option>
-              </select>
-            </label>
-            {connection === 'server' && (
-              <label>
-                {t('lobby:onlineServerOrigin')}
-                <input
-                  autoComplete="url"
-                  required
-                  value={serverUrl}
-                  onChange={(event) => setServerInput(event.target.value)}
-                />
-              </label>
-            )}
             <p className="muted">
-              {t(connection === 'server' ? 'lobby:onlineServerHint' : 'lobby:manualConnectionHint')}
+              {t(
+                connection === 'server'
+                  ? 'lobby:onlineInviteDescription'
+                  : 'lobby:manualConnectionHint',
+              )}
             </p>
+            <details className="online-connection-options">
+              <summary>{t('lobby:onlineAdvancedConnection')}</summary>
+              <div className="online-connection-fields">
+                <label>
+                  {t('lobby:manualConnectionMethod')}
+                  <select
+                    value={connection}
+                    onChange={(event) =>
+                      setConnectionInput(event.target.value === 'server' ? 'server' : 'manual')
+                    }
+                  >
+                    <option value="server">{t('lobby:manualConnectionServer')}</option>
+                    <option value="manual">{t('lobby:manualConnectionCodes')}</option>
+                  </select>
+                </label>
+                {connection === 'server' && (
+                  <div>
+                    <label>
+                      {t('lobby:onlineServerOrigin')}
+                      <input
+                        type="url"
+                        autoComplete="url"
+                        aria-describedby="online-server-hint"
+                        required
+                        value={serverUrl}
+                        onChange={(event) => setServerInput(event.target.value)}
+                        onInvalid={(event) => {
+                          const options = event.currentTarget.closest('details');
+                          if (options) options.open = true;
+                        }}
+                      />
+                    </label>
+                    <p className="muted" id="online-server-hint">
+                      {t('lobby:onlineServerHint')}
+                    </p>
+                  </div>
+                )}
+              </div>
+            </details>
           </fieldset>
           <fieldset>
             <legend>{t('lobby:onlineGameSetup')}</legend>

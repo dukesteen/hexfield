@@ -10,7 +10,7 @@
   "boardPreviewHitTesting": "Select a tile or piece location to inspect its semantic board ID.",
   "boardPreviewLegendForest": "Forest tiles are muted green.",
   "boardPreviewLegendToken": "Number tokens show their production value; 6 and 8 use red.",
-  "boardPreviewLegendPieces": "Player pieces pair distinct colors with marker shapes.",
+  "boardPreviewLegendPieces": "Player pieces use their faction's color.",
   "boardEffectsTitle": "Effect preview",
   "boardEffectDice": "Play dice roll",
   "boardEffectBuilding": "Pop settlement",

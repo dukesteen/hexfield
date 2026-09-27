@@ -3,7 +3,11 @@ export const PACKAGE_NAME = '@cp2p/renderer';
 export { PixiBoardRenderer, createBoardRenderer } from './BoardRenderer.js';
 export { hitTestBoard } from './input/hitTest.js';
 export {
+  getAwardCardUrl,
   getDevelopmentCardUrl,
+  getDieUrl,
+  getFactionUrl,
+  getGameArtUrl,
   getPieceIconUrl,
   getResourceCardUrl,
   getResourceIconUrl,
