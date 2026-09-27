@@ -14,7 +14,7 @@ import type {
 } from '@cp2p/engine';
 import { decodeDeckCard, proveDeckReveal } from './deck-draw.js';
 import type { LogContext, ValidatedEntry } from './log.js';
-import type { SessionDriver } from './p2p-session.js';
+import type { SessionDriver } from './session-driver.js';
 import type { DeckSecretSource, DeckSourceFactory } from './deck-source.js';
 import type { HandSourceFactory } from './hand-source.js';
 import { verifyHandOpening } from './hand-commitments.js';
@@ -116,6 +116,9 @@ export class VerifiedSessionDriver implements SessionDriver {
   private blindings = new Map<Seat, Record<(typeof RESOURCES)[number], string>>();
   private appliedHead: string | null = null;
   private disposed = false;
+  private readonly deckRoutes = new Map<Seat, DeckSourceFactory>();
+  private readonly handRoutes = new Map<Seat, HandSourceFactory>();
+  private readonly stealRoutes = new Map<Seat, StealSourceFactory>();
 
   constructor(
     private readonly engine: Engine,
@@ -203,11 +206,11 @@ export class VerifiedSessionDriver implements SessionDriver {
   }
 
   private checkedStealSource(seat: Seat): Result<StealSecretSource> {
-    if (!this.createStealSource)
-      return failure('steal-source', 'No steal secret source is configured');
+    const factory = this.stealRoutes.get(seat) ?? this.createStealSource;
+    if (!factory) return failure('steal-source', 'No steal secret source is configured');
     let source: StealSecretSource | null = null;
     try {
-      source = this.createStealSource(seat);
+      source = factory(seat);
       const genesisKey = this.genesis.seats.find((item) => item.seat === seat)?.encryptionKey;
       if (!genesisKey || encodePoint(scalePoint(G, source.encryptionSecret())) !== genesisKey) {
         source.dispose();
@@ -432,15 +435,15 @@ export class VerifiedSessionDriver implements SessionDriver {
     const blindings = this.blindings.get(seat);
     if (!priv || !blindings)
       return failure('verified-private-missing', 'Owned count opening is missing');
-    if (!this.createHandSource)
-      return failure('hand-proof-source', 'No hand proof source is configured');
+    const factory = this.handRoutes.get(seat) ?? this.createHandSource;
+    if (!factory) return failure('hand-proof-source', 'No hand proof source is configured');
     const count = priv.hand[operation.resource];
     if (count === undefined)
       return failure('verified-private-missing', 'Owned count resource is missing');
     const blinding = blindings[operation.resource];
     let source: ReturnType<HandSourceFactory> | null = null;
     try {
-      source = this.createHandSource(seat);
+      source = factory(seat);
       const proofContext = countProofContext(operation, seat, count);
       const seed = source.proofSeed(proofContext);
       try {
@@ -468,11 +471,11 @@ export class VerifiedSessionDriver implements SessionDriver {
     const blindings = this.blindings.get(obligation.seat);
     if (!priv || !blindings)
       return failure('verified-private-missing', 'Owned hand opening is missing');
-    if (!this.createHandSource)
-      return failure('hand-proof-source', 'No hand proof source is configured');
+    const factory = this.handRoutes.get(obligation.seat) ?? this.createHandSource;
+    if (!factory) return failure('hand-proof-source', 'No hand proof source is configured');
     let source: ReturnType<HandSourceFactory> | null = null;
     try {
-      source = this.createHandSource(obligation.seat);
+      source = factory(obligation.seat);
       const seed = source.proofSeed(handProofContext(plan, index, binding));
       try {
         return proveHandObligation(plan, index, priv.hand, blindings, seed, binding);
@@ -871,15 +874,94 @@ export class VerifiedSessionDriver implements SessionDriver {
     return failure('verified-entry-context', 'Verified driver requires certified entry callbacks');
   }
 
+  /**
+   * Copy reconstructed bot openings into this live driver at the same certified head.
+   * The donor retains its master-backed source factories; its owning bundle must
+   * remain alive until this driver is disposed.
+   */
+  adoptRecovered(donor: SessionDriver, context: LogContext): Result<void> {
+    if (
+      this.disposed ||
+      !(donor instanceof VerifiedSessionDriver) ||
+      donor.disposed ||
+      donor === this
+    )
+      return failure('verified-adoption-driver', 'A live verified donor is required');
+    const head = entryHash(context.head);
+    if (
+      !context.authority ||
+      !context.crypto ||
+      context.head.seq === 0 ||
+      this.appliedHead !== head ||
+      donor.appliedHead !== head ||
+      this.engine !== donor.engine ||
+      this.digest !== donor.digest ||
+      this.digest !== genesisDigest(context.genesis) ||
+      this.genesis.gameId !== donor.genesis.gameId ||
+      context.genesis.gameId !== this.genesis.gameId ||
+      context.head.stateHash !== toHex(hashValue(context.state))
+    )
+      return failure(
+        'verified-adoption-context',
+        'Donor and recipient need the same verified head',
+      );
+    const ownOpenings = this.verifyOwnedOpenings(context);
+    if (!ownOpenings.ok) return ownOpenings;
+    const donorOpenings = donor.verifyOwnedOpenings(context);
+    if (!donorOpenings.ok) return donorOpenings;
+    if (!donor.createHandSource || !donor.createStealSource)
+      return failure('verified-adoption-source', 'Donor proof sources are missing');
+    const checkedSources = donor.validateSources();
+    if (!checkedSources.ok) return checkedSources;
+
+    const states = new Map<Seat, { state: PrivateState; blindings: Record<Resource, string> }>();
+    for (const seat of donor.owned) {
+      const controller = context.authority.controllers.find((item) => item.seat === seat);
+      const host = context.authority.controllers.find((item) => item.seat === controller?.hostSeat);
+      const state = donor.privates.get(seat);
+      const blindings = donor.blindings.get(seat);
+      if (
+        this.owned.has(seat) ||
+        controller?.kind !== 'bot' ||
+        controller.status !== 'active' ||
+        host?.kind !== 'human' ||
+        host.status !== 'active' ||
+        !this.owned.has(host.seat) ||
+        !state ||
+        !blindings
+      )
+        return failure('verified-adoption-seat', 'Donor seat is not an active hosted bot');
+      try {
+        states.set(seat, { state: copyPrivate(state), blindings: { ...blindings } });
+      } catch {
+        return failure('verified-adoption-private', 'Donor private state could not be copied');
+      }
+    }
+    if (states.size === 0) return failure('verified-adoption-seat', 'Donor has no recovered seats');
+
+    for (const [seat, copied] of states) {
+      this.owned.add(seat);
+      this.privates.set(seat, copied.state);
+      this.blindings.set(seat, copied.blindings);
+      this.deckRoutes.set(seat, donor.deckRoutes.get(seat) ?? donor.createDeckSource);
+      this.handRoutes.set(seat, donor.handRoutes.get(seat) ?? donor.createHandSource);
+      this.stealRoutes.set(seat, donor.stealRoutes.get(seat) ?? donor.createStealSource);
+    }
+    return success(undefined);
+  }
+
   dispose(): void {
     this.disposed = true;
     this.privates.clear();
     this.blindings.clear();
     this.owned.clear();
+    this.deckRoutes.clear();
+    this.handRoutes.clear();
+    this.stealRoutes.clear();
   }
 
   private newSource(deckId: string, seat: Seat): DeckSecretSource {
-    const source = this.createDeckSource(deckId, seat);
+    const source = (this.deckRoutes.get(seat) ?? this.createDeckSource)(deckId, seat);
     if (!source || typeof source.dispose !== 'function')
       throw new TypeError('Deck source factory returned an invalid source');
     return source;

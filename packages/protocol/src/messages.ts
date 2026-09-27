@@ -24,6 +24,8 @@ import { excludeProposerControlSchema, signedCommandSchema } from './schemas.js'
 import { signedVoteSchema } from './votes.js';
 import { cheatClaimSchema } from './cheat-schema.js';
 import { recoveryChangeSchema } from './recovery-membership.js';
+import { recoveryReleaseSchema } from './recovery-release.js';
+import { signedRecoveryCheckSchema } from './recovery-inbox.js';
 import { decodeMessage, encodeMessage } from './wire.js';
 import type { Result } from '@cp2p/engine';
 
@@ -31,6 +33,16 @@ const submitSchema = v.strictObject({ t: v.literal('SUBMIT'), cmd: signedCommand
 const recoverySubmitSchema = v.strictObject({
   t: v.literal('RECOVERY_SUBMIT'),
   change: recoveryChangeSchema,
+});
+const recoveryReleaseMessageSchema = v.strictObject({
+  t: v.literal('RECOVERY_RELEASE'),
+  genesisDigest: key32Schema,
+  release: recoveryReleaseSchema,
+});
+const recoveryCheckMessageSchema = v.strictObject({
+  t: v.literal('RECOVERY_CHECK'),
+  genesisDigest: key32Schema,
+  check: signedRecoveryCheckSchema,
 });
 const systemContributionSchema = v.strictObject({
   t: v.literal('SYS_CONTRIB'),
@@ -131,6 +143,8 @@ const pongSchema = v.strictObject({ t: v.literal('PONG'), n: nonnegativeIntegerS
 export const protocolMessageSchema = v.variant('t', [
   submitSchema,
   recoverySubmitSchema,
+  recoveryReleaseMessageSchema,
+  recoveryCheckMessageSchema,
   systemContributionSchema,
   deckContributionSchema,
   countContributionSchema,

@@ -61,7 +61,12 @@ export { P2PSession } from './p2p-session.js';
 export { VerifiedSessionDriver } from './verified-session-driver.js';
 export type { CertifiedHistory, P2PSessionOptions, SessionDriver } from './p2p-session.js';
 export { ReplicatedLog } from './replicated-log.js';
-export type { ReplicatedLogOptions, ReplicatedLogStatus } from './replicated-log.js';
+export type {
+  ReplicatedLogOptions,
+  ReplicatedLogStatus,
+  RecoveredReplicaOwnership,
+} from './replicated-log.js';
+export { chooseBotPending } from './bot-pending.js';
 export {
   initialProposalContext,
   replayCertifiedPrefix,
@@ -207,6 +212,8 @@ export type {
 export { RecoveryInbox } from './recovery-inbox.js';
 export { loadRecoveryPrivate } from './recovery-private.js';
 export type { RecoveryPrivateStore } from './recovery-private.js';
+export { loadRecoveredHost } from './recovered-host.js';
+export type { RecoveredHost, RecoveredHostInput } from './recovered-host.js';
 export { RecoveryParticipant } from './recovery-participant.js';
 export type {
   RecoveryParticipantOptions,

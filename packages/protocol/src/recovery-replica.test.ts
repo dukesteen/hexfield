@@ -1,22 +1,29 @@
 import { canonicalDecode, canonicalEncode } from '@cp2p/codec';
 import { scalarToBytes } from '@cp2p/crypto';
-import { failure } from '@cp2p/engine';
+import { failure, success } from '@cp2p/engine';
 import type { Result, Seat } from '@cp2p/engine';
-import { describe, expect, test } from 'vitest';
+import { beforeAll, describe, expect, test } from 'vitest';
+import { resolveArtifactSigner } from './authority.js';
 import { createBeaconSecretSource } from './beacon-source.js';
-import { MemoryBeaconContributionStore } from './beacon-contributions.js';
+import {
+  MemoryBeaconContributionStore,
+  prepareBeaconContribution,
+} from './beacon-contributions.js';
 import { MemoryCheatCandidateStore } from './cheat-candidates.js';
 import { MemoryCountContributionStore } from './count-contributions.js';
 import { createConsensusState } from './consensus.js';
 import { deckCeremonyId } from './deck-genesis.js';
 import type { DeckContributionStore } from './deck-outbox.js';
 import { entryHash } from './genesis.js';
+import { MemoryGenesisConsentStore } from './genesis-outbox.js';
 import { MemoryProtocolJournal } from './journal.js';
 import { decodeProtocolMessage } from './messages.js';
 import { ReplicatedLog } from './replicated-log.js';
 import type { ReplicatedLogOptions } from './replicated-log.js';
+import { recoveryChangeSchema } from './recovery-membership.js';
 import { restoreRetiredSafety } from './retired-safety.js';
 import { MemoryStealDeliveryStore } from './steal-contributions.js';
+import { createStealSecretSource } from './steal-source.js';
 import { createMemnet } from './testing/memnet.js';
 import {
   advanceRecoveryFixture,
@@ -30,6 +37,8 @@ import {
 import type { RecoveryFixture } from './testing/recovery-fixture.js';
 import type { VirtualClock } from './testing/virtual-clock.js';
 import type { Transport } from './transport.js';
+import type { ProposalContext } from './proposal.js';
+import { parseCanonical } from './validation.js';
 
 function value<T>(result: Result<T>): T {
   if (!result.ok) throw new Error(`${result.error.code}: ${result.error.message}`);
@@ -126,6 +135,21 @@ function isBeaconMessage(bytes: Uint8Array): boolean {
   return decoded.ok && decoded.value.t === 'SYS_CONTRIB';
 }
 
+function encryptionSecret(fixture: RecoveryFixture, seat: Seat): bigint {
+  const original = required(fixture.genesis.seats.find((item) => item.seat === seat));
+  const source = createStealSecretSource(
+    scalarToBytes(BigInt(17 + seat)),
+    fixture.genesis.ceremonyNonce,
+    seat,
+    original.publicKey,
+  );
+  try {
+    return source.encryptionSecret();
+  } finally {
+    source.dispose();
+  }
+}
+
 interface SeatZeroGate {
   holdRecovery: boolean;
   syncRequests: number;
@@ -167,8 +191,12 @@ function delayedSeatZero(inner: Transport, gate: SeatZeroGate): Transport {
 }
 
 describe('live certified recovery', () => {
+  let fixture: RecoveryFixture;
+  beforeAll(() => {
+    fixture = createRecoveryFixture({ masterBackedBeacon: true });
+  }, 30_000);
+
   test('gossips authorization during a frozen beacon and activates under the remaining quorum', async () => {
-    const fixture = createRecoveryFixture({ masterBackedBeacon: true });
     const seats = [0, 1, 2, 3] as const;
     const peers = seats.map((seat) => required(fixture.source.identities.get(seat)).peerId);
     const network = createMemnet({ peers });
@@ -274,6 +302,141 @@ describe('live certified recovery', () => {
       ).toMatchObject({ ok: false, error: { code: 'replica-retired' } });
     } finally {
       for (const replica of replicas) replica.dispose();
+      network.dispose();
+    }
+  }, 60_000);
+
+  test('exchanges durable releases and checks, then finishes the carried beacon with the replacement key', async () => {
+    const seats = [1, 2, 3] as const;
+    const peers = seats.map((seat) => required(fixture.source.identities.get(seat)).peerId);
+    const network = createMemnet({ peers });
+    const replacement = recoveryFixtureReplacement(78);
+    const recoveredBeacon = createBeaconSecretSource(
+      scalarToBytes(17n),
+      { ceremonyId: deckCeremonyId(fixture.genesis), seat: 0 },
+      2,
+    );
+    const replicas: ReplicatedLog[] = [];
+    const sent: { from: Seat; type: string; beaconSeat?: Seat }[] = [];
+    let activationContext: ProposalContext | null = null;
+    try {
+      for (const [index, seat] of seats.entries()) {
+        // oxlint-disable-next-line no-await-in-loop -- Every replica gets its own certified journal.
+        const journal = await journalAtReady(fixture, seat);
+        const inner = network.transport(required(peers[index]));
+        const transport: Transport = {
+          self: inner.self,
+          peers: () => inner.peers(),
+          send: (to, bytes) => {
+            const decoded = decodeProtocolMessage(bytes);
+            if (decoded.ok) sent.push({ from: seat, type: decoded.value.t });
+            inner.send(to, bytes);
+          },
+          broadcast: (bytes) => {
+            const decoded = decodeProtocolMessage(bytes);
+            if (decoded.ok)
+              sent.push({
+                from: seat,
+                type: decoded.value.t,
+                ...(decoded.value.t === 'SYS_CONTRIB'
+                  ? { beaconSeat: decoded.value.contribution.signed.body.seat }
+                  : {}),
+              });
+            inner.broadcast(bytes);
+          },
+          onMessage: (listener) => inner.onMessage(listener),
+          onPeerChange: (listener) => inner.onPeerChange(listener),
+          disconnect: (peer) => inner.disconnect(peer),
+        };
+        const options = optionsFor(fixture, seat, transport, network.clock, journal);
+        replicas.push(
+          value(
+            // oxlint-disable-next-line no-await-in-loop -- Restore starts one independent live voter.
+            await ReplicatedLog.restore({
+              ...options,
+              recoveryParticipant: {
+                encryptionSecret: () => encryptionSecret(fixture, seat),
+                privateEntropy: () => new Uint8Array(32).fill(80 + seat),
+                store: new MemoryGenesisConsentStore(),
+              },
+              ...(seat === 1
+                ? {
+                    onAuthorityChange: async () =>
+                      success({
+                        keys: new Map([[0, replacement.secretKey.slice()]]),
+                        beaconSources: new Map([[0, recoveredBeacon.source]]),
+                      }),
+                    onCommit: (entry, _previous, next) => {
+                      if (
+                        entry.entry.payload.kind === 'membership' &&
+                        parseCanonical(entry.entry.payload.change, recoveryChangeSchema).ok &&
+                        value(parseCanonical(entry.entry.payload.change, recoveryChangeSchema))
+                          .kind === 'recovery-activate'
+                      )
+                        activationContext = next;
+                    },
+                  }
+                : {}),
+            }),
+          ),
+        );
+      }
+      const authorization = signRecoveryFixtureAuthorization(
+        fixture,
+        recoveryFixtureReadiness(fixture, fixture.ready, replacement.peerId),
+        replacement.secretKey,
+      );
+      const submitted = required(replicas[0]).submitRecovery(authorization);
+      await settle(replicas, network.clock, 50);
+      expect(await submitted).toMatchObject({ ok: true });
+      const histories = replicas.map((replica) => replica.getEntries());
+      const latest = required(histories[0]);
+      expect(
+        new Set(replicas.map((replica) => entryHash(replica.getContext().log.head))).size,
+      ).toBe(1);
+      expect(
+        latest.slice(fixture.ready.log.head.seq).map(({ entry }) => entry.payload.kind),
+      ).toEqual(['membership', 'membership', 'system']);
+      expect(latest.at(-2)?.entry.payload).toMatchObject({
+        kind: 'membership',
+        change: { kind: 'recovery-activate' },
+      });
+      expect(latest.at(-1)?.entry.payload).toMatchObject({
+        kind: 'system',
+        input: { type: 'START_SEAT' },
+      });
+      expect(sent.filter(({ type }) => type === 'RECOVERY_RELEASE').length).toBeGreaterThanOrEqual(
+        6,
+      );
+      expect(sent.filter(({ type }) => type === 'RECOVERY_CHECK').length).toBeGreaterThanOrEqual(3);
+      expect(
+        sent.some(
+          ({ from, type, beaconSeat }) => from === 1 && type === 'SYS_CONTRIB' && beaconSeat === 0,
+        ),
+      ).toBe(true);
+      const activated = required<ProposalContext>(activationContext);
+      const signer = value(
+        resolveArtifactSigner(
+          activated.log.authority,
+          activated.log.genesis,
+          required(activated.log.crypto).epoch,
+          0,
+        ),
+      );
+      expect(
+        await prepareBeaconContribution(
+          required(activated.log.crypto),
+          0,
+          recoveryFixtureKey(fixture, 0),
+          recoveredBeacon.source,
+          new MemoryBeaconContributionStore(),
+          signer,
+        ),
+      ).toMatchObject({ ok: false });
+    } finally {
+      for (const replica of replicas) replica.dispose();
+      recoveredBeacon.dispose();
+      replacement.secretKey.fill(0);
       network.dispose();
     }
   }, 60_000);

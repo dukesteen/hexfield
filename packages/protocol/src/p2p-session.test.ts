@@ -320,6 +320,65 @@ async function openTwoHumanSessions(
   return { clock, net, journals, sessions, committed, peers };
 }
 
+async function openHostedBotSessions(
+  decideBot: NonNullable<P2PSessionOptions['decideBot']>,
+  botDelayMs: number,
+) {
+  const fixture = protocolFixture();
+  const peers = fixture.identities.slice(0, 2).map((identity) => identity.peerId);
+  const host = fixture.identities[0];
+  const otherHuman = fixture.identities[1];
+  const hostedBot = fixture.identities[2];
+  if (!host || !otherHuman || !hostedBot) throw new Error('Missing bot fixture identities');
+  const clock = new VirtualClock();
+  const net = createMemnet({ peers, clock });
+  const hostJournal = new MemoryProtocolJournal();
+  const hostOptions = optionsFor(
+    fixture,
+    0,
+    net.transport(host.peerId),
+    clock,
+    hostJournal,
+    new Map([[2, hostedBot.secretKey]]),
+  );
+  const otherOptions = optionsFor(
+    fixture,
+    1,
+    net.transport(otherHuman.peerId),
+    clock,
+    new MemoryProtocolJournal(),
+  );
+  const sessions = [
+    value(await P2PSession.create({ ...hostOptions, decideBot, botDelayMs })),
+    value(await P2PSession.create(otherOptions)),
+  ];
+  await settleNetwork(sessions, clock);
+  return { fixture, clock, net, sessions, hostJournal };
+}
+
+async function advanceToHostedBotTurn(
+  sessions: readonly P2PSession[],
+  clock: VirtualClock,
+): Promise<void> {
+  for (let step = 0; step < 12; step++) {
+    const host = sessions[0];
+    if (!host) throw new Error('Missing host session');
+    const seat = host.getState().turn.activeSeat;
+    if (seat === 2) return;
+    if (seat !== 0 && seat !== 1) throw new Error(`Unexpected setup seat ${seat}`);
+    const owner = sessions[seat];
+    if (!owner) throw new Error(`Missing owner for seat ${seat}`);
+    const command = owner.getLegalCommands(seat).commands[0];
+    if (!command) throw new Error(`No setup command for seat ${seat}`);
+    const submitted = owner.submit(seat, command);
+    // oxlint-disable-next-line no-await-in-loop -- Each action depends on the preceding certified setup commit.
+    await settleNetwork(sessions, clock);
+    // oxlint-disable-next-line no-await-in-loop -- Check this action before selecting the next seat.
+    expect(await submitted).toEqual(success(undefined));
+  }
+  throw new Error('Hosted bot turn did not occur during setup');
+}
+
 function placementCommand(session: P2PSession, seat: Seat): CommandShape {
   const command = session
     .getLegalCommands(seat)
@@ -1454,5 +1513,83 @@ describe('P2PSession', () => {
     expect(session.getPrivate(2)).toBeNull();
     expect(second.peerId).toBe(peers[1]);
     net.dispose();
+  });
+
+  test('delayed bot decision sees only its hosted seat and commits one legal command', async () => {
+    const decisions: { seat: Seat; privateSeat: Seat; level: string }[] = [];
+    const opened = await openHostedBotSessions((view, _pending, level) => {
+      decisions.push({ seat: view.seat, privateSeat: view.priv.seat, level });
+      return (
+        opened.fixture.engine.getLegalCommands(view.state, view.seat, view.priv).commands[0] ?? null
+      );
+    }, 120);
+    try {
+      await advanceToHostedBotTurn(opened.sessions, opened.clock);
+      const host = opened.sessions[0];
+      if (!host) throw new Error('Missing bot host session');
+      const before = host.getCommittedHead().seq;
+      expect(host.getState().turn.activeSeat).toBe(2);
+
+      opened.clock.advanceBy(119);
+      await settleNetwork(opened.sessions, opened.clock);
+      expect(decisions).toEqual([]);
+      expect(host.getCommittedHead().seq).toBe(before);
+
+      opened.clock.advanceBy(1);
+      await settleNetwork(opened.sessions, opened.clock);
+      expect(decisions).toEqual([{ seat: 2, privateSeat: 2, level: 'easy' }]);
+      const saved = await opened.hostJournal.load();
+      if (!saved) throw new Error('Missing host journal');
+      const botCommands = saved.entries.filter(
+        ({ entry }) => entry.payload.kind === 'command' && entry.payload.signed.body.seat === 2,
+      );
+      expect(botCommands).toHaveLength(1);
+      expect(botCommands[0]?.entry.seq).toBeGreaterThan(before);
+      expect(host.getCommittedHead().seq).toBe(botCommands[0]?.entry.seq);
+      expect(decisions.every(({ seat, privateSeat }) => seat === 2 && privateSeat === 2)).toBe(
+        true,
+      );
+    } finally {
+      opened.sessions.forEach((session) => session.dispose());
+      opened.net.dispose();
+    }
+  });
+
+  test('clears a scheduled bot decision when the head advances or the session is disposed', async () => {
+    let decisions = 0;
+    const opened = await openHostedBotSessions((view) => {
+      decisions++;
+      return (
+        opened.fixture.engine.getLegalCommands(view.state, view.seat, view.priv).commands[0] ?? null
+      );
+    }, 100);
+    try {
+      await advanceToHostedBotTurn(opened.sessions, opened.clock);
+      const host = opened.sessions[0];
+      if (!host) throw new Error('Missing bot host session');
+      opened.clock.advanceBy(50);
+      await settleNetwork(opened.sessions, opened.clock);
+      const command = host.getLegalCommands(2).commands[0];
+      if (!command) throw new Error('Missing hosted bot command');
+      const submitted = host.submit(2, command);
+      await settleNetwork(opened.sessions, opened.clock);
+      expect(await submitted).toEqual(success(undefined));
+      expect(decisions).toBe(0);
+      expect(host.getState().turn.activeSeat).toBe(2);
+
+      // The previous timer would fire at t=100; after the head change the new
+      // pending bot action is delayed until t=150.
+      opened.clock.advanceBy(50);
+      await settleNetwork(opened.sessions, opened.clock);
+      expect(decisions).toBe(0);
+
+      host.dispose();
+      opened.clock.advanceBy(100);
+      await settleNetwork(opened.sessions.slice(1), opened.clock);
+      expect(decisions).toBe(0);
+    } finally {
+      opened.sessions.forEach((session) => session.dispose());
+      opened.net.dispose();
+    }
   });
 });

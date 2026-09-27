@@ -32,6 +32,17 @@ import { STEAL_EVIDENCE_PROTOCOL, stealOperationId } from './steal-delivery.js';
 import type { FixedSteal, StealOperation } from './steal-delivery.js';
 import { beaconOperationId } from './beacon.js';
 import type { BeaconOperation } from './beacon.js';
+import { reconstructPrivateSeats } from './private-replay.js';
+import {
+  advanceRecoveryFixture,
+  certifyRecoveryFixtureEntry,
+  createRecoveryFixture,
+  recoveryFixtureReadiness,
+  recoveryFixtureReplacement,
+  signRecoveryFixtureActivation,
+  signRecoveryFixtureAuthorization,
+  signRecoveryFixtureEntry,
+} from './testing/recovery-fixture.js';
 
 function verifiedGenesis(): {
   engine: ReturnType<typeof protocolFixture>['engine'];
@@ -883,4 +894,81 @@ describe('VerifiedSessionDriver safety boundaries', () => {
     });
     expect(stealOperationId(operation)).toBe(contribution.value.body.operationId);
   });
+  test('adopts only a nonoverlapping recovered bot at the identical verified head', () => {
+    const fixture = createRecoveryFixture({ masterBackedBeacon: true, chainLength: 1 });
+    const replacement = recoveryFixtureReplacement(122);
+    const authorization = signRecoveryFixtureAuthorization(
+      fixture,
+      recoveryFixtureReadiness(fixture, fixture.ready, replacement.peerId),
+      replacement.secretKey,
+    );
+    const authEntry = signRecoveryFixtureEntry(
+      fixture,
+      fixture.ready,
+      { kind: 'membership', change: authorization },
+      fixture.ready.log.head.stateHash,
+    );
+    const certifiedAuth = certifyRecoveryFixtureEntry(fixture, fixture.ready, authEntry, [1, 2, 3]);
+    const authorized = advanceRecoveryFixture(fixture.ready, certifiedAuth);
+    const activation = signRecoveryFixtureActivation(fixture, authorized, authEntry);
+    const takeover = fixture.source.engine.apply(authorized.log.state, {
+      kind: 'system',
+      type: 'SEAT_STATUS',
+      seat: 0,
+      status: 'bot',
+    });
+    if (!takeover.ok) throw new Error(takeover.error.message);
+    const activatedEntry = signRecoveryFixtureEntry(
+      fixture,
+      authorized,
+      { kind: 'membership', change: activation },
+      toHex(hashValue(takeover.value.state)),
+    );
+    const certifiedActivation = certifyRecoveryFixtureEntry(
+      fixture,
+      authorized,
+      activatedEntry,
+      [1, 2, 3],
+    );
+    const active = advanceRecoveryFixture(authorized, certifiedActivation);
+    const entries = [...fixture.deckEntries, certifiedAuth, certifiedActivation];
+    const host = reconstructPrivateSeats({
+      genesisEntry: fixture.genesisEntry,
+      entries,
+      engine: fixture.source.engine,
+      policy: fixture.policy,
+      secrets: [{ seat: 1, master: scalarToBytes(18n) }],
+    });
+    const donor = reconstructPrivateSeats({
+      genesisEntry: fixture.genesisEntry,
+      entries,
+      engine: fixture.source.engine,
+      policy: fixture.policy,
+      secrets: [{ seat: 0, master: scalarToBytes(17n) }],
+    });
+    if (!host.ok || !donor.ok) throw new Error('Could not reconstruct certified private seats');
+    try {
+      expect(host.value.driver.privateState(0)).toBeNull();
+      expect(host.value.driver.adoptRecovered(donor.value.driver, authorized.log)).toMatchObject({
+        ok: false,
+        error: { code: 'verified-adoption-context' },
+      });
+      expect(host.value.driver.adoptRecovered(donor.value.driver, active.log)).toEqual(
+        success(undefined),
+      );
+      expect(host.value.driver.privateState(0)).toEqual(donor.value.driver.privateState(0));
+      expect(host.value.driver.validateSources()).toEqual(success(undefined));
+      expect(host.value.driver.adoptRecovered(donor.value.driver, active.log)).toMatchObject({
+        ok: false,
+        error: { code: 'verified-adoption-seat' },
+      });
+      donor.value.dispose();
+      expect(host.value.driver.privateState(0)).not.toBeNull();
+      expect(host.value.driver.validateSources().ok).toBe(false);
+    } finally {
+      host.value.dispose();
+      donor.value.dispose();
+      replacement.secretKey.fill(0);
+    }
+  }, 30_000);
 });

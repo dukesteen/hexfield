@@ -50,6 +50,13 @@ import { decodeProtocolMessage, encodeProtocolMessage } from './messages.js';
 import type { ProtocolMessage } from './messages.js';
 import { recoveryChangeSchema } from './recovery-membership.js';
 import type { RecoveryChange } from './recovery-types.js';
+import { RecoveryParticipant } from './recovery-participant.js';
+import type {
+  RecoveryParticipantOptions,
+  PreparedRecoveryPackets,
+} from './recovery-participant.js';
+import type { RecoveryRelease } from './recovery-release.js';
+import type { SignedRecoveryCheck } from './recovery-check.js';
 import {
   advanceContext,
   objectiveProofParentHash,
@@ -98,6 +105,15 @@ const MAX_PENDING_COMMANDS = 32;
 const MAX_PENDING_COMMANDS_PER_SEAT = 4;
 const MAX_TRADE_PROOF_CACHE = 16;
 const MAX_TRADE_PROOF_REQUESTS_PER_FINALIZER = 3;
+const MAX_RECOVERY_PACKETS_PER_PULSE = 8;
+const MAX_RECOVERY_RELEASES_PER_PEER = 36;
+const MAX_RECOVERY_CHECKS_PER_PEER = 6;
+
+export interface RecoveredReplicaOwnership {
+  readonly keys: ReadonlyMap<Seat, Uint8Array>;
+  readonly beaconSources: ReadonlyMap<Seat, BeaconSecretSource>;
+  readonly createDeckSource?: DeckSourceFactory;
+}
 
 export type ReplicatedLogStatus =
   | { kind: 'pending'; commandHash: string }
@@ -121,6 +137,8 @@ export interface ReplicatedLogOptions {
   cheatCandidateStore?: CheatCandidateStore;
   /** Required in verified sessions. Only this human's chain secrets are exposed here. */
   beaconSource?: BeaconSecretSource;
+  /** Additional locally owned beacon sources, validated against certified authority. */
+  beaconSources?: ReadonlyMap<Seat, BeaconSecretSource>;
   /** Durable, immutable outgoing contributions, retained alongside the voting journal. */
   beaconContributions?: BeaconContributionStore;
   /** Exact public ceremony passes fixed by genesis; never regenerated after consent. */
@@ -145,6 +163,15 @@ export interface ReplicatedLogOptions {
   ) => Result<readonly IndexedHandProof[]>;
   /** Verified remote trade proofs are delivered to the pre-admission coordinator. */
   onTradeProofResponse?: (response: SignedTradeProofResponse) => void;
+  /** Private recovery inputs; the replica supplies its own journal and current signing key. */
+  recoveryParticipant?: Pick<
+    RecoveryParticipantOptions,
+    'encryptionSecret' | 'privateEntropy' | 'store'
+  >;
+  /** Install only certified active bot keys hosted by this voter. Temporary key buffers transfer ownership. */
+  onAuthorityChange?: (
+    current: ProposalContext,
+  ) => Promise<Result<RecoveredReplicaOwnership | null>>;
   systemInput?: (
     context: ProposalContext,
   ) => { input: SystemInput; evidence: SystemEvidence } | null;
@@ -173,7 +200,7 @@ interface PendingRecovery {
 
 interface LocalConfiguration {
   passes: ReadonlyMap<string, { deckId: string; pass: unknown }>;
-  keys: ReadonlyMap<Seat, Uint8Array>;
+  keys: Map<Seat, Uint8Array>;
   signingKey: Uint8Array;
 }
 
@@ -190,6 +217,16 @@ export class ReplicatedLog {
   private readonly rejectedCommands = new Set<string>();
   private readonly rejectedProposals = new Set<string>();
   private readonly beaconInbox = new BeaconInbox();
+  private recoveryParticipant: RecoveryParticipant | null = null;
+  private readonly beaconSources = new Map<Seat, BeaconSecretSource>();
+  private createDeckSource: DeckSourceFactory | undefined;
+  private preparedRecovery: { headHash: string; packets: PreparedRecoveryPackets } | null = null;
+  private recoverySendCursor = 0;
+  private readonly sentRecoveryPackets = new Set<string>();
+  private recoveryAdmissionScope: string | null = null;
+  private recoveryCheckScope: string | null = null;
+  private readonly recoveryReleasesByPeer = new Map<PeerId, Set<string>>();
+  private readonly recoveryChecksByPeer = new Map<PeerId, Set<string>>();
   private readonly deckInbox = new DeckInbox();
   private readonly countInbox = new CountInbox();
   private readonly stealInbox = new StealInbox();
@@ -217,7 +254,7 @@ export class ReplicatedLog {
   private sentCountOperation: string | null = null;
   private preparedDeckPrefix: string | null = null;
   private sentDeckPrefix: string | null = null;
-  private sentBeaconOperation: string | null = null;
+  private readonly sentBeaconOperations = new Set<string>();
   private accusation: ExcludeProposerControl | null = null;
   private readonly cheatCandidates = new Map<string, CheatClaim>();
   private readonly unsubscribers: Unsubscribe[] = [];
@@ -246,6 +283,9 @@ export class ReplicatedLog {
     this.secretKey = local.signingKey;
     this.deckKeys = local.keys;
     this.deckSetupPasses = local.passes;
+    this.createDeckSource = options.createDeckSource;
+    if (options.beaconSource) this.beaconSources.set(options.seat, options.beaconSource);
+    for (const [seat, source] of options.beaconSources ?? []) this.beaconSources.set(seat, source);
     const identity = identityFromSecret(this.secretKey);
     this.self = identity.peerId;
     identity.secretKey.fill(0);
@@ -334,6 +374,8 @@ export class ReplicatedLog {
       return opened;
     }
     const initialized = await replica.enqueue(async () => {
+      const installed = await replica.installAuthorityOwnership();
+      if (!installed.ok) return installed;
       const recovered = await replica.recoverPersistedAccusation();
       if (!recovered.ok) return recovered;
       const cheats = await replica.recoverCheatCandidates();
@@ -525,6 +567,12 @@ export class ReplicatedLog {
     this.cheatWorkByPeer.clear();
     this.historicalCheatWorkByPeer.clear();
     this.cheatCandidates.clear();
+    this.recoveryParticipant?.dispose();
+    this.recoveryParticipant = null;
+    this.preparedRecovery = null;
+    this.sentRecoveryPackets.clear();
+    this.recoveryReleasesByPeer.clear();
+    this.recoveryChecksByPeer.clear();
     this.preparedSteal = null;
     this.sentStealStage = null;
     this.controller?.dispose();
@@ -596,6 +644,117 @@ export class ReplicatedLog {
   private activeController(): ConsensusController {
     if (!this.controller) throw new Error('No active consensus controller');
     return this.controller;
+  }
+
+  private async installAuthorityOwnership(): Promise<Result<void>> {
+    const authority = this.context.log.authority;
+    const missing =
+      authority?.controllers.filter(
+        (controller) =>
+          controller.kind === 'bot' &&
+          controller.status === 'active' &&
+          controller.hostSeat === this.options.seat &&
+          controller.activatedAt.seq > 0 &&
+          (!this.currentOwnedKeyMatches(controller.seat, controller.publicKey) ||
+            !this.beaconSources.has(controller.seat)),
+      ) ?? [];
+    if (missing.length === 0) return success(undefined);
+    const install = this.options.onAuthorityChange;
+    if (!install) {
+      this.status({ kind: 'rejected', code: 'replica-recovery-keys' });
+      return success(undefined);
+    }
+    const headHash = entryHash(this.context.log.head);
+    let ownership: RecoveredReplicaOwnership | null = null;
+    try {
+      const prepared = await install(detachedContext(this.context));
+      if (!prepared.ok) return prepared;
+      ownership = prepared.value;
+      if (this.disposed || entryHash(this.context.log.head) !== headHash)
+        return failure(
+          'replica-recovery-stale',
+          'Certified parent changed during key installation',
+        );
+      const record = await this.options.journal.load();
+      if (this.disposed || entryHash(this.context.log.head) !== headHash)
+        return failure(
+          'replica-recovery-stale',
+          'Certified parent changed during key installation',
+        );
+      if (
+        !record ||
+        entryHash(record.entries.at(-1)?.entry ?? record.genesis) !== headHash ||
+        record.height !== this.context.log.head.seq + 1
+      )
+        return failure('replica-recovery-stale', 'Journal changed during key installation');
+      if (
+        !ownership ||
+        !(ownership.keys instanceof Map) ||
+        !(ownership.beaconSources instanceof Map) ||
+        ownership.keys.size !== missing.length ||
+        ownership.beaconSources.size !== missing.length ||
+        missing.some(
+          (controller) =>
+            !ownership?.keys.has(controller.seat) || !ownership.beaconSources.has(controller.seat),
+        )
+      )
+        return failure('replica-recovery-keys', 'Recovered ownership differs from certified host');
+      if (
+        missing.some((controller) => {
+          const source = ownership?.beaconSources.get(controller.seat);
+          return (
+            !source || typeof source.link !== 'function' || typeof source.extension !== 'function'
+          );
+        }) ||
+        (ownership.createDeckSource !== undefined &&
+          typeof ownership.createDeckSource !== 'function')
+      )
+        return failure('replica-recovery-keys', 'Recovered private source is malformed');
+      const copied = new Map<Seat, Uint8Array>();
+      try {
+        for (const controller of missing) {
+          const key = ownership.keys.get(controller.seat);
+          if (!(key instanceof Uint8Array) || key.length !== 32)
+            return failure('replica-recovery-keys', 'Recovered signing key is malformed');
+          const identity = identityFromSecret(key);
+          const matches = identity.peerId === controller.publicKey;
+          identity.secretKey.fill(0);
+          if (!matches)
+            return failure(
+              'replica-recovery-keys',
+              'Recovered key differs from certified controller',
+            );
+          copied.set(controller.seat, key.slice());
+        }
+        for (const [seat, key] of copied) {
+          this.deckKeys.get(seat)?.fill(0);
+          this.deckKeys.set(seat, key);
+        }
+        for (const [seat, source] of ownership.beaconSources) this.beaconSources.set(seat, source);
+        if (ownership.createDeckSource) this.createDeckSource = ownership.createDeckSource;
+        return success(undefined);
+      } finally {
+        if (copied.size !== missing.length) for (const key of copied.values()) key.fill(0);
+      }
+    } catch {
+      return failure('replica-recovery-keys', 'Could not install certified recovery ownership');
+    } finally {
+      if (ownership?.keys instanceof Map)
+        for (const key of ownership.keys.values()) if (key instanceof Uint8Array) key.fill(0);
+    }
+  }
+
+  private currentOwnedKeyMatches(seat: Seat, publicKey: string): boolean {
+    const key = this.deckKeys.get(seat);
+    if (!key) return false;
+    try {
+      const identity = identityFromSecret(key);
+      const matches = identity.peerId === publicKey;
+      identity.secretKey.fill(0);
+      return matches;
+    } catch {
+      return false;
+    }
   }
 
   private async openController(): Promise<Result<void>> {
@@ -859,6 +1018,110 @@ export class ReplicatedLog {
     return success(undefined);
   }
 
+  private participant(): RecoveryParticipant | null {
+    const privateInputs = this.options.recoveryParticipant;
+    if (!privateInputs) return null;
+    this.recoveryParticipant ??= new RecoveryParticipant({
+      ...privateInputs,
+      journal: this.options.journal,
+      engine: this.options.engine,
+      policy: this.options.policy,
+      localSeat: this.options.seat,
+      signingKey: this.secretKey,
+    });
+    return this.recoveryParticipant;
+  }
+
+  private recoverySender(seat: Seat): PeerId | null {
+    const controller = this.context.log.authority?.controllers.find((item) => item.seat === seat);
+    if (!controller || controller.status !== 'active') return null;
+    return (
+      this.context.membership.voters.find((item) => item.seat === controller.hostSeat)?.publicKey ??
+      null
+    );
+  }
+
+  private admitRecoveryPacket(from: PeerId, hash: string, check: boolean): boolean {
+    const pending = this.context.log.recovery?.pending;
+    if (!pending) return false;
+    const authorization = `${pending.seq}/${pending.hash}`;
+    const parent = `${authorization}/${this.context.log.head.seq}/${entryHash(this.context.log.head)}`;
+    if (this.recoveryAdmissionScope !== authorization) {
+      this.recoveryAdmissionScope = authorization;
+      this.recoveryReleasesByPeer.clear();
+    }
+    if (this.recoveryCheckScope !== parent) {
+      this.recoveryCheckScope = parent;
+      this.recoveryChecksByPeer.clear();
+    }
+    const byPeer = check ? this.recoveryChecksByPeer : this.recoveryReleasesByPeer;
+    const limit = check ? MAX_RECOVERY_CHECKS_PER_PEER : MAX_RECOVERY_RELEASES_PER_PEER;
+    let seen = byPeer.get(from);
+    if (!seen) {
+      seen = new Set();
+      byPeer.set(from, seen);
+    }
+    if (seen.has(hash) || seen.size >= limit) return false;
+    seen.add(hash);
+    return true;
+  }
+
+  private async receiveRecoveryRelease(
+    from: PeerId,
+    release: RecoveryRelease,
+    digest: string,
+  ): Promise<Result<void>> {
+    const pending = this.context.log.recovery?.pending;
+    if (
+      digest !== this.context.membership.genesisDigest ||
+      !pending ||
+      release.body.authorization.seq !== pending.seq ||
+      release.body.authorization.hash !== pending.hash ||
+      release.body.genesisDigest !== digest ||
+      this.recoverySender(release.body.holderSeat) !== from ||
+      this.recoverySender(release.body.recipientSeat) !== this.self
+    )
+      return success(undefined);
+    const participant = this.participant();
+    if (!participant) return success(undefined);
+    const hash = toHex(hashValue(release));
+    if (!this.admitRecoveryPacket(from, hash, false)) return success(undefined);
+    const remembered = participant.rememberRelease(this.context.log, release);
+    if (!remembered.ok) {
+      this.strikePeer(from);
+      return failure('recovery-release-invalid', 'Authenticated recovery share is invalid', {
+        cause: remembered.error.code,
+      });
+    }
+    if (remembered.value) this.preparedRecovery = null;
+    return remembered.value ? this.offerAvailableInput() : success(undefined);
+  }
+
+  private async receiveRecoveryCheck(
+    from: PeerId,
+    check: SignedRecoveryCheck,
+    digest: string,
+  ): Promise<Result<void>> {
+    if (
+      digest !== this.context.membership.genesisDigest ||
+      !this.context.log.recovery?.pending ||
+      this.recoverySender(check.check.seat) !== from
+    )
+      return success(undefined);
+    const participant = this.participant();
+    if (!participant) return success(undefined);
+    const hash = toHex(hashValue(check));
+    if (!this.admitRecoveryPacket(from, hash, true)) return success(undefined);
+    const remembered = participant.rememberCheck(this.context.log, check);
+    if (!remembered.ok) {
+      this.strikePeer(from);
+      return failure('recovery-check-invalid', 'Authenticated recovery check is invalid', {
+        cause: remembered.error.code,
+      });
+    }
+    return remembered.value ? this.offerAvailableInput() : success(undefined);
+  }
+
   private async receive(from: PeerId, bytes: Uint8Array): Promise<Result<void>> {
     if (this.blockedPeers.has(from)) return success(undefined);
     const voter = this.context.membership.voters.some((item) => item.publicKey === from);
@@ -870,6 +1133,10 @@ export class ReplicatedLog {
     if (!voter && message.t !== 'SYNC_REQ')
       return failure('replica-peer', 'Former voters may only request certified history');
     switch (message.t) {
+      case 'RECOVERY_RELEASE':
+        return this.receiveRecoveryRelease(from, message.release, message.genesisDigest);
+      case 'RECOVERY_CHECK':
+        return this.receiveRecoveryCheck(from, message.check, message.genesisDigest);
       case 'SYS_CONTRIB': {
         if (message.genesisDigest !== this.context.membership.genesisDigest)
           return failure('replica-beacon-genesis', 'Beacon contribution belongs to another game');
@@ -1275,6 +1542,8 @@ export class ReplicatedLog {
     const state = this.activeController().snapshot();
     if (!state.ok) return state;
     if (state.value.halted) return success(undefined);
+    const recoveryPrepared = await this.prepareRecovery(retransmit);
+    if (!recoveryPrepared.ok) return recoveryPrepared;
     const deckPrepared = await this.prepareDeck(retransmit);
     if (!deckPrepared.ok) return deckPrepared;
     const countPrepared = await this.prepareCount(retransmit);
@@ -1287,6 +1556,7 @@ export class ReplicatedLog {
       this.accusation !== null ||
       this.cheatCandidates.size > 0 ||
       this.recoveryIntent !== null ||
+      this.recoveryCandidate() !== null ||
       (!this.cryptoPending() && this.commands.length > 0) ||
       this.deckSetupCandidate() !== null ||
       this.deckDrawCandidate() !== null ||
@@ -1329,6 +1599,78 @@ export class ReplicatedLog {
     );
   }
 
+  private recoveryCandidate(): RecoveryChange | null {
+    if (!this.context.log.recovery?.pending || !this.recoveryParticipant) return null;
+    const candidate = this.recoveryParticipant.candidate(this.context.log);
+    if (!candidate.ok) {
+      this.status({ kind: 'rejected', code: candidate.error.code });
+      return null;
+    }
+    return candidate.value;
+  }
+
+  private async prepareRecovery(retransmit: boolean): Promise<Result<void>> {
+    const participant = this.context.log.recovery?.pending ? this.participant() : null;
+    if (!participant) {
+      this.preparedRecovery = null;
+      this.sentRecoveryPackets.clear();
+      return success(undefined);
+    }
+    const headHash = entryHash(this.context.log.head);
+    if (this.preparedRecovery?.headHash !== headHash) {
+      const prepared = await participant.prepare(detachedContext(this.context).log);
+      if (this.disposed)
+        return failure('replica-disposed', 'Replica closed during recovery preparation');
+      if (!prepared.ok) return prepared;
+      if (entryHash(this.context.log.head) !== headHash)
+        return failure(
+          'recovery-participant-stale',
+          'Certified parent advanced during preparation',
+        );
+      this.preparedRecovery = { headHash, packets: prepared.value };
+      this.recoverySendCursor = 0;
+      this.sentRecoveryPackets.clear();
+    }
+    const packets = this.preparedRecovery.packets;
+    const releases = packets.releases;
+    let sentCount = 0;
+    for (
+      let scanned = 0;
+      scanned < releases.length && sentCount < MAX_RECOVERY_PACKETS_PER_PULSE;
+      scanned += 1
+    ) {
+      const release = releases[this.recoverySendCursor % releases.length];
+      this.recoverySendCursor += 1;
+      if (!release) continue;
+      const recipient = this.recoverySender(release.body.recipientSeat);
+      if (!recipient || recipient === this.self) continue;
+      const hash = toHex(hashValue(release));
+      if (!retransmit && this.sentRecoveryPackets.has(hash)) continue;
+      const sent = this.send(recipient, {
+        t: 'RECOVERY_RELEASE',
+        genesisDigest: this.context.membership.genesisDigest,
+        release,
+      });
+      if (sent.ok) {
+        this.sentRecoveryPackets.add(hash);
+        sentCount += 1;
+      } else this.status({ kind: 'rejected', code: sent.error.code });
+    }
+    if (packets.check) {
+      const hash = toHex(hashValue(packets.check));
+      if (retransmit || !this.sentRecoveryPackets.has(hash)) {
+        const sent = this.broadcast({
+          t: 'RECOVERY_CHECK',
+          genesisDigest: this.context.membership.genesisDigest,
+          check: packets.check,
+        });
+        if (sent.ok) this.sentRecoveryPackets.add(hash);
+        else this.status({ kind: 'rejected', code: sent.error.code });
+      }
+    }
+    return success(undefined);
+  }
+
   private candidate(state: ConsensusState): LogEntry | null {
     if (this.accusation)
       return signEntry(
@@ -1357,6 +1699,8 @@ export class ReplicatedLog {
         },
         this.secretKey,
       );
+    const activation = this.recoveryCandidate();
+    if (activation) return this.entryCandidate(state, { kind: 'membership', change: activation });
     if (this.recoveryIntent) {
       const candidate = this.entryCandidate(state, {
         kind: 'membership',
@@ -1727,7 +2071,8 @@ export class ReplicatedLog {
     const setup = crypto.decks.decks.find(
       (deck) => deck.commitment.definition.deckId === active.deckId,
     )?.setup;
-    const { createDeckSource, deckContributions } = this.options;
+    const createDeckSource = this.createDeckSource;
+    const { deckContributions } = this.options;
     if (!setup || !createDeckSource || !deckContributions)
       return this.failClosed(
         'replica-deck-store',
@@ -1876,44 +2221,50 @@ export class ReplicatedLog {
     );
     if (!refreshed.ok) return this.failClosed(refreshed.error.code, refreshed.error.message);
     if (!crypto?.beacon.active || !decksReady(crypto.decks)) return success(undefined);
-    const operationId = `${this.beaconInbox.operationId()}/${crypto.epoch}`;
-    if (!retransmit && operationId === this.sentBeaconOperation) return success(undefined);
-    const { beaconSource, beaconContributions } = this.options;
-    if (!beaconSource || !beaconContributions)
+    const { beaconContributions } = this.options;
+    if (!beaconContributions)
       return this.failClosed(
         'replica-beacon-store',
         'Verified sessions need durable beacon contributions',
       );
-    const signer = resolveArtifactSigner(
-      this.context.log.authority,
-      this.context.log.genesis,
-      crypto.epoch,
-      this.options.seat,
-    );
-    if (!signer.ok) return signer;
-    const prepared = await prepareBeaconContribution(
-      crypto,
-      this.options.seat,
-      this.secretKey,
-      beaconSource,
-      beaconContributions,
-      signer.value,
-    );
-    if (this.disposed)
-      return failure('replica-disposed', 'Replica closed during beacon preparation');
-    if (!prepared.ok) return this.failClosed(prepared.error.code, prepared.error.message);
-    if (!prepared.value) return success(undefined);
-    const remembered = this.beaconInbox.remember(prepared.value);
-    if (!remembered.ok) return this.failClosed(remembered.error.code, remembered.error.message);
-    // Preparation persists before this first send; later pulses send the exact stored contribution.
-    const sent = this.broadcast({
-      t: 'SYS_CONTRIB',
-      genesisDigest: this.context.membership.genesisDigest,
-      contribution: prepared.value,
-    });
-    if (sent.ok) this.sentBeaconOperation = operationId;
-    else this.status({ kind: 'rejected', code: sent.error.code });
-    // A send failure does not undo persistence; the next pulse retries the same bytes.
+    for (const participant of crypto.beacon.active.participants) {
+      const key = this.deckKeys.get(participant.seat);
+      if (!key) continue;
+      const source = this.beaconSources.get(participant.seat);
+      if (!source)
+        return this.failClosed('replica-beacon-source', 'Owned beacon source is missing');
+      const signer = resolveArtifactSigner(
+        this.context.log.authority,
+        this.context.log.genesis,
+        crypto.epoch,
+        participant.seat,
+      );
+      if (!signer.ok) return signer;
+      const operationId = `${this.beaconInbox.operationId()}/${crypto.epoch}/${participant.seat}/${signer.value.generation.hash}`;
+      if (!retransmit && this.sentBeaconOperations.has(operationId)) continue;
+      // oxlint-disable-next-line no-await-in-loop -- Each owned seat has a separate immutable outbox slot.
+      const prepared = await prepareBeaconContribution(
+        crypto,
+        participant.seat,
+        key,
+        source,
+        beaconContributions,
+        signer.value,
+      );
+      if (this.disposed)
+        return failure('replica-disposed', 'Replica closed during beacon preparation');
+      if (!prepared.ok) return this.failClosed(prepared.error.code, prepared.error.message);
+      if (!prepared.value) continue;
+      const remembered = this.beaconInbox.remember(prepared.value);
+      if (!remembered.ok) return this.failClosed(remembered.error.code, remembered.error.message);
+      const sent = this.broadcast({
+        t: 'SYS_CONTRIB',
+        genesisDigest: this.context.membership.genesisDigest,
+        contribution: prepared.value,
+      });
+      if (sent.ok) this.sentBeaconOperations.add(operationId);
+      else this.status({ kind: 'rejected', code: sent.error.code });
+    }
     return success(undefined);
   }
 
@@ -2271,6 +2622,9 @@ export class ReplicatedLog {
     this.rejectedCountContributions.clear();
     this.rejectedStealMessages.clear();
     this.sentCountContributions.clear();
+    this.sentBeaconOperations.clear();
+    this.preparedRecovery = null;
+    this.sentRecoveryPackets.clear();
     this.accusation = pendingAccusation;
     this.clearConsensusTimers();
     this.refreshPreparedStealStage();
@@ -2288,6 +2642,14 @@ export class ReplicatedLog {
       this.status({ kind: 'halted', code: 'commit-application' });
       this.dispose();
       throw new Error('Committed private-state application failed');
+    }
+    if (!retired && checked.value.entry.payload.kind === 'membership') {
+      const installed = await this.installAuthorityOwnership();
+      if (!installed.ok) {
+        this.status({ kind: 'halted', code: installed.error.code });
+        this.dispose();
+        throw new Error(`Certified recovery key installation failed: ${installed.error.code}`);
+      }
     }
     this.settlePending(certified);
     this.settleRecovery(certified);
@@ -2756,8 +3118,13 @@ function checkLocalKey(
         'Local key and authenticated transport do not match the certified voter',
       );
     for (const [seat, rawKey] of options.botKeys ?? []) {
-      const bot = context.log.genesis.seats.find((item) => item.seat === seat);
-      if (bot?.kind !== 'bot' || bot.botHost !== local || keys.has(seat))
+      const bot = context.log.authority?.controllers.find((item) => item.seat === seat);
+      if (
+        bot?.kind !== 'bot' ||
+        bot.status !== 'active' ||
+        bot.hostSeat !== options.seat ||
+        keys.has(seat)
+      )
         return failure('replica-bot-key', 'Bot key is not hosted by this human');
       const key = rawKey.slice();
       keys.set(seat, key);
@@ -2768,8 +3135,13 @@ function checkLocalKey(
     }
     if (
       needsDeck &&
-      context.log.genesis.seats.some(
-        (seat) => seat.kind === 'bot' && seat.botHost === local && !keys.has(seat.seat),
+      context.log.authority?.controllers.some(
+        (controller) =>
+          controller.kind === 'bot' &&
+          controller.status === 'active' &&
+          controller.hostSeat === options.seat &&
+          !keys.has(controller.seat) &&
+          (controller.activatedAt.seq === 0 || !options.onAuthorityChange),
       )
     )
       return failure('replica-bot-key', 'Verified decks require keys for every locally hosted bot');

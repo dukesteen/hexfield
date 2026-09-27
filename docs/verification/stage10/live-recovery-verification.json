@@ -1,0 +1,24 @@
+{
+  "verifiedAt": "2026-09-27T03:00:32.687964+00:00",
+  "manifest": "live-recovery-source.json",
+  "sourceFiles": 610,
+  "sourceUnchangedAfterCheckAndBuild": true,
+  "check": {
+    "command": "pnpm check",
+    "exitCode": 0,
+    "staticChecks": "passed",
+    "testFilesPassed": 184,
+    "testsPassed": 1104,
+    "testsSkipped": 1,
+    "unitDurationSeconds": 164.73,
+    "log": "live-recovery-check.log"
+  },
+  "build": {
+    "command": "pnpm build",
+    "exitCode": 0,
+    "log": "live-recovery-build.log"
+  },
+  "browserAutomationRun": false,
+  "acceptance": "Implementation checkpoint; complete recovery games, audit and milestones C/D remain unfinished",
+  "claudeImplementationReview": "pending usage-limit reset"
+}
