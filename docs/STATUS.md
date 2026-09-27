@@ -24,11 +24,15 @@ checks pass. External-network connectivity remains unverified, and the full
 milestone acceptance items below remain open.
 
 The current app is [Hexfield on Cloudflare](https://hexfield.steenbakkers.cc/).
-The [deployment check](verification/cloudflare/deployment.md) records live
+The [redesign release](verification/cloudflare/redesign-release.md) is deployed
+from `127f6ab` and includes the merged artwork, multiplayer controls and certified
+seat-transfer flow. Its live check covers startup, human/bot setup and saved-game
+exit. Later local checkpoints below have not yet been deployed.
+The earlier [deployment check](verification/cloudflare/deployment.md) records live
 invite-link startup, replicated setup moves, reload, lobby autosave and desktop /
 mobile viewport checks. Workers Free remains the deployment constraint; TURN is
 disabled. The [online worker release](verification/cloudflare/online-worker-release.md)
-is live from source `929e889`. Certified setup and live game computation run in a
+introduced the worker boundary in `929e889`. Certified setup and live game computation run in a
 dedicated browser worker so pending indicators, menus and board rendering can
 continue while checks run. It preserves the earlier action feedback and
 duplicate-click protection; it does not eliminate network agreement latency.
@@ -398,8 +402,10 @@ verified session and audit lifecycle; the home list shows winner/audit status
 and derives local statistics only from complete successful audits. Saved history
 now has public replay export/opening, confirmed local removal and a display-only
 30-day inactivity label. A permanent deletion marker prevents a deleted game
-from reviving its old voting identity. General saves with optional private material
-remain separate from these public replay controls.
+from reviving its old voting identity. The [full-save UI](verification/stage10/full-save-ui-checkpoint.md) adds optional
+passphrase-encrypted private export and read-only imports. Public file export,
+import, reload and a mobile view pass in native Chrome. Imported history and
+safety do not authorize play; certified fresh-key resume remains unfinished.
 
 The [native v5 handoff](verification/stage10/native-transfer-acceptance.md) certifies
 activation, accepts a move from the new device at matching peer heads and refuses
@@ -410,8 +416,16 @@ finishes a three-point game and all three surviving peers complete clean audits
 in 95.42 seconds. Its crash occurs before survivor startup, so it does not satisfy
 the separate mid-game browser takeover requirement.
 
+The [native resume trace](verification/stage10/native-resume-acceptance.md) now
+refreshes the higher-ID WebRTC responder and accepts its next certified move in
+2.438 seconds. The reconnect fix retries a lost signed offer when signaling
+reports a known peer returning, while preserving admission and replay checks.
+Both pages and workers also close and reopen in reverse order, then accept
+another move at matching heads. This is a local laptop measurement; whole-browser
+process restart and cross-device performance remain separate checks.
+
 - [ ] All chaos additions pass on 500 seeds each.
-- [ ] Refresh-resume takes < 3 s to be back in play on a typical laptop (measured).
+- [x] Refresh-resume takes < 3 s to be back in play on a typical laptop (measured).
 - [ ] Four-human takeover and audit pass; two-/three-human departure pauses safely and resumes when the required voter returns.
 - [ ] A game can be exported and resumed in another browser as the same seat through a certified key transfer; a stale save cannot reactivate a retired key.
 

@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as DevBoardRouteImport } from './routes/dev/board'
 import { Route as DevNetworkRouteImport } from './routes/dev/network'
+import { Route as FullSaveSaveIdRouteImport } from './routes/full-save/$saveId'
 import { Route as GameGameIdRouteImport } from './routes/game/$gameId'
 import { Route as JoinIndexRouteImport } from './routes/join/index'
 import { Route as JoinRoomIdRouteImport } from './routes/join/$roomId'
@@ -41,6 +42,11 @@ const DevBoardRoute = DevBoardRouteImport.update({
 const DevNetworkRoute = DevNetworkRouteImport.update({
   id: '/dev/network',
   path: '/dev/network',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const FullSaveSaveIdRoute = FullSaveSaveIdRouteImport.update({
+  id: '/full-save/$saveId',
+  path: '/full-save/$saveId',
   getParentRoute: () => rootRouteImport,
 } as any)
 const GameGameIdRoute = GameGameIdRouteImport.update({
@@ -94,6 +100,7 @@ export interface FileRoutesByFullPath {
   '/settings': typeof SettingsRoute
   '/dev/board': typeof DevBoardRoute
   '/dev/network': typeof DevNetworkRoute
+  '/full-save/$saveId': typeof FullSaveSaveIdRoute
   '/game/$gameId': typeof GameGameIdRoute
   '/join/$roomId': typeof JoinRoomIdRoute
   '/lobby/$lobbyId': typeof LobbyLobbyIdRoute
@@ -109,6 +116,7 @@ export interface FileRoutesByTo {
   '/settings': typeof SettingsRoute
   '/dev/board': typeof DevBoardRoute
   '/dev/network': typeof DevNetworkRoute
+  '/full-save/$saveId': typeof FullSaveSaveIdRoute
   '/game/$gameId': typeof GameGameIdRoute
   '/join/$roomId': typeof JoinRoomIdRoute
   '/lobby/$lobbyId': typeof LobbyLobbyIdRoute
@@ -125,6 +133,7 @@ export interface FileRoutesById {
   '/settings': typeof SettingsRoute
   '/dev/board': typeof DevBoardRoute
   '/dev/network': typeof DevNetworkRoute
+  '/full-save/$saveId': typeof FullSaveSaveIdRoute
   '/game/$gameId': typeof GameGameIdRoute
   '/join/$roomId': typeof JoinRoomIdRoute
   '/lobby/$lobbyId': typeof LobbyLobbyIdRoute
@@ -142,6 +151,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/dev/board'
     | '/dev/network'
+    | '/full-save/$saveId'
     | '/game/$gameId'
     | '/join/$roomId'
     | '/lobby/$lobbyId'
@@ -157,6 +167,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/dev/board'
     | '/dev/network'
+    | '/full-save/$saveId'
     | '/game/$gameId'
     | '/join/$roomId'
     | '/lobby/$lobbyId'
@@ -172,6 +183,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/dev/board'
     | '/dev/network'
+    | '/full-save/$saveId'
     | '/game/$gameId'
     | '/join/$roomId'
     | '/lobby/$lobbyId'
@@ -188,6 +200,7 @@ export interface RootRouteChildren {
   SettingsRoute: typeof SettingsRoute
   DevBoardRoute: typeof DevBoardRoute
   DevNetworkRoute: typeof DevNetworkRoute
+  FullSaveSaveIdRoute: typeof FullSaveSaveIdRoute
   GameGameIdRoute: typeof GameGameIdRoute
   JoinRoomIdRoute: typeof JoinRoomIdRoute
   LobbyLobbyIdRoute: typeof LobbyLobbyIdRoute
@@ -227,6 +240,13 @@ declare module '@tanstack/react-router' {
       path: '/dev/network'
       fullPath: '/dev/network'
       preLoaderRoute: typeof DevNetworkRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/full-save/$saveId': {
+      id: '/full-save/$saveId'
+      path: '/full-save/$saveId'
+      fullPath: '/full-save/$saveId'
+      preLoaderRoute: typeof FullSaveSaveIdRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/game/$gameId': {
@@ -300,6 +320,7 @@ const rootRouteChildren: RootRouteChildren = {
   SettingsRoute: SettingsRoute,
   DevBoardRoute: DevBoardRoute,
   DevNetworkRoute: DevNetworkRoute,
+  FullSaveSaveIdRoute: FullSaveSaveIdRoute,
   GameGameIdRoute: GameGameIdRoute,
   JoinRoomIdRoute: JoinRoomIdRoute,
   LobbyLobbyIdRoute: LobbyLobbyIdRoute,

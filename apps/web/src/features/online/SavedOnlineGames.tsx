@@ -8,6 +8,7 @@ import {
   useResumableGames,
 } from '../../queries/online-games';
 import { ActionPendingContext, DialogFrame } from '../dialogs/DialogFrame';
+import { FullSaveExportDialog } from './FullSaveExportDialog.js';
 import './saved-online-games.css';
 
 /** Stored summaries are display-only; opening a game validates its certified history again. */
@@ -24,6 +25,7 @@ export function SavedOnlineGames() {
     names: string;
   } | null>(null);
   const [message, setMessage] = useState<'failed' | 'busy' | null>(null);
+  const [fullSaveGameId, setFullSaveGameId] = useState<string | null>(null);
   const pending = exported.isPending || opened.isPending || removed.isPending;
   const replay = async (gameId: string, download: boolean) => {
     setMessage(null);
@@ -169,6 +171,13 @@ export function SavedOnlineGames() {
               </button>
               <button
                 type="button"
+                className="button button-quiet"
+                onClick={() => setFullSaveGameId(game.gameId)}
+              >
+                {t('lobby:fullSaveExport')}
+              </button>
+              <button
+                type="button"
                 className="button button-quiet online-history-remove"
                 disabled={pending}
                 onClick={() => {
@@ -230,6 +239,9 @@ export function SavedOnlineGames() {
             )}
           </DialogFrame>
         </ActionPendingContext>
+      )}
+      {fullSaveGameId && (
+        <FullSaveExportDialog gameId={fullSaveGameId} onClose={() => setFullSaveGameId(null)} />
       )}
     </section>
   );

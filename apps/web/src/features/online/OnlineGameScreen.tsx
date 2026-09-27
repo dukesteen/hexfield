@@ -25,6 +25,7 @@ import { createTransferInviteUrl } from '../../session/online-transfer-link';
 import { useRequestPersistentStorage } from '../../queries/storage-persistence';
 import { queryKeys } from '../../queries/keys';
 import { encodePublicReplay } from '../../session/online-public-archive-client.js';
+import { FullSaveExportDialog } from './FullSaveExportDialog.js';
 import './online.css';
 
 const SHAPES = ['circle', 'triangle', 'square', 'diamond'] as const;
@@ -178,6 +179,7 @@ function OnlineGameInstance({
   const [busy, setBusy] = useState(false);
   const [connectionOpen, setConnectionOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
+  const [fullSaveOpen, setFullSaveOpen] = useState(false);
   const [transferOpen, setTransferOpen] = useState(false);
   const [transferBrowser, setTransferBrowser] = useState<OnlineTransferBrowser | null>(null);
   const sourceTransfer = useSourceTransfer(room);
@@ -420,6 +422,13 @@ function OnlineGameInstance({
               >
                 {t('lobby:connectionDiagnosticsTitle')}
               </button>
+              <button
+                className="button button-quiet"
+                type="button"
+                onClick={() => setFullSaveOpen(true)}
+              >
+                {t('lobby:fullSaveExport')}
+              </button>
               {room.startTransfer && !halted && (
                 <button
                   className="button button-quiet"
@@ -592,6 +601,13 @@ function OnlineGameInstance({
             {exported.isPending ? t('lobby:publicReplayVerifying') : t('game:exportReplay')}
           </button>
           <button
+            className="button button-quiet"
+            type="button"
+            onClick={() => setFullSaveOpen(true)}
+          >
+            {t('lobby:fullSaveExport')}
+          </button>
+          <button
             className="button button-primary"
             type="button"
             disabled={busy}
@@ -634,6 +650,9 @@ function OnlineGameInstance({
           </button>
         </div>
       </dialog>
+      {fullSaveOpen && (
+        <FullSaveExportDialog gameId={game.gameId} onClose={() => setFullSaveOpen(false)} />
+      )}
     </main>
   );
 }

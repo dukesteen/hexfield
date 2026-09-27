@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useSavedGames } from '../queries/hooks';
 import { SavedOnlineGames } from '../features/online/SavedOnlineGames';
 import { PublicReplayLibrary } from '../features/online/PublicReplayLibrary';
+import { ImportedOnlineFullSaves } from '../features/online/ImportedOnlineFullSaves';
 
 export const Route = createFileRoute('/')({ component: Home });
 
@@ -40,6 +41,7 @@ function Home() {
           <img className="home-board-art" src={getGameArtUrl('preview')} alt="" />
           <SavedOnlineGames />
           <PublicReplayLibrary />
+          <ImportedOnlineFullSaves />
           <section className="saved-games" aria-labelledby="saved-title">
             <div className="section-heading">
               <h2 id="saved-title">{t('lobby:savedGames')}</h2>

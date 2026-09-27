@@ -1,0 +1,17 @@
+.full-save-readonly-notice {
+  max-width: 850px;
+  margin-block: 18px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.full-save-readonly-notice p {
+  margin: 6px 0 0;
+  color: var(--muted);
+}
+
+.full-save-readonly-notice p + p {
+  margin-top: 8px;
+}

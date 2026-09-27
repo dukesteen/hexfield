@@ -1,0 +1,71 @@
+.full-save-dialog {
+  width: min(520px, calc(100vw - 28px));
+}
+
+.full-save-private-choice {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-block: 16px;
+  font-weight: 650;
+}
+
+.full-save-private-choice input {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  margin: 2px 0 0;
+}
+
+.full-save-private-warning {
+  margin-block: 16px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--page);
+}
+
+.full-save-private-warning p {
+  margin: 0 0 14px;
+}
+
+.full-save-private-warning label,
+.full-save-import-passphrase {
+  display: grid;
+  gap: 6px;
+  color: var(--text);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.full-save-private-warning input,
+.full-save-import-passphrase input {
+  width: 100%;
+  min-width: 0;
+  min-height: 40px;
+  padding: 8px 10px;
+  border: 1px solid var(--control);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+}
+
+.full-save-private-warning small {
+  display: block;
+  margin-top: 6px;
+  color: var(--muted);
+}
+
+.full-save-import-passphrase {
+  max-width: 520px;
+  margin-block: 12px;
+}
+
+.full-save-row {
+  grid-template-columns: minmax(0, 1fr) 18px;
+}
+
+.full-save-mode {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
