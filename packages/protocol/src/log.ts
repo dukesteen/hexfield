@@ -141,6 +141,11 @@ export function validateNextEntry(
   if (!signer.ok) return signer;
   if (!verifyObject('entry', entryBody(entry), entry.sig, parsePeerId(signer.value.publicKey)))
     return failure('sequencer-signature', 'Entry signature does not match the sequencer');
+  if (
+    context.recovery?.pending &&
+    !['membership', 'control', 'cheat-proof'].includes(entry.payload.kind)
+  )
+    return failure('recovery-pending', 'Finish the certified takeover before resuming gameplay');
   try {
     const transition = validateCryptoTransition(
       context.genesis,

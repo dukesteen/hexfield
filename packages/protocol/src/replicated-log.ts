@@ -106,6 +106,7 @@ const MAX_QUEUED_MESSAGES_TOTAL = 32;
 const INVALID_MESSAGE_LIMIT = 5;
 const EXPENSIVE_REQUEST_WINDOW_MS = 10_000;
 const EXPENSIVE_REQUESTS_PER_WINDOW = 3;
+const REVEAL_REQUESTS_PER_WINDOW = 6;
 const TRADE_PROOF_REQUESTS_PER_WINDOW = 4;
 const MAX_PENDING_COMMANDS = 32;
 const MAX_PENDING_COMMANDS_PER_SEAT = 4;
@@ -235,6 +236,7 @@ export class ReplicatedLog {
     { headHash: string; packet: SignedMasterReveal; verdict: MasterRevealVerdict }
   >();
   private readonly rejectedMasterReveals = new Set<string>();
+  private readonly revealWorkByPeer = new Map<PeerId, { startedAt: number; seen: Set<string> }>();
   private readonly beaconSources = new Map<Seat, BeaconSecretSource>();
   private createDeckSource: DeckSourceFactory | undefined;
   private preparedRecovery: { headHash: string; packets: PreparedRecoveryPackets } | null = null;
@@ -591,6 +593,7 @@ export class ReplicatedLog {
     this.acceptedMasterSeats.clear();
     this.localMasterReveals.clear();
     this.rejectedMasterReveals.clear();
+    this.revealWorkByPeer.clear();
     this.preparedRecovery = null;
     this.sentRecoveryPackets.clear();
     this.recoveryReleasesByPeer.clear();
@@ -894,19 +897,29 @@ export class ReplicatedLog {
   private admitExpensiveRequest(
     peer: PeerId,
     key: string,
-    category: 'repair' | 'trade' | 'cheat' | 'historical-cheat' = 'repair',
+    category: 'repair' | 'trade' | 'cheat' | 'historical-cheat' | 'reveal' = 'repair',
   ): boolean {
     const now = this.options.clock.now();
-    const budgets =
-      category === 'trade'
-        ? this.tradeProofWorkByPeer
-        : category === 'cheat'
-          ? this.cheatWorkByPeer
-          : category === 'historical-cheat'
-            ? this.historicalCheatWorkByPeer
-            : this.expensiveByPeer;
-    const limit =
-      category === 'trade' ? TRADE_PROOF_REQUESTS_PER_WINDOW : EXPENSIVE_REQUESTS_PER_WINDOW;
+    let budgets = this.expensiveByPeer;
+    let limit = EXPENSIVE_REQUESTS_PER_WINDOW;
+    switch (category) {
+      case 'repair':
+        break;
+      case 'trade':
+        budgets = this.tradeProofWorkByPeer;
+        limit = TRADE_PROOF_REQUESTS_PER_WINDOW;
+        break;
+      case 'reveal':
+        budgets = this.revealWorkByPeer;
+        limit = REVEAL_REQUESTS_PER_WINDOW;
+        break;
+      case 'cheat':
+        budgets = this.cheatWorkByPeer;
+        break;
+      case 'historical-cheat':
+        budgets = this.historicalCheatWorkByPeer;
+        break;
+    }
     let budget = budgets.get(peer);
     if (
       !budget ||
@@ -1180,6 +1193,8 @@ export class ReplicatedLog {
       if (this.disposed) return failure('replica-disposed', 'Replica closed during reveal restore');
       if (!restored.ok) return restored;
       this.masterRevealsRestored = true;
+      for (const { code } of coordinator.quarantinedAccepted())
+        this.status({ kind: 'rejected', code });
     }
     for (const reveal of coordinator.reveals()) this.rememberMasterReveal(reveal);
     return success(undefined);
@@ -1195,22 +1210,23 @@ export class ReplicatedLog {
       this.acceptedMasterSeats.has(packet.body.originalSeat)
     )
       return success(undefined);
-    const publisher = this.context.membership.voters.find(
-      (voter) => voter.seat === packet.body.publisherSeat,
-    );
-    if (publisher?.publicKey !== from)
-      return failure('master-reveal-publisher', 'Reveal did not come from its current publisher');
+    if (!this.context.membership.voters.some((voter) => voter.publicKey === from))
+      return failure('master-reveal-relay', 'Reveal relay is not a current voter');
     const coordinator = this.revealCoordinator();
     if (!coordinator) return success(undefined);
-    const restored = await this.restoreMasterReveals(coordinator);
-    if (!restored.ok) return restored;
-    if (this.acceptedMasterSeats.has(packet.body.originalSeat)) return success(undefined);
     const hash = toHex(hashValue(packet));
     if (
       this.rejectedMasterReveals.has(hash) ||
-      !this.admitExpensiveRequest(from, `master-reveal/${hash}`)
+      !this.admitExpensiveRequest(
+        from,
+        `master-reveal/${packet.body.originalSeat}/${hash}`,
+        'reveal',
+      )
     )
       return success(undefined);
+    const restored = await this.restoreMasterReveals(coordinator);
+    if (!restored.ok) return restored;
+    if (this.acceptedMasterSeats.has(packet.body.originalSeat)) return success(undefined);
     const checked = await coordinator.receive(packet);
     if (this.disposed) return failure('replica-disposed', 'Replica closed during master reveal');
     if (!checked.ok) {
@@ -1224,7 +1240,7 @@ export class ReplicatedLog {
         ].includes(checked.error.code)
       ) {
         rememberRejection(this.rejectedMasterReveals, hash);
-        this.strikePeer(from);
+        if (checked.error.code !== 'master-reveal-signature') this.strikePeer(from);
       }
       return checked;
     }
@@ -1236,23 +1252,33 @@ export class ReplicatedLog {
     const coordinator = this.revealCoordinator();
     if (!coordinator) return success(undefined);
     const restored = await this.restoreMasterReveals(coordinator);
-    if (!restored.ok) return restored;
+    if (!restored.ok) {
+      this.status({ kind: 'rejected', code: restored.error.code });
+      return success(undefined);
+    }
     const headHash = entryHash(this.context.log.head);
     const eligible = await coordinator.eligibleSeats();
     if (this.disposed) return failure('replica-disposed', 'Replica closed during master reveal');
-    if (!eligible.ok) return eligible;
+    if (!eligible.ok) {
+      this.status({ kind: 'rejected', code: eligible.error.code });
+      return success(undefined);
+    }
     const metadata = await coordinator.metadata();
     if (this.disposed) return failure('replica-disposed', 'Replica closed during master reveal');
-    if (!metadata.ok) return metadata;
-    if (metadata.value.head.hash !== headHash)
-      return failure('master-reveal-stale', 'Durable journal differs from the active replica');
+    if (!metadata.ok || metadata.value.head.hash !== headHash) {
+      this.status({
+        kind: 'rejected',
+        code: metadata.ok ? 'master-reveal-stale' : metadata.error.code,
+      });
+      return success(undefined);
+    }
     for (const seat of eligible.value) {
       const saved = this.localMasterReveals.get(seat);
       if (saved?.headHash === headHash) {
         this.rememberMasterReveal(saved);
         if (retransmit) {
           const sent = this.broadcast({ t: 'MASTER_REVEAL', reveal: saved.packet });
-          if (!sent.ok) return sent;
+          if (!sent.ok) this.status({ kind: 'rejected', code: sent.error.code });
         }
         continue;
       }
@@ -1265,16 +1291,17 @@ export class ReplicatedLog {
         this.status({ kind: 'rejected', code: prepared.error.code });
         continue;
       }
-      if (entryHash(this.context.log.head) !== headHash)
-        return failure(
-          'master-reveal-stale',
-          'Certified history advanced during reveal preparation',
-        );
+      if (entryHash(this.context.log.head) !== headHash) return success(undefined);
       this.localMasterReveals.set(seat, { headHash, ...prepared.value });
       this.rememberMasterReveal(prepared.value);
       const sent = this.broadcast({ t: 'MASTER_REVEAL', reveal: prepared.value.packet });
-      if (!sent.ok) return sent;
+      if (!sent.ok) this.status({ kind: 'rejected', code: sent.error.code });
     }
+    if (retransmit)
+      for (const reveal of coordinator.reveals()) {
+        const sent = this.broadcast({ t: 'MASTER_REVEAL', reveal: reveal.packet });
+        if (!sent.ok) this.status({ kind: 'rejected', code: sent.error.code });
+      }
     return success(undefined);
   }
 
@@ -1717,13 +1744,14 @@ export class ReplicatedLog {
       this.cheatCandidates.size > 0 ||
       this.recoveryIntent !== null ||
       this.recoveryCandidate() !== null ||
-      (!this.cryptoPending() && this.commands.length > 0) ||
-      this.deckSetupCandidate() !== null ||
-      this.deckDrawCandidate() !== null ||
-      this.countCandidate() !== null ||
-      this.stealCandidate() !== null ||
-      this.beaconCandidate() !== null ||
-      this.systemCandidate() !== null ||
+      (!this.context.log.recovery?.pending &&
+        ((!this.cryptoPending() && this.commands.length > 0) ||
+          this.deckSetupCandidate() !== null ||
+          this.deckDrawCandidate() !== null ||
+          this.countCandidate() !== null ||
+          this.stealCandidate() !== null ||
+          this.beaconCandidate() !== null ||
+          this.systemCandidate() !== null)) ||
       state.value.valid !== null;
     if (!available) return success(undefined);
     if (!state.value.inputKnown) {
@@ -1868,6 +1896,7 @@ export class ReplicatedLog {
       });
       if (candidate) return candidate;
     }
+    if (this.context.log.recovery?.pending) return null;
     const crypto =
       this.deckSetupCandidate() ??
       this.deckDrawCandidate() ??

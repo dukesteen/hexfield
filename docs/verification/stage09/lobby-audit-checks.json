@@ -1,0 +1,154 @@
+{
+  "date": "2026-09-27",
+  "scope": "Audit corrections and lobby implementation checkpoint; not milestone acceptance",
+  "tests": {
+    "files": 10,
+    "passed": 64,
+    "durationSeconds": 179.99,
+    "fileParallelism": false,
+    "workers": 1,
+    "log": "lobby-audit-tests.log"
+  },
+  "checks": {
+    "productionBuild": "passed",
+    "testTypecheck": "passed",
+    "scopedLint": "passed",
+    "scopedFormat": "passed",
+    "dependencyBoundaries": "passed",
+    "enginePurity": "passed",
+    "translationKeys": "passed"
+  },
+  "browser": {
+    "lobby": "passed in existing Chrome, 3 clients in one page",
+    "realAuditWorker": "pending recovered-game fixture"
+  },
+  "remaining": [
+    "Complete recovered-game audit",
+    "Native audit worker execution",
+    "Full unit suite after review corrections",
+    "Production lobby, ceremony and session handoff",
+    "Cross-device acceptance"
+  ],
+  "sourceFiles": [
+    {
+      "path": "apps/web/src/session/audit-worker-client.ts",
+      "sha256": "f2c1a2dbe4f91cb7ba7f6f85ae54be38eeee28a7dbd4de743eb2a00ae2259b8c"
+    },
+    {
+      "path": "apps/web/src/session/audit-worker-client.test.ts",
+      "sha256": "e0efaf316933a23a38e0da7e6cb375a231cecf69fa7771507264468058bda7eb"
+    },
+    {
+      "path": "apps/web/src/session/audit-worker-job.test.ts",
+      "sha256": "3d9310df6f75935604016739323bf9d8775dbe4a7221c86c463c64c4d75fe0ac"
+    },
+    {
+      "path": "apps/web/src/session/online-credentials.ts",
+      "sha256": "3e0459d19ad8e384de3eca672538fecf2bdeb40477375f435704b9fec78f466b"
+    },
+    {
+      "path": "apps/web/src/session/online-credentials.test.ts",
+      "sha256": "ada4a7a11f8029000fa8317ca18c615875bf20bcdb95ab53536d95a2283605e7"
+    },
+    {
+      "path": "apps/web/src/session/online-invite.ts",
+      "sha256": "9e44fe9da20954ee600da4b5ac4947b08e1333fb42e8cf1575659fa1a227fb4c"
+    },
+    {
+      "path": "apps/web/src/session/online-invite.test.ts",
+      "sha256": "2156a28311d561f36b60c52b690ac7779090da525b1d8decc69abd75cff86a30"
+    },
+    {
+      "path": "apps/web/src/session/online-room.ts",
+      "sha256": "d14cb10a6e260cf6a4845ae05f8cb4bc5ebb3d5a1b502617196738850d6497c9"
+    },
+    {
+      "path": "apps/web/dev/lobby-smoke.html",
+      "sha256": "bac4bd4bcd0bb8b0b7be73c26ae3de61be22c15f63d9d2a939052010b741743d"
+    },
+    {
+      "path": "apps/web/dev/audit-smoke.html",
+      "sha256": "e0fc64090799d74643372a2276d4db931c810ab62d1cbda0faf18e87284f8675"
+    },
+    {
+      "path": "apps/web/src/dev/audit-smoke.ts",
+      "sha256": "b3a2e21b226c3df585301be9f5767471dd5475979222c6cea43bdb8759bdea9e"
+    },
+    {
+      "path": "packages/p2p/src/server-signaling.ts",
+      "sha256": "f866d4b80630c25323d579db7a0f0ad9f70f7f91b371efeec88d2d0bf69a6261"
+    },
+    {
+      "path": "packages/p2p/src/server-signaling.test.ts",
+      "sha256": "4861b17ec86d26ab80bc61fa6bfbe4692c67ac167e09b6ee4b1e177d24016685"
+    },
+    {
+      "path": "packages/p2p/src/web-rtc-transport.ts",
+      "sha256": "7dfaa4c7594b041ed2f9a67313ad3605a47e906f2f47fcd693346a12cb590480"
+    },
+    {
+      "path": "packages/p2p/src/web-rtc-transport.test.ts",
+      "sha256": "c2c4ad80c2a2e535503ea03f118eb919f647d83e1cd662dc8e450f407b40bfcf"
+    },
+    {
+      "path": "packages/protocol/src/audit.ts",
+      "sha256": "2c65c90223e4ae85fb285fb37a48283a4b39a5f15741a6fd1cc4ce26405d2d40"
+    },
+    {
+      "path": "packages/protocol/src/audit-types.ts",
+      "sha256": "4ff36a455a16515c102bca43d5585bcae3362dd86f50a10e6113365e1bfbfd6f"
+    },
+    {
+      "path": "packages/protocol/src/audit.test.ts",
+      "sha256": "dd1fc36c7407a8d3eeff2e41efb487e18227109f1b72eb9fe93ebfbddf3d209f"
+    },
+    {
+      "path": "packages/protocol/src/master-reveal.ts",
+      "sha256": "ddb814f8e8563ed594ffa53c502dd376ad4286c6ddecfa95e59efc22cce99e0b"
+    },
+    {
+      "path": "packages/protocol/src/master-reveal.test.ts",
+      "sha256": "4a2f71ad3a6a7087c1f57beda9462ff62e37dd6d8ce6f096d1cbf0e4441ecf0b"
+    },
+    {
+      "path": "packages/protocol/src/end-game-session.test.ts",
+      "sha256": "03d3dd9ec4bbc4ed632ec22c4bfc58de24e626075adf47d215e43daa577b22e7"
+    },
+    {
+      "path": "packages/protocol/src/log.ts",
+      "sha256": "048f8f996fe44d217e30cb23a491e888ea57cb7289878e5982cd3e9bec6db822"
+    },
+    {
+      "path": "packages/protocol/src/recovery-membership.test.ts",
+      "sha256": "7ad6a130258cc46219aa87c9006f1be526c2f4cb88e3b43bdd5745f07d8e351f"
+    },
+    {
+      "path": "packages/protocol/src/p2p-session.ts",
+      "sha256": "f35d129e587cf61e67ee3266595a064483b125153a0fa0c683f4f7c3fa38d01f"
+    },
+    {
+      "path": "packages/protocol/src/replicated-log.ts",
+      "sha256": "715bff741cfe2b3eb097b2eed0ff50ed27a0a3565725c96ae023418fd6fc1217"
+    },
+    {
+      "path": "packages/protocol/src/testing/audit-fixture.ts",
+      "sha256": "b693ec12bf849930ae797696337117fa800eacd806dfd6e7fa9084659b4e0d26"
+    },
+    {
+      "path": "packages/protocol/src/lobby.ts",
+      "sha256": "a93ad0e4cba30ac9ce4ba6a4a87b696154776a42d05ee17909b899b70e701945"
+    },
+    {
+      "path": "packages/protocol/src/lobby-types.ts",
+      "sha256": "16968f0019fc5e652903ee356c21f1abf23407b676733c501869f4e7d883028a"
+    },
+    {
+      "path": "packages/protocol/src/lobby.test.ts",
+      "sha256": "c22b1258f6a613a2acb3a0b35caf70bc8b0d16872ed33b30d8cedc631ececcc8"
+    },
+    {
+      "path": "packages/protocol/src/index.ts",
+      "sha256": "ee45bebbb97b4f31b4308d3e47db9514daefcbc1e276271a19064d6d4a2e94f3"
+    }
+  ]
+}

@@ -171,7 +171,8 @@ function publisher(
     controller.activatedAt.seq !== 0 ||
     originalHost !== publisherSeat ||
     human.activatedAt.seq !== 0 ||
-    human.publicKey !== context.log.genesis.seats[publisherSeat]?.publicKey
+    human.publicKey !==
+      context.log.genesis.seats.find((seat) => seat.seat === publisherSeat)?.publicKey
   )
     return failure('master-reveal-publisher', 'Publisher does not own this original master');
   return success({ publicKey: human.publicKey, mode: 'owned' });
@@ -207,7 +208,15 @@ function checkMaster(
     packet.body.originalSeat,
     packet.body.master,
   );
-  return full.ok ? success('valid') : success('inconsistent-genesis');
+  if (full.ok) return success('valid');
+  return [
+    'master-encryption-key',
+    'master-beacon-tip',
+    'master-shuffle-key',
+    'master-lock-key',
+  ].includes(full.error.code)
+    ? success('inconsistent-genesis')
+    : full;
 }
 
 /** Cheap sender/ref checks precede master point and full genesis derivation. */
@@ -240,6 +249,7 @@ export function verifyMasterReveal(
 export class MasterRevealCoordinator {
   private disposed = false;
   private terminalCache: Terminal | undefined;
+  private readonly quarantined = new Map<Seat, string>();
   private readonly accepted = new Map<
     Seat,
     {
@@ -286,6 +296,7 @@ export class MasterRevealCoordinator {
     const { context, result, head, genesisHash } = latest.value;
     const genesis = genesisDigest(context.log.genesis);
     const saved: v.InferOutput<typeof acceptedRevealSchema>[] = [];
+    const quarantined = new Map<Seat, string>();
     try {
       for (const { seat } of context.log.genesis.seats) {
         // oxlint-disable-next-line eslint/no-await-in-loop -- Bounded by the six-seat genesis roster.
@@ -297,22 +308,34 @@ export class MasterRevealCoordinator {
         if (!bytes) continue;
         try {
           const parsed = parseCanonical(canonicalDecode(bytes), acceptedRevealSchema);
-          if (!parsed.ok || !sameBytes(canonicalEncode(parsed.value), bytes))
-            return failure('master-reveal-accepted', 'Stored accepted reveal is malformed');
+          if (!parsed.ok || !sameBytes(canonicalEncode(parsed.value), bytes)) {
+            quarantined.set(seat, 'master-reveal-accepted');
+            continue;
+          }
           if (
             parsed.value.packet.body.originalSeat !== seat ||
             parsed.value.packet.body.genesisDigest !== genesis ||
             !sameRef(parsed.value.packet.body.result, result) ||
             parsed.value.receivedAt.seq < result.seq ||
             parsed.value.receivedAt.seq > head.seq
-          )
-            return failure('master-reveal-accepted', 'Stored accepted reveal has another scope');
+          ) {
+            quarantined.set(seat, 'master-reveal-scope');
+            continue;
+          }
           saved.push(parsed.value);
+        } catch {
+          quarantined.set(seat, 'master-reveal-accepted');
         } finally {
           bytes.fill(0);
         }
       }
-      if (saved.length === 0) return success(undefined);
+      if (saved.length === 0) {
+        for (const { master } of this.accepted.values()) master.fill(0);
+        this.accepted.clear();
+        this.quarantined.clear();
+        for (const [seat, code] of quarantined) this.quarantined.set(seat, code);
+        return success(undefined);
+      }
       const record = await this.options.journal.load();
       if (this.disposed) return failure('master-reveal-disposed', 'Reveal coordinator is closed');
       const recordHead = record?.entries.at(-1)?.entry ?? record?.genesis;
@@ -353,13 +376,15 @@ export class MasterRevealCoordinator {
       try {
         for (const item of saved) {
           const snapshot = historical.get(item.receivedAt.seq);
-          if (!snapshot || !sameRef(snapshot.head, item.receivedAt))
-            return failure(
-              'master-reveal-accepted',
-              'Accepted receipt is absent from certified history',
-            );
+          if (!snapshot || !sameRef(snapshot.head, item.receivedAt)) {
+            quarantined.set(item.packet.body.originalSeat, 'master-reveal-history');
+            continue;
+          }
           const checked = verifyMasterReveal(item.packet, snapshot);
-          if (!checked.ok) return checked;
+          if (!checked.ok) {
+            quarantined.set(item.packet.body.originalSeat, checked.error.code);
+            continue;
+          }
           const seat = checked.value.packet.body.originalSeat;
           accepted.set(seat, {
             packet: checked.value.packet,
@@ -378,6 +403,8 @@ export class MasterRevealCoordinator {
         for (const { master } of this.accepted.values()) master.fill(0);
         this.accepted.clear();
         for (const [seat, item] of accepted) this.accepted.set(seat, item);
+        this.quarantined.clear();
+        for (const [seat, code] of quarantined) this.quarantined.set(seat, code);
         accepted.clear();
         return success(undefined);
       } finally {
@@ -567,6 +594,9 @@ export class MasterRevealCoordinator {
       verdict,
     }));
   }
+  quarantinedAccepted(): readonly { seat: Seat; code: string }[] {
+    return [...this.quarantined].map(([seat, code]) => ({ seat, code }));
+  }
   acceptedMasters(): readonly { seat: Seat; verdict: MasterRevealVerdict; master: Uint8Array }[] {
     return [...this.accepted].map(([seat, { verdict, master }]) => ({
       seat,
@@ -579,6 +609,7 @@ export class MasterRevealCoordinator {
     this.disposed = true;
     for (const { master } of this.accepted.values()) master.fill(0);
     this.accepted.clear();
+    this.quarantined.clear();
     this.terminalCache = undefined;
   }
 }

@@ -8,7 +8,9 @@ type Fixture = Awaited<ReturnType<typeof createTerminalAuditFixture>>;
 let fixture: Fixture;
 
 beforeAll(async () => {
-  fixture = await createTerminalAuditFixture();
+  fixture = await createTerminalAuditFixture({
+    yieldTask: () => new Promise<void>((resolve) => setImmediate(resolve)),
+  });
 }, 120_000);
 
 describe('base audit worker policy', () => {

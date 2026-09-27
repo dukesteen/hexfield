@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Online lobby connection check</title>
+    <style>
+      body {
+        max-width: 52rem;
+        margin: 2rem auto;
+        padding: 0 1rem;
+        font:
+          16px/1.5 system-ui,
+          sans-serif;
+      }
+      button {
+        padding: 0.6rem 1rem;
+      }
+      pre {
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        padding: 1rem;
+        background: #17191c;
+        color: #f1f3f5;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Online lobby connection check</h1>
+    <p>
+      Three clients in this Chrome page, with separate test identities and real WebSocket and WebRTC
+      connections. No game secrets are generated.
+    </p>
+    <button id="run" type="button">Run lobby check</button>
+    <pre id="output" aria-live="polite">Ready. Start the local signaling server on port 3009.</pre>
+    <script type="module">
+      import { OnlineRoom } from '/src/session/online-room.ts';
+      import { toBase64Url } from '@cp2p/codec';
+      const button = document.querySelector('#run');
+      const output = document.querySelector('#output');
+      const write = (text) => {
+        output.textContent += `${text}\n`;
+      };
+      const checked = (result) => {
+        if (!result.ok) throw new Error(`${result.error.code}: ${result.error.message}`);
+      };
+      function runtime() {
+        const values = new Map();
+        return {
+          store: {
+            async load(id) {
+              return values.get(id)?.slice() ?? null;
+            },
+            async putIfAbsent(id, bytes) {
+              if (values.has(id)) return false;
+              values.set(id, bytes.slice());
+              return true;
+            },
+            async withCeremonyLock(_id, task) {
+              return task();
+            },
+          },
+        };
+      }
+      async function until(predicate, label) {
+        const deadline = performance.now() + 15000;
+        while (!predicate()) {
+          if (performance.now() > deadline) throw new Error(`Timed out: ${label}`);
+          await new Promise((resolve) => setTimeout(resolve, 50));
+        }
+      }
+      button.addEventListener('click', async () => {
+        button.disabled = true;
+        output.textContent = '';
+        const rooms = [];
+        try {
+          const host = await OnlineRoom.open(
+            {
+              kind: 'host',
+              name: 'Native lobby check',
+              hostName: 'Host',
+              serverUrl: 'ws://127.0.0.1:3009',
+              config: {
+                modules: [{ id: 'base', version: '1.0.0' }],
+                seats: [0, 1, 2, 3],
+                options: { base: { mapLayout: 'random', vpTarget: 3 } },
+              },
+            },
+            runtime(),
+          );
+          rooms.push(host);
+          for (let index = 0; index < 2; index += 1)
+            rooms.push(await OnlineRoom.open({ kind: 'join', invite: host.invite }, runtime()));
+          await until(
+            () =>
+              rooms.every((room) => room.getSnapshot().peers.length === 2 && room.lobby.state()),
+            'authenticated mesh and host snapshots',
+          );
+          write('PASS three clients discovered and authenticated every native peer link');
+          for (let seat = 1; seat < 3; seat += 1) {
+            checked(rooms[seat].lobby.request({ kind: 'takeSeat', seat }));
+            await until(
+              () => rooms.every((room) => room.lobby.state()?.seats[seat]?.kind === 'human'),
+              `seat ${seat}`,
+            );
+          }
+          checked(host.lobby.setBot(3, 'medium'));
+          await until(
+            () => rooms.every((room) => room.lobby.state()?.seats[3]?.kind === 'bot'),
+            'hosted bot',
+          );
+          write('PASS two guests took seats and the host added a bot');
+          for (let seat = 0; seat < 3; seat += 1) {
+            checked(rooms[seat].lobby.request({ kind: 'setReady', ready: true }));
+            await until(
+              () => rooms.every((room) => room.lobby.state()?.seats[seat]?.ready),
+              `ready ${seat}`,
+            );
+          }
+          const nonce = toBase64Url(crypto.getRandomValues(new Uint8Array(32)));
+          checked(host.lobby.start(nonce));
+          await until(
+            () => rooms.every((room) => room.lobby.state()?.ceremonyNonce === nonce),
+            'same frozen lobby',
+          );
+          for (const room of rooms) checked(room.lobby.ackFreeze());
+          await until(
+            () => rooms.every((room) => room.lobby.freezeAgreement()?.acks.length === 3),
+            'all human freeze acknowledgements',
+          );
+          const states = rooms.map((room) => JSON.stringify(room.lobby.freezeAgreement()?.state));
+          if (!states.every((state) => state === states[0]))
+            throw new Error('Freeze states differ');
+          write('PASS every human signed the same configuration and fresh ceremony nonce');
+          let closeNotifications = 0;
+          let nestedClose;
+          host.subscribe(() => {
+            if (host.getSnapshot().closed) {
+              closeNotifications += 1;
+              nestedClose = host.close();
+            }
+          });
+          const closing = host.close();
+          if (nestedClose !== closing || closeNotifications !== 1)
+            throw new Error('Closing a lobby from its observer must reuse one cleanup');
+          await closing;
+          write('PASS closing observers reuse the same completed cleanup');
+          write('PASS lobby connection check complete');
+        } catch (error) {
+          write(`FAIL ${error instanceof Error ? error.message : String(error)}`);
+          for (const room of rooms) write(JSON.stringify(room.getSnapshot()));
+        } finally {
+          await Promise.allSettled(rooms.map((room) => room.close()));
+          button.disabled = false;
+        }
+      });
+    </script>
+  </body>
+</html>

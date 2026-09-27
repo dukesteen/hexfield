@@ -30,4 +30,6 @@ export interface AuditReport {
   readonly terminal: AuditEntryRef | null;
   readonly finalHead: AuditEntryRef | null;
   readonly historyError: { readonly code: string } | null;
+  /** Local reconstruction or engine failure, without attributing misconduct. */
+  readonly auditError: { readonly seq: number; readonly code: string } | null;
 }

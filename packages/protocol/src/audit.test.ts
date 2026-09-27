@@ -1,4 +1,4 @@
-import { scalarToBytes } from '@cp2p/crypto';
+import { SCALAR_ORDER, scalarToBytes } from '@cp2p/crypto';
 import type { Engine } from '@cp2p/engine';
 import { beforeAll, describe, expect, test } from 'vitest';
 import { auditCertifiedGame } from './audit.js';
@@ -8,7 +8,9 @@ type Fixture = Awaited<ReturnType<typeof createTerminalAuditFixture>>;
 let fixture: Fixture;
 
 beforeAll(async () => {
-  fixture = await createTerminalAuditFixture();
+  fixture = await createTerminalAuditFixture({
+    yieldTask: () => new Promise<void>((resolve) => setImmediate(resolve)),
+  });
 }, 120_000);
 
 describe('certified end-game audit', () => {
@@ -21,6 +23,7 @@ describe('certified end-game audit', () => {
       violations: [],
       inputErrors: [],
       historyError: null,
+      auditError: null,
     });
     expect(report.terminal?.seq).toBeGreaterThan(0);
     expect(report.finalHead?.seq).toBeGreaterThanOrEqual(report.terminal?.seq ?? 0);
@@ -82,6 +85,46 @@ describe('certified end-game audit', () => {
       detail: 'private-victory-mismatch',
     });
   }, 30_000);
+
+  test('reports a private engine exception without accusing the drawing player', () => {
+    const original = fixture.engine;
+    const altered: Engine = {
+      ...original,
+      applyAllPrivates(privates, before, input, data) {
+        if (input.kind === 'system' && input.type === 'CARD_DEALT')
+          throw new Error('Local engine failed');
+        return original.applyAllPrivates(privates, before, input, data);
+      },
+    };
+    const report = auditCertifiedGame({ ...fixture, engine: altered });
+    const draw = fixture.entries.find(
+      ({ entry }) => entry.payload.kind === 'system' && entry.payload.input.type === 'CARD_DEALT',
+    );
+    expect(report).toMatchObject({
+      ok: false,
+      complete: false,
+      violations: [],
+      auditError: { seq: draw?.entry.seq, code: 'driver-error' },
+    });
+  }, 30_000);
+
+  test('rejects an alternate encoding of the same scalar as bad reveal input', () => {
+    let scalar = SCALAR_ORDER + 17n;
+    const noncanonical = Uint8Array.from({ length: 32 }, () => {
+      const byte = Number(scalar & 255n);
+      scalar >>= 8n;
+      return byte;
+    });
+    const report = auditCertifiedGame({
+      ...fixture,
+      masters: fixture.masters.map((row) =>
+        row.seat === 0 ? { seat: row.seat, master: noncanonical } : row,
+      ),
+    });
+    expect(report.violations).toEqual([]);
+    expect(report.inputErrors).toContainEqual({ seat: 0, kind: 'master-scalar' });
+    expect(report.complete).toBe(false);
+  });
 
   test('rejects a corrupt certificate before evaluating any supplied secrets', () => {
     const entries = fixture.entries.map((item, index) =>

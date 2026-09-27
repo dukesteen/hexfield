@@ -207,7 +207,7 @@ function member<T>(values: readonly T[], index: number): T {
   return value;
 }
 
-function mesh(count: number, descendingIds = false, manualDeadline = false) {
+function mesh(count: number, descendingIds = false, manualDeadline = false, selfOnly = false) {
   const identities = Array.from({ length: count }, (_, index) =>
     identityFromSecret(new Uint8Array(32).fill(index + 1)),
   );
@@ -221,7 +221,7 @@ function mesh(count: number, descendingIds = false, manualDeadline = false) {
     return new WebRtcTransport({
       self: identity.peerId,
       secretKey: identity.secretKey,
-      roster,
+      roster: selfOnly ? [identity.peerId] : roster,
       scope: 'test-lobby',
       adapter: member(adapters, index),
       clock,
@@ -247,6 +247,116 @@ function mesh(count: number, descendingIds = false, manualDeadline = false) {
 }
 
 describe('authenticated WebRTC mesh', () => {
+  test('can freeze a single-host game roster', () => {
+    const f = mesh(2, false, false, true);
+    try {
+      const solo = member(f.peers, 0);
+      const self = member(f.roster, 0);
+      expect(solo.freezeRoster()).toEqual([self]);
+      expect(() => solo.updatePreGameRoster(f.roster)).toThrow('frozen');
+      expect(() => solo.connect(member(f.roster, 1))).toThrow('Unknown mesh peer');
+    } finally {
+      f.dispose();
+    }
+  });
+
+  test('grows a one-peer lobby, preserves links, retires removed peers and freezes the roster', async () => {
+    const f = mesh(3, false, false, true);
+    try {
+      const [a, b, c] = f.roster;
+      if (!a || !b || !c) throw new Error('Missing test identity');
+      expect(f.peers.map((peer) => peer.roster())).toEqual([[a], [b], [c]]);
+      for (const peer of f.peers) peer.start();
+      const initiator = a < b ? 0 : 1;
+      const responder = 1 - initiator;
+      const initiatorPeer = member(f.peers, initiator);
+      const responderPeer = member(f.peers, responder);
+      const initiatorId = member(f.roster, initiator);
+      const responderId = member(f.roster, responder);
+      const adapter = member(f.adapters, initiator);
+      const originalSend = adapter.send.bind(adapter);
+      const sent: SignedSignalEnvelope[] = [];
+      adapter.send = async (to, envelope) => {
+        sent.push(envelope);
+        await originalSend(to, envelope);
+      };
+      responderPeer.updatePreGameRoster([a, b]);
+      initiatorPeer.updatePreGameRoster([a, b]);
+      await settle();
+      expect([initiatorPeer.peers(), responderPeer.peers()]).toEqual([
+        [responderId],
+        [initiatorId],
+      ]);
+      const firstLink = f.fabric.connection(a, b);
+      const oldOffer = sent.find(
+        (item) =>
+          item.body.blob.kind === 'description' && item.body.blob.description.type === 'offer',
+      );
+      if (!oldOffer) throw new Error('Missing first signed offer');
+
+      initiatorPeer.updatePreGameRoster([initiatorId]);
+      responderPeer.updatePreGameRoster([responderId]);
+      expect(initiatorPeer.peers()).toEqual([]);
+      expect(responderPeer.peers()).toEqual([]);
+      expect(() => initiatorPeer.connect(responderId)).toThrow('Unknown mesh peer');
+      responderPeer.updatePreGameRoster([a, b]);
+      initiatorPeer.updatePreGameRoster([a, b]);
+      await settle();
+      const resumedLink = f.fabric.connection(a, b);
+      expect(resumedLink).not.toBe(firstLink);
+      await originalSend(responderId, oldOffer);
+      await settle();
+      expect(f.fabric.connection(a, b)).toBe(resumedLink);
+      await settle();
+      expect(initiatorPeer.peers()).toEqual([responderId]);
+      expect(responderPeer.peers()).toEqual([initiatorId]);
+
+      member(f.peers, 2).updatePreGameRoster([a, b, c]);
+      member(f.peers, 0).updatePreGameRoster([a, b, c]);
+      member(f.peers, 1).updatePreGameRoster([a, b, c]);
+      await settle();
+      expect(f.peers.map((peer) => peer.peers().length)).toEqual([2, 2, 2]);
+      expect(f.fabric.connection(a, b)).not.toBe(firstLink);
+      const retained = f.fabric.connection(a, b);
+      member(f.peers, 0).updatePreGameRoster([a, b]);
+      member(f.peers, 1).updatePreGameRoster([a, b]);
+      member(f.peers, 2).updatePreGameRoster([c]);
+      expect(f.peers.map((peer) => peer.peers().length)).toEqual([1, 1, 0]);
+      expect(f.fabric.connection(a, b)).toBe(retained);
+      const selected = member(f.peers, 0).roster();
+      Reflect.set(selected, 0, 'corrupted');
+      expect(member(f.peers, 0).roster()).toEqual([a, b].toSorted());
+      expect(() => member(f.peers, 0).updatePreGameRoster([a, a])).toThrow('Invalid');
+      expect(() => member(f.peers, 0).updatePreGameRoster([b])).toThrow('Invalid');
+      expect(member(f.peers, 0).peers()).toEqual([b]);
+      expect(member(f.peers, 0).freezeRoster()).toEqual([a, b].toSorted());
+      expect(() => member(f.peers, 0).updatePreGameRoster([a, b, c])).toThrow('frozen');
+      member(f.peers, 0).disconnect(b);
+      member(f.peers, 0).connect(b);
+      await settle();
+      expect(member(f.peers, 0).roster()).toEqual([a, b].toSorted());
+    } finally {
+      f.dispose();
+    }
+  });
+
+  test('signaling loss alone leaves an authenticated game channel in place', async () => {
+    const f = mesh(2);
+    try {
+      for (const peer of f.peers) peer.start();
+      await settle();
+      const received: Uint8Array[] = [];
+      member(f.peers, 1).onMessage((_from, bytes) => received.push(bytes));
+      member(f.adapters, 0).close();
+      expect(f.peers.map((peer) => peer.peers().length)).toEqual([1, 1]);
+      member(f.peers, 0).send(member(f.roster, 1), new Uint8Array([9]));
+      await settle();
+      expect(received).toEqual([new Uint8Array([9])]);
+    } finally {
+      f.dispose();
+    }
+  });
+
   test('four peers form six links and deliver only authenticated Transport bytes', async () => {
     const f = mesh(4);
     try {

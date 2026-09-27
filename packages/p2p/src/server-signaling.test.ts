@@ -90,6 +90,75 @@ function fixture() {
 }
 
 describe('server signaling client', () => {
+  test('publishes validated detached room snapshots to late listeners and clears them on reconnect', () => {
+    const f = fixture();
+    const changes: (readonly string[] | null)[] = [];
+    try {
+      const unsubscribe = f.adapter.onRoomPeers((peers) => changes.push(peers));
+      expect(changes).toEqual([null]);
+      f.ready();
+      expect(f.adapter.roomPeers()).toEqual([f.identity.peerId]);
+      const peerList = [f.peer.peerId, f.identity.peerId];
+      f.socket.emit('message', JSON.stringify({ type: 'peers', peers: peerList }));
+      const expected = peerList.toSorted();
+      expect(f.adapter.roomPeers()).toEqual(expected);
+      const detached = f.adapter.roomPeers();
+      if (!detached) throw new Error('Missing room snapshot');
+      Reflect.set(detached, 0, 'corrupted');
+      expect(f.adapter.roomPeers()).toEqual(expected);
+      const late: (readonly string[] | null)[] = [];
+      f.adapter.onRoomPeers((peers) => late.push(peers));
+      expect(late).toEqual([expected]);
+      f.socket.emit('message', JSON.stringify({ type: 'peers', peers: peerList }));
+      expect(changes).toHaveLength(3);
+      f.socket.emit('error');
+      expect(f.adapter.roomPeers()).toBeNull();
+      expect(changes.at(-1)).toBeNull();
+      f.clock.advanceBy(250);
+      const replacement = f.sockets[1];
+      if (!replacement) throw new Error('Missing retry socket');
+      f.ready(replacement);
+      expect(f.adapter.roomPeers()).toEqual([f.identity.peerId]);
+      unsubscribe();
+    } finally {
+      f.adapter.close();
+    }
+  });
+
+  test('rejects invalid initial rosters and ignores malformed later advice', () => {
+    const f = fixture();
+    try {
+      f.socket.emit(
+        'message',
+        JSON.stringify({ type: 'challenge', roomId: 'aaaaaaaaaa', challenge: f.challenge }),
+      );
+      f.socket.emit(
+        'message',
+        JSON.stringify({ type: 'peers', peers: [f.identity.peerId, f.identity.peerId] }),
+      );
+      expect(f.socket.readyState).toBe(3);
+      expect(f.adapter.roomPeers()).toBeNull();
+      f.clock.advanceBy(250);
+      const replacement = f.sockets[1];
+      if (!replacement) throw new Error('Missing retry socket');
+      f.ready(replacement);
+      const initial = f.adapter.roomPeers();
+      replacement.emit('message', JSON.stringify({ type: 'peers', peers: [f.peer.peerId] }));
+      replacement.emit(
+        'message',
+        JSON.stringify({ type: 'peers', peers: [f.identity.peerId, 'bad'] }),
+      );
+      replacement.emit(
+        'message',
+        JSON.stringify({ type: 'peers', peers: Array(9).fill(f.identity.peerId) }),
+      );
+      expect(f.adapter.roomPeers()).toEqual(initial);
+      expect(replacement.readyState).toBe(1);
+    } finally {
+      f.adapter.close();
+    }
+  });
+
   test('open socket without challenge or join acknowledgement expires and retries', () => {
     const f = fixture();
     try {

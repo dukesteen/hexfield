@@ -140,6 +140,8 @@ export class P2PSession implements GameSession<CertifiedHistory> {
   private auditState: SessionAuditState = { kind: 'not-started' };
   private auditJob: {
     headHash: string;
+    headSeq: number;
+    terminal: { seq: number; hash: string };
     job: SessionAuditJob;
     masters: SessionAuditInput['masters'];
   } | null = null;
@@ -253,8 +255,20 @@ export class P2PSession implements GameSession<CertifiedHistory> {
       Reflect.deleteProperty(safeOptions, 'onTradeProofResponse');
       Reflect.deleteProperty(safeOptions, 'onAuthorityChange');
       Reflect.deleteProperty(safeOptions, 'onMasterReveal');
+      const recoveryPrivateStore =
+        options.masterReveal?.recoveryPrivateStore ??
+        options.recoveryStore ??
+        options.recoveryParticipant?.store;
       const replicaOptions: ReplicatedLogOptions = {
         ...safeOptions,
+        ...(options.masterReveal
+          ? {
+              masterReveal: {
+                ...options.masterReveal,
+                ...(recoveryPrivateStore ? { recoveryPrivateStore } : {}),
+              },
+            }
+          : {}),
         ...(options.createDeckSource
           ? {
               createDeckSource: (deckId: string, seat: Seat) =>
@@ -874,7 +888,10 @@ export class P2PSession implements GameSession<CertifiedHistory> {
     if (!this.replica || this.status.kind !== 'complete') return;
     const runner = this.options.auditRunner;
     if (!runner || !this.options.masterReveal) {
-      this.auditState = { kind: 'unavailable' };
+      if (this.auditState.kind !== 'unavailable') {
+        this.auditState = { kind: 'unavailable' };
+        this.emit([]);
+      }
       return;
     }
     const headHash = entryHash(this.context.log.head);
@@ -897,8 +914,16 @@ export class P2PSession implements GameSession<CertifiedHistory> {
       })),
     };
     try {
+      const terminal = this.auditReveals.values().next().value?.body.result;
+      if (!terminal) throw new Error('Missing certified audit result');
       const job = runner(input);
-      this.auditJob = { headHash, job, masters: input.masters };
+      this.auditJob = {
+        headHash,
+        headSeq: this.context.log.head.seq,
+        terminal: { ...terminal },
+        job,
+        masters: input.masters,
+      };
       this.auditState = { kind: 'verifying' };
       this.emit([]);
       void this.finishAudit(this.auditJob, input);
@@ -911,19 +936,30 @@ export class P2PSession implements GameSession<CertifiedHistory> {
   }
 
   private async finishAudit(
-    running: { headHash: string; job: SessionAuditJob },
+    running: {
+      headHash: string;
+      headSeq: number;
+      terminal: { seq: number; hash: string };
+      job: SessionAuditJob;
+    },
     input: SessionAuditInput,
   ): Promise<void> {
     try {
       const report = await running.job.result;
       if (this.auditJob !== running || this.status.kind !== 'complete') return;
-      const result = this.auditReveals.values().next().value?.body.result;
+      const incompleteReplay =
+        (report.historyError !== null || report.auditError !== null) &&
+        !report.ok &&
+        !report.complete;
       if (
-        !result ||
-        report.terminal?.seq !== result.seq ||
-        report.terminal.hash !== result.hash ||
-        report.finalHead?.seq !== this.context.log.head.seq ||
-        report.finalHead.hash !== running.headHash
+        this.context.log.head.seq !== running.headSeq ||
+        entryHash(this.context.log.head) !== running.headHash ||
+        (!incompleteReplay && (!report.terminal || !report.finalHead)) ||
+        (report.terminal &&
+          (report.terminal.seq !== running.terminal.seq ||
+            report.terminal.hash !== running.terminal.hash)) ||
+        (report.finalHead &&
+          (report.finalHead.seq !== running.headSeq || report.finalHead.hash !== running.headHash))
       ) {
         this.auditState = { kind: 'error', code: 'audit-report-context' };
       } else this.auditState = { kind: 'complete', report: copyCanonical(report) };

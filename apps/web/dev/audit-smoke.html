@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Recovered game audit check</title>
+    <style>
+      body {
+        max-width: 54rem;
+        margin: 3rem auto;
+        padding: 0 1rem;
+        font:
+          16px/1.5 system-ui,
+          sans-serif;
+      }
+      button {
+        padding: 0.7rem 1rem;
+      }
+      pre {
+        padding: 1rem;
+        overflow-wrap: anywhere;
+        white-space: pre-wrap;
+        background: #16171b;
+        color: #eee;
+      }
+      code {
+        overflow-wrap: anywhere;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Recovered game audit check</h1>
+    <p>
+      Runs one certified recovered-game audit in a disposable browser worker with a 60-second
+      deadline. Master material is kept out of the page output and wiped from owned buffers after
+      worker handoff.
+    </p>
+    <p>
+      Copy the generated fixture with
+      <code
+        >cp /private/tmp/hexfield-recovered-audit-browser.json
+        apps/web/dev/recovered-audit-fixture.json</code
+      >
+      before running this check. The fixture contains deterministic test master material and is
+      excluded from Git.
+    </p>
+    <button id="run" type="button">Run recovered game audit</button>
+    <pre id="output" aria-live="polite">Ready.</pre>
+    <script type="module" src="/src/dev/audit-smoke.ts"></script>
+  </body>
+</html>

@@ -15,6 +15,14 @@ interface AuditWorkerPort {
 
 export type AuditWorkerFactory = () => AuditWorkerPort;
 
+export interface AuditWorkerOptions {
+  /** Must be between 1 ms and 5 minutes. Defaults to 60 seconds. */
+  deadlineMs?: number;
+}
+
+const DEFAULT_DEADLINE_MS = 60_000;
+const MAX_DEADLINE_MS = 5 * 60_000;
+
 let nextRequestId = 1;
 
 function createWorker(): AuditWorkerPort {
@@ -34,6 +42,7 @@ function isAuditReference(reference: unknown): boolean {
 function isAuditReport(value: unknown): value is AuditReport {
   if (typeof value !== 'object' || value === null) return false;
   const historyError = Reflect.get(value, 'historyError');
+  const auditError = Reflect.get(value, 'auditError');
   return (
     typeof Reflect.get(value, 'ok') === 'boolean' &&
     typeof Reflect.get(value, 'complete') === 'boolean' &&
@@ -46,7 +55,12 @@ function isAuditReport(value: unknown): value is AuditReport {
     (historyError === null ||
       (typeof historyError === 'object' &&
         historyError !== null &&
-        typeof Reflect.get(historyError, 'code') === 'string'))
+        typeof Reflect.get(historyError, 'code') === 'string')) &&
+    (auditError === null ||
+      (typeof auditError === 'object' &&
+        auditError !== null &&
+        Number.isSafeInteger(Reflect.get(auditError, 'seq')) &&
+        typeof Reflect.get(auditError, 'code') === 'string'))
   );
 }
 
@@ -71,8 +85,17 @@ function abortError(): Error {
 export function createSessionAuditJob(
   input: SessionAuditInput,
   workerFactory: AuditWorkerFactory = createWorker,
+  options: AuditWorkerOptions = {},
 ): SessionAuditJob {
   const id = nextRequestId++;
+  const deadlineMs = options.deadlineMs ?? DEFAULT_DEADLINE_MS;
+  if (!Number.isSafeInteger(deadlineMs) || deadlineMs < 1 || deadlineMs > MAX_DEADLINE_MS) {
+    wipeMasters(input.masters);
+    return {
+      result: Promise.reject(new RangeError('Audit deadline must be between 1 ms and 5 minutes')),
+      cancel() {},
+    };
+  }
   const masters: { seat: SessionAuditInput['masters'][number]['seat']; master: Uint8Array }[] = [];
   try {
     for (const { seat, master } of input.masters)
@@ -98,6 +121,7 @@ export function createSessionAuditJob(
   };
 
   let settled = false;
+  let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
   const callbacks: {
     resolve?: (report: AuditReport) => void;
     reject?: (error: Error) => void;
@@ -106,6 +130,7 @@ export function createSessionAuditJob(
     worker.removeEventListener('message', onMessage);
     worker.removeEventListener('error', onError);
     worker.removeEventListener('messageerror', onMessageError);
+    if (deadlineTimer !== undefined) clearTimeout(deadlineTimer);
     worker.terminate();
     wipeMasters(masters);
   };
@@ -138,6 +163,9 @@ export function createSessionAuditJob(
   worker.addEventListener('message', onMessage);
   worker.addEventListener('error', onError);
   worker.addEventListener('messageerror', onMessageError);
+  deadlineTimer = setTimeout(() => {
+    finish(() => callbacks.reject?.(new Error(`Audit worker timed out after ${deadlineMs} ms`)));
+  }, deadlineMs);
   try {
     worker.postMessage(
       request,
@@ -157,6 +185,7 @@ export function createSessionAuditJob(
 
 export function createSessionAuditRunner(
   workerFactory: AuditWorkerFactory = createWorker,
+  options: AuditWorkerOptions = {},
 ): SessionAuditRunner {
-  return (input) => createSessionAuditJob(input, workerFactory);
+  return (input) => createSessionAuditJob(input, workerFactory, options);
 }

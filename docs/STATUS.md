@@ -153,8 +153,11 @@ reveals, independent full-hand auditing and a browser worker adapter. A real
 certified victory passes the audit; the live trace covers lost reveals, retry,
 worker cancellation and restoration after the other peer leaves. Audit status is
 separate from the certified game result. The production lobby and results view
-do not consume this path yet. Complete recovered-game audits, adversarial
-acceptance, performance and the Claude implementation review remain open.
+do not consume this path yet. The [Claude review and corrections](verification/stage07/audit-review-disposition.md)
+address rejected-history reporting, signed reveal relay, recovered-secret storage
+wiring, corrupt reveal records, fault attribution and worker deadlines. Pending
+recovery now pauses ordinary gameplay until activation. Complete recovered-game
+audits, adversarial acceptance and performance remain open.
 
 - [ ] P2P games over memnet with real crypto pass the stage-06 chaos suite (200 seeds per scenario in CI).
 - [ ] Every row in the cheat table is covered by a passing test that checks the cheat is caught at the listed time.
@@ -178,6 +181,14 @@ The [latest Chrome check](verification/stage08/chromium-replacement-smoke.md) fo
 ## 09 — Lobby & Game Setup (first end-to-end P2P game)
 
 Source: [09-lobby-and-game-setup.md](09-lobby-and-game-setup.md)
+
+The [native lobby check](verification/stage09/lobby-browser-check.md) passes in
+Chrome with three clients using real signaling and WebRTC. Guests take seats,
+the host adds a bot, and all humans sign the same configuration and ceremony
+nonce. A native startup race found during the check is fixed with bounded signed
+snapshot retries. Device identities and fresh per-game key material have durable
+storage helpers. This is a connection/controller checkpoint; the production
+create/join screens, ceremony and game-session handoff remain unfinished.
 
 - [ ] Create → invite → join → start → finish → audit ✓ works over the signaling server and over manual codes.
 - [ ] Mixed humans and bots work. The bot host can be any peer.

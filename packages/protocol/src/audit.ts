@@ -139,11 +139,17 @@ export function auditCertifiedGame(input: AuditCertifiedGameInput): AuditReport 
   let terminal: AuditEntryRef | null = null;
   let finalHead: AuditEntryRef | null = null;
   let historyError: { code: string } | null = null;
+  let auditError: AuditReport['auditError'] = null;
   let cheatFindings: AuditReport['cheatFindings'] = [];
   let missingSeats: Seat[] = [];
   let complete = false;
   const report = (): AuditReport => ({
-    ok: complete && violations.length === 0 && inputErrors.length === 0 && !historyError,
+    ok:
+      complete &&
+      violations.length === 0 &&
+      inputErrors.length === 0 &&
+      !historyError &&
+      !auditError,
     complete,
     missingSeats,
     violations,
@@ -152,7 +158,13 @@ export function auditCertifiedGame(input: AuditCertifiedGameInput): AuditReport 
     terminal,
     finalHead,
     historyError,
+    auditError,
   });
+  const processingFailure = (seq: number, code: string): AuditReport => {
+    auditError = { seq, code };
+    complete = false;
+    return report();
+  };
   try {
     const publicReplay = replayCertifiedPrefix(
       input.genesisEntry,
@@ -213,9 +225,16 @@ export function auditCertifiedGame(input: AuditCertifiedGameInput): AuditReport 
       if (verified.error.code === 'master-public-key' || verified.error.code === 'master-reveal') {
         if (inputErrors.length < MAX_DIAGNOSTICS)
           inputErrors.push({ seat, kind: verified.error.code });
-      } else if (violations.length < MAX_DIAGNOSTICS) {
+      } else if (
+        [
+          'master-encryption-key',
+          'master-beacon-tip',
+          'master-shuffle-key',
+          'master-lock-key',
+        ].includes(verified.error.code)
+      ) {
         violations.push(issue(0, seat, verified.error.code));
-      }
+      } else return processingFailure(0, verified.error.code);
     }
     complete = missingSeats.length === 0 && inputErrors.length === 0;
     if (!complete || violations.length) return report();
@@ -231,15 +250,11 @@ export function auditCertifiedGame(input: AuditCertifiedGameInput): AuditReport 
       fromBase64Url(genesis.genesisSeed),
     );
     if (!recorded.ok) {
-      violations.push(issue(0, null, recorded.error.code));
-      complete = true;
-      return report();
+      return processingFailure(0, recorded.error.code);
     }
     const game = recorded.value;
     if (toHex(hashValue(game.state)) !== initial.value.log.head.stateHash) {
-      violations.push(issue(0, null, 'audit-genesis-state'));
-      complete = true;
-      return report();
+      return processingFailure(0, 'audit-genesis-state');
     }
     let prior = initial.value;
     let failureSeq = 0;
@@ -253,14 +268,16 @@ export function auditCertifiedGame(input: AuditCertifiedGameInput): AuditReport 
         failureSeq = entry.entry.seq;
         const recordedInput = entry.input;
         if (recordedInput) {
-          if (recordedInput.kind === 'system' && recordedInput.type === 'CARD_DEALT')
-            failureSeat = isSeat(recordedInput.seat) ? recordedInput.seat : null;
-          else if (recordedInput.kind === 'system' && recordedInput.type === 'STEAL_RESULT')
-            failureSeat = isSeat(recordedInput.victim) ? recordedInput.victim : null;
-          else failureSeat = null;
+          failureSeat = null;
           try {
             const data = privateDataFor(recordedInput, prior, next, game, masters, genesis);
-            if (!data.ok) return data;
+            if (!data.ok) {
+              // Only this mismatch identifies the signer of the fixed hidden transfer.
+              // A draw failure does not prove misconduct by the receiving player.
+              if (data.error.code === 'audit-steal-resource' && recordedInput.kind === 'system')
+                failureSeat = isSeat(recordedInput.victim) ? recordedInput.victim : null;
+              return data;
+            }
             const applied = game.applyRecorded(recordedInput, data.value);
             if (!applied.ok) return applied;
           } catch {
@@ -277,14 +294,27 @@ export function auditCertifiedGame(input: AuditCertifiedGameInput): AuditReport 
       },
     );
     if (!privateReplay.ok) {
+      if (
+        [
+          'driver-error',
+          'audit-private-input',
+          'audit-state-hash',
+          'audit-draw-context',
+          'audit-draw-seat',
+          'audit-steal-context',
+          'audit-steal-master',
+          'steal-recipient-key',
+          'deck-owner-lock',
+          'missing-private-state',
+        ].includes(privateReplay.error.code)
+      )
+        return processingFailure(failureSeq, privateReplay.error.code);
       violations.push(issue(failureSeq, failureSeat, privateReplay.error.code));
       complete = true;
       return report();
     }
     if (toHex(hashValue(game.state.result)) !== toHex(hashValue(context.log.state.result))) {
-      violations.push(issue((terminal as AuditEntryRef).seq, null, 'audit-terminal-result'));
-      complete = true;
-      return report();
+      return processingFailure((terminal as AuditEntryRef).seq, 'audit-terminal-result');
     }
     const crossCheck = reconstructPrivateSeats({
       genesisEntry: input.genesisEntry,
@@ -302,6 +332,15 @@ export function auditCertifiedGame(input: AuditCertifiedGameInput): AuditReport 
         typeof details.seq === 'number'
           ? details.seq
           : context.log.head.seq;
+      if (
+        [
+          'private-replay-failed',
+          'private-replay-beacon',
+          'crypto-context-required',
+          'verified-private-missing',
+        ].includes(crossCheck.error.code)
+      )
+        return processingFailure(seq, crossCheck.error.code);
       violations.push(issue(seq, null, crossCheck.error.code));
     } else {
       crossCheck.value.dispose();
@@ -309,8 +348,7 @@ export function auditCertifiedGame(input: AuditCertifiedGameInput): AuditReport 
     complete = true;
     return report();
   } catch {
-    violations.push(issue(finalHead?.seq ?? 0, null, 'audit-internal-failure'));
-    return report();
+    return processingFailure(finalHead?.seq ?? 0, 'audit-internal-failure');
   } finally {
     for (const master of masters.values()) master.fill(0);
   }

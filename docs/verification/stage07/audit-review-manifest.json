@@ -1,0 +1,142 @@
+{
+  "checkpoint": "24b7296",
+  "promptSha256": "b9740cf3db7e8f727e550fc600d63fc857e25a6d50f186a1999e6708fd821237",
+  "bundleSha256": "97b904474dfafdc7ff001b0f88f8481cc339aeaf598f34117f07c1a85205c84c",
+  "files": [
+    {
+      "path": "docs/verification/stage07/audit-checkpoint.md",
+      "sha256": "3fee290995ec804b8f0fe41853bd6051c93fc20e40ae9dd6aecbb3db42a28742",
+      "bytes": 4899
+    },
+    {
+      "path": "docs/verification/stage10/live-recovery-checkpoint.md",
+      "sha256": "cf6911e73ae8daf782ae437613fa1d54f67fb4414d53641e6b7f08010d7c7212",
+      "bytes": 4063
+    },
+    {
+      "path": "docs/verification/stage10/recovery-checkpoint.md",
+      "sha256": "95c77f248f1ca0f8a9bc34e0f19ccf052690a1ac0a5318c2ea872c18b41816ca",
+      "bytes": 4768
+    },
+    {
+      "path": "packages/protocol/src/audit.ts",
+      "sha256": "0d99f2bd5afdfb6774d64f2ac3524203ba5a6fb61edea58558576e3582f33840",
+      "bytes": 12064
+    },
+    {
+      "path": "packages/protocol/src/audit-types.ts",
+      "sha256": "a75f2dc2febd917f8e290d20e173c7279f4390c662ca5ef1e9fd1f2f627071cf",
+      "bytes": 1016
+    },
+    {
+      "path": "packages/protocol/src/audit.test.ts",
+      "sha256": "bba293cb5dc294b12d7881af28fb899455b15fe66a4c45ad0c6e99e9af4d64f9",
+      "bytes": 3451
+    },
+    {
+      "path": "packages/protocol/src/master-reveal.ts",
+      "sha256": "5b5542299d3ded31ae1e18fd080e1aaf95f7a803882b67f593314afa9437174a",
+      "bytes": 24421
+    },
+    {
+      "path": "packages/protocol/src/master-reveal.test.ts",
+      "sha256": "b930c6a92f2553b2408028fc597c8d3f662b73ae81fc6628b827b7b0949ab52a",
+      "bytes": 10885
+    },
+    {
+      "path": "packages/protocol/src/p2p-session.ts",
+      "sha256": "381da76889aa17e7621f56c07934ee42ccb8ee6af8d5c373372d4d9a17af3aec",
+      "bytes": 48651
+    },
+    {
+      "path": "packages/protocol/src/session-audit-types.ts",
+      "sha256": "9ee3b02355d847f1030faf672a93123c87e723b2f1ada01c77345aee93c625ee",
+      "bytes": 1158
+    },
+    {
+      "path": "packages/protocol/src/end-game-session.test.ts",
+      "sha256": "4ae0b520bd352b762cd4f7f79368dec2d9736c711f02cf39edba4d443f0072e9",
+      "bytes": 6363
+    },
+    {
+      "path": "packages/protocol/src/replicated-log.ts",
+      "sha256": "16ea327f961620233bbbd53d63494ac0af0f8b0dbd74f6e4319f152d20c3ba07",
+      "bytes": 135872
+    },
+    {
+      "path": "packages/protocol/src/recovered-host.ts",
+      "sha256": "97ca14288a87a41ef523cef40e8e55a0420f0f251d534ab7bc7014da84053654",
+      "bytes": 10926
+    },
+    {
+      "path": "packages/protocol/src/recovery-private.ts",
+      "sha256": "45c476cadd644e84a794561fdb2a5e23bd0a6bbc65ac9b3aa301b95103fe7a20",
+      "bytes": 7920
+    },
+    {
+      "path": "packages/protocol/src/private-replay.ts",
+      "sha256": "1d161bbad8b37754b3d072b240ff6aad171ec4c96c46f6ccb0cd8dd05541c338",
+      "bytes": 7948
+    },
+    {
+      "path": "packages/protocol/src/genesis-secrets.ts",
+      "sha256": "145d54ba5462b23be436d1967dd7b1d5c8f45d8ffea66e2b17ab6f5c2f74daea",
+      "bytes": 5423
+    },
+    {
+      "path": "packages/protocol/src/recovery-membership.ts",
+      "sha256": "d444c57a1aafeb5f721cd33653ab0ffc738e4dc90efc5b3654e92d4fce5e96ea",
+      "bytes": 16536
+    },
+    {
+      "path": "packages/protocol/src/recovery-types.ts",
+      "sha256": "670304a6178443554ad8d72c2b5e7aa501f8a7e50bacb950d8ac9dda14ea83a0",
+      "bytes": 1909
+    },
+    {
+      "path": "packages/protocol/src/recovery-readiness.ts",
+      "sha256": "47a54ebed1a0275beb70c7a92227cf97b1fc20a4476bdfefacb1acca2ff8dbf0",
+      "bytes": 23021
+    },
+    {
+      "path": "packages/protocol/src/testing/audit-fixture.ts",
+      "sha256": "c61c72f2a9b842ab29de4eb1006d89de6a8655167155dc921af61448eef83d22",
+      "bytes": 13106
+    },
+    {
+      "path": "packages/protocol/src/log.ts",
+      "sha256": "49e25cd4eb8115e4042cc252fa350fc975a2f5c517ff3df1b85d508700b5e467",
+      "bytes": 15699
+    },
+    {
+      "path": "packages/protocol/src/log-types.ts",
+      "sha256": "9be1afbb0cc5cba76fb3640aee4ebaec0d2152c036e6d67166b2aea26efe6bba",
+      "bytes": 1915
+    },
+    {
+      "path": "packages/engine/src/core/pipeline/localGame.ts",
+      "sha256": "014f59f204d3fd79daeb1730c298e0ee5aa4a8db3962fdeece82221bab658fae",
+      "bytes": 10185
+    },
+    {
+      "path": "apps/web/src/session/audit-worker-client.ts",
+      "sha256": "9f6625b83350515235593b6f6f0db96df432f45dea219c3c5eeb58a459b4f0b6",
+      "bytes": 5343
+    },
+    {
+      "path": "apps/web/src/session/audit-worker-job.ts",
+      "sha256": "89e007555a0531929bb04c727a31d9c7d9c78cee326b6dc16fe54f55dff5278d",
+      "bytes": 1123
+    },
+    {
+      "path": "apps/web/src/session/audit-worker.ts",
+      "sha256": "903dc23dff074684d3090c343a781350a891c11925f9a5c4b40f677bc1752220",
+      "bytes": 1723
+    },
+    {
+      "path": "apps/web/src/session/audit-worker-client.test.ts",
+      "sha256": "a2969de02c992c2086e19fc75d6dc4f3321b4d52fd295e27f802d40b6519fb65",
+      "bytes": 6291
+    }
+  ]
+}

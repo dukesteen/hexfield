@@ -1,0 +1,30 @@
+ DEPRECATED  The workspace file is deprecated and will be removed in the next major. Please, use the `test.projects` field in /Users/duke/Dev/Personal/colonist-p2p/vitest.config.ts instead.
+
+ RUN  v3.2.7 /Users/duke/Dev/Personal/colonist-p2p
+
+ ✓ |@cp2p/protocol| src/end-game-session.test.ts (1 test) 61350ms
+   ✓ finished sessions retry reveals, audit separately and cancel a closing worker  61349ms
+ ✓ |@cp2p/protocol| src/master-reveal.test.ts (5 tests) 55559ms
+   ✓ post-result master disclosure > persists exact signed output, retries after restart and accepts one authenticated master  5004ms
+   ✓ post-result master disclosure > rejects forged sender, altered result and F0 mismatch before accepting disclosure  1982ms
+   ✓ post-result master disclosure > quarantines a corrupt accepted slot while restoring other durable reveals  5404ms
+   ✓ post-result master disclosure > disposal during journal, source, store and restore waits cannot resurrect a reveal  4447ms
+ ✓ |@cp2p/protocol| src/audit.test.ts (7 tests) 53009ms
+   ✓ certified end-game audit > passes a complete certified victory and identifies the first result  5570ms
+   ✓ certified end-game audit > requires a certified terminal result  823ms
+   ✓ certified end-game audit > keeps missing and bad supplied masters out of owner violations  1853ms
+   ✓ certified end-game audit > detects a false private draw at the certified victory claim  2091ms
+   ✓ certified end-game audit > reports a private engine exception without accusing the drawing player  1832ms
+   ✓ certified end-game audit > rejects an alternate encoding of the same scalar as bad reveal input  911ms
+ ✓ |@cp2p/protocol| src/recovery-membership.test.ts (4 tests) 5854ms
+ ✓ |@cp2p/p2p| src/web-rtc-transport.test.ts (18 tests) 223ms
+ ✓ |@cp2p/protocol| src/lobby.test.ts (5 tests) 191ms
+ ✓ |@cp2p/p2p| src/server-signaling.test.ts (9 tests) 71ms
+ ✓ |@cp2p/web| src/session/online-credentials.test.ts (4 tests) 32ms
+ ✓ |@cp2p/web| src/session/online-invite.test.ts (3 tests) 3ms
+ ✓ |@cp2p/web| src/session/audit-worker-client.test.ts (8 tests) 80ms
+
+ Test Files  10 passed (10)
+      Tests  64 passed (64)
+   Start at  06:16:26
+   Duration  179.99s (transform 1.14s, setup 0ms, collect 2.33s, tests 176.37s, environment 162ms, prepare 322ms)

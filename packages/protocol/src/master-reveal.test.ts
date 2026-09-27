@@ -1,4 +1,4 @@
-import { canonicalEncode, toBase64Url } from '@cp2p/codec';
+import { canonicalDecode, canonicalEncode, toBase64Url } from '@cp2p/codec';
 import { scalarToBytes, signObject } from '@cp2p/crypto';
 import type { Result, Seat } from '@cp2p/engine';
 import { beforeAll, describe, expect, test } from 'vitest';
@@ -26,6 +26,18 @@ class MemoryRevealStore implements MasterRevealStore {
   values(): readonly Uint8Array[] {
     return [...this.records.values()].map((bytes) => bytes.slice());
   }
+  alterAccepted(seat: Seat, alter: (value: object) => unknown): void {
+    const id = [...this.records.keys()].find(
+      (key) => key.includes('/accepted/') && key.endsWith(`/${seat}`),
+    );
+    if (!id) throw new Error('Missing accepted reveal');
+    const bytes = this.records.get(id);
+    if (!bytes) throw new Error('Missing accepted reveal bytes');
+    const decoded: unknown = canonicalDecode(bytes);
+    if (!decoded || typeof decoded !== 'object' || Array.isArray(decoded))
+      throw new Error('Accepted reveal is not an object');
+    this.records.set(id, canonicalEncode(alter(decoded)));
+  }
 }
 
 function deferred() {
@@ -42,7 +54,9 @@ let journal: MemoryProtocolJournal;
 let genesisOnly: MemoryProtocolJournal;
 
 beforeAll(async () => {
-  fixture = await createTerminalAuditFixture();
+  fixture = await createTerminalAuditFixture({
+    yieldTask: () => new Promise<void>((resolve) => setImmediate(resolve)),
+  });
   journal = new MemoryProtocolJournal();
   genesisOnly = new MemoryProtocolJournal();
   if (!(await journal.initialize(fixture.genesisEntry, new Uint8Array([1]))))
@@ -175,6 +189,34 @@ describe('post-result master disclosure', () => {
     });
     sender.dispose();
     receiver.dispose();
+  }, 120_000);
+
+  test('quarantines a corrupt accepted slot while restoring other durable reveals', async () => {
+    const sender0 = coordinator(0, new MemoryRevealStore());
+    const sender1 = coordinator(1, new MemoryRevealStore());
+    const packet0 = value(await sender0.prepare(0)).packet;
+    const packet1 = value(await sender1.prepare(1)).packet;
+    const store = new MemoryRevealStore();
+    const receiver = coordinator(1, store);
+    value(await receiver.receive(packet0));
+    value(await receiver.receive(packet1));
+    receiver.dispose();
+    store.alterAccepted(0, (record) => ({
+      ...record,
+      receivedAt: { seq: fixture.entries.length + 100, hash: '0'.repeat(64) },
+    }));
+    const restored = coordinator(1, store);
+    value(await restored.restoreAccepted());
+    expect(restored.quarantinedAccepted()).toEqual([{ seat: 0, code: 'master-reveal-scope' }]);
+    expect(restored.acceptedMasters().map(({ seat }) => seat)).toEqual([1]);
+    expect(await restored.receive(packet0)).toMatchObject({
+      ok: false,
+      error: { code: 'master-reveal-conflict' },
+    });
+    expect(restored.acceptedMasters().map(({ seat }) => seat)).toEqual([1]);
+    restored.dispose();
+    sender0.dispose();
+    sender1.dispose();
   }, 120_000);
 
   test('disposal during journal, source, store and restore waits cannot resurrect a reveal', async () => {

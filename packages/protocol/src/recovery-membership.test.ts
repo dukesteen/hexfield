@@ -12,6 +12,8 @@ import {
   getBeaconOperation,
 } from './beacon-state.js';
 import { BEACON_EVIDENCE_PROTOCOL } from './crypto-context.js';
+import { entryHash, genesisDigest } from './genesis.js';
+import { signCommand } from './log.js';
 import { validateCertifiedEntry } from './proposal.js';
 import type { CertifiedEntry, ProposalContext } from './proposal.js';
 import { advanceCarriedOperations, validateRecoveryTransition } from './recovery-membership.js';
@@ -212,6 +214,93 @@ describe('certified public recovery membership', () => {
       epoch: frozen.epoch,
       anchor: frozen.anchor,
     });
+  });
+
+  test('holds otherwise valid gameplay until a certified recovery activates', () => {
+    const before = data.ready;
+    const beacon = required(before.log.crypto).beacon;
+    const operation = value(getBeaconOperation(beacon));
+    const reveals = data.genesis.seats.map(({ seat }) =>
+      signBeaconReveal(operation, seat, required(required(data.chains[seat])[1]), key(data, seat)),
+    );
+    const outcome = value(
+      completeBeaconState(beacon, reveals, before.log.state, {
+        seq: before.log.head.seq + 1,
+        hash: 'd'.repeat(64),
+      }),
+    );
+    if (outcome.outcome.kind !== 'system') throw new Error('Expected initial system result');
+    const input = outcome.outcome.input;
+    const state = value(data.source.engine.apply(before.log.state, input)).state;
+    const rollEntry = signedEntry(
+      data,
+      before,
+      {
+        kind: 'system',
+        input,
+        evidence: { kind: 'proof', protocol: BEACON_EVIDENCE_PROTOCOL, data: reveals },
+      },
+      toHex(hashValue(state)),
+    );
+    let ready = advanceRecoveryFixture(before, certificate(data, before, rollEntry, [0, 1, 2, 3]));
+    const placement = (context: ProposalContext) => {
+      const seat = context.log.state.turn.activeSeat;
+      const command = required(
+        data.source.engine.getLegalCommands(context.log.state, seat).commands[0],
+      );
+      const commandBody = {
+        gameId: data.genesis.gameId,
+        genesisDigest: genesisDigest(data.genesis),
+        seat,
+        nonce: (context.log.lastNonces.get(seat) ?? 0) + 1,
+        headSeq: context.log.head.seq,
+        headHash: entryHash(context.log.head),
+        command,
+      };
+      const next = value(
+        data.source.engine.apply(context.log.state, { kind: 'command', seat, command }),
+      );
+      return signedEntry(
+        data,
+        context,
+        { kind: 'command', signed: signCommand(commandBody, key(data, seat)) },
+        toHex(hashValue(next.state)),
+      );
+    };
+    // Leave the departed seat's setup turn if the seed selected it first.
+    for (let move = 0; ready.log.state.turn.activeSeat === 0 && move < 2; move += 1) {
+      const entry = placement(ready);
+      ready = advanceRecoveryFixture(ready, certificate(data, ready, entry, [0, 1, 2, 3]));
+    }
+    expect(ready.log.state.turn.activeSeat).not.toBe(0);
+    const allowed = placement(ready);
+    expect(validateCertifiedEntry(certificate(data, ready, allowed, [0, 1, 2, 3]), ready).ok).toBe(
+      true,
+    );
+    const replacement = identityFromSecret(new Uint8Array(32).fill(83));
+    try {
+      const auth = authorization(
+        readiness(data, ready, replacement.peerId),
+        data,
+        replacement.secretKey,
+      );
+      const entry = signedEntry(
+        data,
+        ready,
+        { kind: 'membership', change: auth },
+        ready.log.head.stateHash,
+      );
+      const pending = advanceRecoveryFixture(ready, certificate(data, ready, entry, [1, 2, 3]));
+      const blocked = placement(pending);
+      expect(
+        validateCertifiedEntry(certificate(data, pending, blocked, [1, 2, 3]), pending),
+      ).toMatchObject({
+        ok: false,
+        error: { code: 'recovery-pending' },
+      });
+    } finally {
+      replacement.secretKey.fill(0);
+    }
   });
 
   test('rejects wrong readiness, parent, reused keys, and setup-pending recovery', () => {

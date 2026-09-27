@@ -8,3 +8,4 @@ failures/
 reports/
 *.local
 *.tsbuildinfo
+apps/web/dev/recovered-audit-fixture.json

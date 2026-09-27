@@ -8,6 +8,7 @@ import type { EnvelopeSignalingAdapter, SignedSignalEnvelope } from './signaling
 
 const RETIRED_LIMIT = 64;
 const SESSION_HISTORY_LIMIT = 64;
+const REMOVED_PEER_HISTORY_LIMIT = 64;
 const ATTEMPT_TIMEOUT_MS = 30_000;
 const MANUAL_ATTEMPT_TIMEOUT_MS = 5 * 60_000;
 const EARLY_CANDIDATE_MS = 5_000;
@@ -57,7 +58,7 @@ export interface WebRtcTransportOptions {
 export class WebRtcTransport implements Transport {
   readonly self: PeerId;
   private readonly secretKey: Uint8Array;
-  private readonly expected: ReadonlySet<PeerId>;
+  private readonly expected: Set<PeerId>;
   private readonly sessionId: string;
   private readonly links = new Map<PeerId, LinkRecord>();
   private readonly pendingLinks = new Map<PeerId, LinkRecord>();
@@ -70,6 +71,7 @@ export class WebRtcTransport implements Transport {
   private readonly retries = new Map<PeerId, unknown>();
   private readonly retryDelay = new Map<PeerId, number>();
   private readonly manualDisconnects = new Set<PeerId>();
+  private readonly removedPeerHistory = new Set<PeerId>();
   private readonly messageListeners = new Set<(from: PeerId, bytes: Uint8Array) => void>();
   private readonly peerListeners = new Set<(peer: PeerId, online: boolean) => void>();
   private readonly diagnosticListeners = new Set<
@@ -78,6 +80,8 @@ export class WebRtcTransport implements Transport {
   private readonly unsubscribe: Unsubscribe;
   private generation = 0;
   private nextAttemptSeq = 0;
+  private started = false;
+  private rosterFrozen = false;
   private disposed = false;
 
   constructor(private readonly options: WebRtcTransportOptions) {
@@ -85,7 +89,7 @@ export class WebRtcTransport implements Transport {
     if (
       !options.scope ||
       options.scope.length > 128 ||
-      options.roster.length < 2 ||
+      options.roster.length < 1 ||
       options.roster.length > 6 ||
       new Set(options.roster).size !== options.roster.length ||
       !options.roster.includes(options.self) ||
@@ -119,7 +123,63 @@ export class WebRtcTransport implements Transport {
 
   /** Begin signaling every roster link; manual callers may connect one peer at a time. */
   start(): void {
+    if (this.disposed) throw new Error('WebRTC transport is disposed');
+    this.started = true;
     for (const peer of this.expected) if (this.self < peer) this.connect(peer);
+  }
+
+  /** Explicit lobby selection. Server room snapshots never call this automatically. */
+  updatePreGameRoster(roster: readonly PeerId[]): void {
+    if (this.disposed) throw new Error('WebRTC transport is disposed');
+    if (this.rosterFrozen) throw new Error('WebRTC roster is frozen');
+    if (
+      !Array.isArray(roster) ||
+      roster.length < 1 ||
+      roster.length > 6 ||
+      new Set(roster).size !== roster.length ||
+      !roster.includes(this.self)
+    )
+      throw new TypeError('Invalid WebRTC mesh roster');
+    for (const peer of roster) parsePeerId(peer);
+    const next = new Set(roster.filter((peer) => peer !== this.self));
+    const removed = [...this.expected].filter((peer) => !next.has(peer));
+    const added = [...next].filter((peer) => !this.expected.has(peer));
+    this.expected.clear();
+    for (const peer of next) this.expected.add(peer);
+    for (const peer of removed) {
+      if (this.expected.has(peer)) continue;
+      this.clearRetry(peer);
+      this.clearEarly(peer);
+      this.clearDeferred(peer);
+      this.retirePending(peer);
+      this.retireLink(peer);
+      this.manualDisconnects.delete(peer);
+      this.lastReplacement.delete(peer);
+      this.retryDelay.delete(peer);
+      this.removedPeerHistory.delete(peer);
+      this.removedPeerHistory.add(peer);
+    }
+    for (const peer of added) {
+      if (this.disposed) break;
+      if (this.expected.has(peer) && this.started && this.self < peer) {
+        try {
+          this.connect(peer);
+        } catch {
+          this.scheduleRetry(peer);
+        }
+      }
+    }
+    this.trimRemovedPeerHistory();
+  }
+
+  roster(): readonly PeerId[] {
+    return [this.self, ...this.expected].toSorted();
+  }
+
+  freezeRoster(): readonly PeerId[] {
+    if (this.disposed) throw new Error('WebRTC transport is disposed');
+    this.rosterFrozen = true;
+    return this.roster();
   }
 
   connect(peer: PeerId): void {
@@ -326,8 +386,10 @@ export class WebRtcTransport implements Transport {
       clock: this.options.clock,
       rtcFactory: () => this.options.rtcFactory(peer, configuration),
       ...(this.options.randomBytes ? { randomBytes: this.options.randomBytes } : {}),
-      signal: (blob) =>
-        this.options.adapter.send(
+      signal: (blob) => {
+        if (!this.expected.has(peer) || this.disposed || this.manualDisconnects.has(peer))
+          return Promise.reject(new Error('Peer is outside the active mesh roster'));
+        return this.options.adapter.send(
           peer,
           signSignalEnvelope(
             {
@@ -342,7 +404,8 @@ export class WebRtcTransport implements Transport {
             },
             this.secretKey,
           ),
-        ),
+        );
+      },
       onMessage: (message) => {
         if (record && this.links.get(peer) === record && link.isAuthenticated)
           for (const listener of this.messageListeners) {
@@ -587,7 +650,7 @@ export class WebRtcTransport implements Transport {
   }
 
   private scheduleRetry(peer: PeerId): void {
-    if (this.retries.has(peer)) return;
+    if (!this.expected.has(peer) || this.disposed || this.retries.has(peer)) return;
     const delay = this.retryDelay.get(peer) ?? RETRY_MIN_MS;
     this.retryDelay.set(peer, Math.min(delay * 2, RETRY_MAX_MS));
     this.retries.set(
@@ -596,6 +659,7 @@ export class WebRtcTransport implements Transport {
         this.retries.delete(peer);
         if (
           !this.disposed &&
+          this.expected.has(peer) &&
           !this.manualDisconnects.has(peer) &&
           !this.links.has(peer) &&
           !this.pendingLinks.has(peer)
@@ -624,6 +688,18 @@ export class WebRtcTransport implements Transport {
   private assertPeer(peer: PeerId): void {
     if (this.disposed) throw new Error('WebRTC transport is disposed');
     if (!this.expected.has(peer)) throw new Error('Unknown mesh peer');
+  }
+
+  private trimRemovedPeerHistory(): void {
+    while (this.removedPeerHistory.size > REMOVED_PEER_HISTORY_LIMIT) {
+      const oldest = this.removedPeerHistory.values().next().value;
+      if (oldest === undefined) return;
+      this.removedPeerHistory.delete(oldest);
+      if (!this.expected.has(oldest)) {
+        this.retired.delete(oldest);
+        this.offerHighwater.delete(oldest);
+      }
+    }
   }
 }
 

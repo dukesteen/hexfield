@@ -54,7 +54,7 @@ class MemoryDeckStore implements DeckContributionStore {
   }
 }
 
-async function settle(sessions: readonly P2PSession[], clock: VirtualClock, passes = 24) {
+async function settleMessages(sessions: readonly P2PSession[], clock: VirtualClock, passes = 24) {
   for (let pass = 0; pass < passes; pass += 1) {
     // oxlint-disable-next-line eslint/no-await-in-loop -- Each flush schedules the next packet batch.
     await Promise.all(sessions.map((session) => session.flush()));
@@ -100,6 +100,8 @@ export async function createTerminalAuditFixture(
   options: {
     sessionOptions?: (options: P2PSessionOptions) => P2PSessionOptions;
     onTerminal?: (sessions: readonly P2PSession[], clock: VirtualClock) => Promise<void>;
+    /** Let the test runner process I/O without advancing the protocol clock. */
+    yieldTask?: () => Promise<void>;
   } = {},
 ): Promise<{
   genesisEntry: LogEntry;
@@ -109,6 +111,10 @@ export async function createTerminalAuditFixture(
   masters: { seat: Seat; master: Uint8Array }[];
   identities: ReturnType<typeof createSimulationGenesis>['identities'];
 }> {
+  async function settle(sessions: readonly P2PSession[], clock: VirtualClock, passes = 24) {
+    await settleMessages(sessions, clock, passes);
+    await options.yieldTask?.();
+  }
   const simulation = createSimulationGenesis({
     seed: 3,
     humanCount: 2,

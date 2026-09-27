@@ -87,6 +87,24 @@ export type {
 export { phaseIdentity, timerKey } from './session-timing.js';
 export type { PeerId, ProtocolClock, Transport, Unsubscribe } from './transport.js';
 export { PROTOCOL_VERSION } from './types.js';
+export { LobbyController } from './lobby.js';
+export type { LobbyControllerOptions, HostLobbyOptions, JoinLobbyOptions } from './lobby.js';
+export { LOBBY_COLOURS } from './lobby-types.js';
+export type {
+  LobbyBotLevel,
+  LobbyColour,
+  LobbyDiagnostic,
+  LobbyFreezeAck,
+  LobbyFreezeAgreement,
+  LobbyRequest,
+  LobbySeat,
+  LobbyState,
+} from './lobby-types.js';
+export { EscrowCeremony } from './escrow-ceremony.js';
+export type { CeremonySend, EscrowCeremonyStore } from './escrow-ceremony.js';
+export type { EscrowManifestApproval } from './escrow-lifecycle.js';
+export type { EscrowShareAck, AcceptedEscrowShare } from './escrow-distribution.js';
+export type { EscrowShareEnvelope } from './escrow-types.js';
 export type {
   BotSeat,
   CommandBody,

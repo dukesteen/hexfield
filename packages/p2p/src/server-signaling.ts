@@ -1,4 +1,4 @@
-import { identityFromSecret } from '@cp2p/crypto';
+import { identityFromSecret, parsePeerId } from '@cp2p/crypto';
 import type { PeerId, ProtocolClock, Unsubscribe } from '@cp2p/protocol';
 import type { EnvelopeSignalingAdapter, SignedSignalEnvelope } from './signaling-envelope.js';
 import {
@@ -15,6 +15,7 @@ const SEND_INTERVAL_MS = 50;
 const RETRY_MIN_MS = 250;
 const RETRY_MAX_MS = 4_000;
 const SOCKET_OPEN = 1;
+const MAX_ROOM_PEERS = 8;
 const roomIdPattern = /^[a-z2-7]{10}$/;
 const utf8 = new TextEncoder();
 
@@ -55,7 +56,9 @@ export class ServerSignalingAdapter implements EnvelopeSignalingAdapter {
   private readonly url: string;
   private readonly key: Uint8Array;
   private readonly listeners = new Set<(from: PeerId, value: unknown) => void>();
+  private readonly roomPeerListeners = new Set<(peers: readonly PeerId[] | null) => void>();
   private readonly waiters = new Set<Waiter>();
+  private roomPeerSnapshot: readonly PeerId[] | null = null;
   private socket: WebSocket | null = null;
   private handshakeTimer: unknown = null;
   private challenged = false;
@@ -127,10 +130,29 @@ export class ServerSignalingAdapter implements EnvelopeSignalingAdapter {
     };
   }
 
+  /** Authenticated server discovery advice, never a game membership decision. */
+  roomPeers(): readonly PeerId[] | null {
+    return this.roomPeerSnapshot?.slice() ?? null;
+  }
+
+  onRoomPeers(listener: (peers: readonly PeerId[] | null) => void): Unsubscribe {
+    if (this.closed) return () => undefined;
+    this.roomPeerListeners.add(listener);
+    try {
+      listener(this.roomPeers());
+    } catch {
+      /* Isolate observers. */
+    }
+    return () => {
+      this.roomPeerListeners.delete(listener);
+    };
+  }
+
   close(reason?: string): void {
     if (this.closed) return;
     this.closed = true;
     this.ready = false;
+    this.updateRoomPeers(null);
     this.clearHandshakeTimer();
     this.clearSendTimer();
     if (this.retryTimer !== null) this.options.clock.clearTimeout(this.retryTimer);
@@ -144,6 +166,7 @@ export class ServerSignalingAdapter implements EnvelopeSignalingAdapter {
     }
     this.rejectWaiters(new Error('Signaling adapter is closed'));
     this.listeners.clear();
+    this.roomPeerListeners.clear();
     this.key.fill(0);
     this.status('closed', reason);
   }
@@ -203,18 +226,21 @@ export class ServerSignalingAdapter implements EnvelopeSignalingAdapter {
       } catch {
         this.lost();
       }
-    } else if (
-      frame.type === 'peers' &&
-      this.challenged &&
-      exact(frame, ['type', 'peers']) &&
-      Array.isArray(frame.peers) &&
-      frame.peers.includes(this.options.self)
-    ) {
+    } else if (frame.type === 'peers' && this.challenged) {
+      const peers = this.parseRoomPeers(frame);
+      if (!peers) {
+        if (!this.ready) this.lost();
+        return;
+      }
+      const first = !this.ready;
       this.ready = true;
-      this.clearHandshakeTimer();
-      this.retryDelay = RETRY_MIN_MS;
-      this.status('ready');
-      this.flush();
+      this.updateRoomPeers(peers);
+      if (first) {
+        this.clearHandshakeTimer();
+        this.retryDelay = RETRY_MIN_MS;
+        this.status('ready');
+        this.flush();
+      }
     } else if (
       frame.type === 'signal' &&
       this.ready &&
@@ -249,6 +275,7 @@ export class ServerSignalingAdapter implements EnvelopeSignalingAdapter {
       /* Retry still proceeds. */
     }
     this.ready = false;
+    this.updateRoomPeers(null);
     if (this.closed || this.retryTimer !== null) return;
     const delay = this.retryDelay;
     this.retryDelay = Math.min(delay * 2, RETRY_MAX_MS);
@@ -262,6 +289,48 @@ export class ServerSignalingAdapter implements EnvelopeSignalingAdapter {
         this.lost();
       }
     }, delay);
+  }
+
+  private parseRoomPeers(frame: Record<string, unknown>): PeerId[] | null {
+    if (
+      !exact(frame, ['type', 'peers']) ||
+      !Array.isArray(frame.peers) ||
+      frame.peers.length < 1 ||
+      frame.peers.length > MAX_ROOM_PEERS
+    )
+      return null;
+    const peers: PeerId[] = [];
+    try {
+      for (const value of frame.peers) {
+        if (typeof value !== 'string') return null;
+        parsePeerId(value);
+        peers.push(value);
+      }
+    } catch {
+      return null;
+    }
+    if (new Set(peers).size !== peers.length || !peers.includes(this.options.self)) return null;
+    return peers.toSorted();
+  }
+
+  private updateRoomPeers(peers: readonly PeerId[] | null): void {
+    const previous = this.roomPeerSnapshot;
+    if (previous === null && peers === null) return;
+    if (
+      previous &&
+      peers &&
+      previous.length === peers.length &&
+      previous.every((peer, index) => peer === peers[index])
+    )
+      return;
+    this.roomPeerSnapshot = peers?.slice() ?? null;
+    for (const listener of this.roomPeerListeners) {
+      try {
+        listener(this.roomPeers());
+      } catch {
+        /* Isolate observers. */
+      }
+    }
   }
 
   private clearHandshakeTimer(): void {
