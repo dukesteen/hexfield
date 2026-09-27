@@ -346,6 +346,91 @@ async function playSetupThroughRoll(
 }
 
 describe('verified beacon contribution replication', () => {
+  test('captures a signed bad reveal, certifies its finding, and keeps the owed outcome frozen', async () => {
+    const fixture = verifiedFixture();
+    const peers = fixture.humans.map(
+      (seat) => required(fixture.simulation.identities.get(seat.seat)).peerId,
+    );
+    const network = createMemnet({ peers });
+    const sent: ProtocolMessage[][] = [[], []];
+    const transports = peers.map((peer, index) =>
+      observeWithoutSystemContributions(network.transport(peer), required(sent[index])),
+    );
+    const journals = [new MemoryProtocolJournal(), new MemoryProtocolJournal()];
+    const options = transports.map((transport, index) =>
+      optionsFor(
+        fixture,
+        index,
+        transport,
+        network.clock,
+        required(journals[index]),
+        new MemoryBeaconContributionStore(),
+      ),
+    );
+    const first = value(await ReplicatedLog.create(required(options[0])));
+    const second = value(await ReplicatedLog.create(required(options[1])));
+    try {
+      deliverFirstProposal(required(peers[0]), required(transports[1]), required(sent[0]));
+      await settle([first, second], network.clock);
+      const before = second.getContext();
+      expect(before.log.head.seq).toBe(setupPassCount(fixture));
+      if (!before.log.crypto) throw new Error('Missing verified crypto state');
+      const operation = value(getBeaconOperation(before.log.crypto.beacon));
+      const offender = required(fixture.humans[0]);
+      const body = {
+        operationId: beaconOperationId(operation),
+        seat: offender.seat,
+        index: required(operation.participants.find((item) => item.seat === offender.seat)).index,
+        value: toBase64Url(new Uint8Array(32).fill(200)),
+      };
+      const bad: ProtocolMessage = {
+        t: 'SYS_CONTRIB',
+        genesisDigest: before.membership.genesisDigest,
+        contribution: {
+          kind: 'beacon-reveal',
+          signed: {
+            body,
+            sig: signObject(
+              'beacon-reveal',
+              body,
+              required(fixture.simulation.identities.get(offender.seat)).secretKey,
+            ),
+          },
+        },
+      };
+      required(transports[1]).inject(required(peers[0]), bad);
+      await settle([first, second], network.clock);
+      for (const replica of [first, second]) {
+        const after = replica.getContext();
+        expect(after.log.head.seq).toBe(before.log.head.seq + 1);
+        expect(after.log.head.payload.kind).toBe('cheat-proof');
+        expect(after.log.head.stateHash).toBe(before.log.head.stateHash);
+        expect(after.log.state).toEqual(before.log.state);
+        expect(after.log.crypto?.beacon).toEqual(before.log.crypto.beacon);
+        expect(after.log.crypto?.cheats).toMatchObject([
+          { seat: offender.seat, kind: 'beacon-reveal', at: { seq: before.log.head.seq } },
+        ]);
+        expect(replica.getEntries().at(-1)?.certificate).toHaveLength(2);
+      }
+      expect(required(sent[1]).some((message) => message.t === 'CHEAT_CLAIM')).toBe(true);
+      required(transports[1]).inject(required(peers[0]), bad);
+      await settle([first, second], network.clock);
+      expect(second.getContext().log.head.seq).toBe(before.log.head.seq + 1);
+      expect(second.getContext().log.crypto?.cheats).toHaveLength(1);
+      expect(await required(options[1]).cheatCandidateStore?.loadAll()).toEqual([]);
+      second.dispose();
+      const restored = value(await ReplicatedLog.restore(required(options[1])));
+      expect(restored.getContext().log.crypto?.cheats).toEqual(
+        first.getContext().log.crypto?.cheats,
+      );
+      restored.dispose();
+    } finally {
+      first.dispose();
+      second.dispose();
+      network.dispose();
+    }
+  }, 30_000);
+
   test('early signed timeout waits for each verified peer, including a restored peer', async () => {
     const fixture = verifiedFixture(2, 2, 1);
     const peers = fixture.humans.map(

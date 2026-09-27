@@ -108,6 +108,7 @@ import {
   encodeCheatCandidate,
 } from './cheat-candidates.js';
 import type { CheatCandidateStore } from './cheat-candidates.js';
+import { certifiedDeliveryClaim, rejectedWireProofCandidates } from './cheat-capture.js';
 import * as v from 'valibot';
 
 const MAX_QUEUED_MESSAGES_PER_PEER = 8;
@@ -431,6 +432,7 @@ export class ReplicatedLog {
       replica.broadcastNextCheatClaim();
       const resumed = await replica.activeController().resume();
       if (!resumed.ok) return resumed;
+      await replica.captureCertifiedDelivery();
       return replica.offerAvailableInput();
     });
     if (!initialized.ok) {
@@ -999,7 +1001,12 @@ export class ReplicatedLog {
         const copy = bytes.slice();
         this.queuedByPeer.set(from, peerQueued + 1);
         this.queuedMessages += 1;
-        void this.enqueue(() => this.receive(from, copy)).then((result) => {
+        void this.enqueue(async () => {
+          const result = await this.receive(from, copy);
+          if (!result.ok && !FATAL_CONTROLLER_ERRORS.has(result.error.code))
+            await this.captureRejectedProofs(from, copy);
+          return result;
+        }).then((result) => {
           this.queuedMessages -= 1;
           const remaining = (this.queuedByPeer.get(from) ?? 1) - 1;
           if (remaining === 0) this.queuedByPeer.delete(from);
@@ -1679,6 +1686,7 @@ export class ReplicatedLog {
           proposal: message.proposal,
         });
         if (!received.ok) {
+          await this.captureRejectedProofs(from, bytes);
           if (
             received.error.code === 'recovery-approval-required' &&
             entry.payload.kind === 'membership'
@@ -1758,7 +1766,15 @@ export class ReplicatedLog {
         return this.rememberAccusation(message.control);
       }
       case 'CHEAT_CLAIM': {
-        if (!authenticatedCheatSigner(message.claim, this.context.log.genesis))
+        if (
+          message.claim.evidence.at.seq === this.context.log.head.seq &&
+          !authenticatedCheatSigner(
+            message.claim,
+            this.context.log.genesis,
+            this.context.log.authority,
+            this.context.log.crypto?.epoch,
+          )
+        )
           return failure('cheat-signature', 'Cheat evidence has no authenticated genesis signer');
         if (message.claim.evidence.at.seq > this.context.log.head.seq)
           return failure('cheat-future', 'Cheat evidence parent is not certified');
@@ -2920,15 +2936,48 @@ export class ReplicatedLog {
   }
 
   private verifiedCheatClaim(claim: CheatClaim): Result<CheatFinding> {
-    if (!authenticatedCheatSigner(claim, this.context.log.genesis))
-      return failure('cheat-signature', 'Cheat evidence has no authenticated genesis signer');
     if (claim.evidence.at.seq > this.context.log.head.seq)
       return failure('cheat-future', 'Cheat evidence parent is not certified');
-    return claim.evidence.at.seq === this.context.log.head.seq &&
-      claim.evidence.at.hash === entryHash(this.context.log.head)
-      ? verifyCheatProof(claim, this.context.log)
-      : (this.context.verifyHistoricalCheat?.(claim) ??
-          failure('cheat-history', 'Certified evidence parent is unavailable'));
+    if (claim.evidence.at.seq < this.context.log.head.seq)
+      return (
+        this.context.verifyHistoricalCheat?.(claim) ??
+        failure('cheat-history', 'Certified evidence parent is unavailable')
+      );
+    if (
+      !authenticatedCheatSigner(
+        claim,
+        this.context.log.genesis,
+        this.context.log.authority,
+        this.context.log.crypto?.epoch,
+      )
+    )
+      return failure('cheat-signature', 'Cheat evidence has no authenticated current signer');
+    return verifyCheatProof(claim, this.context.log);
+  }
+
+  private async captureRejectedProofs(from: PeerId, bytes: Uint8Array): Promise<void> {
+    if (
+      this.disposed ||
+      this.context.log.genesis.security !== 'verified' ||
+      !this.context.membership.voters.some((voter) => voter.publicKey === from) ||
+      !this.admitExpensiveRequest(from, `capture/${toHex(hashValue(bytes))}`, 'cheat')
+    )
+      return;
+    for (const claim of rejectedWireProofCandidates(bytes, this.context.log)) {
+      // Retain before gossip; a candidate is still untrusted until the objective
+      // verifier checks its signature and proof against this certified parent.
+      // oxlint-disable-next-line no-await-in-loop -- Bounded candidates share one durable outbox.
+      const retained = await this.rememberCheatClaim(claim, true);
+      if (!retained.ok && retained.error.code.startsWith('cheat-store-'))
+        this.status({ kind: 'rejected', code: retained.error.code });
+    }
+  }
+
+  private async captureCertifiedDelivery(): Promise<void> {
+    const delivery = certifiedDeliveryClaim(this.context.log);
+    if (!delivery) return;
+    const retained = await this.rememberCheatClaim(delivery, true);
+    if (!retained.ok) this.status({ kind: 'rejected', code: retained.error.code });
   }
 
   private async rememberCheatClaim(value: unknown, gossip: boolean): Promise<Result<void>> {
@@ -3301,7 +3350,10 @@ export class ReplicatedLog {
     if (pendingAccusation)
       this.requireSend(this.broadcast({ t: 'ACCUSE', control: pendingAccusation }));
     this.requireSend(this.broadcast({ t: 'COMMIT', certified }));
-    void this.enqueue(() => this.offerAvailableInput());
+    void this.enqueue(async () => {
+      await this.captureCertifiedDelivery();
+      return this.offerAvailableInput();
+    });
   }
 
   private settlePending(certified: CertifiedEntry): void {
@@ -3402,6 +3454,7 @@ export class ReplicatedLog {
         );
       const recovered = await this.activeController().resume();
       if (!recovered.ok) return recovered;
+      await this.captureCertifiedDelivery();
       const offered = await this.offerAvailableInput(true);
       return offered;
     } finally {
