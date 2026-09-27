@@ -79,6 +79,40 @@ function fixture(exhausted = false) {
 }
 
 describe('durable outgoing beacon contributions', () => {
+  test('keeps two seats in distinct immutable slots for the same frozen operation', async () => {
+    const { crypto, identities, chains, source } = fixture();
+    const store = new MemoryBeaconContributionStore();
+    const first = await prepareBeaconContribution(
+      crypto,
+      0,
+      required(identities[0]).secretKey,
+      source,
+      store,
+    );
+    const second = await prepareBeaconContribution(
+      crypto,
+      1,
+      required(identities[1]).secretKey,
+      {
+        link: () => required(required(chains[1])[1]),
+        extension: (chainEpoch) => source.extension(chainEpoch),
+      },
+      store,
+    );
+    expect(first).toMatchObject({ ok: true, value: { kind: 'beacon-reveal' } });
+    expect(second).toMatchObject({ ok: true, value: { kind: 'beacon-reveal' } });
+    if (!first.ok || !first.value || !second.ok || !second.value)
+      throw new Error('Missing signed beacon contributions');
+    const operation = getBeaconOperation(crypto.beacon);
+    if (!operation.ok) throw new Error(operation.error.message);
+    const id = beaconOperationId(operation.value);
+    expect(await store.load(`${id}/0`)).toEqual(canonicalEncode(first.value));
+    expect(await store.load(`${id}/1`)).toEqual(canonicalEncode(second.value));
+    expect(
+      await prepareBeaconContribution(crypto, 0, required(identities[0]).secretKey, source, store),
+    ).toEqual(first);
+  });
+
   test('reports a local source failure separately and writes no contribution', async () => {
     const { crypto, identities, source } = fixture();
     const store = new MemoryBeaconContributionStore();
@@ -139,10 +173,10 @@ describe('durable outgoing beacon contributions', () => {
     const operation = getBeaconOperation(crypto.beacon);
     if (!operation.ok) throw new Error(operation.error.message);
     const operationId = beaconOperationId(operation.value);
-    expect(await memory.load(operationId)).toEqual(canonicalEncode(first.value));
-    const detached = await memory.load(operationId);
+    expect(await memory.load(`${operationId}/0`)).toEqual(canonicalEncode(first.value));
+    const detached = await memory.load(`${operationId}/0`);
     detached?.fill(0);
-    expect(await memory.load(operationId)).toEqual(canonicalEncode(first.value));
+    expect(await memory.load(`${operationId}/0`)).toEqual(canonicalEncode(first.value));
     const inserted = canonicalEncode(first.value);
     expect(await memory.putIfAbsent('copy-check', inserted)).toBe(true);
     inserted.fill(0);
@@ -212,7 +246,7 @@ describe('durable outgoing beacon contributions', () => {
     expect(raceExtension).toHaveBeenCalledTimes(2);
     const operation = getBeaconExtensionOperation(crypto.beacon);
     if (!operation.ok || !first.ok || !first.value) throw new Error('Missing extension');
-    expect(await memory.load(beaconExtensionOperationId(operation.value))).toEqual(
+    expect(await memory.load(`${beaconExtensionOperationId(operation.value)}/0`)).toEqual(
       canonicalEncode(first.value),
     );
   });
@@ -307,7 +341,7 @@ describe('durable outgoing beacon contributions', () => {
     expect(extension.value.signed.body.tip).toBe(firstTip);
     const operation = getBeaconExtensionOperation(atExtension.beacon);
     if (!operation.ok) throw new Error(operation.error.message);
-    expect(await store.load(beaconExtensionOperationId(operation.value))).toEqual(
+    expect(await store.load(`${beaconExtensionOperationId(operation.value)}/0`)).toEqual(
       canonicalEncode(extension.value),
     );
     const extended = extendBeaconState(atExtension.beacon, [extension.value.signed]);
@@ -336,7 +370,7 @@ describe('durable outgoing beacon contributions', () => {
     const key = required(identities[0]).secretKey;
     const operation = getBeaconOperation(crypto.beacon);
     if (!operation.ok) throw new Error(operation.error.message);
-    const id = beaconOperationId(operation.value);
+    const id = `${beaconOperationId(operation.value)}/0`;
     const corrupt = new MemoryBeaconContributionStore();
     await corrupt.putIfAbsent(id, new Uint8Array([1, 2, 3]));
     expect((await prepareBeaconContribution(crypto, 0, key, source, corrupt)).ok).toBe(false);

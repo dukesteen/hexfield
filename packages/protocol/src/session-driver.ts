@@ -15,6 +15,8 @@ export interface SessionDriver {
   validateSources?(): Result<void>;
   /** Adopt verified recovered seats at the same certified head before they can act. */
   adoptRecovered?(donor: SessionDriver, context: LogContext): Result<void>;
+  /** Drop private state and proof-source routes for seats retired by certified authority. */
+  relinquishSeats?(seats: readonly Seat[]): void;
   /** Produce owner evidence bound to this exact parent, nonce and complete command before signing. */
   prepareCommand?(
     body: Omit<CommandBody, 'evidence'>,

@@ -87,7 +87,8 @@ export interface P2PSessionOptions extends Omit<
     clock: ProtocolClock,
     ownedSeats: readonly Seat[],
   ) => SessionDriver;
-  /** Bot keys only for bots hosted by this human. The human key is secretKey above. */
+  /** Current hosted-bot keys only. Restore callers with historical bindings must
+   * validate the installing generation, then pass only still-owned controllers. */
   botKeys?: ReadonlyMap<Seat, Uint8Array>;
   /** Private recovery records and reserved replacement keys, retained with this journal. */
   recoveryStore?: RecoveryPrivateStore & RecoveryReadinessStore;
@@ -139,6 +140,7 @@ export class P2PSession implements GameSession<CertifiedHistory> {
   private readonly inflight = new Set<Seat>();
   private readonly tradeIntents = new Map<Seat, TradeIntent>();
   private privateStateReleased = false;
+  private replayingHistory = false;
   private readonly recoveredHosts: RecoveredHost[] = [];
   private recoveryInstalling = false;
   private botTimer: unknown = null;
@@ -161,8 +163,8 @@ export class P2PSession implements GameSession<CertifiedHistory> {
     private readonly driver: SessionDriver,
     private readonly genesisEntry: LogEntry,
   ) {
-    this.keys.set(options.seat, options.secretKey.slice());
-    for (const [seat, key] of options.botKeys ?? []) this.keys.set(seat, key.slice());
+    this.keys.set(options.seat, new Uint8Array(options.secretKey));
+    for (const [seat, key] of options.botKeys ?? []) this.keys.set(seat, new Uint8Array(key));
     if (context.log.state.result) this.status = { kind: 'complete' };
   }
 
@@ -195,17 +197,9 @@ export class P2PSession implements GameSession<CertifiedHistory> {
       const initial = initialProposalContext(options.genesisEntry, options.engine, options.policy);
       if (!initial.ok) return initial;
       const context = initial.value;
-      const human = context.log.genesis.seats.find((seat) => seat.seat === options.seat);
-      if (human?.kind !== 'human' || !keyMatches(options.secretKey, human.publicKey))
-        return failure('session-key', 'The local human key does not match genesis');
-      for (const [seat, key] of options.botKeys ?? []) {
-        const bot = context.log.genesis.seats.find((item) => item.seat === seat);
-        if (
-          bot?.kind !== 'bot' ||
-          bot.botHost !== human.publicKey ||
-          !keyMatches(key, bot.publicKey)
-        )
-          return failure('session-bot-key', 'Bot key is not hosted by this human');
+      if (!restoring) {
+        const keys = validateSessionKeys(context.log, options);
+        if (!keys.ok) return keys;
       }
       const ownedSeats = [options.seat, ...(options.botKeys?.keys() ?? [])];
       const driver = options.createDriver(
@@ -241,6 +235,7 @@ export class P2PSession implements GameSession<CertifiedHistory> {
           session.dispose();
           return failure('session-save', 'Saved certified history does not match this genesis');
         }
+        session.replayingHistory = true;
         const replayed = replayCertifiedPrefix(
           saved.genesis,
           saved.entries,
@@ -251,6 +246,20 @@ export class P2PSession implements GameSession<CertifiedHistory> {
         if (!replayed.ok) {
           session.dispose();
           return replayed;
+        }
+        session.replayingHistory = false;
+        const reconciled = session.reconcileBotOwnership();
+        if (!reconciled.ok) {
+          session.dispose();
+          return reconciled;
+        }
+        // A transfer can replace the same seat's genesis keys. Validate against
+        // certified current ownership after private replay, before opening any
+        // signing replica. Replica.restore independently checks safety and keys.
+        const keys = validateSessionKeys(replayed.value.context.log, options);
+        if (!keys.ok) {
+          session.dispose();
+          return keys;
         }
       }
       // Runtime callers may still pass raw proof callbacks despite the public type.
@@ -361,7 +370,7 @@ export class P2PSession implements GameSession<CertifiedHistory> {
             openedSession.cancelAudit();
             openedSession.status = {
               kind: 'error',
-              message: 'This seat was replaced by a bot. Its previous signing key is retired.',
+              message: 'This seat has a new controller. Its previous signing key is retired.',
             };
             for (const seat of openedSession.tradeIntents.keys()) openedSession.cancelPending(seat);
             openedSession.clearAutomaticRetry();
@@ -769,6 +778,13 @@ export class P2PSession implements GameSession<CertifiedHistory> {
     return this.replica.submitRecovery(change);
   }
 
+  /** Transfer submission still requires certification by the current voters. */
+  submitTransfer(change: unknown): Promise<Result<void>> {
+    if (!this.replica || this.status.kind !== 'running' || this.recoveryInstalling)
+      return Promise.resolve(failure('session-inactive', 'Peer session is unavailable'));
+    return this.replica.submitTransfer(change);
+  }
+
   previewRecoveryAuthorization(change: unknown): Result<RecoveryApprovalCandidate> {
     return this.replica
       ? this.replica.previewRecoveryAuthorization(change)
@@ -955,6 +971,7 @@ export class P2PSession implements GameSession<CertifiedHistory> {
   }
 
   private createDeckSource(deckId: string, seat: Seat) {
+    if (!this.keys.has(seat)) throw new Error('Seat is no longer locally owned');
     const recovered = this.recoveredHosts.find((bundle) => bundle.keys.has(seat));
     if (recovered) return recovered.createDeckSource(deckId, seat);
     if (!this.options.createDeckSource) throw new Error('Owned deck source is unavailable');
@@ -1012,8 +1029,8 @@ export class P2PSession implements GameSession<CertifiedHistory> {
       if (!adopted.ok) return adopted;
       const replicaKeys = new Map<Seat, Uint8Array>();
       for (const [seat, key] of recovered.keys) {
-        this.keys.set(seat, key.slice());
-        replicaKeys.set(seat, key.slice());
+        this.keys.set(seat, new Uint8Array(key));
+        replicaKeys.set(seat, new Uint8Array(key));
       }
       this.recoveredHosts.push(recovered);
       retained = true;
@@ -1036,6 +1053,61 @@ export class P2PSession implements GameSession<CertifiedHistory> {
         this.clearBotTimer();
       }
     }
+  }
+
+  private reconcileBotOwnership(): Result<void> {
+    if (this.privateStateReleased) return success(undefined);
+    const authority = this.context.log.authority;
+    if (!authority) return success(undefined);
+    const retired: Seat[] = [];
+    for (const [seat, key] of this.keys) {
+      if (seat === this.options.seat) continue;
+      const controller = authority.controllers.find((item) => item.seat === seat);
+      let matches = false;
+      try {
+        const identity = identityFromSecret(key);
+        matches =
+          controller?.kind === 'bot' &&
+          controller.status === 'active' &&
+          controller.hostSeat === this.options.seat &&
+          controller.publicKey === identity.peerId;
+        identity.secretKey.fill(0);
+        identity.publicKey.fill(0);
+      } catch {
+        // A malformed local key cannot continue to own certified private state.
+      }
+      if (!matches) retired.push(seat);
+    }
+    if (retired.length === 0) return success(undefined);
+    if (this.context.log.genesis.security === 'verified' && !this.driver.relinquishSeats)
+      return failure(
+        'session-driver-retirement',
+        'Verified private driver cannot relinquish retired seats',
+      );
+    try {
+      this.driver.relinquishSeats?.(retired);
+    } catch {
+      return failure(
+        'session-driver-retirement',
+        'Private driver could not relinquish retired seats',
+      );
+    }
+    for (const seat of retired) {
+      this.cancelPending(seat);
+      this.keys.get(seat)?.fill(0);
+      this.keys.delete(seat);
+      for (let index = this.recoveredHosts.length - 1; index >= 0; index -= 1) {
+        const bundle = this.recoveredHosts[index];
+        if (!bundle) continue;
+        if (!bundle.keys.has(seat)) continue;
+        bundle.releaseSeat(seat);
+        if (bundle.keys.size === 0) {
+          bundle.dispose();
+          this.recoveredHosts.splice(index, 1);
+        }
+      }
+    }
+    return success(undefined);
   }
 
   private cancelAudit(): void {
@@ -1168,6 +1240,10 @@ export class P2PSession implements GameSession<CertifiedHistory> {
       if (!applied.ok) return applied;
     }
     this.context = next;
+    if (!this.replayingHistory && entry.entry.payload.kind === 'membership') {
+      const reconciled = this.reconcileBotOwnership();
+      if (!reconciled.ok) return reconciled;
+    }
     if (entry.input?.kind === 'command') this.verifiedMoves += 1;
     for (const intent of this.tradeIntents.values())
       intent.finishWait?.(failure('trade-proof-parent', 'The certified parent changed'));
@@ -1473,6 +1549,30 @@ function sameCommand(left: CommandShape, right: CommandShape): boolean {
   const a = canonicalEncode(left);
   const b = canonicalEncode(right);
   return a.length === b.length && a.every((byte, index) => byte === b[index]);
+}
+
+function validateSessionKeys(
+  context: LogContext,
+  options: Pick<P2PSessionOptions, 'seat' | 'secretKey' | 'botKeys'>,
+): Result<void> {
+  const human = context.authority?.controllers.find((seat) => seat.seat === options.seat);
+  if (
+    human?.kind !== 'human' ||
+    human.status !== 'active' ||
+    !keyMatches(options.secretKey, human.publicKey)
+  )
+    return failure('session-key', 'The local human key does not match certified ownership');
+  for (const [seat, key] of options.botKeys ?? []) {
+    const bot = context.authority?.controllers.find((item) => item.seat === seat);
+    if (
+      bot?.kind !== 'bot' ||
+      bot.status !== 'active' ||
+      bot.hostSeat !== human.seat ||
+      !keyMatches(key, bot.publicKey)
+    )
+      return failure('session-bot-key', 'Bot key is not hosted by this certified human');
+  }
+  return success(undefined);
 }
 
 function keyMatches(key: Uint8Array, publicKey: string): boolean {

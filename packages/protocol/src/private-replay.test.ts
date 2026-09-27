@@ -251,12 +251,23 @@ describe('certified private history reconstruction', () => {
     const trace = history(base);
     try {
       expect(trace.context().log.state.seats.some((seat) => seat.resources.total > 0)).toBe(true);
-      const recovered = checked(reconstruct(trace.entries, [1]));
+      const callerMaster = Buffer.from(master(1));
+      const recovered = checked(
+        reconstructPrivateSeats({
+          genesisEntry: base.entry,
+          entries: trace.entries,
+          engine: base.simulation.engine,
+          policy: base.policy,
+          secrets: [{ seat: 1, master: callerMaster }],
+        }),
+      );
       expect(recovered.driver.privateState(1)).toEqual(trace.driver.privateState(1));
       expect(recovered.driver.privateState(0)).toBeNull();
       expect(recovered.context.log.state).toEqual(trace.context().log.state);
-      recovered.dispose();
+      recovered.releaseSeat(1);
       expect(recovered.driver.privateState(1)).toBeNull();
+      expect(callerMaster).toEqual(Buffer.from(master(1)));
+      recovered.dispose();
     } finally {
       trace.driver.dispose();
     }

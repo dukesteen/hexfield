@@ -202,6 +202,20 @@ describe('VerifiedSessionDriver safety boundaries', () => {
     expect(driver.privateState(2)).toBeNull();
   });
 
+  test('relinquishes one bot without discarding the surviving human private state', () => {
+    const fixture = verifiedGenesis();
+    const driver = driverFor(fixture, [0, 2]);
+    const bot = driver.privateState(2);
+    if (!bot) throw new Error('Missing bot private state');
+    driver.relinquishSeats([2]);
+    expect(driver.privateState(2)).toBeNull();
+    expect(driver.privateState(0)).toEqual(fixture.engine.createPrivateState(0));
+    expect(bot).toEqual(fixture.engine.createPrivateState(2));
+    driver.relinquishSeats([2]);
+    expect(driver.privateState(0)).not.toBeNull();
+    driver.dispose();
+  });
+
   test('fails closed for hidden steals involving an owned seat and preserves its hand', () => {
     const fixture = verifiedGenesis();
     const driver = driverFor(fixture, [0]);

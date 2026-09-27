@@ -139,7 +139,7 @@ export async function prepareBeaconContribution(
   const operationId = extensionPending
     ? beaconExtensionOperationId(operation.value)
     : beaconOperationId(operation.value);
-  const id = `${operationId}${currentSigner ? `/${currentSigner.generation.seq}/${currentSigner.generation.hash}` : ''}`;
+  const id = `${operationId}/${seat}${currentSigner ? `/${currentSigner.generation.seq}/${currentSigner.generation.hash}` : ''}`;
 
   const verifyStored = (bytes: Uint8Array): Result<BeaconContribution> => {
     try {

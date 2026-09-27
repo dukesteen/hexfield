@@ -11,6 +11,7 @@ import type { CertifiedEntry, ProposalContext } from './proposal.js';
 import { authenticatedCheatSigner, verifyCheatProof } from './cheat-proof.js';
 import type { CheatFinding } from './cheat-proof.js';
 import { initialSeatAuthorities } from './authority.js';
+import { initialTransferState } from './transfer-readiness.js';
 import { advanceTimerAnchors } from './turn-timeout.js';
 
 const MAX_HISTORICAL_CONTEXTS = 16;
@@ -38,6 +39,9 @@ export function initialProposalContext(
   const { genesis, state, entry } = checked.value;
   const authority = initialSeatAuthorities(genesis);
   if (!authority.ok) return authority;
+  const transfer =
+    genesis.security === 'verified' ? initialTransferState(genesis, entry) : success(undefined);
+  if (!transfer.ok) return transfer;
   const crypto = initializeCryptoContext(
     genesis,
     engine,
@@ -60,6 +64,7 @@ export function initialProposalContext(
       timers: timers.value,
       authority: authority.value,
       recovery: { authorizations: [], pending: null, completed: [] },
+      ...(transfer.value ? { transfer: transfer.value } : {}),
     },
     membership: {
       genesisDigest: genesisDigest(genesis),
@@ -231,6 +236,7 @@ export function snapshotFromContext(context: ProposalContext) {
       crypto: context.log.crypto,
       authority: context.log.authority ?? null,
       recovery: context.log.recovery ?? null,
+      transfer: context.log.transfer ?? null,
       timers: context.log.timers ?? [],
       lastNonces: [...context.log.lastNonces].toSorted(([a], [b]) => a - b),
       membership: context.membership,

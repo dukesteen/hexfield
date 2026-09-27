@@ -20,6 +20,7 @@ import type { SignedVote, VoteContext } from './votes.js';
 import type { CheatClaim, CheatFinding } from './cheat-proof.js';
 import { validateSeatAuthorities } from './authority.js';
 import { advanceCarriedOperations } from './recovery-membership.js';
+import { advanceTransferHead } from './transfer-readiness.js';
 import { advanceTimerAnchors } from './turn-timeout.js';
 
 export type { ProposalBody, SignedProposal } from './types.js';
@@ -255,6 +256,7 @@ export function advanceContext(
     context.log.timers,
   );
   if (!timers.ok) return timers;
+  const transfer = validated.transfer ?? context.log.transfer;
   return success({
     ...context,
     log: {
@@ -266,6 +268,7 @@ export function advanceContext(
       timers: timers.value,
       ...(authority ? { authority } : {}),
       ...(validated.recovery ? { recovery: validated.recovery } : {}),
+      ...(transfer ? { transfer: advanceTransferHead(transfer, validated.entry) } : {}),
     },
     membership: validated.authority
       ? {

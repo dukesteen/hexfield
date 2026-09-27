@@ -1,11 +1,16 @@
 import { RandomBot, createBotRng } from '@cp2p/bots';
+import { canonicalEncode, fromBase64Url } from '@cp2p/codec';
 import { BASE_VERSION, createBaseEngine } from '@cp2p/engine';
 import type { Result } from '@cp2p/engine';
 import { LobbyController, MemoryProtocolJournal, OnlineCeremony } from '@cp2p/protocol';
 import type { EscrowCeremonyStore, OnlineCeremonyProgress } from '@cp2p/protocol';
 import { createMemnet, MemoryEscrowLifecycleStore } from '@cp2p/protocol/testing';
 import { expect, test, vi } from 'vitest';
-import { loadOnlineIdentity, loadOrCreateOnlineIdentity } from './online-credentials.js';
+import {
+  loadCeremonyMaterial,
+  loadOnlineIdentity,
+  loadOrCreateOnlineIdentity,
+} from './online-credentials.js';
 import { loadOnlineGameRecord } from './online-game-records.js';
 import type { OnlineGameRuntime } from './online-game.js';
 import { createOnlineLobbyTransport } from './online-lobby-transport.js';
@@ -182,6 +187,46 @@ test('restores the exact signed game and first certified action without new cons
   const restoredIdentities = await Promise.all(stores.map((store) => loadOnlineIdentity(store)));
   const records = await Promise.all(stores.map((store) => loadOnlineGameRecord(store, gameId)));
   expect(records.every((record) => record?.gameId === gameId)).toBe(true);
+  // The injected memory journals do not persist openOnlineGame's binding as IndexedDB does.
+  // Reconstruct the exact owned record so this fixture exercises the same restore contract.
+  await Promise.all(
+    records.map(async (record, index) => {
+      const saved = required(record);
+      const nonce = required(saved.agreement.state.ceremonyNonce);
+      const layout = saved.agreement.state.seats.map((seat) => {
+        if (seat.kind === 'open') throw new Error('Saved lobby contains an open seat');
+        return seat.kind === 'human'
+          ? { seat: seat.seat, kind: seat.kind, devicePeerId: seat.peer }
+          : { seat: seat.seat, kind: seat.kind, botHost: seat.botHost };
+      });
+      const identity = required(restoredIdentities[index]);
+      const material = await loadCeremonyMaterial({
+        store: required(stores[index]),
+        identity,
+        ceremonyNonce: fromBase64Url(nonce),
+        layout,
+      });
+      const human = required(material.keys.find((seat) => seat.kind === 'human'));
+      const bytes = canonicalEncode({
+        protocol: 'online-game-keys-v1',
+        genesisDigest: saved.genesisDigest,
+        devicePeer: identity.peerId,
+        humanSeat: human.seat,
+        seats: material.keys,
+      });
+      try {
+        expect(
+          await required(stores[index]).putIfAbsent(
+            `online-game/${saved.genesisDigest}/keys`,
+            bytes,
+          ),
+        ).toBe(true);
+      } finally {
+        bytes.fill(0);
+        material.dispose();
+      }
+    }),
+  );
   const listeners = new Map<OnlineCeremony, (progress: OnlineCeremonyProgress) => void>();
   // oxlint-disable-next-line typescript/unbound-method -- The wrapper retains the coordinator receiver.
   const onChange = OnlineCeremony.prototype.onChange;
@@ -264,12 +309,48 @@ test('restores the exact signed game and first certified action without new cons
       () => missingJournal.snapshot()?.phase === 'error',
       () => missingJournal.snapshot(),
     );
-    expect(missingJournal.snapshot()?.error).toContain('journal is missing');
+    expect(missingJournal.snapshot()?.error).toContain('journal is absent');
     expect(missingJournal.game()).toBeNull();
   } finally {
     await missingJournal.close();
     missingIdentity.dispose();
     missingJournalNetwork.dispose();
+  }
+
+  const missingBindingNetwork = createMemnet({ peers: [host.peerId] });
+  const missingBindingIdentity = await loadOnlineIdentity(required(stores[0]));
+  const bindingStore: EscrowCeremonyStore = {
+    load: (id) =>
+      id === `online-game/${required(records[0]).genesisDigest}/keys`
+        ? Promise.resolve(null)
+        : required(stores[0]).load(id),
+    putIfAbsent: (id, bytes) => required(stores[0]).putIfAbsent(id, bytes),
+    compareAndSwap: (id, oldBytes, bytes) =>
+      required(stores[0]).compareAndSwap(id, oldBytes, bytes),
+    withCeremonyLock: (id, task) => required(stores[0]).withCeremonyLock(id, task),
+  };
+  const missingBinding = new OnlineStartup({
+    invite,
+    identity: missingBindingIdentity,
+    resume: required(records[0]),
+    transport: missingBindingNetwork.transport(missingBindingIdentity.peerId),
+    store: bindingStore,
+    clock: missingBindingNetwork.clock,
+    engine: createBaseEngine(),
+    gameRuntime: runtime(required(journals[0])),
+  });
+  try {
+    await settle(
+      missingBindingNetwork.clock,
+      () => missingBinding.snapshot()?.phase === 'error',
+      () => missingBinding.snapshot(),
+    );
+    expect(missingBinding.snapshot()?.error).toContain('journal exists without its key binding');
+    expect(missingBinding.game()).toBeNull();
+  } finally {
+    await missingBinding.close();
+    missingBindingIdentity.dispose();
+    missingBindingNetwork.dispose();
   }
 
   const missingMaterialNetwork = createMemnet({ peers: [host.peerId] });

@@ -61,7 +61,6 @@ function captureCeremonyProgress() {
 async function setupTwoHumans(
   acquireHostLease: (
     gameId: string,
-    voterIdentity: string,
     options?: GameWriterLeaseOptions,
   ) => Promise<GameWriterLease | null>,
   freezeHost: () => void = () => undefined,
@@ -195,7 +194,7 @@ async function setupTwoHumans(
 
 test('an unexpected writer loss immediately disposes the live signer and blocks game output', async () => {
   let onLost: GameWriterLeaseOptions['onLost'];
-  const room = await setupTwoHumans(async (_gameId, _voter, options) => {
+  const room = await setupTwoHumans(async (_gameId, options) => {
     onLost = options?.onLost;
     return testLease();
   });

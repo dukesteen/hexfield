@@ -145,6 +145,7 @@ export class OnlineRoom {
   private readonly chat: OnlineChat;
   private chatAllowedPeers: readonly PeerId[] = [];
   private readonly resumedChatState: LobbyState | null;
+  private readonly resumedPeers: readonly PeerId[] | null;
   private chatSwitching = false;
   private chatSwitchFailed = false;
   private manualOffer: ManualOffer | null = null;
@@ -175,10 +176,13 @@ export class OnlineRoom {
   ) {
     this.lobby = controller;
     this.resumedChatState = resume?.agreement.state ?? null;
+    this.resumedPeers = resume?.peers ?? null;
     const initialState = this.resumedChatState ?? controller?.state();
-    this.chatAllowedPeers = initialState
-      ? [...humanChatPeers(initialState), ...(resume ? [] : initialState.spectators)]
-      : [];
+    this.chatAllowedPeers = resume
+      ? [...resume.peers]
+      : initialState
+        ? [...humanChatPeers(initialState), ...initialState.spectators]
+        : [];
     this.chat = new OnlineChat({
       transport,
       clock,
@@ -308,9 +312,7 @@ export class OnlineRoom {
           serverUrl: request.serverUrl,
         };
       const invite = validateOnlineInvite(inviteSource);
-      const frozenPeers = resume?.agreement.state.seats.flatMap((seat) =>
-        seat.kind === 'human' ? [seat.peer] : [],
-      );
+      const frozenPeers = resume?.peers;
       if (resume && !frozenPeers?.includes(identity.peerId))
         throw new Error('This device does not own a human seat in the saved game');
       const scope = `lobby:${invite.roomId}`;
@@ -801,9 +803,12 @@ export class OnlineRoom {
     const game = this.startup.game();
     const gameChat = this.chat.scopeKind() === 'game' || game !== null;
     const chatState = gameChat ? (agreement?.state ?? this.resumedChatState) : state;
-    this.chatAllowedPeers = chatState
-      ? [...humanChatPeers(chatState), ...(gameChat || agreement ? [] : chatState.spectators)]
-      : [];
+    this.chatAllowedPeers =
+      this.resumedPeers && gameChat
+        ? [...this.resumedPeers]
+        : chatState
+          ? [...humanChatPeers(chatState), ...(gameChat || agreement ? [] : chatState.spectators)]
+          : [];
     if (
       game &&
       !this.chatSwitching &&

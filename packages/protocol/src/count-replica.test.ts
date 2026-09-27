@@ -139,9 +139,9 @@ function quietRobber(
 
 describe('live verified Monopoly count replication', () => {
   test('certifies owner count contributions and folds private hands after a legal Monopoly', async () => {
-    // Keep the original board/game seed; nonce 7 selects a Monopoly-first private permutation.
+    // Keep the original board/game seed; nonce 14 selects the current protocol's Monopoly-first permutation.
     const fixture = createVerifiedDeckSession(16, 2, 128, {
-      ceremonyNonce: toBase64Url(new Uint8Array(32).fill(7)),
+      ceremonyNonce: toBase64Url(new Uint8Array(32).fill(14)),
       boardSeed: fromBase64Url(
         createSimulationGenesis({ seed: 14, humanCount: 2 }).genesis.genesisSeed,
       ),

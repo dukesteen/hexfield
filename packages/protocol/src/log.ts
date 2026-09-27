@@ -20,6 +20,10 @@ import { validateRecoveryTransition } from './recovery-membership.js';
 import { verifyTimeoutEvidence } from './turn-timeout.js';
 import type { SeatAuthorities } from './authority-types.js';
 import type { RecoveryState } from './recovery-types.js';
+import { advanceTransferRecovery } from './transfer-membership.js';
+import { validateTransferTransition } from './transfer-membership.js';
+import { parseMembershipChange } from './membership-change.js';
+import type { TransferState } from './transfer-types.js';
 
 export {
   signCommand,
@@ -38,6 +42,7 @@ export interface ValidatedEntry {
   crypto: CryptoContext | null;
   authority?: SeatAuthorities;
   recovery?: RecoveryState;
+  transfer?: TransferState;
 }
 
 /** Binds simulation evidence to exactly one game, parent and system input. */
@@ -163,15 +168,48 @@ export function validateNextEntry(
     );
     if (!transition.ok) return transition;
     if (entry.payload.kind === 'membership') {
+      const change = parseMembershipChange(entry.payload.change);
+      if (!change.ok) return change;
+      if (
+        change.value.kind === 'transfer-authorize' ||
+        change.value.kind === 'transfer-activate' ||
+        change.value.kind === 'transfer-cancel'
+      ) {
+        const transferred = validateTransferTransition(
+          change.value,
+          entry,
+          context,
+          transition.value.crypto,
+        );
+        if (!transferred.ok) return transferred;
+        return success({
+          ...transferred.value,
+          entry,
+          hash: entryHash(entry),
+          events: [],
+          lastNonces: new Map(context.lastNonces),
+        });
+      }
       const recovered = validateRecoveryTransition(
-        entry.payload.change,
+        change.value,
         entry,
         context,
         transition.value.crypto,
       );
       if (!recovered.ok) return recovered;
+      if (!context.transfer)
+        return failure('transfer-history', 'Certified transfer routes are unavailable');
+      const transfer = advanceTransferRecovery(
+        context.transfer,
+        context,
+        entry,
+        change.value,
+        recovered.value.recovery,
+      );
+      if (!transfer.ok) return transfer;
       return success({
         ...recovered.value,
+        transfer: transfer.value,
         entry,
         hash: entryHash(entry),
         events: [],

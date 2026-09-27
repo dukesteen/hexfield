@@ -9,6 +9,7 @@ import { validateOnlineInvite } from './online-invite.js';
 import type { OnlineInvite } from './online-invite.js';
 import { loadOnlineGameRecord } from './online-game-records.js';
 import type { SavedOnlineGameRecord } from './online-game-records.js';
+import { loadActiveOnlineResume } from './online-resume-binding.js';
 import { OnlineStartup, pinOnlineFreeze } from './online-startup.js';
 import { createWorkerDeviceTransport } from './online-worker-transport.js';
 import {
@@ -319,18 +320,20 @@ export class OnlineWorkerRuntime {
       throw new Error('Stored device identity differs from authenticated transport');
     }
     let resume: SavedOnlineGameRecord | null = null;
+    let resumePeers: readonly string[] = [];
     let invite: OnlineInvite;
     try {
       if (body.mode === 'resume') {
         resume = await loadOnlineGameRecord(this.store, body.gameId);
         if (!resume) throw new Error('Saved online game is missing');
         invite = validateOnlineInvite(resume.invite);
-        if (
-          !resume.agreement.state.seats.some(
-            (seat) => seat.kind === 'human' && seat.peer === body.self,
-          )
-        )
-          throw new Error('Device does not own a human seat in this saved game');
+        const active = await loadActiveOnlineResume({
+          store: this.store,
+          record: resume,
+          devicePeer: body.self,
+          engine: createBaseEngine(),
+        });
+        resumePeers = active.peers;
       } else invite = validateOnlineInvite(body.invite);
       if (this.closed) throw new Error('Worker closed while loading saved game');
       this.identity = identity;
@@ -345,6 +348,7 @@ export class OnlineWorkerRuntime {
               genesisDigest: resume.genesisDigest,
               agreement: copyPublic(resume.agreement),
               genesis: copyPublic(resume.result.genesis),
+              peers: [...resumePeers],
             }
           : null,
       };

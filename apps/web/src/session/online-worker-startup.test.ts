@@ -413,6 +413,7 @@ test('resume attaches a previously initialized client without fresh initialize o
     genesisDigest: toBase64Url(new Uint8Array(32)),
     agreement: { state, acks: [] },
     genesis: createSimulationGenesis({ seed: 3, humanCount: 2 }).genesis,
+    peers: [...room.peers],
   };
   const initialization: OnlineWorkerInitialization = {
     self: room.peers[0] ?? '',

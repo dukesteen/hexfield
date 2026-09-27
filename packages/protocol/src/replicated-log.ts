@@ -49,6 +49,9 @@ import type { LogContext, ValidatedEntry } from './log.js';
 import { decodeProtocolMessage, encodeProtocolMessage } from './messages.js';
 import type { ProtocolMessage } from './messages.js';
 import { recoveryChangeSchema } from './recovery-membership.js';
+import { parseMembershipChange } from './membership-change.js';
+import type { MembershipChange } from './membership-change.js';
+import { transferChangeSchema } from './transfer-readiness.js';
 import { previewRecoveryAuthorization } from './recovery-facade.js';
 import type { RecoveryApprovalCandidate, RecoveryApprovalPreview } from './recovery-facade.js';
 import type { RecoveryChange } from './recovery-types.js';
@@ -202,6 +205,8 @@ export interface ReplicatedLogOptions {
     previous: ProposalContext,
     next: ProposalContext,
   ) => void;
+  /** Update device routes after the membership COMMIT is sent, before next-height work. */
+  onMembershipCommitted?: (entries: readonly CertifiedEntry[]) => Result<void>;
   onStatus?: (status: ReplicatedLogStatus) => void;
 }
 
@@ -212,9 +217,9 @@ interface PendingCommand {
   pendingTimer: unknown;
 }
 
-interface PendingRecovery {
+interface PendingMembership {
   hash: string;
-  change: RecoveryChange;
+  change: MembershipChange;
   parentHash: string;
   resolve?: (result: Result<void>) => void;
   pendingTimer?: unknown;
@@ -234,8 +239,8 @@ export class ReplicatedLog {
   private readonly self: PeerId;
   private readonly timers = new Map<string, unknown>();
   private readonly pending: PendingCommand[] = [];
-  private recoveryIntent: PendingRecovery | null = null;
-  private pendingRecoverySubmit: PendingRecovery | null = null;
+  private membershipIntent: PendingMembership | null = null;
+  private pendingRecoverySubmit: PendingMembership | null = null;
   private recoveryCandidateForApproval: RecoveryApprovalCandidate | null = null;
   private recoveryApproval: {
     parentHash: string;
@@ -308,6 +313,8 @@ export class ReplicatedLog {
   private readonly queuedByPeer = new Map<PeerId, number>();
   private readonly invalidByPeer = new Map<PeerId, number>();
   private readonly blockedPeers = new Set<PeerId>();
+  /** Only certified human generations may request a read-only catch-up after retirement. */
+  private readonly historicalHumanPeers = new Set<PeerId>();
   private readonly expensiveByPeer = new Map<PeerId, { startedAt: number; seen: Set<string> }>();
   private readonly cheatWorkByPeer = new Map<PeerId, { startedAt: number; seen: Set<string> }>();
   private readonly historicalCheatWorkByPeer = new Map<
@@ -337,6 +344,7 @@ export class ReplicatedLog {
     const identity = identityFromSecret(this.secretKey);
     this.self = identity.peerId;
     identity.secretKey.fill(0);
+    this.refreshHistoricalHumanPeers();
   }
 
   static async create(options: ReplicatedLogOptions): Promise<Result<ReplicatedLog>> {
@@ -388,24 +396,28 @@ export class ReplicatedLog {
     const context = replayed.value.context;
     if (record.height !== context.log.head.seq + 1 || !record.safety)
       return failure('replica-journal', 'Certified prefix and active safety height disagree');
-    if (!context.membership.voters.some((voter) => voter.seat === options.seat)) {
+    let localPublicKey: string;
+    try {
+      const identity = identityFromSecret(options.secretKey);
+      localPublicKey = identity.peerId;
+      identity.secretKey.fill(0);
+    } catch {
+      return failure('replica-key', 'Local signing key is invalid');
+    }
+    if (
+      !context.membership.voters.some(
+        (voter) => voter.seat === options.seat && voter.publicKey === localPublicKey,
+      )
+    ) {
       let marker: unknown;
       try {
         marker = canonicalDecode(record.safety.bytes);
       } catch {
         return failure('replica-retirement', 'Retired signing record is malformed');
       }
-      let publicKey: string;
-      try {
-        const identity = identityFromSecret(options.secretKey);
-        publicKey = identity.peerId;
-        identity.secretKey.fill(0);
-      } catch {
-        return failure('replica-key', 'Local signing key is invalid');
-      }
-      const checked = restoreRetiredSafety(marker, context, options.seat, publicKey);
+      const checked = restoreRetiredSafety(marker, context, options.seat, localPublicKey);
       if (!checked.ok) return checked;
-      return failure('replica-retired', 'This signing key was retired by a certified recovery');
+      return failure('replica-retired', 'This signing key was retired by certified membership');
     }
     const key = checkLocalKey(options, context);
     if (!key.ok) return key;
@@ -433,7 +445,11 @@ export class ReplicatedLog {
       const resumed = await replica.activeController().resume();
       if (!resumed.ok) return resumed;
       await replica.captureCertifiedDelivery();
-      return replica.offerAvailableInput();
+      const offered = await replica.offerAvailableInput();
+      if (!offered.ok) return offered;
+      // A one-shot commit hint can arrive before restore attaches its listener.
+      // Request the next certified height while an authenticated peer is present.
+      return replica.requestSync(replica.context.log.head.seq + 1);
     });
     if (!initialized.ok) {
       replica.dispose();
@@ -504,6 +520,7 @@ export class ReplicatedLog {
     this.preparedDeckPrefix = null;
     this.sentDeckPrefix = null;
     this.entries = replayed.value.entries;
+    this.refreshHistoricalHumanPeers();
     const opened = await this.openController();
     if (!opened.ok) return this.failClosed(opened.error.code, opened.error.message);
     return this.activeController().dispatch({ kind: 'resume-after-replay' });
@@ -554,25 +571,37 @@ export class ReplicatedLog {
 
   /** Gossip one parent-bound membership change and resolve when it is certified. */
   submitRecovery(value: unknown): Promise<Result<void>> {
-    return this.enqueueRecovery(value, false);
+    return this.enqueueMembership(value, 'recovery', false);
   }
 
   /** One serialized explicit local approval and submission after durable key preparation. */
   approveAndSubmitRecovery(value: unknown): Promise<Result<void>> {
-    return this.enqueueRecovery(value, true);
+    return this.enqueueMembership(value, 'recovery', true);
   }
 
-  private enqueueRecovery(value: unknown, approveLocally: boolean): Promise<Result<void>> {
+  /** Submit a signed transfer intent, exact-parent activation, or cancellation. */
+  submitTransfer(value: unknown): Promise<Result<void>> {
+    return this.enqueueMembership(value, 'transfer', false);
+  }
+
+  private enqueueMembership(
+    value: unknown,
+    family: 'recovery' | 'transfer',
+    approveLocally: boolean,
+  ): Promise<Result<void>> {
     const approvalRevision = this.recoveryApprovalRevision;
     return new Promise((resolve) => {
       let accepted = false;
       void this.enqueue(async () => {
-        const parsed = parseCanonical(value, recoveryChangeSchema);
+        const parsed =
+          family === 'recovery'
+            ? parseCanonical(value, recoveryChangeSchema)
+            : parseCanonical(value, transferChangeSchema);
         if (!parsed.ok) return parsed;
         const hash = toHex(hashValue(parsed.value));
-        const conflicting = this.recoveryIntent;
+        const conflicting = this.membershipIntent;
         if (conflicting && (conflicting.hash !== hash || conflicting.resolve))
-          return failure('recovery-intent-pending', 'A recovery change is already pending');
+          return failure('recovery-intent-pending', 'A membership change is already pending');
         if (approveLocally) {
           const approved = await this.approveRecoveryInQueue(parsed.value, approvalRevision);
           if (!approved.ok) return approved;
@@ -596,10 +625,10 @@ export class ReplicatedLog {
               'Approve this exact takeover before submitting',
             );
         }
-        const existing = this.recoveryIntent;
+        const existing = this.membershipIntent;
         if (existing) {
           if (existing.hash !== hash || existing.resolve)
-            return failure('recovery-intent-pending', 'A recovery change is already pending');
+            return failure('recovery-intent-pending', 'A membership change is already pending');
           existing.resolve = resolve;
           accepted = true;
         } else {
@@ -607,7 +636,7 @@ export class ReplicatedLog {
             () => this.status({ kind: 'pending', commandHash: hash }),
             10_000,
           );
-          this.recoveryIntent = {
+          this.membershipIntent = {
             hash,
             change: parsed.value,
             parentHash: entryHash(this.context.log.head),
@@ -616,13 +645,13 @@ export class ReplicatedLog {
           };
           accepted = true;
         }
-        const sent = this.broadcast({ t: 'RECOVERY_SUBMIT', change: parsed.value });
+        const sent = this.broadcast({ t: 'MEMBERSHIP_SUBMIT', change: parsed.value });
         if (!sent.ok) this.status({ kind: 'pending', commandHash: hash });
         return this.offerAvailableInput();
       }).then((result) => {
         if (!result.ok) {
           if (accepted)
-            this.status({ kind: 'pending', commandHash: this.recoveryIntent?.hash ?? '' });
+            this.status({ kind: 'pending', commandHash: this.membershipIntent?.hash ?? '' });
           else resolve(result);
         }
         return undefined;
@@ -642,7 +671,7 @@ export class ReplicatedLog {
 
   canStartRecoveryRequest(): Promise<Result<void>> {
     return this.enqueue(async () =>
-      this.recoveryIntent || this.pendingRecoverySubmit || this.recoveryApproval
+      this.membershipIntent || this.pendingRecoverySubmit || this.recoveryApproval
         ? failure('recovery-intent-pending', 'Another takeover request is already pending')
         : success(undefined),
     );
@@ -664,7 +693,7 @@ export class ReplicatedLog {
     if (!candidate.value.preview.canApprove)
       return failure('recovery-approval-seat', 'This voter cannot approve its own takeover');
     const candidateHash = toHex(hashValue(candidate.value.change));
-    if (this.recoveryIntent && this.recoveryIntent.hash !== candidateHash)
+    if (this.membershipIntent && this.membershipIntent.hash !== candidateHash)
       return failure('recovery-intent-pending', 'Another takeover request is already pending');
     if (this.pendingRecoverySubmit && this.pendingRecoverySubmit.hash !== candidateHash)
       return failure('recovery-intent-pending', 'Another takeover request is already pending');
@@ -690,10 +719,10 @@ export class ReplicatedLog {
         submitted.parentHash === candidate.value.preview.parent.hash &&
         toHex(hashValue(submittedChange.value.statement)) ===
           candidate.value.preview.statementHash &&
-        !this.recoveryIntent
+        !this.membershipIntent
       ) {
-        this.recoveryIntent = submitted;
-        const sent = this.broadcast({ t: 'RECOVERY_SUBMIT', change: submitted.change });
+        this.membershipIntent = submitted;
+        const sent = this.broadcast({ t: 'MEMBERSHIP_SUBMIT', change: submitted.change });
         if (!sent.ok) this.status({ kind: 'pending', commandHash: submitted.hash });
       }
     }
@@ -772,14 +801,14 @@ export class ReplicatedLog {
         ),
       );
     }
-    const recovery = this.recoveryIntent;
-    this.recoveryIntent = null;
-    if (recovery?.pendingTimer !== undefined)
-      this.options.clock.clearTimeout(recovery.pendingTimer);
-    recovery?.resolve?.(
+    const membership = this.membershipIntent;
+    this.membershipIntent = null;
+    if (membership?.pendingTimer !== undefined)
+      this.options.clock.clearTimeout(membership.pendingTimer);
+    membership?.resolve?.(
       failure(
         'replica-outcome-unknown',
-        'Accepted recovery may have committed; restore and inspect the certified log',
+        'Accepted membership change may have committed; restore and inspect the certified log',
       ),
     );
     this.secretKey.fill(0);
@@ -830,6 +859,8 @@ export class ReplicatedLog {
 
   private async installAuthorityOwnership(): Promise<Result<void>> {
     const authority = this.context.log.authority;
+    const hasBeaconChain = (seat: Seat) =>
+      this.context.log.crypto?.beacon.chains.some((chain) => chain.seat === seat) ?? false;
     const missing =
       authority?.controllers.filter(
         (controller) =>
@@ -838,7 +869,7 @@ export class ReplicatedLog {
           controller.hostSeat === this.options.seat &&
           controller.activatedAt.seq > 0 &&
           (!this.currentOwnedKeyMatches(controller.seat, controller.publicKey) ||
-            !this.beaconSources.has(controller.seat)),
+            (hasBeaconChain(controller.seat) && !this.beaconSources.has(controller.seat))),
       ) ?? [];
     if (missing.length === 0) return success(undefined);
     const install = this.options.onAuthorityChange;
@@ -847,6 +878,7 @@ export class ReplicatedLog {
       return success(undefined);
     }
     const headHash = entryHash(this.context.log.head);
+    const beaconSeats = missing.filter((controller) => hasBeaconChain(controller.seat));
     let ownership: RecoveredReplicaOwnership | null = null;
     try {
       const prepared = await install(detachedContext(this.context));
@@ -874,15 +906,13 @@ export class ReplicatedLog {
         !(ownership.keys instanceof Map) ||
         !(ownership.beaconSources instanceof Map) ||
         ownership.keys.size !== missing.length ||
-        ownership.beaconSources.size !== missing.length ||
-        missing.some(
-          (controller) =>
-            !ownership?.keys.has(controller.seat) || !ownership.beaconSources.has(controller.seat),
-        )
+        ownership.beaconSources.size !== beaconSeats.length ||
+        missing.some((controller) => !ownership?.keys.has(controller.seat)) ||
+        beaconSeats.some((controller) => !ownership?.beaconSources.has(controller.seat))
       )
         return failure('replica-recovery-keys', 'Recovered ownership differs from certified host');
       if (
-        missing.some((controller) => {
+        beaconSeats.some((controller) => {
           const source = ownership?.beaconSources.get(controller.seat);
           return (
             !source || typeof source.link !== 'function' || typeof source.extension !== 'function'
@@ -906,7 +936,7 @@ export class ReplicatedLog {
               'replica-recovery-keys',
               'Recovered key differs from certified controller',
             );
-          copied.set(controller.seat, key.slice());
+          copied.set(controller.seat, new Uint8Array(key));
         }
         for (const [seat, key] of copied) {
           this.deckKeys.get(seat)?.fill(0);
@@ -936,6 +966,26 @@ export class ReplicatedLog {
       return matches;
     } catch {
       return false;
+    }
+  }
+
+  private pruneRetiredBotOwnership(): void {
+    const authority = this.context.log.authority;
+    if (!authority) return;
+    const seats = new Set([...this.deckKeys.keys(), ...this.beaconSources.keys()]);
+    for (const seat of seats) {
+      if (seat === this.options.seat) continue;
+      const controller = authority.controllers.find((item) => item.seat === seat);
+      if (
+        controller?.kind === 'bot' &&
+        controller.status === 'active' &&
+        controller.hostSeat === this.options.seat &&
+        this.currentOwnedKeyMatches(seat, controller.publicKey)
+      )
+        continue;
+      this.deckKeys.get(seat)?.fill(0);
+      this.deckKeys.delete(seat);
+      this.beaconSources.delete(seat);
     }
   }
 
@@ -1036,9 +1086,23 @@ export class ReplicatedLog {
   }
 
   private formerHumanPeer(peer: PeerId): boolean {
-    return this.context.log.genesis.seats.some(
-      (seat) => seat.kind === 'human' && seat.publicKey === peer,
-    );
+    return this.historicalHumanPeers.has(peer);
+  }
+
+  private rememberHumanActivation(entry: LogEntry): void {
+    if (entry.payload.kind !== 'membership') return;
+    const parsed = v.safeParse(transferChangeSchema, entry.payload.change);
+    if (parsed.success && parsed.output.kind === 'transfer-activate')
+      this.historicalHumanPeers.add(parsed.output.statement.destinationGame);
+  }
+
+  private refreshHistoricalHumanPeers(): void {
+    this.historicalHumanPeers.clear();
+    for (const seat of this.context.log.genesis.seats)
+      if (seat.kind === 'human') this.historicalHumanPeers.add(seat.publicKey);
+    // `entries` came from certified replay or local validated commits. Pending
+    // authorizations never enter this set; only activated human controllers do.
+    for (const { entry } of this.entries) this.rememberHumanActivation(entry);
   }
 
   private knownSyncPeer(peer: PeerId): boolean {
@@ -1480,7 +1544,7 @@ export class ReplicatedLog {
     if (this.blockedPeers.has(from)) return success(undefined);
     const voter = this.context.membership.voters.some((item) => item.publicKey === from);
     if (!voter && !this.formerHumanPeer(from))
-      return failure('replica-peer', 'Sender is not a certified voter or original human');
+      return failure('replica-peer', 'Sender is not a certified voter or historical human');
     const decoded = decodeProtocolMessage(bytes);
     if (!decoded.ok) return decoded;
     const message = decoded.value;
@@ -1580,25 +1644,34 @@ export class ReplicatedLog {
         return this.receiveTradeProofRequest(from, message.request);
       case 'TRADE_PROOF_RESPONSE':
         return this.receiveTradeProofResponse(from, message.response);
-      case 'RECOVERY_SUBMIT': {
+      case 'MEMBERSHIP_SUBMIT': {
         const change = message.change;
-        const parent = change.statement.parent;
+        const digest =
+          change.kind === 'transfer-cancel' ? change.genesisDigest : change.statement.genesisDigest;
+        const parent =
+          change.kind === 'transfer-cancel'
+            ? change.parent
+            : change.kind === 'transfer-authorize'
+              ? null
+              : change.statement.parent;
         if (
-          change.statement.genesisDigest !== this.context.membership.genesisDigest ||
-          parent.seq !== this.context.log.head.seq ||
-          parent.hash !== entryHash(this.context.log.head) ||
-          change.statement.nextEpoch !== this.context.membership.epoch + 1
+          digest !== this.context.membership.genesisDigest ||
+          (parent !== null &&
+            (parent.seq !== this.context.log.head.seq ||
+              parent.hash !== entryHash(this.context.log.head))) ||
+          (change.kind !== 'transfer-cancel' &&
+            change.statement.nextEpoch !== this.context.membership.epoch + 1)
         )
           return success(undefined);
         const hash = toHex(hashValue(change));
-        if (this.recoveryIntent) return success(undefined);
-        if (!this.admitExpensiveRequest(from, `recovery/${hash}`)) return success(undefined);
+        if (this.membershipIntent) return success(undefined);
+        if (!this.admitExpensiveRequest(from, `membership/${hash}`)) return success(undefined);
         const checked = this.deriveCandidate(
           { height: this.context.log.head.seq + 1, round: 1 },
           { kind: 'membership', change },
         );
         if (!checked.ok)
-          return failure('recovery-proof-invalid', 'Recovery change failed at certified parent', {
+          return failure('recovery-proof-invalid', 'Membership change failed at certified parent', {
             cause: checked.error.code,
           });
         if (change.kind === 'recovery-authorize') {
@@ -1612,11 +1685,15 @@ export class ReplicatedLog {
             return success(undefined);
           this.rememberRecoveryCandidate(preview.value);
           if (!this.hasRecoveryApproval(preview.value.preview)) {
-            this.pendingRecoverySubmit ??= { hash, change, parentHash: parent.hash };
+            this.pendingRecoverySubmit ??= {
+              hash,
+              change,
+              parentHash: entryHash(this.context.log.head),
+            };
             return success(undefined);
           }
         }
-        this.recoveryIntent = { hash, change, parentHash: parent.hash };
+        this.membershipIntent = { hash, change, parentHash: entryHash(this.context.log.head) };
         return this.offerAvailableInput();
       }
       case 'SUBMIT': {
@@ -1967,7 +2044,7 @@ export class ReplicatedLog {
     const available =
       this.accusation !== null ||
       this.cheatCandidates.size > 0 ||
-      this.recoveryIntent !== null ||
+      this.membershipIntent !== null ||
       this.recoveryCandidate() !== null ||
       (!this.context.log.recovery?.pending &&
         ((!this.cryptoPending() && this.commands.length > 0) ||
@@ -2114,10 +2191,10 @@ export class ReplicatedLog {
       );
     const activation = this.recoveryCandidate();
     if (activation) return this.entryCandidate(state, { kind: 'membership', change: activation });
-    if (this.recoveryIntent) {
+    if (this.membershipIntent) {
       const candidate = this.entryCandidate(state, {
         kind: 'membership',
-        change: this.recoveryIntent.change,
+        change: this.membershipIntent.change,
       });
       if (candidate) return candidate;
     }
@@ -2165,10 +2242,10 @@ export class ReplicatedLog {
   ): Result<LogEntry> {
     try {
       let stateHash = this.context.log.head.stateHash;
-      const recovery =
-        payload.kind === 'membership' ? parseCanonical(payload.change, recoveryChangeSchema) : null;
-      if (recovery && !recovery.ok) return recovery;
-      if (recovery?.ok && recovery.value.kind === 'recovery-activate') {
+      const membership =
+        payload.kind === 'membership' ? parseMembershipChange(payload.change) : null;
+      if (membership && !membership.ok) return membership;
+      if (membership?.ok && membership.value.kind === 'recovery-activate') {
         const pending = this.context.log.recovery?.authorizations.find(
           (item) =>
             item.entry.seq === this.context.log.recovery?.pending?.seq &&
@@ -2184,6 +2261,24 @@ export class ReplicatedLog {
         });
         if (!applied.ok) return applied;
         stateHash = toHex(hashValue(applied.value.state));
+      } else if (membership?.ok && membership.value.kind === 'transfer-activate') {
+        const pending = this.context.log.transfer?.authorizations.find(
+          (item) =>
+            item.entry.seq === this.context.log.transfer?.pending?.seq &&
+            item.entry.hash === this.context.log.transfer?.pending?.hash,
+        );
+        if (!pending)
+          return failure('transfer-authorization', 'Activation needs certified authorization');
+        if (pending.statement.mode === 'return') {
+          const applied = this.context.log.engine.apply(this.context.log.state, {
+            kind: 'system',
+            type: 'SEAT_STATUS',
+            seat: pending.statement.seat,
+            status: 'active',
+          });
+          if (!applied.ok) return applied;
+          stateHash = toHex(hashValue(applied.value.state));
+        }
       } else if (payload.kind === 'command' || payload.kind === 'system') {
         const input =
           payload.kind === 'command'
@@ -2340,7 +2435,7 @@ export class ReplicatedLog {
         return failure('recovery-approval-proposal', 'Local vote has no retained proposal value');
       const payload = proposal.body.entry.payload;
       if (payload.kind !== 'membership') continue;
-      const change = parseCanonical(payload.change, recoveryChangeSchema);
+      const change = parseMembershipChange(payload.change);
       if (!change.ok) return change;
       if (change.value.kind !== 'recovery-authorize') continue;
       const preview = this.previewRecoveryAuthorization(change.value);
@@ -2355,7 +2450,7 @@ export class ReplicatedLog {
     if (this.context.log.genesis.security !== 'verified') return true;
     const payload = proposal.body.entry.payload;
     if (payload.kind !== 'membership') return true;
-    const change = parseCanonical(payload.change, recoveryChangeSchema);
+    const change = parseMembershipChange(payload.change);
     if (!change.ok) return false;
     if (change.value.kind !== 'recovery-authorize') return true;
     const preview = this.previewRecoveryAuthorization(change.value);
@@ -2405,7 +2500,7 @@ export class ReplicatedLog {
       (item) => item.kind === 'human' && item.status === 'active' && item.publicKey === peer,
     );
     if (!active) return;
-    const pending = this.recoveryIntent;
+    const pending = this.membershipIntent;
     const pendingSeat =
       pending?.change.kind === 'recovery-authorize'
         ? pending.change.statement.departedSeat
@@ -2418,7 +2513,7 @@ export class ReplicatedLog {
     if (![pendingSeat, candidateSeat, submitSeat].includes(active.seat)) return;
     this.clearRecoveryCandidate();
     if (pendingSeat !== active.seat || !pending) return;
-    this.recoveryIntent = null;
+    this.membershipIntent = null;
     if (pending.pendingTimer !== undefined) this.options.clock.clearTimeout(pending.pendingTimer);
     pending.resolve?.(failure('recovery-target-returned', 'The original voter has returned'));
   }
@@ -3262,7 +3357,9 @@ export class ReplicatedLog {
         : null);
     const pendingAccusation =
       checked.value.entry.payload.kind === 'control' ? null : prior.value.pendingAccusation;
-    const retired = !next.membership.voters.some((voter) => voter.seat === this.options.seat);
+    const retired = !next.membership.voters.some(
+      (voter) => voter.seat === this.options.seat && voter.publicKey === this.self,
+    );
     const nextSafety = retired
       ? createRetiredSafety(previous, certified, this.options.seat, prior.value)
       : createConsensusState(next, this.options.seat, provenOffender, pendingAccusation);
@@ -3284,6 +3381,7 @@ export class ReplicatedLog {
       throw new Error('Certified journal commit lost its safety CAS');
     this.activeController().dispose();
     this.context = next;
+    if (checked.value.entry.payload.kind === 'membership') this.pruneRetiredBotOwnership();
     this.timerObserver.advance(next.log.timers ?? []);
     this.clearTimedVoteRetry();
     this.clearRecoveryCandidate();
@@ -3291,6 +3389,7 @@ export class ReplicatedLog {
     this.tradeProofResponses.clear();
     this.tradeProofRequestsByFinalizer.clear();
     this.entries.push({ entry: checked.value.entry, certificate: [...checked.value.certificate] });
+    this.rememberHumanActivation(checked.value.entry);
     if (checked.value.entry.payload.kind === 'cheat-proof') {
       const id = cheatCandidateId(checked.value.entry.payload.claim);
       this.cheatCandidates.delete(id);
@@ -3339,17 +3438,31 @@ export class ReplicatedLog {
       }
     }
     this.settlePending(certified);
-    this.settleRecovery(certified);
+    const sent = this.broadcast({ t: 'COMMIT', certified });
     if (retired) {
-      const sent = this.broadcast({ t: 'COMMIT', certified });
       if (!sent.ok) this.status({ kind: 'rejected', code: sent.error.code });
+    } else this.requireSend(sent);
+    if (checked.value.entry.payload.kind === 'membership') {
+      try {
+        const routed = this.options.onMembershipCommitted?.(this.getEntries());
+        if (routed && !routed.ok) throw new Error(routed.error.code);
+      } catch {
+        this.status({ kind: 'halted', code: 'membership-routing' });
+        this.dispose();
+        throw new Error('Certified membership routing failed');
+      }
+    }
+    // Report a matching membership commit only after the final COMMIT is sent
+    // on the old route and the new route is installed. A failed hook disposes
+    // with an outcome-unknown result instead of reporting false success.
+    this.settleMembership(certified);
+    if (retired) {
       this.status({ kind: 'retired', seat: this.options.seat });
       this.dispose();
       return;
     }
     if (pendingAccusation)
       this.requireSend(this.broadcast({ t: 'ACCUSE', control: pendingAccusation }));
-    this.requireSend(this.broadcast({ t: 'COMMIT', certified }));
     void this.enqueue(async () => {
       await this.captureCertifiedDelivery();
       return this.offerAvailableInput();
@@ -3374,9 +3487,9 @@ export class ReplicatedLog {
     }
   }
 
-  private settleRecovery(certified: CertifiedEntry): void {
-    const pending = this.recoveryIntent;
-    this.recoveryIntent = null;
+  private settleMembership(certified: CertifiedEntry): void {
+    const pending = this.membershipIntent;
+    this.membershipIntent = null;
     if (!pending) return;
     if (pending.pendingTimer !== undefined) this.options.clock.clearTimeout(pending.pendingTimer);
     const payload = certified.entry.payload;
@@ -3384,7 +3497,7 @@ export class ReplicatedLog {
     pending.resolve?.(
       committed === pending.hash
         ? success(undefined)
-        : failure('renewed-intent', 'Recovery changed at the certified parent'),
+        : failure('renewed-intent', 'Membership intent changed at the certified parent'),
     );
   }
 
@@ -3448,15 +3561,15 @@ export class ReplicatedLog {
       this.broadcastNextCheatClaim();
       for (const pending of this.pending)
         this.requireSend(this.broadcast({ t: 'SUBMIT', cmd: pending.signed }));
-      if (this.recoveryIntent)
+      if (this.membershipIntent)
         this.requireSend(
-          this.broadcast({ t: 'RECOVERY_SUBMIT', change: this.recoveryIntent.change }),
+          this.broadcast({ t: 'MEMBERSHIP_SUBMIT', change: this.membershipIntent.change }),
         );
       const recovered = await this.activeController().resume();
       if (!recovered.ok) return recovered;
       await this.captureCertifiedDelivery();
       const offered = await this.offerAvailableInput(true);
-      return offered;
+      return offered.ok ? this.requestSync(this.context.log.head.seq + 1) : offered;
     } finally {
       this.schedulePulse();
     }
@@ -3489,6 +3602,7 @@ export class ReplicatedLog {
   }
 
   private requestSync(fromSeq: number): Result<void> {
+    if (this.options.transport.peers().length === 0) return success(undefined);
     const now = this.options.clock.now();
     if (
       this.lastSyncRequest?.fromSeq === fromSeq &&
@@ -3801,7 +3915,7 @@ function checkLocalKey(
         'replica-deck-transcript',
         'Retain every uncommitted deck pass before starting or restoring',
       );
-    const signingKey = options.secretKey.slice();
+    const signingKey = new Uint8Array(options.secretKey);
     keys.set(options.seat, signingKey);
     const identity = identityFromSecret(signingKey);
     const local = identity.peerId;
@@ -3865,6 +3979,7 @@ function detachedContext(context: ProposalContext): ProposalContext {
       state: copyCanonical(context.log.state),
       ...(context.log.authority ? { authority: copyCanonical(context.log.authority) } : {}),
       ...(context.log.recovery ? { recovery: copyCanonical(context.log.recovery) } : {}),
+      ...(context.log.transfer ? { transfer: copyCanonical(context.log.transfer) } : {}),
       lastNonces: new Map(context.log.lastNonces),
       crypto: copyCanonical(context.log.crypto),
       ...(context.log.timers
@@ -3899,6 +4014,7 @@ function detachedValidated(
     crypto: copyCanonical(value.crypto),
     ...(value.authority ? { authority: copyCanonical(value.authority) } : {}),
     ...(value.recovery ? { recovery: copyCanonical(value.recovery) } : {}),
+    ...(value.transfer ? { transfer: copyCanonical(value.transfer) } : {}),
   };
 }
 

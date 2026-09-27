@@ -71,6 +71,16 @@ function copyPrivate(state: PrivateState): PrivateState {
   };
 }
 
+function wipePrivateBytes(value: unknown, seen = new WeakSet<object>()): void {
+  if (!value || typeof value !== 'object' || seen.has(value)) return;
+  seen.add(value);
+  if (value instanceof Uint8Array) {
+    value.fill(0);
+    return;
+  }
+  for (const nested of Object.values(value)) wipePrivateBytes(nested, seen);
+}
+
 function resourceCounts(state: PrivateState): Record<Resource, number> {
   return {
     brick: state.hand.brick ?? -1,
@@ -952,11 +962,27 @@ export class VerifiedSessionDriver implements SessionDriver {
     return success(undefined);
   }
 
+  relinquishSeats(seats: readonly Seat[]): void {
+    for (const seat of seats) {
+      if (!this.owned.delete(seat)) continue;
+      const privateState = this.privates.get(seat);
+      if (privateState) {
+        for (const resource of Object.keys(privateState.hand)) privateState.hand[resource] = 0;
+        for (const slot of Object.keys(privateState.slots)) delete privateState.slots[slot];
+        for (const value of Object.values(privateState.ext)) wipePrivateBytes(value);
+        for (const module of Object.keys(privateState.ext)) delete privateState.ext[module];
+      }
+      this.privates.delete(seat);
+      this.blindings.delete(seat);
+      this.deckRoutes.delete(seat);
+      this.handRoutes.delete(seat);
+      this.stealRoutes.delete(seat);
+    }
+  }
+
   dispose(): void {
     this.disposed = true;
-    this.privates.clear();
-    this.blindings.clear();
-    this.owned.clear();
+    this.relinquishSeats([...this.owned]);
     this.deckRoutes.clear();
     this.handRoutes.clear();
     this.stealRoutes.clear();

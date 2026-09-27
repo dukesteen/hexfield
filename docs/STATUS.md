@@ -369,6 +369,20 @@ policy and certified online/offline entries are not implemented yet. The
 remaining fresh-key transfer and recovered-human return work; it is not
 implementation or acceptance evidence.
 
+The local [v4 transfer core checkpoint](verification/stage10/transfer-core-check.md)
+adds certified authorization, cancellation, activation and same-seat key
+retirement. A four-replica network trace exercises those transitions and refuses
+restart by the retired key. Review fixes reject older recovery roots after a
+new recovery and reserve transfer-encryption keys after cancellation. The user
+waived backward compatibility: v4 rejects earlier saves without rewriting them.
+The sealed private-delivery and atomic import-promotion helpers now pass focused
+tests. Promoted browser startup restores the current certified device and key
+without reminting ceremony material. A recovered player's former host releases
+that seat's keys and private state while retaining its own hand. The
+[runtime integration map](verification/stage10/transfer-runtime-integration-map.md)
+tracks the remaining bootstrap, device admission, worker orchestration and user
+controls. This checkpoint is not deployed and does not complete Stage 10.
+
 - [ ] All chaos additions pass on 500 seeds each.
 - [ ] Refresh-resume takes < 3 s to be back in play on a typical laptop (measured).
 - [ ] Four-human takeover and audit pass; two-/three-human departure pauses safely and resumes when the required voter returns.

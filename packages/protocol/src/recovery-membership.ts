@@ -112,7 +112,7 @@ function signedByAll(
 }
 
 /** Derive carry records from the certified parent, never from a membership message. */
-function carriedOperations(crypto: CryptoContext): Result<readonly CarriedOperation[]> {
+export function carriedOperations(crypto: CryptoContext): Result<readonly CarriedOperation[]> {
   const carried: CarriedOperation[] = [];
   if (crypto.decks.active)
     carried.push({
@@ -213,6 +213,8 @@ export function validateRecoveryTransition(
     );
   if (context.state.result !== null)
     return failure('recovery-finished', 'A finished game cannot change controllers');
+  if (context.transfer?.pending)
+    return failure('recovery-transfer-pending', 'Cancel the certified transfer before recovery');
   const parsed = parseCanonical(change, recoveryChangeSchema);
   if (!parsed.ok) return parsed;
   const checked = validateSeatAuthorities(

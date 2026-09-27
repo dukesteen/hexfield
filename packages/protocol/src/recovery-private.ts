@@ -1,4 +1,4 @@
-import { canonicalDecode, canonicalEncode, toBase64Url } from '@cp2p/codec';
+import { canonicalDecode, canonicalEncode } from '@cp2p/codec';
 import { failure, success } from '@cp2p/engine';
 import type { Result, Seat } from '@cp2p/engine';
 import * as v from 'valibot';
@@ -81,12 +81,7 @@ function validateSecrets(context: LogContext, secrets: readonly Secret[], seats:
   )
     return failure('recovery-private-seats', 'Private record must contain every affected seat');
   for (const { seat, master } of secrets) {
-    const verified = verifyRevealedMaster(
-      context.genesis,
-      context.crypto.decks,
-      seat,
-      toBase64Url(master),
-    );
+    const verified = verifyRevealedMaster(context.genesis, context.crypto.decks, seat, master);
     if (!verified.ok) return verified;
   }
   return success(undefined);

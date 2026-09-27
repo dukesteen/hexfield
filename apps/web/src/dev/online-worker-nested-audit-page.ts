@@ -1,11 +1,11 @@
 import { canonicalDecode, canonicalEncode } from '@cp2p/codec';
-import type { Seat } from '@cp2p/engine';
 import { certifiedEntrySchema, logEntrySchema } from '@cp2p/protocol';
-import { safeParse } from 'valibot';
+import { picklist, safeParse } from 'valibot';
 
 const FIXTURE_URL = '/dev/recovered-audit-fixture.json';
 const MAX_FIXTURE_BYTES = 64 * 1024 * 1024;
 const DEADLINE_MS = 70_000;
+const seatSchema = picklist([0, 1, 2, 3, 4, 5]);
 
 function record(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -36,14 +36,10 @@ function parseFixture(value: unknown) {
   if (!genesis.success || entries.some((entry) => !entry.success))
     throw new Error('Invalid certified fixture history');
   const masters = value.masters.map((item) => {
-    if (
-      !record(item) ||
-      !Number.isInteger(item.seat) ||
-      Number(item.seat) < 0 ||
-      Number(item.seat) > 5
-    )
-      throw new Error('Invalid fixture seat');
-    return { seat: Number(item.seat) as Seat, master: parseMaster(item.master) };
+    if (!record(item)) throw new Error('Invalid fixture seat');
+    const seat = safeParse(seatSchema, item.seat);
+    if (!seat.success) throw new Error('Invalid fixture seat');
+    return { seat: seat.output, master: parseMaster(item.master) };
   });
   return {
     input: { genesisEntry: genesis.output, entries: entries.map((entry) => entry.output), masters },

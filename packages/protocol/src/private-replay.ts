@@ -19,6 +19,8 @@ export interface ReconstructedPrivateSeats {
   readonly context: ProposalContext;
   /** Contains only requested seats and checks their public openings after every entry. */
   readonly driver: VerifiedSessionDriver;
+  /** Relinquish one owned seat without discarding other reconstructed seats. */
+  releaseSeat(seat: Seat): void;
   /** Disposes the driver and clears its retained master copies. */
   dispose(): void;
 }
@@ -41,12 +43,18 @@ export function reconstructPrivateSeats(input: {
   const beacons = new Map<Seat, { length: number; provider: BeaconSecretProvider }>();
   let driver: VerifiedSessionDriver | undefined;
   let retained = false;
+  const releaseSeat = (seat: Seat) => {
+    driver?.relinquishSeats([seat]);
+    const master = masters.get(seat);
+    master?.fill(0);
+    masters.delete(seat);
+    const beacon = beacons.get(seat);
+    beacon?.provider.dispose();
+    beacons.delete(seat);
+  };
   const dispose = () => {
+    for (const seat of masters.keys()) releaseSeat(seat);
     driver?.dispose();
-    for (const master of masters.values()) master.fill(0);
-    masters.clear();
-    for (const source of beacons.values()) source.provider.dispose();
-    beacons.clear();
   };
   try {
     if (!Array.isArray(input.secrets) || input.secrets.length < 1 || input.secrets.length > 6)
@@ -61,7 +69,7 @@ export function reconstructPrivateSeats(input: {
         master.length !== 32
       )
         return failure('private-replay-secrets', 'Seat secrets are malformed or duplicated');
-      const copy = master.slice();
+      const copy = new Uint8Array(master);
       masters.set(seat, copy);
       scalarFromBytes(copy, { nonzero: true });
     }
@@ -82,7 +90,7 @@ export function reconstructPrivateSeats(input: {
     if (genesis.security !== 'verified' || !crypto)
       return failure('private-replay-security', 'Private reconstruction requires verified history');
     for (const [seat, master] of masters) {
-      const verified = verifyRevealedMaster(genesis, crypto.decks, seat, toBase64Url(master));
+      const verified = verifyRevealedMaster(genesis, crypto.decks, seat, master);
       if (!verified.ok) return verified;
     }
     const initial = initialProposalContext(input.genesisEntry, input.engine, input.policy);
@@ -187,7 +195,7 @@ export function reconstructPrivateSeats(input: {
     for (const source of beacons.values()) source.provider.dispose();
     beacons.clear();
     retained = true;
-    return success({ context: rebuilt.value.context, driver: activeDriver, dispose });
+    return success({ context: rebuilt.value.context, driver: activeDriver, releaseSeat, dispose });
   } catch {
     return failure('private-replay-failed', 'Could not reconstruct the requested private seats');
   } finally {

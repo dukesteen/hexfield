@@ -1,5 +1,12 @@
 import { canonicalDecode, canonicalEncode, hashValue, toHex } from '@cp2p/codec';
-import { scalarToBytes, signObject } from '@cp2p/crypto';
+import {
+  G,
+  encodePoint,
+  identityFromSecret,
+  scalarToBytes,
+  scalePoint,
+  signObject,
+} from '@cp2p/crypto';
 import { failure, success } from '@cp2p/engine';
 import type { Result, Seat } from '@cp2p/engine';
 import { beforeAll, describe, expect, test } from 'vitest';
@@ -13,6 +20,8 @@ import { MemoryCheatCandidateStore } from './cheat-candidates.js';
 import { MemoryCountContributionStore } from './count-contributions.js';
 import { createConsensusState } from './consensus.js';
 import { deckCeremonyId } from './deck-genesis.js';
+import { createDeckSecretSource } from './deck-source.js';
+import { createHandSecretSource } from './hand-source.js';
 import type { DeckContributionStore } from './deck-outbox.js';
 import { entryHash } from './genesis.js';
 import { MemoryGenesisConsentStore } from './genesis-outbox.js';
@@ -21,6 +30,8 @@ import { decodeProtocolMessage, encodeProtocolMessage } from './messages.js';
 import { proposerFor, signProposal } from './proposal.js';
 import { previewRecoveryAuthorization } from './recovery-facade.js';
 import { ReplicatedLog } from './replicated-log.js';
+import { P2PSession } from './p2p-session.js';
+import { VerifiedSessionDriver } from './verified-session-driver.js';
 import type { ReplicatedLogOptions } from './replicated-log.js';
 import { RECOVERY_READINESS_DOMAIN, recoveryChangeSchema } from './recovery-membership.js';
 import { restoreRetiredSafety } from './retired-safety.js';
@@ -43,6 +54,18 @@ import type { VirtualClock } from './testing/virtual-clock.js';
 import type { Transport } from './transport.js';
 import type { ProposalContext } from './proposal.js';
 import { parseCanonical } from './validation.js';
+import {
+  TRANSFER_DESTINATION_CHECK_DOMAIN,
+  TRANSFER_DEVICE_DOMAIN,
+  TRANSFER_GAME_KEY_DOMAIN,
+  TRANSFER_OWNER_GAME_DOMAIN,
+  transferCheckDigest,
+  transferEntryRef,
+} from './transfer-readiness.js';
+import type {
+  SeatTransferAuthorization,
+  SeatTransferAuthorizationStatement,
+} from './transfer-types.js';
 
 function value<T>(result: Result<T>): T {
   if (!result.ok) throw new Error(`${result.error.code}: ${result.error.message}`);
@@ -166,7 +189,7 @@ function delayedSeatZero(inner: Transport, gate: SeatZeroGate): Transport {
     return (
       decoded.ok &&
       gate.holdRecovery &&
-      ['RECOVERY_SUBMIT', 'PROPOSAL', 'VOTE', 'COMMIT', 'SYNC_RES'].includes(decoded.value.t)
+      ['MEMBERSHIP_SUBMIT', 'PROPOSAL', 'VOTE', 'COMMIT', 'SYNC_RES'].includes(decoded.value.t)
     );
   };
   return {
@@ -788,3 +811,298 @@ describe('live certified recovery', () => {
     }
   }, 60_000);
 });
+
+// Exercise the actual gossip/voting path, rather than constructing its certificates.
+test('live transfer submission certifies cancellation and replacement, then fences the old signer', async () => {
+  const fixture = createRecoveryFixture({ masterBackedBeacon: true });
+  const seats = [0, 1, 2, 3] as const;
+  const peers = seats.map((seat) => required(fixture.source.identities.get(seat)).peerId);
+  const network = createMemnet({ peers });
+  const replicas: ReplicatedLog[] = [];
+  const journals: MemoryProtocolJournal[] = [];
+  const wire: string[] = [];
+  const routeUpdates: { seat: Seat; head: number }[] = [];
+  const unresolvedAtRouteHook: boolean[] = [];
+  let pendingTransferResult: Result<void> | undefined;
+  let committingTransfer = false;
+  let failRouteHook = false;
+  const secrets: Uint8Array[] = [];
+  try {
+    for (const [index, seat] of seats.entries()) {
+      const inner = network.transport(required(peers[index]));
+      // Hold the initial beacon so these assertions isolate membership commits.
+      const transport: Transport = {
+        ...delayedSeatZero(inner, { holdRecovery: false, syncRequests: 0, syncResponses: 0 }),
+        broadcast: (bytes) => {
+          const decoded = decodeProtocolMessage(bytes);
+          if (decoded.ok) wire.push(decoded.value.t);
+          if (!isBeaconMessage(bytes)) inner.broadcast(bytes);
+        },
+      };
+      // oxlint-disable-next-line no-await-in-loop -- Keep cryptographic restores bounded on small CI workers.
+      const journal = await journalAtReady(fixture, seat);
+      journals.push(journal);
+      replicas.push(
+        value(
+          // oxlint-disable-next-line no-await-in-loop -- Each replica owns its durable voting journal.
+          await ReplicatedLog.restore({
+            ...optionsFor(fixture, seat, transport, network.clock, journal),
+            onMembershipCommitted(entries) {
+              expect(wire.at(-1)).toBe('COMMIT');
+              if (seat === 1 && committingTransfer)
+                unresolvedAtRouteHook.push(pendingTransferResult === undefined);
+              routeUpdates.push({ seat, head: required(entries.at(-1)).entry.seq });
+              if (seat === 1 && failRouteHook)
+                return failure('route-test', 'Simulated route installation failure');
+              return success(undefined);
+            },
+          }),
+        ),
+      );
+    }
+    const submitter = required(replicas[1]);
+    const prepare = (keyByte: number, movingSeat: Seat = 0) => {
+      const context = submitter.getContext();
+      const controller = required(
+        context.log.authority?.controllers.find((item) => item.seat === movingSeat),
+      );
+      const device = identityFromSecret(new Uint8Array(32).fill(keyByte - 1));
+      const game = identityFromSecret(new Uint8Array(32).fill(keyByte));
+      secrets.push(device.secretKey, game.secretKey);
+      const statement: SeatTransferAuthorizationStatement = {
+        protocol: 'seat-transfer-v1',
+        genesisDigest: context.membership.genesisDigest,
+        anchor: transferEntryRef(context.log.head),
+        validUntilSeq: context.log.head.seq + 64,
+        mode: 'live',
+        seat: movingSeat,
+        currentController: {
+          publicKey: controller.publicKey,
+          kind: controller.kind,
+          activatedAt: controller.activatedAt,
+          hostSeat: controller.hostSeat,
+        },
+        recovery: null,
+        nextEpoch: context.membership.epoch + 1,
+        destination: {
+          devicePeer: device.peerId,
+          gamePeer: game.peerId,
+          transferEncryptionKey: encodePoint(scalePoint(G, BigInt(keyByte + 30))),
+        },
+        replacements: [
+          {
+            seat: movingSeat,
+            oldPublicKey: controller.publicKey,
+            newPublicKey: game.peerId,
+            newHostSeat: movingSeat,
+          },
+        ],
+      };
+      const change: SeatTransferAuthorization = {
+        kind: 'transfer-authorize',
+        statement,
+        destinationDeviceSig: signObject(TRANSFER_DEVICE_DOMAIN, statement, device.secretKey),
+        destinationGameSig: signObject(TRANSFER_GAME_KEY_DOMAIN, statement, game.secretKey),
+        replacementKeySigs: [],
+        ownerIntent: {
+          signer: 'current-game',
+          sig: signObject(
+            TRANSFER_OWNER_GAME_DOMAIN,
+            statement,
+            recoveryFixtureKey(fixture, movingSeat),
+          ),
+        },
+      };
+      return { change, game };
+    };
+    const commit = async (change: unknown) => {
+      pendingTransferResult = undefined;
+      committingTransfer = true;
+      let result: Result<void> | undefined;
+      const submitted = submitter.submitTransfer(change).then((answer) => {
+        result = answer;
+        pendingTransferResult = answer;
+        return undefined;
+      });
+      for (let step = 0; step < 30; step++) {
+        if (result !== undefined) break;
+        // oxlint-disable-next-line no-await-in-loop -- Advance only until this membership decision settles.
+        await settle(replicas, network.clock, 1);
+      }
+      expect(result).toMatchObject({ ok: true });
+      await submitted;
+      committingTransfer = false;
+      await settle(replicas, network.clock, 1);
+      const hashes = replicas.map((replica) => entryHash(replica.getContext().log.head));
+      expect(new Set(hashes).size).toBe(1);
+    };
+    const first = prepare(120);
+    expect(await submitter.submitRecovery(first.change)).toMatchObject({ ok: false });
+    expect(
+      await submitter.submitTransfer({
+        ...first.change,
+        ownerIntent: { signer: 'current-game', sig: first.change.destinationGameSig },
+      }),
+    ).toMatchObject({ ok: false, error: { code: 'transfer-owner-intent' } });
+    await commit(first.change);
+    const authorized = submitter.getContext();
+    expect(authorized.membership.voters).toEqual(fixture.ready.membership.voters);
+    expect(authorized.log.transfer?.pending).toEqual(transferEntryRef(authorized.log.head));
+    await commit({
+      kind: 'transfer-cancel',
+      genesisDigest: authorized.membership.genesisDigest,
+      authorization: transferEntryRef(authorized.log.head),
+      parent: transferEntryRef(authorized.log.head),
+    });
+    expect(submitter.getContext().log.transfer?.pending).toBeNull();
+    expect(await submitter.submitTransfer(first.change)).toMatchObject({
+      ok: false,
+      error: { code: 'transfer-anchor' },
+    });
+    const second = prepare(124);
+    await commit(second.change);
+    const parent = submitter.getContext();
+    const authorization = transferEntryRef(parent.log.head);
+    const statement = {
+      protocol: 'seat-transfer-activation-v1' as const,
+      genesisDigest: parent.membership.genesisDigest,
+      authorization,
+      parent: authorization,
+      nextEpoch: second.change.statement.nextEpoch,
+      destinationDevice: second.change.statement.destination.devicePeer,
+      destinationGame: second.game.peerId,
+      replacements: second.change.statement.replacements,
+      checkDigest: transferCheckDigest(parent.log, authorization),
+    };
+    const activation = {
+      kind: 'transfer-activate',
+      statement,
+      destinationCheck: signObject(
+        TRANSFER_DESTINATION_CHECK_DOMAIN,
+        statement,
+        second.game.secretKey,
+      ),
+      replacementChecks: [],
+    };
+    await commit(activation);
+    expect(unresolvedAtRouteHook).toEqual([true, true, true, true]);
+    expect(routeUpdates).toHaveLength(16);
+    expect(routeUpdates).toContainEqual({ seat: 0, head: parent.log.head.seq + 1 });
+    expect(wire).toContain('MEMBERSHIP_SUBMIT');
+    expect(submitter.getContext().membership.epoch).toBe(parent.membership.epoch + 1);
+    expect(submitter.getContext().membership.voters[0]?.publicKey).toBe(second.game.peerId);
+    expect(submitter.getContext().log.transfer?.routes[0]?.devicePeer).toBe(
+      second.change.statement.destination.devicePeer,
+    );
+    expect(await submitter.submitTransfer(activation)).toMatchObject({ ok: false });
+    const oldJournal = required(journals[0]);
+    const stored = required(await oldJournal.load());
+    expect(canonicalDecode(stored.safety.bytes)).toMatchObject({
+      kind: 'retired-controller',
+      version: 1,
+    });
+    expect(
+      await ReplicatedLog.restore(
+        optionsFor(fixture, 0, network.transport(required(peers[0])), network.clock, oldJournal),
+      ),
+    ).toMatchObject({ ok: false, error: { code: 'replica-retired' } });
+
+    // Model a fresh promoted journal: verified public ancestry, fresh safety at
+    // every height, and no safety tuple copied from the retiring signer.
+    const destinationJournal = await journalAtReady(fixture, 0);
+    let destinationContext = fixture.ready;
+    for (const certified of submitter.getEntries().slice(fixture.deckEntries.length)) {
+      destinationContext = advanceRecoveryFixture(destinationContext, certified);
+      expect(
+        // oxlint-disable-next-line no-await-in-loop -- Install the exact contiguous certified history.
+        await destinationJournal.commit(
+          certified.entry.seq,
+          0,
+          certified,
+          canonicalEncode(value(createConsensusState(destinationContext, 0))),
+        ),
+      ).toBe(true);
+    }
+    const destinationNetwork = createMemnet({ peers: [second.game.peerId, ...peers.slice(1)] });
+    let destination: P2PSession | undefined;
+    try {
+      const base = optionsFor(
+        fixture,
+        0,
+        destinationNetwork.transport(second.game.peerId),
+        destinationNetwork.clock,
+        destinationJournal,
+      );
+      const createDriver = () =>
+        new VerifiedSessionDriver(
+          fixture.source.engine,
+          fixture.genesis,
+          [0],
+          (deckId, seat) => {
+            const definition = required(
+              fixture.ready.log.crypto?.decks.decks.find(
+                (deck) => deck.commitment.definition.deckId === deckId,
+              ),
+            ).commitment.definition;
+            return createDeckSecretSource(scalarToBytes(17n), definition, seat);
+          },
+          (seat) =>
+            createHandSecretSource(
+              scalarToBytes(17n),
+              fixture.ready.membership.genesisDigest,
+              seat,
+            ),
+          (seat) =>
+            createStealSecretSource(
+              scalarToBytes(17n),
+              fixture.genesis.ceremonyNonce,
+              seat,
+              required(fixture.genesis.seats[seat]).publicKey,
+            ),
+        );
+      expect(await P2PSession.restore({ ...base, createDriver })).toMatchObject({
+        ok: false,
+        error: { code: 'session-key' },
+      });
+      destination = value(
+        await P2PSession.restore({
+          ...base,
+          secretKey: second.game.secretKey,
+          createDriver,
+        }),
+      );
+      expect(destination.exportSave().entries).toEqual(submitter.getEntries());
+      expect(destination.getState()).toEqual(submitter.getContext().log.state);
+      expect(destination.getPrivate(0)).not.toBeNull();
+      expect(destination.getPrivate(1)).toBeNull();
+    } finally {
+      destination?.dispose();
+      destinationNetwork.dispose();
+    }
+    const beforeFailure = submitter.getContext().log.head.seq;
+    const failedRoute = prepare(130, 1);
+    failRouteHook = true;
+    let failedResult: Result<void> | undefined;
+    const outcome = submitter.submitTransfer(failedRoute.change).then((result) => {
+      failedResult = result;
+      return result;
+    });
+    for (let step = 0; step < 30; step += 1) {
+      if (failedResult !== undefined) break;
+      // oxlint-disable-next-line no-await-in-loop -- Wait for the one certified change and failed route hook.
+      await settle(replicas, network.clock, 1);
+    }
+    expect(failedResult).toBeDefined();
+    expect(await outcome).toMatchObject({
+      ok: false,
+      error: { code: 'replica-outcome-unknown' },
+    });
+    expect(required(await required(journals[1]).load()).entries.at(-1)?.entry.seq).toBe(
+      beforeFailure + 1,
+    );
+  } finally {
+    for (const replica of replicas) replica.dispose();
+    for (const key of secrets) key.fill(0);
+    network.dispose();
+  }
+}, 30_000);

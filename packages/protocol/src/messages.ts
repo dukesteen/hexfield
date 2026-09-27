@@ -23,7 +23,7 @@ import {
 import { excludeProposerControlSchema, signedCommandSchema } from './schemas.js';
 import { signedVoteSchema } from './votes.js';
 import { cheatClaimSchema } from './cheat-schema.js';
-import { recoveryChangeSchema } from './recovery-membership.js';
+import { membershipChangeSchema } from './membership-change.js';
 import { recoveryReleaseSchema } from './recovery-release.js';
 import { signedRecoveryCheckSchema } from './recovery-inbox.js';
 import { signedMasterRevealSchema } from './master-reveal.js';
@@ -35,9 +35,9 @@ const masterRevealMessageSchema = v.strictObject({
   t: v.literal('MASTER_REVEAL'),
   reveal: signedMasterRevealSchema,
 });
-const recoverySubmitSchema = v.strictObject({
-  t: v.literal('RECOVERY_SUBMIT'),
-  change: recoveryChangeSchema,
+const membershipSubmitSchema = v.strictObject({
+  t: v.literal('MEMBERSHIP_SUBMIT'),
+  change: membershipChangeSchema,
 });
 const recoveryReleaseMessageSchema = v.strictObject({
   t: v.literal('RECOVERY_RELEASE'),
@@ -148,7 +148,7 @@ const pongSchema = v.strictObject({ t: v.literal('PONG'), n: nonnegativeIntegerS
 export const protocolMessageSchema = v.variant('t', [
   submitSchema,
   masterRevealMessageSchema,
-  recoverySubmitSchema,
+  membershipSubmitSchema,
   recoveryReleaseMessageSchema,
   recoveryCheckMessageSchema,
   systemContributionSchema,

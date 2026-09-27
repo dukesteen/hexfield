@@ -142,8 +142,10 @@ describe('recovered host restore', () => {
       const source = restored.createDeckSource(deckId, 0);
       expect(source.lock(0)).toBeTypeOf('bigint');
       source.dispose();
-      restored.dispose();
+      restored.releaseSeat(0);
       expect(signingKey).toEqual(new Uint8Array(32));
+      expect(restored.keys.size).toBe(0);
+      expect(restored.beaconSources.size).toBe(0);
       expect(restored.driver.privateState(0)).toBeNull();
       expect(() => restored.createDeckSource(deckId, 0)).toThrow(
         'Recovered deck source is unavailable',

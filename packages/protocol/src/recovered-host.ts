@@ -31,6 +31,8 @@ export interface RecoveredHost {
   readonly beaconSources: ReadonlyMap<Seat, BeaconSecretSource>;
   /** Original-master-backed deck sources. Each returned source belongs to its caller. */
   readonly createDeckSource: DeckSourceFactory;
+  /** Erase one retired bot's key and original-master-backed sources. */
+  releaseSeat(seat: Seat): void;
   /** Wipe keys and masters, dispose beacon sources and reconstructed donor. */
   dispose(): void;
 }
@@ -74,11 +76,27 @@ export async function loadRecoveredHost(input: RecoveredHostInput): Promise<Resu
   const keyBuffers: Uint8Array[] = [];
   const masters = new Map<Seat, Uint8Array>();
   const providers = new Map<Seat, BeaconSecretProvider>();
+  const beaconSources = new Map<Seat, BeaconSecretSource>();
   let reconstructed: ReconstructedPrivateSeats | undefined;
   let retained = false;
   let disposed = false;
+  const releaseSeat = (seat: Seat) => {
+    if (disposed) return;
+    reconstructed?.releaseSeat(seat);
+    const key = keys.get(seat);
+    key?.fill(0);
+    keys.delete(seat);
+    const master = masters.get(seat);
+    master?.fill(0);
+    masters.delete(seat);
+    const provider = providers.get(seat);
+    provider?.dispose();
+    providers.delete(seat);
+    beaconSources.delete(seat);
+  };
   const dispose = () => {
     if (disposed) return;
+    for (const seat of keys.keys()) releaseSeat(seat);
     disposed = true;
     reconstructed?.dispose();
     for (const key of keyBuffers) key.fill(0);
@@ -88,6 +106,7 @@ export async function loadRecoveredHost(input: RecoveredHostInput): Promise<Resu
     keyBuffers.length = 0;
     masters.clear();
     providers.clear();
+    beaconSources.clear();
   };
   try {
     if (
@@ -140,7 +159,7 @@ export async function loadRecoveredHost(input: RecoveredHostInput): Promise<Resu
         const found = activated.value.keys.find((item) => item.seat === seat);
         if (!found)
           return failure('recovered-host-key', 'Activated controller signing key is missing');
-        const copy = found.secretKey.slice();
+        const copy = new Uint8Array(found.secretKey);
         keys.set(seat, copy);
         keyBuffers.push(copy);
       }
@@ -171,7 +190,7 @@ export async function loadRecoveredHost(input: RecoveredHostInput): Promise<Resu
       if (!loaded.ok) return loaded;
       try {
         for (const { seat, master } of loaded.value.secrets) {
-          if (seats.includes(seat) && !masters.has(seat)) masters.set(seat, master.slice());
+          if (seats.includes(seat) && !masters.has(seat)) masters.set(seat, new Uint8Array(master));
         }
       } finally {
         loaded.value.dispose();
@@ -213,10 +232,15 @@ export async function loadRecoveredHost(input: RecoveredHostInput): Promise<Resu
     for (const seat of selected) {
       const master = masters.get(seat);
       const chain = crypto.beacon.chains.find((item) => item.seat === seat);
-      if (!master || !chain)
-        return failure('recovered-host-beacon', 'Original beacon chain is missing');
+      if (!master) return failure('recovered-host-private', 'Recovered master is missing');
+      if (!chain) {
+        if (log.genesis.seats.find((item) => item.seat === seat)?.kind !== 'bot')
+          return failure('recovered-host-beacon', 'Original beacon chain is missing');
+        continue;
+      }
       const provider = createBeaconSecretSource(master, { ceremonyId, seat }, chain.length);
       providers.set(seat, provider);
+      beaconSources.set(seat, provider.source);
       const expected =
         chain.index > 0
           ? provider.source.link(chain.chainEpoch, chain.index)
@@ -253,8 +277,9 @@ export async function loadRecoveredHost(input: RecoveredHostInput): Promise<Resu
       context: rebuilt.value.context,
       driver: rebuilt.value.driver,
       keys,
-      beaconSources: new Map([...providers].map(([seat, provider]) => [seat, provider.source])),
+      beaconSources,
       createDeckSource,
+      releaseSeat,
       dispose,
     });
   } catch {

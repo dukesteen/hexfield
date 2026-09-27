@@ -31,7 +31,36 @@ export async function acquireGameWriterLease(
   voterIdentity: string,
   options: GameWriterLeaseOptions = {},
 ): Promise<GameWriterLease | null> {
-  const name = writerLockName(gameId, voterIdentity);
+  return acquireLease(writerLockName(gameId, voterIdentity), options);
+}
+
+/** All active controller generations of one local game must share this lease. */
+export function acquireActiveGameWriterLease(
+  gameId: string,
+  options: GameWriterLeaseOptions = {},
+): Promise<GameWriterLease | null> {
+  validateId(gameId, 'gameId');
+  return acquireLease(`cp2p/game-active/${gameId.length}:${gameId}`, options);
+}
+
+/** Private import work cannot acquire the active journal lease before activation. */
+export function acquireTransferStagingLease(
+  gameId: string,
+  authorizationId: string,
+  options: GameWriterLeaseOptions = {},
+): Promise<GameWriterLease | null> {
+  validateId(gameId, 'gameId');
+  validateId(authorizationId, 'authorizationId');
+  return acquireLease(
+    `cp2p/transfer-stage/${gameId.length}:${gameId}/${authorizationId.length}:${authorizationId}`,
+    options,
+  );
+}
+
+async function acquireLease(
+  name: string,
+  options: GameWriterLeaseOptions,
+): Promise<GameWriterLease | null> {
   const manager = options.lockManager ?? browserLockManager();
   let releaseLock!: () => void;
   const releaseSignal = new Promise<void>((resolve) => {

@@ -278,6 +278,9 @@ importers:
         specifier: ^1.0.0
         version: 1.5.0(typescript@5.9.3)
     devDependencies:
+      '@cp2p/crypto':
+        specifier: workspace:*
+        version: link:../crypto
       fake-indexeddb:
         specifier: ^6.2.5
         version: 6.2.5

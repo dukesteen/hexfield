@@ -26,6 +26,7 @@ import type { OnlineGame, OnlineGameRuntime } from './online-game.js';
 import type { OnlineInvite } from './online-invite.js';
 import { assertSupportedOnlineGameVersion, saveOnlineGameRecord } from './online-game-records.js';
 import type { SavedOnlineGameRecord } from './online-game-records.js';
+import { loadActiveOnlineResume } from './online-resume-binding.js';
 
 export interface OnlineStartupSnapshot {
   readonly phase: OnlineCeremonyProgress['phase'] | 'freezing' | 'opening' | 'playing' | 'halted';
@@ -76,7 +77,7 @@ export class OnlineStartup {
   private readonly unsubscribers: Unsubscribe[] = [];
   private current: OnlineStartupSnapshot | null = null;
   private approved: LobbyFreezeAgreement | null = null;
-  private material: OwnedCeremonyMaterial | null = null;
+  private material: Pick<OwnedCeremonyMaterial, 'keys' | 'dispose'> | null = null;
   private ceremony: OnlineCeremony | null = null;
   private activeGame: OnlineGame | null = null;
   private work: Promise<void> | null = null;
@@ -238,7 +239,7 @@ export class OnlineStartup {
     this.update({
       phase: 'error',
       awaitingSeats: [],
-      locallyConsented: this.ceremony?.snapshot().locallyConsented ?? false,
+      locallyConsented: this.ceremony?.snapshot().locallyConsented ?? Boolean(this.resume),
       error: error instanceof Error ? error.message : 'Online startup failed',
       gameId: this.resume?.gameId ?? this.current?.gameId ?? null,
     });
@@ -319,6 +320,42 @@ export class OnlineStartup {
         approved.state.seats.flatMap((seat) => (seat.kind === 'human' ? [seat.peer] : [])),
       );
       this.approved = approved;
+    }
+    if (this.resume && !this.ceremony) {
+      const active = await loadActiveOnlineResume({
+        store: this.options.store,
+        record: this.resume,
+        devicePeer: this.options.identity.peerId,
+        engine: this.options.engine,
+        includeMaterial: true,
+        ...(this.options.gameRuntime?.createJournal
+          ? { createJournal: this.options.gameRuntime.createJournal }
+          : {}),
+      });
+      if (this.closed) {
+        active.material?.dispose();
+        return;
+      }
+      const original = this.resume.result.genesis.seats.some(
+        (seat) =>
+          seat.seat === active.humanSeat &&
+          seat.kind === 'human' &&
+          seat.publicKey === active.gamePeer &&
+          this.approved?.state.seats.some(
+            (frozen) =>
+              frozen.seat === seat.seat &&
+              frozen.kind === 'human' &&
+              frozen.peer === this.options.identity.peerId,
+          ),
+      );
+      if (!original) {
+        if (!active.material) throw new Error('Transferred device has no active owned binding');
+        this.material?.dispose();
+        this.material = active.material;
+        await this.openTransferredResume();
+        return;
+      }
+      active.material?.dispose();
     }
     if (!this.ceremony) {
       const approved = this.approved;
@@ -454,6 +491,52 @@ export class OnlineStartup {
       locallyConsented: true,
       error: null,
       gameId: game.gameId,
+    });
+  }
+
+  private async openTransferredResume(): Promise<void> {
+    const resume = this.resume;
+    const material = this.material;
+    const agreement = this.approved;
+    if (!resume || !material || !agreement || this.closed || this.revoked)
+      throw new Error('Transferred resume is incomplete');
+    this.activationAttempted = true;
+    this.update({
+      phase: 'opening',
+      awaitingSeats: [],
+      locallyConsented: true,
+      error: null,
+      gameId: resume.gameId,
+    });
+    const game = await openOnlineGame(
+      {
+        ...resume.result,
+        agreement,
+        material: material.keys,
+        deviceTransport: this.options.transport,
+        store: this.options.store,
+        clock: this.options.clock,
+        engine: this.options.engine,
+        signal: this.abort.signal,
+        journalMode: 'restore-only',
+        ...(this.options.onGameFatal ? { onFatal: this.options.onGameFatal } : {}),
+      },
+      this.options.gameRuntime,
+    ).finally(() => {
+      material.dispose();
+      if (this.material === material) this.material = null;
+    });
+    if (this.closed || this.revoked) {
+      await game.close();
+      return;
+    }
+    this.activeGame = game;
+    this.update({
+      phase: 'playing',
+      awaitingSeats: [],
+      locallyConsented: true,
+      error: null,
+      gameId: resume.gameId,
     });
   }
 

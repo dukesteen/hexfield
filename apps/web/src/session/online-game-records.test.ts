@@ -1,7 +1,12 @@
 import { canonicalEncode } from '@cp2p/codec';
 import { BASE_VERSION, createBaseEngine } from '@cp2p/engine';
 import type { Result } from '@cp2p/engine';
-import { genesisDigest, LobbyController, MemoryProtocolJournal } from '@cp2p/protocol';
+import {
+  genesisDigest,
+  LobbyController,
+  MemoryProtocolJournal,
+  PROTOCOL_VERSION,
+} from '@cp2p/protocol';
 import type { EscrowCeremonyStore, ProtocolClock, Transport } from '@cp2p/protocol';
 import { createMemnet, MemoryEscrowLifecycleStore } from '@cp2p/protocol/testing';
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
@@ -317,9 +322,9 @@ describe('saved online game records', () => {
     await expect(loadOnlineGameRecord(lostRecord.store, fixture.gameId)).rejects.toThrow(/missing/);
   });
 
-  test('rejects a v2 pointer or start record before strict v3 parsing and leaves bytes intact', async () => {
-    const legacyGenesis = { ...fixture.genesis, protocolVersion: 2 };
-    Reflect.deleteProperty(legacyGenesis, 'takeover');
+  test('rejects previous-version pointers and start records without changing saved bytes', async () => {
+    const previousVersion = PROTOCOL_VERSION - 1;
+    const legacyGenesis = { ...fixture.genesis, protocolVersion: previousVersion };
     const pointer = newStore(fixture);
     const pointerKey = `online-game/${fixture.gameId}/start-digest`;
     const pointerBytes = canonicalEncode({
@@ -332,7 +337,7 @@ describe('saved online game records', () => {
     pointer.memory.records.set(pointerKey, pointerBytes);
     await expect(loadOnlineGameRecord(pointer.store, fixture.gameId)).rejects.toMatchObject({
       code: 'unsupported-version',
-      savedVersion: 2,
+      savedVersion: previousVersion,
     });
     expect(pointer.memory.records.get(pointerKey)).toEqual(pointerBytes);
     expect(pointer.memory.records.get(fixture.startKey)).toEqual(fixture.startBytes);
@@ -362,8 +367,7 @@ describe('saved online game records', () => {
     expect(record.memory.records.get(fixture.startKey)).toEqual(recordBytes);
 
     const legacyResume = structuredClone(valid);
-    Object.assign(legacyResume.result.genesis, { protocolVersion: 2 });
-    Reflect.deleteProperty(legacyResume.result.genesis, 'takeover');
+    Object.assign(legacyResume.result.genesis, { protocolVersion: previousVersion });
     expect(
       () =>
         new OnlineStartup({

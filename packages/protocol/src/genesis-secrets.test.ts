@@ -106,6 +106,20 @@ describe('recovered master consistency', () => {
       );
   });
 
+  test('checks private master bytes without changing caller-owned buffers', () => {
+    const bytes = master(0);
+    try {
+      expect(verifyRevealedMaster(base.body, base.ledger, 0, bytes).ok).toBe(true);
+      expect(bytes).toEqual(master(0));
+      expect(verifyRevealedMaster(base.body, base.ledger, 1, bytes).ok).toBe(false);
+      expect(bytes).toEqual(master(0));
+      for (const invalid of [bytes.subarray(1), new Uint8Array(33), new Uint8Array(32)])
+        expect(verifyRevealedMaster(base.body, base.ledger, 0, invalid).ok).toBe(false);
+    } finally {
+      bytes.fill(0);
+    }
+  });
+
   test('requires one distinct nonidentity commitment per original seat in order', () => {
     const good = checked(validateGenesisMasters(base.body));
     for (const masters of [

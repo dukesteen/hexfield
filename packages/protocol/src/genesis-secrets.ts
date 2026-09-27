@@ -33,7 +33,7 @@ export function verifyRevealedMaster(
   value: GenesisBody,
   ledger: DeckLedger,
   seat: Seat,
-  encodedMaster: unknown,
+  suppliedMaster: unknown,
 ): Result<void> {
   const body = parseCanonical(value, bodySchema);
   if (!body.ok) return body;
@@ -44,12 +44,22 @@ export function verifyRevealedMaster(
   if (!masters.ok) return masters;
   const owner = genesis.seats.find((item) => item.seat === seat);
   const commitment = masters.value.find((item) => item.seat === seat);
-  const parsed = parseCanonical(encodedMaster, key32Schema);
-  if (!owner || !commitment || !parsed.ok)
+  if (!owner || !commitment)
     return failure('master-reveal', 'Master reveal has an invalid seat or scalar encoding');
   let master: Uint8Array | undefined;
   try {
-    master = fromBase64Url(parsed.value);
+    // Private import paths pass bytes directly. Do not create an unwipeable
+    // base64 string for a master that has not been publicly revealed.
+    if (suppliedMaster instanceof Uint8Array) {
+      if (suppliedMaster.byteLength !== 32)
+        return failure('master-reveal', 'Master must contain exactly 32 bytes');
+      master = new Uint8Array(suppliedMaster);
+    } else {
+      const parsed = parseCanonical(suppliedMaster, key32Schema);
+      if (!parsed.ok)
+        return failure('master-reveal', 'Master reveal has an invalid scalar encoding');
+      master = fromBase64Url(parsed.value);
+    }
     const scalar = scalarFromBytes(master, { nonzero: true });
     if (encodePoint(scalePoint(G, scalar)) !== commitment.masterPub)
       return failure('master-public-key', 'Revealed master does not match its commitment');

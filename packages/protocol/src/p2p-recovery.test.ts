@@ -1,5 +1,14 @@
 import { canonicalEncode } from '@cp2p/codec';
-import { parsePeerId, scalarToBytes, verifyObject } from '@cp2p/crypto';
+import {
+  G,
+  encodePoint,
+  identityFromSecret,
+  parsePeerId,
+  scalarToBytes,
+  scalePoint,
+  signObject,
+  verifyObject,
+} from '@cp2p/crypto';
 import type { Result, Seat } from '@cp2p/engine';
 import { expect, test } from 'vitest';
 import { createBeaconSecretSource } from './beacon-source.js';
@@ -16,6 +25,7 @@ import { MemoryProtocolJournal } from './journal.js';
 import { P2PSession } from './p2p-session.js';
 import type { P2PSessionOptions } from './p2p-session.js';
 import { replayCertifiedPrefix } from './replay.js';
+import { reconstructPrivateSeats } from './private-replay.js';
 import { MemoryStealDeliveryStore } from './steal-contributions.js';
 import { createStealSecretSource } from './steal-source.js';
 import { createMemnet } from './testing/memnet.js';
@@ -25,6 +35,15 @@ import {
   recoveryFixtureKey,
 } from './testing/recovery-fixture.js';
 import { VerifiedSessionDriver } from './verified-session-driver.js';
+import {
+  TRANSFER_DESTINATION_CHECK_DOMAIN,
+  TRANSFER_DEVICE_DOMAIN,
+  TRANSFER_GAME_KEY_DOMAIN,
+  TRANSFER_RETURN_INTENT_DOMAIN,
+  transferCheckDigest,
+  transferEntryRef,
+} from './transfer-readiness.js';
+import type { SeatTransferAuthorizationStatement } from './transfer-types.js';
 
 function value<T>(result: Result<T>): T {
   if (!result.ok) throw new Error(`${result.error.code}: ${result.error.message}`);
@@ -279,6 +298,133 @@ test('a surviving session recovers a bot, finishes the frozen beacon and resumes
     ).toBe(true);
     const record = required(await required(options.get(1)).journal.load());
     expect(entryHash(required(record.entries.at(-1)).entry)).toBe(finalHead.hash);
+
+    // A certified return retires the recovered bot on the former host without
+    // erasing that host's own human hand. Its old private history stays replayable.
+    const returningDevice = identityFromSecret(new Uint8Array(32).fill(139));
+    const returningGame = identityFromSecret(new Uint8Array(32).fill(140));
+    const beforeReturn = value(
+      replayCertifiedPrefix(
+        restored.exportSave().genesis,
+        restored.exportSave().entries,
+        fixture.source.engine,
+        fixture.policy,
+      ),
+    ).context;
+    const controller = required(
+      beforeReturn.log.authority?.controllers.find((item) => item.seat === 0),
+    );
+    const recovery = required(
+      beforeReturn.log.transfer?.returnRoots.findLast((item) => item.departedSeat === 0),
+    );
+    const statement: SeatTransferAuthorizationStatement = {
+      protocol: 'seat-transfer-v1',
+      genesisDigest: beforeReturn.membership.genesisDigest,
+      anchor: transferEntryRef(beforeReturn.log.head),
+      validUntilSeq: beforeReturn.log.head.seq + 64,
+      mode: 'return',
+      seat: 0,
+      currentController: {
+        publicKey: controller.publicKey,
+        kind: controller.kind,
+        activatedAt: controller.activatedAt,
+        hostSeat: controller.hostSeat,
+      },
+      recovery: {
+        authorization: recovery.finalAuthorization,
+        activation: required(recovery.activation),
+      },
+      nextEpoch: beforeReturn.membership.epoch + 1,
+      destination: {
+        devicePeer: returningDevice.peerId,
+        gamePeer: returningGame.peerId,
+        transferEncryptionKey: encodePoint(scalePoint(G, 141n)),
+      },
+      replacements: [
+        {
+          seat: 0,
+          oldPublicKey: controller.publicKey,
+          newPublicKey: returningGame.peerId,
+          newHostSeat: 0,
+        },
+      ],
+    };
+    const authorized = restored.submitTransfer({
+      kind: 'transfer-authorize',
+      statement,
+      destinationDeviceSig: signObject(
+        TRANSFER_DEVICE_DOMAIN,
+        statement,
+        returningDevice.secretKey,
+      ),
+      destinationGameSig: signObject(TRANSFER_GAME_KEY_DOMAIN, statement, returningGame.secretKey),
+      replacementKeySigs: [],
+      returnIntent: {
+        signer: 'last-human-game-key',
+        sig: signObject(TRANSFER_RETURN_INTENT_DOMAIN, statement, recoveryFixtureKey(fixture, 0)),
+      },
+    });
+    await pumpUntil(() =>
+      [...sessions.values()].every((session) => session.getCommittedHead().seq > finalHead.seq),
+    );
+    expect(await authorized).toEqual({ ok: true, value: undefined });
+
+    const returnParent = value(
+      replayCertifiedPrefix(
+        restored.exportSave().genesis,
+        restored.exportSave().entries,
+        fixture.source.engine,
+        fixture.policy,
+      ),
+    ).context;
+    const returnAuthorization = transferEntryRef(returnParent.log.head);
+    const activationStatement = {
+      protocol: 'seat-transfer-activation-v1' as const,
+      genesisDigest: returnParent.membership.genesisDigest,
+      authorization: returnAuthorization,
+      parent: returnAuthorization,
+      nextEpoch: statement.nextEpoch,
+      destinationDevice: returningDevice.peerId,
+      destinationGame: returningGame.peerId,
+      replacements: statement.replacements,
+      checkDigest: transferCheckDigest(returnParent.log, returnAuthorization),
+    };
+    const activated = restored.submitTransfer({
+      kind: 'transfer-activate',
+      statement: activationStatement,
+      destinationCheck: signObject(
+        TRANSFER_DESTINATION_CHECK_DOMAIN,
+        activationStatement,
+        returningGame.secretKey,
+      ),
+      replacementChecks: [],
+    });
+    await pumpUntil(() =>
+      [...sessions.values()].every(
+        (session) => session.getCommittedHead().seq > returnAuthorization.seq,
+      ),
+    );
+    expect(await activated).toEqual({ ok: true, value: undefined });
+    expect(restored.getPrivate(0)).toBeNull();
+    expect(restored.getPrivate(1)).not.toBeNull();
+    expect(restored.validate(0, { type: 'END_TURN' })).toMatchObject({
+      ok: false,
+      error: { code: 'seat-not-controllable' },
+    });
+    const returnedSave = restored.exportSave();
+    const historical = value(
+      reconstructPrivateSeats({
+        genesisEntry: returnedSave.genesis,
+        entries: returnedSave.entries,
+        engine: fixture.source.engine,
+        policy: fixture.policy,
+        secrets: [{ seat: 0, master: master(0) }],
+      }),
+    );
+    expect(historical.driver.privateState(0)).not.toBeNull();
+    historical.dispose();
+    returningDevice.secretKey.fill(0);
+    returningGame.secretKey.fill(0);
   } finally {
     for (const session of sessions.values()) session.dispose();
     for (const provider of providers) provider.dispose();

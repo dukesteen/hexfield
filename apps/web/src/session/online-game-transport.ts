@@ -1,16 +1,25 @@
 import { fromBase64Url, hashValue, toHex } from '@cp2p/codec';
 import { failure, success } from '@cp2p/engine';
-import type { Result } from '@cp2p/engine';
+import type { Engine, Result } from '@cp2p/engine';
 import { MAX_MESSAGE_BYTES as MAX_WEBRTC_MESSAGE_BYTES } from '@cp2p/p2p';
 import {
   genesisDigest,
+  advanceContext,
+  decodeProtocolMessage,
+  encodeProtocolMessage,
+  entryHash,
   MAX_MESSAGE_BYTES as MAX_PROTOCOL_MESSAGE_BYTES,
+  replayCertifiedPrefix,
+  validateCertifiedEntry,
   verifyGameSeatBindings,
   validateGenesisOnlineStart,
 } from '@cp2p/protocol';
 import type {
   LobbyFreezeAgreement,
+  CertifiedEntry,
   PeerId,
+  ProposalContext,
+  ReplayPolicy,
   SignedGameSeatBinding,
   Transport,
   Unsubscribe,
@@ -21,8 +30,52 @@ const MAGIC = new Uint8Array([0x43, 0x50, 0x32, 0x47]); // CP2G
 const FRAME_VERSION = 1;
 const DIGEST_BYTES = 32;
 const HEADER_BYTES = MAGIC.length + 1 + DIGEST_BYTES;
+const RETIRED_GRACE_HEIGHTS = 128;
+const MAX_RETIRED_ROUTES = 6;
+
+interface RetiringRoute {
+  readonly device: PeerId;
+  readonly game: PeerId;
+  readonly atSeq: number;
+  readonly hint: Uint8Array;
+  hinted: boolean;
+}
+
+function retireRemovedRoutes(
+  prior: ReadonlyMap<PeerId, PeerId>,
+  current: ReadonlyMap<PeerId, PeerId>,
+  certified: CertifiedEntry,
+  retired: Map<PeerId, RetiringRoute>,
+): Result<void> {
+  if (certified.entry.payload.kind === 'membership')
+    for (const [device, game] of prior) {
+      if (current.get(device) === game) continue;
+      const hint = encodeProtocolMessage({
+        t: 'COMMIT',
+        certified: { entry: certified.entry, certificate: certified.certificate },
+      });
+      if (!hint.ok) return hint;
+      retired.set(game, {
+        device,
+        game,
+        atSeq: certified.entry.seq,
+        hint: hint.value,
+        hinted: false,
+      });
+    }
+  for (const [game, route] of retired)
+    if (certified.entry.seq - route.atSeq > RETIRED_GRACE_HEIGHTS) retired.delete(game);
+  while (retired.size > MAX_RETIRED_ROUTES) {
+    const oldest = retired.keys().next().value;
+    if (oldest === undefined) break;
+    retired.delete(oldest);
+  }
+  return success(undefined);
+}
 
 export interface OnlineGameTransport extends Transport {
+  /** Advances routing only from a verified extension of this transport's certified history. */
+  advanceCertifiedHistory(entries: readonly CertifiedEntry[]): Result<void>;
   /** Leaves the authenticated device links and their other subscribers alive. */
   dispose(): void;
 }
@@ -33,6 +86,13 @@ export interface OnlineGameTransportOptions {
   readonly validatedGenesis: ValidatedGenesis;
   readonly agreement: LobbyFreezeAgreement;
   readonly bindings: readonly SignedGameSeatBinding[];
+  /** Required on restore or when the device joined after genesis. */
+  readonly certifiedHistory?: {
+    readonly genesisEntry: unknown;
+    readonly entries: readonly CertifiedEntry[];
+    readonly engine: Engine;
+    readonly policy: ReplayPolicy;
+  };
 }
 
 function sameValue(left: unknown, right: unknown): boolean {
@@ -82,14 +142,90 @@ export function createOnlineGameTransport(
       deviceToGame.set(frozen.peer, game.publicKey);
       gameToDevice.set(game.publicKey, frozen.peer);
     }
+    let certifiedContext: ProposalContext | null = null;
+    let certifiedHashes: string[] = [];
+    const retiring = new Map<PeerId, RetiringRoute>();
+    if (options.certifiedHistory) {
+      const history = options.certifiedHistory;
+      let priorRoutes = new Map(deviceToGame);
+      const replayed = replayCertifiedPrefix(
+        history.genesisEntry,
+        history.entries,
+        history.engine,
+        history.policy,
+        (entry, next) => {
+          const routes = projectCertifiedRoutes(next);
+          if (!routes.ok) return routes;
+          const retained = retireRemovedRoutes(
+            priorRoutes,
+            routes.value.deviceToGame,
+            entry,
+            retiring,
+          );
+          if (retained.ok) priorRoutes = routes.value.deviceToGame;
+          return retained;
+        },
+      );
+      if (!replayed.ok) return replayed;
+      if (!sameValue(replayed.value.context.log.genesis, genesis))
+        return failure('online-transport-history', 'Certified history belongs to another genesis');
+      const routes = projectCertifiedRoutes(replayed.value.context);
+      if (!routes.ok) return routes;
+      deviceToGame.clear();
+      gameToDevice.clear();
+      for (const [device, game] of routes.value.deviceToGame) deviceToGame.set(device, game);
+      for (const [game, device] of routes.value.gameToDevice) gameToDevice.set(game, device);
+      certifiedContext = replayed.value.context;
+      certifiedHashes = replayed.value.entries.map(({ entry }) => entryHash(entry));
+    }
     const self = deviceToGame.get(options.deviceTransport.self);
     if (!self) return failure('online-transport-self', 'Device has no frozen human game seat');
     return success(
-      new GameKeyTransport(options.deviceTransport, self, digest, deviceToGame, gameToDevice),
+      new GameKeyTransport(
+        options.deviceTransport,
+        self,
+        digest,
+        deviceToGame,
+        gameToDevice,
+        certifiedContext,
+        certifiedHashes,
+        retiring,
+        options.certifiedHistory
+          ? {
+              genesisEntry: options.certifiedHistory.genesisEntry,
+              engine: options.certifiedHistory.engine,
+              policy: {
+                genesis: { ...options.certifiedHistory.policy.genesis },
+                entry: { ...options.certifiedHistory.policy.entry },
+              },
+            }
+          : null,
+      ),
     );
   } catch {
     return failure('online-transport-genesis', 'Certified genesis projection is invalid');
   }
+}
+
+function projectCertifiedRoutes(context: ProposalContext): Result<{
+  deviceToGame: Map<PeerId, PeerId>;
+  gameToDevice: Map<PeerId, PeerId>;
+}> {
+  const authority = context.log.authority;
+  const transfer = context.log.transfer;
+  if (!authority || !transfer)
+    return failure('online-transport-history', 'Certified authority or device routes are missing');
+  const deviceToGame = new Map<PeerId, PeerId>();
+  const gameToDevice = new Map<PeerId, PeerId>();
+  for (const controller of authority.controllers) {
+    if (controller.kind !== 'human' || controller.status !== 'active') continue;
+    const device = transfer.routes.find(({ seat }) => seat === controller.seat)?.devicePeer;
+    if (!device || deviceToGame.has(device) || gameToDevice.has(controller.publicKey))
+      return failure('online-transport-history', 'Certified human device routes are incomplete');
+    deviceToGame.set(device, controller.publicKey);
+    gameToDevice.set(controller.publicKey, device);
+  }
+  return success({ deviceToGame, gameToDevice });
 }
 
 class GameKeyTransport implements OnlineGameTransport {
@@ -103,11 +239,24 @@ class GameKeyTransport implements OnlineGameTransport {
     private readonly device: Transport,
     readonly self: PeerId,
     private readonly digest: Uint8Array,
-    private readonly deviceToGame: ReadonlyMap<PeerId, PeerId>,
-    private readonly gameToDevice: ReadonlyMap<PeerId, PeerId>,
+    private deviceToGame: ReadonlyMap<PeerId, PeerId>,
+    private gameToDevice: ReadonlyMap<PeerId, PeerId>,
+    private context: ProposalContext | null,
+    private certifiedHashes: string[],
+    private retiring: Map<PeerId, RetiringRoute>,
+    private readonly verifier: {
+      readonly genesisEntry: unknown;
+      readonly engine: Engine;
+      readonly policy: ReplayPolicy;
+    } | null,
   ) {
     this.offMessage = device.onMessage((from, bytes) => this.receive(from, bytes));
     this.offPeer = device.onPeerChange((peer, online) => {
+      for (const route of this.retiring.values())
+        if (route.device === peer) {
+          if (online) this.hintRetiring(route);
+          else route.hinted = false;
+        }
       const game = this.deviceToGame.get(peer);
       if (!this.disposed && game && game !== this.self)
         for (const listener of this.peerListeners) {
@@ -118,6 +267,105 @@ class GameKeyTransport implements OnlineGameTransport {
           }
         }
     });
+    for (const route of this.retiring.values())
+      if (device.peers().includes(route.device)) this.hintRetiring(route);
+  }
+
+  advanceCertifiedHistory(entries: readonly CertifiedEntry[]): Result<void> {
+    if (this.disposed) return failure('online-transport-retired', 'Game transport is disposed');
+    if (!this.context || !this.verifier)
+      return failure('online-transport-history', 'Certified genesis history was not installed');
+    let hashes: string[];
+    try {
+      hashes = entries.map(({ entry }) => entryHash(entry));
+    } catch {
+      return failure('online-transport-history', 'Certified history contains an invalid entry');
+    }
+    if (
+      hashes.length < this.certifiedHashes.length ||
+      this.certifiedHashes.some((hash, index) => hashes[index] !== hash)
+    )
+      return failure('online-transport-history', 'Certified history does not extend this prefix');
+    if (hashes.length === this.certifiedHashes.length) return success(undefined);
+    let next = this.context;
+    let priorRoutes = new Map(this.deviceToGame);
+    const retiring = new Map(this.retiring);
+    for (let index = this.certifiedHashes.length; index < entries.length; index++) {
+      const certified = entries[index];
+      if (!certified) return failure('online-transport-history', 'Certified entry is missing');
+      // Historical accusations need a resolver over their exact certified ancestry.
+      const kind = certified.entry?.payload?.kind;
+      if (kind === 'control' || kind === 'cheat-proof') {
+        const replayed = replayCertifiedPrefix(
+          this.verifier.genesisEntry,
+          entries.slice(0, index),
+          this.verifier.engine,
+          this.verifier.policy,
+        );
+        if (!replayed.ok) return replayed;
+        next = replayed.value.context;
+      }
+      const checked = validateCertifiedEntry(certified, next);
+      if (!checked.ok) return checked;
+      const advanced = advanceContext(next, checked.value);
+      if (!advanced.ok) return advanced;
+      next = advanced.value;
+      const nextRoutes = projectCertifiedRoutes(next);
+      if (!nextRoutes.ok) return nextRoutes;
+      const retained = retireRemovedRoutes(
+        priorRoutes,
+        nextRoutes.value.deviceToGame,
+        certified,
+        retiring,
+      );
+      if (!retained.ok) return retained;
+      priorRoutes = nextRoutes.value.deviceToGame;
+    }
+    const routes = projectCertifiedRoutes(next);
+    if (!routes.ok) return routes;
+    const newSelf = routes.value.deviceToGame.get(this.device.self);
+    if (newSelf !== this.self) {
+      this.dispose();
+      return failure('online-transport-retired', 'Local game key was retired by certified history');
+    }
+    const online = new Set(this.device.peers());
+    const previous = new Set(this.peers());
+    const current = new Set(
+      [...routes.value.gameToDevice]
+        .filter(([, device]) => online.has(device))
+        .map(([game]) => game),
+    );
+    this.context = next;
+    this.certifiedHashes = hashes;
+    this.deviceToGame = routes.value.deviceToGame;
+    this.gameToDevice = routes.value.gameToDevice;
+    this.retiring = retiring;
+    for (const peer of previous) if (!current.has(peer)) this.notifyPeer(peer, false);
+    for (const peer of current)
+      if (!previous.has(peer) && peer !== this.self) this.notifyPeer(peer, true);
+    for (const route of this.retiring.values())
+      if (online.has(route.device)) this.hintRetiring(route);
+    return success(undefined);
+  }
+
+  private hintRetiring(route: RetiringRoute): void {
+    if (this.disposed || route.hinted) return;
+    try {
+      this.device.send(route.device, this.frame(route.hint));
+      route.hinted = true;
+    } catch {
+      // Retry on the next authenticated link event or retired peer request.
+    }
+  }
+
+  private notifyPeer(peer: PeerId, online: boolean): void {
+    for (const listener of this.peerListeners) {
+      try {
+        listener(peer, online);
+      } catch {
+        /* A view cannot interrupt other game or device subscribers. */
+      }
+    }
   }
 
   peers(): PeerId[] {
@@ -132,8 +380,17 @@ class GameKeyTransport implements OnlineGameTransport {
   send(to: PeerId, message: Uint8Array): void {
     this.assertActive();
     const devicePeer = this.gameToDevice.get(to);
-    if (!devicePeer || to === this.self) throw new Error('Game peer is not a remote human');
-    this.device.send(devicePeer, this.frame(message));
+    if (devicePeer && to !== this.self) {
+      this.device.send(devicePeer, this.frame(message));
+      return;
+    }
+    const retired = this.retiring.get(to);
+    if (!retired || !this.device.peers().includes(retired.device))
+      throw new Error('Game peer is not a remote human');
+    const decoded = decodeProtocolMessage(message);
+    if (!decoded.ok || decoded.value.t !== 'SYNC_RES')
+      throw new Error('Retired game peer accepts certified sync responses only');
+    this.device.send(retired.device, this.frame(message));
   }
 
   broadcast(message: Uint8Array): void {
@@ -175,6 +432,7 @@ class GameKeyTransport implements OnlineGameTransport {
     this.offPeer();
     this.messageListeners.clear();
     this.peerListeners.clear();
+    this.retiring.clear();
   }
 
   private assertActive(): void {
@@ -200,8 +458,6 @@ class GameKeyTransport implements OnlineGameTransport {
     if (this.disposed) return;
     const gamePeer = this.deviceToGame.get(from);
     if (
-      !gamePeer ||
-      gamePeer === this.self ||
       !(bytes instanceof Uint8Array) ||
       bytes.byteLength < HEADER_BYTES ||
       bytes.byteLength > HEADER_BYTES + MAX_PROTOCOL_MESSAGE_BYTES ||
@@ -211,6 +467,22 @@ class GameKeyTransport implements OnlineGameTransport {
       this.digest.some((byte, index) => bytes[MAGIC.length + 1 + index] !== byte)
     )
       return;
+    if (!gamePeer) {
+      const retired = [...this.retiring.values()].find((route) => route.device === from);
+      if (!retired) return;
+      const decoded = decodeProtocolMessage(bytes.slice(HEADER_BYTES));
+      if (!decoded.ok || decoded.value.t !== 'SYNC_REQ') return;
+      this.hintRetiring(retired);
+      for (const listener of this.messageListeners) {
+        try {
+          listener(retired.game, bytes.slice(HEADER_BYTES));
+        } catch {
+          /* A view cannot interrupt certified catch-up or other subscribers. */
+        }
+      }
+      return;
+    }
+    if (gamePeer === this.self) return;
     for (const listener of this.messageListeners) {
       try {
         listener(gamePeer, bytes.slice(HEADER_BYTES));

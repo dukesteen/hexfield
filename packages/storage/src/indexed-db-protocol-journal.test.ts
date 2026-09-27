@@ -1,3 +1,4 @@
+import { Buffer } from 'node:buffer';
 import { canonicalEncode, hashValue, toHex } from '@cp2p/codec';
 import { createSimulationGenesis } from '@cp2p/protocol/testing';
 import { entryHash, signEntry } from '@cp2p/protocol';
@@ -82,32 +83,35 @@ describe('IndexedDbProtocolJournal', () => {
     await reopened.close();
   });
 
-  test('atomically pins its voting-key record and reopens only with the same bytes', async () => {
-    installFactory();
-    const source = fixture();
-    const keyBytes = Uint8Array.of(17, 18, 19);
-    const journal = new IndexedDbProtocolJournal(source.genesis.gameId, {
-      keyBinding: { recordKey: 'vote-key-game-1', bytes: keyBytes },
-    });
-    keyBytes.fill(0);
-    expect(await journal.initialize(source.entry, Uint8Array.of(1, 2))).toBe(true);
-    expect(await journal.load()).toMatchObject({ height: 1 });
-    expect(await journal.initialize(source.entry, Uint8Array.of(9))).toBe(false);
-    await journal.close();
+  test.each([false, true])(
+    'atomically pins a detached voting-key record with Buffer input %s',
+    async (asBuffer) => {
+      installFactory();
+      const source = fixture();
+      const keyBytes = asBuffer ? Buffer.from([17, 18, 19]) : Uint8Array.of(17, 18, 19);
+      const journal = new IndexedDbProtocolJournal(source.genesis.gameId, {
+        keyBinding: { recordKey: 'vote-key-game-1', bytes: keyBytes },
+      });
+      keyBytes.fill(0);
+      expect(await journal.initialize(source.entry, Uint8Array.of(1, 2))).toBe(true);
+      expect(await journal.load()).toMatchObject({ height: 1 });
+      expect(await journal.initialize(source.entry, Uint8Array.of(9))).toBe(false);
+      await journal.close();
 
-    const database = await openDB<JournalDatabase>('cp2p', 2);
-    expect(await database.get('bytes', 'vote-key-game-1')).toEqual(Uint8Array.of(17, 18, 19));
-    database.close();
+      const database = await openDB<JournalDatabase>('cp2p', 2);
+      expect(await database.get('bytes', 'vote-key-game-1')).toEqual(Uint8Array.of(17, 18, 19));
+      database.close();
 
-    const reopened = new IndexedDbProtocolJournal(source.genesis.gameId, {
-      keyBinding: { recordKey: 'vote-key-game-1', bytes: Uint8Array.of(17, 18, 19) },
-    });
-    expect(await reopened.load()).toMatchObject({
-      height: 1,
-      safety: { bytes: Uint8Array.of(1, 2) },
-    });
-    await reopened.close();
-  });
+      const reopened = new IndexedDbProtocolJournal(source.genesis.gameId, {
+        keyBinding: { recordKey: 'vote-key-game-1', bytes: Uint8Array.of(17, 18, 19) },
+      });
+      expect(await reopened.load()).toMatchObject({
+        height: 1,
+        safety: { bytes: Uint8Array.of(1, 2) },
+      });
+      await reopened.close();
+    },
+  );
 
   test('closes terminally, drains active work, and leaves caller key buffers untouched', async () => {
     installFactory();

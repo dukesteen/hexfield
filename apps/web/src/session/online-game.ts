@@ -9,8 +9,13 @@ import {
   createHandSecretSource,
   createStealSecretSource,
   deckCeremonyId,
+  decksReady,
   genesisDigest,
+  entryHash,
   initialProposalContext,
+  replayCertifiedPrefix,
+  transferChangeSchema,
+  validateTransferOwnedMaterial,
   P2PSession,
   validateDeckCeremony,
   validateGenesisOnlineStart,
@@ -18,11 +23,14 @@ import {
 } from '@cp2p/protocol';
 import type {
   BeaconSecretProvider,
+  BeaconSecretSource,
   DeckSourceFactory,
   EscrowCeremonyStore,
   Genesis,
   LobbyFreezeAgreement,
   LogEntry,
+  LogContext,
+  CertifiedEntry,
   ProtocolClock,
   ProtocolJournal,
   ReplayPolicy,
@@ -32,8 +40,9 @@ import type {
   SignedGameSeatBinding,
   Transport,
 } from '@cp2p/protocol';
-import { acquireGameWriterLease, IndexedDbProtocolJournal } from '@cp2p/storage';
+import { acquireActiveGameWriterLease, IndexedDbProtocolJournal } from '@cp2p/storage';
 import type { GameWriterLease } from '@cp2p/storage';
+import * as v from 'valibot';
 import type { OwnedSeatMaterial } from './online-credentials.js';
 import { createOnlineGameTransport } from './online-game-transport.js';
 import type { OnlineGameTransport } from './online-game-transport.js';
@@ -44,7 +53,7 @@ import { browserEntropy, randomIndex, randomSeed } from './random.js';
 type OnlineJournal = ProtocolJournal & { close(): Promise<void> };
 
 export interface OnlineGameRuntime {
-  readonly acquireLease?: typeof acquireGameWriterLease;
+  readonly acquireLease?: typeof acquireActiveGameWriterLease;
   readonly createJournal?: (
     gameId: string,
     keyBinding: { recordKey: string; bytes: Uint8Array },
@@ -93,15 +102,15 @@ export async function openOnlineGame(
   };
   const material = input.material.map((item) => ({
     ...item,
-    signingKey: item.signingKey.slice(),
-    master: item.master.slice(),
+    signingKey: new Uint8Array(item.signingKey),
+    master: new Uint8Array(item.master),
   }));
   let journal: OnlineJournal | null = null;
   let lease: GameWriterLease | null = null;
   let transport: OnlineGameTransport | null = null;
   let session: P2PSession | null = null;
   let leaseLost = false;
-  const providers: BeaconSecretProvider[] = [];
+  const providers = new Map<Seat, BeaconSecretProvider>();
   const checkCancelled = () => {
     if (input.signal?.aborted || leaseLost)
       throw new DOMException('Online game opening was cancelled', 'AbortError');
@@ -115,7 +124,7 @@ export async function openOnlineGame(
       await session?.flush();
     } finally {
       transport?.dispose();
-      for (const provider of providers) provider.dispose();
+      for (const provider of providers.values()) provider.dispose();
       for (const item of material) {
         item.signingKey.fill(0);
         item.master.fill(0);
@@ -143,65 +152,22 @@ export async function openOnlineGame(
     const { genesis, state, crypto } = checked.value.log;
     const startup = validateGenesisOnlineStart(genesis);
     if (!startup.ok) throw new Error(startup.error.message);
-    const projection = createOnlineGameTransport({
-      deviceTransport: input.deviceTransport,
-      validatedGenesis: { genesis, state },
-      agreement: input.agreement,
-      bindings: input.bindings,
-    });
-    if (!projection.ok) throw new Error(projection.error.message);
-    transport = projection.value;
-    checkCancelled();
-    const human = genesis.seats.find(
-      (seat) => seat.kind === 'human' && seat.publicKey === transport?.self,
-    );
-    if (!human || human.kind !== 'human' || !crypto)
-      throw new Error('The device does not own a verified human game seat');
-    const owned = genesis.seats.filter(
-      (seat) =>
-        seat.seat === human.seat || (seat.kind === 'bot' && seat.botHost === human.publicKey),
-    );
-    if (
-      material.length !== owned.length ||
-      material.some(
-        (item, index) => item.seat !== owned[index]?.seat || item.kind !== owned[index]?.kind,
-      )
-    )
-      throw new Error('Stored game keys differ from the frozen device-owned seats');
-    for (const item of material) {
-      const owner = owned.find((seat) => seat.seat === item.seat);
-      const master = startup.value.bindings.masters.find((entry) => entry.seat === item.seat);
-      const identity = identityFromSecret(item.signingKey);
-      try {
-        if (
-          identity.peerId !== item.peerId ||
-          identity.peerId !== owner?.publicKey ||
-          encodePoint(scalePoint(G, scalarFromBytes(item.master, { nonzero: true }))) !==
-            master?.masterPub
-        )
-          throw new Error('Stored game secrets do not match the certified identity');
-      } finally {
-        identity.secretKey.fill(0);
-      }
-    }
-    const local = material.find((item) => item.seat === human.seat);
-    if (!local) throw new Error('The local game key is missing');
-    lease = await (runtime.acquireLease ?? acquireGameWriterLease)(
-      genesis.gameId,
-      human.publicKey,
-      {
-        onLost(error) {
-          leaseLost = true;
-          transport?.dispose();
-          session?.dispose();
-          try {
-            input.onFatal?.(error);
-          } catch {
-            // Reporting failure cannot restore authority or resume output.
-          }
-        },
+    if (!crypto) throw new Error('Verified game commitments are missing');
+    const humans = material.filter((seat) => seat.kind === 'human');
+    const local = humans[0];
+    if (humans.length !== 1 || !local) throw new Error('Stored material needs one human seat');
+    lease = await (runtime.acquireLease ?? acquireActiveGameWriterLease)(genesis.gameId, {
+      onLost(error) {
+        leaseLost = true;
+        transport?.dispose();
+        session?.dispose();
+        try {
+          input.onFatal?.(error);
+        } catch {
+          // Reporting failure cannot restore authority or resume output.
+        }
       },
-    );
+    });
     checkCancelled();
     if (!lease) throw new Error('This game is already active in another tab');
     const digest = genesisDigest(genesis);
@@ -211,7 +177,7 @@ export async function openOnlineGame(
         protocol: 'online-game-keys-v1',
         genesisDigest: digest,
         devicePeer: input.deviceTransport.self,
-        humanSeat: human.seat,
+        humanSeat: local.seat,
         seats: material,
       }),
     };
@@ -222,8 +188,126 @@ export async function openOnlineGame(
     } finally {
       keyBinding.bytes.fill(0);
     }
+    const saved = await journal.load();
+    checkCancelled();
+    if (saved && entryHash(saved.genesis) !== entryHash(input.entry))
+      throw new Error('Stored game history differs from the certified online start');
+    let installed: LogContext | null =
+      checked.value.log.authority?.controllers.find((seat) => seat.seat === local.seat)
+        ?.publicKey === local.peerId
+        ? checked.value.log
+        : null;
+    let priorKey = checked.value.log.authority?.controllers.find(
+      (seat) => seat.seat === local.seat,
+    )?.publicKey;
+    const replayed = saved
+      ? replayCertifiedPrefix(
+          saved.genesis,
+          saved.entries,
+          input.engine,
+          policy,
+          (_entry, next) => {
+            const key = next.log.authority?.controllers.find(
+              (seat) => seat.seat === local.seat,
+            )?.publicKey;
+            if (key !== priorKey && key === local.peerId) installed = next.log;
+            priorKey = key;
+            return success(undefined);
+          },
+        )
+      : success({ context: checked.value });
+    if (!replayed.ok) throw new Error(replayed.error.message);
+    const current = replayed.value.context.log;
+    if (!installed) throw new Error('Stored game key has no certified owning generation');
+    // The durable binding contains exactly the seats installed with this human
+    // key. Later recovery adds separately persisted bots; a return can retire one.
+    if (current.crypto && decksReady(current.crypto.decks)) {
+      const ownedMaterial = validateTransferOwnedMaterial(
+        {
+          protocol: 'online-game-keys-v1',
+          genesisDigest: digest,
+          devicePeer: input.deviceTransport.self,
+          humanSeat: local.seat,
+          seats: material,
+        },
+        { ...installed, crypto: current.crypto },
+      );
+      if (!ownedMaterial.ok) throw new Error(ownedMaterial.error.message);
+      for (const seat of ownedMaterial.value.seats) {
+        seat.signingKey.fill(0);
+        seat.master.fill(0);
+      }
+    } else {
+      // Before certified deck setup only the original frozen owners can open.
+      // Driver/source checks below validate the available deck and beacon data.
+      const owned = genesis.seats.filter(
+        (seat) =>
+          seat.seat === local.seat || (seat.kind === 'bot' && seat.botHost === local.peerId),
+      );
+      if (
+        installed.head.seq !== 0 ||
+        material.length !== owned.length ||
+        material.some(
+          (item, index) =>
+            item.seat !== owned[index]?.seat ||
+            item.kind !== owned[index]?.kind ||
+            item.peerId !== owned[index]?.publicKey,
+        )
+      )
+        throw new Error('Stored game keys differ from the frozen device-owned seats');
+      for (const item of material) {
+        const identity = identityFromSecret(item.signingKey);
+        try {
+          if (
+            identity.peerId !== item.peerId ||
+            encodePoint(scalePoint(G, scalarFromBytes(item.master, { nonzero: true }))) !==
+              startup.value.bindings.masters.find((entry) => entry.seat === item.seat)?.masterPub
+          )
+            throw new Error('Stored game secrets do not match the certified identity');
+        } finally {
+          identity.secretKey.fill(0);
+        }
+      }
+    }
+    const projection = createOnlineGameTransport({
+      deviceTransport: input.deviceTransport,
+      validatedGenesis: { genesis, state },
+      agreement: input.agreement,
+      bindings: input.bindings,
+      certifiedHistory: {
+        genesisEntry: input.entry,
+        entries: saved?.entries ?? [],
+        engine: input.engine,
+        policy,
+      },
+    });
+    if (!projection.ok) throw new Error(projection.error.message);
+    transport = projection.value;
+    const human = current.authority?.controllers.find(
+      (seat) => seat.seat === local.seat && seat.kind === 'human' && seat.status === 'active',
+    );
+    if (!human || human.publicKey !== local.peerId || transport.self !== local.peerId)
+      throw new Error('The stored human key no longer controls this seat');
+    const activeMaterial = material.filter((item) =>
+      current.authority?.controllers.some(
+        (seat) =>
+          seat.seat === item.seat &&
+          seat.kind === item.kind &&
+          seat.status === 'active' &&
+          seat.hostSeat === human.seat &&
+          seat.publicKey === item.peerId,
+      ),
+    );
+    const ownedMaterial = new Map(activeMaterial.map((item) => [item.seat, item]));
+    // The journal retains the exact installing-generation binding. Working
+    // secrets belong only to the seats still controlled at the restored head.
+    for (const item of material) {
+      if (ownedMaterial.has(item.seat)) continue;
+      item.signingKey.fill(0);
+      item.master.fill(0);
+    }
     const masterFor = (seat: Seat) => {
-      const entry = material.find((item) => item.seat === seat);
+      const entry = ownedMaterial.get(seat);
       if (!entry) throw new Error('Cannot derive secrets for another device');
       return entry.master;
     };
@@ -235,7 +319,7 @@ export async function openOnlineGame(
       return createDeckSecretSource(masterFor(seat), definition, seat);
     };
     const stealSource = (seat: Seat) => {
-      const owner = owned.find((item) => item.seat === seat);
+      const owner = genesis.seats.find((item) => item.seat === seat);
       if (!owner) throw new Error("Cannot derive another device's encryption key");
       return createStealSecretSource(masterFor(seat), genesis.ceremonyNonce, seat, owner.publicKey);
     };
@@ -246,12 +330,32 @@ export async function openOnlineGame(
       { ceremonyId: deckCeremonyId(genesis), seat: human.seat },
       chain.length,
     );
-    providers.push(beacon);
+    providers.set(human.seat, beacon);
     if (toBase64Url(beacon.initialCommitment.tip) !== chain.tip)
       throw new Error('Stored master differs from the frozen beacon chain');
+    const beaconSources = new Map<Seat, BeaconSecretSource>();
+    for (const item of activeMaterial) {
+      if (item.kind !== 'bot') continue;
+      const originalChain = crypto.beacon.chains.find((candidate) => candidate.seat === item.seat);
+      if (!originalChain) {
+        if (genesis.seats.find((seat) => seat.seat === item.seat)?.kind === 'bot') continue;
+        throw new Error('Missing hosted-seat beacon commitment');
+      }
+      const provider = createBeaconSecretSource(
+        item.master,
+        { ceremonyId: deckCeremonyId(genesis), seat: item.seat },
+        originalChain.length,
+      );
+      providers.set(item.seat, provider);
+      if (toBase64Url(provider.initialCommitment.tip) !== originalChain.tip)
+        throw new Error('Hosted master differs from the frozen beacon chain');
+      beaconSources.set(item.seat, provider.source);
+    }
     const bot = new RandomBot();
     const botKeys = new Map(
-      material.filter((item) => item.kind === 'bot').map((item) => [item.seat, item.signingKey]),
+      activeMaterial
+        .filter((item) => item.kind === 'bot')
+        .map((item) => [item.seat, item.signingKey]),
     );
     const options = {
       genesisEntry: input.entry,
@@ -262,6 +366,35 @@ export async function openOnlineGame(
       transport,
       clock: input.clock,
       journal,
+      onMembershipCommitted(entries: readonly CertifiedEntry[]) {
+        const routed = projection.value.advanceCertifiedHistory(entries);
+        const payload = entries.at(-1)?.entry.payload;
+        const transfer =
+          payload?.kind === 'membership' ? v.safeParse(transferChangeSchema, payload.change) : null;
+        const replacements =
+          transfer?.success && transfer.output.kind === 'transfer-activate'
+            ? transfer.output.statement.replacements
+            : [];
+        const retired = !routed.ok && routed.error.code === 'online-transport-retired';
+        for (const item of material) {
+          if (
+            !retired &&
+            !replacements.some(
+              (replacement) =>
+                replacement.seat === item.seat && replacement.oldPublicKey === item.peerId,
+            )
+          )
+            continue;
+          item.signingKey.fill(0);
+          item.master.fill(0);
+          ownedMaterial.delete(item.seat);
+          providers.get(item.seat)?.dispose();
+          providers.delete(item.seat);
+        }
+        // The final commit was sent with the old route. Retirement disposes this
+        // immutable signer/transport; the destination opens a fresh instance.
+        return retired ? success(undefined) : routed;
+      },
       botKeys,
       botDelayMs: input.botDelayMs ?? 800,
       decideBot: (
@@ -269,6 +402,7 @@ export async function openOnlineGame(
         pending: Parameters<RandomBot['decide']>[1],
       ) => bot.decide(view, pending, { int: (max) => randomIndex(browserEntropy, max) }),
       beaconSource: beacon.source,
+      beaconSources,
       beaconContributions: input.store,
       deckSetupPasses: input.transcripts.flatMap(({ deckId, passes }) =>
         passes.map((pass) => ({ deckId, pass })),
@@ -308,13 +442,12 @@ export async function openOnlineGame(
       masterReveal: {
         store: input.store,
         async loadOwnedMaster(seat: Seat) {
-          return material.find((item) => item.seat === seat)?.master.slice() ?? null;
+          const item = ownedMaterial.get(seat);
+          return item ? new Uint8Array(item.master) : null;
         },
       },
       auditRunner: runtime.auditRunner ?? createSessionAuditRunner(),
     };
-    const saved = await journal.load();
-    checkCancelled();
     // The built-in journal returns null only when genesis, entries, safety and
     // its bound voting-key record are all absent in one IndexedDB transaction.
     // Injected journals have no equivalent proof and must remain restore-only.

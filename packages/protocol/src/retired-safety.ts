@@ -76,11 +76,9 @@ export function restoreRetiredSafety(
     marker.parentHash !== entryHash(context.log.head) ||
     marker.localSeat !== localSeat ||
     marker.localPublicKey !== publicKey ||
-    context.membership.voters.some(
-      (member) => member.seat === localSeat || member.publicKey === publicKey,
-    ) ||
+    context.membership.voters.some((member) => member.publicKey === publicKey) ||
     !controller ||
-    controller.kind !== 'bot' ||
+    (controller.kind !== 'bot' && controller.publicKey === publicKey) ||
     !context.log.authority?.usedPublicKeys.includes(publicKey)
   )
     return failure('replica-retirement', 'Retired signing record differs from certified removal');

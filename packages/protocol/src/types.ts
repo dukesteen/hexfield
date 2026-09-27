@@ -4,7 +4,7 @@ import type { SignedVote } from './votes.js';
 import type { CheatClaim } from './cheat-types.js';
 import type { TakeoverPolicy } from './takeover-policy.js';
 
-export const PROTOCOL_VERSION = 3;
+export const PROTOCOL_VERSION = 4;
 
 export interface HumanSeat {
   seat: Seat;

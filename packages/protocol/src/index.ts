@@ -64,6 +64,35 @@ export { advanceContext } from './proposal.js';
 export { certifiedEntrySchema } from './proposal.js';
 export { genesisSchema, logEntrySchema } from './schemas.js';
 export { MemorySafetyStore } from './safety-store.js';
+export { createConsensusState } from './consensus.js';
+export { restoreRetiredSafety } from './retired-safety.js';
+export {
+  transferAuthorizationStatementSchema,
+  transferChangeSchema,
+  TRANSFER_DEVICE_DOMAIN,
+  TRANSFER_GAME_KEY_DOMAIN,
+  TRANSFER_BOT_KEY_DOMAIN,
+} from './transfer-readiness.js';
+export type { SeatTransferAuthorizationStatement, TransferReplacement } from './transfer-types.js';
+export {
+  prepareTransferPrivate,
+  importTransferPrivate,
+  verifyTransferPrivateEnvelope,
+  transferPrivateEnvelopeSchema,
+  TRANSFER_PRIVATE_DOMAIN,
+} from './transfer-private.js';
+export type {
+  TransferPrivateEnvelope,
+  TransferPrivateStore,
+  ImportedTransferPrivate,
+} from './transfer-private.js';
+export { transferActivationStatementSchema } from './transfer-readiness.js';
+export {
+  validatePendingTransferMaterial,
+  validateRetiredTransferBinding,
+  validateTransferOwnedMaterial,
+} from './transfer-material.js';
+export type { TransferOwnedMaterial, TransferOwnedSeat } from './transfer-material.js';
 export type { SafetyStore, StoredSafety } from './safety-store.js';
 export { MemoryProtocolJournal, journalSafetyStore } from './journal.js';
 export type { JournalRecord, ProtocolJournal } from './journal.js';

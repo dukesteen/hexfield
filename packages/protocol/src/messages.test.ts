@@ -42,9 +42,58 @@ const entry = {
   sig: signature,
 };
 const certified = { entry, certificate: [signedVote] };
+const transferRef = { seq: 0, hash };
+const replacements = [{ seat: 0, oldPublicKey: key, newPublicKey: key, newHostSeat: 0 }];
+const transferAuthorization = {
+  kind: 'transfer-authorize',
+  statement: {
+    protocol: 'seat-transfer-v1',
+    genesisDigest: key,
+    anchor: transferRef,
+    validUntilSeq: 64,
+    mode: 'live',
+    seat: 0,
+    currentController: { publicKey: key, kind: 'human', activatedAt: transferRef, hostSeat: 0 },
+    recovery: null,
+    nextEpoch: 1,
+    destination: { devicePeer: key, gamePeer: key, transferEncryptionKey: key },
+    replacements,
+  },
+  destinationDeviceSig: signature,
+  destinationGameSig: signature,
+  replacementKeySigs: [],
+  ownerIntent: { signer: 'current-game', sig: signature },
+};
+const transferCancel = {
+  kind: 'transfer-cancel',
+  genesisDigest: key,
+  authorization: transferRef,
+  parent: transferRef,
+};
 
 const messages = [
   { t: 'SUBMIT', cmd: signedCommand },
+  { t: 'MEMBERSHIP_SUBMIT', change: transferAuthorization },
+  { t: 'MEMBERSHIP_SUBMIT', change: transferCancel },
+  {
+    t: 'MEMBERSHIP_SUBMIT',
+    change: {
+      kind: 'transfer-activate',
+      statement: {
+        protocol: 'seat-transfer-activation-v1',
+        genesisDigest: key,
+        authorization: transferRef,
+        parent: transferRef,
+        nextEpoch: 1,
+        destinationDevice: key,
+        destinationGame: key,
+        replacements,
+        checkDigest: hash,
+      },
+      destinationCheck: signature,
+      replacementChecks: [],
+    },
+  },
   {
     t: 'PROPOSAL',
     proposal: {
@@ -102,6 +151,18 @@ describe('Stage 06 protocol messages', () => {
   test('rejects unknown message types, extra fields, and malformed nested payloads', () => {
     const invalid = [
       { t: 'CHAT', text: 'not in stage 06' },
+      { t: 'RECOVERY_SUBMIT', change: transferCancel },
+      { t: 'MEMBERSHIP_SUBMIT', change: { ...transferCancel, extra: true } },
+      {
+        t: 'MEMBERSHIP_SUBMIT',
+        change: {
+          ...transferAuthorization,
+          statement: {
+            ...transferAuthorization.statement,
+            replacements: Array(7).fill(replacements[0]),
+          },
+        },
+      },
       { t: 'PING', n: 1, extra: true },
       { t: 'SYNC_REQ', genesisDigest: key, fromSeq: -1 },
       { t: 'SYNC_REQ', genesisDigest: key, fromSeq: 1.5 },

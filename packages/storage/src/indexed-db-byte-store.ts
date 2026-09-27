@@ -36,6 +36,10 @@ export class IndexedDbByteStore {
       throw new RangeError('maxRecordBytes must be between zero and 16 MiB');
   }
 
+  get maxRecordBytes(): number {
+    return this.#maxRecordBytes;
+  }
+
   async load(id: string): Promise<Uint8Array | null> {
     const key = validateKey(id);
     const database = await this.#database();
@@ -49,28 +53,40 @@ export class IndexedDbByteStore {
       throw error;
     }
     if (value === undefined) return null;
-    return validateStoredBytes(value, this.#maxRecordBytes).slice();
+    try {
+      return validateStoredBytes(value, this.#maxRecordBytes).slice();
+    } finally {
+      if (value instanceof Uint8Array) value.fill(0);
+    }
   }
 
   async putIfAbsent(id: string, bytes: Uint8Array): Promise<boolean> {
     const key = validateKey(id);
     const value = copyBytes(bytes, this.#maxRecordBytes);
-    const database = await this.#database();
-    const transaction = strictWriteTransaction(database, [BYTE_STORE]);
     try {
-      const store = transaction.objectStore(BYTE_STORE);
-      const existing = await store.get(key);
-      if (existing !== undefined) {
+      const database = await this.#database();
+      const transaction = strictWriteTransaction(database, [BYTE_STORE]);
+      try {
+        const store = transaction.objectStore(BYTE_STORE);
+        const existing = await store.get(key);
+        if (existing !== undefined) {
+          await transaction.done;
+          try {
+            validateStoredBytes(existing, this.#maxRecordBytes);
+          } finally {
+            if (existing instanceof Uint8Array) existing.fill(0);
+          }
+          return false;
+        }
+        await store.add(value, key);
         await transaction.done;
-        validateStoredBytes(existing, this.#maxRecordBytes);
-        return false;
+        return true;
+      } catch (error) {
+        await transaction.done.catch(() => undefined);
+        throw error;
       }
-      await store.add(value, key);
-      await transaction.done;
-      return true;
-    } catch (error) {
-      await transaction.done.catch(() => undefined);
-      throw error;
+    } finally {
+      value.fill(0);
     }
   }
 
@@ -82,27 +98,41 @@ export class IndexedDbByteStore {
   ): Promise<boolean> {
     const key = validateKey(id);
     const expectedCopy = copyBytes(expected, this.#maxRecordBytes);
-    const replacementCopy = copyBytes(replacement, this.#maxRecordBytes);
-    const database = await this.#database();
-    const transaction = strictWriteTransaction(database, [BYTE_STORE]);
+    let replacementCopy: Uint8Array;
     try {
-      const store = transaction.objectStore(BYTE_STORE);
-      const existing = await store.get(key);
-      if (existing === undefined) {
-        await transaction.done;
-        return false;
-      }
-      const current = validateStoredBytes(existing, this.#maxRecordBytes);
-      if (!equalBytes(current, expectedCopy)) {
-        await transaction.done;
-        return false;
-      }
-      await store.put(replacementCopy, key);
-      await transaction.done;
-      return true;
+      replacementCopy = copyBytes(replacement, this.#maxRecordBytes);
     } catch (error) {
-      await transaction.done.catch(() => undefined);
+      expectedCopy.fill(0);
       throw error;
+    }
+    try {
+      const database = await this.#database();
+      const transaction = strictWriteTransaction(database, [BYTE_STORE]);
+      let existing: Uint8Array | undefined;
+      try {
+        const store = transaction.objectStore(BYTE_STORE);
+        existing = await store.get(key);
+        if (existing === undefined) {
+          await transaction.done;
+          return false;
+        }
+        const current = validateStoredBytes(existing, this.#maxRecordBytes);
+        if (!equalBytes(current, expectedCopy)) {
+          await transaction.done;
+          return false;
+        }
+        await store.put(replacementCopy, key);
+        await transaction.done;
+        return true;
+      } catch (error) {
+        await transaction.done.catch(() => undefined);
+        throw error;
+      } finally {
+        if (existing instanceof Uint8Array) existing.fill(0);
+      }
+    } finally {
+      expectedCopy.fill(0);
+      replacementCopy.fill(0);
     }
   }
 

@@ -8,6 +8,7 @@ import { expect, test } from 'vitest';
 import { auditCertifiedGame } from './audit.js';
 import type { AuditReport } from './audit-types.js';
 import { genesisDigest } from './genesis.js';
+import { PROTOCOL_VERSION } from './types.js';
 import type { P2PSession, P2PSessionOptions } from './p2p-session.js';
 import type { SessionAuditInput } from './session-audit-types.js';
 import { createTerminalAuditFixture } from './testing/audit-fixture.js';
@@ -28,10 +29,10 @@ async function settle(sessions: readonly P2PSession[], clock: VirtualClock): Pro
   }
 }
 
-const acceptanceTest = process.env.CP2P_BETA_V3_GAME_ARTIFACT ? test : test.skip;
+const acceptanceTest = process.env.CP2P_BETA_GAME_ARTIFACT ? test : test.skip;
 
 acceptanceTest(
-  'one signed v3 default-ten-point game finishes and both peers independently audit it',
+  'one signed current-protocol default-ten-point game finishes and both peers independently audit it',
   async () => {
     const startedAt = performance.now();
     const bot = new RandomBot();
@@ -47,7 +48,7 @@ acceptanceTest(
       yieldTask: () => new Promise<void>((resolve) => setImmediate(resolve)),
       onProgress(step, state) {
         process.stdout.write(
-          `v3 game: command ${step}, turn ${state.turn.number}, result ${!!state.result}\n`,
+          `verified game: command ${step}, turn ${state.turn.number}, result ${!!state.result}\n`,
         );
       },
       chooseCommand(host, pending) {
@@ -133,7 +134,7 @@ acceptanceTest(
 
     if (fixture.genesisEntry.payload.kind !== 'genesis') throw new Error('Missing signed genesis');
     const genesis = fixture.genesisEntry.payload.genesis;
-    expect(genesis.protocolVersion).toBe(3);
+    expect(genesis.protocolVersion).toBe(PROTOCOL_VERSION);
     expect(genesis.security).toBe('verified');
     expect(genesis.config.options.base).toEqual({ mapLayout: 'random' });
     expect(genesis.commitments.onlineStart).toBeDefined();
@@ -171,10 +172,10 @@ acceptanceTest(
       auditReportDigests: reportHashes,
       elapsedMs: Math.round(performance.now() - startedAt),
     };
-    const artifactPath = process.env.CP2P_BETA_V3_GAME_ARTIFACT;
+    const artifactPath = process.env.CP2P_BETA_GAME_ARTIFACT;
     if (artifactPath) await writeFile(artifactPath, `${JSON.stringify(artifact, null, 2)}\n`);
     process.stdout.write(
-      `v3 game complete: ${JSON.stringify({ ...artifact, commands: undefined })}\n`,
+      `verified game complete: ${JSON.stringify({ ...artifact, commands: undefined })}\n`,
     );
   },
   600_000,

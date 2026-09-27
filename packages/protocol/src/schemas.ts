@@ -155,8 +155,7 @@ const payloadSchema = v.variant('kind', [
     ]),
     evidence: v.unknown(),
   }),
-  // Membership is reserved for Stage 10. Its change is deliberately opaque here;
-  // the entry validator must reject it until the membership adapter exists.
+  // Recovery and transfer have strict, versioned verification in log.ts.
   v.strictObject({ kind: v.literal('membership'), change: v.unknown() }),
 ]);
 

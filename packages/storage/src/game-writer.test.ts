@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
-import { acquireGameWriterLease } from './game-writer.js';
+import {
+  acquireActiveGameWriterLease,
+  acquireGameWriterLease,
+  acquireTransferStagingLease,
+} from './game-writer.js';
 
 class TestLockManager implements Pick<LockManager, 'request'> {
   readonly held = new Set<string>();
@@ -92,6 +96,27 @@ afterEach(() => {
 });
 
 describe('browser game writer lease', () => {
+  test('fences active generations while permitting authorization-scoped staging', async () => {
+    const locks = new TestLockManager();
+    const active = await acquireActiveGameWriterLease('game-transfer', { lockManager: locks });
+    if (!active) throw new Error('Expected active lease');
+    expect(await acquireActiveGameWriterLease('game-transfer', { lockManager: locks })).toBeNull();
+    const staging = await acquireTransferStagingLease('game-transfer', 'auth-1', {
+      lockManager: locks,
+    });
+    expect(staging).not.toBeNull();
+    expect(
+      await acquireTransferStagingLease('game-transfer', 'auth-1', { lockManager: locks }),
+    ).toBeNull();
+    expect(
+      await acquireTransferStagingLease('game-transfer', 'auth-2', { lockManager: locks }),
+    ).not.toBeNull();
+    await staging?.close();
+    await active.close();
+    const promoted = await acquireActiveGameWriterLease('game-transfer', { lockManager: locks });
+    expect(promoted).not.toBeNull();
+    await promoted?.close();
+  });
   test.each(['-', '_'])(
     'coordinates base64url game and voter identifiers beginning with %s',
     async (prefix) => {

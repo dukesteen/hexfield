@@ -14,7 +14,9 @@ export default defineConfig({
     environment: 'node',
     // Concurrent curve-proof replicas otherwise compete for CPU and hit their
     // wall-clock deadlines. Preserve the deadlines and bound worker contention.
-    maxWorkers: Math.max(1, Math.min(4, Math.floor(availableParallelism() / 2))),
+    maxWorkers: process.env.CI
+      ? 1
+      : Math.max(1, Math.min(4, Math.floor(availableParallelism() / 2))),
     exclude: ['**/node_modules/**', '**/dist/**', '**/tests/**'],
     coverage: {
       provider: 'v8',

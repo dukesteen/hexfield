@@ -1,5 +1,6 @@
 import { canonicalDecode, canonicalEncode } from '@cp2p/codec';
-import { createBaseEngine } from '@cp2p/engine';
+import { createBaseEngine, failure, success } from '@cp2p/engine';
+import type { Result } from '@cp2p/engine';
 import {
   genesisDigest,
   genesisSchema,
@@ -188,6 +189,38 @@ function validateStoredRecord(value: unknown, expectedGameId?: string): SavedOnl
     bindings: checkedBindings.value.bindings,
   };
   return { gameId, genesisDigest: digest, invite, agreement, result };
+}
+
+/** Validates and detaches a public online start record without consulting device storage. */
+export function validateOnlineGameStartRecord(
+  value: unknown,
+  expectedGameId?: string,
+): Result<SavedOnlineGameRecord> {
+  let bytes: Uint8Array | undefined;
+  let detached: unknown;
+  let retained = false;
+  try {
+    bytes = encodeBounded(value);
+    detached = decodeCanonical(bytes);
+    const record = validateStoredRecord(detached, expectedGameId);
+    retained = true;
+    return success(record);
+  } catch {
+    return failure('online-game-start', 'Online game start record is invalid');
+  } finally {
+    bytes?.fill(0);
+    if (!retained) wipeByteArrays(detached);
+  }
+}
+
+function wipeByteArrays(value: unknown, seen = new Set<object>()): void {
+  if (value instanceof Uint8Array) {
+    value.fill(0);
+    return;
+  }
+  if (typeof value !== 'object' || value === null || seen.has(value)) return;
+  seen.add(value);
+  for (const key of Reflect.ownKeys(value)) wipeByteArrays(Reflect.get(value, key), seen);
 }
 
 function isObjectRecord(value: unknown): value is Record<string, unknown> {

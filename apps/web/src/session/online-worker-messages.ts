@@ -83,6 +83,8 @@ export interface OnlineWorkerResumeInfo {
   readonly genesisDigest: string;
   readonly agreement: LobbyFreezeAgreement;
   readonly genesis: Genesis;
+  /** Active human device routes derived from this device's certified journal. */
+  readonly peers: readonly string[];
 }
 
 export interface OnlineWorkerInitialization {

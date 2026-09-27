@@ -5,6 +5,7 @@ import type { CryptoContext } from './crypto-context.js';
 import type { PeerId } from './transport.js';
 import type { SeatAuthorities } from './authority-types.js';
 import type { RecoveryState } from './recovery-types.js';
+import type { TransferState } from './transfer-types.js';
 import type { TimerAnchor } from './turn-timeout.js';
 import type {
   ExcludeProposerControl,
@@ -24,6 +25,8 @@ export interface LogContext {
   /** Replayed controller authority. Legacy epoch-zero fixtures may omit it. */
   authority?: SeatAuthorities;
   recovery?: RecoveryState;
+  /** Replayed device routes and transfer lineage; never supplied by a peer. */
+  transfer?: TransferState;
   /** Certified pending intervals, independent of each peer's observed elapsed time. */
   timers?: readonly TimerAnchor[];
 }
