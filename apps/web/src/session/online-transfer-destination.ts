@@ -23,6 +23,7 @@ import type {
   TransferPrivateEnvelope,
 } from '@cp2p/protocol';
 import { IndexedDbByteStore, IndexedDbProtocolJournal, TransferImportStore } from '@cp2p/storage';
+import type { VaultOwnerLease } from '@cp2p/storage';
 import * as v from 'valibot';
 import type { DisposableOnlineIdentity } from './online-credentials.js';
 import { saveOnlineGameRecord } from './online-game-records.js';
@@ -106,6 +107,7 @@ export interface OnlineTransferDestinationOptions {
   readonly expected: ExpectedOnlineTransferGame;
   readonly identity: DisposableOnlineIdentity;
   readonly store: IndexedDbByteStore;
+  readonly vault?: VaultOwnerLease;
   readonly bootstrapBytes?: Uint8Array;
   readonly importStore?: TransferImportStore;
   readonly importedArchiveId?: string;
@@ -308,6 +310,13 @@ export class OnlineTransferDestination {
     this.#phase = locator.stageKey ? 'imported' : locator.scope ? 'offered' : 'prepared';
   }
 
+  #journal(gameId: string, keyBinding?: { recordKey: string; bytes: Uint8Array }) {
+    return new IndexedDbProtocolJournal(gameId, {
+      ...(keyBinding ? { keyBinding } : {}),
+      ...(this.#options.vault ? { vault: this.#options.vault } : {}),
+    });
+  }
+
   static async create(
     options: OnlineTransferDestinationOptions,
   ): Promise<OnlineTransferDestination> {
@@ -487,11 +496,19 @@ export class OnlineTransferDestination {
           record: final.record,
           engine: createBaseEngine(),
           devicePeer: this.#options.identity.peerId,
+          ...(this.#options.vault
+            ? {
+                createJournal: (
+                  gameId: string,
+                  keyBinding: { recordKey: string; bytes: Uint8Array },
+                ) => this.#journal(gameId, keyBinding),
+              }
+            : {}),
         });
         const expectedGame = this.#locator.scope?.replacements[0]?.seat;
         if (active.humanSeat !== expectedGame)
           throw new TypeError('Promoted destination seat differs from reserved transfer');
-        const journal = new IndexedDbProtocolJournal(this.#options.expected.gameId);
+        const journal = this.#journal(this.#options.expected.gameId);
         try {
           const saved = await journal.load();
           if (!saved?.entries.some((item) => sameRef(transferEntryRef(item.entry), entry)))
@@ -1132,10 +1149,18 @@ export class OnlineTransferDestination {
             record: next.record,
             engine: createBaseEngine(),
             devicePeer: this.#options.identity.peerId,
+            ...(this.#options.vault
+              ? {
+                  createJournal: (
+                    gameId: string,
+                    keyBinding: { recordKey: string; bytes: Uint8Array },
+                  ) => this.#journal(gameId, keyBinding),
+                }
+              : {}),
           });
           if (active.gamePeer !== change.output.statement.destinationGame)
             throw new TypeError('Promoted journal binding differs from certified destination');
-          const journal = new IndexedDbProtocolJournal(this.#options.expected.gameId);
+          const journal = this.#journal(this.#options.expected.gameId);
           try {
             const saved = await journal.load();
             if (
@@ -1168,8 +1193,9 @@ export class OnlineTransferDestination {
           if (oldBinding) {
             if (oldBinding.length > 16 * 1024)
               throw new TypeError('Existing game binding is oversized');
-            const oldJournal = new IndexedDbProtocolJournal(this.#options.expected.gameId, {
-              keyBinding: { recordKey: bindingKey, bytes: oldBinding },
+            const oldJournal = this.#journal(this.#options.expected.gameId, {
+              recordKey: bindingKey,
+              bytes: oldBinding,
             });
             try {
               const saved = await oldJournal.load();
@@ -1222,11 +1248,9 @@ export class OnlineTransferDestination {
               await oldJournal.close();
             }
           }
-          const journal = new IndexedDbProtocolJournal(this.#options.expected.gameId, {
-            keyBinding: {
-              recordKey: bindingKey,
-              bytes: stage.bindingBytes,
-            },
+          const journal = this.#journal(this.#options.expected.gameId, {
+            recordKey: bindingKey,
+            bytes: stage.bindingBytes,
           });
           try {
             if (

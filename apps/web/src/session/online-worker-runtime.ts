@@ -2,7 +2,8 @@ import { canonicalDecode, canonicalEncode, hashValue, toHex } from '@cp2p/codec'
 import { createBaseEngine, success } from '@cp2p/engine';
 import { transferChangeSchema, verifyLobbyFreezeAgreement } from '@cp2p/protocol';
 import type { ProtocolClock, SessionUpdate, Unsubscribe } from '@cp2p/protocol';
-import { IndexedDbByteStore } from '@cp2p/storage';
+import { acquireVaultOwner, IndexedDbByteStore, IndexedDbProtocolJournal } from '@cp2p/storage';
+import type { VaultKeyHandoff, VaultOwnerLease } from '@cp2p/storage';
 import * as v from 'valibot';
 import { loadOnlineIdentity } from './online-credentials.js';
 import type { DisposableOnlineIdentity } from './online-credentials.js';
@@ -85,7 +86,9 @@ function errorResult(error: unknown): {
 
 /** Owns one room's certified online ceremony and session, never exposing its keys to main. */
 export class OnlineWorkerRuntime {
-  private readonly store: WorkerStore;
+  private store: WorkerStore;
+  private readonly injectedStore: boolean;
+  private vaultOwner: VaultOwnerLease | null = null;
   private readonly clock: ProtocolClock;
   private readonly emit: (event: OnlineWorkerEvent) => void;
   private generation: string | null = null;
@@ -116,6 +119,7 @@ export class OnlineWorkerRuntime {
   private closing: Promise<void> | null = null;
 
   constructor(options: OnlineWorkerRuntimeOptions) {
+    this.injectedStore = options.store !== undefined;
     this.store = options.store ?? new IndexedDbByteStore();
     this.clock = options.clock ?? workerClock();
     this.emit = options.emit;
@@ -173,6 +177,7 @@ export class OnlineWorkerRuntime {
     if (heavy) this.pendingHeavy = true;
     else this.pendingBytes += bytes;
     const lifecycle = [
+      'unlockVault',
       'initialize',
       'initializeTransfer',
       'prepareTransferOffer',
@@ -232,6 +237,9 @@ export class OnlineWorkerRuntime {
 
   private async dispatch(body: OnlineWorkerRequestBody): Promise<unknown> {
     switch (body.kind) {
+      case 'unlockVault':
+        await this.ensureVaultOwner(body.handoff);
+        return undefined;
       case 'initializeTransfer':
         return this.initializeTransfer(body);
       case 'transferSnapshot':
@@ -419,6 +427,7 @@ export class OnlineWorkerRuntime {
   ): Promise<OnlineWorkerReplyByKind['initialize']> {
     if (this.identity || this.transport || this.startup)
       throw new Error('Worker already initialized');
+    await this.ensureVaultOwner();
     const identity = await loadOnlineIdentity(this.store);
     if (this.closed) {
       identity.dispose();
@@ -436,11 +445,24 @@ export class OnlineWorkerRuntime {
         resume = await loadOnlineGameRecord(this.store, body.gameId);
         if (!resume) throw new Error('Saved online game is missing');
         invite = validateOnlineInvite(resume.invite);
+        const vault = this.vaultOwner;
         const active = await loadActiveOnlineResume({
           store: this.store,
           record: resume,
           devicePeer: body.self,
           engine: createBaseEngine(),
+          ...(vault
+            ? {
+                createJournal: (
+                  gameId: string,
+                  keyBinding: { recordKey: string; bytes: Uint8Array },
+                ) =>
+                  new IndexedDbProtocolJournal(gameId, {
+                    keyBinding,
+                    vault,
+                  }),
+              }
+            : {}),
         });
         resumePeers = active.peers;
       } else invite = validateOnlineInvite(body.invite);
@@ -474,6 +496,7 @@ export class OnlineWorkerRuntime {
       throw new Error('Worker already initialized');
     if (!(this.store instanceof IndexedDbByteStore))
       throw new Error('Transfer promotion requires the atomic IndexedDB store');
+    await this.ensureVaultOwner();
     const identity = await loadOnlineIdentity(this.store);
     let destination: OnlineTransferDestination | undefined;
     try {
@@ -485,6 +508,7 @@ export class OnlineWorkerRuntime {
         expected: body.expected,
         identity,
         store: this.store,
+        ...(this.vaultOwner ? { vault: this.vaultOwner } : {}),
         signal: this.destinationAbort.signal,
         ...(body.bootstrapBytes === undefined ? {} : { bootstrapBytes: body.bootstrapBytes }),
         ...(body.importedArchiveId === undefined
@@ -508,6 +532,31 @@ export class OnlineWorkerRuntime {
   private requireDestination(): OnlineTransferDestination {
     if (!this.destination || this.closed) throw new Error('Transfer destination is not active');
     return this.destination;
+  }
+
+  private async ensureVaultOwner(handoff?: VaultKeyHandoff): Promise<void> {
+    if (this.injectedStore) {
+      if (handoff) throw new Error('Injected worker storage cannot accept a vault handoff');
+      return;
+    }
+    if (this.vaultOwner) {
+      if (
+        handoff &&
+        (handoff.generation !== this.vaultOwner.generation ||
+          handoff.vaultId !== this.vaultOwner.handoff()?.vaultId)
+      )
+        throw new Error('Worker vault handoff differs from its pinned owner');
+      return;
+    }
+    const owner = await acquireVaultOwner(handoff ? { handoff } : {});
+    if (this.closed) {
+      await owner.close();
+      throw new Error('Worker closed during vault acquisition');
+    }
+    const oldStore = this.store;
+    this.store = new IndexedDbByteStore({ vault: owner });
+    this.vaultOwner = owner;
+    await oldStore.close();
   }
 
   private async transferResult<T>(operation: Promise<T>): Promise<T> {
@@ -565,11 +614,26 @@ export class OnlineWorkerRuntime {
       | { approved: Extract<OnlineWorkerRequestBody, { kind: 'startCeremony' }>['agreement'] },
   ): void {
     if (!this.identity || !this.invite || !this.transport) throw new Error('Worker is not ready');
+    const vault = this.vaultOwner;
     const startup = new OnlineStartup({
       invite: this.invite,
       identity: this.identity,
       transport: this.transport,
       store: this.store,
+      ...(vault
+        ? {
+            gameRuntime: {
+              createJournal: (
+                gameId: string,
+                keyBinding: { recordKey: string; bytes: Uint8Array },
+              ) =>
+                new IndexedDbProtocolJournal(gameId, {
+                  keyBinding,
+                  vault,
+                }),
+            },
+          }
+        : {}),
       clock: this.clock,
       engine: createBaseEngine(),
       onGameFatal: (error) => this.fatal(error, 'game-writer-lost'),
@@ -721,7 +785,12 @@ export class OnlineWorkerRuntime {
         } finally {
           this.transport?.close();
           this.identity?.dispose();
-          await this.store.close();
+          try {
+            await this.store.close();
+          } finally {
+            await this.vaultOwner?.close();
+            this.vaultOwner = null;
+          }
         }
       }
     })();

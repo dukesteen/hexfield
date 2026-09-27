@@ -5,6 +5,7 @@ export type { CeremonyLockProvider, IndexedDbByteStoreOptions } from './indexed-
 export {
   acquireVaultOwner,
   migrateLocalVault,
+  readLocalVaultStatus,
   VaultError,
   VaultOwnerLease,
 } from './local-vault.js';

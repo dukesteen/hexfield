@@ -15,25 +15,42 @@ const mocks = vi.hoisted(() => ({
     >(),
   open: vi.fn<() => Promise<{ close: () => Promise<void> }>>(),
   constructWorker: vi.fn<() => void>(),
+  storeOptions: vi.fn<(options: { vault: object }) => void>(),
+  workerOptions: vi.fn<(options: { vaultHandoff: object }) => void>(),
   closeStore: vi.fn<() => Promise<void>>(),
   disposeIdentity: vi.fn<() => void>(),
   closeLease: vi.fn<() => Promise<void>>(),
   closeBrowser: vi.fn<() => Promise<void>>(),
+  releaseVault: vi.fn<() => Promise<void>>(),
+  acquireVault: vi.fn<(close: () => Promise<void>) => Promise<{ handoff: () => object }>>(),
+  vaultHandoff: vi.fn<() => object>(),
+  vaultScope: { handoff: vi.fn<() => object>() },
+  vault: {} as object,
   shutdown: vi.fn<() => Promise<void>>(),
   fail: vi.fn<(error: Error) => void>(),
 }));
 
 vi.mock('./network.js', () => ({ loadOnlineConnectionSettings: mocks.network }));
 vi.mock('../session/online-credentials.js', () => ({ loadOrCreateOnlineIdentity: mocks.identity }));
+vi.mock('../session/online-vault-controller.js', () => ({
+  getOnlineVaultController: () => ({
+    acquireScope: mocks.acquireVault,
+    releaseScope: mocks.releaseVault,
+  }),
+}));
 vi.mock('@cp2p/storage', () => ({
   IndexedDbByteStore: class {
+    constructor(options: { vault: object }) {
+      mocks.storeOptions(options);
+    }
     close = mocks.closeStore;
   },
   acquireGameWriterLease: mocks.lease,
 }));
 vi.mock('../session/online-worker-client.js', () => ({
   OnlineWorkerClient: class {
-    constructor() {
+    constructor(options: { vaultHandoff: object }) {
+      mocks.workerOptions(options);
       mocks.constructWorker();
     }
     shutdown = mocks.shutdown;
@@ -62,6 +79,9 @@ beforeEach(() => {
   vi.resetAllMocks();
   mocks.network.mockResolvedValue({ iceServers: [], iceTransportPolicy: 'all' });
   mocks.identity.mockResolvedValue({ peerId: 'destination', dispose: mocks.disposeIdentity });
+  mocks.vaultHandoff.mockReturnValue(mocks.vault);
+  mocks.vaultScope.handoff.mockReturnValue(mocks.vault);
+  mocks.acquireVault.mockImplementation(async () => mocks.vaultScope);
   mocks.lease.mockResolvedValue({ close: mocks.closeLease });
   mocks.open.mockResolvedValue({ close: mocks.closeBrowser });
   for (const close of [mocks.closeStore, mocks.closeLease, mocks.closeBrowser, mocks.shutdown])
@@ -72,6 +92,7 @@ test('identity failure closes the store before any worker is created', async () 
   mocks.identity.mockRejectedValue(new Error('identity unavailable'));
   await expect(openDestinationTransfer(invite)).rejects.toThrow('identity unavailable');
   expect(mocks.closeStore).toHaveBeenCalledOnce();
+  expect(mocks.releaseVault).toHaveBeenCalledOnce();
   expect(mocks.constructWorker).not.toHaveBeenCalled();
 });
 
@@ -80,8 +101,47 @@ test('writer contention releases identity and store without creating an importer
   await expect(openDestinationTransfer(invite)).rejects.toThrow('another tab');
   expect(mocks.disposeIdentity).toHaveBeenCalledOnce();
   expect(mocks.closeStore).toHaveBeenCalledOnce();
+  expect(mocks.releaseVault).toHaveBeenCalledOnce();
   expect(mocks.constructWorker).not.toHaveBeenCalled();
   expect(mocks.open).not.toHaveBeenCalled();
+});
+
+test('vault lock during identity loading disposes the late identity and prevents transfer startup', async () => {
+  let identityReady!: (identity: { peerId: string; dispose: () => void }) => void;
+  mocks.identity.mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        identityReady = resolve;
+      }),
+  );
+  let closeScope!: () => Promise<void>;
+  mocks.acquireVault.mockImplementation(async (close) => {
+    closeScope = close;
+    return { handoff: mocks.vaultHandoff };
+  });
+
+  const opening = openDestinationTransfer(invite);
+  await vi.waitFor(() => expect(identityReady).toBeTypeOf('function'));
+  await closeScope();
+  identityReady({ peerId: 'destination', dispose: mocks.disposeIdentity });
+
+  await expect(opening).rejects.toThrow('Transfer storage was closed');
+  expect(mocks.disposeIdentity).toHaveBeenCalledOnce();
+  expect(mocks.lease).not.toHaveBeenCalled();
+  expect(mocks.constructWorker).not.toHaveBeenCalled();
+  expect(mocks.closeStore).toHaveBeenCalledOnce();
+  expect(mocks.releaseVault).toHaveBeenCalledOnce();
+});
+
+test('opens the imported checkpoint transfer with its immutable archive identifier', async () => {
+  const archiveId = 'e'.repeat(64);
+  const handle = await openDestinationTransfer(invite, archiveId);
+  expect(mocks.storeOptions).toHaveBeenCalledWith({ vault: mocks.vaultScope });
+  expect(mocks.workerOptions).toHaveBeenCalledWith({ vaultHandoff: mocks.vault });
+  expect(mocks.open).toHaveBeenCalledWith(
+    expect.objectContaining({ importedArchiveId: archiveId }),
+  );
+  await handle.close();
 });
 
 test('worker constructor failure releases the acquired lease and identity', async () => {

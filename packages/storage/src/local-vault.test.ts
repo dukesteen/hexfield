@@ -11,7 +11,12 @@ import {
 import { openDB } from 'idb';
 import { afterEach, expect, test, vi } from 'vitest';
 import { IndexedDbByteStore } from './indexed-db-byte-store.js';
-import { acquireVaultOwner, migrateLocalVault, VaultRecordAccess } from './local-vault.js';
+import {
+  acquireVaultOwner,
+  migrateLocalVault,
+  readLocalVaultStatus,
+  VaultRecordAccess,
+} from './local-vault.js';
 
 const identityKey = 'online-credentials/device-identity/v1';
 
@@ -86,6 +91,25 @@ class TestLocks implements Pick<LockManager, 'request'> {
   }
 }
 
+class WaitingLocks implements Pick<LockManager, 'request'> {
+  request<T>(name: string, callback: LockGrantedCallback<T>): Promise<T>;
+  request<T>(name: string, options: LockOptions, callback: LockGrantedCallback<T>): Promise<T>;
+  request<T>(
+    _name: string,
+    optionsOrCallback: LockOptions | LockGrantedCallback<T>,
+    _callback?: LockGrantedCallback<T>,
+  ): Promise<T> {
+    const options = typeof optionsOrCallback === 'function' ? {} : optionsOrCallback;
+    return new Promise<T>((_resolve, reject) => {
+      options.signal?.addEventListener(
+        'abort',
+        () => reject(new DOMException('Vault lock request aborted', 'AbortError')),
+        { once: true },
+      );
+    });
+  }
+}
+
 function installFactory(): void {
   vi.stubGlobal('indexedDB', new IDBFactory());
   for (const [name, value] of Object.entries({
@@ -99,6 +123,19 @@ function installFactory(): void {
   }))
     vi.stubGlobal(name, value);
 }
+
+test('a waiting exclusive migration can be cancelled without touching stored records', async () => {
+  installFactory();
+  const abort = new AbortController();
+  const migration = migrateLocalVault({
+    newPassphrase: 'cancelled migration passphrase',
+    lockManager: new WaitingLocks(),
+    signal: abort.signal,
+  });
+  abort.abort();
+  await expect(migration).rejects.toMatchObject({ name: 'AbortError' });
+  expect(await readLocalVaultStatus()).toEqual({ mode: 'clear', generation: 0 });
+});
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -117,7 +154,9 @@ test('enables the local vault without plaintext fallback, authenticates records,
   const locks = new TestLocks();
   const old = await seed();
   await old.close();
+  expect(await readLocalVaultStatus()).toEqual({ mode: 'clear', generation: 0 });
   await migrateLocalVault({ newPassphrase: 'first passphrase', lockManager: locks });
+  expect(await readLocalVaultStatus()).toEqual({ mode: 'locked', generation: 1 });
   const database = await openDB('cp2p');
   const raw = await database.get('bytes', identityKey);
   expect(raw).toBeInstanceOf(Uint8Array);
@@ -171,6 +210,7 @@ test('enables the local vault without plaintext fallback, authenticates records,
   await rotatedStore.close();
   await rotated.close();
   await migrateLocalVault({ oldPassphrase: 'second passphrase', lockManager: locks });
+  expect(await readLocalVaultStatus()).toEqual({ mode: 'clear', generation: 3 });
   const clear = new IndexedDbByteStore();
   expect(await clear.load('escrow-accepted/ceremony/0/1')).toEqual(Uint8Array.of(9));
   await clear.close();

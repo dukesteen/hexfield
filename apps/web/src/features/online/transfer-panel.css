@@ -70,7 +70,8 @@
 }
 
 .online-transfer-explanation,
-.online-transfer-warning {
+.online-transfer-warning,
+.online-transfer-checkpoint-hint {
   color: var(--muted);
 }
 

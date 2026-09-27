@@ -1,9 +1,58 @@
 import { QueryClient } from '@tanstack/react-query';
-import { expect, test } from 'vitest';
-import { loadSavedGame } from './hooks';
+import {
+  IDBCursor,
+  IDBDatabase,
+  IDBFactory,
+  IDBIndex,
+  IDBKeyRange,
+  IDBObjectStore,
+  IDBRequest,
+  IDBTransaction,
+} from 'fake-indexeddb';
+import { expect, test, vi } from 'vitest';
+import { getOnlineVaultController } from '../session/online-vault-controller.js';
+import { getWebRepositories, loadSavedGame } from './hooks';
 import { queryKeys } from './keys';
 import { LocalSavedGameRepository, SaveConflictError } from './repositories/saved-games';
 import { MemoryStorage } from './repositories/storage';
+
+test('browser settings reopen a vault-bound store after the owner closes', async () => {
+  vi.stubGlobal('indexedDB', new IDBFactory());
+  for (const [name, value] of Object.entries({
+    IDBCursor,
+    IDBDatabase,
+    IDBIndex,
+    IDBKeyRange,
+    IDBObjectStore,
+    IDBRequest,
+    IDBTransaction,
+  }))
+    vi.stubGlobal(name, value);
+  vi.stubGlobal('navigator', {
+    locks: {
+      request: async (
+        name: string,
+        options: LockOptions,
+        callback: (lock: { name: string; mode: LockMode }) => Promise<unknown>,
+      ) => callback({ name, mode: options.mode ?? 'exclusive' }),
+    },
+  });
+  vi.stubGlobal('window', {
+    localStorage: new MemoryStorage(),
+    addEventListener: () => undefined,
+    removeEventListener: () => undefined,
+  });
+  try {
+    const settings = getWebRepositories().settings;
+    expect((await settings.get()).theme).toBe('system');
+    expect((await settings.update({ theme: 'dark' })).theme).toBe('dark');
+    await getOnlineVaultController().lock();
+    expect((await settings.get()).theme).toBe('dark');
+  } finally {
+    await getOnlineVaultController().dispose();
+    vi.unstubAllGlobals();
+  }
+});
 
 test('route loads cannot replace a newer cached save with an older persisted revision', async () => {
   const storage = new MemoryStorage();

@@ -85,6 +85,15 @@
   "fullSavePrivateEncrypted": "Encrypted private material is included",
   "fullSavePublicOnly": "Public history and voting safety only",
   "fullSaveOpenTitle": "Imported game snapshot",
+  "importTransferTitle": "Request this seat on this device",
+  "importTransferDescription": "This saved file provides a history checkpoint only. A current player must send a signed transfer invitation and approve the move; this file cannot give this device control.",
+  "importTransferInviteLabel": "Current player's signed transfer invitation URL",
+  "importTransferContinue": "Continue with this invitation",
+  "importTransferInvalidInvite": "Enter a valid signed seat transfer invitation URL.",
+  "importTransferWrongGame": "This invitation is for another game. Open the invitation for this saved game.",
+  "importTransferWrongSeat": "This invitation names a seat that is not in this saved game.",
+  "importTransferCheckpointHint": "The current player still needs to approve the move. The saved file is checked against the live certified history before this device offers keys.",
+  "importTransferCheckpointInvalid": "This saved checkpoint does not match the live game and seat. No transfer offer was made.",
   "fullSaveVerifying": "Checking imported save…",
   "fullSaveOpenFailed": "This imported save could not be verified or opened.",
   "fullSavePausedTitle": "Paused, read-only snapshot",
@@ -420,5 +429,8 @@
   "onlineHistoryCancelDelete": "Keep game",
   "onlineHistoryDeleteTitle": "Remove this saved game?",
   "onlineHistoryDeleteWarning": "This removes the game from this device. You will not be able to resume it here. Other players and exported replays are unaffected.",
-  "onlineHistoryDeleteBusy": "This game is open in another tab. Close it before removing the saved copy."
+  "onlineHistoryDeleteBusy": "This game is open in another tab. Close it before removing the saved copy.",
+  "onlineGameVoidTitle": "Game void · no winner",
+  "onlineGameVoidBody": "The remaining players agreed that recovery could not complete. This game has ended without a winner.",
+  "onlineGameVoidHistory": "You can inspect the board or leave. The saved history remains available, and this game does not count towards your statistics."
 }

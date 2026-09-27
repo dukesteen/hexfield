@@ -24,6 +24,7 @@ import type {
 } from '@cp2p/protocol';
 import { acquireGameWriterLease, IndexedDbByteStore } from '@cp2p/storage';
 import type { GameWriterLease } from '@cp2p/storage';
+import type { VaultOwnerLease } from '@cp2p/storage';
 import { loadOnlineIdentity, loadOrCreateOnlineIdentity } from './online-credentials.js';
 import type { DisposableOnlineIdentity } from './online-credentials.js';
 import { createRoomId, validateOnlineInvite } from './online-invite.js';
@@ -48,6 +49,8 @@ import {
 import { OnlineChat } from './online-chat.js';
 import type { ChatContent, ChatSnapshot } from './online-chat.js';
 import { planPregameRoster } from './online-room-roster.js';
+import { getOnlineVaultController } from './online-vault-controller.js';
+import type { OnlineVaultController } from './online-vault-controller.js';
 
 export type OpenOnlineRoom =
   | {
@@ -97,6 +100,11 @@ const idleManual: ManualSnapshot = {
 
 function humanChatPeers(state: LobbyState): PeerId[] {
   return state.seats.flatMap((seat) => (seat.kind === 'human' ? [seat.peer] : []));
+}
+
+function requiredVault(value: VaultOwnerLease | null): VaultOwnerLease {
+  if (!value) throw new Error('Online vault owner is unavailable');
+  return value;
 }
 
 export interface OnlineRoomRuntime {
@@ -177,6 +185,8 @@ export class OnlineRoom {
     controller: LobbyController | null,
     resume: OnlineWorkerResumeInfo | null,
     private readonly ownedStore: IndexedDbByteStore | null,
+    private readonly vaultController: OnlineVaultController | null,
+    private readonly vaultScope: VaultOwnerLease | null,
     private readonly store: EscrowCeremonyStore,
     private readonly clock: ProtocolClock,
     private readonly manualRtcFactory: () => RTCPeerConnection,
@@ -270,26 +280,70 @@ export class OnlineRoom {
   }
 
   static async open(request: OpenOnlineRoom, runtime: OnlineRoomRuntime = {}): Promise<OnlineRoom> {
-    const ownedStore = runtime.store ? null : new IndexedDbByteStore();
-    const store = runtime.store ?? ownedStore;
-    if (!store) throw new Error('Online storage is unavailable');
+    let room: OnlineRoom | null = null;
+    let scopeCancelled = false;
+    let settleOpen!: () => void;
+    const openSettled = new Promise<void>((resolve) => {
+      settleOpen = resolve;
+    });
+    const vaultController = runtime.store ? null : getOnlineVaultController();
+    let vaultScope: VaultOwnerLease | null = null;
+    let ownedStore: IndexedDbByteStore | null = null;
+    let store: EscrowCeremonyStore | null = runtime.store ?? null;
     let identity: DisposableOnlineIdentity | null = null;
     let lease: GameWriterLease | null = null;
     let signaling: ServerSignalingAdapter | null = null;
     let relay: MeshRelaySignalingAdapter | null = null;
     let transport: WebRtcTransport | null = null;
     let controller: LobbyController | null = null;
-    let room: OnlineRoom | null = null;
     let worker: { client: OnlineWorkerClient; initialization: OnlineWorkerInitialization } | null =
       null;
     let workerClient: OnlineWorkerClient | null = null;
-    const createWorkerClient = () =>
-      new OnlineWorkerClient(runtime.workerFactory ? { worker: runtime.workerFactory() } : {});
+    const checkOpen = () => {
+      if (scopeCancelled) throw new Error('Online room closed while opening');
+      vaultScope?.assertActive();
+    };
+    const createWorkerClient = () => {
+      checkOpen();
+      const handoff = vaultScope?.handoff();
+      return new OnlineWorkerClient({
+        ...(runtime.workerFactory ? { worker: runtime.workerFactory() } : {}),
+        ...(handoff ? { vaultHandoff: handoff } : {}),
+      });
+    };
     try {
+      vaultScope = vaultController
+        ? await vaultController.acquireScope(async () => {
+            scopeCancelled = true;
+            if (room) {
+              await room.close();
+              return;
+            }
+            workerClient?.fail(new Error('Local vault locked during room opening'));
+            controller?.dispose();
+            if (transport) transport.dispose();
+            else if (relay) relay.close();
+            else signaling?.close();
+            identity?.dispose();
+            try {
+              await lease?.close();
+            } finally {
+              await ownedStore?.close();
+            }
+            await openSettled;
+          })
+        : null;
+      ownedStore = runtime.store
+        ? null
+        : new IndexedDbByteStore({ vault: requiredVault(vaultScope) });
+      store = runtime.store ?? ownedStore;
+      if (!store) throw new Error('Online storage is unavailable');
+      checkOpen();
       identity =
         request.kind === 'resume'
           ? await loadOnlineIdentity(store)
           : await loadOrCreateOnlineIdentity(store);
+      checkOpen();
       if (request.kind === 'resume') {
         workerClient = createWorkerClient();
         const initialized = await workerClient.request({
@@ -298,6 +352,7 @@ export class OnlineRoom {
           self: identity.peerId,
           gameId: request.gameId,
         });
+        checkOpen();
         if (!initialized.ok) {
           if (
             initialized.error.code === 'unsupported-version' &&
@@ -334,6 +389,7 @@ export class OnlineRoom {
       const scope = `lobby:${invite.roomId}`;
       const leaseId = `lobby-${toHex(hashValue({ server: invite.serverUrl, room: invite.roomId }))}`;
       lease = await (runtime.acquireLease ?? acquireGameWriterLease)(leaseId, identity.peerId);
+      checkOpen();
       if (!lease) throw new Error('This lobby is already open in another tab');
       const clock = runtime.clock ?? createBrowserClock();
       let status: SignalingStatus = { state: 'connecting' };
@@ -395,6 +451,8 @@ export class OnlineRoom {
         controller,
         resume,
         ownedStore,
+        vaultController,
+        vaultScope,
         store,
         clock,
         runtime.manualRtcFactory ??
@@ -407,10 +465,13 @@ export class OnlineRoom {
         worker,
       );
       room.update({ signaling: status });
+      checkOpen();
       if (request.kind === 'manual-join') {
         const answered = await room.answerManualOffer(request.offerCode);
+        checkOpen();
         if (!answered.ok) throw new Error(answered.error.message);
       } else if (signaling || request.kind === 'host') transport.start();
+      checkOpen();
       return room;
     } catch (error) {
       if (room) {
@@ -430,11 +491,17 @@ export class OnlineRoom {
           try {
             await lease?.close();
           } finally {
-            await ownedStore?.close();
+            try {
+              await ownedStore?.close();
+            } finally {
+              if (vaultScope) await vaultController?.releaseScope(vaultScope);
+            }
           }
         }
       }
       throw error;
+    } finally {
+      settleOpen();
     }
   }
 
@@ -834,7 +901,11 @@ export class OnlineRoom {
       try {
         await this.lease.close();
       } finally {
-        await this.ownedStore?.close();
+        try {
+          await this.ownedStore?.close();
+        } finally {
+          if (this.vaultScope) await this.vaultController?.releaseScope(this.vaultScope);
+        }
       }
     }
   }

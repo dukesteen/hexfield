@@ -1,7 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { IndexedDbByteStore } from '@cp2p/storage';
+import { getOnlineVaultController } from '../session/online-vault-controller.js';
 import { listOnlineGameRecords } from '../session/online-game-records.js';
-import { deriveOnlineGameStats, loadOnlineGameOutcome } from '../session/online-game-history.js';
+import {
+  deriveOnlineGameStats,
+  loadOnlineGameOutcome,
+  loadOnlineGameVoid,
+} from '../session/online-game-history.js';
 import { isOnlineGameAbandoned, loadOnlineGameActivity } from '../session/online-game-activity.js';
 import { deleteStoredGame, exportStoredGameReplay } from '../session/online-saved-game-client.js';
 import { importPublicReplay } from '../session/online-public-archive-client.js';
@@ -13,36 +18,81 @@ export function useResumableGames() {
     queryKey: queryKeys.onlineGames(),
     staleTime: 0,
     retry: false,
-    queryFn: async () => {
-      const store = new IndexedDbByteStore();
-      try {
-        const listed = await listOnlineGameRecords(store);
+    queryFn: async ({ signal }) => {
+      const vault = getOnlineVaultController();
+      let active: Promise<unknown> | null = null;
+      let cancelled = signal.aborted;
+      const onAbort = () => {
+        cancelled = true;
+      };
+      const scope = await vault.acquireScope(async () => {
+        cancelled = true;
+        await active?.catch(() => undefined);
+      });
+      if (cancelled) {
+        await vault.releaseScope(scope);
+        throw new DOMException('Online history query was cancelled', 'AbortError');
+      }
+      signal.addEventListener('abort', onAbort, { once: true });
+      let store: IndexedDbByteStore | null = null;
+      const assertActive = () => {
+        if (cancelled) throw new DOMException('Online history query was cancelled', 'AbortError');
+      };
+      const run = async () => {
+        assertActive();
+        const currentStore = store;
+        if (!currentStore) throw new Error('Online history store is unavailable');
+        const listed = await listOnlineGameRecords(currentStore);
+        assertActive();
         const games = await Promise.all(
           listed.games.map(async (game) => {
-            const [result, recent] = await Promise.allSettled([
-              loadOnlineGameOutcome(store, game.gameId, game.genesisDigest),
-              loadOnlineGameActivity(store, game.gameId, game.genesisDigest),
+            const [result, recent, termination] = await Promise.allSettled([
+              loadOnlineGameOutcome(currentStore, game.gameId, game.genesisDigest),
+              loadOnlineGameActivity(currentStore, game.gameId, game.genesisDigest),
+              loadOnlineGameVoid(currentStore, game.gameId, game.genesisDigest),
             ]);
-            const outcome = result.status === 'fulfilled' ? result.value : null;
+            assertActive();
+            const voided = termination.status === 'fulfilled' ? termination.value : null;
+            const outcome =
+              !voided && termination.status === 'fulfilled' && result.status === 'fulfilled'
+                ? result.value
+                : null;
             const activity = recent.status === 'fulfilled' ? recent.value : null;
             // Missing display metadata cannot change certified resume authority.
             return {
               ...game,
               outcome,
-              outcomeUnavailable: result.status === 'rejected',
+              voided,
+              outcomeUnavailable: result.status === 'rejected' || termination.status === 'rejected',
               activity,
               abandoned:
-                result.status === 'fulfilled' && !outcome && isOnlineGameAbandoned(activity),
+                result.status === 'fulfilled' &&
+                termination.status === 'fulfilled' &&
+                !outcome &&
+                !voided &&
+                isOnlineGameAbandoned(activity),
             };
           }),
         );
+        assertActive();
         return {
           ...listed,
           games,
           stats: deriveOnlineGameStats(games.flatMap(({ outcome }) => (outcome ? [outcome] : []))),
         };
+      };
+      try {
+        store = new IndexedDbByteStore({ vault: scope });
+        const pending = run();
+        active = pending;
+        return await pending;
       } finally {
-        await store.close();
+        signal.removeEventListener('abort', onAbort);
+        try {
+          await store?.close();
+        } finally {
+          await vault.releaseScope(scope);
+        }
       }
     },
   });

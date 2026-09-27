@@ -1,5 +1,16 @@
 // @vitest-environment happy-dom
+import {
+  IDBCursor,
+  IDBDatabase,
+  IDBFactory,
+  IDBIndex,
+  IDBKeyRange,
+  IDBObjectStore,
+  IDBRequest,
+  IDBTransaction,
+} from 'fake-indexeddb';
 import { afterEach, expect, test, vi } from 'vitest';
+import { getOnlineVaultController } from './online-vault-controller.js';
 import {
   exportStoredOnlineFullSave,
   importOnlineFullSaveFile,
@@ -57,7 +68,11 @@ test('export sends only the game ID and explicit choice, never locally held mate
   vi.stubGlobal('Worker', FakeWorker);
   const bytes = Uint8Array.of(1, 2, 3);
   FakeWorker.respond = ({ id }) => ({ id, kind: 'exported', bytes });
-  const exported = await exportStoredOnlineFullSave('a'.repeat(22), { includePrivate: false });
+  const exported = await exportStoredOnlineFullSave(
+    'a'.repeat(22),
+    { includePrivate: false },
+    () => new FakeWorker(new URL('https://example.test'), { type: 'module' }),
+  );
   expect(FakeWorker.last?.posted).toMatchObject({ gameId: 'a'.repeat(22), includePrivate: false });
   expect(Object.keys(FakeWorker.last?.posted ?? {}).toSorted()).toEqual([
     'gameId',
@@ -90,6 +105,41 @@ test('import transfers bounded encrypted bytes and preserves password failure co
   expect(new OnlineFullSaveClientError('full-save-passphrase', 'Required').code).toBe(
     'full-save-passphrase',
   );
+});
+
+test('production one-shot worker receives only a vault key handoff and bounded job', async () => {
+  vi.stubGlobal('indexedDB', new IDBFactory());
+  for (const [name, value] of Object.entries({
+    IDBCursor,
+    IDBDatabase,
+    IDBIndex,
+    IDBKeyRange,
+    IDBObjectStore,
+    IDBRequest,
+    IDBTransaction,
+  }))
+    vi.stubGlobal(name, value);
+  vi.stubGlobal('navigator', {
+    locks: {
+      request: async (
+        name: string,
+        options: LockOptions,
+        callback: (lock: { name: string; mode: LockMode }) => Promise<void>,
+      ) => callback({ name, mode: options.mode ?? 'exclusive' }),
+    },
+  });
+  vi.stubGlobal('Worker', FakeWorker);
+  FakeWorker.respond = ({ request }) => {
+    if (!isRecord(request)) throw new Error('Missing vault-bound job');
+    return { id: request.id, kind: 'listed', saves: [] };
+  };
+  const { listImportedOnlineFullSaves } = await import('./online-full-save-client.js');
+  expect(await listImportedOnlineFullSaves()).toEqual([]);
+  expect(FakeWorker.last?.posted).toEqual({
+    handoff: null,
+    request: { id: expect.any(Number), kind: 'list' },
+  });
+  await getOnlineVaultController().dispose();
 });
 
 test('leaving read-only open terminates its worker', async () => {

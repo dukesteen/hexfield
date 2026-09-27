@@ -181,6 +181,7 @@ export function useGameActions(
   const priv = useSessionStore((store) => store.privateState);
   const legal = useSessionStore((store) => store.legal);
   const status = useSessionStore((store) => store.status);
+  const voided = status?.kind === 'void';
   const conflicted = useSessionStore((store) => store.conflicted);
   const revision = useSessionStore((store) => store.revision);
   const boardKind = useSessionStore((store) => store.placementMode);
@@ -197,8 +198,9 @@ export function useGameActions(
   const isSubmitting = submittingCommand !== null;
   const actorSeat = actingSeat(state, pending);
   const availability = useMemo(
-    () => (seat !== null && legal ? deriveActionAvailability(legal, pending, seat) : null),
-    [legal, pending, seat],
+    () =>
+      !voided && seat !== null && legal ? deriveActionAvailability(legal, pending, seat) : null,
+    [legal, pending, seat, voided],
   );
   const graph = useMemo(() => buildBoardGraph(state.board.hexes), [state.board.hexes]);
   const availableBoardKinds = boardOrder.filter((kind) => availability?.placements[kind].length);
@@ -253,6 +255,7 @@ export function useGameActions(
     if (
       !session ||
       latest.conflicted ||
+      latest.status?.kind === 'void' ||
       latest.revision !== revision ||
       latest.revealedSeat !== seat
     ) {
@@ -270,6 +273,7 @@ export function useGameActions(
           sessionForActions() !== session ||
           current.revision !== revision ||
           current.revealedSeat !== seat ||
+          current.status?.kind === 'void' ||
           current.conflicted
         ) {
           setError(t('game:staleAction'));
@@ -290,6 +294,7 @@ export function useGameActions(
           sessionForActions() !== session ||
           afterValidation.revision !== revision ||
           afterValidation.revealedSeat !== seat ||
+          afterValidation.status?.kind === 'void' ||
           afterValidation.conflicted
         ) {
           setError(t('game:staleAction'));
@@ -501,7 +506,7 @@ export function useGameActions(
     ? normalGroups.find((group) => group.type === 'ROLL_DICE' || group.type === 'END_TURN')
     : undefined;
   const sheetNormalGroups = normalGroups.filter((group) => group !== promoted);
-  const actionsEnabled = !isSubmitting && !conflicted && status?.kind !== 'error';
+  const actionsEnabled = !isSubmitting && !conflicted && !voided && status?.kind !== 'error';
   const chooseBoardAction = (kind: PlacementKind) => {
     options.onHandOff?.();
     const store = useSessionStore.getState();
@@ -653,6 +658,8 @@ export function useGameActions(
         <p role="alert">{t('game:saveConflictStopped')}</p>
       ) : status?.kind === 'error' ? (
         <p role="alert">{t('game:sessionStopped')}</p>
+      ) : voided ? (
+        <p role="status">{t('lobby:onlineGameVoidTitle')}</p>
       ) : seat === null || !availability ? (
         <>
           <p className="muted">{t('game:awaitingAction')}</p>
@@ -862,7 +869,8 @@ export function useGameActions(
         </button>
       )}
       {optionalTradeChooser}
-      {seat === null && !conflicted && status?.kind !== 'error' && (
+      {voided && <p role="status">{t('lobby:onlineGameVoidTitle')}</p>}
+      {seat === null && !conflicted && !voided && status?.kind !== 'error' && (
         <p className="desktop-awaiting-action" role="status">
           {t('game:awaitingAction')}
         </p>
@@ -1059,6 +1067,8 @@ export function useGameActions(
     nextStep = { kind: 'text', tone: 'alert', text: t('game:saveConflictStopped') };
   } else if (status?.kind === 'error') {
     nextStep = { kind: 'text', tone: 'alert', text: t('game:sessionStopped') };
+  } else if (voided) {
+    nextStep = { kind: 'text', tone: 'muted', text: t('lobby:onlineGameVoidTitle') };
   } else if (isSubmitting) {
     nextStep = {
       kind: 'pending',

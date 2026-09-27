@@ -69,3 +69,48 @@
   color: var(--muted);
   font-size: 0.75rem;
 }
+
+.full-save-transfer-request {
+  display: grid;
+  gap: 12px;
+  max-width: 850px;
+  margin-block: 18px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.full-save-transfer-request h2,
+.full-save-transfer-request p {
+  margin: 0;
+}
+
+.full-save-transfer-request p {
+  color: var(--muted);
+}
+
+.full-save-transfer-request label {
+  display: grid;
+  gap: 6px;
+  color: var(--text);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.full-save-transfer-request textarea {
+  width: 100%;
+  min-width: 0;
+  min-height: 88px;
+  padding: 10px;
+  border: 1px solid var(--control);
+  border-radius: 8px;
+  background: var(--page);
+  color: var(--text);
+  font: inherit;
+  overflow-wrap: anywhere;
+}
+
+.full-save-transfer-request .button {
+  justify-self: start;
+}

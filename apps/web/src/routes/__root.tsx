@@ -6,6 +6,7 @@ import type { QueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSettings } from '../queries/hooks';
+import { LocalVaultGate } from '../features/online/LocalVaultGate.js';
 
 function ThemePreference() {
   const { data } = useSettings();
@@ -34,7 +35,9 @@ function RootContent() {
   return (
     <>
       <ThemePreference />
-      <Outlet />
+      <LocalVaultGate bypass={localGame || path === '/settings' || path.startsWith('/editor')}>
+        <Outlet />
+      </LocalVaultGate>
       {import.meta.env.DEV && !localGame && (
         <>
           <TanStackRouterDevtools />

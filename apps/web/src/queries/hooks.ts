@@ -1,4 +1,6 @@
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
+import { IndexedDbByteStore } from '@cp2p/storage';
+import { getOnlineVaultController } from '../session/online-vault-controller.js';
 import { queryKeys } from './keys';
 import {
   LocalSavedGameRepository,
@@ -20,9 +22,34 @@ export interface WebRepositories {
 
 let browserRepositories: WebRepositories | undefined;
 
+async function withVaultSettings<T>(
+  run: (repository: SettingsRepository) => Promise<T>,
+): Promise<T> {
+  const vault = getOnlineVaultController();
+  let active: Promise<T> | null = null;
+  const scope = await vault.acquireScope(async () => {
+    await active?.catch(() => undefined);
+  });
+  const store = new IndexedDbByteStore({ vault: scope });
+  try {
+    active = run(new IndexedDbSettingsRepository({ store }));
+    return await active;
+  } finally {
+    await store.close();
+    await vault.releaseScope(scope);
+  }
+}
+
+const browserSettings: SettingsRepository = {
+  get: () => withVaultSettings((repository) => repository.get()),
+  update: (patch) => withVaultSettings((repository) => repository.update(patch)),
+  claimStoragePersistenceRequest: () =>
+    withVaultSettings((repository) => repository.claimStoragePersistenceRequest()),
+};
+
 export function getWebRepositories(): WebRepositories {
   browserRepositories ??= {
-    settings: new IndexedDbSettingsRepository(),
+    settings: browserSettings,
     savedGames: new LocalSavedGameRepository(),
   };
   return browserRepositories;

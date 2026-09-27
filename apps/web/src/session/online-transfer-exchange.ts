@@ -601,6 +601,9 @@ export class DestinationTransferExchange extends Exchange {
           attemptId: this.record.attemptId,
           mode: 'open',
           expected: this.destination.expected,
+          ...(this.record.importedArchiveId === undefined
+            ? {}
+            : { importedArchiveId: this.record.importedArchiveId }),
           bootstrapBytes: artifact.bytes,
         }),
       );

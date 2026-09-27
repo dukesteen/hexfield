@@ -7,7 +7,7 @@ import type {
   SessionUpdate,
 } from '@cp2p/protocol';
 import { expect, test, vi } from 'vitest';
-import { loadOnlineGameOutcome } from './online-game-history.js';
+import { loadOnlineGameOutcome, loadOnlineGameVoid } from './online-game-history.js';
 import { createOnlineGameHistoryWriter } from './online-game-history-writer.js';
 
 class MemoryStore implements EscrowCeremonyStore {
@@ -235,4 +235,42 @@ test('does not write metadata before the game ends', async () => {
   await writer.flush();
   expect(store.records.size).toBe(0);
   writer.stop();
+});
+
+test('a certified void persists a terminal marker without a winner or audit', async () => {
+  const store = new MemoryStore();
+  const state = { ...endedState(), result: null };
+  const session = {
+    ...sessionHarness().session,
+    subscribe(listener: (update: SessionUpdate) => void) {
+      listener({
+        revision: finalHead.seq,
+        state,
+        events: [],
+        pending: [],
+        timers: [],
+        status: { kind: 'void' },
+        audit: { kind: 'not-started' },
+      });
+      return () => undefined;
+    },
+  };
+  const writer = createOnlineGameHistoryWriter({
+    store,
+    gameId,
+    genesisDigest: digest,
+    session,
+    localHumanSeat: 0,
+    terminalHead: null,
+  });
+  writer.stop();
+  await writer.flush();
+  expect(await loadOnlineGameOutcome(store, gameId, digest)).toBeNull();
+  expect(await loadOnlineGameVoid(store, gameId, digest)).toEqual({
+    protocol: 'online-game-void-v1',
+    gameId,
+    genesisDigest: digest,
+    head: finalHead,
+  });
+  await expect(loadOnlineGameVoid(store, gameId, 'C'.repeat(43))).rejects.toThrow('another game');
 });

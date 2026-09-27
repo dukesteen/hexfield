@@ -79,8 +79,24 @@ export interface VaultOwnerOptions {
 export interface VaultMigrationOptions {
   readonly oldPassphrase?: string;
   readonly newPassphrase?: string;
+  /** Stops waiting for another tab's owner; an acquired migration still runs atomically. */
+  readonly signal?: AbortSignal;
   /** Test seam; production uses same-origin Web Locks. */
   readonly lockManager?: VaultLockManager;
+}
+
+/** Public mode metadata only; acquiring an owner remains mandatory before private work. */
+export async function readLocalVaultStatus(): Promise<{
+  mode: 'clear' | 'locked';
+  generation: number;
+}> {
+  const access = new VaultRecordAccess(true);
+  try {
+    await access.pin();
+    return { mode: access.mode, generation: access.generation };
+  } finally {
+    access.close();
+  }
 }
 
 /** Exact public records needed by locked deletion, escrow retirement and transfer tombstones. */
@@ -191,128 +207,132 @@ export async function acquireVaultOwner(options: VaultOwnerOptions = {}): Promis
 /** Migration is one exact-key-set and exact-value transaction after all encryption work. */
 export async function migrateLocalVault(options: VaultMigrationOptions): Promise<void> {
   const manager = options.lockManager ?? browserLocks();
-  await manager.request(LOCK_NAME, { mode: 'exclusive' }, async (lock) => {
-    if (!lock) throw new VaultError('busy', 'Exclusive vault lock could not be acquired');
-    const database = await openDatabase(
-      () => undefined,
-      () => undefined,
-    );
-    const oldRecords: { key: string; bytes: Uint8Array }[] = [];
-    const replacements: { key: string; bytes: Uint8Array }[] = [];
-    let oldRaw: Uint8Array | undefined;
-    try {
-      const read = database.transaction([BYTE_STORE, VAULT_STORE], 'readonly');
-      let cursor = await read.objectStore(BYTE_STORE).openCursor();
-      let total = 0;
-      while (cursor) {
-        const key = cursor.key;
-        const bytes = cursor.value;
-        if (
-          typeof key !== 'string' ||
-          key.length > 512 ||
-          !(bytes instanceof Uint8Array) ||
-          bytes.byteLength > MAX_VAULT_STORED_BYTES
-        )
-          throw new TypeError('Vault migration found a malformed record');
-        total += key.length * 3 + bytes.byteLength;
-        if (total > MAX_MIGRATION_BYTES || oldRecords.length >= 65_536)
-          throw new RangeError('Vault migration is too large');
-        oldRecords.push({ key, bytes });
-        // IDB cursors keep the read transaction alive without materializing unbounded getAll().
-        // eslint-disable-next-line no-await-in-loop
-        cursor = await cursor.continue();
-      }
-      oldRaw = await read.objectStore(VAULT_STORE).get(VAULT_KEY);
-      await read.done;
-      const oldMeta = parseMetadata(oldRaw);
-      const oldKey = await unlockKey(oldMeta, options.oldPassphrase);
-      if (oldMeta?.mode === 'clear' && options.oldPassphrase !== undefined)
-        throw new TypeError('Clear vault does not accept an old passphrase');
-      if (!oldMeta && options.oldPassphrase !== undefined)
-        throw new TypeError('Clear vault does not accept an old passphrase');
-      const identity = oldRecords.find((item) => item.key === IDENTITY_KEY);
-      if (!identity)
-        throw new VaultError(
-          'identity-missing',
-          'Cannot migrate a device without its reserved identity',
-        );
-      const identityPlain = await decodeProtected(IDENTITY_KEY, identity.bytes, oldMeta, oldKey);
-      let identityHash: string;
+  await manager.request(
+    LOCK_NAME,
+    { mode: 'exclusive', ...(options.signal ? { signal: options.signal } : {}) },
+    async (lock) => {
+      if (!lock) throw new VaultError('busy', 'Exclusive vault lock could not be acquired');
+      const database = await openDatabase(
+        () => undefined,
+        () => undefined,
+      );
+      const oldRecords: { key: string; bytes: Uint8Array }[] = [];
+      const replacements: { key: string; bytes: Uint8Array }[] = [];
+      let oldRaw: Uint8Array | undefined;
       try {
-        identityHash = await sha256Hex(identityPlain);
-      } finally {
-        identityPlain.fill(0);
-      }
-      if (oldMeta && oldMeta.identityHash !== identityHash)
-        throw new VaultError(
-          'identity-mismatch',
-          'Reserved device identity changed before vault migration',
-        );
-      const generation = (oldMeta?.generation ?? 0) + 1;
-      if (generation > 0xffffffff) throw new RangeError('Vault generation is exhausted');
-      const vaultId = oldMeta?.vaultId ?? randomHex(32);
-      const next = await nextMetadata(vaultId, generation, identityHash, options.newPassphrase);
-      for (const item of oldRecords) {
-        if (isPublicVaultRecord(item.key)) continue;
-        // Bound peak migration memory by converting records one at a time.
-        // eslint-disable-next-line no-await-in-loop
-        const plain = await decodeProtected(item.key, item.bytes, oldMeta, oldKey);
-        try {
-          // eslint-disable-next-line no-await-in-loop
-          const encrypted = await encodeProtected(item.key, plain, next.meta, next.key);
-          replacements.push({ key: item.key, bytes: encrypted });
-        } finally {
-          plain.fill(0);
-        }
-      }
-      const nextRaw = canonicalEncode(next.meta);
-      try {
-        const transaction = strictWriteTransaction(database, [BYTE_STORE, VAULT_STORE]);
-        try {
-          const bytes = transaction.objectStore(BYTE_STORE);
-          const currentKeys = await bytes.getAllKeys();
+        const read = database.transaction([BYTE_STORE, VAULT_STORE], 'readonly');
+        let cursor = await read.objectStore(BYTE_STORE).openCursor();
+        let total = 0;
+        while (cursor) {
+          const key = cursor.key;
+          const bytes = cursor.value;
           if (
-            currentKeys.length !== oldRecords.length ||
-            currentKeys.some((key, index) => key !== oldRecords[index]?.key)
+            typeof key !== 'string' ||
+            key.length > 512 ||
+            !(bytes instanceof Uint8Array) ||
+            bytes.byteLength > MAX_VAULT_STORED_BYTES
           )
-            throw new VaultError('changed', 'Vault records changed during migration');
-          for (const item of oldRecords) {
-            // Keep all IDB work in one transaction; no WebCrypto awaits in this loop.
-            // eslint-disable-next-line no-await-in-loop
-            const current = await bytes.get(item.key);
-            if (!(current instanceof Uint8Array) || !equalBytes(current, item.bytes))
-              throw new VaultError('changed', 'Vault record changed during migration', item.key);
-            current.fill(0);
-          }
-          const currentMeta = await transaction.objectStore(VAULT_STORE).get(VAULT_KEY);
-          if (!equalOptional(currentMeta, oldRaw))
-            throw new VaultError('changed', 'Vault metadata changed during migration');
-          currentMeta?.fill(0);
-          for (const item of replacements) {
-            // eslint-disable-next-line no-await-in-loop
-            await bytes.put(item.bytes, item.key);
-          }
-          await transaction.objectStore(VAULT_STORE).put(nextRaw, VAULT_KEY);
-          await transaction.done;
-        } catch (error) {
+            throw new TypeError('Vault migration found a malformed record');
+          total += key.length * 3 + bytes.byteLength;
+          if (total > MAX_MIGRATION_BYTES || oldRecords.length >= 65_536)
+            throw new RangeError('Vault migration is too large');
+          oldRecords.push({ key, bytes });
+          // IDB cursors keep the read transaction alive without materializing unbounded getAll().
+          // eslint-disable-next-line no-await-in-loop
+          cursor = await cursor.continue();
+        }
+        oldRaw = await read.objectStore(VAULT_STORE).get(VAULT_KEY);
+        await read.done;
+        const oldMeta = parseMetadata(oldRaw);
+        const oldKey = await unlockKey(oldMeta, options.oldPassphrase);
+        if (oldMeta?.mode === 'clear' && options.oldPassphrase !== undefined)
+          throw new TypeError('Clear vault does not accept an old passphrase');
+        if (!oldMeta && options.oldPassphrase !== undefined)
+          throw new TypeError('Clear vault does not accept an old passphrase');
+        const identity = oldRecords.find((item) => item.key === IDENTITY_KEY);
+        if (!identity)
+          throw new VaultError(
+            'identity-missing',
+            'Cannot migrate a device without its reserved identity',
+          );
+        const identityPlain = await decodeProtected(IDENTITY_KEY, identity.bytes, oldMeta, oldKey);
+        let identityHash: string;
+        try {
+          identityHash = await sha256Hex(identityPlain);
+        } finally {
+          identityPlain.fill(0);
+        }
+        if (oldMeta && oldMeta.identityHash !== identityHash)
+          throw new VaultError(
+            'identity-mismatch',
+            'Reserved device identity changed before vault migration',
+          );
+        const generation = (oldMeta?.generation ?? 0) + 1;
+        if (generation > 0xffffffff) throw new RangeError('Vault generation is exhausted');
+        const vaultId = oldMeta?.vaultId ?? randomHex(32);
+        const next = await nextMetadata(vaultId, generation, identityHash, options.newPassphrase);
+        for (const item of oldRecords) {
+          if (isPublicVaultRecord(item.key)) continue;
+          // Bound peak migration memory by converting records one at a time.
+          // eslint-disable-next-line no-await-in-loop
+          const plain = await decodeProtected(item.key, item.bytes, oldMeta, oldKey);
           try {
-            transaction.abort();
-          } catch {
-            // A failed commit may have already closed the transaction.
+            // eslint-disable-next-line no-await-in-loop
+            const encrypted = await encodeProtected(item.key, plain, next.meta, next.key);
+            replacements.push({ key: item.key, bytes: encrypted });
+          } finally {
+            plain.fill(0);
           }
-          await transaction.done.catch(() => undefined);
-          throw error;
+        }
+        const nextRaw = canonicalEncode(next.meta);
+        try {
+          const transaction = strictWriteTransaction(database, [BYTE_STORE, VAULT_STORE]);
+          try {
+            const bytes = transaction.objectStore(BYTE_STORE);
+            const currentKeys = await bytes.getAllKeys();
+            if (
+              currentKeys.length !== oldRecords.length ||
+              currentKeys.some((key, index) => key !== oldRecords[index]?.key)
+            )
+              throw new VaultError('changed', 'Vault records changed during migration');
+            for (const item of oldRecords) {
+              // Keep all IDB work in one transaction; no WebCrypto awaits in this loop.
+              // eslint-disable-next-line no-await-in-loop
+              const current = await bytes.get(item.key);
+              if (!(current instanceof Uint8Array) || !equalBytes(current, item.bytes))
+                throw new VaultError('changed', 'Vault record changed during migration', item.key);
+              current.fill(0);
+            }
+            const currentMeta = await transaction.objectStore(VAULT_STORE).get(VAULT_KEY);
+            if (!equalOptional(currentMeta, oldRaw))
+              throw new VaultError('changed', 'Vault metadata changed during migration');
+            currentMeta?.fill(0);
+            for (const item of replacements) {
+              // eslint-disable-next-line no-await-in-loop
+              await bytes.put(item.bytes, item.key);
+            }
+            await transaction.objectStore(VAULT_STORE).put(nextRaw, VAULT_KEY);
+            await transaction.done;
+          } catch (error) {
+            try {
+              transaction.abort();
+            } catch {
+              // A failed commit may have already closed the transaction.
+            }
+            await transaction.done.catch(() => undefined);
+            throw error;
+          }
+        } finally {
+          nextRaw.fill(0);
         }
       } finally {
-        nextRaw.fill(0);
+        oldRaw?.fill(0);
+        oldRecords.forEach((item) => item.bytes.fill(0));
+        replacements.forEach((item) => item.bytes.fill(0));
+        database.close();
       }
-    } finally {
-      oldRaw?.fill(0);
-      oldRecords.forEach((item) => item.bytes.fill(0));
-      replacements.forEach((item) => item.bytes.fill(0));
-      database.close();
-    }
-  });
+    },
+  );
 }
 
 /** Shared codec and generation assertion used by all direct IDB writers. */

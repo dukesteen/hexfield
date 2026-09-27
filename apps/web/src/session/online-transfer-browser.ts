@@ -138,8 +138,16 @@ export class OnlineTransferBrowser {
   }
 
   static async openDestination(
-    options: BrowserOptions & { readonly invite: OnlineTransferInvite },
+    options: BrowserOptions & {
+      readonly invite: OnlineTransferInvite;
+      readonly importedArchiveId?: string;
+    },
   ): Promise<OnlineTransferBrowser> {
+    if (
+      options.importedArchiveId !== undefined &&
+      !/^[0-9a-f]{64}$/.test(options.importedArchiveId)
+    )
+      throw new TypeError('Imported checkpoint identifier is malformed');
     const records = new OnlineTransferRecordStore(
       options.store,
       options.identity.peerId,
@@ -147,6 +155,8 @@ export class OnlineTransferBrowser {
       'destination',
     );
     const progress = await records.load();
+    if (progress.record && progress.record.importedArchiveId !== options.importedArchiveId)
+      throw new TypeError('Transfer attempt is pinned to another imported checkpoint');
     const browser = new OnlineTransferBrowser(
       options,
       options.invite,
@@ -156,7 +166,7 @@ export class OnlineTransferBrowser {
     if (progress.finished && (!browser.#record || !browser.#record.authorization))
       throw new TypeError('Finished transfer has no pinned destination authorization');
     if (!browser.#record) {
-      browser.#record = browser.#emptyRecord(options.identity.peerId);
+      browser.#record = browser.#emptyRecord(options.identity.peerId, options.importedArchiveId);
       await records.save(browser.#record);
     }
     try {
@@ -170,6 +180,9 @@ export class OnlineTransferBrowser {
             gameId: options.invite.body.gameId,
             genesisDigest: options.invite.body.genesisDigest,
           },
+          ...(options.importedArchiveId === undefined
+            ? {}
+            : { importedArchiveId: options.importedArchiveId }),
         });
         if (!restored.ok) throw new Error(restored.error.message);
         browser.#ensureExchange();
@@ -263,7 +276,10 @@ export class OnlineTransferBrowser {
     return this.#closing;
   }
 
-  #emptyRecord(destinationDevice: string): OnlineTransferExchangeRecord {
+  #emptyRecord(
+    destinationDevice: string,
+    importedArchiveId?: string,
+  ): OnlineTransferExchangeRecord {
     const { body } = this.#snapshot.invite;
     return {
       protocol: 'online-transfer-exchange-v1',
@@ -274,6 +290,7 @@ export class OnlineTransferBrowser {
       sourceDevice: body.sourceDevice,
       destinationDevice,
       seat: body.seat,
+      ...(importedArchiveId === undefined ? {} : { importedArchiveId }),
       offer: null,
       approved: null,
       authorization: null,

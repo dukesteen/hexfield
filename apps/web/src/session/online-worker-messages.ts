@@ -17,6 +17,7 @@ import type {
   OnlineTransferDestination,
   OnlineTransferDestinationSnapshot,
 } from './online-transfer-destination.js';
+import type { VaultKeyHandoff } from '@cp2p/storage';
 
 export const ONLINE_WORKER_PROTOCOL = 'cp2p-online-worker-v1' as const;
 export const MAX_ONLINE_WORKER_REQUEST_BYTES = 1_048_576;
@@ -29,6 +30,7 @@ export interface OnlineWorkerHead {
 }
 
 export type OnlineWorkerRequestBody =
+  | { readonly kind: 'unlockVault'; readonly handoff: VaultKeyHandoff }
   | {
       readonly kind: 'initializeTransfer';
       readonly self: string;
@@ -133,6 +135,7 @@ export interface OnlineWorkerInitialization {
 }
 
 export interface OnlineWorkerReplyByKind {
+  unlockVault: void;
   initializeTransfer: OnlineTransferDestinationSnapshot;
   transferSnapshot: OnlineTransferDestinationSnapshot;
   prepareTransferOffer: SeatTransferAuthorization;

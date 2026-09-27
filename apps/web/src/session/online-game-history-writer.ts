@@ -1,7 +1,7 @@
 import { canonicalEncode, toBase64Url } from '@cp2p/codec';
 import type { Seat } from '@cp2p/engine';
 import type { EscrowCeremonyStore, P2PSession, SessionAuditState } from '@cp2p/protocol';
-import { saveOnlineGameOutcome } from './online-game-history.js';
+import { saveOnlineGameOutcome, saveOnlineGameVoid } from './online-game-history.js';
 
 type OnlineHistorySession = Pick<
   P2PSession,
@@ -70,7 +70,28 @@ export function createOnlineGameHistoryWriter(
   let writes = Promise.resolve();
 
   const unsubscribe = options.session.subscribe((update) => {
-    if (stopped || !update.state.result) return;
+    if (stopped) return;
+    if (update.status.kind === 'void') {
+      const head = options.session.getCommittedHead();
+      const signature = `void:${head.seq}:${head.hash}`;
+      if (lastSignature === signature) return;
+      lastSignature = signature;
+      writes = writes.then(async () => {
+        try {
+          await saveOnlineGameVoid(options.store, {
+            gameId: options.gameId,
+            genesisDigest: options.genesisDigest,
+            head,
+          });
+        } catch (error) {
+          if (lastSignature === signature) lastSignature = null;
+          reportError(options, error);
+        }
+        return undefined;
+      });
+      return;
+    }
+    if (!update.state.result) return;
     const head = options.session.getCommittedHead();
     terminalHead ??= { ...head };
     const audit = update.audit ?? options.session.getAudit();

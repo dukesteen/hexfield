@@ -2,6 +2,7 @@ import { createFileRoute, Link } from '@tanstack/react-router';
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { BoardView } from '../../features/board/BoardView.js';
+import { ImportedTransferRequest } from '../../features/online/ImportedTransferRequest.js';
 import { toRenderModel } from '../../features/board/toRenderModel.js';
 import { formatGameEvent } from '../../features/game/event-format.js';
 import { useBoardAppearance } from '../../features/game/use-appearance.js';
@@ -39,6 +40,7 @@ function ReadOnlyFullSave({ save }: { save: OnlineFullSaveDisplay }) {
         <p>{t('lobby:fullSavePausedDescription')}</p>
         {save.privateCapsule === 'encrypted' && <p>{t('lobby:fullSavePrivateLocked')}</p>}
       </div>
+      <ImportedTransferRequest save={save} />
       <p>{t('lobby:publicReplayHead', { number: save.head.seq })}</p>
       <div className="public-replay-layout">
         <section aria-label={t('lobby:publicReplayBoard')} className="public-replay-board">

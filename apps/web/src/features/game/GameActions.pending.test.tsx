@@ -10,6 +10,7 @@ import {
 } from '@testing-library/react';
 import { createBaseEngine, failure, success } from '@cp2p/engine';
 import { getPieceIconUrl } from '@cp2p/renderer';
+import type { SessionStatus } from '@cp2p/protocol';
 import type { GamePresentation } from '../../queries/repositories/saved-games';
 import { afterEach, expect, test, vi } from 'vitest';
 import { useGameActions } from './GameActions';
@@ -19,7 +20,7 @@ const harness = vi.hoisted(() => {
     revealedSeat: 0,
     privateState: {},
     legal: { commands: [] },
-    status: null,
+    status: null as SessionStatus | null,
     conflicted: false,
     revision: 7,
     placementMode: null,
@@ -64,12 +65,48 @@ afterEach(() => {
   vi.restoreAllMocks();
   harness.session.current = null;
   harness.state.revision = 7;
+  harness.state.status = null;
   harness.state.placementCancelled = false;
   harness.state.closeActionDialog.mockClear();
   harness.choosePlacement.mockClear();
   harness.openActionDialog.mockClear();
   harness.availability.placements.road.length = 0;
   harness.availability.primary = [{ type: 'ROLL_DICE', commands: [{ type: 'ROLL_DICE' }] }];
+});
+
+test('a certified void removes actions and rejects a command captured before termination', () => {
+  const validate = vi.fn<() => void>();
+  const submit = vi.fn<() => void>();
+  harness.session.current = { validate, submit };
+  const state = createBaseEngine().createGame(
+    { modules: [{ id: 'base', version: '1.0.0' }], seats: [0, 1], options: { base: {} } },
+    new Uint8Array(32).fill(7),
+  );
+  const view = renderHook(() =>
+    useGameActions(state, [], { players: [], botDelayMs: 0 }, { compact: true }),
+  );
+  const command = view.result.current.nextStep;
+  if (command.kind !== 'command') throw new Error('Expected an action before termination');
+  harness.state.status = { kind: 'void' };
+  view.rerender();
+  expect(view.result.current.nextStep).toEqual({
+    kind: 'text',
+    tone: 'muted',
+    text: 'lobby:onlineGameVoidTitle',
+  });
+  expect(view.result.current.availability).toBeNull();
+  expect(view.result.current.highlights).toEqual({});
+  const desktop = render(
+    <>
+      {view.result.current.desktopStatus}
+      {view.result.current.desktopTurn}
+    </>,
+  );
+  expect(desktop.getByRole('status').textContent).toBe('lobby:onlineGameVoidTitle');
+  expect(desktop.queryByRole('button')).toBeNull();
+  act(() => command.run());
+  expect(validate).not.toHaveBeenCalled();
+  expect(submit).not.toHaveBeenCalled();
 });
 
 test('desktop controls expose only engine-offered build, trade, and turn actions', () => {

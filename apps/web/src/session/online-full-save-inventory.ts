@@ -29,6 +29,10 @@ export async function loadStoredOnlineMasterInventory(input: {
   readonly start: SavedOnlineGameRecord;
   readonly journal: Pick<ProtocolJournal, 'load'>;
   readonly store: EscrowCeremonyStore;
+  readonly createJournal?: (
+    gameId: string,
+    keyBinding: { recordKey: string; bytes: Uint8Array },
+  ) => Pick<ProtocolJournal, 'load'> & { close(): Promise<void> };
 }): Promise<OwnedMasterInventory> {
   const identity = await loadOnlineIdentity(input.store);
   const devicePeer = identity.peerId;
@@ -49,6 +53,7 @@ export async function loadStoredOnlineMasterInventory(input: {
     devicePeer,
     engine,
     includeMaterial: true,
+    ...(input.createJournal ? { createJournal: input.createJournal } : {}),
   });
   if (!material.material) throw new Error('Current bound game material is missing');
   const masters = new Map<Seat, Uint8Array>();

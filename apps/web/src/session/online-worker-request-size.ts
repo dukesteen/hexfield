@@ -11,6 +11,25 @@ export function prepareOnlineWorkerRequest(body: OnlineWorkerRequestBody): {
   bytes: number;
   heavy: boolean;
 } {
+  if (body.kind === 'unlockVault') {
+    const { handoff } = body;
+    if (
+      !/^[0-9a-f]{64}$/.test(handoff.vaultId) ||
+      !Number.isSafeInteger(handoff.generation) ||
+      handoff.generation < 1 ||
+      !(handoff.key instanceof CryptoKey) ||
+      handoff.key.extractable ||
+      handoff.key.algorithm.name !== 'AES-GCM' ||
+      !handoff.key.usages.includes('encrypt') ||
+      !handoff.key.usages.includes('decrypt')
+    )
+      throw new TypeError('Vault key handoff is malformed');
+    return {
+      body: { kind: 'unlockVault', handoff: structuredClone(handoff) },
+      bytes: 128,
+      heavy: false,
+    };
+  }
   const bootstrap =
     body.kind === 'initializeTransfer' ||
     body.kind === 'refreshTransferBootstrap' ||

@@ -1,4 +1,5 @@
 import type { PublicArchiveSummary } from './online-public-archive-store.js';
+import { getOnlineVaultController } from './online-vault-controller.js';
 import { MAX_ONLINE_PUBLIC_ARCHIVE_BYTES } from './online-public-archive-format.js';
 import type {
   PublicArchiveDisplay,
@@ -47,7 +48,7 @@ function validResponse(value: unknown, id: number): value is PublicArchiveWorker
   );
 }
 
-function runJob(
+async function runJob(
   body:
     | { readonly kind: 'import'; readonly bytes: Uint8Array }
     | {
@@ -63,50 +64,69 @@ function runJob(
   if (signal?.aborted)
     return Promise.reject(new DOMException('Replay opening cancelled', 'AbortError'));
   const id = nextRequestId++;
-  const worker = factory();
-  return new Promise((resolve, reject) => {
-    let done = false;
-    const finish = (outcome: PublicArchiveWorkerResponse | Error) => {
-      if (done) return;
-      done = true;
-      clearTimeout(deadline);
-      worker.removeEventListener('message', onMessage);
-      worker.removeEventListener('error', onFailure);
-      worker.removeEventListener('messageerror', onFailure);
-      signal?.removeEventListener('abort', onAbort);
-      worker.terminate();
-      if (outcome instanceof Error) reject(outcome);
-      else if (outcome.kind === 'error') reject(new Error(outcome.error));
-      else resolve(outcome);
-    };
-    const onMessage: EventListener = (event) => {
-      const value: unknown = Reflect.get(event, 'data');
-      finish(
-        validResponse(value, id)
-          ? value
-          : new Error('Public replay worker returned an invalid response'),
+  let worker: WorkerPort | null = null;
+  let cancelJob: (() => void) | null = null;
+  const vault = factory === defaultWorker ? getOnlineVaultController() : null;
+  const scope = vault
+    ? await vault.acquireScope(async () => {
+        cancelJob?.();
+        worker?.terminate();
+      })
+    : null;
+  try {
+    scope?.assertActive();
+    worker = factory();
+    const activeWorker = worker;
+    return await new Promise((resolve, reject) => {
+      let done = false;
+      const finish = (outcome: PublicArchiveWorkerResponse | Error) => {
+        if (done) return;
+        done = true;
+        clearTimeout(deadline);
+        activeWorker.removeEventListener('message', onMessage);
+        activeWorker.removeEventListener('error', onFailure);
+        activeWorker.removeEventListener('messageerror', onFailure);
+        signal?.removeEventListener('abort', onAbort);
+        activeWorker.terminate();
+        if (outcome instanceof Error) reject(outcome);
+        else if (outcome.kind === 'error') reject(new Error(outcome.error));
+        else resolve(outcome);
+      };
+      const onMessage: EventListener = (event) => {
+        const value: unknown = Reflect.get(event, 'data');
+        finish(
+          validResponse(value, id)
+            ? value
+            : new Error('Public replay worker returned an invalid response'),
+        );
+      };
+      const onFailure: EventListener = () => finish(new Error('Public replay worker failed'));
+      const onAbort = () => finish(new DOMException('Replay opening cancelled', 'AbortError'));
+      cancelJob = onAbort;
+      const deadline = setTimeout(
+        () => finish(new Error('Public replay verification timed out')),
+        WORKER_DEADLINE_MS,
       );
-    };
-    const onFailure: EventListener = () => finish(new Error('Public replay worker failed'));
-    const onAbort = () => finish(new DOMException('Replay opening cancelled', 'AbortError'));
-    const deadline = setTimeout(
-      () => finish(new Error('Public replay verification timed out')),
-      WORKER_DEADLINE_MS,
-    );
-    worker.addEventListener('message', onMessage);
-    worker.addEventListener('error', onFailure);
-    worker.addEventListener('messageerror', onFailure);
-    signal?.addEventListener('abort', onAbort, { once: true });
-    if (signal?.aborted) {
-      onAbort();
-      return;
-    }
-    try {
-      worker.postMessage({ ...body, id }, transfer);
-    } catch {
-      finish(new Error('Public replay could not be sent to its worker'));
-    }
-  });
+      activeWorker.addEventListener('message', onMessage);
+      activeWorker.addEventListener('error', onFailure);
+      activeWorker.addEventListener('messageerror', onFailure);
+      signal?.addEventListener('abort', onAbort, { once: true });
+      if (signal?.aborted) {
+        onAbort();
+        return;
+      }
+      try {
+        activeWorker.postMessage(
+          scope ? { request: { ...body, id }, handoff: scope.handoff() } : { ...body, id },
+          transfer,
+        );
+      } catch {
+        finish(new Error('Public replay could not be sent to its worker'));
+      }
+    });
+  } finally {
+    if (scope) await vault?.releaseScope(scope);
+  }
 }
 
 /** The caller must check File.size before reading; this repeats the byte-level bound. */

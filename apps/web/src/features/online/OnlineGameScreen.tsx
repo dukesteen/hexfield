@@ -26,6 +26,7 @@ import { useRequestPersistentStorage } from '../../queries/storage-persistence';
 import { queryKeys } from '../../queries/keys';
 import { encodePublicReplay } from '../../session/online-public-archive-client.js';
 import { FullSaveExportDialog } from './FullSaveExportDialog.js';
+import { RecoveryVoidDialog } from './RecoveryVoidDialog.js';
 import './online.css';
 
 const SHAPES = ['circle', 'triangle', 'square', 'diamond'] as const;
@@ -181,6 +182,11 @@ function OnlineGameInstance({
   const [chatOpen, setChatOpen] = useState(false);
   const [fullSaveOpen, setFullSaveOpen] = useState(false);
   const [transferOpen, setTransferOpen] = useState(false);
+  const [voidOpen, setVoidOpen] = useState(false);
+  const voided = status?.kind === 'void';
+  useEffect(() => {
+    if (voided) setVoidOpen(true);
+  }, [voided]);
   const [transferBrowser, setTransferBrowser] = useState<OnlineTransferBrowser | null>(null);
   const sourceTransfer = useSourceTransfer(room);
   const transfer = useSyncExternalStore(
@@ -234,7 +240,7 @@ function OnlineGameInstance({
     requestPersistentStorage();
   }, [requestPersistentStorage]);
   useEffect(() => {
-    if (status?.kind === 'complete')
+    if (status?.kind === 'complete' || status?.kind === 'void')
       void queryClient.invalidateQueries({ queryKey: queryKeys.onlineGames(), exact: true });
   }, [queryClient, status?.kind, audit]);
   useEffect(() => {
@@ -429,7 +435,7 @@ function OnlineGameInstance({
               >
                 {t('lobby:fullSaveExport')}
               </button>
-              {room.startTransfer && !halted && (
+              {room.startTransfer && !halted && !voided && (
                 <button
                   className="button button-quiet"
                   type="button"
@@ -441,7 +447,19 @@ function OnlineGameInstance({
             </>
           }
           sessionNotice={
-            missing.length > 0 || recoveryCandidate ? (
+            voided ? (
+              <div className="online-game-notice" role="status">
+                <strong>{t('lobby:onlineGameVoidTitle')}</strong>
+                <p>{t('lobby:onlineGameVoidBody')}</p>
+                <button
+                  className="button button-quiet"
+                  type="button"
+                  onClick={() => setVoidOpen(true)}
+                >
+                  {t('game:results')}
+                </button>
+              </div>
+            ) : missing.length > 0 || recoveryCandidate ? (
               <>
                 {missing.length > 0 && (
                   <div className="online-game-notice">
@@ -652,6 +670,14 @@ function OnlineGameInstance({
       </dialog>
       {fullSaveOpen && (
         <FullSaveExportDialog gameId={game.gameId} onClose={() => setFullSaveOpen(false)} />
+      )}
+      {attached && voided && voidOpen && (
+        <RecoveryVoidDialog
+          onViewBoard={() => setVoidOpen(false)}
+          onLeave={() => void leave()}
+          busy={busy}
+          leaveError={leaveError}
+        />
       )}
     </main>
   );

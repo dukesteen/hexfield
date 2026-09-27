@@ -145,6 +145,31 @@ test('leaving during an importer open rejects its late result', async () => {
   expect(navigate).toHaveBeenCalledTimes(1);
 });
 
+test('passes the selected imported checkpoint into the destination before opening', async () => {
+  const opened = destination();
+  vi.mocked(openDestinationTransfer).mockResolvedValue(opened.handle);
+  const importedArchiveId = 'a'.repeat(64);
+  const page = render(
+    <TransferDestinationScreen code="signed-code" importedArchiveId={importedArchiveId} />,
+  );
+  expect(page.getByText('lobby:importTransferCheckpointHint')).toBeTruthy();
+  fireEvent.click(page.getByRole('button', { name: 'lobby:transferStart' }));
+  await waitFor(() => expect(openDestinationTransfer).toHaveBeenCalledOnce());
+  expect(openDestinationTransfer).toHaveBeenCalledWith({
+    invite: { body: { sourceDevice: 'source-device' } },
+    importedArchiveId,
+  });
+  page.unmount();
+});
+
+test('a malformed checkpoint reference cannot open a destination worker', () => {
+  const page = render(
+    <TransferDestinationScreen code="signed-code" importedArchiveId="not-an-archive-id" />,
+  );
+  expect(page.getByRole('heading', { name: 'lobby:importTransferCheckpointInvalid' })).toBeTruthy();
+  expect(openDestinationTransfer).not.toHaveBeenCalled();
+});
+
 test('invalid invitation uses the same themed destination shell and a clear return action', () => {
   const page = render(<TransferDestinationScreen code="invalid-code" />);
   const main = page.getByRole('main');

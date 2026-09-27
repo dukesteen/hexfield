@@ -65,7 +65,10 @@ type Journal = Pick<ProtocolJournal, 'load'> & { close(): Promise<void> };
 
 export interface OnlineFullSaveWorkerDependencies {
   readonly createStore?: () => Store;
-  readonly createJournal?: (gameId: string) => Journal;
+  readonly createJournal?: (
+    gameId: string,
+    keyBinding?: { recordKey: string; bytes: Uint8Array },
+  ) => Journal;
   readonly loadMasterInventory?: typeof loadStoredOnlineMasterInventory;
 }
 
@@ -254,6 +257,7 @@ export async function runOnlineFullSaveWorkerRequest(
             start,
             journal: resources.journal,
             store,
+            ...(dependencies.createJournal ? { createJournal: dependencies.createJournal } : {}),
           });
         } catch {
           throw new FullSaveTaskError(

@@ -104,7 +104,10 @@ export function SavedOnlineGames() {
         const winner = outcome
           ? game.genesis.seats.find((seat) => seat.seat === outcome.terminal.winner)?.name
           : undefined;
-        const action = outcome ? t('lobby:onlineHistoryOpenResult') : t('lobby:onlineResumeTitle');
+        const action =
+          outcome || game.voided
+            ? t('lobby:onlineHistoryOpenResult')
+            : t('lobby:onlineResumeTitle');
         return (
           <article key={game.gameId} className="online-history-item">
             <Link
@@ -131,6 +134,9 @@ export function SavedOnlineGames() {
                           : t('lobby:onlineHistoryAuditPending')}
                     </span>
                   </span>
+                )}
+                {game.voided && (
+                  <span className="online-history-result">{t('lobby:onlineGameVoidTitle')}</span>
                 )}
                 {game.outcomeUnavailable && (
                   <span className="muted">{t('lobby:onlineHistoryUnavailable')}</span>

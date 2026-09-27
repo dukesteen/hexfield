@@ -10,6 +10,7 @@ const scope = globalThis as unknown as {
 };
 
 const kinds = {
+  unlockVault: true,
   initializeTransfer: true,
   transferSnapshot: true,
   prepareTransferOffer: true,
@@ -79,6 +80,23 @@ function bootstrap(value: unknown): boolean {
 
 function validBody(body: Record<string, unknown>): boolean {
   switch (body.kind) {
+    case 'unlockVault': {
+      const handoff = object(body.handoff);
+      return (
+        onlyKeys(body, ['kind', 'handoff']) &&
+        !!handoff &&
+        onlyKeys(handoff, ['key', 'vaultId', 'generation']) &&
+        typeof handoff.vaultId === 'string' &&
+        /^[0-9a-f]{64}$/.test(handoff.vaultId) &&
+        typeof handoff.generation === 'number' &&
+        Number.isSafeInteger(handoff.generation) &&
+        handoff.generation >= 1 &&
+        typeof CryptoKey !== 'undefined' &&
+        handoff.key instanceof CryptoKey &&
+        !handoff.key.extractable &&
+        handoff.key.algorithm.name === 'AES-GCM'
+      );
+    }
     case 'initializeTransfer': {
       const expected = object(body.expected);
       return (

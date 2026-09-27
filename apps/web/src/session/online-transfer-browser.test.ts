@@ -146,6 +146,66 @@ test('a finished destination record cannot assert cancellation without a verifie
   }
 });
 
+test('an imported checkpoint is pinned before linking and cannot be omitted on reopen', async () => {
+  const source = identityFromSecret(new Uint8Array(32).fill(115));
+  const destination = identityFromSecret(new Uint8Array(32).fill(116));
+  const invite = createTransferInvite({
+    attemptId: 'E'.repeat(43),
+    gameId: 'e'.repeat(22),
+    seat: 0,
+    genesisDigest: testKey(10),
+    roomId: 'transferag',
+    serverUrl: 'wss://signal.example/',
+    identity: { ...source, dispose: () => source.secretKey.fill(0) },
+  });
+  const archiveId = 'f'.repeat(64);
+  const store = new MemoryEscrowLifecycleStore();
+  const link = vi
+    .spyOn(OnlineTransferLink, 'openDestination')
+    .mockImplementation(() => asTestLink({ close() {} }));
+  const workerCalls: string[] = [];
+  const worker = asTestWorker({
+    async request(body: OnlineWorkerRequestBody) {
+      workerCalls.push(body.kind);
+      throw new Error(`Unexpected initial request ${body.kind}`);
+    },
+    async shutdown() {},
+  });
+  let browser: OnlineTransferBrowser | undefined;
+  try {
+    browser = await OnlineTransferBrowser.openDestination({
+      invite,
+      importedArchiveId: archiveId,
+      identity: { ...destination, dispose: () => destination.secretKey.fill(0) },
+      store,
+      worker,
+      clock: new VirtualClock(),
+      network: {},
+    });
+    const records = new OnlineTransferRecordStore(store, destination.peerId, invite, 'destination');
+    expect(await records.load()).toMatchObject({
+      finished: false,
+      record: { importedArchiveId: archiveId },
+    });
+    expect(workerCalls).toEqual([]);
+    await expect(
+      OnlineTransferBrowser.openDestination({
+        invite,
+        identity: { ...destination, dispose: () => destination.secretKey.fill(0) },
+        store,
+        worker,
+        clock: new VirtualClock(),
+        network: {},
+      }),
+    ).rejects.toThrow('pinned to another imported checkpoint');
+    expect(link).toHaveBeenCalledOnce();
+  } finally {
+    await browser?.close();
+    source.secretKey.fill(0);
+    destination.secretKey.fill(0);
+  }
+});
+
 afterEach(() => vi.restoreAllMocks());
 
 function asTestLink(value: object): OnlineTransferLink {

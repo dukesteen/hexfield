@@ -1,6 +1,7 @@
 import { failure } from '@cp2p/engine';
 import type { Result } from '@cp2p/engine';
 import type { Unsubscribe } from '@cp2p/protocol';
+import type { VaultKeyHandoff } from '@cp2p/storage';
 import {
   MAX_ONLINE_WORKER_PENDING_REQUESTS,
   MAX_ONLINE_WORKER_REQUEST_BYTES,
@@ -156,9 +157,18 @@ export class OnlineWorkerClient {
   private stopped = false;
   private closing: Promise<void> | null = null;
   private fatalError: Error | null = null;
+  private readonly vaultHandoff: VaultKeyHandoff | null;
+  private vaultReady: Promise<Result<void>> | null = null;
 
-  constructor(options: { worker?: OnlineProtocolWorkerPort; generation?: string } = {}) {
+  constructor(
+    options: {
+      worker?: OnlineProtocolWorkerPort;
+      generation?: string;
+      vaultHandoff?: VaultKeyHandoff | null;
+    } = {},
+  ) {
     this.generation = options.generation ?? crypto.randomUUID();
+    this.vaultHandoff = options.vaultHandoff ?? null;
     this.worker =
       options.worker ??
       new Worker(new URL('./online-protocol-worker.ts', import.meta.url), { type: 'module' });
@@ -168,6 +178,19 @@ export class OnlineWorkerClient {
   }
 
   request<K extends OnlineWorkerRequestBody['kind']>(
+    body: Extract<OnlineWorkerRequestBody, { kind: K }>,
+    options: { timeoutMs?: number } = {},
+  ): Promise<Result<OnlineWorkerReplyByKind[K]>> {
+    if (body.kind !== 'unlockVault' && body.kind !== 'shutdown' && this.vaultHandoff) {
+      this.vaultReady ??= this.send({ kind: 'unlockVault', handoff: this.vaultHandoff });
+      return this.vaultReady.then((ready) =>
+        ready.ok ? this.send(body, options) : failure(ready.error.code, ready.error.message),
+      );
+    }
+    return this.send(body, options);
+  }
+
+  private send<K extends OnlineWorkerRequestBody['kind']>(
     body: Extract<OnlineWorkerRequestBody, { kind: K }>,
     options: { timeoutMs?: number } = {},
   ): Promise<Result<OnlineWorkerReplyByKind[K]>> {

@@ -68,6 +68,35 @@ afterEach(() => {
 });
 
 describe('OnlineWorkerClient', () => {
+  test('hands a non-extractable vault key to the worker before any session request', async () => {
+    const key = await crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, false, [
+      'encrypt',
+      'decrypt',
+    ]);
+    const worker = new FakeWorker();
+    const client = new OnlineWorkerClient({
+      worker,
+      generation: 'vault-generation',
+      vaultHandoff: { vaultId: 'a'.repeat(64), generation: 1, key },
+    });
+    try {
+      const operation = client.request({ kind: 'retryStart' });
+      expect(worker.requests.map((request) => request.body.kind)).toEqual(['unlockVault']);
+      const unlock = worker.requests[0];
+      if (!unlock || unlock.body.kind !== 'unlockVault') throw new Error('Missing vault handoff');
+      expect(unlock.body.handoff.key.extractable).toBe(false);
+      worker.reply(unlock, { ok: true, value: undefined });
+      await vi.waitFor(() => expect(worker.requests).toHaveLength(2));
+      const start = worker.requests[1];
+      if (!start) throw new Error('Missing gated session request');
+      expect(start.body.kind).toBe('retryStart');
+      worker.reply(start, { ok: true, value: undefined });
+      expectOk(await operation);
+    } finally {
+      client.fail(new Error('test complete'));
+    }
+  });
+
   test('copies only visible request bytes and reserves the heavy slot for exports too', async () => {
     vi.useFakeTimers();
     const worker = new FakeWorker();

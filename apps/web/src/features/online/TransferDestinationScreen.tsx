@@ -9,7 +9,13 @@ import './online.css';
 import './transfer-panel.css';
 
 /** The invited device opens no keys, storage writer or peer link before Start. */
-export function TransferDestinationScreen({ code }: { code: string }) {
+export function TransferDestinationScreen({
+  code,
+  importedArchiveId,
+}: {
+  code: string;
+  importedArchiveId?: string;
+}) {
   const { t } = useTranslation('lobby');
   const navigate = useNavigate();
   const destinationTransfer = useDestinationTransfer();
@@ -44,13 +50,16 @@ export function TransferDestinationScreen({ code }: { code: string }) {
   }, []);
 
   const start = async () => {
-    if (!invite || opening.current || handleRef.current) return;
+    if (!invite || !validArchiveId || opening.current || handleRef.current) return;
     opening.current = true;
     const current = generation.current;
     setBusy(true);
     setError(null);
     try {
-      const opened = await destinationTransfer.mutateAsync(invite);
+      const opened = await destinationTransfer.mutateAsync({
+        invite,
+        ...(importedArchiveId === undefined ? {} : { importedArchiveId }),
+      });
       if (generation.current !== current) {
         await opened.close();
         return;
@@ -86,7 +95,10 @@ export function TransferDestinationScreen({ code }: { code: string }) {
     }
   };
 
-  if (!invite)
+  const validArchiveId =
+    importedArchiveId === undefined || /^[0-9a-f]{64}$/.test(importedArchiveId);
+
+  if (!invite || !validArchiveId)
     return (
       <main className="app-page online-page online-transfer-invalid">
         <header className="app-header">
@@ -97,7 +109,11 @@ export function TransferDestinationScreen({ code }: { code: string }) {
         </header>
         <div className="online-transfer-destination">
           <section className="online-transfer-panel">
-            <h1>{t('lobby:transferInvalidInvite')}</h1>
+            <h1>
+              {invite
+                ? t('lobby:importTransferCheckpointInvalid')
+                : t('lobby:transferInvalidInvite')}
+            </h1>
           </section>
         </div>
       </main>
@@ -125,6 +141,11 @@ export function TransferDestinationScreen({ code }: { code: string }) {
           <section className="online-transfer-panel">
             <h1>{t('lobby:transferDestinationTitle')}</h1>
             <p>{t('lobby:transferStartHint')}</p>
+            {importedArchiveId && (
+              <p className="online-transfer-checkpoint-hint">
+                {t('lobby:importTransferCheckpointHint')}
+              </p>
+            )}
             <p className="online-transfer-self">
               <strong>{t('lobby:transferSourceDevice')}</strong>
               <code>
@@ -139,7 +160,7 @@ export function TransferDestinationScreen({ code }: { code: string }) {
               <button
                 className="button button-primary"
                 type="button"
-                disabled={busy}
+                disabled={busy || !validArchiveId}
                 onClick={() => void start()}
               >
                 {t('lobby:transferStart')}

@@ -42,6 +42,14 @@ const outcomeSchema = v.strictObject({
   finalScores: v.nullable(v.pipe(v.array(finalScoreSchema), v.minLength(2), v.maxLength(6))),
 });
 
+const voidSchema = v.strictObject({
+  protocol: v.literal('online-game-void-v1'),
+  gameId: v.pipe(v.string(), v.regex(GAME_ID)),
+  genesisDigest: v.pipe(v.string(), v.regex(DIGEST)),
+  head: entryRefSchema,
+});
+export type OnlineGameVoid = v.InferOutput<typeof voidSchema>;
+
 export interface OnlineGameOutcome {
   readonly protocol: typeof PROTOCOL;
   readonly gameId: string;
@@ -381,6 +389,42 @@ export async function loadOnlineGameOutcome(
   if (outcome.gameId !== gameId || outcome.genesisDigest !== expectedGenesisDigest)
     throw new Error('Online game outcome is bound to another game or genesis');
   return outcome;
+}
+
+/** Display metadata for a certified void; never a winner, audit or resume authority. */
+export async function saveOnlineGameVoid(
+  store: EscrowCeremonyStore,
+  input: Omit<OnlineGameVoid, 'protocol'>,
+): Promise<void> {
+  const value = v.parse(voidSchema, { ...input, protocol: 'online-game-void-v1' });
+  const bytes = encodeBounded(value);
+  await store.withCeremonyLock(historyLock(input.gameId), async () => {
+    const key = `online-game/${input.gameId}/void`;
+    if (await store.putIfAbsent(key, bytes)) return;
+    const prior = await store.load(key);
+    if (!prior || !equalBytes(prior, bytes))
+      throw new Error('Voided game metadata conflicts with its certified head');
+  });
+}
+
+export async function loadOnlineGameVoid(
+  store: EscrowCeremonyStore,
+  gameId: string,
+  expectedGenesisDigest: string,
+): Promise<OnlineGameVoid | null> {
+  if (!GAME_ID.test(gameId) || !DIGEST.test(expectedGenesisDigest))
+    throw new TypeError('Online game identity is invalid');
+  const bytes = await store.load(`online-game/${gameId}/void`);
+  if (!bytes) return null;
+  if (bytes.byteLength > MAX_RECORD_BYTES) throw new Error('Voided game metadata is oversized');
+  const value = v.parse(voidSchema, canonicalDecode(bytes));
+  if (
+    !equalBytes(bytes, canonicalEncode(value)) ||
+    value.gameId !== gameId ||
+    value.genesisDigest !== expectedGenesisDigest
+  )
+    throw new Error('Voided game metadata is bound to another game or genesis');
+  return value;
 }
 
 /** Only fully audited outcomes with a known local human seat contribute to statistics. */

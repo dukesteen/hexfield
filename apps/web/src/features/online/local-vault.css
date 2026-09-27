@@ -1,0 +1,34 @@
+.local-vault {
+  margin-block: 1.5rem;
+}
+
+.local-vault h2 {
+  margin: 0;
+}
+
+.local-vault form {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.local-vault input {
+  min-width: 0;
+  width: 100%;
+}
+
+.local-vault-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  margin-block-start: 0.65rem;
+}
+
+.local-vault-status {
+  font-weight: 700;
+}
+
+.local-vault-gate {
+  max-width: 42rem;
+  margin-inline: auto;
+  padding: 1.5rem;
+}

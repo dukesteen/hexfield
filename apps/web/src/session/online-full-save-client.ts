@@ -1,4 +1,6 @@
 import { MAX_ONLINE_FULL_SAVE_BYTES } from './online-full-save.js';
+import { VaultError } from '@cp2p/storage';
+import { getOnlineVaultController } from './online-vault-controller.js';
 import type { ImportedOnlineFullSaveSummary } from './online-full-save-catalogue.js';
 import type {
   OnlineFullSaveDisplay,
@@ -130,7 +132,7 @@ type Body =
   | Omit<Extract<OnlineFullSaveWorkerRequest, { kind: 'list' }>, 'id'>
   | Omit<Extract<OnlineFullSaveWorkerRequest, { kind: 'open' }>, 'id'>;
 
-function runJob(
+async function runJob(
   body: Body,
   factory: OnlineFullSaveWorkerFactory,
   transfer: Transferable[] = [],
@@ -138,76 +140,111 @@ function runJob(
 ): Promise<OnlineFullSaveWorkerResponse> {
   if (signal?.aborted)
     return Promise.reject(new DOMException('Full-save operation cancelled', 'AbortError'));
-  let worker: WorkerPort;
+  // The injected worker factory is a test seam. Production jobs hold a shared
+  // owner until their one-shot worker has stopped.
+  let worker: WorkerPort | null = null;
+  let cancelJob: (() => void) | null = null;
+  const vault = factory === defaultWorker ? getOnlineVaultController() : null;
+  let scope;
   try {
+    scope = vault
+      ? await vault.acquireScope(async () => {
+          cancelJob?.();
+          worker?.terminate();
+        })
+      : null;
+  } catch (error) {
+    if (error instanceof VaultError)
+      throw new OnlineFullSaveClientError(
+        error.code === 'busy' ? 'full-save-busy' : 'full-save-locked',
+        'Unlock local storage before using full saves',
+      );
+    throw error;
+  }
+  try {
+    scope?.assertActive();
     worker = factory();
-  } catch {
+  } catch (error) {
+    if (scope) await vault?.releaseScope(scope);
     return Promise.reject(
-      new OnlineFullSaveClientError('full-save-worker', 'Full-save worker could not start'),
+      error instanceof VaultError
+        ? new OnlineFullSaveClientError('full-save-locked', 'Local vault closed before the job')
+        : new OnlineFullSaveClientError('full-save-worker', 'Full-save worker could not start'),
     );
   }
+  const activeWorker = worker;
   const id = nextId++;
-  return new Promise((resolve, reject) => {
-    let settled = false;
-    const finish = (outcome: OnlineFullSaveWorkerResponse | Error) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(deadline);
-      worker.removeEventListener('message', onMessage);
-      worker.removeEventListener('error', onFailure);
-      worker.removeEventListener('messageerror', onFailure);
-      signal?.removeEventListener('abort', onAbort);
-      worker.terminate();
-      if (outcome instanceof Error) reject(outcome);
-      else if (outcome.kind === 'error')
-        reject(new OnlineFullSaveClientError(outcome.code, outcome.message));
-      else resolve(outcome);
-    };
-    const onMessage: EventListener = (event) => {
+  try {
+    return await new Promise((resolve, reject) => {
+      let settled = false;
+      const finish = (outcome: OnlineFullSaveWorkerResponse | Error) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(deadline);
+        activeWorker.removeEventListener('message', onMessage);
+        activeWorker.removeEventListener('error', onFailure);
+        activeWorker.removeEventListener('messageerror', onFailure);
+        signal?.removeEventListener('abort', onAbort);
+        activeWorker.terminate();
+        if (outcome instanceof Error) reject(outcome);
+        else if (outcome.kind === 'error')
+          reject(new OnlineFullSaveClientError(outcome.code, outcome.message));
+        else resolve(outcome);
+      };
+      const onMessage: EventListener = (event) => {
+        try {
+          const value: unknown = Reflect.get(event, 'data');
+          finish(
+            validResponse(value, id)
+              ? value
+              : new OnlineFullSaveClientError(
+                  'full-save-worker',
+                  'Full-save worker returned an invalid response',
+                ),
+          );
+        } catch {
+          finish(
+            new OnlineFullSaveClientError(
+              'full-save-worker',
+              'Full-save worker returned an invalid response',
+            ),
+          );
+        }
+      };
+      const onFailure: EventListener = () =>
+        finish(new OnlineFullSaveClientError('full-save-worker', 'Full-save worker failed'));
+      const onAbort = () => finish(new DOMException('Full-save operation cancelled', 'AbortError'));
+      cancelJob = onAbort;
+      const deadline = setTimeout(
+        () =>
+          finish(
+            new OnlineFullSaveClientError('full-save-timeout', 'Full-save operation timed out'),
+          ),
+        DEADLINE_MS,
+      );
+      activeWorker.addEventListener('message', onMessage);
+      activeWorker.addEventListener('error', onFailure);
+      activeWorker.addEventListener('messageerror', onFailure);
+      signal?.addEventListener('abort', onAbort, { once: true });
+      if (signal?.aborted) {
+        onAbort();
+        return;
+      }
       try {
-        const value: unknown = Reflect.get(event, 'data');
-        finish(
-          validResponse(value, id)
-            ? value
-            : new OnlineFullSaveClientError(
-                'full-save-worker',
-                'Full-save worker returned an invalid response',
-              ),
+        // oxlint-disable-next-line unicorn/require-post-message-target-origin -- Dedicated Worker messages do not take a target origin.
+        activeWorker.postMessage(
+          scope ? { request: { ...body, id }, handoff: scope.handoff() } : { ...body, id },
+          transfer,
         );
       } catch {
         finish(
-          new OnlineFullSaveClientError(
-            'full-save-worker',
-            'Full-save worker returned an invalid response',
-          ),
+          new OnlineFullSaveClientError('full-save-worker', 'Full-save request could not be sent'),
         );
       }
-    };
-    const onFailure: EventListener = () =>
-      finish(new OnlineFullSaveClientError('full-save-worker', 'Full-save worker failed'));
-    const onAbort = () => finish(new DOMException('Full-save operation cancelled', 'AbortError'));
-    const deadline = setTimeout(
-      () =>
-        finish(new OnlineFullSaveClientError('full-save-timeout', 'Full-save operation timed out')),
-      DEADLINE_MS,
-    );
-    worker.addEventListener('message', onMessage);
-    worker.addEventListener('error', onFailure);
-    worker.addEventListener('messageerror', onFailure);
-    signal?.addEventListener('abort', onAbort, { once: true });
-    if (signal?.aborted) {
-      onAbort();
-      return;
-    }
-    try {
-      // oxlint-disable-next-line unicorn/require-post-message-target-origin -- Dedicated Worker messages do not take a target origin.
-      worker.postMessage({ ...body, id }, transfer);
-    } catch {
-      finish(
-        new OnlineFullSaveClientError('full-save-worker', 'Full-save request could not be sent'),
-      );
-    }
-  });
+    });
+  } finally {
+    if (scope) await vault?.releaseScope(scope);
+  }
 }
 
 /** Loads journal and optional private material by ID inside a one-shot worker. */

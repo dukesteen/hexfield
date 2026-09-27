@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useSettings, useUpdateSettings } from '../queries/hooks';
 import type { Settings } from '../queries/repositories/settings';
 import { NetworkSettingsForm } from '../features/online/NetworkSettingsForm';
+import { LocalVaultSettings } from '../features/online/LocalVaultSettings.js';
 
 export const Route = createFileRoute('/settings')({ component: SettingsPage });
 
@@ -25,6 +26,7 @@ function SettingsPage() {
         {settings.isError && <p role="alert">{t('lobby:settingsLoadError')}</p>}
         {settings.data && <SettingsForm initial={settings.data} />}
         {settings.data && <NetworkSettingsForm initial={settings.data.network} />}
+        <LocalVaultSettings />
       </div>
     </main>
   );

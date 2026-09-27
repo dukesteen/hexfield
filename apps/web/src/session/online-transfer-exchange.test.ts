@@ -122,8 +122,14 @@ function sourceRecord(): OnlineTransferExchangeRecord & { role: 'source' } {
   return { ...record('source'), role: 'source' };
 }
 
-function destinationRecord(): OnlineTransferExchangeRecord & { role: 'destination' } {
-  return { ...record('destination'), role: 'destination' };
+function destinationRecord(
+  importedArchiveId?: string,
+): OnlineTransferExchangeRecord & { role: 'destination' } {
+  return {
+    ...record('destination'),
+    role: 'destination',
+    ...(importedArchiveId === undefined ? {} : { importedArchiveId }),
+  };
 }
 
 function required<T>(item: T | undefined): T {
@@ -548,9 +554,11 @@ test('duplicate destination offer resumes an already approved source without ano
 test('destination delegates import and promotion to worker and shuts it down before opening the game', async () => {
   const steps: string[] = [];
   const sent: OnlineTransferArtifact[] = [];
+  const importedArchiveId = 'e'.repeat(64);
+  let initializeRequest: OnlineWorkerRequestBody | null = null;
   let stage: 'offered' | 'imported' = 'offered';
   const destination = new DestinationTransferExchange({
-    record: destinationRecord(),
+    record: destinationRecord(importedArchiveId),
     expected: { gameId: 'a'.repeat(22), genesisDigest: digest },
     channel: {
       async send(item) {
@@ -559,6 +567,7 @@ test('destination delegates import and promotion to worker and shuts it down bef
     },
     worker: worker((body) => {
       steps.push(body.kind);
+      if (body.kind === 'initializeTransfer') initializeRequest = body;
       // oxlint-disable-next-line typescript/switch-exhaustiveness-check -- This fake rejects requests outside the destination exchange API.
       switch (body.kind) {
         case 'initializeTransfer':
@@ -625,6 +634,7 @@ test('destination delegates import and promotion to worker and shuts it down bef
     },
   });
   await destination.receive({ kind: 'bootstrap', bytes: Uint8Array.of(1) });
+  expect(initializeRequest).toMatchObject({ importedArchiveId });
   await destination.receive({ kind: 'authorized', bytes: Uint8Array.of(2) });
   await destination.receive(artifact('private', packet));
   expect(sent.map((item) => item.kind)).toEqual(['offer', 'readiness']);
