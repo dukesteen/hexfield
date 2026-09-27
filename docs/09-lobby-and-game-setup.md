@@ -61,7 +61,7 @@ Rules:
 
 ## 3. Genesis ceremony
 
-Run when the host presses Start (all humans ready, all connected in a full mesh). Every step is signed. The ceremony aborts cleanly (back to the lobby with an error) if any step times out (20 s per step).
+Run when the host presses Start (all humans ready, all connected in a full mesh). Every step is signed. Before local genesis consent, a step timeout (20 s) aborts the ceremony and returns to the lobby with an error. Retire that ceremony and use fresh secrets on retry. Once a client durably promises and signs an exact genesis digest, timeout cannot revoke the signature. It stays in a recoverable waiting state until that genesis is assembled or an agreed disposition resolves it.
 
 1. **Freeze**: the host broadcasts `CEREMONY_BEGIN { lobbyVersion, protocolVersion, engineVersion, config, seats, ceremonyNonce }`. Every peer checks it equals its lobby view and replies with a signed `FREEZE_ACK`.
 2. **Secrets**: each human seat (and each bot host, for each of its bots) generates `masterSecret`s. For each one it computes and publishes a `SeatCommitments` package:
@@ -76,6 +76,7 @@ Run when the host presses Start (all humans ready, all connected in a full mesh)
 6. **Genesis draft**: every peer builds the identical `Genesis` body:
    `{ protocolVersion, engineVersion, config, seats(with game keys, identity bindings, names, colours, kinds, botHosts), genesisSeed, ceremonyNonce, security: 'verified', commitments(including deck definitions, ordered signed-pass hashes, final locked-deck hashes, share acknowledgements and sealed shares), createdAt(host clock, informational) }`.
    Hash the body and derive the routing `gameId` exactly as defined in stage 06. Each human uses `prepareGenesisConsent` to verify the complete deck transcript and durably reserve one final genesis digest for this ceremony and seat before returning its signature. A retry returns the same consent; a redraft that changes the digest must begin a fresh ceremony. The body excludes its derived identifier and consent signatures. A fixed board still needs a fresh agreed ceremony nonce. Retain the exact public transcript blobs for setup completion after a restart; a hash list alone cannot prove availability or valid setup.
+   The ceremony coordinator first records an irreversible `consenting` phase for that digest in the same device-global registry that orders aborts. From then on, local abort is refused. Later authenticated share disclosures are retained across restart for agreed handling; they do not erase the consent or silently allow normal gameplay. A valid signed genesis can complete local storage while its disclosure disposition remains pending. This boundary avoids a client retiring keys whose genesis signature peers can still use.
 7. **Start and certify decks**: seq 0 is genesis with all human signatures. The term 1 sequencer certifies the already-fixed passes individually as state-preserving `crypto/deck-pass` entries, each within the 256 KiB message cap including its proposal/certificate envelope. Certified proposer-exclusion controls may intervene without resetting the deck cursor. The first engine pending, `startSeat`, stays frozen at its genesis anchor. No human reveals a beacon link and no gameplay entry is accepted until every committed deck pass has been verified and certified.
 
 Version compatibility: in `HELLO` and in step 1, peers compare `protocolVersion` (must be equal) and `engineVersion` (must be equal). Otherwise the joining peer sees "Your app version differs from the host's. Please reload (the host is on vX)." The service worker update flow (stage 18) must make "reload to update" reliable.
@@ -116,5 +117,5 @@ Version compatibility: in `HELLO` and in step 1, peers compare `protocolVersion`
 - [ ] Create → invite → join → start → finish → audit ✓ works over the signaling server and over manual codes.
 - [ ] Mixed humans and bots work. The bot host can be any peer.
 - [ ] A version mismatch is detected with a clear message.
-- [ ] Every ceremony abort path returns everyone to the lobby cleanly.
+- [ ] Every pre-consent ceremony abort path retires its keys and returns to the lobby cleanly; post-consent timeout/disclosure preserves the signed promise and shows a recoverable waiting state.
 - [ ] Turn timers work, and a disagreeing peer can't be forced into an early timeout.

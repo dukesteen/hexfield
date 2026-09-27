@@ -43,8 +43,9 @@ decryption point, then uses the same payload/hash/Feldman checks as acceptance.
 A correctly opened share produces a typed false-complaint verdict against its
 holder. An invalid opening produces a bad-share verdict against its dealer.
 Malformed data, an invalid signature or an unauthenticated point produce neither
-verdict. Both authenticated disclosures expose a share and require aborting the
-whole ceremony. Complaint proof randomness derives privately from the holder's
+verdict. Both authenticated disclosures expose a share. Before genesis consent they
+require aborting the whole ceremony. After consent they are retained for an
+agreed disposition; an already sent genesis signature cannot be revoked. Complaint proof randomness derives privately from the holder's
 encryption secret and the exact signed envelope. It is never caller-supplied.
 
 The distribution lifecycle requires signed approval of the frozen manifest from
@@ -59,24 +60,31 @@ Abort atomically retires every local master in the ceremony and records a
 permanent ceremony tombstone, including when abort races with the first
 reservation. Verified bad-share and false-complaint evidence use this same
 transition. Storage failure returns no successful retirement verdict. The
-provided memory store is a test double; the browser needs durable transactions
-shared across tabs. Retirement also tombstones masters that have not yet been
+provided memory store is a test double. `IndexedDbByteStore` now provides
+bounded atomic records shared across tabs, resolving writes only after the
+transaction commits, and an exclusive Web Lock for ceremony critical sections. Retirement also tombstones masters that have not yet been
 reserved and clears cached envelopes for retired masters. Admission reserves
 storage for every active ceremony's abort. Retirement may consume its own
 allocation while preserving space for other active ceremonies. The registry is
 bounded; a full device must refuse new attempts before exposing any share.
-Completed ceremonies still need a coordinator transition that discards cached
-envelopes after validating certified genesis while retaining permanent master
-bindings. Never clear the registry to retry a reserved or retired master.
+The coordinator now validates the signed genesis and complete deck transcripts
+before recording completion in the same CAS registry. Completion discards
+cached envelopes and retains permanent master bindings. Never clear the
+registry to retry a reserved or retired master.
 
-A returned envelope can outlive its storage read. The future delivery, ACK and
-genesis-consent paths must check retirement immediately before sending or
-signing, and must accept disputes only before genesis certification. Active
-masters must not be exported to another device during setup. A corrupt registry
-fails closed; starting another attempt requires new keys, never reuse of a key
-whose prior reservation cannot be established. Network delivery, persistence of accepted private shares
-before ACKs, and publication of complaints after durable abort remain ceremony
-integration work. Only public sealed envelopes and ACKs enter genesis.
+`EscrowCeremony` pins the local frozen manifest and holds a device-wide lock
+through durable checks and synchronous message enqueue. It retains an accepted
+private share with its exact signed ACK before delivery. Genesis consent first
+reserves an irreversible exact digest, and further aborts fail. Authenticated
+post-consent disclosures are retained across restart; completion returns a
+disputed result when they exist. Complaint publication retains the exact
+outbound evidence and durably retires setup before enqueue. These methods are
+building blocks for the future lobby driver, which is not wired yet.
+
+Active masters must not be exported to another device during setup. A corrupt
+registry fails closed; starting another attempt requires new keys, never reuse
+of a key whose prior reservation cannot be established. Only public sealed
+envelopes and ACKs enter genesis.
 
 `verifyRevealedMaster` checks a disclosed canonical nonzero scalar against its
 master commitment, original encryption key, initial human beacon tip, and every
@@ -86,12 +94,19 @@ the key-consistency check required for recovery. It neither authorizes secret
 release nor replaces the full historical audit. Certified replay remains the
 authority for genesis and ledger provenance.
 
-Remaining integration includes browser-backed manifest approval and reservation,
-ceremony delivery/ACKs and complaint publication, the old-quorum recovery-authorization certificate,
-authorized share release and reconstruction, a second activation certificate,
-and end-game reveal/audit. A timeout alone must never release a share. If a
-required holder withholds, recovery pauses. A master/key mismatch after
-authorized reconstruction must void the game rather than activate an unusable
-replacement seat. Activation must also replay private hand openings and check
-current beacon extensions. Context corruption and invalid released shares must
-not be classified as a departed seat's master/key violation.
+`reconstructPrivateSeats` authenticates a complete certified prefix before
+checking supplied master secrets. It verifies every owned human beacon link and
+extension, rebuilds owned hands and dealt slots through the verified private
+driver, and checks commitment openings after each entry. Failure disposes the
+partial result. Its caller must already own or have authorization for the
+supplied secrets; this function does not authorize recovery or audit the game.
+
+Remaining integration includes the lobby and network delivery driver, the
+old-quorum recovery-authorization certificate, authorized share release, a
+second activation certificate, and end-game reveal/audit. A timeout alone must
+never release a share. If a required holder withholds, recovery pauses. A
+master/key mismatch after authorized reconstruction must void the game rather
+than activate an unusable replacement seat. Context corruption and invalid
+released shares must not be classified as a departed seat's master/key
+violation. The next [recovery design](recovery-integration-design.md) separates
+current controller authority from the original cryptographic commitments.

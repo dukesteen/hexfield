@@ -10,6 +10,7 @@ import { createHandSecretSource } from './hand-source.js';
 import { MemoryProtocolJournal } from './journal.js';
 import { decodeProtocolMessage } from './messages.js';
 import { P2PSession } from './p2p-session.js';
+import { reconstructPrivateSeats } from './private-replay.js';
 import type { P2PSessionOptions } from './p2p-session.js';
 import { MemoryStealDeliveryStore } from './steal-contributions.js';
 import type { StealDeliveryStore } from './steal-contributions.js';
@@ -254,6 +255,27 @@ test('a live hidden steal survives a dropped delivery and restart with one priva
       );
     expect(results).toHaveLength(1);
     const after = allHands();
+    const botSeats = fixture.genesis.seats
+      .filter((seat) => seat.kind === 'bot')
+      .map((seat) => seat.seat);
+    expect(botSeats.some((seat) => seat === thiefSeat || seat === victimSeat)).toBe(true);
+    const reconstructed = value(
+      reconstructPrivateSeats({
+        genesisEntry: fixture.entry,
+        entries: required(live[0]).exportSave().entries,
+        engine: fixture.simulation.engine,
+        policy: fixture.policy,
+        secrets: botSeats.map((seat) => ({ seat, master: scalarToBytes(BigInt(17 + seat)) })),
+      }),
+    );
+    try {
+      for (const seat of botSeats)
+        expect(reconstructed.driver.privateState(seat)).toEqual(
+          required(after.find((hand) => hand.seat === seat)),
+        );
+    } finally {
+      reconstructed.dispose();
+    }
     const thiefBefore = required(before.find((item) => item.seat === thiefSeat));
     const thiefAfter = required(after.find((item) => item.seat === thiefSeat));
     const victimBefore = required(before.find((item) => item.seat === victimSeat));

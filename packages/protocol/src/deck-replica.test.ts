@@ -1,7 +1,7 @@
 import { canonicalDecode, fromBase64Url, toBase64Url } from '@cp2p/codec';
 import { BASE_DEV_CARD_CATALOGUE, RESOURCES, failure } from '@cp2p/engine';
 import { scalarToBytes } from '@cp2p/crypto';
-import type { CommandShape, GameState, Result, Seat } from '@cp2p/engine';
+import type { CommandShape, GameState, PrivateState, Result, Seat } from '@cp2p/engine';
 import { writeFile } from 'node:fs/promises';
 import { Session as InspectorSession } from 'node:inspector';
 import { tmpdir } from 'node:os';
@@ -22,6 +22,7 @@ import { signCommand } from './log.js';
 import { decodeProtocolMessage, encodeProtocolMessage } from './messages.js';
 import type { ProtocolMessage } from './messages.js';
 import { P2PSession } from './p2p-session.js';
+import { reconstructPrivateSeats } from './private-replay.js';
 import { ReplicatedLog } from './replicated-log.js';
 import type { ReplicatedLogOptions } from './replicated-log.js';
 import { createMemnet } from './testing/memnet.js';
@@ -1005,6 +1006,28 @@ describe('live verified deck replication', () => {
             : privateState === null,
         ).toBe(true);
       }
+      let recoveredHand: PrivateState | null | undefined;
+      if (humanCount === 1) {
+        const reconstructed = value(
+          reconstructPrivateSeats({
+            genesisEntry: fixture.entry,
+            entries: first.getEntries(),
+            engine: fixture.simulation.engine,
+            policy: fixture.policy,
+            secrets: [{ seat: draw.seat, master: scalarToBytes(BigInt(17 + draw.seat)) }],
+          }),
+        );
+        try {
+          recoveredHand = reconstructed.driver.privateState(draw.seat);
+        } finally {
+          reconstructed.dispose();
+        }
+      }
+      expect(humanCount !== 1 || drawer.kind === 'bot').toBe(true);
+      expect(recoveredHand).toEqual(
+        humanCount === 1 ? required(sessions[ownerIndex]).getPrivate(draw.seat) : undefined,
+      );
+      expect(humanCount !== 1 || Boolean(recoveredHand?.slots[draw.slotId])).toBe(true);
       sessions.forEach((session) => session.dispose());
       network.dispose();
     },

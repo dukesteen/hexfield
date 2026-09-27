@@ -1,0 +1,12 @@
+{
+  "docs/verification/stage07/recovery-integration-design.md": "e3e06b412ca4a14030082cfa3ffe48b60ca5b3ec0335c11689595c32ec45f243",
+  "docs/verification/stage07/step7-escrow-design.md": "40d03715626530d75ee96ac7fb9c588120b87198dd9f4329ae3f6cd0645aa0d6",
+  "docs/10-persistence-reconnection.md": "f7bc1b37475b3e0d6e47a74f77ccad3ec001d8de048103c7578f75acdf6da5ca",
+  "packages/protocol/src/escrow-lifecycle.ts": "de04f9a13577fe94c35b80968ad98ccd68a75d40ac38080479cdc4bb6226466d",
+  "packages/protocol/src/genesis-outbox.ts": "2d4c7cb2747af910cfb0ee4a8b0e16d22ea70e4970f18f34b23b03c6d146691f",
+  "packages/protocol/src/proposal.ts": "4211e661de712a986388a0f7a6bcf6da65f90dd9989d2e96100ba8556c24cfb7",
+  "packages/protocol/src/crypto-context.ts": "f17ed4cbeafa0eac304d0e5f542dfd07d9223ee53d8bf2d7799fa822c561fcc1",
+  "packages/protocol/src/count-state.ts": "5b2e9e41169f8c707610c00336a3036abd4501676926137aeb684b0adaf5a519",
+  "packages/protocol/src/steal-state.ts": "b6d3c4137982ab4523e37b03fa6fbca8d77f18904528fe87d46a2e346f71b17d",
+  "packages/protocol/src/votes.ts": "d8ca8b3f9d17b5f774eec2b891f5043139aa753695274e840af2e858050b0206"
+}

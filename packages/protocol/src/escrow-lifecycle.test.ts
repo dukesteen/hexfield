@@ -20,6 +20,8 @@ import {
   MemoryEscrowLifecycleStore,
   prepareEscrowDistribution,
   prepareEscrowManifestApproval,
+  reserveEscrowGenesisConsent,
+  checkEscrowCeremonyActive,
   retireEscrowCeremony,
   verifyEscrowManifestApprovals,
   verifyAndRetireEscrowShareDispute,
@@ -125,6 +127,20 @@ async function approve(
 }
 
 const dealerMaster = fromBase64Url(encodeScalar(masterSecrets[0]));
+
+test('an irreversible signed-genesis intent prevents local retirement and further distribution', async () => {
+  const frozen = manifest();
+  const store = new MemoryEscrowLifecycleStore();
+  const digest = encodeScalar(918n);
+  expect((await reserveEscrowGenesisConsent(frozen, digest, store)).ok).toBe(true);
+  expect((await reserveEscrowGenesisConsent(frozen, digest, store)).ok).toBe(true);
+  const changed = await reserveEscrowGenesisConsent(frozen, encodeScalar(919n), store);
+  expect(changed.ok ? '' : changed.error.code).toBe('escrow-ceremony-consent-conflict');
+  const retired = await retireEscrowCeremony(frozen, store);
+  expect(retired.ok ? '' : retired.error.code).toBe('escrow-ceremony-consenting');
+  const active = await checkEscrowCeremonyActive(frozen, store);
+  expect(active.ok ? '' : active.error.code).toBe('escrow-ceremony-consenting');
+});
 
 class FailingReservationStore extends MemoryEscrowLifecycleStore {
   override async putIfAbsent(id: string, bytes: Uint8Array): Promise<boolean> {

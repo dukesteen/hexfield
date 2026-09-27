@@ -25,6 +25,7 @@ import type { EscrowDisputeVerdict } from './escrow-dispute.js';
 import { deckCeremonyId } from './deck-genesis.js';
 import { deriveEscrowRosters } from './escrow-roster.js';
 import { validateGenesisEncryption } from './genesis-encryption.js';
+import { validateGenesisEscrow } from './genesis-escrow.js';
 import { validateGenesisMasters } from './genesis-masters.js';
 import { genesisSchema } from './schemas.js';
 import { key32Schema, seatSchema, signature64Schema } from './schema-values.js';
@@ -52,7 +53,7 @@ const reservationSchema = v.strictObject({
   ceremonyId: key32Schema,
   masterPub: key32Schema,
   dealerSeat: seatSchema,
-  status: v.picklist(['active', 'retired']),
+  status: v.picklist(['active', 'retired', 'completed']),
   envelopes: v.pipe(
     v.array(v.pipe(v.string(), v.maxLength(MAX_MESSAGE_BYTES * 2))),
     v.maxLength(5),
@@ -62,6 +63,18 @@ const registrySchema = v.strictObject({
   protocol: v.literal(REGISTRY_PROTOCOL),
   reservations: v.pipe(v.array(reservationSchema), v.maxLength(50_000)),
   retiredCeremonies: v.pipe(v.array(key32Schema), v.maxLength(50_000)),
+  consentingCeremonies: v.optional(
+    v.pipe(
+      v.array(v.strictObject({ ceremonyId: key32Schema, genesisDigest: key32Schema })),
+      v.maxLength(50_000),
+    ),
+  ),
+  completedCeremonies: v.optional(
+    v.pipe(
+      v.array(v.strictObject({ ceremonyId: key32Schema, genesisDigest: key32Schema })),
+      v.maxLength(50_000),
+    ),
+  ),
 });
 
 export interface EscrowManifestApproval {
@@ -86,10 +99,29 @@ export interface EscrowLifecycleStore {
   putIfAbsent(id: string, bytes: Uint8Array): Promise<boolean>;
   /** Atomic byte-exact compare-and-swap; true only after durable commit. */
   compareAndSwap(id: string, expected: Uint8Array, replacement: Uint8Array): Promise<boolean>;
+  /** Shared device lock, required when this store is used for live delivery. */
+  withCeremonyLock?<T>(ceremonyId: string, task: () => Promise<T>): Promise<T>;
 }
 
 export class MemoryEscrowLifecycleStore implements EscrowLifecycleStore {
   readonly #records = new Map<string, Uint8Array>();
+  readonly #locks = new Map<string, Promise<void>>();
+
+  async withCeremonyLock<T>(ceremonyId: string, task: () => Promise<T>): Promise<T> {
+    const previous = this.#locks.get(ceremonyId) ?? Promise.resolve();
+    let release!: () => void;
+    const current = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    this.#locks.set(ceremonyId, current);
+    await previous;
+    try {
+      return await task();
+    } finally {
+      if (this.#locks.get(ceremonyId) === current) this.#locks.delete(ceremonyId);
+      release();
+    }
+  }
 
   async load(id: string): Promise<Uint8Array | null> {
     return this.#records.get(id)?.slice() ?? null;
@@ -280,7 +312,7 @@ interface Reservation {
   readonly ceremonyId: string;
   readonly masterPub: string;
   readonly dealerSeat: Seat;
-  readonly status: 'active' | 'retired';
+  readonly status: 'active' | 'retired' | 'completed';
   readonly envelopes: readonly string[];
 }
 
@@ -288,10 +320,24 @@ interface EscrowRegistry {
   readonly protocol: typeof REGISTRY_PROTOCOL;
   readonly reservations: readonly Reservation[];
   readonly retiredCeremonies: readonly string[];
+  readonly consentingCeremonies: readonly {
+    readonly ceremonyId: string;
+    readonly genesisDigest: string;
+  }[];
+  readonly completedCeremonies: readonly {
+    readonly ceremonyId: string;
+    readonly genesisDigest: string;
+  }[];
 }
 
 function emptyRegistry(): EscrowRegistry {
-  return { protocol: REGISTRY_PROTOCOL, reservations: [], retiredCeremonies: [] };
+  return {
+    protocol: REGISTRY_PROTOCOL,
+    reservations: [],
+    retiredCeremonies: [],
+    consentingCeremonies: [],
+    completedCeremonies: [],
+  };
 }
 
 function activeCeremonies(registry: EscrowRegistry): number {
@@ -306,7 +352,11 @@ function registryWithinBounds(registry: EscrowRegistry): boolean {
   const active = activeCeremonies(registry);
   return (
     registry.reservations.length + active * 6 <= 50_000 &&
-    registry.retiredCeremonies.length + active <= 50_000
+    registry.retiredCeremonies.length +
+      registry.consentingCeremonies.length +
+      registry.completedCeremonies.length +
+      active <=
+      50_000
   );
 }
 
@@ -317,15 +367,30 @@ function parseRegistry(bytes: Uint8Array): Result<EscrowRegistry> {
     const parsed = v.safeParse(registrySchema, canonicalDecode(bytes));
     if (!parsed.success || !equalBytes(bytes, canonicalEncode(parsed.output)))
       return failure('escrow-registry-record', 'Stored escrow registry is corrupt');
+    const registry: EscrowRegistry = {
+      ...parsed.output,
+      consentingCeremonies: parsed.output.consentingCeremonies ?? [],
+      completedCeremonies: parsed.output.completedCeremonies ?? [],
+    };
     if (
-      new Set(parsed.output.reservations.map(({ masterPub }) => masterPub)).size !==
-        parsed.output.reservations.length ||
-      new Set(parsed.output.retiredCeremonies).size !== parsed.output.retiredCeremonies.length
+      new Set(registry.reservations.map(({ masterPub }) => masterPub)).size !==
+        registry.reservations.length ||
+      new Set(registry.retiredCeremonies).size !== registry.retiredCeremonies.length ||
+      new Set(registry.completedCeremonies.map(({ ceremonyId }) => ceremonyId)).size !==
+        registry.completedCeremonies.length ||
+      new Set(registry.consentingCeremonies.map(({ ceremonyId }) => ceremonyId)).size !==
+        registry.consentingCeremonies.length ||
+      registry.completedCeremonies.some(({ ceremonyId }) =>
+        registry.retiredCeremonies.includes(ceremonyId),
+      ) ||
+      registry.consentingCeremonies.some(({ ceremonyId }) =>
+        registry.retiredCeremonies.includes(ceremonyId),
+      )
     )
       return failure('escrow-registry-record', 'Stored escrow registry has duplicate reservations');
-    if (!registryWithinBounds(parsed.output))
+    if (!registryWithinBounds(registry))
       return failure('escrow-registry-record', 'Stored escrow registry exceeds reservation bounds');
-    return success(parsed.output as EscrowRegistry);
+    return success(registry);
   } catch {
     return failure('escrow-registry-record', 'Stored escrow registry is corrupt');
   }
@@ -388,6 +453,191 @@ function decodeRetainedEnvelopes(reservation: Reservation): Result<readonly Escr
   } catch {
     return failure('escrow-reservation-record', 'Stored escrow envelope is corrupt');
   }
+}
+
+/** Read the durable registry immediately before an outgoing ceremony action. */
+export async function checkEscrowCeremonyActive(
+  localFrozenManifest: GenesisBody,
+  store: EscrowLifecycleStore,
+): Promise<Result<void>> {
+  const checked = checkedManifest(localFrozenManifest);
+  if (!checked.ok) return checked;
+  const ceremonyId = deckCeremonyId(checked.value);
+  const loaded = await loadRegistry(store);
+  if (!loaded.ok) return loaded;
+  if (loaded.value.value.retiredCeremonies.includes(ceremonyId))
+    return failure('escrow-ceremony-retired', 'This escrow ceremony has been permanently retired');
+  if (loaded.value.value.completedCeremonies.some((item) => item.ceremonyId === ceremonyId))
+    return failure('escrow-ceremony-completed', 'This escrow ceremony has completed');
+  if (loaded.value.value.consentingCeremonies.some((item) => item.ceremonyId === ceremonyId))
+    return failure('escrow-ceremony-consenting', 'This escrow ceremony has issued genesis consent');
+  return success(undefined);
+}
+
+/** Reject a final draft that omits any locally retained dealer envelope. */
+export async function checkEscrowLocalDistribution(
+  localFrozenManifest: GenesisBody,
+  finalBody: GenesisBody,
+  store: EscrowLifecycleStore,
+): Promise<Result<void>> {
+  const local = checkedManifest(localFrozenManifest);
+  if (!local.ok) return local;
+  const final = checkedManifest(finalBody);
+  if (!final.ok) return final;
+  const ceremonyId = deckCeremonyId(local.value);
+  if (deckCeremonyId(final.value) !== ceremonyId)
+    return failure('escrow-manifest-conflict', 'Final draft differs from local ceremony');
+  const transcript = validateGenesisEscrow(final.value);
+  if (!transcript.ok) return transcript;
+  const loaded = await loadRegistry(store);
+  if (!loaded.ok) return loaded;
+  if (loaded.value.value.retiredCeremonies.includes(ceremonyId))
+    return failure('escrow-ceremony-retired', 'Retired ceremony cannot consent');
+  for (const reservation of loaded.value.value.reservations) {
+    if (reservation.ceremonyId !== ceremonyId) continue;
+    if (reservation.status !== 'active')
+      return failure('escrow-ceremony-retired', 'Local master is no longer active');
+    const dealer = transcript.value.find((item) => item.dealerSeat === reservation.dealerSeat);
+    if (!dealer || dealer.shares.length !== reservation.envelopes.length)
+      return failure('escrow-ceremony-transcript', 'Local retained shares differ from final draft');
+    for (let index = 0; index < dealer.shares.length; index += 1) {
+      const signed = dealer.shares[index];
+      if (!signed || reservation.envelopes[index] !== toBase64Url(canonicalEncode(signed.envelope)))
+        return failure(
+          'escrow-ceremony-transcript',
+          'Local retained share differs from final draft',
+        );
+    }
+  }
+  return success(undefined);
+}
+
+/** Reserve an irreversible exact final genesis digest before signing it. */
+export async function reserveEscrowGenesisConsent(
+  localFrozenManifest: GenesisBody,
+  digest: string,
+  store: EscrowLifecycleStore,
+): Promise<Result<void>> {
+  const checked = checkedManifest(localFrozenManifest);
+  if (!checked.ok) return checked;
+  const ceremonyId = deckCeremonyId(checked.value);
+  // oxlint-disable no-await-in-loop -- Each durable CAS retry reads the preceding winner.
+  for (let attempt = 0; attempt < 64; attempt += 1) {
+    const loaded = await loadRegistry(store);
+    if (!loaded.ok) return loaded;
+    const { bytes, value } = loaded.value;
+    if (value.retiredCeremonies.includes(ceremonyId))
+      return failure('escrow-ceremony-retired', 'Retired ceremony cannot consent');
+    if (value.completedCeremonies.some((item) => item.ceremonyId === ceremonyId))
+      return failure('escrow-ceremony-completed', 'Completed ceremony cannot consent');
+    const previous = value.consentingCeremonies.find((item) => item.ceremonyId === ceremonyId);
+    if (previous)
+      return previous.genesisDigest === digest
+        ? success(undefined)
+        : failure(
+            'escrow-ceremony-consent-conflict',
+            'Ceremony already consented to another genesis',
+          );
+    const encoded = encodeRegistry(
+      {
+        ...value,
+        consentingCeremonies: [
+          ...value.consentingCeremonies,
+          { ceremonyId, genesisDigest: digest },
+        ],
+      },
+      false,
+    );
+    if (!encoded.ok) return encoded;
+    try {
+      const won =
+        bytes === null
+          ? await store.putIfAbsent(REGISTRY_ID, encoded.value)
+          : await store.compareAndSwap(REGISTRY_ID, bytes, encoded.value);
+      if (won) return success(undefined);
+    } catch {
+      return failure('escrow-registry-write', 'Could not durably reserve genesis consent');
+    }
+  }
+  // oxlint-enable no-await-in-loop
+  return failure('escrow-registry-contention', 'Could not reserve genesis consent');
+}
+
+/**
+ * Called only after the coordinator validates the signed genesis entry and all
+ * deck transcripts. Retained envelopes must appear byte-exactly in genesis.
+ */
+export async function completeEscrowCeremony(
+  localFrozenManifest: GenesisBody,
+  certifiedGenesis: GenesisBody,
+  digest: string,
+  store: EscrowLifecycleStore,
+): Promise<Result<void>> {
+  const local = checkedManifest(localFrozenManifest);
+  if (!local.ok) return local;
+  const certified = checkedManifest(certifiedGenesis);
+  if (!certified.ok) return certified;
+  const ceremonyId = deckCeremonyId(local.value);
+  if (deckCeremonyId(certified.value) !== ceremonyId)
+    return failure(
+      'escrow-manifest-conflict',
+      'Certified genesis differs from the frozen ceremony',
+    );
+  const transcript = validateGenesisEscrow(certified.value);
+  if (!transcript.ok) return transcript;
+  // oxlint-disable no-await-in-loop -- Each durable CAS retry reads the preceding winner.
+  for (let attempt = 0; attempt < 64; attempt += 1) {
+    const loaded = await loadRegistry(store);
+    if (!loaded.ok) return loaded;
+    const { bytes, value } = loaded.value;
+    if (value.retiredCeremonies.includes(ceremonyId))
+      return failure('escrow-ceremony-retired', 'Retired ceremony cannot complete');
+    const completed = value.completedCeremonies.find((item) => item.ceremonyId === ceremonyId);
+    if (completed)
+      return completed.genesisDigest === digest
+        ? success(undefined)
+        : failure('escrow-ceremony-conflict', 'Ceremony already completed with another genesis');
+    const consented = value.consentingCeremonies.find((item) => item.ceremonyId === ceremonyId);
+    if (!consented || consented.genesisDigest !== digest)
+      return failure('escrow-ceremony-consent', 'Certified genesis lacks matching local consent');
+    const reservations = [...value.reservations];
+    for (const [index, reservation] of reservations.entries()) {
+      if (reservation.ceremonyId !== ceremonyId) continue;
+      if (reservation.status !== 'active')
+        return failure('escrow-ceremony-retired', 'A local master has been retired');
+      const dealer = transcript.value.find((item) => item.dealerSeat === reservation.dealerSeat);
+      if (!dealer || dealer.shares.length !== reservation.envelopes.length)
+        return failure('escrow-ceremony-transcript', 'Local retained shares differ from genesis');
+      for (let shareIndex = 0; shareIndex < dealer.shares.length; shareIndex += 1) {
+        const retained = reservation.envelopes[shareIndex];
+        const signed = dealer.shares[shareIndex];
+        if (!retained || !signed || retained !== toBase64Url(canonicalEncode(signed.envelope)))
+          return failure('escrow-ceremony-transcript', 'Local retained share differs from genesis');
+      }
+      reservations[index] = { ...reservation, status: 'completed', envelopes: [] };
+    }
+    const updated: EscrowRegistry = {
+      ...value,
+      reservations,
+      completedCeremonies: [...value.completedCeremonies, { ceremonyId, genesisDigest: digest }],
+    };
+    const encoded = encodeRegistry(updated, false);
+    if (!encoded.ok) return encoded;
+    try {
+      const won =
+        bytes === null
+          ? await store.putIfAbsent(REGISTRY_ID, encoded.value)
+          : await store.compareAndSwap(REGISTRY_ID, bytes, encoded.value);
+      if (won) return success(undefined);
+    } catch {
+      return failure('escrow-registry-write', 'Could not durably complete the ceremony');
+    }
+  }
+  // oxlint-enable no-await-in-loop
+  return failure(
+    'escrow-registry-contention',
+    'Could not complete the ceremony after concurrent updates',
+  );
 }
 
 /**
@@ -498,6 +748,10 @@ async function reserveOrRestore(
   const { value: registry, bytes: previousBytes } = loaded.value;
   if (registry.retiredCeremonies.includes(desired.ceremonyId))
     return failure('escrow-ceremony-retired', 'This escrow ceremony has been permanently retired');
+  if (registry.completedCeremonies.some(({ ceremonyId }) => ceremonyId === desired.ceremonyId))
+    return failure('escrow-ceremony-completed', 'This escrow ceremony has completed');
+  if (registry.consentingCeremonies.some(({ ceremonyId }) => ceremonyId === desired.ceremonyId))
+    return failure('escrow-ceremony-consenting', 'This escrow ceremony has issued genesis consent');
   const existing = registry.reservations.find(({ masterPub }) => masterPub === desired.masterPub);
   if (existing)
     return validateReservationWinner(
@@ -593,6 +847,26 @@ export async function retireEscrowCeremony(
 ): Promise<Result<void>> {
   const checked = checkedManifest(localFrozenManifest);
   if (!checked.ok) return checked;
+  const ceremonyId = deckCeremonyId(checked.value);
+  if (store.withCeremonyLock) {
+    try {
+      return await store.withCeremonyLock(ceremonyId, () =>
+        retireEscrowCeremonyWithinLock(checked.value, store),
+      );
+    } catch {
+      return failure('escrow-ceremony-lock', 'Could not lock escrow retirement');
+    }
+  }
+  return retireEscrowCeremonyWithinLock(checked.value, store);
+}
+
+/** Use only from a coordinator that already holds the same ceremony lock. */
+export async function retireEscrowCeremonyWithinLock(
+  localFrozenManifest: GenesisBody,
+  store: EscrowLifecycleStore,
+): Promise<Result<void>> {
+  const checked = checkedManifest(localFrozenManifest);
+  if (!checked.ok) return checked;
   const masters = validateGenesisMasters(checked.value);
   if (!masters.ok) return masters;
   return retireCeremonyAttempt(deckCeremonyId(checked.value), masters.value, store, 0);
@@ -636,6 +910,13 @@ async function retireCeremonyAttempt(
   const loaded = await loadRegistry(store);
   if (!loaded.ok) return loaded;
   const { bytes, value } = loaded.value;
+  if (value.completedCeremonies.some((entry) => entry.ceremonyId === ceremonyId))
+    return failure('escrow-ceremony-completed', 'Certified escrow ceremony cannot be retired');
+  if (value.consentingCeremonies.some((entry) => entry.ceremonyId === ceremonyId))
+    return failure(
+      'escrow-ceremony-consenting',
+      'A signed genesis cannot be revoked by retirement',
+    );
   const alreadyRetired = value.retiredCeremonies.includes(ceremonyId);
   const reservations = [...value.reservations];
   for (const master of masters) {

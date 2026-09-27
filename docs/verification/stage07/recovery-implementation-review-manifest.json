@@ -1,0 +1,22 @@
+{
+  "docs/verification/stage07/recovery-implementation-review-prompt.md": "5eb6906869f2ed0fb416048562a9ac1cec9f732ea2ddf1fa9a844c6cede6ae63",
+  "docs/verification/stage07/recovery-integration-design.md": "de94be8ae7fba15dc413d4ae30aa78b86a2f21eba69bfbe36315a7a662678f26",
+  "packages/protocol/src/escrow-ceremony.ts": "f9f1c17b99ca3b92e1535cdc68e23734d94f426ff4a5d36e12a3c37417a065eb",
+  "packages/protocol/src/escrow-ceremony.test.ts": "f90c7f9c016424f045da4701f23b94ff733b566578d823f812ae37fa98be18de",
+  "packages/protocol/src/escrow-lifecycle.ts": "c31e9c25c98baf2930ef578ca72a93272265cca10fd4b55900c9d1227fb4cd27",
+  "packages/protocol/src/escrow-lifecycle.test.ts": "32b8ef93290e9563bcb1c9f52cf7a6b5df232041d02a75fef7e907602fe794cd",
+  "packages/protocol/src/escrow-distribution.ts": "84e583ded210f5fe6dd5fd78da0fe15cace947798c0b57578fd8aa3207b0160f",
+  "packages/protocol/src/escrow-dispute.ts": "005cb0cb5a01a6c777cb6f6448b97abb13cf2a5e7eabff745bb52b3b33a41ee1",
+  "packages/protocol/src/escrow-roster.ts": "11a7f43e81d8dc627fdb711ffde1a9070870ad1a6c71f62f939e07b0c2e7d9c1",
+  "packages/protocol/src/genesis-escrow.ts": "1f0eff6287fdfd989448e8dded1e389594408699cb6040dcd4b188097a8e450c",
+  "packages/protocol/src/genesis.ts": "200ce39353d8e4b809b8638c6b1f888aa534c90b794adcac5c052acb7ae5ea81",
+  "packages/protocol/src/genesis-outbox.ts": "2d4c7cb2747af910cfb0ee4a8b0e16d22ea70e4970f18f34b23b03c6d146691f",
+  "packages/protocol/src/deck-genesis.ts": "6403740e3daf7d1b45faca388adb626845b671d4650b0c84127f00d3e955043a",
+  "packages/protocol/src/genesis-secrets.ts": "145d54ba5462b23be436d1967dd7b1d5c8f45d8ffea66e2b17ab6f5c2f74daea",
+  "packages/protocol/src/private-replay.ts": "1d161bbad8b37754b3d072b240ff6aad171ec4c96c46f6ccb0cd8dd05541c338",
+  "packages/protocol/src/private-replay.test.ts": "ff54b1ce257687b40b715396b9a5983f6d46eb0042cc3af05e7ae82fdac6f62d",
+  "packages/protocol/src/verified-session-driver.ts": "69ef0ed0d1b2eb8fdd8b1a89c82330cdf499508af4c0fdbfc47be85cd838f24a",
+  "packages/protocol/src/replay.ts": "f1f0c9081341fec93e71cc783f10fa031e603a400ea1b77f96f79d4ed5a62442",
+  "packages/storage/src/indexed-db-byte-store.ts": "4063fd10ef247ca8b30c8e91fde51b66a214aee77b52e4bd83dae79a90d145e8",
+  "packages/storage/src/indexed-db-byte-store.test.ts": "3e1dd86c541cbde5aa6d1971c6c7bcad05a80492226f30ee6eb62fc8013cfdbc"
+}

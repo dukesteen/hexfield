@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Native escrow storage check</title>
+    <style>
+      body {
+        max-width: 48rem;
+        margin: 3rem auto;
+        padding: 1rem;
+        font:
+          16px/1.5 system-ui,
+          sans-serif;
+      }
+      button {
+        padding: 0.7rem 1rem;
+      }
+      pre {
+        padding: 1rem;
+        background: #16171b;
+        color: #eee;
+        white-space: pre-wrap;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Native escrow storage check</h1>
+    <p>
+      Two workers share native IndexedDB and Web Locks on this origin. This creates a few uniquely
+      named verification records. It does not use real game keys.
+    </p>
+    <button id="run" type="button">Run storage check</button>
+    <pre id="output" aria-live="polite">Ready.</pre>
+    <script type="module" src="/src/dev/storage-smoke.ts"></script>
+  </body>
+</html>

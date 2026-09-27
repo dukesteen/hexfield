@@ -17,5 +17,8 @@
   "dependencies": {
     "@cp2p/protocol": "workspace:*",
     "idb": "^8.0.0"
+  },
+  "devDependencies": {
+    "fake-indexeddb": "^6.2.5"
   }
 }

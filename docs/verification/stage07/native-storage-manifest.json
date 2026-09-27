@@ -1,0 +1,7 @@
+{
+  "packages/storage/src/indexed-db-byte-store.ts": "4063fd10ef247ca8b30c8e91fde51b66a214aee77b52e4bd83dae79a90d145e8",
+  "packages/storage/src/index.ts": "ff07b3900dcef79c2e1ecbde8a67288a37ab7aa57f8c7e67cbeceea58b7b2f72",
+  "apps/web/dev/storage-smoke.html": "984abc8f0b1f2f4c1db4820d15c01f7b2a484e46e6a3bd7823205f23cfb390ed",
+  "apps/web/src/dev/storage-smoke.ts": "774b9dd6532ffc74a1ff6233c309740c8a7b8280a3e66656667a4a752077e085",
+  "apps/web/src/dev/storage-smoke.worker.ts": "6d7d9fb1b5b8b75e6d753e2baa844d7f565d5296281a8254836bd8d5c597a46d"
+}
