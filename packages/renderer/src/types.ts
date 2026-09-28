@@ -1,3 +1,4 @@
+import type { Container } from 'pixi.js';
 import type { EdgeId, HexId, VertexId } from '@cp2p/engine/geometry';
 import type { Seat } from '@cp2p/engine';
 
@@ -19,7 +20,43 @@ export interface RenderModel {
   }[];
   readonly robberHex: HexId | null;
   readonly pirateHex?: HexId | null;
+  /** Non-hex board pieces such as a two-hex track. Rules ignore them; the camera fits them. */
+  readonly fixtures?: readonly RenderFixture[];
+  /** Per-plugin render-model slices, keyed by plugin layer id. */
+  readonly layers?: Readonly<Record<string, unknown>>;
 }
+
+/** A board fixture in board coordinates. The footprint lists the anchor first. */
+export interface RenderFixture {
+  readonly id: string;
+  readonly module: string;
+  readonly footprint: readonly { readonly q: number; readonly r: number }[];
+  readonly orientation: number;
+  readonly art: string;
+}
+
+/** Drawing context shared with fixture art and plugin layers. */
+export interface RenderLayerContext {
+  readonly hexSize: number;
+  readonly theme: 'light' | 'dark';
+  readonly reducedMotion: boolean;
+}
+
+/**
+ * A module renderer layer. `fixtures` sits above the sea and below terrain; `pieces` sits
+ * above buildings and the robber (for pieces on fixtures, such as a ship on its track);
+ * `overlay` sits above effects. Within a band, lower zIndex draws first.
+ */
+export interface RenderLayerPlugin {
+  readonly id: string;
+  readonly band: 'fixtures' | 'pieces' | 'overlay';
+  readonly zIndex: number;
+  /** Draw this plugin's slice (`RenderModel.layers[id]`) into a fresh container. */
+  draw(target: Container, slice: unknown, context: RenderLayerContext): void;
+}
+
+/** Draws one fixture's art in the fixtures band. */
+export type FixtureArt = (fixture: RenderFixture, context: RenderLayerContext) => Container;
 
 export type BoardHit =
   | { readonly kind: 'hex'; readonly id: HexId }
@@ -55,7 +92,7 @@ export interface BoardAppearance {
   readonly players: readonly {
     readonly seat: Seat;
     readonly color: number;
-    readonly marker: 'circle' | 'triangle' | 'square' | 'diamond';
+    readonly marker: 'circle' | 'triangle' | 'square' | 'diamond' | 'hexagon' | 'star';
   }[];
 }
 
@@ -67,6 +104,12 @@ export interface BoardRendererOptions {
   readonly accessibleLabel?: string;
   readonly formatHarborLabel?: (kind: string) => string;
   readonly onSelect?: (hit: BoardHit) => void;
+  /** A tap on a fixture's footprint that selected no other board target. */
+  readonly onFixtureSelect?: (fixtureId: string) => void;
+  /** Module plugin layers, drawn in their band by zIndex. */
+  readonly layers?: readonly RenderLayerPlugin[];
+  /** Fixture art by `RenderFixture.art`; unknown art uses a generic track. */
+  readonly fixtureArt?: Readonly<Record<string, FixtureArt>>;
   readonly onHover?: (hit: BoardHit | null) => void;
   readonly onReady?: (renderer: BoardRenderer) => void;
 }

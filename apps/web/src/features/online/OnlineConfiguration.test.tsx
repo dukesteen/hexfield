@@ -99,7 +99,7 @@ test('guests can read the signed rules and timers but cannot change or submit th
   );
   expect(page.getByLabelText('lobby:mainSeconds')).toHaveProperty('value', '45');
   expect(page.getByLabelText('lobby:onlineSeedValue')).toHaveProperty('value', '0a'.repeat(32));
-  expect(page.getByRole('group')).toHaveProperty('disabled', true);
+  expect(page.getByRole('group', { name: 'lobby:boardAndRules' })).toHaveProperty('disabled', true);
   expect(page.queryByRole('button', { name: 'lobby:onlineSaveSettings' })).toBeNull();
   const form = page.container.querySelector('form');
   if (!form) throw new Error('Missing configuration form');
@@ -131,11 +131,11 @@ test('fixed islands retain their board, random maps remove it, and malformed see
     { kind: 'joint' },
     takeover,
   );
-  fireEvent.change(page.getByLabelText('lobby:mapLayout'), {
-    target: { value: 'balanced-random' },
-  });
+  expect(page.queryByLabelText('lobby:mapLayout')).toBeNull();
+  fireEvent.change(page.getByLabelText('lobby:scenario'), { target: { value: 'standard' } });
   void act(() => vi.advanceTimersByTime(400));
   expect(save.mock.lastCall?.[0]).not.toHaveProperty('board');
+  expect(save.mock.lastCall?.[0].options.base).toMatchObject({ mapLayout: 'balanced-random' });
   fireEvent.change(page.getByLabelText('lobby:onlineBoardSeed'), { target: { value: 'fixed' } });
   fireEvent.change(page.getByLabelText('lobby:onlineSeedValue'), { target: { value: 'invalid' } });
   void act(() => vi.advanceTimersByTime(400));
@@ -319,4 +319,45 @@ test('host policy changes are saved with the same signed lobby configuration', (
       afterSeconds: 'never',
     },
   );
+});
+
+test('five or six seats select the five-six module and drop a fixed island', () => {
+  vi.useFakeTimers();
+  const save = vi.fn<(config: GameConfig, seed: GenesisSeedMode) => Result<void>>(() =>
+    success(undefined),
+  );
+  const page = render(
+    <OnlineConfiguration
+      takeover={takeover}
+      humanCount={2}
+      config={{
+        ...config,
+        board: standardFixedBoard(),
+        options: { base: { mapLayout: 'standard-fixed' } },
+      }}
+      seedMode={{ kind: 'joint' }}
+      editable
+      onSave={save}
+    />,
+  );
+  fireEvent.change(page.getByLabelText('lobby:playerCount'), { target: { value: '6' } });
+  void act(() => vi.advanceTimersByTime(400));
+  const saved = save.mock.lastCall?.[0];
+  expect(saved?.seats).toEqual([0, 1, 2, 3, 4, 5]);
+  expect(saved?.modules.map((module) => module.id)).toEqual(['base', 'five-six']);
+  expect(saved).not.toHaveProperty('board');
+  expect(saved?.options.base).toMatchObject({ mapLayout: 'balanced-random' });
+  expect(page.getByLabelText('lobby:scenario')).toHaveProperty('value', 'five-six');
+  expect(
+    page.container.querySelector<HTMLInputElement>('[data-expansion="five-six"] input')?.checked,
+  ).toBe(true);
+  expect(
+    page.container.querySelector<HTMLInputElement>('[data-expansion="knights"] input')?.disabled,
+  ).toBe(true);
+  fireEvent.click(
+    page.container.querySelector('[data-expansion="five-six"] input') ?? page.container,
+  );
+  void act(() => vi.advanceTimersByTime(400));
+  expect(save.mock.lastCall?.[0].seats).toEqual([0, 1, 2, 3]);
+  expect(save.mock.lastCall?.[0].modules.map((module) => module.id)).toEqual(['base']);
 });

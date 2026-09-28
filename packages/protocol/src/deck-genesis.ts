@@ -1,5 +1,5 @@
 import { hashValue, toBase64Url, toHex } from '@cp2p/codec';
-import { BASE_DEV_CARD_CATALOGUE, BASE_VERSION, failure, success } from '@cp2p/engine';
+import { checkModuleSelection, devCardCatalogueFor, failure, success } from '@cp2p/engine';
 import type { Result } from '@cp2p/engine';
 import * as v from 'valibot';
 import { applyDeckPass, initDeckSetup, replayDeckSetup } from './deck-setup.js';
@@ -58,14 +58,15 @@ export function genesisDeckDefinitions(genesis: GenesisBody): Result<readonly De
     if (base.length > 1)
       return failure('deck-genesis-module', 'Base module is selected more than once');
     if (base.length === 0) return success([]);
-    if (base[0]?.version !== BASE_VERSION)
-      return failure('deck-genesis-module', 'Base module version has no matching deck catalogue');
+    const selection = checkModuleSelection(modules);
+    if (!selection.ok)
+      return failure('deck-genesis-module', 'Module selection has no matching deck catalogue');
     const definition: DeckDefinition = {
       ceremonyId: deckCeremonyId(genesis),
       deckId: 'dev',
       deckEpoch: 0,
       creation: { kind: 'ceremony' },
-      cards: BASE_DEV_CARD_CATALOGUE.map(({ identity, card }) => ({ identity, card })),
+      cards: devCardCatalogueFor(genesis.config).map(({ identity, card }) => ({ identity, card })),
       participants: seats.map(({ seat, publicKey }) => ({ seat, publicKey })),
     };
     const initialized = initDeckSetup(definition);

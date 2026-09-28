@@ -1,5 +1,5 @@
 import { canonicalDecode, canonicalEncode } from '@cp2p/codec';
-import { createBaseEngine, failure, success } from '@cp2p/engine';
+import { createCatalogueEngine, failure, success } from '@cp2p/engine';
 import type { Result } from '@cp2p/engine';
 import {
   genesisDigest,
@@ -192,7 +192,7 @@ function validateStoredRecord(value: unknown, expectedGameId?: string): SavedOnl
     throw new Error('Stored result differs from the evidence frozen into genesis');
 
   const transcripts = parseTranscripts(parsed.result.transcripts);
-  const verifiedEntry = validateGenesisEntry(entry, createBaseEngine(), {
+  const verifiedEntry = validateGenesisEntry(entry, createCatalogueEngine(), {
     verifyCommitments(candidate) {
       return validateDeckCeremony(candidate, transcripts);
     },

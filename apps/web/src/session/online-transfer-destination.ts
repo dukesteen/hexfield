@@ -1,6 +1,6 @@
 import { canonicalDecode, canonicalEncode, sha256, toHex } from '@cp2p/codec';
 import { identityFromSecret, signObject } from '@cp2p/crypto';
-import { createBaseEngine, success } from '@cp2p/engine';
+import { createCatalogueEngine, success } from '@cp2p/engine';
 import type { Seat } from '@cp2p/engine';
 import {
   genesisDigest,
@@ -506,7 +506,7 @@ export class OnlineTransferDestination {
         const active = await loadActiveOnlineResume({
           store: this.#options.store,
           record: final.record,
-          engine: createBaseEngine(),
+          engine: createCatalogueEngine(),
           devicePeer: this.#options.identity.peerId,
           ...(this.#options.vault
             ? {
@@ -841,7 +841,7 @@ export class OnlineTransferDestination {
       decoded = canonicalDecode(bytes);
       const initial = initialProposalContext(
         this.#bootstrap.record.result.entry,
-        createBaseEngine(),
+        createCatalogueEngine(),
         policyFor(this.#bootstrap),
       );
       if (!initial.ok) throw new TypeError(initial.error.message);
@@ -854,7 +854,7 @@ export class OnlineTransferDestination {
       const replayed = replayCertifiedPrefix(
         this.#bootstrap.record.result.entry,
         this.#bootstrap.entries,
-        createBaseEngine(),
+        createCatalogueEngine(),
         policyFor(this.#bootstrap),
         (_entry, next) => {
           const key = controllerKey(next.log);
@@ -1041,7 +1041,7 @@ export class OnlineTransferDestination {
     const imported = await importTransferPrivate({
       genesisEntry: bootstrap.record.result.entry,
       entries: bootstrap.entries,
-      engine: createBaseEngine(),
+      engine: createCatalogueEngine(),
       policy: policyFor(bootstrap),
       authorization,
       packet,
@@ -1091,7 +1091,7 @@ export class OnlineTransferDestination {
           genesis: bootstrap.record.result.entry,
           entries: bootstrap.entries,
         },
-        createBaseEngine(),
+        createCatalogueEngine(),
         policyFor(bootstrap),
       );
       this.#ensureActive();
@@ -1240,7 +1240,7 @@ export class OnlineTransferDestination {
           const active = await loadActiveOnlineResume({
             store: this.#options.store,
             record: next.record,
-            engine: createBaseEngine(),
+            engine: createCatalogueEngine(),
             devicePeer: this.#options.identity.peerId,
             ...(this.#options.vault
               ? {
@@ -1309,7 +1309,7 @@ export class OnlineTransferDestination {
               const replayed = replayCertifiedPrefix(
                 saved.genesis,
                 saved.entries,
-                createBaseEngine(),
+                createCatalogueEngine(),
                 policyFor(next),
               );
               if (!replayed.ok)
@@ -1391,7 +1391,7 @@ export class OnlineTransferDestination {
               !(await journal.promoteTransfer({
                 stageKey,
                 activation,
-                engine: createBaseEngine(),
+                engine: createCatalogueEngine(),
                 policy: policyFor(next),
                 expectedActive,
               }))
@@ -1478,7 +1478,7 @@ export class OnlineTransferDestination {
         authorization,
         genesis: next.record.result.entry,
         entries: next.entries,
-        engine: createBaseEngine(),
+        engine: createCatalogueEngine(),
         policy: policyFor(next),
       });
       this.#ensureActive();

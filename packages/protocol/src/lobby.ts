@@ -1,6 +1,12 @@
 import { canonicalDecode, canonicalEncode, hashValue, toHex } from '@cp2p/codec';
 import { identityFromSecret, parsePeerId, signObject, verifyObject } from '@cp2p/crypto';
-import { BASE_VERSION, ENGINE_VERSION, createBaseEngine, failure, success } from '@cp2p/engine';
+import {
+  ENGINE_VERSION,
+  checkModuleSelection,
+  engineForConfig,
+  failure,
+  success,
+} from '@cp2p/engine';
 import type { GameConfig, Result, Seat } from '@cp2p/engine';
 import * as v from 'valibot';
 import { genesisSchema } from './schemas.js';
@@ -81,7 +87,7 @@ const stateSchema = v.strictObject({
   seats: v.pipe(
     v.array(v.variant('kind', [openSeatSchema, humanSeatSchema, botSeatSchema])),
     v.minLength(2),
-    v.maxLength(4),
+    v.maxLength(6),
   ),
   spectators: v.pipe(v.array(key32Schema), v.maxLength(MAX_SPECTATORS)),
   config: v.unknown(),
@@ -158,7 +164,7 @@ const frozenBodySchema = v.strictObject({
   lobbyId: roomSchema,
   hostEpoch: nonnegativeIntegerSchema,
   stateHash: hashSchema,
-  acks: v.pipe(v.array(signedAckSchema), v.minLength(1), v.maxLength(4)),
+  acks: v.pipe(v.array(signedAckSchema), v.minLength(1), v.maxLength(6)),
 });
 const signedFrozenSchema = v.strictObject({ body: frozenBodySchema, sig: signature64Schema });
 const messageSchema = v.variant('t', [
@@ -222,15 +228,14 @@ function validConfig(value: unknown): Result<GameConfig> {
   const config = parsed.output.config;
   if (
     config.seats.length < 2 ||
-    config.seats.length > 4 ||
-    config.seats.some((seat, index) => seat !== index) ||
-    config.modules.length !== 1 ||
-    config.modules[0]?.id !== 'base' ||
-    config.modules[0].version !== BASE_VERSION
+    config.seats.length > 6 ||
+    config.seats.some((seat, index) => seat !== index)
   )
-    return failure('lobby-config', 'Only two to four base seats are supported');
+    return failure('lobby-config', 'Only two to six ordered seats are supported');
+  const modules = checkModuleSelection(config.modules);
+  if (!modules.ok) return failure('lobby-config', modules.error.message);
   try {
-    createBaseEngine().createGame(config, new Uint8Array(32));
+    engineForConfig(config).createGame(config, new Uint8Array(32));
     return success(config);
   } catch {
     return failure('lobby-config', 'Game configuration fails engine validation');
@@ -282,7 +287,7 @@ export function verifyLobbyFreezeAgreement(value: unknown): Result<LobbyFreezeAg
   const parsed = v.safeParse(
     v.strictObject({
       state: stateSchema,
-      acks: v.pipe(v.array(signedAckSchema), v.minLength(1), v.maxLength(4)),
+      acks: v.pipe(v.array(signedAckSchema), v.minLength(1), v.maxLength(6)),
     }),
     value,
   );

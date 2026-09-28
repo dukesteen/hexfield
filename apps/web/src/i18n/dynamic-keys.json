@@ -38,6 +38,7 @@
   "game:placement.robber",
   "game:command.ROLL_DICE",
   "game:command.END_TURN",
+  "game:command.END_SBP",
   "game:command.BUY_DEV_CARD",
   "game:command.CLAIM_VICTORY",
   "lobby:invitationCopyCode",
@@ -96,5 +97,16 @@
   "game:fairnessProofCount",
   "game:fairnessProofSteal",
   "game:fairnessProofDelivery",
-  "game:fairnessProofDispute"
+  "game:fairnessProofDispute",
+  "lobby:scenarioStandard",
+  "lobby:scenarioStandardAbout",
+  "lobby:scenarioStandardFixed",
+  "lobby:scenarioStandardFixedAbout",
+  "lobby:scenarioFiveSix",
+  "lobby:scenarioFiveSixAbout",
+  "lobby:expansion_five-six",
+  "lobby:expansion_seafaring",
+  "lobby:expansion_knights",
+  "lobby:expansion_frontier",
+  "lobby:expansion_explorers"
 ]

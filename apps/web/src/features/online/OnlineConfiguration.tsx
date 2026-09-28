@@ -1,13 +1,19 @@
 import { fromBase64Url, hashValue, toBase64Url, toHex } from '@cp2p/codec';
 import { baseModule } from '@cp2p/engine';
 import type { GameConfig, OptionSpec, Result, TurnTimer } from '@cp2p/engine';
-import { standardFixedBoard } from '@cp2p/maps';
+import { defaultScenario, scenarioById, standardFixedBoard } from '@cp2p/maps';
 import type { GenesisSeedMode, TakeoverPolicy } from '@cp2p/protocol';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { MAX_PLAYERS, MIN_PLAYERS, modulesForSeatCount } from '../players/identity';
+import { ScenarioPicker } from '../setup/ScenarioPicker';
 
 const rules = baseModule();
-const seats = [0, 1, 2, 3] as const;
+const seats = [0, 1, 2, 3, 4, 5] as const;
+const PLAYER_COUNTS = Array.from(
+  { length: MAX_PLAYERS - MIN_PLAYERS + 1 },
+  (_, index) => MIN_PLAYERS + index,
+);
 const defaultTimer: TurnTimer = { preRollSec: 60, mainSec: 180, discardSec: 60, robberSec: 60 };
 const SAVE_DELAY_MS = 400;
 
@@ -115,13 +121,27 @@ export function OnlineConfiguration({
           }
         : { kind: 'joint' };
       const { board: previousBoard, ...previous } = currentConfig.current;
+      const modules = modulesForSeatCount(seatCount);
+      const fixed = options.mapLayout === 'standard-fixed' && seatCount <= 4;
+      const moduleOptions = Object.fromEntries(
+        modules.map(({ id }) => [
+          id,
+          id === 'base'
+            ? {
+                ...options,
+                ...(fixed || options.mapLayout !== 'standard-fixed'
+                  ? {}
+                  : { mapLayout: 'balanced-random' }),
+              }
+            : (currentConfig.current.options[id] ?? {}),
+        ]),
+      );
       const next: GameConfig = {
         ...previous,
+        modules,
         seats: seats.slice(0, seatCount),
-        options: { ...currentConfig.current.options, base: options },
-        ...(options.mapLayout === 'standard-fixed'
-          ? { board: previousBoard ?? standardFixedBoard() }
-          : {}),
+        options: moduleOptions,
+        ...(fixed ? { board: previousBoard ?? standardFixedBoard() } : {}),
       };
       const key = toHex(hashValue([next, selectedSeed, takeoverDraft]));
       const draftKey = JSON.stringify([
@@ -164,7 +184,6 @@ export function OnlineConfiguration({
   };
   const enumLabels: Record<string, Record<string, string>> = {
     mapLayout: {
-      'standard-fixed': t('lobby:mapFixed'),
       random: t('lobby:mapRandom'),
       'balanced-random': t('lobby:mapBalanced'),
     },
@@ -172,6 +191,16 @@ export function OnlineConfiguration({
   };
   const patch = (key: string, value: unknown) => {
     setOptions((current) => ({ ...current, [key]: value }));
+    changed();
+  };
+  const fixedScenario = options.mapLayout === 'standard-fixed' && seatCount <= 4;
+  const scenarioId = fixedScenario
+    ? (scenarioById('standard-fixed')?.id ?? 'standard-fixed')
+    : defaultScenario(seatCount).id;
+  const changeSeats = (count: number) => {
+    setSeatCount(count);
+    if (count > 4 && options.mapLayout === 'standard-fixed')
+      setOptions((current) => ({ ...current, mapLayout: 'balanced-random' }));
     changed();
   };
 
@@ -189,31 +218,38 @@ export function OnlineConfiguration({
           <legend className="sr-only">{t('lobby:boardAndRules')}</legend>
           <label>
             {t('lobby:playerCount')}
-            <select
-              value={seatCount}
-              onChange={(event) => {
-                setSeatCount(Number(event.target.value));
-                changed();
-              }}
-            >
-              {[2, 3, 4].map((count) => (
+            <select value={seatCount} onChange={(event) => changeSeats(Number(event.target.value))}>
+              {PLAYER_COUNTS.map((count) => (
                 <option key={count} value={count}>
                   {count}
                 </option>
               ))}
             </select>
           </label>
-          {rules.optionsSchema.map((spec) => (
-            <RuleField
-              key={spec.key}
-              spec={spec}
-              label={labels[spec.key] ?? spec.key}
-              value={options[spec.key]}
-              enumLabels={enumLabels[spec.key] ?? {}}
-              disabled={spec.key === 'strictBalance' && options.mapLayout === 'standard-fixed'}
-              onChange={(value) => patch(spec.key, value)}
-            />
-          ))}
+          <ScenarioPicker
+            seatCount={seatCount}
+            scenarioId={scenarioId}
+            disabled={!editable}
+            onScenario={(scenario) => {
+              if (scenario.board.kind === 'fixed') patch('mapLayout', 'standard-fixed');
+              else if (options.mapLayout === 'standard-fixed')
+                patch('mapLayout', 'balanced-random');
+            }}
+            onSeatCount={changeSeats}
+          />
+          {rules.optionsSchema
+            .filter((spec) => spec.key !== 'mapLayout' || !fixedScenario)
+            .map((spec) => (
+              <RuleField
+                key={spec.key}
+                spec={spec}
+                label={labels[spec.key] ?? spec.key}
+                value={options[spec.key]}
+                enumLabels={enumLabels[spec.key] ?? {}}
+                disabled={spec.key === 'strictBalance' && options.mapLayout === 'standard-fixed'}
+                onChange={(value) => patch(spec.key, value)}
+              />
+            ))}
           <div className="online-seed-fields">
             <label>
               {t('lobby:onlineBoardSeed')}
@@ -344,11 +380,15 @@ function RuleField({
           value={typeof value === 'string' ? value : ''}
           onChange={(event) => onChange(event.target.value)}
         >
-          {spec.values?.map((choice) => (
-            <option key={choice} value={choice}>
-              {enumLabels[choice] ?? choice}
-            </option>
-          ))}
+          {spec.values
+            ?.filter(
+              (choice) => Object.hasOwn(enumLabels, choice) || Object.keys(enumLabels).length === 0,
+            )
+            .map((choice) => (
+              <option key={choice} value={choice}>
+                {enumLabels[choice] ?? choice}
+              </option>
+            ))}
         </select>
       </label>
     );

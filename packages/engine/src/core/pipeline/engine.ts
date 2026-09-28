@@ -29,8 +29,11 @@ export interface Engine {
   readonly hooks: HookPipeline;
   /** Build deterministic public genesis using the supplied seed only during setup. */
   createGame(config: GameConfig, genesisSeed: Uint8Array): GameState;
-  /** Build one owner's secret state outside the replicated public state. */
-  createPrivateState(seat: Seat): PrivateState;
+  /**
+   * Build one owner's secret state outside the replicated public state. A routing engine
+   * uses the config to pick the module set; a fixed engine ignores it.
+   */
+  createPrivateState(seat: Seat, config?: Pick<GameConfig, 'modules'>): PrivateState;
   /** Ask registered modules for an omniscient local input, such as a hidden VP claim. */
   getAutomaticInput(state: GameState, privates: ReadonlyMap<Seat, PrivateState>): Input | null;
   /** Check an input without changing state; malformed values return a rule failure. */
@@ -206,6 +209,22 @@ function advance(state: GameState, transition: Transition): Transition {
     events: transition.events,
     effects: transition.effects,
   };
+}
+
+/**
+ * Attach module metadata and hooks as non-enumerable fields, so canonical snapshots of an
+ * engine's data fields (which protocol context stamps take) stay unchanged.
+ */
+export function withMetadata(
+  methods: Omit<Engine, 'modules' | 'hooks'>,
+  modules: readonly { id: string; version: string }[],
+  hooks: HookPipeline,
+): Engine {
+  const frozen = Object.freeze(modules.map((module) => Object.freeze({ ...module })));
+  const engine: Engine = { ...methods, modules: frozen, hooks };
+  Object.defineProperty(engine, 'modules', { enumerable: false });
+  Object.defineProperty(engine, 'hooks', { enumerable: false });
+  return Object.freeze(engine);
 }
 
 /** Build a rules engine without process-global mutable module registration. */
@@ -445,26 +464,26 @@ export function createEngine(modules: readonly GameModule[]): Engine {
     return violations;
   }
 
-  return Object.freeze({
-    modules: Object.freeze(
-      registry.modules.map(({ id, version }) => Object.freeze({ id, version })),
-    ),
-    hooks: registry.hooks,
-    createGame: (config: GameConfig, seed: Uint8Array) => createGenesis(config, seed, registry),
-    createPrivateState: (seat: Seat) => createPrivateState(seat, registry),
-    getAutomaticInput,
-    validate,
-    apply,
-    applyPrivate,
-    applyAllPrivates,
-    getPending,
-    getLegalCommands,
-    project: (state: GameState, viewer: Seat | 'spectator') => ({
-      viewer,
-      state: cloneJson(state),
-    }),
-    computeVictoryPoints,
-    checkInvariants,
-    checkPrivateInvariants,
-  });
+  return withMetadata(
+    {
+      createGame: (config: GameConfig, seed: Uint8Array) => createGenesis(config, seed, registry),
+      createPrivateState: (seat: Seat) => createPrivateState(seat, registry),
+      getAutomaticInput,
+      validate,
+      apply,
+      applyPrivate,
+      applyAllPrivates,
+      getPending,
+      getLegalCommands,
+      project: (state: GameState, viewer: Seat | 'spectator') => ({
+        viewer,
+        state: cloneJson(state),
+      }),
+      computeVictoryPoints,
+      checkInvariants,
+      checkPrivateInvariants,
+    },
+    registry.modules.map(({ id, version }) => ({ id, version })),
+    registry.hooks,
+  );
 }

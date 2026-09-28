@@ -391,10 +391,10 @@ export class OnlineCeremony {
     if (!agreement.ok) return agreement;
     const state = agreement.value.state;
     const humans = state.seats.filter((seat) => seat.kind === 'human');
-    if (state.seats.length < 2 || state.seats.length > 4 || humans.length < 1)
+    if (state.seats.length < 2 || state.seats.length > 6 || humans.length < 1)
       return failure(
         'online-ceremony-roster',
-        'Ceremony requires two to four seats and at least one human',
+        'Ceremony requires two to six seats and at least one human',
       );
     try {
       const identity = identityFromSecret(options.deviceSigningKey);

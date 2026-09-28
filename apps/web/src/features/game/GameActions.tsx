@@ -39,6 +39,7 @@ const boardOrder: readonly PlacementKind[] = ['settlement', 'road', 'city', 'fre
 const normalActionOrder: Readonly<Record<string, number>> = {
   ROLL_DICE: 0,
   END_TURN: 0,
+  END_SBP: 0,
   MARITIME_TRADE: 1,
   OFFER_TRADE: 2,
   PROPOSE_TRADE: 2,
@@ -46,6 +47,7 @@ const normalActionOrder: Readonly<Record<string, number>> = {
 const actionPaths: Readonly<Record<string, string>> = {
   ROLL_DICE: 'M5 5h6v6H5zM13 13h6v6h-6zM7.5 7.5h1M15.5 15.5h1',
   END_TURN: 'M4 12h15m-6-6 6 6-6 6',
+  END_SBP: 'M4 12h15m-6-6 6 6-6 6',
   MARITIME_TRADE: 'M4 8h15m-4-4 4 4-4 4M20 16H5m4-4-4 4 4 4',
   OFFER_TRADE:
     'M7 8a2 2 0 1 0 0-4 2 2 0 0 0 0 4Zm10 0a2 2 0 1 0 0-4 2 2 0 0 0 0 4ZM3 17v-2a4 4 0 0 1 7-2.6M21 17v-2a4 4 0 0 0-7-2.6M9 16h6m-2-2 2 2-2 2',
@@ -56,6 +58,8 @@ const actionPaths: Readonly<Record<string, string>> = {
   PLAY_DEV_CARD: 'M5 4h12v15H5zM8 7h12v15H8z',
 };
 const noChoices = [] as const;
+/** Commands that end or advance the seat's own phase; shown as the promoted turn button. */
+const TURN_COMMANDS: ReadonlySet<string> = new Set(['ROLL_DICE', 'END_TURN', 'END_SBP']);
 const closeForm = () => useSessionStore.getState().closeActionDialog();
 
 function ActionIcon({ kind, color }: { kind: string; color?: string | undefined }) {
@@ -359,13 +363,13 @@ export function useGameActions(
         event.preventDefault();
         return;
       }
-      const commandType =
+      const commandTypes =
         event.key.toLowerCase() === 'r'
-          ? 'ROLL_DICE'
+          ? ['ROLL_DICE']
           : event.key.toLowerCase() === 'e'
-            ? 'END_TURN'
-            : null;
-      const command = availability?.primary.find((group) => group.type === commandType)
+            ? ['END_TURN', 'END_SBP']
+            : [];
+      const command = availability?.primary.find((group) => commandTypes.includes(group.type))
         ?.commands[0];
       if (command) {
         event.preventDefault();
@@ -503,7 +507,7 @@ export function useGameActions(
     );
   const contextualGroups = primary.filter((group) => !(group.type in normalActionOrder));
   const promoted = options.compact
-    ? normalGroups.find((group) => group.type === 'ROLL_DICE' || group.type === 'END_TURN')
+    ? normalGroups.find((group) => TURN_COMMANDS.has(group.type))
     : undefined;
   const sheetNormalGroups = normalGroups.filter((group) => group !== promoted);
   const actionsEnabled = !isSubmitting && !conflicted && !voided && status?.kind !== 'error';
@@ -767,9 +771,7 @@ export function useGameActions(
   const playerTrade = normalGroups.find(
     (group) => group.type === 'OFFER_TRADE' || group.type === 'PROPOSE_TRADE',
   );
-  const turnGroup = normalGroups.find(
-    (group) => group.type === 'ROLL_DICE' || group.type === 'END_TURN',
-  );
+  const turnGroup = normalGroups.find((group) => TURN_COMMANDS.has(group.type));
   const turnCommand = turnGroup?.commands[0];
   const desktopBuild = (
     <section
@@ -1073,7 +1075,7 @@ export function useGameActions(
     nextStep = {
       kind: 'pending',
       text: t('game:submittingAction'),
-      ...(submittingCommand === 'ROLL_DICE' || submittingCommand === 'END_TURN'
+      ...(submittingCommand !== null && TURN_COMMANDS.has(submittingCommand)
         ? {
             turnAction: {
               label: t(`game:command.${submittingCommand}`),

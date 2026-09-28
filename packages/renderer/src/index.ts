@@ -3,6 +3,7 @@ export const PACKAGE_NAME = '@cp2p/renderer';
 export { PixiBoardRenderer, createBoardRenderer } from './BoardRenderer.js';
 export { DICE_ROLL_DURATION_MS, PRODUCTION_TOKEN_PULSE_MS } from './effectMotion.js';
 export { hitTestBoard } from './input/hitTest.js';
+export { drawDefaultFixture, fixtureBounds, fixtureCenters, hitTestFixture } from './fixtures.js';
 export {
   getAwardCardUrl,
   getDevelopmentCardUrl,
@@ -23,6 +24,10 @@ export type {
   BoardRenderer,
   BoardRendererOptions,
   DevelopmentCard,
+  FixtureArt,
+  RenderFixture,
+  RenderLayerContext,
+  RenderLayerPlugin,
   HitMode,
   RenderModel,
   ScreenPoint,

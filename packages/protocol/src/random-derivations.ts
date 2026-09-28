@@ -100,7 +100,7 @@ function expectedSystem(type: string): string {
 
 function seatList(state: GameState): readonly Seat[] | null {
   const seats: unknown = state.config.seats;
-  if (!Array.isArray(seats) || seats.length < 2 || seats.length > 4) return null;
+  if (!Array.isArray(seats) || seats.length < 2 || seats.length > 6) return null;
   if (!Array.isArray(state.seats) || state.seats.length !== seats.length) return null;
   if (!seats.every((seat) => isSeat(state, seat))) return null;
   if (new Set(seats).size !== seats.length) return null;

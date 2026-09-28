@@ -1,5 +1,5 @@
-import { baseModule, type BaseOptions, type GameConfig } from '@cp2p/engine';
-import { standardFixedBoard } from '@cp2p/maps';
+import type { BaseOptions, GameConfig } from '@cp2p/engine';
+import { defaultScenario, scenarioConfig, type Scenario } from '@cp2p/maps';
 import { useNavigate } from '@tanstack/react-router';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -7,9 +7,14 @@ import { Link } from '@tanstack/react-router';
 import { useSettings } from '../../queries/hooks';
 import { DEFAULT_NETWORK_SETTINGS, effectiveNetworkSettings } from '../../queries/network-config';
 import { beginOnlineRoomOpen, closeOnlineRoom } from './room-registry.js';
+import { ScenarioPicker } from '../setup/ScenarioPicker';
+import { MAX_PLAYERS, MIN_PLAYERS } from '../players/identity';
 import './online.css';
 
-const seats = [0, 1, 2, 3] as const;
+const PLAYER_COUNTS = Array.from(
+  { length: MAX_PLAYERS - MIN_PLAYERS + 1 },
+  (_, index) => MIN_PLAYERS + index,
+);
 const DEFAULT_OPTIONS: BaseOptions = {
   vpTarget: 10,
   discardLimit: 7,
@@ -39,7 +44,13 @@ export function OnlineCreate() {
   const [connectionInput, setConnectionInput] = useState<'manual' | 'server' | null>(null);
   const connection = connectionInput ?? (serverUrl ? 'server' : 'manual');
   const [seatCount, setSeatCount] = useState(4);
+  const [scenario, setScenario] = useState<Scenario>(() => defaultScenario(4));
   const [mapLayout, setMapLayout] = useState<BaseOptions['mapLayout']>('balanced-random');
+  const changeSeatCount = (count: number) => {
+    setSeatCount(count);
+    if (count < scenario.seats.min || count > scenario.seats.max)
+      setScenario(defaultScenario(count));
+  };
   const [vpTarget, setVpTarget] = useState(10);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(false);
@@ -58,12 +69,7 @@ export function OnlineCreate() {
     setBusy(true);
     setError(false);
     const options: BaseOptions = { ...DEFAULT_OPTIONS, mapLayout, vpTarget };
-    const config: GameConfig = {
-      modules: [{ id: 'base', version: baseModule().version }],
-      seats: seats.slice(0, seatCount),
-      options: { base: options },
-      ...(mapLayout === 'standard-fixed' ? { board: standardFixedBoard() } : {}),
-    };
+    const config: GameConfig = scenarioConfig(scenario, seatCount, { base: { ...options } });
     const opening = beginOnlineRoomOpen(`host:${crypto.randomUUID()}`, {
       kind: 'host',
       serverUrl: connection === 'manual' ? '' : serverUrl,
@@ -175,33 +181,35 @@ export function OnlineCreate() {
               {t('lobby:playerCount')}
               <select
                 value={seatCount}
-                onChange={(event) => setSeatCount(Number(event.target.value))}
+                onChange={(event) => changeSeatCount(Number(event.target.value))}
               >
-                {[2, 3, 4].map((count) => (
+                {PLAYER_COUNTS.map((count) => (
                   <option key={count} value={count}>
                     {count}
                   </option>
                 ))}
               </select>
             </label>
-            <label>
-              {t('lobby:mapLayout')}
-              <select
-                value={mapLayout}
-                onChange={(event) => {
-                  const value = event.target.value;
-                  setMapLayout(
-                    value === 'random' || value === 'standard-fixed' || value === 'balanced-random'
-                      ? value
-                      : 'balanced-random',
-                  );
-                }}
-              >
-                <option value="balanced-random">{t('lobby:mapBalanced')}</option>
-                <option value="random">{t('lobby:mapRandom')}</option>
-                <option value="standard-fixed">{t('lobby:mapFixed')}</option>
-              </select>
-            </label>
+            <ScenarioPicker
+              seatCount={seatCount}
+              scenarioId={scenario.id}
+              onScenario={setScenario}
+              onSeatCount={changeSeatCount}
+            />
+            {scenario.board.kind === 'generator' && (
+              <label>
+                {t('lobby:mapLayout')}
+                <select
+                  value={mapLayout}
+                  onChange={(event) =>
+                    setMapLayout(event.target.value === 'random' ? 'random' : 'balanced-random')
+                  }
+                >
+                  <option value="balanced-random">{t('lobby:mapBalanced')}</option>
+                  <option value="random">{t('lobby:mapRandom')}</option>
+                </select>
+              </label>
+            )}
             <label>
               {t('lobby:vpTarget')}
               <input

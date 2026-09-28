@@ -1,4 +1,4 @@
-import { createBaseEngine, success } from '@cp2p/engine';
+import { createCatalogueEngine, success } from '@cp2p/engine';
 import { auditCertifiedGame, validateDeckGenesisCommitments } from '@cp2p/protocol';
 import type { AuditReport, ReplayPolicy, SessionAuditInput } from '@cp2p/protocol';
 
@@ -27,7 +27,7 @@ export function performAuditRequest(request: AuditWorkerRequest): AuditReport {
     genesisEntry: request.genesisEntry,
     entries: request.entries,
     masters: request.masters,
-    engine: createBaseEngine(),
+    engine: createCatalogueEngine(),
     policy: baseAuditPolicy,
   });
 }

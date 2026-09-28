@@ -1,4 +1,4 @@
-import { DEV_CARD_COUNTS, RESOURCES } from '@cp2p/engine';
+import { RESOURCES, devCardCountsFor } from '@cp2p/engine';
 import type {
   GameState,
   LocalRandomAnswer,
@@ -78,7 +78,7 @@ export function remainingDevPool(
   state: GameState,
   privates: ReadonlyMap<Seat, PrivateState>,
 ): string[] {
-  const remaining = new Map<string, number>(Object.entries(DEV_CARD_COUNTS));
+  const remaining = new Map<string, number>(Object.entries(devCardCountsFor(state.config)));
   const deck = state.decks.dev;
   if (!deck) throw new Error('Development deck is missing');
   for (const ref of deck.drawn) {

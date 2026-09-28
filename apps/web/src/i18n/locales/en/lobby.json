@@ -438,5 +438,21 @@
   "onlineHistoryDeleteBusy": "This game is open in another tab. Close it before removing the saved copy.",
   "onlineGameVoidTitle": "Game void · no winner",
   "onlineGameVoidBody": "The remaining players agreed that recovery could not complete. This game has ended without a winner.",
-  "onlineGameVoidHistory": "You can inspect the board or leave. The saved history remains available, and this game does not count towards your statistics."
+  "onlineGameVoidHistory": "You can inspect the board or leave. The saved history remains available, and this game does not count towards your statistics.",
+  "scenario": "Scenario",
+  "scenarioStandard": "Standard island",
+  "scenarioStandardAbout": "The 19-hex island for two to four players, generated fresh for every game.",
+  "scenarioStandardFixed": "Fixed island",
+  "scenarioStandardFixedAbout": "One hand-picked 19-hex layout for two to four players, the same every game.",
+  "scenarioFiveSix": "Large island (5–6 players)",
+  "scenarioFiveSixAbout": "A 30-hex island with a bigger bank and deck. After each turn, every other player gets a special build phase.",
+  "expansions": "Expansions",
+  "expansion_five-six": "Five and six players",
+  "expansion_seafaring": "Seafaring",
+  "expansion_knights": "Knights and commerce",
+  "expansion_frontier": "Frontier scenarios",
+  "expansion_explorers": "Explorers",
+  "expansionLater": "not available yet",
+  "expansionConflict": "can't be combined with {{module}}",
+  "expansionFiveSixSeats": "turned on automatically for five or six players"
 }

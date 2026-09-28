@@ -1,5 +1,5 @@
 import { canonicalDecode, canonicalEncode, fromBase64Url, toBase64Url } from '@cp2p/codec';
-import { createBaseEngine, failure, success } from '@cp2p/engine';
+import { createCatalogueEngine, failure, success } from '@cp2p/engine';
 import type { Result } from '@cp2p/engine';
 import {
   certifiedEntrySchema,
@@ -259,7 +259,7 @@ export function validateOnlineTransferBootstrap(
     if (validatedStart.value.genesisDigest !== expected.genesisDigest)
       return failure('transfer-bootstrap-binding', 'Bootstrap belongs to another game genesis');
 
-    const engine = createBaseEngine();
+    const engine = createCatalogueEngine();
     const policy = {
       genesis: {
         verifyCommitments(genesis: Parameters<typeof validateDeckCeremony>[0]) {

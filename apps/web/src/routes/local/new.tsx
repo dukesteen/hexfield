@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
-import { baseModule, type BaseOptions } from '@cp2p/engine';
-import { standardFixedBoard } from '@cp2p/maps';
+import type { BaseOptions } from '@cp2p/engine';
+import { defaultScenario, scenarioById, scenarioConfig, type Scenario } from '@cp2p/maps';
 import { useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import * as v from 'valibot';
@@ -8,6 +8,22 @@ import { useSaveGame } from '../../queries/hooks';
 import type { GamePresentation } from '../../queries/repositories/saved-games';
 import { LocalSession } from '../../session';
 import { PlayerMarker } from '../../features/game/PlayerMarker.js';
+import { ScenarioPicker } from '../../features/setup/ScenarioPicker';
+import {
+  MAX_PLAYERS,
+  MIN_PLAYERS,
+  PLAYER_COLORS,
+  PLAYER_PRESETS,
+  isPlayerColor,
+  type PlayerColor,
+  type PlayerSeat,
+  type PlayerShape,
+} from '../../features/players/identity';
+
+const PLAYER_COUNTS = Array.from(
+  { length: MAX_PLAYERS - MIN_PLAYERS + 1 },
+  (_, index) => MIN_PLAYERS + index,
+);
 
 export const newGameSearchSchema = v.object({
   map: v.optional(v.picklist(['balanced-random', 'random', 'standard-fixed'])),
@@ -18,19 +34,7 @@ export const Route = createFileRoute('/local/new')({
   component: NewLocalGame,
 });
 
-const COLORS = ['blue', 'orange', 'green', 'magenta'] as const;
-type PlayerColor = (typeof COLORS)[number];
-type PlayerShape = 'circle' | 'triangle' | 'square' | 'diamond';
-
-function isPlayerColor(value: string): value is PlayerColor {
-  return value === 'blue' || value === 'orange' || value === 'green' || value === 'magenta';
-}
-const PLAYER_PRESETS = [
-  { seat: 0, color: 'blue', shape: 'circle' },
-  { seat: 1, color: 'orange', shape: 'triangle' },
-  { seat: 2, color: 'green', shape: 'square' },
-  { seat: 3, color: 'magenta', shape: 'diamond' },
-] as const;
+const COLORS = PLAYER_COLORS;
 const TIMER_FIELDS = [
   { key: 'preRollSec', label: 'lobby:preRollSeconds' },
   { key: 'mainSec', label: 'lobby:mainSeconds' },
@@ -39,7 +43,7 @@ const TIMER_FIELDS = [
 ] as const;
 
 interface PlayerDraft {
-  seat: 0 | 1 | 2 | 3;
+  seat: PlayerSeat;
   name: string;
   role: 'human' | 'bot';
   color: PlayerColor;
@@ -71,10 +75,21 @@ function NewLocalGame() {
       role: preset.seat === 0 ? 'human' : 'bot',
     })),
   );
+  const [scenario, setScenario] = useState<Scenario>(() =>
+    search.map === 'standard-fixed'
+      ? (scenarioById('standard-fixed') ?? defaultScenario(4))
+      : defaultScenario(4),
+  );
   const [options, setOptions] = useState<BaseOptions>(() => ({
     ...DEFAULT_OPTIONS,
-    mapLayout: search.map ?? DEFAULT_OPTIONS.mapLayout,
+    mapLayout: search.map === 'random' ? 'random' : DEFAULT_OPTIONS.mapLayout,
   }));
+  const fixedMap = scenario.board.kind === 'fixed';
+  const changePlayerCount = (count: number) => {
+    setPlayerCount(count);
+    if (count < scenario.seats.min || count > scenario.seats.max)
+      setScenario(defaultScenario(count));
+  };
   const [botDelayMs, setBotDelayMs] = useState(450);
   const [error, setError] = useState(false);
   const [invalidNames, setInvalidNames] = useState<number[]>([]);
@@ -109,10 +124,8 @@ function NewLocalGame() {
     }
     const seats = selected.map((player) => player.seat);
     const config = {
-      modules: [{ id: 'base', version: baseModule().version }],
+      ...scenarioConfig(scenario, playerCount, { base: { ...options } }),
       seats,
-      options: { base: options },
-      ...(options.mapLayout === 'standard-fixed' ? { board: standardFixedBoard() } : {}),
     };
     const created = LocalSession.create({
       config,
@@ -168,9 +181,9 @@ function NewLocalGame() {
             <select
               id="player-count"
               value={playerCount}
-              onChange={(event) => setPlayerCount(Number(event.target.value))}
+              onChange={(event) => changePlayerCount(Number(event.target.value))}
             >
-              {[2, 3, 4].map((count) => (
+              {PLAYER_COUNTS.map((count) => (
                 <option key={count} value={count}>
                   {count}
                 </option>
@@ -234,27 +247,29 @@ function NewLocalGame() {
 
           <fieldset>
             <legend>{t('lobby:boardAndRules')}</legend>
+            <ScenarioPicker
+              seatCount={playerCount}
+              scenarioId={scenario.id}
+              onScenario={setScenario}
+              onSeatCount={changePlayerCount}
+            />
             <div className="form-grid">
-              <label>
-                {t('lobby:mapLayout')}
-                <select
-                  value={options.mapLayout}
-                  onChange={(event) => {
-                    const layout = event.target.value;
-                    if (
-                      layout === 'balanced-random' ||
-                      layout === 'random' ||
-                      layout === 'standard-fixed'
-                    ) {
-                      patchOptions({ mapLayout: layout });
-                    }
-                  }}
-                >
-                  <option value="balanced-random">{t('lobby:mapBalanced')}</option>
-                  <option value="random">{t('lobby:mapRandom')}</option>
-                  <option value="standard-fixed">{t('lobby:mapFixed')}</option>
-                </select>
-              </label>
+              {!fixedMap && (
+                <label>
+                  {t('lobby:mapLayout')}
+                  <select
+                    value={options.mapLayout}
+                    onChange={(event) => {
+                      const layout = event.target.value;
+                      if (layout === 'balanced-random' || layout === 'random')
+                        patchOptions({ mapLayout: layout });
+                    }}
+                  >
+                    <option value="balanced-random">{t('lobby:mapBalanced')}</option>
+                    <option value="random">{t('lobby:mapRandom')}</option>
+                  </select>
+                </label>
+              )}
               <label>
                 {t('lobby:vpTarget')}
                 <input
@@ -310,7 +325,7 @@ function NewLocalGame() {
                 <input
                   type="checkbox"
                   checked={options.strictBalance}
-                  disabled={options.mapLayout === 'standard-fixed'}
+                  disabled={fixedMap}
                   onChange={(event) => patchOptions({ strictBalance: event.target.checked })}
                 />
                 <span>{t('lobby:strictBalance')}</span>

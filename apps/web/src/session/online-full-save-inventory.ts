@@ -1,4 +1,4 @@
-import { createBaseEngine } from '@cp2p/engine';
+import { createCatalogueEngine } from '@cp2p/engine';
 import type { Seat } from '@cp2p/engine';
 import {
   entryHash,
@@ -37,7 +37,7 @@ export async function loadStoredOnlineMasterInventory(input: {
   const identity = await loadOnlineIdentity(input.store);
   const devicePeer = identity.peerId;
   identity.dispose();
-  const engine = createBaseEngine();
+  const engine = createCatalogueEngine();
   const policy: ReplayPolicy = {
     genesis: {
       verifyCommitments(genesis) {

@@ -1,5 +1,5 @@
 import { canonicalDecode, canonicalEncode, hashValue, toHex } from '@cp2p/codec';
-import { createBaseEngine, success } from '@cp2p/engine';
+import { createCatalogueEngine, success } from '@cp2p/engine';
 import { transferChangeSchema, verifyLobbyFreezeAgreement } from '@cp2p/protocol';
 import type { ProtocolClock, SessionUpdate, Unsubscribe } from '@cp2p/protocol';
 import { acquireVaultOwner, IndexedDbByteStore, IndexedDbProtocolJournal } from '@cp2p/storage';
@@ -450,7 +450,7 @@ export class OnlineWorkerRuntime {
           store: this.store,
           record: resume,
           devicePeer: body.self,
-          engine: createBaseEngine(),
+          engine: createCatalogueEngine(),
           ...(vault
             ? {
                 createJournal: (
@@ -635,7 +635,7 @@ export class OnlineWorkerRuntime {
           }
         : {}),
       clock: this.clock,
-      engine: createBaseEngine(),
+      engine: createCatalogueEngine(),
       onGameFatal: (error) => this.fatal(error, 'game-writer-lost'),
       onDeviceRoutes: (routes) => {
         if (this.closed || !this.generation) return;

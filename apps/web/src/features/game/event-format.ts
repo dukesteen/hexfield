@@ -48,6 +48,8 @@ export function formatGameEvent(
       victim: playerLabel(event.victim),
     });
   if (event.type === 'turnStarted' && actor) return t('log:turnStarted', { player: actor });
+  if (event.type === 'turnFlowStarted' && actor)
+    return t('log:specialBuildStarted', { player: actor });
   if (event.type === 'tradeOffered' || event.type === 'tradeProposed') return t('log:tradeOffered');
   if (event.type === 'tradeResponded' && actor)
     return t(event.accept === true ? 'log:tradeAccepted' : 'log:tradeDeclined', { player: actor });

@@ -53,7 +53,7 @@ export class SimulationDriver {
     if (genesis.security !== 'stub') throw new Error('Simulation driver requires stub genesis');
     this.digest = genesisDigest(genesis);
     this.privates = new Map(
-      genesis.config.seats.map((seat) => [seat, engine.createPrivateState(seat)]),
+      genesis.config.seats.map((seat) => [seat, engine.createPrivateState(seat, genesis.config)]),
     );
   }
 

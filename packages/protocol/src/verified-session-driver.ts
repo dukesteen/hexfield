@@ -147,7 +147,7 @@ export class VerifiedSessionDriver implements SessionDriver {
     for (const seat of ownedSeats) {
       if (!configured.has(seat)) throw new RangeError('Owned seat is not configured in genesis');
       this.owned.add(seat);
-      this.privates.set(seat, engine.createPrivateState(seat));
+      this.privates.set(seat, engine.createPrivateState(seat, genesis.config));
       const zero = encodeScalar(0n);
       this.blindings.set(seat, { brick: zero, lumber: zero, wool: zero, grain: zero, ore: zero });
     }

@@ -1,5 +1,6 @@
 import { createEngine } from '../core/pipeline/index.js';
 import type { Engine } from '../core/pipeline/index.js';
+import { withMetadata } from '../core/pipeline/engine.js';
 import type { GameModule } from '../core/modules/index.js';
 import type { GameConfig, ModuleSelection } from '../core/state/index.js';
 import { failure } from '../core/types/index.js';
@@ -71,9 +72,49 @@ export function engineForModules(selection: readonly ModuleSelection[]): Engine 
   return engine;
 }
 
+const byModules = new WeakMap<readonly ModuleSelection[], Engine>();
+
 /** The rules engine named by a genesis config. */
 export function engineForConfig(config: Pick<GameConfig, 'modules'>): Engine {
-  return engineForModules(config.modules);
+  let engine = byModules.get(config.modules);
+  if (!engine) {
+    engine = engineForModules(config.modules);
+    byModules.set(config.modules, engine);
+  }
+  return engine;
+}
+
+/**
+ * One engine for every catalogue module set. Each call runs on the engine named by the
+ * state's (or config's) module selection. `modules` and `hooks` describe the base engine;
+ * use `engineForConfig` for a specific game's hooks. `createPrivateState` needs the game's
+ * config for anything but a base-only game.
+ */
+export function createCatalogueEngine(): Engine {
+  const base = engineForModules([{ id: 'base', version: BASE_VERSION }]);
+  const routed: Omit<Engine, 'modules' | 'hooks'> = {
+    createGame: (config, seed) => engineForConfig(config).createGame(config, seed),
+    createPrivateState: (seat, config) =>
+      (config ? engineForConfig(config) : base).createPrivateState(seat),
+    getAutomaticInput: (state, privates) =>
+      engineForConfig(state.config).getAutomaticInput(state, privates),
+    validate: (state, input) => engineForConfig(state.config).validate(state, input),
+    apply: (state, input) => engineForConfig(state.config).apply(state, input),
+    applyPrivate: (priv, before, input, data) =>
+      engineForConfig(before.config).applyPrivate(priv, before, input, data),
+    applyAllPrivates: (privates, before, input, data) =>
+      engineForConfig(before.config).applyAllPrivates(privates, before, input, data),
+    getPending: (state) => engineForConfig(state.config).getPending(state),
+    getLegalCommands: (state, seat, priv, filter) =>
+      engineForConfig(state.config).getLegalCommands(state, seat, priv, filter),
+    project: (state, viewer) => engineForConfig(state.config).project(state, viewer),
+    computeVictoryPoints: (state, seat, priv) =>
+      engineForConfig(state.config).computeVictoryPoints(state, seat, priv),
+    checkInvariants: (state) => engineForConfig(state.config).checkInvariants(state),
+    checkPrivateInvariants: (state, privates) =>
+      engineForConfig(state.config).checkPrivateInvariants(state, privates),
+  };
+  return withMetadata(routed, base.modules, base.hooks);
 }
 
 /** Physical development cards for a game's module selection, in canonical order. */

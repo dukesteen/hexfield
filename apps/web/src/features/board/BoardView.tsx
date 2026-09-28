@@ -2,6 +2,8 @@ import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import { createBoardRenderer } from '@cp2p/renderer';
+import type { FixtureArt, RenderLayerPlugin } from '@cp2p/renderer';
+import { uiModulesFor } from '../modules';
 import type {
   BoardAppearance,
   BoardFocusPreview,
@@ -26,6 +28,22 @@ export interface BoardViewProps {
   readonly label?: string;
   readonly targetLabel?: (hit: BoardHit) => string;
   readonly onRendererError?: (error: unknown) => void;
+  /** The game's module ids; their UI registrations supply fixture art and plugin layers. */
+  readonly moduleIds?: readonly string[];
+  /** A tap on a board fixture, such as a module track. */
+  readonly onFixtureSelect?: (fixtureId: string) => void;
+}
+
+/** Renderer plugin layers and fixture art registered by the game's module UIs. */
+function moduleRendererOptions(moduleIds: readonly string[]): {
+  layers: RenderLayerPlugin[];
+  fixtureArt: Record<string, FixtureArt>;
+} {
+  const modules = uiModulesFor(moduleIds);
+  return {
+    layers: modules.flatMap(({ ui }) => (ui.RenderLayers ?? []).map((layer) => layer.plugin)),
+    fixtureArt: Object.assign({}, ...modules.map(({ ui }) => ui.BoardFixtures ?? {})),
+  };
 }
 
 /** Accessible DOM wrapper; the canvas reports semantic locations for the app to resolve. */
@@ -44,6 +62,8 @@ export function BoardView({
   className,
   label,
   targetLabel,
+  moduleIds = [],
+  onFixtureSelect,
 }: BoardViewProps) {
   const { t } = useTranslation('common');
   const keyboardHelpId = useId();
@@ -86,6 +106,8 @@ export function BoardView({
     onRendererError,
     label: accessibleLabel,
     formatHarborLabel,
+    moduleIds,
+    onFixtureSelect,
   });
   propsRef.current = {
     model,
@@ -99,6 +121,8 @@ export function BoardView({
     onRendererError,
     label: accessibleLabel,
     formatHarborLabel,
+    moduleIds,
+    onFixtureSelect,
   };
 
   useEffect(() => {
@@ -114,6 +138,8 @@ export function BoardView({
           formatHarborLabel: (kind) => propsRef.current.formatHarborLabel(kind),
           onSelect: (hit) => propsRef.current.onSelect?.(hit),
           onHover: (hit) => propsRef.current.onHover?.(hit),
+          ...moduleRendererOptions(propsRef.current.moduleIds),
+          onFixtureSelect: (fixture) => propsRef.current.onFixtureSelect?.(fixture),
           onReady: (readyRenderer) => {
             if (active) {
               rendererRef.current = readyRenderer;

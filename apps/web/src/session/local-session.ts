@@ -1,7 +1,7 @@
 import { createBotRng, RandomBot } from '@cp2p/bots';
 import type { BotRng } from '@cp2p/bots';
 import { fromBase64Url, toBase64Url } from '@cp2p/codec';
-import { createBaseEngine, ENGINE_VERSION, failure, LocalGame, success } from '@cp2p/engine';
+import { engineForConfig, ENGINE_VERSION, failure, LocalGame, success } from '@cp2p/engine';
 import type {
   CommandShape,
   Engine,
@@ -141,7 +141,7 @@ export class LocalSession implements GameSession<LocalSessionSave> {
   static create(options: LocalSessionCreate): Result<LocalSession> {
     try {
       roleSeats(options.config, options.humanSeats, options.botSeats);
-      const engine = createBaseEngine();
+      const engine = engineForConfig(options.config);
       const entropy = options.entropy ?? browserEntropy;
       const seed = options.genesisSeed?.slice() ?? randomSeed(entropy);
       if (seed.length !== 32) throw new Error('Genesis seed must be 32 bytes');
@@ -172,7 +172,7 @@ export class LocalSession implements GameSession<LocalSessionSave> {
       const save = parseSave(raw);
       if (save.engineVersion !== ENGINE_VERSION) throw new Error('Save engine version differs');
       roleSeats(save.config, save.roles.humanSeats, save.roles.botSeats);
-      const engine = createBaseEngine();
+      const engine = engineForConfig(save.config);
       const source = createBrowserRandomSource(runtime.entropy ?? browserEntropy);
       const replay = new ReplayRandomSource(source);
       replay.begin(save.genesis);

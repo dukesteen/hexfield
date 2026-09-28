@@ -205,7 +205,8 @@
     "BUY_DEV_CARD": "Buy development card",
     "CLAIM_VICTORY": "Claim victory",
     "trade": "Offer a trade",
-    "bank": "Trade with bank"
+    "bank": "Trade with bank",
+    "END_SBP": "Done building"
   },
   "fairnessTitle": "Game fairness",
   "fairnessOpen": "Game fairness: {{status}}",
@@ -238,5 +239,7 @@
   "developmentInBank": "Development cards in bank: {{count}}",
   "awardUnclaimed": "Unclaimed",
   "buildPanel": "Build",
-  "tradePanel": "Trade"
+  "tradePanel": "Trade",
+  "specialBuild": "Special build phase: {{name}}",
+  "specialBuildHint": "Build or buy a development card. Trading and playing cards wait for your turn."
 }

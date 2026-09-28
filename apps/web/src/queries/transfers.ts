@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { LOBBY_COLOURS } from '@cp2p/protocol';
 import * as v from 'valibot';
+import { PLAYER_COLORS, PLAYER_SEATS, PLAYER_SHAPES } from '../features/players/identity';
 import type { Seat } from '@cp2p/engine';
 import { LocalSession } from '../session/local-session';
 import { parseSave, sameCanonical } from '../session/save';
@@ -13,14 +14,14 @@ const presentationSchema = v.strictObject({
   players: v.pipe(
     v.array(
       v.strictObject({
-        seat: v.picklist([0, 1, 2, 3]),
+        seat: v.picklist(PLAYER_SEATS),
         name: v.pipe(v.string(), v.minLength(1), v.maxLength(40)),
         color: v.picklist(LOBBY_COLOURS),
-        shape: v.picklist(['circle', 'triangle', 'square', 'diamond']),
+        shape: v.picklist(PLAYER_SHAPES),
       }),
     ),
     v.minLength(2),
-    v.maxLength(4),
+    v.maxLength(6),
   ),
   botDelayMs: v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(60_000)),
 });
@@ -168,9 +169,6 @@ export function useExportReplay() {
   });
 }
 
-const colors = ['blue', 'orange', 'green', 'magenta'] as const;
-const shapes = ['circle', 'triangle', 'square', 'diamond'] as const;
-
 /** Restore an imported local save as a separate game, preserving validated input history. */
 export function useImportLocalSave(playerName: (seat: Seat) => string) {
   const queryClient = useQueryClient();
@@ -186,13 +184,13 @@ export function useImportLocalSave(playerName: (seat: Seat) => string) {
         const seats = session.getState().config.seats;
         const presentation: GamePresentation = payload.presentation ?? {
           players: seats.map((seat, index) => {
-            const displaySeat = ([0, 1, 2, 3] as const).find((candidate) => candidate === seat);
+            const displaySeat = PLAYER_SEATS.find((candidate) => candidate === seat);
             if (displaySeat === undefined) throw new Error('Imported game has unsupported seats');
             return {
               seat: displaySeat,
               name: playerName(seat),
-              color: colors[index] ?? 'blue',
-              shape: shapes[index] ?? 'circle',
+              color: PLAYER_COLORS[index] ?? 'blue',
+              shape: PLAYER_SHAPES[index] ?? 'circle',
             };
           }),
           botDelayMs: 500,

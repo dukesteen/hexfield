@@ -37,6 +37,8 @@ import { MobileGameControls, type MobileTab } from './MobileGameControls.js';
 import { useCompactCockpit } from './use-compact-cockpit.js';
 import type { SaveStatus } from './save-coordinator';
 import { AwardsPanel } from './AwardsPanel';
+import { ModuleHud } from '../modules/ModuleHud';
+import { FixtureDialog } from '../modules/FixtureDialog';
 
 const MAX_INLINE_DEVELOPMENT_CARDS = 5;
 const MAX_NARROW_INLINE_DEVELOPMENT_CARDS = 3;
@@ -967,6 +969,7 @@ function LiveGame({
   const [renderer, setRenderer] = useState<BoardRenderer | null>(null);
   const finished = Boolean(state.result);
   const [resultsOpen, setResultsOpen] = useState(finished);
+  const [fixtureDialog, setFixtureDialog] = useState<string | null>(null);
   const wasFinished = useRef(finished);
   const resultsButton = useRef<HTMLButtonElement>(null);
   useEffect(() => {
@@ -1105,12 +1108,23 @@ function LiveGame({
               if (!finished) actions.onBoardSelect(hit);
             }}
             targetLabel={(hit) => actions.targetLabel(hit)}
+            moduleIds={state.config.modules.map((module) => module.id)}
+            onFixtureSelect={setFixtureDialog}
             onRendererReady={(readyRenderer) => {
               setRenderer(readyRenderer);
               onRendererReady?.(readyRenderer);
             }}
           />
           <DiceRollReadout dice={lastRoll} />
+          <ModuleHud state={state} presentation={presentation} />
+          {fixtureDialog !== null && (
+            <FixtureDialog
+              fixtureId={fixtureDialog}
+              state={state}
+              presentation={presentation}
+              onClose={() => setFixtureDialog(null)}
+            />
+          )}
           {compact && (
             <div className="mobile-board-awards">
               <AwardsPanel state={state} presentation={presentation} />

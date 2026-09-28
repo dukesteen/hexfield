@@ -22,5 +22,6 @@
   "monopolyCollected": "{{player}} collected {{count}} cards with Monopoly.",
   "phaseChanged": "The next phase began.",
   "gameEnded": "{{player}} won the game.",
-  "gameUpdated": "The game changed."
+  "gameUpdated": "The game changed.",
+  "specialBuildStarted": "{{player}} ended their turn. The other players may now build in turn."
 }

@@ -14,6 +14,7 @@ export { STANDARD_BOARD, STANDARD_HEXES } from './modules/base/board/shapes.js';
 export {
   MODULE_CATALOGUE,
   checkModuleSelection,
+  createCatalogueEngine,
   devCardCatalogueFor,
   devCardCountsFor,
   engineForConfig,

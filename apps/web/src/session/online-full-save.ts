@@ -13,7 +13,7 @@ import {
   EscrowCeremony,
 } from '@cp2p/protocol';
 import type { EscrowCeremonyStore, ProposalContext, ProtocolJournal } from '@cp2p/protocol';
-import { createBaseEngine } from '@cp2p/engine';
+import { createCatalogueEngine } from '@cp2p/engine';
 import * as v from 'valibot';
 import {
   MAX_ONLINE_PUBLIC_ARCHIVE_BYTES,
@@ -154,7 +154,7 @@ function historicalSafetyHash(safety: HistoricalOnlineSafety): string {
 }
 
 function contextFor(archive: VerifiedPublicOnlineArchive): Result<ProposalContext> {
-  const engine = createBaseEngine();
+  const engine = createCatalogueEngine();
   const replay = replayCertifiedPrefix(archive.start.result.entry, archive.entries, engine, {
     genesis: {
       verifyCommitments(genesis) {

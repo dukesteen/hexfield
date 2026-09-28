@@ -1,18 +1,19 @@
 import { LOBBY_COLOURS } from '@cp2p/protocol';
 import * as v from 'valibot';
+import { PLAYER_SEATS, PLAYER_SHAPES } from '../../features/players/identity';
 import { browserStorage, type KeyValueStorage } from './storage';
 
 const SAVE_PREFIX = 'hexfield:save:v1:';
 
 const playerSchema = v.strictObject({
-  seat: v.picklist([0, 1, 2, 3]),
+  seat: v.picklist(PLAYER_SEATS),
   name: v.pipe(v.string(), v.minLength(1), v.maxLength(40)),
   color: v.picklist(LOBBY_COLOURS),
-  shape: v.picklist(['circle', 'triangle', 'square', 'diamond']),
+  shape: v.picklist(PLAYER_SHAPES),
 });
 
 const presentationSchema = v.strictObject({
-  players: v.pipe(v.array(playerSchema), v.minLength(2), v.maxLength(4)),
+  players: v.pipe(v.array(playerSchema), v.minLength(2), v.maxLength(6)),
   botDelayMs: v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(60_000)),
 });
 

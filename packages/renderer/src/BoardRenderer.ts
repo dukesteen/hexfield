@@ -3,6 +3,7 @@ import type { Texture } from 'pixi.js';
 import { buildBoardGraph, edgeToPixel, hexToPixel, vertexToPixel } from '@cp2p/engine/geometry';
 import type { BoardGraph, EdgeId, HexId, Point, VertexId } from '@cp2p/engine/geometry';
 import { hitTestBoard } from './input/hitTest.js';
+import { drawDefaultFixture, fixtureAnchorIds, fixtureBounds, hitTestFixture } from './fixtures.js';
 import { cameraPositionAtAnchor, clampCameraAxis, fitZoomToBounds } from './input/camera.js';
 import { artColorFromNumber, loadBoardTextures } from './assets/terrainTextures.js';
 import { assignTerrainVariants } from './assets/terrainVariants.js';
@@ -27,6 +28,8 @@ import type {
   BoardHit,
   BoardRenderer,
   BoardRendererOptions,
+  RenderLayerContext,
+  RenderLayerPlugin,
   RenderModel,
   ScreenPoint,
 } from './types.js';
@@ -58,6 +61,7 @@ const BADGE_RADIUS = 0.13;
 const PREVIEW_CORNER = 0.12;
 const LAYER_NAMES = [
   'background',
+  'fixtures',
   'terrain',
   'harbors',
   'tokens',
@@ -66,9 +70,11 @@ const LAYER_NAMES = [
   'edgeFocus',
   'buildings',
   'robber',
+  'modulePieces',
   'highlights',
   'focus',
   'effects',
+  'moduleOverlay',
 ] as const;
 type LayerName = (typeof LAYER_NAMES)[number];
 
@@ -95,6 +101,8 @@ const DEFAULT_PLAYERS: BoardAppearance['players'] = [
   { seat: 1, color: 0xd55e00, marker: 'triangle' },
   { seat: 2, color: 0x009e73, marker: 'square' },
   { seat: 3, color: 0xb35b93, marker: 'diamond' },
+  { seat: 4, color: 0xe6ad26, marker: 'hexagon' },
+  { seat: 5, color: 0xcf4a44, marker: 'star' },
 ];
 
 function sameHit(a: BoardHit | null, b: BoardHit | null): boolean {
@@ -143,6 +151,9 @@ export class PixiBoardRenderer implements BoardRenderer {
   private readonly viewChangeListeners = new Set<() => void>();
   private viewSignature = '';
   private readonly onSelect?: BoardRendererOptions['onSelect'];
+  private readonly onFixtureSelect?: BoardRendererOptions['onFixtureSelect'];
+  private readonly plugins: readonly RenderLayerPlugin[];
+  private readonly fixtureArt: NonNullable<BoardRendererOptions['fixtureArt']>;
   private readonly onHover?: BoardRendererOptions['onHover'];
   private readonly onReady?: BoardRendererOptions['onReady'];
   private forceReducedMotion: boolean;
@@ -193,6 +204,7 @@ export class PixiBoardRenderer implements BoardRenderer {
     this.camera = new Container();
     this.layers = {
       background: new Container(),
+      fixtures: new Container(),
       terrain: new Container(),
       harbors: new Container(),
       tokens: new Container(),
@@ -201,10 +213,17 @@ export class PixiBoardRenderer implements BoardRenderer {
       edgeFocus: new Container(),
       buildings: new Container(),
       robber: new Container(),
+      modulePieces: new Container(),
       highlights: new Container(),
       focus: new Container(),
       effects: new Container(),
+      moduleOverlay: new Container(),
     };
+    this.onFixtureSelect = options.onFixtureSelect;
+    this.plugins = [...(options.layers ?? [])].toSorted(
+      (a, b) => a.zIndex - b.zIndex || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
+    );
+    this.fixtureArt = options.fixtureArt ?? {};
     app.stage.addChild(this.camera);
     for (const name of LAYER_NAMES) this.camera.addChild(this.layers[name]);
     app.stage.addChild(this.screenEffects);
@@ -288,12 +307,19 @@ export class PixiBoardRenderer implements BoardRenderer {
       this.appearance.theme,
       model.hexes.map(({ q, r, terrain }) => ({ q, r, terrain })),
     ]);
-    this.drawChanged('terrain', [model.hexes]);
+    this.drawChanged('terrain', [model.hexes, model.fixtures ?? []]);
     this.drawChanged('harbors', [model.harbors]);
     this.drawChanged('tokens', [model.hexes.map(({ id, q, r, token }) => ({ id, q, r, token }))]);
     this.drawChanged('roads', [model.roads, this.appearance.players]);
     this.drawChanged('buildings', [model.buildings, this.appearance.players]);
     this.drawChanged('robber', [model.robberHex, model.pirateHex]);
+    this.drawChanged('fixtures', [
+      model.fixtures ?? [],
+      this.pluginSlices('fixtures'),
+      this.appearance.theme,
+    ]);
+    this.drawChanged('modulePieces', [this.pluginSlices('pieces'), this.appearance.theme]);
+    this.drawChanged('moduleOverlay', [this.pluginSlices('overlay'), this.appearance.theme]);
     this.drawChanged('focus', [
       this.focusTarget,
       this.focusPreview,
@@ -1003,7 +1029,9 @@ export class PixiBoardRenderer implements BoardRenderer {
         layer.addChild(underlay);
       }
     } else if (name === 'terrain') {
+      const anchors = fixtureAnchorIds(model.fixtures ?? []);
       for (const { q, r, center } of this.waterCells()) {
+        if (anchors.has(`h:${q},${r}`)) continue;
         const variant = this.terrainVariants.get(`h:${q},${r}`) ?? 1;
         const texture = this.textures.terrain.sea[variant - 1] ?? this.textures.terrain.sea[0];
         if (texture) this.drawTerrainTile(layer, center, texture);
@@ -1021,6 +1049,28 @@ export class PixiBoardRenderer implements BoardRenderer {
       }
     } else if (name === 'harbors') {
       for (const harbor of model.harbors) this.drawHarbor(layer, harbor.edge, harbor.kind);
+    } else if (name === 'fixtures' || name === 'modulePieces' || name === 'moduleOverlay') {
+      const context: RenderLayerContext = {
+        hexSize: this.hexSize,
+        theme: this.appearance.theme,
+        reducedMotion: this.forceReducedMotion,
+      };
+      if (name === 'fixtures')
+        for (const fixture of model.fixtures ?? []) {
+          const art = this.fixtureArt[fixture.art];
+          layer.addChild(
+            art ? art(fixture, context) : drawDefaultFixture(fixture, this.hexSize, context.theme),
+          );
+        }
+      const band =
+        name === 'fixtures' ? 'fixtures' : name === 'modulePieces' ? 'pieces' : 'overlay';
+      for (const plugin of this.plugins) {
+        if (plugin.band !== band) continue;
+        const target = new Container();
+        target.label = `plugin:${plugin.id}`;
+        plugin.draw(target, model.layers?.[plugin.id], context);
+        layer.addChild(target);
+      }
     } else if (name === 'tokens') {
       this.tokenSprites.clear();
       for (const hex of model.hexes) {
@@ -1174,6 +1224,18 @@ export class PixiBoardRenderer implements BoardRenderer {
     layer.addChild(sprite);
   }
 
+  /** The fixture under a client point, when a fixture handler is registered. */
+  fixtureAt(clientPoint: ScreenPoint): string | null {
+    if (!this.onFixtureSelect || !this.model?.fixtures?.length) return null;
+    return hitTestFixture(this.screenToBoard(clientPoint), this.model.fixtures, this.hexSize);
+  }
+
+  private pluginSlices(band: RenderLayerPlugin['band']): unknown[] {
+    return this.plugins
+      .filter((plugin) => plugin.band === band)
+      .map((plugin) => [plugin.id, this.model?.layers?.[plugin.id] ?? null]);
+  }
+
   private isStandardFootprint(): boolean {
     if (!this.model || this.model.hexes.length !== 19) return false;
     const cells = new Set(this.model.hexes.map(({ q, r }) => `${q},${r}`));
@@ -1303,6 +1365,13 @@ export class PixiBoardRenderer implements BoardRenderer {
     const board = this.boardPixelBounds();
     if (!board || !this.model) return null;
     let { minX, maxX, minY, maxY } = board;
+    const fixtures = fixtureBounds(this.model.fixtures ?? [], this.hexSize);
+    if (fixtures) {
+      minX = Math.min(minX, fixtures.minX);
+      maxX = Math.max(maxX, fixtures.maxX);
+      minY = Math.min(minY, fixtures.minY);
+      maxY = Math.max(maxY, fixtures.maxY);
+    }
     const badgeRadius = this.hexSize * 0.8;
     for (const harbor of this.model.harbors) {
       const edgeIndex = this.graph?.edgeIndex[harbor.edge];
@@ -1480,6 +1549,14 @@ export class PixiBoardRenderer implements BoardRenderer {
       const point = { x: event.clientX, y: event.clientY };
       const hit = this.hitTest(point);
       if (hit) this.onSelect?.(hit);
+      const fixture = hit ? null : this.fixtureAt(point);
+      if (fixture !== null) {
+        this.onFixtureSelect?.(fixture);
+        this.lastTap = null;
+        this.drag = null;
+        if (this.pointers.size < 2) this.pinch = null;
+        return;
+      }
       if (hit && this.isLegalHighlight(hit)) {
         this.lastTap = null;
       } else {
