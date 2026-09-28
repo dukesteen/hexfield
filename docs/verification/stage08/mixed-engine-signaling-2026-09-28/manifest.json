@@ -1,0 +1,21 @@
+{
+  "run": "https://github.com/dukesteen/hexfield/actions/runs/36405459968",
+  "sourceRevision": "2d027c17a14caa99d872a6af1367accc41bb9365",
+  "files": [
+    {
+      "file": "manual-job.log.gz",
+      "rawSha256": "21e5e08ae9932d84411aa9e92be90000aaf3788e0149043b3e5bb945a3691e55",
+      "gzipSha256": "a214cbd1b7ec173a8a6c18c12232c3483d9d0378cca546a40ba30207c887f126"
+    },
+    {
+      "file": "signaling-job.log.gz",
+      "rawSha256": "e2b77dda674d95b287e3e3f67e040d5f0a9d6d3a0afcc7a2c09f12d464df2184",
+      "gzipSha256": "d32c810c1684b604cabbb19790211dcd38dc7afc149afcb58861a1f40b060825"
+    },
+    {
+      "file": "signaling-report.json.gz",
+      "rawSha256": "0866c080d6b1d87afd2b398eb2e2bb69248367214d5d1083add735572cc0d048",
+      "gzipSha256": "e02fb8efce88d081952244923ba302c9771de32d3382c3d2235d990727212d66"
+    }
+  ]
+}

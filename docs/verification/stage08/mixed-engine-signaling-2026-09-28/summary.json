@@ -1,0 +1,12 @@
+{
+  "mode": "signaling",
+  "browserSet": ["chromium-a", "chromium-b", "firefox", "webkit"],
+  "commands": 20,
+  "terminalSeq": 57,
+  "modeAuditCount": 4,
+  "sourceRevision": "2d027c17a14caa99d872a6af1367accc41bb9365",
+  "testDurationMs": 239632,
+  "timeoutMs": 240000,
+  "victoryPointsToWin": 3,
+  "finalLogHash": "701be4612cad345da58317e13b9361c293bbba236afdcae114bfacd8be3654c9"
+}
