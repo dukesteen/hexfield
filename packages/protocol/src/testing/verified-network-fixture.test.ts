@@ -7,7 +7,12 @@ import { createVerifiedNetworkFixture } from './verified-network-fixture.js';
 
 describe('verified network fixture', () => {
   test('builds strict four-human 25-card genesis with seat-scoped reusable options', async () => {
-    const fixture = createVerifiedNetworkFixture({ seed: 802, gameIndex: 3, vpTarget: 3 });
+    const fixture = createVerifiedNetworkFixture({
+      seed: 802,
+      gameIndex: 3,
+      vpTarget: 3,
+      verifyLivePrivateStates: true,
+    });
     try {
       expect(fixture.genesis.security).toBe('verified');
       expect(fixture.genesis.seats).toHaveLength(4);
@@ -59,6 +64,20 @@ describe('verified network fixture', () => {
       } finally {
         driver.dispose?.();
       }
+
+      const restoredDriver = restoredSeatZero.createDriver(
+        fixture.engine,
+        fixture.genesis,
+        new VirtualClock(),
+        [0],
+      );
+      restoredDriver.dispose?.();
+      expect(fixture.privateStateEvidence()).toMatchObject({
+        capturedSequences: 1,
+        capturedSnapshots: 1,
+        checkedSequences: 0,
+        repeatedSnapshots: 1,
+      });
 
       const masterCopies = fixture.mastersForAudit();
       expect(masterCopies.map(({ seat }) => seat)).toEqual([0, 1, 2, 3]);

@@ -8,6 +8,7 @@ export type { SimulationGenesisOptions, SimulationGenesis } from './testing/simu
 export { createTerminalAuditFixture } from './testing/audit-fixture.js';
 export { createVerifiedNetworkFixture } from './testing/verified-network-fixture.js';
 export type {
+  VerifiedNetworkAuditTiming,
   VerifiedNetworkFixtureOptions,
   VerifiedNetworkSessionOptions,
 } from './testing/verified-network-fixture.js';

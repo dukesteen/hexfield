@@ -11,6 +11,7 @@ export interface NetBatchOptions {
   scenario: number;
   parallel: number;
   security?: 'stub' | 'verified';
+  lifecycle?: 'persistence';
   maxElapsedMs?: number;
 }
 
@@ -43,6 +44,7 @@ export function parseNetBatchOptions(args: readonly string[]): NetBatchOptions {
     'seed',
     'parallel',
     'security',
+    'lifecycle',
     'max-elapsed-ms',
   ]);
   for (let index = 0; index < args.length; index++) {
@@ -57,6 +59,8 @@ export function parseNetBatchOptions(args: readonly string[]): NetBatchOptions {
     if (name === 'security') {
       if (value !== 'stub' && value !== 'verified')
         throw new Error('--security must be stub or verified');
+    } else if (name === 'lifecycle') {
+      if (value !== 'persistence') throw new Error('--lifecycle must be persistence');
     } else if (!/^-?\d+$/.test(value)) throw new Error(`--${name} needs an integer value`);
     values.set(name, value);
     index++;
@@ -77,6 +81,7 @@ export function parseNetBatchOptions(args: readonly string[]): NetBatchOptions {
     seed: parse('seed', 42),
     parallel: parse('parallel', 1),
     ...(values.has('security') ? { security } : {}),
+    ...(values.has('lifecycle') ? { lifecycle: 'persistence' as const } : {}),
     ...(maxElapsedMs === undefined ? {} : { maxElapsedMs }),
   };
   if (options.scenario < 1 || options.scenario > 9)
@@ -90,7 +95,17 @@ export function parseNetBatchOptions(args: readonly string[]): NetBatchOptions {
     throw new Error(`--parallel must be between 1 and ${MAX_WORKERS}`);
   if (maxElapsedMs !== undefined && maxElapsedMs <= 0)
     throw new Error('--max-elapsed-ms must be positive');
+  validateLifecycleOptions(options);
   return options;
+}
+
+function validateLifecycleOptions(options: NetBatchOptions): void {
+  if (
+    options.lifecycle === 'persistence' &&
+    (options.security !== 'verified' || options.scenario !== 1)
+  ) {
+    throw new Error('--lifecycle persistence requires --security verified and --scenario 1');
+  }
 }
 
 /** Partition a deterministic contiguous game-index range across worker slices. */
@@ -112,6 +127,7 @@ async function runWorker(indices: number[], options: NetBatchOptions): Promise<N
         scenario: options.scenario,
         gameIndices: indices,
         ...(options.security === undefined ? {} : { security: options.security }),
+        ...(options.lifecycle === undefined ? {} : { lifecycle: options.lifecycle }),
         ...(options.maxElapsedMs === undefined ? {} : { maxElapsedMs: options.maxElapsedMs }),
       },
     });
@@ -141,6 +157,7 @@ async function runIndices(
         gameIndex,
         scenario: options.scenario,
         ...(options.security === undefined ? {} : { security: options.security }),
+        ...(options.lifecycle === undefined ? {} : { lifecycle: options.lifecycle }),
         ...(options.maxElapsedMs === undefined ? {} : { maxElapsedMs: options.maxElapsedMs }),
       });
       results.push(result);
@@ -153,6 +170,7 @@ async function runIndices(
 
 /** Run contiguous deterministic game indices with a hard worker limit. */
 export async function runNetworkBatch(options: NetBatchOptions): Promise<NetBatchResult> {
+  validateLifecycleOptions(options);
   if (options.startIndex > Number.MAX_SAFE_INTEGER - (options.seeds - 1))
     throw new Error('Network game-index range exceeds the safe integer limit');
   const gameIndices = partitionGameIndices(options);

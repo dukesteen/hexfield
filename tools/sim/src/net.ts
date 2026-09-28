@@ -20,7 +20,9 @@ import type {
   CertifiedEntry,
   ProposalContext,
   ProtocolClock,
+  ProtocolMessage,
   P2PSessionOptions,
+  SessionAuditState,
   SessionUpdate,
   Transport,
 } from '@cp2p/protocol';
@@ -35,6 +37,12 @@ import type { VerifiedNonVoterActor } from '@cp2p/protocol/testing';
 import { deriveSeed } from './random-source.js';
 import { invalidCommandProposal } from './net-adversary.js';
 import { NonVoterCommand } from './non-voter-command.js';
+import {
+  PersistenceLifecycle,
+  observeRestoredJournal,
+  restartEvidence,
+} from './persistence-lifecycle.js';
+import type { LifecycleHistoryEntry, LifecycleRestart } from './persistence-lifecycle.js';
 import { observeOutgoingTransport } from './observed-transport.js';
 
 export interface NetworkGameOptions {
@@ -45,6 +53,8 @@ export interface NetworkGameOptions {
   /** Stage 07 acceptance uses genuine private sources and proofs on the same fault schedules. */
   security?: 'stub' | 'verified';
   maxElapsedMs?: number;
+  /** Representative Stage 10 persistence trace on the clean verified four-human game. */
+  lifecycle?: 'persistence';
   onProgress?: (progress: {
     revision: number;
     turn: number;
@@ -72,6 +82,26 @@ export interface NetworkGameResult {
     finalHead: { seq: number; hash: string };
     cheatFindings: AuditReport['cheatFindings'];
   }[];
+  auditTimings?: readonly {
+    seat: Seat;
+    invocations: number;
+    totalMilliseconds: number;
+    lastMilliseconds: number;
+    privateComparisonInvocations: number;
+    privateComparisonMilliseconds: number;
+  }[];
+  lifecycle?: {
+    profile: 'persistence';
+    restarts: readonly LifecycleRestart[];
+    inputCounts: Record<string, number>;
+    privateStates: {
+      capturedSequences: number;
+      capturedSnapshots: number;
+      checkedSequences: number;
+      repeatedSnapshots: number;
+      snapshotDigest: string;
+    };
+  };
   faultInjected: boolean;
   faultRecovered: boolean;
   faultEvidence: {
@@ -97,14 +127,36 @@ function unwrap<T>(result: Result<T>): T {
   return result.value;
 }
 
+function beaconPosition({
+  seat,
+  chainEpoch,
+  index,
+  length,
+}: {
+  seat: Seat;
+  chainEpoch: number;
+  index: number;
+  length: number;
+}) {
+  return { seat, chainEpoch, index, length };
+}
+
 /** Full games through the real peer sessions, signatures, wire encoding and journals. */
 export async function runNetworkGame(options: NetworkGameOptions): Promise<NetworkGameResult> {
   if (!Number.isInteger(options.scenario) || options.scenario < 1 || options.scenario > 9)
     throw new Error('This network scenario is not implemented yet');
+  if (options.lifecycle && (options.security !== 'verified' || options.scenario !== 1))
+    throw new Error('Persistence lifecycle requires clean scenario 1 with verified security');
+  const lifecycle = options.lifecycle ? new PersistenceLifecycle() : null;
+  let lifecycleObservedRevision = -1;
   const started = performance.now();
   const verified =
     options.security === 'verified'
-      ? createVerifiedNetworkFixture({ seed: options.seed, gameIndex: options.gameIndex })
+      ? createVerifiedNetworkFixture({
+          seed: options.seed,
+          gameIndex: options.gameIndex,
+          verifyLivePrivateStates: lifecycle !== null,
+        })
       : null;
   const game =
     verified ?? createSimulationGenesis({ seed: options.seed, gameIndex: options.gameIndex });
@@ -179,6 +231,43 @@ export async function runNetworkGame(options: NetworkGameOptions): Promise<Netwo
   );
   const failures: string[] = [];
   let submission: { seat: Seat; result: Result<void> | null } | null = null;
+  let lastProgressMilliseconds = 0;
+  let highestProgressRevision = -1;
+  let terminalReachedMilliseconds: number | null = null;
+  const packetCounts = new Map<
+    Seat,
+    { sent: Map<string, number>; received: Map<string, number> }
+  >();
+
+  function countPacket(seat: Seat, direction: 'sent' | 'received', bytes: Uint8Array): void {
+    const decoded = decodeProtocolMessage(bytes);
+    if (!decoded.ok) return;
+    const message: ProtocolMessage = decoded.value;
+    let key: string;
+    if (message.t === 'SYS_CONTRIB') key = `SYS_CONTRIB/${message.contribution.kind}`;
+    else if (message.t === 'MASTER_REVEAL') {
+      const { publisherSeat, originalSeat } = message.reveal.body;
+      if (
+        !game.genesis.config.seats.includes(publisherSeat) ||
+        !game.genesis.config.seats.includes(originalSeat)
+      )
+        return;
+      key = `MASTER_REVEAL/${publisherSeat}/${originalSeat}`;
+    } else return;
+    let counters = packetCounts.get(seat);
+    if (!counters) {
+      counters = { sent: new Map(), received: new Map() };
+      packetCounts.set(seat, counters);
+    }
+    const counts = counters[direction];
+    if (counts.size >= 64 && !counts.has(key)) return;
+    counts.set(key, Math.min(Number.MAX_SAFE_INTEGER, (counts.get(key) ?? 0) + 1));
+  }
+
+  function checkDeadline(): void {
+    if (options.maxElapsedMs !== undefined && performance.now() - started > options.maxElapsedMs)
+      throw new Error(`Peer game exceeded ${options.maxElapsedMs} ms: ${progressDiagnostic()}`);
+  }
 
   function observe(seat: Seat, update: SessionUpdate): void {
     const prior = updates.get(seat);
@@ -199,6 +288,12 @@ export async function runNetworkGame(options: NetworkGameOptions): Promise<Netwo
       else failures.push(`Peer ${seat}: ${update.status.message}`);
     }
     if (prior?.revision !== update.revision) {
+      if (update.revision > highestProgressRevision) {
+        highestProgressRevision = update.revision;
+        lastProgressMilliseconds = performance.now() - started;
+      }
+      if (update.state.result && terminalReachedMilliseconds === null)
+        terminalReachedMilliseconds = performance.now() - started;
       const hash = toHex(hashValue(update.state));
       const known = stateHashes.get(update.revision);
       if (known !== undefined && known !== hash)
@@ -266,25 +361,99 @@ export async function runNetworkGame(options: NetworkGameOptions): Promise<Netwo
   }
 
   function progressDiagnostic(): string {
+    const latest = [...updates.values()].toSorted(
+      (left, right) => right.revision - left.revision,
+    )[0];
     return JSON.stringify({
+      elapsedMilliseconds: performance.now() - started,
+      lastProgressMilliseconds,
+      terminalReachedMilliseconds,
+      virtualMilliseconds: network.clock.now(),
+      public: latest
+        ? {
+            revision: latest.revision,
+            turn: latest.state.turn.number,
+            phase: latest.state.turn.phase,
+            result: latest.state.result,
+            publicVp: latest.state.seats.map(({ seat, publicVp }) => ({ seat, publicVp })),
+          }
+        : null,
+      auditTimings: verified?.auditTimingEvidence() ?? [],
       submission,
       peers: [...sessions].map(([seat, session]) => ({
         seat,
+        head: session.getCommittedHead(),
         revision: updates.get(seat)?.revision,
         turn: updates.get(seat)?.state.turn,
+        phase: updates.get(seat)?.state.turn.phase,
+        publicVp: updates.get(seat)?.state.seats.map(({ seat: publicSeat, publicVp }) => ({
+          seat: publicSeat,
+          publicVp,
+        })),
         result: updates.get(seat)?.state.result,
         pending: session.getPending(),
         protocol: session.getProtocolStatus(),
-        audit: session.getAudit().kind,
+        beacon: (() => {
+          const beacon = session['context'].log.crypto?.beacon;
+          return beacon
+            ? {
+                round: beacon.round,
+                chains: beacon.chains.map(beaconPosition),
+                active: beacon.active
+                  ? {
+                      epoch: beacon.active.epoch,
+                      round: beacon.active.round,
+                      participants: beacon.active.participants.map(beaconPosition),
+                    }
+                  : null,
+              }
+            : null;
+        })(),
+        packets: (() => {
+          const counts = packetCounts.get(seat);
+          return {
+            sent: Object.fromEntries(counts?.sent ?? []),
+            received: Object.fromEntries(counts?.received ?? []),
+          };
+        })(),
+        audit: (() => {
+          const audit: SessionAuditState = session.getAudit();
+          return audit.kind === 'awaiting-reveals'
+            ? { kind: audit.kind, missingSeats: audit.missingSeats }
+            : { kind: audit.kind };
+        })(),
         automaticParent: Reflect.get(session, 'automaticParent'),
       })),
     });
   }
 
+  function countingTransport(seat: Seat, raw: Transport): Transport {
+    // Sent counts are emissions; received counts include duplicate wire deliveries.
+    return {
+      self: raw.self,
+      peers: () => raw.peers(),
+      send: (to, bytes) => {
+        countPacket(seat, 'sent', bytes);
+        raw.send(to, bytes);
+      },
+      broadcast: (bytes) => {
+        countPacket(seat, 'sent', bytes);
+        raw.broadcast(bytes);
+      },
+      onMessage: (listener) =>
+        raw.onMessage((from, bytes) => {
+          countPacket(seat, 'received', bytes);
+          listener(from, bytes);
+        }),
+      onPeerChange: (listener) => raw.onPeerChange(listener),
+      disconnect: (peer) => raw.disconnect(peer),
+    };
+  }
+
   function peerTransport(seat: Seat): Transport {
     const identity = game.identities.get(seat);
     if (!identity) throw new Error('Missing transport identity');
-    const transport = network.transport(identity.peerId);
+    const transport = countingTransport(seat, network.transport(identity.peerId));
     if (![3, 4, 5, 6, 7, 8].includes(options.scenario)) return transport;
     const rewrite = (bytes: Uint8Array): Uint8Array | null => {
       const decoded = unwrap(decodeProtocolMessage(bytes));
@@ -429,7 +598,10 @@ export async function runNetworkGame(options: NetworkGameOptions): Promise<Netwo
   }
 
   function nonVoterTransport(peerId: string): Transport {
-    return observeOutgoingTransport(network.transport(peerId), observeNonVoterMessage);
+    return observeOutgoingTransport(
+      countingTransport(0, network.transport(peerId)),
+      observeNonVoterMessage,
+    );
   }
 
   function wakeNonVoter(): void {
@@ -437,19 +609,46 @@ export async function runNetworkGame(options: NetworkGameOptions): Promise<Netwo
     nonVoterWake = network.clock.setTimeout(wakeNonVoter, 250);
   }
 
-  async function open(seat: Seat, restoring: boolean): Promise<void> {
+  async function open(
+    seat: Seat,
+    restoring: boolean,
+    restoreJournal?: P2PSessionOptions['journal'],
+    restoreEvidence?: LifecycleRestart['restored'][number],
+  ): Promise<void> {
     const identity = game.identities.get(seat);
     const journal = journals.get(seat);
     if (!identity || !journal) throw new Error('Missing simulation identity or journal');
+    const transport = peerTransport(seat);
+    const restoredTransport = restoreEvidence
+      ? observeOutgoingTransport(transport, (bytes) => {
+          const parsed = decodeProtocolMessage(bytes);
+          if (!parsed.ok || (parsed.value.t !== 'PROPOSAL' && parsed.value.t !== 'VOTE')) return;
+          if (!restoreEvidence.loadedBeforeVoting) {
+            restoreEvidence.orderingViolations += 1;
+            throw new Error('Restored session voted before validating its retained journal');
+          }
+          restoreEvidence.votingMessagesAfterLoad += 1;
+          if (parsed.value.t !== 'VOTE') return;
+          const { seq, phase, valueHash } = parsed.value.vote.body;
+          if (
+            phase === 'precommit' &&
+            valueHash !== null &&
+            !restoreEvidence.precommits.some(
+              (vote) => vote.seq === seq && vote.valueHash === valueHash,
+            )
+          )
+            restoreEvidence.precommits.push({ seq, valueHash });
+        })
+      : transport;
     const sessionOptions: P2PSessionOptions = {
       genesisEntry: game.entry,
       engine: game.engine,
       policy: { genesis: { allowStub: true }, entry: { allowStub: true } },
       seat,
       secretKey: identity.secretKey,
-      transport: peerTransport(seat),
+      transport: restoredTransport,
       clock: network.clock,
-      journal,
+      journal: restoreJournal ?? journal,
       createDriver: (
         engine: typeof game.engine,
         genesis: typeof game.genesis,
@@ -462,6 +661,71 @@ export async function runNetworkGame(options: NetworkGameOptions): Promise<Netwo
     );
     session.subscribe((update) => observe(seat, update));
     sessions.set(seat, session);
+  }
+
+  async function restartLifecycle(event: LifecycleRestart): Promise<void> {
+    const records = new Map<
+      Seat,
+      NonNullable<Awaited<ReturnType<MemoryProtocolJournal['load']>>>
+    >();
+    const preCrashHeads = new Map<Seat, { seq: number; hash: string }>();
+    for (const seat of event.seats) {
+      const session = sessions.get(seat);
+      if (!session || session.getCommittedHead().seq !== event.seq)
+        throw new Error('Lifecycle restart requires a common certified head');
+      preCrashHeads.set(seat, session.getCommittedHead());
+    }
+    for (const seat of event.seats) crash(seat);
+    if (event.kind === 'everyone-left' && sessions.size !== 0)
+      throw new Error('Everyone-left trace did not close every session');
+    const allClosedAt = network.clock.now();
+    if (event.kind === 'everyone-left') network.clock.advanceBy(2_000);
+    let lastReopenedAt: number | null = null;
+    for (const seat of event.seats) {
+      const journal = journals.get(seat);
+      if (!journal) throw new Error('Missing lifecycle journal');
+      // oxlint-disable-next-line no-await-in-loop -- Observe the retained safety after disposal stops queued consensus work.
+      const record = await journal.load();
+      const preCrash = preCrashHeads.get(seat);
+      if (
+        !record ||
+        record.height !== event.seq + 1 ||
+        entryHash(record.entries.at(-1)?.entry ?? record.genesis) !== preCrash?.hash
+      )
+        throw new Error('Retained lifecycle journal differs from its pre-crash committed head');
+      records.set(seat, record);
+    }
+    for (const [index, seat] of event.seats.entries()) {
+      const identity = game.identities.get(seat);
+      const journal = journals.get(seat);
+      const record = records.get(seat);
+      if (!identity || !journal || !record) throw new Error('Missing lifecycle restore record');
+      const reopenedAt = network.clock.now();
+      if (event.kind === 'everyone-left') {
+        event.closedForMilliseconds ??= reopenedAt - allClosedAt;
+        if (lastReopenedAt !== null) event.reopenGapsMilliseconds.push(reopenedAt - lastReopenedAt);
+        lastReopenedAt = reopenedAt;
+      }
+      network.restart(identity.peerId);
+      const evidence = restartEvidence(seat, record);
+      event.restored.push(evidence);
+      // oxlint-disable-next-line no-await-in-loop -- Fixed non-seat order is part of the everyone-left trace.
+      await open(seat, true, observeRestoredJournal(journal, record, evidence), evidence);
+      const head = sessions.get(seat)?.getCommittedHead();
+      if (
+        !evidence.loadedBeforeVoting ||
+        evidence.orderingViolations !== 0 ||
+        head?.seq !== event.seq ||
+        head.hash !== evidence.headHash
+      )
+        throw new Error('Lifecycle restore changed its exact certified head');
+      offline.delete(seat);
+      if (event.kind === 'everyone-left' && index < event.seats.length - 1) {
+        network.clock.advanceBy(250);
+        // oxlint-disable-next-line no-await-in-loop -- Let the restored quorum process before the next seat rejoins.
+        await flush();
+      }
+    }
   }
 
   function crash(seat: Seat): void {
@@ -678,12 +942,13 @@ export async function runNetworkGame(options: NetworkGameOptions): Promise<Netwo
 
   try {
     await Promise.all(game.genesis.config.seats.map((seat) => open(seat, false)));
+    checkDeadline();
     const maxSteps = options.maxSteps ?? 1_000_000;
     for (let step = 0; step < maxSteps; step++) {
-      if (options.maxElapsedMs !== undefined && performance.now() - started > options.maxElapsedMs)
-        throw new Error(`Peer game exceeded ${options.maxElapsedMs} ms: ${progressDiagnostic()}`);
+      checkDeadline();
       // oxlint-disable-next-line no-await-in-loop -- Virtual network delivery and peer queues alternate causally.
       await flush();
+      checkDeadline();
       if (options.scenario === 6 && byzantineHalted && sessions.has(0)) {
         if (submission?.seat === 0 && submission.result === null)
           intentionallyInterruptedSubmissions.add(submission);
@@ -700,6 +965,40 @@ export async function runNetworkGame(options: NetworkGameOptions): Promise<Netwo
         }
       const latest = [...updates.values()].toSorted((a, b) => b.revision - a.revision)[0];
       if (!latest) throw new Error('No peer state available');
+      const lifecycleHead = lifecycle ? sessions.values().next().value?.getCommittedHead() : null;
+      if (
+        lifecycle &&
+        sessions.size === 4 &&
+        [...sessions.values()].every(
+          (session) =>
+            session.getCommittedHead().seq === latest.revision &&
+            session.getCommittedHead().hash === lifecycleHead?.hash,
+        )
+      ) {
+        if (latest.revision !== lifecycleObservedRevision) {
+          lifecycleObservedRevision = latest.revision;
+          if (lifecycle.restarts.some((event) => event.continuedAtSeq === null)) {
+            const history = sessions.values().next().value?.exportSave().entries;
+            if (!history) throw new Error('Lifecycle certified history is missing');
+            lifecycle.observe(
+              history.map(({ entry }): LifecycleHistoryEntry => ({
+                seq: entry.seq,
+                kind: entry.payload.kind,
+                hash: entryHash(entry),
+              })),
+            );
+          }
+        }
+        if ((!submission || submission.result?.ok) && !latest.state.result) {
+          const restart = lifecycle.next(latest.revision, latest.state.turn.number);
+          if (restart) {
+            submission = null;
+            // oxlint-disable-next-line no-await-in-loop -- Dispose and restore whole sessions before the next virtual delivery.
+            await restartLifecycle(restart);
+            continue;
+          }
+        }
+      }
       // oxlint-disable-next-line no-await-in-loop -- Crash recovery must restore durable journals before the next delivery.
       await advanceFault(latest);
       if (verified && options.scenario === 6 && byzantineHalted && faultRecovered) {
@@ -875,7 +1174,47 @@ export async function runNetworkGame(options: NetworkGameOptions): Promise<Netwo
             });
           }
         }
+        let lifecycleEvidence: NetworkGameResult['lifecycle'];
+        if (lifecycle && verified) {
+          lifecycle.finish(latest.revision);
+          const privateStates = verified.privateStateEvidence();
+          const expectedRepeatedSnapshots = lifecycle.restarts.reduce(
+            (total, event) => total + event.seats.length * (event.seq + 1),
+            0,
+          );
+          if (
+            privateStates.checkedSequences !== latest.revision + 1 ||
+            privateStates.capturedSnapshots !== (latest.revision + 1) * 4 ||
+            privateStates.repeatedSnapshots !== expectedRepeatedSnapshots
+          )
+            throw new Error(
+              'Lifecycle private-state comparison did not cover every owned certified state',
+            );
+          const inputCounts: Record<string, number> = {};
+          const history = sessions.values().next().value?.exportSave().entries;
+          if (!history) throw new Error('Missing lifecycle terminal history');
+          for (const { entry, certificate } of history) {
+            if (
+              entry.payload.kind === 'control' ||
+              entry.payload.kind === 'membership' ||
+              certificate.some((vote) => vote.body.epoch !== 0)
+            )
+              throw new Error('Honest persistence game changed authority or accused a player');
+            let type: string | null = null;
+            if (entry.payload.kind === 'command') type = entry.payload.signed.body.command.type;
+            else if (entry.payload.kind === 'system') type = entry.payload.input.type;
+            if (type) inputCounts[type] = (inputCounts[type] ?? 0) + 1;
+          }
+          lifecycleEvidence = {
+            profile: 'persistence',
+            restarts: lifecycle.restarts,
+            inputCounts,
+            privateStates,
+          };
+        }
+        checkDeadline();
         return {
+          ...(lifecycleEvidence ? { lifecycle: lifecycleEvidence } : {}),
           security: game.genesis.security,
           protocolVersion: game.genesis.protocolVersion,
           seed: options.seed,
@@ -888,6 +1227,7 @@ export async function runNetworkGame(options: NetworkGameOptions): Promise<Netwo
           finalStateHash: toHex(hashValue(latest.state)),
           finalLogHash,
           audits,
+          ...(verified ? { auditTimings: verified.auditTimingEvidence() } : {}),
           faultInjected,
           faultRecovered,
           faultEvidence: {

@@ -11,7 +11,18 @@ on:
         required: false
         default: false
       verified_network:
-        description: Run the nine bounded real-crypto fault games
+        description: Run bounded real-crypto fault acceptance
+        type: boolean
+        required: false
+        default: false
+      verified_scenario:
+        description: Real-crypto scenario to check
+        type: choice
+        required: false
+        default: all
+        options: [all, '1', '2', '3', '4', '5', '6', '7', '8', '9']
+      persistence_lifecycle:
+        description: Run one four-human restart and private-state acceptance game
         type: boolean
         required: false
         default: false
@@ -37,7 +48,14 @@ jobs:
     if: github.event_name == 'workflow_dispatch' && inputs.verified_network
     uses: ./.github/workflows/verified-network.yml
     with:
-      scenario: all
+      scenario: ${{ inputs.verified_scenario }}
+
+  persistence-lifecycle:
+    if: github.event_name == 'workflow_dispatch' && inputs.persistence_lifecycle
+    uses: ./.github/workflows/verified-network.yml
+    with:
+      scenario: '1'
+      lifecycle: true
 
   check:
     runs-on: ubuntu-latest

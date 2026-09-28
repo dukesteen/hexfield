@@ -1,6 +1,8 @@
 import { fromBase64Url, hashValue, toBase64Url, toHex } from '@cp2p/codec';
 import { scalarToBytes } from '@cp2p/crypto';
+import { failure, success } from '@cp2p/engine';
 import type { Seat } from '@cp2p/engine';
+import { reconstructPrivateSeats } from '../private-replay.js';
 import { auditCertifiedGame } from '../audit.js';
 import type { AuditReport } from '../audit-types.js';
 import { createBeaconSecretSource } from '../beacon-source.js';
@@ -30,6 +32,8 @@ import type { P2PSessionOptions } from '../p2p-session.js';
 import { VerifiedSessionDriver } from '../verified-session-driver.js';
 import { createGenesisDeckFixture } from './deck-fixture.js';
 import { createSimulationGenesis } from './simulation-genesis.js';
+
+declare const performance: { now(): number };
 
 const HUMAN_SEATS = [0, 1, 2, 3] as const satisfies readonly Seat[];
 const BEACON_LENGTH = 128;
@@ -103,6 +107,17 @@ export interface VerifiedNetworkFixtureOptions {
   readonly seed: number;
   readonly gameIndex?: number;
   readonly vpTarget?: number;
+  /** Compare session-owned snapshots with terminal reconstruction and the independent audit. */
+  readonly verifyLivePrivateStates?: boolean;
+}
+
+export interface VerifiedNetworkAuditTiming {
+  readonly seat: Seat;
+  readonly invocations: number;
+  readonly totalMilliseconds: number;
+  readonly lastMilliseconds: number;
+  readonly privateComparisonInvocations: number;
+  readonly privateComparisonMilliseconds: number;
 }
 
 /**
@@ -219,6 +234,33 @@ export function createVerifiedNetworkFixture(options: VerifiedNetworkFixtureOpti
     );
     const digest = genesisDigest(genesis);
 
+    const livePrivateHashes = new Map<number, Map<Seat, string>>();
+    const auditTimings = new Map<
+      Seat,
+      {
+        invocations: number;
+        totalMilliseconds: number;
+        lastMilliseconds: number;
+        privateComparisonInvocations: number;
+        privateComparisonMilliseconds: number;
+      }
+    >();
+    let repeatedPrivateSnapshots = 0;
+    let checkedPrivateSequences = 0;
+    const capturePrivateState = (driver: VerifiedSessionDriver, seat: Seat, seq: number) => {
+      if (!options.verifyLivePrivateStates) return;
+      const ownedState = driver.privateState(seat);
+      if (!ownedState) throw new Error(`Missing owned private state at ${seat}/${seq}`);
+      const hash = toHex(hashValue(ownedState));
+      const hashes = livePrivateHashes.get(seq) ?? new Map<Seat, string>();
+      const prior = hashes.get(seat);
+      if (prior !== undefined) {
+        if (prior !== hash) throw new Error(`Restored private state differs at ${seat}/${seq}`);
+        repeatedPrivateSnapshots += 1;
+      }
+      hashes.set(seat, hash);
+      livePrivateHashes.set(seq, hashes);
+    };
     const sessionOptions = (seat: Seat): VerifiedNetworkSessionOptions => {
       const master = masterSecrets.get(seat);
       const provider = providers.get(seat);
@@ -251,8 +293,55 @@ export function createVerifiedNetworkFixture(options: VerifiedNetworkFixtureOpti
             requestedSeat === seat ? master.slice() : null,
         },
         auditRunner: (input) => {
+          const timing = auditTimings.get(seat) ?? {
+            invocations: 0,
+            totalMilliseconds: 0,
+            lastMilliseconds: 0,
+            privateComparisonInvocations: 0,
+            privateComparisonMilliseconds: 0,
+          };
+          auditTimings.set(seat, timing);
+          const started = performance.now();
           let report: AuditReport;
           try {
+            if (options.verifyLivePrivateStates && checkedPrivateSequences === 0) {
+              const comparisonStarted = performance.now();
+              try {
+                const rebuilt = reconstructPrivateSeats({
+                  genesisEntry: input.genesisEntry,
+                  entries: input.entries,
+                  engine: simulation.engine,
+                  policy,
+                  secrets: input.masters,
+                  verifyPrivateState(seq, states) {
+                    const hashes = livePrivateHashes.get(seq);
+                    if (
+                      !hashes ||
+                      hashes.size !== HUMAN_SEATS.length ||
+                      states.size !== hashes.size ||
+                      [...states].some(
+                        ([ownedSeat, privateState]) =>
+                          hashes.get(ownedSeat) !== toHex(hashValue(privateState)),
+                      )
+                    )
+                      return failure(
+                        'fixture-live-private-state',
+                        'Live owned state differs from terminal reconstruction',
+                        { seq },
+                      );
+                    return success(undefined);
+                  },
+                });
+                if (!rebuilt.ok) throw new Error(`${rebuilt.error.code}: ${rebuilt.error.message}`);
+                rebuilt.value.dispose();
+                checkedPrivateSequences = input.entries.length + 1;
+                if (livePrivateHashes.size !== checkedPrivateSequences)
+                  throw new Error('Live private capture omitted a certified sequence');
+              } finally {
+                timing.privateComparisonInvocations++;
+                timing.privateComparisonMilliseconds += performance.now() - comparisonStarted;
+              }
+            }
             report = auditCertifiedGame({
               genesisEntry: input.genesisEntry,
               entries: input.entries,
@@ -262,13 +351,17 @@ export function createVerifiedNetworkFixture(options: VerifiedNetworkFixtureOpti
             });
           } finally {
             for (const item of input.masters) item.master.fill(0);
+            const elapsed = performance.now() - started;
+            timing.invocations++;
+            timing.totalMilliseconds += elapsed;
+            timing.lastMilliseconds = elapsed;
           }
           return { result: Promise.resolve(report), cancel() {} };
         },
         createDriver: (engine, signedGenesis, _clock, ownedSeats) => {
           if (ownedSeats.length !== 1 || ownedSeats[0] !== seat)
             throw new RangeError(`Seat ${seat} driver may own only its human seat`);
-          return new VerifiedSessionDriver(
+          const driver = new VerifiedSessionDriver(
             engine,
             signedGenesis,
             ownedSeats,
@@ -286,6 +379,16 @@ export function createVerifiedNetworkFixture(options: VerifiedNetworkFixtureOpti
               return createStealSecretSource(master, genesis.ceremonyNonce, seat, owner.publicKey);
             },
           );
+          capturePrivateState(driver, seat, 0);
+          if (options.verifyLivePrivateStates) {
+            const committed = driver.committedEntry.bind(driver);
+            driver.committedEntry = (...args) => {
+              const applied = committed(...args);
+              if (applied.ok) capturePrivateState(driver, seat, args[0].entry.seq);
+              return applied;
+            };
+          }
+          return driver;
         },
       };
     };
@@ -297,6 +400,29 @@ export function createVerifiedNetworkFixture(options: VerifiedNetworkFixtureOpti
       entry,
       policy,
       sessionOptions,
+      privateStateEvidence: () => ({
+        capturedSequences: livePrivateHashes.size,
+        capturedSnapshots: [...livePrivateHashes.values()].reduce(
+          (sum, hashes) => sum + hashes.size,
+          0,
+        ),
+        checkedSequences: checkedPrivateSequences,
+        repeatedSnapshots: repeatedPrivateSnapshots,
+        snapshotDigest: toHex(
+          hashValue(
+            [...livePrivateHashes]
+              .map(([seq, hashes]) => ({
+                seq,
+                seats: [...hashes].toSorted(([a], [b]) => a - b),
+              }))
+              .toSorted((a, b) => a.seq - b.seq),
+          ),
+        ),
+      }),
+      auditTimingEvidence: (): readonly VerifiedNetworkAuditTiming[] =>
+        [...auditTimings]
+          .map(([seat, timing]) => ({ seat, ...timing }))
+          .toSorted((left, right) => left.seat - right.seat),
       mastersForAudit: () =>
         HUMAN_SEATS.map((seat) => {
           const master = masterSecrets.get(seat);

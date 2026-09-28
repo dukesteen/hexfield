@@ -59,6 +59,18 @@ describe('network simulation CLI options', () => {
     });
   });
 
+  test('selects the persistence lifecycle with real cryptography on the clean network', () => {
+    expect(parseNetBatchOptions(['--security', 'verified', '--lifecycle', 'persistence'])).toEqual({
+      seeds: 1,
+      startIndex: 0,
+      scenario: 1,
+      seed: 42,
+      parallel: 1,
+      security: 'verified',
+      lifecycle: 'persistence',
+    });
+  });
+
   test.each([
     [['--scenario'], /--scenario needs an integer value/],
     [['--scenario', '1.5'], /--scenario needs an integer value/],
@@ -70,6 +82,12 @@ describe('network simulation CLI options', () => {
     [['--seed', '-1'], /--seed must be non-negative/],
     [['--parallel', '17'], /--parallel must be between 1 and 16/],
     [['--security', 'unverified'], /--security must be stub or verified/],
+    [['--lifecycle', 'other'], /--lifecycle must be persistence/],
+    [['--lifecycle', 'persistence'], /requires --security verified and --scenario 1/],
+    [
+      ['--lifecycle', 'persistence', '--security', 'verified', '--scenario', '2'],
+      /requires --security verified and --scenario 1/,
+    ],
     [['--max-elapsed-ms', '0'], /--max-elapsed-ms must be positive/],
     [['--unknown', '1'], /Unknown network option --unknown/],
     [['--seed', '1', '--seed', '2'], /Duplicate network option --seed/],

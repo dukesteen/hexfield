@@ -7,6 +7,10 @@ on:
         type: string
         required: false
         default: all
+      lifecycle:
+        type: boolean
+        required: false
+        default: false
   workflow_dispatch:
     inputs:
       scenario:
@@ -25,23 +29,28 @@ on:
           - '7'
           - '8'
           - '9'
+      lifecycle:
+        description: Run the four-human persistence profile instead of fault scenarios
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: read
 
 concurrency:
-  group: verified-network-${{ github.ref }}
+  group: verified-network-${{ github.ref }}-${{ inputs.lifecycle && 'persistence' || 'faults' }}
   cancel-in-progress: false
 
 jobs:
   full-game:
-    name: Real crypto scenario ${{ matrix.scenario }}
+    name: ${{ inputs.lifecycle && 'Persistence lifecycle' || format('Real crypto scenario {0}', matrix.scenario) }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
-        scenario: ${{ fromJSON(inputs.scenario == 'all' && '[1,2,3,4,5,6,7,8,9]' || format('[{0}]', inputs.scenario)) }}
+        scenario: ${{ fromJSON(inputs.lifecycle && '[1]' || (inputs.scenario == 'all' && '[1,2,3,4,5,6,7,8,9]' || format('[{0}]', inputs.scenario))) }}
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -56,6 +65,7 @@ jobs:
       - name: Record source revision
         run: git rev-parse HEAD > verified-source-revision.txt
       - name: Run one complete game with independent peer audits
+        if: '!inputs.lifecycle'
         run: >-
           node tools/sim/dist/index.js net
           --security verified
@@ -66,12 +76,26 @@ jobs:
           --parallel 1
           --max-elapsed-ms 900000
           > verified-network-${{ matrix.scenario }}.json
+      - name: Run one complete persistence game with private-state comparisons
+        if: inputs.lifecycle
+        run: >-
+          node tools/sim/dist/index.js net
+          --security verified
+          --scenario 1
+          --lifecycle persistence
+          --seeds 1
+          --seed 42
+          --start-index 0
+          --parallel 1
+          --max-elapsed-ms 900000
+          > verified-persistence.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: verified-network-${{ matrix.scenario }}
+          name: ${{ inputs.lifecycle && 'verified-persistence' || format('verified-network-{0}', matrix.scenario) }}
           path: |
             verified-network-${{ matrix.scenario }}.json
+            verified-persistence.json
             verified-source-revision.txt
           if-no-files-found: warn
           retention-days: 14
