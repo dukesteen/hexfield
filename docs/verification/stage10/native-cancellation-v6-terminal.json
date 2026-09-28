@@ -1,0 +1,46 @@
+{
+  "gameId": "lrkZ6w59KQAAuTHgOMAIC0",
+  "authorization": {
+    "seq": 6,
+    "kind": "transfer-authorize"
+  },
+  "cancellation": {
+    "seq": 7,
+    "kind": "transfer-cancel"
+  },
+  "sourceMoveBefore": 9,
+  "sourceAfter": {
+    "seats": [0],
+    "requiredDeckPasses": 4,
+    "activeSeat": 0,
+    "legal": [
+      {
+        "seat": 0,
+        "count": 3
+      }
+    ],
+    "head": {
+      "hash": "f2117b4b0d3e47b337f02a9d2df57f2334d4037044e613a176e7c31fe1979c5e",
+      "seq": 10
+    }
+  },
+  "survivorAfter": {
+    "seats": [1],
+    "requiredDeckPasses": 4,
+    "activeSeat": 0,
+    "legal": [
+      {
+        "seat": 1,
+        "count": 0
+      }
+    ],
+    "head": {
+      "hash": "f2117b4b0d3e47b337f02a9d2df57f2334d4037044e613a176e7c31fe1979c5e",
+      "seq": 10
+    }
+  },
+  "destinationStatus": "The move was cancelled. This device did not take over the seat.",
+  "destinationReloaded": true,
+  "destinationOpenGameButtons": 0,
+  "pageErrors": []
+}

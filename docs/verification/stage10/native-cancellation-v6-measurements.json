@@ -1,0 +1,2173 @@
+{
+  "result": "PASS",
+  "testDurationMs": 47236,
+  "scope": "Only certified current-v6 cancellation with continued source play and cancelled destination reload, installed Chrome/3 isolated fresh contexts, real WebRTC and localhost signaling. No fresh-device handoff repeat, takeover repeat or cross-engine claim.",
+  "sourceUnchanged": true,
+  "verifiedSourceFiles": [
+    {
+      "path": "apps/signaling/src/server.test.ts",
+      "sha256": "04adcc60b0f2298f0e03e88d1796e35c317e17f3eb0d65d47f04219242bc3588",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/signaling/src/server.ts",
+      "sha256": "37ae51d1915cceef596d7bf331df7e535b826b4c64751bd89dd465c61067168f",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/playwright.config.ts",
+      "sha256": "0d922aaac906fd078cdc842baf2ee91486da0a7a813a543418ca7feb6a636b8a",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/config.ts",
+      "sha256": "e1469063d1d94c7172264223c55829288cb7efdf383e679444423631ca04d43a",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/dev/audit-smoke.ts",
+      "sha256": "e153fa6d04de3e74cda2befe77aba996c6ff03caec976a2c996ec9ba12358639",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/dev/online-worker-nested-audit-page.ts",
+      "sha256": "3d71e5b4857de60adc2086bc84b3c71365c36eb792206be32f06aed1e66c41cc",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/dev/online-worker-nested-audit.ts",
+      "sha256": "c0dce01f6de219aee020b6c885585f28927a3d0d119a8ad0b3bda6a4b8c1649f",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/dev/steal-proof-timing.ts",
+      "sha256": "e9c9d6304fc780f8008dacdec05cd1dba0594c2b7cf100c79c1eb45503844da0",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/dev/steal-proof-timing.worker.ts",
+      "sha256": "3d6fb980ff49c67bb564ec95bab1e17d2e26449158be8b602bd5ce6305b618c6",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/dev/storage-smoke.ts",
+      "sha256": "d27cea71f6e413b45d28aacb133289bdc25084bd0bd303c472fe8e3c9af84899",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/dev/storage-smoke.worker.ts",
+      "sha256": "1105ac32b157d068e165654ad43501c70c5f19782582709732be9ff9ad91085b",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/dev/web-rtc-browser-harness.ts",
+      "sha256": "27888c9cc6765aab88618657e42d56a3b0f9ddcbe9f9fd2787fa8b7763abae05",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/features/actions/availability.ts",
+      "sha256": "bcc9fecb031e05ea7f0559c72bed20c306c8235b08f08b1e8a3249badc2ddc4d",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/features/board/BoardView.tsx",
+      "sha256": "d6ec5850dd06686dca8f6a531535cfdcd89efa8456ae485e17bc59a7a51ef334",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/features/board/toRenderModel.ts",
+      "sha256": "29d2db067b6eadf5c44e760f7db2f072ecf4fa54339ad8d6f99bca42c33ef7c0",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/features/devtools/DevDrawer.tsx",
+      "sha256": "3ca17948b4114f235916c5839037aeff9fe0c99be8be31b50e7e15e934c21179",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/features/devtools/NetworkSimulation.tsx",
+      "sha256": "9f54250ef834f6aeb4822be26bea85189c847579d23caff4b037150f3da26289",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/features/devtools/hook.ts",
+      "sha256": "8fc98f22a82061ae19c50ee6bfcb9ddd4d4366e432e4fc8661137e784f97c4fd",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/features/devtools/index.ts",
+      "sha256": "4d2de7f6451ff2404caa02f79f12c2304449e38fae1fd6dd1a018761995343d3",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/features/dialogs/DialogFrame.tsx",
+      "sha256": "6f4a4401ee6ef5f2766ed2f0a5ed3253127b4df6f63eeff2fe342fd4734809b2",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/features/dialogs/DiscardDialog.tsx",
+      "sha256": "8c3dceb46acd5995449be35ae61d2ac8d10e52a04fd6b48019a2b63fc2d453f9",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/features/dialogs/MonopolyDialog.tsx",
+      "sha256": "50dacb3632147bb57b3ab083522a851959eff9699da50aef0509fc0ef31bd6dc",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/features/dialogs/StealDialog.tsx",
+      "sha256": "f8111b6716080c084e84a91604a8f18cbed976fd5acdc2bbf3092a2d0906436e",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/features/dialogs/ValidationChecking.tsx",
+      "sha256": "0d62673aa99539137f0b5b4e16ce08203c0a5771b67d6a858e0e4ff58e656567",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/features/dialogs/YearOfPlentyDialog.tsx",
+      "sha256": "69134766ffc8b83b5fd6500f0fcb92b2cfa6ac3a6a09fbed48a3757980a21d20",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/features/dialogs/index.ts",
+      "sha256": "5e580000d1955613722dd4f64d23ad4273965ba25015e0db54f8ef756a254305",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/features/dialogs/resources.tsx",
+      "sha256": "1f1b662137eb05b3f93f6601c861ea85f5bc2582107d9432660a0cfd01b9160a",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/features/dialogs/types.ts",
+      "sha256": "2ece3ae1a5bf303f351989948c8a859efa23e339ed4a4f69a4b875f7032c75c6",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/features/dialogs/use-command-validation.ts",
+      "sha256": "e1fb3d4f42c0f36c2ac290245dfe75d8912ca4932fb9df1995e25be1efc9c05c",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/features/game/AwardsPanel.tsx",
+      "sha256": "9c7171e01a873a7e797f6eb9faa9c5d4b574a89aebee93e88938bfc7e483536a",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/features/game/BuildCostsDialog.tsx",
+      "sha256": "1e504ffbba5be66f0f2f89dcc1717f9c8221d7aedb03ff8e8f9d5289d69814c9",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/features/game/CockpitSheet.tsx",
+      "sha256": "c506fdfca32803e9da01b5738a4fe26446b841be93fc4470f9176abb8dde3f69",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/features/game/DiceRollReadout.tsx",
+      "sha256": "c7d7d1cb2e6940f404d31f4b44f90c3fd404b1b9efe4442137aeed946d4f03bb",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/features/game/EventLog.tsx",
+      "sha256": "0a2efcb544b6f65ec9b014563807149496e6169caae702b236c2eae51599a015",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/features/game/FairnessStatus.tsx",
+      "sha256": "f211384b730cb4e5a89938af758f060bda676eb449afb4e7cf4a58aa3553ff0a",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/features/game/GameActions.tsx",
+      "sha256": "84be86420551f5cccf14583213102c2b6636c2341e9b9160b24f102c64dd39af",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/features/game/GameOverPanel.tsx",
+      "sha256": "ce2931356d8030d2e982337ba08c7ff1bd3871523c9232cf713129ea476cfdbe",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/features/game/GameReadOnly.tsx",
+      "sha256": "53ace1b0b040405d7b505b2ff41b8126bd597b37eee6183ae18733a84369e5df",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/features/game/MobileGameControls.tsx",
+      "sha256": "c6db1fbf1fb0eba89771d94c85fba5756b550204693a4fe4ea3b6d9e50112299",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/features/game/NextStepBar.tsx",
+      "sha256": "e6def26ff6c975752342ac7f7393fc0972a527674d7b394639764ff2a3283474",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/features/game/PlacementConfirmation.tsx",
+      "sha256": "85d78da8a2865ae16f74bdd96dfb7690bf5df0b667b37dd17e98f216b6b3a49d",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/features/game/PlayerMarker.tsx",
+      "sha256": "c45929599e7723c20910fc365b6d37fc608ac37e61ed23bcf19001ffe8d8ccbb",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/features/game/action-diagnostics.ts",
+      "sha256": "dbfc8807491d35742c4c14691968e920287866f50ebabdf0f6f7fef36d56c648",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/features/game/event-format.ts",
+      "sha256": "353f7a0ee8583094996c4b6a77544e3c0f10e89d30c5ce9da5eaf6ab0a95e548",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/features/game/placement-confirmation-layout.ts",
+      "sha256": "6d3d37f243d6db5d8fd30963b7eded30475b19d47d2750f9e653781263eace5e",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/features/game/save-coordinator.ts",
+      "sha256": "f541f50d9fb7e928dcc9612307fe1ef0b6ca8f2eb44be6ca675f0a93c862eb8e",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/features/game/session-registry.ts",
+      "sha256": "907543f1362389e8e4479be5f4d9f307b814c1b24170bba7846e246cd7e93810",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/features/game/stats.ts",
+      "sha256": "26f06308cc6bd942a74cdb8a1c62941b1bca510663b436eeed4dc77789124360",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/features/game/use-appearance.ts",
+      "sha256": "4be837586d5b9fb8222494a9842bc977f200c5783d7277d006cb93b526ed4979",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/features/game/use-compact-cockpit.ts",
+      "sha256": "21485a922043de494646a8221f8516d942f9db0cb0adff247cd9fd43a50426ba",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/features/game/use-visual-effects.tsx",
+      "sha256": "5fc8885207707a55432a801e28af216cd458a28076a43c4103715a4a4da6e241",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/features/game/visual-effects.ts",
+      "sha256": "1c8dd8145e019eba636334633629f5808de3f40118eda38a926884f9741f4aa7",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/features/online/ChatPanel.tsx",
+      "sha256": "0eb7ac008370cc6aabb6a446d16e8276831a3b023437072187975be87519d0a9",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/features/online/ConnectionDiagnostics.tsx",
+      "sha256": "d2a7e75c5437c90550a7634c6f49ca7d491905ec62dec8e446d6e8275de9c5cf",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/features/online/FullSaveExportDialog.tsx",
+      "sha256": "631e7812b1cfae7365497aebbda43cddabdb6c7500a1b2a19078a0351d69a792",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/features/online/ImportedOnlineFullSaves.tsx",
+      "sha256": "70b3dec53e8b4ff34a08542ac0e604bbaeaddafdaee52d6ca70eb172e09890b3",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/features/online/ImportedTransferRequest.tsx",
+      "sha256": "55020b99f3aa202dd5a93692b0b3267a75722f0cb7c1753617ac72355b2279bd",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/features/online/InvitationCode.tsx",
+      "sha256": "4116f4fcb4221222d28ad772bd1a7ada2775a31fe8b18760c19ad5e63049f0ed",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/features/online/LobbyNameEditor.tsx",
+      "sha256": "56c7f578e608d6c514925393af6397d1be42e1c05d1e4d50f5f4d30fa245a880",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/features/online/LocalVaultGate.tsx",
+      "sha256": "8f904a89400a587b892f8c91977c62b63ed0b8c7df06b379964e02049f7640b4",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/features/online/LocalVaultSettings.tsx",
+      "sha256": "3606c3cf836fe897630e8c438b2fb0fee1990aa112801c393a852d1882f280c7",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/features/online/ManualConnectionPanel.tsx",
+      "sha256": "8787e0832b4ef7c887d7723b304dadc7784cca1a19b631258492ef85ddb02cfa",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/features/online/NetworkSettingsForm.tsx",
+      "sha256": "c105f7f311792e5897b1ae6530f65aed9bf06fb011119ff6d5e8d169bfe8fc10",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/features/online/OnlineConfiguration.tsx",
+      "sha256": "5189cee5b906d092c00bdb547c50b48202aacf503d515d5bcbe719abc7e3262f",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/features/online/OnlineCreate.tsx",
+      "sha256": "7f2b830a6903729fd09fec685f0af81cdcd1c49a2dcfe4c95e7b964a9f5597c9",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/features/online/OnlineGameScreen.test.tsx",
+      "sha256": "adb2cab025f95b59853c263810eca66d35ed2c21cb8fd9ae4c40822899464284",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/features/online/OnlineGameScreen.tsx",
+      "sha256": "4e12b86f34314b37f2c9bc5e36d7fe9f2bb8aa1606521ac7a87f84b9c29b4cfd",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/features/online/OnlineJoin.tsx",
+      "sha256": "26e2b039b5aed05e289f9b1a5fd9ce49413f63063b1f580cf36f898ee9ff08f5",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/features/online/OnlineLobby.tsx",
+      "sha256": "31c56799fec0d465ab98f94ce7ce7a710c24fd514b61f4aec563740c8d5962b1",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/features/online/PublicReplayLibrary.tsx",
+      "sha256": "ceefb16bbbe465e608ed026098faebe91c1b250d2f10cd2b0f047aae62197781",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/features/online/RecoveryPanel.tsx",
+      "sha256": "11eb7aaddb9f3f9e58e10346d67b9acbd9104d44fd35e91427a5fccfcf4e4bda",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/features/online/RecoveryVoidDialog.tsx",
+      "sha256": "ceee06dcb407286dc8ca6049cd2f2861bc7da0e12b9cdd9d49c77988c6239c62",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/features/online/SavedOnlineGames.tsx",
+      "sha256": "a69ef17e1af3fbaabfe988e24a52a3fd75af5b5854c3844eadef11e7ccc72ed0",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/features/online/TransferDestinationScreen.tsx",
+      "sha256": "23d03dffc569a667c9bbe49052df03d8a416493a20a3252e6d70f374e9a5fc46",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/features/online/TransferPanel.test.tsx",
+      "sha256": "5626877b885e037ead7b38c1117725669ec8d49d29877e22bb9ffe1bb89b3286",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/features/online/TransferPanel.tsx",
+      "sha256": "aa8a75a86b8296920364ac6066309eab093d4af347c58298a3e2d2ce84b4a9c2",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/features/online/qr-code.ts",
+      "sha256": "3a7ecc943caaa3fcc9c3c9b445f238268b685115912a10c6607cf10f72176a9c",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/features/online/qr-scanner.ts",
+      "sha256": "0d0f1761ff74af16b8448f68e19f5dd4464a7cc707d7895a0b51f7b0e9abba4e",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/features/online/room-registry.ts",
+      "sha256": "d9b28f3e54f26937cdc583b3d40fed46f3307f062999b7f530e6fbeb8d0be4b4",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/features/online/use-reconnect-fallback.ts",
+      "sha256": "e99bcfea9f2dfea0d3e64f3ba6dd8e4c146b7cd052f9536abfc0fcf6a420ecf4",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/features/trade/BankTradePicker.tsx",
+      "sha256": "ce1a3744d1a7aaaf9c46ab21aec1089829b36534637d02fe8e40396536c44240",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/features/trade/IncomingOffers.tsx",
+      "sha256": "5e5d0d318caea73271be3712b5974094f3716e4b3f61c17add4f2b73a70c5500",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/features/trade/ResourceCard.tsx",
+      "sha256": "bc1a7d5a0283ec8d0c6c2afd12064df6c8bfbdbf2c8205e6ec3cb4d22c8694c2",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/features/trade/TradeComposer.tsx",
+      "sha256": "caf011b96c68c150296a28d16793ffcb867a89d5aa0e988b777abc317cd9880c",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/features/trade/index.ts",
+      "sha256": "4b8c86b588ee71bc6a6f6ac8e631499aa477f503fe4bea095da89e66e40734f8",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/i18n/index.ts",
+      "sha256": "1fe814d7d67297b28c80b1e5373ac1b5b05d800f8f39694106697d8eb6f3fcef",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/i18n/locales/en/lobby.json",
+      "sha256": "d0898c31cc01b92296a8fb1672117c7f02216c7634d0158c3ba13cd6556570ef",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/main.tsx",
+      "sha256": "e083d4441d66ca038f8502e9c0778d4d00430758c9b6b56985f9815b9aaa1cdd",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/queries/connection-diagnostics.ts",
+      "sha256": "7c0fb5787e476978e7028ab09428422fe8a1bdb3de123c2126bf324c36f423a5",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/queries/hooks.ts",
+      "sha256": "a9ba9abbafc3f28d21110d8c805b6058bd8cf84e26865d939d7460a0440abb86",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/queries/keys.ts",
+      "sha256": "3458f7e2a32921cd6845f6604c274957df00f0ae1546263d7634ae9567947893",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/queries/network-config.ts",
+      "sha256": "23806487524969a2f5a2bce42a566f54dc1daffbe8de8d14285ba4235d08e6db",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/queries/network.ts",
+      "sha256": "3f014984e55e3bba5f5baa5fca4f12a67f7da35bf03ccb5b972537e56b2b9e9d",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/queries/online-full-saves.ts",
+      "sha256": "bbb4547c0435a50ee5155f87893f28c287ca5ed01b9f14304715b5e2ffc53126",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/queries/online-games.ts",
+      "sha256": "217f12ad904d3acf84eec30ae4f288310f110865d4f50db27eb138ea27ac0354",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/queries/online-public-replays.ts",
+      "sha256": "80901029313926e7c42e8791ec84ecd191fe32a6b8976b1cae776d10019cf917",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/queries/online-transfers.test.ts",
+      "sha256": "5cf43ea3e9ec626d950eb04b2d0fd97acad1cfac7b3f8ee0ce2b32fc2a9ef560",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/queries/online-transfers.ts",
+      "sha256": "f762d8c0bbfc6af5b71df7c19ebe00a539936a2fd32bcce9503bab49217862bf",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/queries/online-vault.ts",
+      "sha256": "e1e67a096785be61dbb8b38d7ebbdbb6d9cacc299e0f92d06a896817f53a048e",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/queries/repositories/saved-games.ts",
+      "sha256": "1fe692d8802619d3e4482043b19c0d092b547b58d847afd95d610c6441433132",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/queries/repositories/settings.ts",
+      "sha256": "bdc522d72cb90b7eb195b82593c658053554c1d77cb79dd150d2e35a544431df",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/queries/repositories/storage.ts",
+      "sha256": "3561e15bd115a78561398090f842374608bf4cd9e35f7cd1cb09e81577e87426",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/queries/storage-persistence.ts",
+      "sha256": "1010efca510e1a5f2c902c81bdd8749acfa9a92b15063fd33fab8f5e30a00092",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/queries/transfers.ts",
+      "sha256": "0dda2c9a37d9021c13e4a4b6e7f6ec196cde0b4aa03f1ad1a7286bc7ded9f9ea",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/queryClient.ts",
+      "sha256": "7db65ac94fddcc7b484ee2bc7dd93539ed6031205a6c40f4847022850aa722b6",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/routeTree.gen.ts",
+      "sha256": "669bd379c9a102d897914e9bcb0720a599d2b06f68ca224c7941969e77c4f8fa",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/router.ts",
+      "sha256": "4d04dc57d7ee8c850d01b1fb0223ed21362c1baf82add2bd371eaefdca1e7d0c",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/routes/__root.tsx",
+      "sha256": "1bf5a99a7f07bdbefc83de1f071191cf18eedacc77035d921838d3e5fdf58da3",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/routes/dev/board.tsx",
+      "sha256": "eae5bc12eb5989c308008cd11a837fb3c7c55c0bd142395d2547e017fbde3b98",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/routes/dev/network.tsx",
+      "sha256": "b935b37cbc3b214f77092df18ef27ec35b4a5caafd8e698f551123f4bd89e765",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/routes/full-save/$saveId.tsx",
+      "sha256": "eebb2b88392dcf3071de10f813004754b83227af52640202a37a0fb15d32c99a",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/routes/game/$gameId.tsx",
+      "sha256": "3c6d093dca206532350be584cf013dc240d3f739bb52b616dd4c55802b55bd84",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/routes/index.tsx",
+      "sha256": "8da8c2eec7f06469313499042d39ab8d5bd4b8d98177c2aeb7a7e98d398d3914",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/routes/join/$roomId.tsx",
+      "sha256": "076cee092377bc065eee19a6c618591b9bf38a6a1d5ba936304eb4a379c9449e",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/routes/join/index.tsx",
+      "sha256": "e27c4ceb54fdb8c968a64079cd8632a445015bf14de34b9ad6a540129ca99764",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/routes/lobby/$lobbyId.tsx",
+      "sha256": "8eee65783e547cdbd29d9b851a3a1cc834b184d733e72c8086e2038d3792dad5",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/routes/local/$gameId.tsx",
+      "sha256": "4397a7164dcd362282b4d3f1b4d6f9bbea3e4bbf6f7ca762c118562f40c4d681",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/routes/local/new.tsx",
+      "sha256": "1eff2dfac99b8024ad59ed1b9d46b55566acabdb9b4bdfbf4ea61e04bcbe232d",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/routes/online/create.tsx",
+      "sha256": "51bdfec8e5e0839d12dcb21fd8e32766a024b2f57f322b99794f00fdb9675a4d",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/routes/replay/$archiveId.tsx",
+      "sha256": "5f88aef9e9aaec07c631541b5d8e91f4d5ad9da999182b8c9248653b11d74405",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/routes/settings.tsx",
+      "sha256": "80288341829a8740f9c256c5aeca03d4fa1c66b9fff1258a66d4bf1852209c7b",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/routes/transfer/$code.tsx",
+      "sha256": "03d89ae74b7c719dfb7499339d6e2f53f2ad11cd0cbaa6437d87b67be4980917",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/session/audit-worker-client.ts",
+      "sha256": "c906236a528d2e6f1a0a985f86b114d293d360efb213d03a7002ef2da6f6b505",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/session/audit-worker-job.ts",
+      "sha256": "89e007555a0531929bb04c727a31d9c7d9c78cee326b6dc16fe54f55dff5278d",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/session/audit-worker.ts",
+      "sha256": "903dc23dff074684d3090c343a781350a891c11925f9a5c4b40f677bc1752220",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/session/bounded-canonical-json.ts",
+      "sha256": "0b2fabd3b9da78ba9a51826673eb65c139142f620df869d44c4880cbe642cf71",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/session/index.ts",
+      "sha256": "07195c83a637271388143e1bbc09d38941c506ecd99be36af918b66d66e1360d",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/session/local-session.ts",
+      "sha256": "8da4c80c0a63aa3d596e89621f7cbe5a36050a45611d93a728032900e7b30ddc",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/session/online-chat.ts",
+      "sha256": "75ddb14adf146ea677c36c25e4541d88943bac8c788f3faadd9461b46bb453c7",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/session/online-credentials.ts",
+      "sha256": "046459b969b3e261f2d93a01103a52dc863ed1ed0f7c36f60643216fafed9e6a",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/session/online-full-save-catalogue.ts",
+      "sha256": "b5efbb9678ea85d0880fb7be6f46aa77f7aa0c70521aef66ff1692a62d8559dd",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/session/online-full-save-client.ts",
+      "sha256": "09d07b7e9cdcd8da63cf68c3cea13d3d3fa4a82d243c430d66c2c929f2ac6a0f",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/session/online-full-save-inventory.ts",
+      "sha256": "ed71d06789ee8a0ae8f9141911029acc20838a5717a8506c3e6f1ab4c3b6ec76",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/session/online-full-save-store.ts",
+      "sha256": "e100e9fff3be37a013f09d68b9f369a25957ed61f250f8b5ce3ad46720fd6ca7",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/session/online-full-save-worker-entry.ts",
+      "sha256": "2d69cb6907f6a1e23365bb010d805f040ccb27849b3f47424e3c1f3eecc8ab9d",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/session/online-full-save-worker.ts",
+      "sha256": "ef3b4ec3247a87fdd5b483e7271ae7053a8390ae9eef336f78ecc7a06be76ebd",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/session/online-full-save.ts",
+      "sha256": "cc8b3464e897cbc5df92610705c78d62b148b3fcbb39e34a6421c18c2c11ef7a",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/session/online-game-activity.ts",
+      "sha256": "ce92a0b1113a38a2dd79e1d848a59ffd5061f476ab00d83ada8076896b7852ae",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/session/online-game-candidates.ts",
+      "sha256": "d7311ac9f55ad6f958caa816b862e493089bce8ec7e8fa3193dca70409400b76",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/session/online-game-history-writer.ts",
+      "sha256": "d61c020b1b34f17dee599ab68f6ae593a5df5e6f828fe33af2c739de1d90457c",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/session/online-game-history.ts",
+      "sha256": "a5940d47dfee73963d5e04aa610705b517b33166526839fdcc052fad9128ae54",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/session/online-game-records.ts",
+      "sha256": "2ec9e6a4a699dd7efe6f9cdd3746f44bd1a686091e2de8165086dc7251414033",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/session/online-game-transport.ts",
+      "sha256": "1748f8906ed7e08f7103d002beb7a1474e9726c78ada6ae93739c38fb55cb5d7",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/session/online-game.ts",
+      "sha256": "c71573dd3a58801d6f8e9362f4a36b55593dd3e374dd607634eaf0e69d01a2fd",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/session/online-ice.ts",
+      "sha256": "a54df4d65ac0f4842113f5c36784253fa85b2afd2948d5ff48da32fa231042f7",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/session/online-invite.ts",
+      "sha256": "0c1c1bcd0df5e4f362c52093166d7f08be2c71f0de0165badb2b0eaec2677567",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/session/online-lobby-transport.ts",
+      "sha256": "c82b3dc839aba0f23bf5428c23c7f315013576a10c73c37476281f9e276a9824",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/session/online-protocol-worker.ts",
+      "sha256": "bfef223e6c5d1e01a963bc18ba2df21c59022b3979139ff39cd4ab53ff19489b",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/session/online-public-archive-client.ts",
+      "sha256": "b1c97085274f436a7142122a3f2924e3fb609ee0b51b3c0835af19697ff89a83",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/session/online-public-archive-format.ts",
+      "sha256": "34deffdb79e121439693e827788da896eaf3c85b966ffdfa39045e75ca0d0b30",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/session/online-public-archive-store.ts",
+      "sha256": "de56820fe6f2bdc4c838e2c1dc93082a0a21af5ebbbde172264c51d8b6926fde",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/session/online-public-archive-worker-entry.ts",
+      "sha256": "a1ea0cd0e1266320df8b60f52f791ca36775296128696fff507dbeb47d584ebe",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/session/online-public-archive-worker.ts",
+      "sha256": "5bcbcf4bf237e0c11e2a91b6cdfc3a1a0f20cd11b66a08a5e12622406214c051",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/session/online-public-archive.ts",
+      "sha256": "0b55af2ecd12f24a94a425991ee241bc6a1e373ecaefced915c7f7d48a35c266",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/session/online-resume-binding.ts",
+      "sha256": "80bd13eab7c8bff353addbdfb1e94fc987207f959e4fb7a4b2b4c5ed4e908741",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/session/online-room-roster.ts",
+      "sha256": "c64eac4caa5de190aa24c182773f64042e208be1140a8c785849b1ccb3e806d6",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/session/online-room.ts",
+      "sha256": "67f873aaffda425805cf55a4193250336aa3df2cd954a3e4f428827bd487d1df",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/session/online-saved-game-client.ts",
+      "sha256": "30915d990ae151b5c211693391362a652bd8085bdde1729178b29d214dfdeb6e",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/session/online-saved-game-worker-entry.ts",
+      "sha256": "0e00e01ca076589328673d0b34b8bd1789c5f9f913af1b5d4fc52ccb06fe93c1",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/session/online-saved-game-worker.ts",
+      "sha256": "108c1bcdcb5abdc80d94d3baf30042f8bf9e48ef7ddeb931aba83626fcf4fe3c",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/session/online-startup.ts",
+      "sha256": "ac863b72457e5e4ca19c903b55b98dde0caef60ebf7abe50d278b640707ddff7",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/session/online-transfer-bootstrap.ts",
+      "sha256": "ea99644d54abdbfc7fbffbba622d9108e60e3dac300709d35c6048b3915ada9a",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/session/online-transfer-browser.test.ts",
+      "sha256": "c1457256d8f7042c42bbf9616c9447017ccc165025952af2ce17d4ad021cf12f",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/session/online-transfer-browser.ts",
+      "sha256": "9454291031b2089e3be1b6282ab299517b83b257d781c640d9391ecf7029e1aa",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/session/online-transfer-channel.ts",
+      "sha256": "e86e8639d67cebd8cb26a56d8edf9fcd8ca05c06c4a7c29674a95cc335e59410",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/session/online-transfer-credentials.ts",
+      "sha256": "08cd06369f8793fdcfeae273ae4087697c3e0074ac4c004e3044e1325e51bb32",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/session/online-transfer-destination.test.ts",
+      "sha256": "cabf173d324476d3805815d36f609bd40fd600850ee9fc20e70eac819f890330",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/session/online-transfer-destination.ts",
+      "sha256": "c4cd3783a99c3c828890d4846c28ccad3aa3b66c928743aed274bd6ad396f6f8",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/session/online-transfer-exchange.test.ts",
+      "sha256": "d2064bc197e99c26a6006e8f3d29d6c56f21066c844a542641ffbe6a7005af30",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/session/online-transfer-exchange.ts",
+      "sha256": "72f1a19508ca0c49af9124fce9fd37346b2f64f526e2dad399b42e504a43129e",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/session/online-transfer-imported-checkpoint.ts",
+      "sha256": "5e232eee532efeea513999fd5c62080e842053bae76846c8ffdfef2ea3851fa1",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/session/online-transfer-link.test.ts",
+      "sha256": "65a07e3acebd84f064b71f71b8ea14c13967bbfb914fcdbf3976065d5998d75e",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/session/online-transfer-link.ts",
+      "sha256": "8d9db586fad7c02217450e3ab6dfc0c7893ac5fadae968ac33b7e4b2eb413c75",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/session/online-transfer-records.ts",
+      "sha256": "8af26beeb29b619f7e9d5158dad28aa1120893b27f66b9b2109366b4ad5d961d",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/session/online-vault-controller.ts",
+      "sha256": "7b3cbbadf6e3f89ae79470067d831efff8e103e6839af1dbbe96f981ad88d8aa",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/session/online-worker-client.ts",
+      "sha256": "c7a194f712b9109c81e19d30f60a59affb04a4172c48039a3d255bc31eaf86a8",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/session/online-worker-messages.ts",
+      "sha256": "fea9156a10eb92f4293551be6a8b10c879c67a86ee27e7e20847ab27d30e2a68",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/session/online-worker-request-size.ts",
+      "sha256": "f2431b61e3d1bc61d8d57ef6e0bc8fe32f10f519be64459a76fa0fe9f770c6ea",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/session/online-worker-runtime.ts",
+      "sha256": "e85e680754e00525695b1c7db2a9766f0304f002f12de05f3a4f603696aba940",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/session/online-worker-session.ts",
+      "sha256": "b93f940f580d81a7b633b4609eaeb1a25f42157ef92be53a35c4cff9a9da9766",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/session/online-worker-startup.ts",
+      "sha256": "0aa921396834a474143bfa6f018e1a79b341f37930bf37a3b28db0aeec9e2101",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/session/online-worker-transport.ts",
+      "sha256": "e7d190396258307bbbca56aaf00b1b1ab114f05377110d5a4d8381af3f808b36",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/session/random.ts",
+      "sha256": "dc3a5db4f80f2f9b0ca79eddd1fe42770f341a4855865ca12304499ccb449771",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/session/save.ts",
+      "sha256": "17d2a64e14800c3da1c5f3d571718b6bc06134bb55abc0c6f441b9768c895989",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/session/scheduling.ts",
+      "sha256": "38c3fd84bf8ef33de44ac80cdb1a4c785d0f157d1599f4b8bf23b98be3783341",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/session/types.ts",
+      "sha256": "25c3b111f36cdb9e0793b0c97a46e493203eb972af8ddc2fb95019eccbdb2696",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/store/pending-actors.ts",
+      "sha256": "2db699786c7d57c05d61934fadc8bc30244eaaf90b4e2e050c0ad5e8af350a52",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/src/store/session-store.ts",
+      "sha256": "0dea5a8cabb7c39d3b1a8b6dc08ba18ba52f10276af23cdbcf06147a112f896f",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/tests/online-takeover.e2e.ts",
+      "sha256": "858feec9f2638f78175d40fe3c809227c4623cc7cae3063d711d388647a250b8",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/tests/online-transfer.e2e.ts",
+      "sha256": "b0372b59b17dee98fe73942311bcd41240f6d480caac0c684c5a57a70ec3807a",
+      "matchesPin": true
+    },
+    {
+      "path": "apps/web/vite.config.ts",
+      "sha256": "e358a83cc9d22aaa562afd0148d7cda3898db9e276e128e0cf60515d530ecd5b",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/bots/src/index.ts",
+      "sha256": "5718872ba44382a55cdbbe0ba5e96104effb779a64596087520138b2cfaecf11",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/bots/src/random-bot.ts",
+      "sha256": "d0df3c83722e9cc6eb9e2e90c6f4eedef28c009894bae3d31c8e4fe0c72421a4",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/bots/src/types.ts",
+      "sha256": "b1670496b5dac1188048014e7f9c6af7bd7008c871e41917675f3e89c2827570",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/codec/src/canonical.ts",
+      "sha256": "bc51a4fa7022f6ed6af92b191672526ee91f357395a116e36b9c5c01076b5049",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/codec/src/hash.ts",
+      "sha256": "e2d516f007606105f6a01e386329f1bdbf6ce3940255204690550f5bb1b64ae8",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/codec/src/index.ts",
+      "sha256": "c98ce3b2a0457dd0e415c9e86e21903c3f6a564135a6758a7ad7da6d3f1cc65b",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/crypto/src/cds.ts",
+      "sha256": "3b4a9994a8395c392f96db0853d9812908eefdb2cfe487d975f37a5df86fbecc",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/crypto/src/derivation.ts",
+      "sha256": "1913bb90fead1319af33153c69ea329b2f822d19e6ca1a6ce93bbbf358472be0",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/crypto/src/feldman.ts",
+      "sha256": "9579d6b4b0ff4f8be57afc3d4f76dd3ec993571098a656e7f95b5915f0ad7dcd",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/crypto/src/group.ts",
+      "sha256": "18f7725dae5b88448d611ce61da4531747ce6e0373be9b9367d4f76328ca16ab",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/crypto/src/hash-chain.ts",
+      "sha256": "27f704961bc6fc0a7fc8aeb215d46a8c7d5963e20a2cf2bfa33a61898e5f4735",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/crypto/src/hidden-transfer.ts",
+      "sha256": "59e918a7d8cad0278e2085bfc8a31e2ffab7e78076f85f6be48c43507b36ff61",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/crypto/src/identity.ts",
+      "sha256": "a892b57073e7208f99c37480dde87662a6274236f5dc2ad18384a7bcc8c28688",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/crypto/src/index.ts",
+      "sha256": "26599a68ac09c8eb2c2f8d144e1450200ddd8f067d9a4c9e9b51757061edcf30",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/crypto/src/proof-transcript.ts",
+      "sha256": "287c895b9ea527273411632be3a8e61a129f00f8e12272d5c28907344eaeb5c8",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/crypto/src/range.ts",
+      "sha256": "619967c1132fb640add4fdb0f5e86066566b8197324f5f49bbc11533ed34f3f3",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/crypto/src/seal.ts",
+      "sha256": "2732bbdd7ad064932fac132054c304a96fef4de68b7292b253d84189b662a254",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/crypto/src/shuffle.ts",
+      "sha256": "9dc138197533798261ad90fdf013575efc114b35302e8280857c72b66da966ea",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/crypto/src/sigma.ts",
+      "sha256": "e2ce8cb6f0549e8b2ae5b6536614067643cf7baa7a8afd1b00b20b8a62f7caca",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/crypto/src/uniform.ts",
+      "sha256": "4259bdc4873e4267e05a96632c0f95cd52ef7b4273f807d083ef8cce7c9cec60",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/engine/src/core/effects/index.ts",
+      "sha256": "4c8eb222948c6f1b7d9a19367a4d8fffdd8cd15e02c028b22170106a5b464afc",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/engine/src/core/enumerate.ts",
+      "sha256": "b95f3f3b641e73034e6f52260695650b0b52aa2d205347376e43e9d54b944f16",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/engine/src/core/events/index.ts",
+      "sha256": "ad17ba7a598ea3387be457f776fba9e69c12748f8e2f8e19256126c16fe22908",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/engine/src/core/geometry/index.ts",
+      "sha256": "8c983d55aa1c9d1b0df76acdbce66df1a4ec8713ea55fa6327b0a1fe38a13aa9",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/engine/src/core/modules/index.ts",
+      "sha256": "64e90a78ac3711fd56564d7f5f8575a4ab3bdc1df0b10b7383761199a2b062eb",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/engine/src/core/modules/registry.ts",
+      "sha256": "df7fbf739946a57e0b8232404dab7b43e3488991579051e876b5660e1b89dedd",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/engine/src/core/modules/types.ts",
+      "sha256": "a57edfefd1e200743256c975b48c23210e6bf28cb896e12ca8a2deb4d6e81b3e",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/engine/src/core/pipeline/__tests__/testCounter.ts",
+      "sha256": "56be9c37c0cb595232d4eb3aef3fd9e719d6d3155fda1acf6f586585a2549908",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/engine/src/core/pipeline/engine.ts",
+      "sha256": "777185a258d855d66f0ead7d7c5cac8e96ae47e29f01236aad0a8c6fad3b1025",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/engine/src/core/pipeline/index.ts",
+      "sha256": "7700d6b94fbc6e492ab98702a8400d81fc6706d7ee5e11cf10e7b1d110bd57ae",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/engine/src/core/pipeline/localGame.ts",
+      "sha256": "014f59f204d3fd79daeb1730c298e0ee5aa4a8db3962fdeece82221bab658fae",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/engine/src/core/pipeline/types.ts",
+      "sha256": "d920f5e2e9a7fa5e4067ff7f02d82e4d8824d49ef074fa24eae277a271ad8f56",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/engine/src/core/resources/bounds.ts",
+      "sha256": "9d8547ade54962f1ce002be9655c5a3d92def5cfe25d2228c158af46d1897774",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/engine/src/core/resources/counts.ts",
+      "sha256": "09de7342af598004ad8493a3adc8e9c97e8cdcb3c0084a2bea6934cf9194faaa",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/engine/src/core/resources/index.ts",
+      "sha256": "464a0919584a6df256162faa72d6fe09bf48dcda0066fdbec57bd7d6ae270763",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/engine/src/core/rng/index.ts",
+      "sha256": "95eb5e0b1e874f2d4722290c465ba6d36cad3034f4fc9e9e6e89985fa0e03729",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/engine/src/core/state/createGame.ts",
+      "sha256": "afce9ddf19823070e7c9a11d8426739e9b6c0f57e96d92e86f9818955c7c50db",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/engine/src/core/state/index.ts",
+      "sha256": "4c4558fc6d6162f98eaa60e3ec1bffc630ae082c7bfd6edc10bd5c2951afef8a",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/engine/src/core/state/json.ts",
+      "sha256": "8a12a7c62179c6789a31463c8cd5e0b90830ca9b42f27110b8cc99e63a1b051e",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/engine/src/core/state/types.ts",
+      "sha256": "8593457c593bb424167a8734ccec512232daf7b6bd49d8e08649717c757ed9f9",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/engine/src/core/types/index.ts",
+      "sha256": "7a69451caacad029bcc8ea61c6c5123618fe20bd5b5f2b080ff0d59a8c4a8950",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/engine/src/core/types/resources.ts",
+      "sha256": "ee555bce735d620d7c6fd4bf8c9cc24072aa2c6430c746e2c1dce68e3d7be249",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/engine/src/core/types/result.ts",
+      "sha256": "fe6ff840ca5077ad1ef92277ba893476998548a82d2f8ddfdd40d34e5cdf342b",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/engine/src/geometry.ts",
+      "sha256": "470d6b047728139b8d5fdd15a60ac1773f284287905d581070f1b498379285f1",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/engine/src/index.ts",
+      "sha256": "0dd7fca755732bb879b38f7500711aa96db54aff60757bf270f6f0ab36700ed0",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/engine/src/modules/base/awards/index.ts",
+      "sha256": "f2208a7a52b8bfec71e5bbbf34938afa7c3155f48d937fbc4adaaed47f8a5702",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/engine/src/modules/base/board/index.ts",
+      "sha256": "ea276e2ec7e330b67218573cb007b323201b0b9cb0007e4e9453aa1d453f0c73",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/engine/src/modules/base/builds.ts",
+      "sha256": "f6799b3498a44d94eec2ab0aa6dba2d5158c9c4bcde9cf6b3083e40a3fee6402",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/engine/src/modules/base/config.ts",
+      "sha256": "0fa68d9803b2ff3089ac11c8f438a63b49b32910e2e1c35dbf9b288662dc13d5",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/engine/src/modules/base/constants.ts",
+      "sha256": "e23448ada3cedcc6564509895220447b821f76754994120a9b95426d7d95fd5e",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/engine/src/modules/base/devcards.ts",
+      "sha256": "d13fe29f44c1b2b41050179e5dd7743df4b0b4f10579eb9d479d4b42d51d8f7b",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/engine/src/modules/base/index.ts",
+      "sha256": "7d4732896808369747e0ea9ec05a1b0e3aeb8b294d570acbfa2c505746194b13",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/engine/src/modules/base/invariants.ts",
+      "sha256": "93f34fccfc927256430ffa2be239d7baf73b63d73f09c6b04a827d7eaa733e32",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/engine/src/modules/base/legal.ts",
+      "sha256": "80ccd9395ec2e4eb29a9582390d8bc309219d6af0ed60db44480896e876d401d",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/engine/src/modules/base/phases/setup.ts",
+      "sha256": "8c7981e9505500fb772888e86f788d289e6e094fe93a250d4f55bfb2031d8fa4",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/engine/src/modules/base/phases/turn.ts",
+      "sha256": "0315b13dbc144d0ff3de26a4283eb5f28e471ba2411376878e5e27d7c93fb645",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/engine/src/modules/base/placement/index.ts",
+      "sha256": "76ae4e7ed039d6f51a8655f6c9a7bcc92f8c7fdff62cc88b479e695f7338c9ca",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/engine/src/modules/base/production.ts",
+      "sha256": "2cdb719a111b213db461918bfc42c83e540aa624f008de8835333044bdd55b7a",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/engine/src/modules/base/robber.ts",
+      "sha256": "f591092d723572adc46a2e11798839565747fec3440591b9ea001bf8ebc54dab",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/engine/src/modules/base/setup/board/index.ts",
+      "sha256": "bbcb556cd347357996b83752d2e10f4d0b8dd63ea64d6737a17ad05c9fb02236",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/engine/src/modules/base/shared.ts",
+      "sha256": "cc605a487fe07e790e54f2cdb3d5496166332d184a0577aa9050f1155094d923",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/engine/src/modules/base/timeouts.ts",
+      "sha256": "0684257a1f7c6d449fddcfacf20a7f648ca22dee3eb0798ff2e6fc5399a51fcb",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/engine/src/modules/base/trade.ts",
+      "sha256": "0946a8cd90f34b220de749d8d33cff1313dd9e584849f065d660b96958a86b69",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/engine/src/modules/base/types.ts",
+      "sha256": "213fa721d7ba4ef4dbd4b95bb057f00258f499c67ac8f99ab38053c2aad07581",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/engine/src/modules/base/victory.ts",
+      "sha256": "3cd2ba173c7ad133d42277d3c2345b11e5e892427b7b7c1fb74ba54c43f8112e",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/engine/src/rng.ts",
+      "sha256": "21c11a221e36c7f811e02ae2a25eb1639e23cc3c1e08c5ce1236a841bd3f2df9",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/maps/src/index.ts",
+      "sha256": "25a1968b65520685499894d82a7830b8e47c4f6070a802d5d48c1a02e7525c60",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/p2p/src/framing.ts",
+      "sha256": "b5e58ae5e41d37f2062a2c78c34a48c581d4aded94f015f7fa50aa4a879568c5",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/p2p/src/in-process-signaling.ts",
+      "sha256": "c6b05b67f625740470ebdb2dbfc461c147ea9e42ebf765afe010b13664a454ff",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/p2p/src/index.ts",
+      "sha256": "06217bad8fd020f47ae70fc443f616404062e33c13a5eff2bc635b1296b68419",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/p2p/src/manual-bootstrap.test.ts",
+      "sha256": "3cdf9841b1200489980a193b3e7765ab7de05946a2dcf83e7b13f2ac23da23f1",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/p2p/src/manual-bootstrap.ts",
+      "sha256": "0ac1a1733e3af8c7e6e2221e5e5b0688f57e2b6aa362b7579a28c3934748193d",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/p2p/src/manual-code.ts",
+      "sha256": "31f7fc8c5dc2eefadb89d5d4d3911f1ff8f7d8cee240d0b0679be4b68009f446",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/p2p/src/manual-sdp-codec.ts",
+      "sha256": "606045a9176400c68c7099bd3d3d0e70feb8deecfdfc1e5f32775f49db2016ce",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/p2p/src/manual-sdp.ts",
+      "sha256": "86b1c774ce3284706f10b2c93c59ed7b6958bd182aa8bcb2f49ed26d64731bb8",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/p2p/src/mesh-relay-signaling.ts",
+      "sha256": "e94e8c29d1a05343bd22250735982b81ffd66cade7120c5423fb6907d0e75dd0",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/p2p/src/peer-link.test.ts",
+      "sha256": "50615216aa3ecd0822ab8daf8a34bff0672517ed4694f49ecaa10386e8de9260",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/p2p/src/peer-link.ts",
+      "sha256": "ef92b0bb4470fe08440cb273bf6752e79761f0bf10db18936a4487029c26224d",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/p2p/src/server-signaling-wire.ts",
+      "sha256": "4ffa5e5fb9cdc8cd0cddf93036abbbf8365fb479afb7fa6b1b43fd787099fba8",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/p2p/src/server-signaling.test.ts",
+      "sha256": "58cef801b2aedcb4c25e99c796e575d20c1ae857cf576af4009e8dc4241b3749",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/p2p/src/server-signaling.ts",
+      "sha256": "f866d4b80630c25323d579db7a0f0ad9f70f7f91b371efeec88d2d0bf69a6261",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/p2p/src/signaling-envelope.test.ts",
+      "sha256": "e127f0b0219e4251d8fb47ae166c9415f8f14e3f24aa0fcd50898b5228fa0a6f",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/p2p/src/signaling-envelope.ts",
+      "sha256": "ec419713064945df12c3de26e04fa04befbd57053c9ce93697431f087988546e",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/p2p/src/signaling.ts",
+      "sha256": "94e7c2e235ce81aac23f9436ae5e9cbcd10548e562bb5b5368f8f5f4a7938e21",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/p2p/src/web-rtc-transport.test.ts",
+      "sha256": "de4204541b105a157722b5ef85c01d4a664a071586fa55bcbbc79f82c3ac7afa",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/p2p/src/web-rtc-transport.ts",
+      "sha256": "b197d436accb0a30c218c42a881093b21a849856dd59f157cd74165f6beb1d2b",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/audit-types.ts",
+      "sha256": "deace863db31d656b5ae0e99e720c6f92109d780cbf1378176327c66a58ef5b9",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/audit.ts",
+      "sha256": "75c4cee8db897cf2df1af1cbcbc56802e22384081cd08299698e40b7eb377a47",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/authority-types.ts",
+      "sha256": "a267a45d42f425c215283b0de213aab5bbdc23082ce51478d8e88dd305dc3442",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/authority.ts",
+      "sha256": "1f7ebdd14b27ccb747fa6bd833bdc504739cd096e698d62c33cd3e76362d4dc3",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/beacon-contributions.ts",
+      "sha256": "6920de8b61ef136354d47e79bbfa44122523e692352aedafe76f99a68ba941e3",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/beacon-extension.ts",
+      "sha256": "a991b7892fd7b53d71749f8da4f41e26afbe8481e1123b292f09fda7f9bbfc9e",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/beacon-inbox.ts",
+      "sha256": "238aeedd5e1f78da8581a633e2264382f360fcad0d044b11cdfdede4d4465266",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/beacon-source.ts",
+      "sha256": "a3c0a4a466a1d5b2607f9992636ee380a8a17858ff783ea2beb41fea0b34db84",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/beacon-state.ts",
+      "sha256": "6ef0b82b4d6da689f622b2445b2cf9318a0ab93222d08104a2dfc2e4b1bbf611",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/beacon.ts",
+      "sha256": "cb26a36ec1dd1ea341cd21a39a6d3b1bbf63720b50168abdc012c964f0667682",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/bot-pending.test.ts",
+      "sha256": "a1b208e25e9c4d7fe71a8063d62b170c020c261d154911de074e875d8142b9a5",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/bot-pending.ts",
+      "sha256": "47217e257bf37e2ca177799cc6aee87ac5ebdd356de05485a8a3215ecfa444db",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/cheat-candidates.ts",
+      "sha256": "1d4dd4e60c0d61a57c1a2ebdde3c9c9260bc0280e9140cfc459c991d8369b354",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/cheat-capture.ts",
+      "sha256": "2644c43d5397a41bc12e5c73e764b4f383b3ba670921c496eee1d48d6bfd17ae",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/cheat-proof.ts",
+      "sha256": "1230b371e898fd3f83030ed5d6be0a7cbaebf9ad8be95c1fcea0e4f93afbb479",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/cheat-schema.ts",
+      "sha256": "3b83a9f9f2e8b20a0733c28a97eaa2134c2231414d98dfa3e5fd66b386257e5c",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/cheat-types.ts",
+      "sha256": "df9ea0a43f93e91f682626857fae7f4f175ce32ea56a3eda740933dae83cbce1",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/command-proofs.ts",
+      "sha256": "22cbc03bb2341ffb22eb1bac418466fcd8b8268f711e818ea8cb50774b28d230",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/command-validation.ts",
+      "sha256": "c4836dc4bb602e5bc5027a8982f3948e7504ec43465978c665021450dfb6ecac",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/consensus-controller.ts",
+      "sha256": "55b9fc6cd750fcf0e1ae28410eb1711974b8a3b4ffb6d3c2b6846f57b0fe30bd",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/consensus.ts",
+      "sha256": "03188297861b2f06435b8389558e30faa397a5e8711d779b1f56d83eba15d827",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/control.ts",
+      "sha256": "1d1dc650d8413faf2f2eb23c57c31a6e0e3102a69e819bc3f9d8837f9805e558",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/count-contributions.ts",
+      "sha256": "0f1da02800d669537a2f7669bfb4ab4d8133c4b83f7af8387668e0f4c64b4824",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/count-inbox.ts",
+      "sha256": "d0261c3a001e9323b120541b2bf60dd026b3862dfa827ba21ab17f4b39ea06f5",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/count-reveal.ts",
+      "sha256": "4297528391b9d1590ac65e08772022a79f2b15396857ff26c559d4ec1d85d039",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/count-state.ts",
+      "sha256": "66835c0d391ca70c1ebc8114887a2e5a0a106e65bc9e9c28637e0df5f34211bf",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/crypto-context.ts",
+      "sha256": "ecfdceaff778dbc78fab649d4ffbbbe24ad09e9610ba9effdb9b0a702438bdbb",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/deck-draw.ts",
+      "sha256": "1913cb2362514b4875fce7a99df8b40fb520aaba1990b98187af116c1d4b4986",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/deck-genesis.ts",
+      "sha256": "6403740e3daf7d1b45faca388adb626845b671d4650b0c84127f00d3e955043a",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/deck-inbox.ts",
+      "sha256": "cb4be29aa98bdf032860d4a177d3611ecc81663e736a648906a374da8c073b61",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/deck-ledger.ts",
+      "sha256": "71a1fa54c01a350fef9129b13daeb369e4031fc6aa9f76b1b68243f114491392",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/deck-outbox.ts",
+      "sha256": "94b5518b37f94fad7599b6c9a727f39470865eee5f8945e303b9dc6b7909307e",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/deck-setup-outbox.ts",
+      "sha256": "055af35edde312bab1934ddab60e4d0e668965fbce42aaaae441ee001ef1e8e0",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/deck-setup.ts",
+      "sha256": "2b836901748302678c4e927a87d293d17be73e65223132a34a2e19cdfe7cd840",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/deck-source.ts",
+      "sha256": "5b27e8a399fdd0124759c5d253a7dd216ce569d3ef3ba0c2eb670575e8cce1eb",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/escrow-ceremony.ts",
+      "sha256": "d56593b235667450666bccf07a00d5976738dcdc3e4197e0845ae54b9a7456e2",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/escrow-dispute.ts",
+      "sha256": "005cb0cb5a01a6c777cb6f6448b97abb13cf2a5e7eabff745bb52b3b33a41ee1",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/escrow-distribution.ts",
+      "sha256": "52a9a44952eea874cc9c4110e13a1001970fa676981cafc374af5884524610b5",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/escrow-lifecycle.ts",
+      "sha256": "d7f05f68916ad9439cfb476e75ebc5fea1e30d24a787ac6a260e99fefed4b5cb",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/escrow-opening.ts",
+      "sha256": "156151392e0b35c027cf44feab9defca98389a1f2f20b7de2eb6e704dd672619",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/escrow-roster.ts",
+      "sha256": "6d9b4d23463d995fe5f95ebcd10fccede3b6e617ce8b29f686d983e37b3f2715",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/escrow-types.ts",
+      "sha256": "10b726903f5d128304760f96c9ea527b1c5ca126a3ff1a03aff4ac52a4c8745c",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/genesis-encryption.ts",
+      "sha256": "ae9a7ed8feca820afc61a5de336e8104384c9eb38f525c0b81e86d6493eb2bf9",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/genesis-escrow.ts",
+      "sha256": "1f0eff6287fdfd989448e8dded1e389594408699cb6040dcd4b188097a8e450c",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/genesis-identity.ts",
+      "sha256": "e373974115979d4f9a5e37f8b523e80bc0b5d19fc11f093e5f7cd0be96af64fd",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/genesis-masters.ts",
+      "sha256": "1eeace43df40c0b2a5ccaebf6c4d0de5814d18360689654fb02ae22d54b19c6d",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/genesis-online-start.ts",
+      "sha256": "278be8abdf5655b4f2862461e7979f16bdc89c74cda842ff1b5544e4b0d62b0e",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/genesis-outbox.ts",
+      "sha256": "2d4c7cb2747af910cfb0ee4a8b0e16d22ea70e4970f18f34b23b03c6d146691f",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/genesis-secrets.ts",
+      "sha256": "6fb4158b66c4c31dcdc8d98017ef1de42baa61bd03ea63f9355e8d5dbb183b27",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/genesis-seed.ts",
+      "sha256": "06d25a6aad9c24e25218bcfa19df219887d655ccf05fa79e188ef428170e47bc",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/genesis.ts",
+      "sha256": "20bd8958ae0a352a615bb711f107e0103326fc368baebdf157b3e9c0477730ac",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/hand-commitments.ts",
+      "sha256": "9fec55a3bc63062245da7bcab499845516d36a32fcaed3aa7b36408075461edd",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/hand-source.ts",
+      "sha256": "8dc8c6fcc7c51500db3bc5321275a7740dab3e453234d2b2987a481cc2eeb575",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/hand-transition.ts",
+      "sha256": "ecf804c47dc2b75483df54b1a61acd334ce17a338aa0dfaee6485201584d147a",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/index.ts",
+      "sha256": "e85980bf8797bbede5cc460cecaf813b45283a2baf9923a5e7020781ee60201e",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/journal.ts",
+      "sha256": "027bffef4385e0c983f407b3379984d256b5b25690813bd88134cf34473b8e1a",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/lobby-types.ts",
+      "sha256": "d4cf75e4495171a02c7ea4006812ab36aaa7eb87b037e9804e8731a789471c00",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/lobby.test.ts",
+      "sha256": "c3560299550ac43522e58e04c1debdbc3b2ac1df71dbba78d726e4f767e7a22d",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/lobby.ts",
+      "sha256": "9bb3cd7a6215981648bff67b0bea10aa3c12af9bfc62c6c48bcd56e6bd4aa4dc",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/log-types.ts",
+      "sha256": "306215ce65509baf68e6b9d23e4629e401ba61367fe049339085af4ca1466d0d",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/log.ts",
+      "sha256": "86984cb061333edb4566d0685da1e9a267fdd96867fb7efcf8afc2e87b6604ce",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/master-reveal.ts",
+      "sha256": "ddb814f8e8563ed594ffa53c502dd376ad4286c6ddecfa95e59efc22cce99e0b",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/membership-change.ts",
+      "sha256": "3433501fca9dafd8915bff50d2db65693575b0e2e0d215f62c609ebd6496cd15",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/messages.ts",
+      "sha256": "4e36964319533447579b1a879e27ac2124cab696ba26f6070d81fa5e026f67a0",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/online-bindings.ts",
+      "sha256": "bc26cc131318bfd5da8d01fbc977a72492a2e880bbcd05aefe434c804545cb30",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/online-ceremony-wire.ts",
+      "sha256": "1a8fe6a39ff70a5af3db4c0b7d2e55b497e4f4c9b1e35a74bf83aefc9eccd51c",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/online-ceremony.test.ts",
+      "sha256": "fc7dfb6bf5f112fef4031e8b4506b241587b0466293a48934661ac983b50b3ec",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/online-ceremony.ts",
+      "sha256": "93d5dbe69da576c39ff5d0d3d3f2f39c7f95d663f80abaade799507a67e9d535",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/p2p-session.ts",
+      "sha256": "f49712f1cdee6e308fb00252983b190b17634b5f4c4fca962137f635149b8cfb",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/private-replay.ts",
+      "sha256": "800f8498958e68e3c31227a877f916c0c978401ec143f503865152b3f84e0813",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/proposal.ts",
+      "sha256": "d4ed77ac5df102fb54714524ee8df27e11f44eb76b2596dfb7bc4bbdb76344f3",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/public-snapshot.ts",
+      "sha256": "3083b64886f109ee55c988960f1efe1b4a09c6b233d465809e91f6fafe305fb8",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/random-derivations.ts",
+      "sha256": "5255733c2fceaccb827b0c6644d4236a9dc99d1e61e3a909442c2fe05e11b8be",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/recovered-host.ts",
+      "sha256": "c2244048723fc3d2ca8d244455c1133f5813b8fac448618c565af8587ec18b34",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/recovery-check.ts",
+      "sha256": "3f71fe0dbbcc98ea217af4ae15df5366f81aa752a5687af5e499bb01f1e275d8",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/recovery-facade.ts",
+      "sha256": "069fe0be837d3ae3dba7098cd98046eeaa49261b497a97fa86638ed2611c65ec",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/recovery-inbox.ts",
+      "sha256": "d63df82ed050d92af0f8db766f9468f32aced08df6b92c6f395d8567d6124d72",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/recovery-membership.ts",
+      "sha256": "00092c45390a01bc2a8b9da57fdd8772ef6d078653bcbe3d57e7592b95b49509",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/recovery-participant.ts",
+      "sha256": "c8ec52f247c4affab90fd2b0f0f92bbfa6905ce92103bbf87981db5c572ba7db",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/recovery-presence-observer.ts",
+      "sha256": "00bd779fc8ce27dce15b56de3e32953c6bce3cbbb4636a05068c745327f8f7ad",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/recovery-presence.ts",
+      "sha256": "40cf806181f4aa95f7c4609eb0bd26feb8cebe1ebe252f84a3f254a28deaf5f9",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/recovery-private.ts",
+      "sha256": "447594caa7e41f9d946024c1e5e9c58fecae1c1f1ca38c664f872186d4444f4d",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/recovery-readiness.ts",
+      "sha256": "dd90b48b00dd381e7acb02f4c4b0ea4412d4c657667fbaa6bab1f51479e411ef",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/recovery-release.ts",
+      "sha256": "73f9f45a1599a1918eb34bfd50b03d6cee69de193ffda020223ea9f6af11163c",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/recovery-types.ts",
+      "sha256": "744bca784ea531607e99fbb7ab9718f50e230244c2723cc95abe98212644aff4",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/recovery-void.ts",
+      "sha256": "5f466ff43b773f56985cc81a0c9e9679d6820d6f1aebb6d8e12406f92eb78422",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/replay.ts",
+      "sha256": "9ab16ad3ec9487d1adabffcbd9e66b3945251a436c3fe51b153953cfc7a50ccc",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/replicated-log.ts",
+      "sha256": "0c012422017768f7ce8ad760b765bef7a35f6f66be4ade5e0b1b47fd1f40cadd",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/resource-accounting.ts",
+      "sha256": "4d3da5b5fad41083bcd76fbdcb2d95ea9699c6a3866308647660f7a29ca02bc2",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/retired-safety.ts",
+      "sha256": "2a693ad8fb22aa0f13717277084ed326b4fc32ea72b15572759f0ee6a37b7418",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/safety-store.ts",
+      "sha256": "6f4d14269c6666bae70674887d447306a84b20c19d70b324b2562caadb4be484",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/schema-values.ts",
+      "sha256": "5f42a01a0d5a59abc1b93a5462a010ec56609ec44c050edd57e85791f5f0ef96",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/schemas.ts",
+      "sha256": "07a1d92a57d0642083c534189de764aa6e8bf5b6b9acf6794f49a614692a3003",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/session-audit-types.ts",
+      "sha256": "9ee3b02355d847f1030faf672a93123c87e723b2f1ada01c77345aee93c625ee",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/session-driver.ts",
+      "sha256": "09e4465416f6bf6fe308131ed7564b24de2fa3bb2c0425d313feb8482b07e45b",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/session-timer-types.ts",
+      "sha256": "20bae1b42e91700c4957f714c2fbda1a8b6c91a779ec8f09160366ab89350fb2",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/session-timing.ts",
+      "sha256": "e91f13d794d96e17b979d653671d991fc24d37889367f84b476301003d06edb5",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/session-types.ts",
+      "sha256": "4a51306eb1f7b78a64ebf133136360b8e7660f681b81c62d9622617b1eb16bb6",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/steal-contributions.ts",
+      "sha256": "bef45419c9b515378e12771a2ce0e69007270cd7a44567287e5036abcdb349b3",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/steal-delivery.ts",
+      "sha256": "a3609cf64ab4a3458f0b9ce95532b08a99d60e227052767eef13573ece7d3c56",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/steal-inbox.ts",
+      "sha256": "c119c7d80a98407184d19609e249cfeb4abb0272521edeb4e03d3eaa17307760",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/steal-proof-cache.ts",
+      "sha256": "aaa37c3be1c8577223e9e3b6ecdb84baf83e91ab2403c7bd2c7278590cdee4af",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/steal-source.ts",
+      "sha256": "a40280be340b065ef079aab38fb9af8d51fd5c149fb9e447d2a615190f799a21",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/steal-state.ts",
+      "sha256": "052b3461d8ad4a771fab1699c571c0be5b1a8f9123ca9dbb1bd11bb18bc8b809",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/takeover-policy.ts",
+      "sha256": "06a7a9bbc53a84431fbcd765b97987564488334943b40639e67f30f77b67c9f0",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/testing.ts",
+      "sha256": "7c71ed4e9ec3fd90185d43cd35cb8cd407429515a429ad1d8027547c54eece64",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/testing/audit-fixture.ts",
+      "sha256": "136565db6e73e7848a46db5679979977ae0241c858b28ca7af8201e80f87408e",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/testing/deck-fixture.ts",
+      "sha256": "5e045fd4005cac391faeb05e34b8d84021277be312fb933b94d58be67c2f48f1",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/testing/escrow-fixture.ts",
+      "sha256": "f707f50aa92cd7426cca94bb09f5c2bf89890d350356fb05620741933c3faa31",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/testing/fixtures.ts",
+      "sha256": "733ae95e20dfd0376fd6aa37167ee9d46090d9110f6594bc7e1ae317efd96bd9",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/testing/memnet.ts",
+      "sha256": "f70340b658370df4837a003241b87b2f89ab96edfca8f8a5c0416848777ec244",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/testing/online-start-fixture.ts",
+      "sha256": "b36a6c7a8aa14ff72cc9c5b6e4e25eb0633d4d5d7f1eb876a33ba6d736d9ede9",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/testing/recovery-fixture.ts",
+      "sha256": "e773cdd4842f525e3a255da264af4aee5c4cdc9069c0ac6e4f8aa81643c27436",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/testing/simulation-driver.ts",
+      "sha256": "e0d8c2fd693b0790ed52d97e350d67924061ce7e134e638211209e912ab74b0d",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/testing/simulation-genesis.ts",
+      "sha256": "6a3e4124c2f043997620119547eca01671504f78afb333ae140d584050029a78",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/testing/verified-deck-session.ts",
+      "sha256": "a08e8d18790ff1620dc9d4a6686a3f4920e8f1f403732df47a3d826be87bf8e7",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/testing/virtual-clock.ts",
+      "sha256": "3239d59105bf35779c9dd472133beb5ac9ce7f96a082b6a416e58586128cd10c",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/trade-proof-delivery.ts",
+      "sha256": "0c3e2f4a93842b3bfe9997a7931aa31330eb239391de32f9c04ae8b719410ba5",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/transfer-material.ts",
+      "sha256": "c74544691e8d5735139da15040e5311ad461fbc83a06b2ce7b3b08b98970726d",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/transfer-membership.ts",
+      "sha256": "d5f8624b5dba22e78a92961b265c78da31983d3b338017c32f15c209940d04ec",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/transfer-private.ts",
+      "sha256": "dd03542a9d8d97c79829df3eb151d06d12d347a6e2929ce888b1f918a7c44a34",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/transfer-readiness.ts",
+      "sha256": "74eeb2f9553a7f6d032c1297ae9a8e6262f1aaec3e50f48e7df9a9649c345b60",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/transfer-session.test.ts",
+      "sha256": "fc77bef5166ad356da9c21ae6dcfcfb89eadb6a9cc5f37e5fb824fbcb2706548",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/transfer-types.ts",
+      "sha256": "4de0002efd55fb69833e17a6354d8d1410d03e1d36a82c1f5ccb14250012f580",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/transport.ts",
+      "sha256": "a55c1b12c23dc32339557ef38c1abcf03395f2cac106af7d72e1445716bbc48b",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/turn-timeout.ts",
+      "sha256": "8f4bfa066d49b31f1c96260325ac763e7d99ee31f7fc62579f71c8c50a41fcd7",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/types.ts",
+      "sha256": "0c000d990d31574c62f4d92c2e159f9f9fa61bde400c0c84190ae539a05326db",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/validation.ts",
+      "sha256": "bb646520abbab0596ff5d99f1b7f6ffaeed264260c3030917725a050acef5f23",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/verified-session-driver.ts",
+      "sha256": "5200c89d416c203ba87a0170e3336b4ef917c2ad1db960954ddc8c7d88f34e32",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/votes.ts",
+      "sha256": "d8ca8b3f9d17b5f774eec2b891f5043139aa753695274e840af2e858050b0206",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/protocol/src/wire.ts",
+      "sha256": "cda322319dbe40c34d6f74437afa67461ecdfdca9e662993b23f74427830f78e",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/renderer/src/BoardRenderer.ts",
+      "sha256": "a39ab6e60dc33521d7bbe46dd5823d433523608d552dc49a83306c286aacbb9d",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/renderer/src/appearance.ts",
+      "sha256": "c4db440e8dc1fe403a973e565bc4318c93aaea21d357945ecd4bf8fb880d4245",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/renderer/src/assets/forestSvg.d.ts",
+      "sha256": "0a82ab811bdbc079af57d18997d1351a54c98d14f4976fb84c57659a0594c0b6",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/renderer/src/assets/terrainTextures.ts",
+      "sha256": "70ce6daa1f793dbbdcc7531cf3f7c644ab6808ed0665780bada3e6041aa4c297",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/renderer/src/assets/terrainVariants.ts",
+      "sha256": "256aec1954ad01874550803c70f2b3ca82990e247ab552406f673ff86c0ab3f1",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/renderer/src/effectMotion.ts",
+      "sha256": "9b4b19e5e65b6680cfa1efeede612c128526fb481c511272a26855b0666bb71f",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/renderer/src/harborLayout.ts",
+      "sha256": "19502203f431dd609b052cfc081cf4aa3bc06db306d6178bf1dd32a5d681c0b6",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/renderer/src/index.ts",
+      "sha256": "638325357430691b581c679fc46bcbd6db9c2b350096c2a73ce20b913202edb5",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/renderer/src/input/camera.ts",
+      "sha256": "0b5a1c7c1d6f5d029ddd9e904ad5d26f2018ec4929910cc84947b8979e9fc635",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/renderer/src/input/hitTest.ts",
+      "sha256": "ac36dba74164200727d76ecce70cbb8c852946f814fa3a909cb0fd6f027ccd83",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/renderer/src/pixi-unsafe-eval.d.ts",
+      "sha256": "f385096d769cbfae6186e9843ab29943b788ff82e0c87c11c7953786865d03fe",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/renderer/src/roadVariant.ts",
+      "sha256": "4d69b1f8e8bf070d92acc6dcafba23c561e6b3cbc5c44e08ff06c07c88405a82",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/renderer/src/tokenLayout.ts",
+      "sha256": "a9419a4d9cf8de6418a471e9da8e1052bef7db8f930631e0b0108d2915c79df8",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/renderer/src/types.ts",
+      "sha256": "87b7d654da5fe6e59765b18540e1e6703e4276cd754720e76845c6cd137bbd6a",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/storage/src/database.ts",
+      "sha256": "1a8220a7eb3785e5f99038369fcdf9aa6230de3911ad0b31d6872e7c728d4252",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/storage/src/game-writer.ts",
+      "sha256": "37c89aa90fc2a193f6dcd448a85b26fefbf0024b2bb7072217490a597c10146f",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/storage/src/index.ts",
+      "sha256": "0f56ec6857f4b71cc5c89c5fd8ae4cc5feaa29a065509096ab0c6df3b670ad5a",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/storage/src/indexed-db-byte-store.ts",
+      "sha256": "e1af6589d2c16fad3f0c1f2afa1396a5ae3d63f549f16fbccd1ff83e46e6494e",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/storage/src/indexed-db-protocol-journal.ts",
+      "sha256": "60ec6ad7c5afc5a1ef9c3d4237ae0c337bedb9df876d25e85952afea69d2d65f",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/storage/src/local-vault.ts",
+      "sha256": "837b3996735eb058c54e70c5037e618cb522733640351e5bcd5a15d21c14c202",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/storage/src/online-game-deletion.ts",
+      "sha256": "13ba1c9a87cf1226a0427ef5593559ba30be2368a8ef0f35b75fc4685b6c5dbb",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/storage/src/public-snapshot-store.ts",
+      "sha256": "0680c168d6ee0e180a8f5ec65a169151e5f735dcb926e68569b2f0ec243d2abe",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/storage/src/transfer-import-store.test.ts",
+      "sha256": "813e2d1f2b87d7164b3298c16d2ffe88e434da2a8380ea2d5e7b3fb1c5e4e376",
+      "matchesPin": true
+    },
+    {
+      "path": "packages/storage/src/transfer-import-store.ts",
+      "sha256": "ecd2290861be9d740ad3d3ae3f95cbabb759475797f450bd75a71674c72c5f4a",
+      "matchesPin": true
+    }
+  ],
+  "sourceManifest": "native-cancellation-v6-source-manifest.sha256",
+  "logSha256": "73d24ec8448839351fa8ba0708c3acac245ef3bfba89edeb7d3a5baab87ead87",
+  "testTimeoutMs": 180000,
+  "phaseTimeoutMs": 20000,
+  "terminalReport": "native-cancellation-v6-terminal.json"
+}

@@ -1,0 +1,11 @@
+{
+  "scope": "Only current-v6 certified cancellation: genuine delayed signed readiness, certified authorization then cancellation, continued source play accepted by survivor, durable cancelled destination reload",
+  "priorPassingCore": "native-takeover-return-dialog-source-manifest.sha256",
+  "testTimeoutMs": 180000,
+  "phaseTimeoutMs": 20000,
+  "freshContexts": 3,
+  "browser": "installed Chrome",
+  "server": "ws://127.0.0.1:8909",
+  "sourceSnapshot": "reviewed isolated v6 core; excludes in-progress main profiling optimizations",
+  "runtimeFilesPinned": 432
+}

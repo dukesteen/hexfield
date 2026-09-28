@@ -1,6 +1,10 @@
 # Native seat-transfer acceptance
 
-The opt-in `apps/web/tests/online-transfer.e2e.ts` trace uses three isolated native Chrome contexts and the real local WebSocket signaling server. Two human devices start a verified game and certify the deck passes before the source invites a fresh third device. Browser contexts close in `finally`.
+The current-v6 certified cancellation trace passed on 2026-09-28 in 47.236 seconds. It used three fresh isolated installed-Chrome contexts, real WebRTC and localhost signaling. Authorization was certified at sequence 6, cancellation at sequence 7, and the source retained seat 0. Its later legal move was accepted by the survivor at matching head 10. The cancelled destination reloaded and still refused activation; no page errors occurred.
+
+The [terminal report](native-cancellation-v6-terminal.json), [source pin](native-cancellation-v6-source-manifest.sha256), [measurements and scope](native-cancellation-v6-measurements.json), [run context](native-cancellation-v6-run-context.json) and [compressed exact trace](native-cancellation-v6-trace.log.gz) preserve the result. All 432 pinned isolated source files matched after execution. The opt-in `apps/web/tests/online-transfer.e2e.ts` ran only the cancellation case under its unchanged 180-second bound and the production 20-second ceremony phases; browser contexts and the test-owned web server closed afterward. This establishes cancellation, continued source play and cancelled destination reload in installed Chrome. It does not repeat the fresh-device handoff case or establish another browser engine.
+
+The v5 results below remain historical evidence.
 
 ## Fresh-device handoff
 
@@ -24,4 +28,4 @@ Frozen source hashes for the cancellation run:
 - `online-transfer-exchange.ts`: `765b9438cf957539f0c9b1a5c84d999c8270d94ed250fb5627d2c99d00062950`
 - `online-transfer.e2e.ts`: `bbd693866fe804fe7e44bae025b210163cb98f51b6d5558b36ec4d055a069320`
 
-These checks cover fresh-device handoff and cancellation on native Chrome. They do not establish post-takeover return, another browser engine, or remote deployed signaling acceptance.
+The historical v5 checks cover fresh-device handoff and cancellation on native Chrome. The current-v6 cancellation result above supersedes the cancellation evidence for that named gate; fresh-key return after takeover is covered by the separate [current-v6 native lifecycle](native-takeover-acceptance.md). Another browser engine and remote deployed signaling remain separate requirements.

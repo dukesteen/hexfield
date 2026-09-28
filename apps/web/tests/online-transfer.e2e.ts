@@ -372,6 +372,11 @@ test('certified cancellation keeps the source in control after delayed genuine r
 }) => {
   test.setTimeout(180_000);
   const contexts = await Promise.all(Array.from({ length: 3 }, () => browser.newContext()));
+  await Promise.all(
+    contexts.map((context) =>
+      context.addInitScript(() => performance.setResourceTimingBufferSize(5000)),
+    ),
+  );
   const [source, survivor, destination] = await Promise.all(
     contexts.map((context) => context.newPage()),
   );
@@ -392,6 +397,8 @@ test('certified cancellation keeps the source in control after delayed genuine r
     const invitation = await source.getByRole('textbox', { name: /^Invitation link/ }).inputValue();
     await survivor.goto(invitation);
     await survivor.getByRole('button', { name: 'Take seat' }).click();
+    await expect(survivor.getByRole('button', { name: 'Ready up' })).toBeVisible();
+    await expect(source.getByText('2 of 2 players connected', { exact: true })).toBeVisible();
     await source.getByRole('button', { name: 'Ready up' }).click();
     await survivor.getByRole('button', { name: 'Ready up' }).click();
     await expect(source.getByRole('button', { name: 'Start game' })).toBeEnabled();
@@ -465,6 +472,8 @@ test('certified cancellation keeps the source in control after delayed genuine r
       .poll(async () => (await gameView(source, gameId))?.seats.includes(0) ?? false)
       .toBe(true);
 
+    await dialog.getByRole('button', { name: 'Close', exact: true }).click();
+    await expect(dialog).not.toBeVisible();
     for (let step = 0; step < 6; step += 1) {
       const sourceView = await gameView(source, gameId);
       if (sourceView?.legal.some((item) => item.count > 0)) break;
@@ -495,6 +504,30 @@ test('certified cancellation keeps the source in control after delayed genuine r
     await destination.getByRole('button', { name: 'Start seat transfer' }).click();
     await expect(destination.getByRole('status')).toContainText('This device did not take over', {
       timeout: 20_000,
+    });
+    const sourceAfter = await gameView(source, gameId);
+    const survivorAfter = await gameView(survivor, gameId);
+    const destinationStatus = await destination.getByRole('status').innerText();
+    await test.info().attach('native-certified-cancellation', {
+      body: JSON.stringify(
+        {
+          gameId,
+          authorization,
+          cancellation,
+          sourceMoveBefore: before,
+          sourceAfter,
+          survivorAfter,
+          destinationStatus,
+          destinationReloaded: true,
+          destinationOpenGameButtons: await destination
+            .getByRole('button', { name: 'Open game on this device' })
+            .count(),
+          pageErrors: errors,
+        },
+        null,
+        2,
+      ),
+      contentType: 'application/json',
     });
     expect(errors).toEqual([]);
   } catch (error) {
