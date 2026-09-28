@@ -167,9 +167,9 @@ test('encrypted imported history stays read-only until a fresh certified seat tr
     await destination.getByLabel('Choose full-save file').setInputFiles(downloadPath);
     // Import authenticates the saved history before exposing the read-only snapshot.
     await expect(destination).toHaveURL(/#\/full-save\/([a-f0-9]{64})$/, { timeout: 30_000 });
-    await expect(
-      destination.getByRole('heading', { name: 'Imported game snapshot' }),
-    ).toBeVisible();
+    await expect(destination.getByRole('heading', { name: 'Imported game snapshot' })).toBeVisible({
+      timeout: 30_000,
+    });
     await expect(destination.getByText('Paused, read-only snapshot')).toBeVisible();
     await expect(
       destination.getByText(
@@ -274,6 +274,21 @@ test('encrypted imported history stays read-only until a fresh certified seat tr
       /could not be restored|no longer secure|retired/i,
       { timeout: 30_000 },
     );
+
+    // Re-importing the earlier private package cannot restore the retired writer.
+    await source.goto('/#/');
+    await source.getByLabel('File passphrase, if needed').fill(filePassphrase);
+    await source.getByLabel('Choose full-save file').setInputFiles(downloadPath);
+    await expect(source).toHaveURL(new RegExp(`/#/full-save/${archiveId}$`), {
+      timeout: 30_000,
+    });
+    await expect(source.getByText('Paused, read-only snapshot')).toBeVisible({ timeout: 30_000 });
+    expect(await gameView(source, gameId)).toBeNull();
+    await source.goto(`/#/game/${gameId}`);
+    await expect(source.locator('main.online-resume-page').getByRole('alert')).toContainText(
+      /could not be restored|no longer secure|retired/i,
+      { timeout: 30_000 },
+    );
     expect(errors).toEqual([]);
     await testInfo.attach('imported-transfer-result', {
       body: JSON.stringify({
@@ -283,6 +298,8 @@ test('encrypted imported history stays read-only until a fresh certified seat tr
         freshDevice: sourceDevice !== destinationDevice,
         importedReadOnlyBeforeTransfer: true,
         retiredSourceRejectedAfterReload: true,
+        staleImportRemainsReadOnlyAfterTransfer: true,
+        retiredSourceRejectedAfterStaleImport: true,
         peerAcceptedDestinationMove: acceptedMove,
         finalHead: (await gameView(destination, gameId))?.head,
         pageErrors: errors,
