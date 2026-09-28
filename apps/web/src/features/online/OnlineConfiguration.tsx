@@ -1,12 +1,18 @@
 import { fromBase64Url, hashValue, toBase64Url, toHex } from '@cp2p/codec';
 import { baseModule } from '@cp2p/engine';
 import type { GameConfig, OptionSpec, Result, TurnTimer } from '@cp2p/engine';
-import { defaultScenario, scenarioById, standardFixedBoard } from '@cp2p/maps';
+import {
+  defaultScenario,
+  scenarioById,
+  scenarioConfig,
+  scenarioOfConfig,
+  standardFixedBoard,
+} from '@cp2p/maps';
 import type { GenesisSeedMode, TakeoverPolicy } from '@cp2p/protocol';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { MAX_PLAYERS, MIN_PLAYERS, modulesForSeatCount } from '../players/identity';
-import { ScenarioPicker } from '../setup/ScenarioPicker';
+import { ScenarioPicker, isSeafaringScenario } from '../setup/ScenarioPicker';
 
 const rules = baseModule();
 const seats = [0, 1, 2, 3, 4, 5] as const;
@@ -26,6 +32,12 @@ function initialOptions(config: GameConfig): Record<string, unknown> {
     ...Object.fromEntries(rules.optionsSchema.map((spec) => [spec.key, spec.default])),
     ...(isRecord(config.options.base) ? config.options.base : {}),
   };
+}
+
+/** The seafaring scenario a signed configuration was built from, or null for a classic game. */
+function seafaringIdOf(config: GameConfig): string | null {
+  const scenario = scenarioOfConfig(config);
+  return scenario && isSeafaringScenario(scenario) ? scenario.id : null;
 }
 
 /** Keep a newer local draft when an earlier signed configuration arrives. */
@@ -49,6 +61,7 @@ export function OnlineConfiguration({
   const { t } = useTranslation('lobby');
   const [seatCount, setSeatCount] = useState(config.seats.length);
   const [options, setOptions] = useState<Record<string, unknown>>(() => initialOptions(config));
+  const [seafaringId, setSeafaringId] = useState(() => seafaringIdOf(config));
   const [fixedSeed, setFixedSeed] = useState(seedMode.kind === 'fixed');
   const [takeoverDraft, setTakeoverDraft] = useState<TakeoverPolicy>(takeover);
   const [seedHex, setSeedHex] = useState(() =>
@@ -56,7 +69,9 @@ export function OnlineConfiguration({
   );
   const [error, setError] = useState(false);
   const [revision, setRevision] = useState(0);
-  const baseline = useRef(JSON.stringify([seatCount, options, fixedSeed, seedHex, takeoverDraft]));
+  const baseline = useRef(
+    JSON.stringify([seatCount, options, seafaringId, fixedSeed, seedHex, takeoverDraft]),
+  );
   const externalKey = toHex(hashValue([config, seedMode, takeover]));
   const previousExternal = useRef(externalKey);
   const latestSubmitted = useRef<{ revision: number; key: string } | null>(null);
@@ -83,12 +98,14 @@ export function OnlineConfiguration({
       return;
     setSeatCount(config.seats.length);
     setOptions(initialOptions(config));
+    setSeafaringId(seafaringIdOf(config));
     setFixedSeed(seedMode.kind === 'fixed');
     setTakeoverDraft(takeover);
     setSeedHex(seedMode.kind === 'fixed' ? toHex(fromBase64Url(seedMode.seed)) : '');
     baseline.current = JSON.stringify([
       config.seats.length,
       initialOptions(config),
+      seafaringIdOf(config),
       seedMode.kind === 'fixed',
       seedMode.kind === 'fixed' ? toHex(fromBase64Url(seedMode.seed)) : '',
       takeover,
@@ -102,7 +119,8 @@ export function OnlineConfiguration({
     if (!editable || revision === 0) return undefined;
     if (
       !latestSubmitted.current &&
-      JSON.stringify([seatCount, options, fixedSeed, seedHex, takeoverDraft]) === baseline.current
+      JSON.stringify([seatCount, options, seafaringId, fixedSeed, seedHex, takeoverDraft]) ===
+        baseline.current
     ) {
       setRevision(0);
       return undefined;
@@ -121,6 +139,7 @@ export function OnlineConfiguration({
           }
         : { kind: 'joint' };
       const { board: previousBoard, ...previous } = currentConfig.current;
+      const seafaring = seafaringId === null ? undefined : scenarioById(seafaringId);
       const modules = modulesForSeatCount(seatCount);
       const fixed = options.mapLayout === 'standard-fixed' && seatCount <= 4;
       const moduleOptions = Object.fromEntries(
@@ -136,17 +155,21 @@ export function OnlineConfiguration({
             : (currentConfig.current.options[id] ?? {}),
         ]),
       );
-      const next: GameConfig = {
-        ...previous,
-        modules,
-        seats: seats.slice(0, seatCount),
-        options: moduleOptions,
-        ...(fixed ? { board: previousBoard ?? standardFixedBoard() } : {}),
-      };
+      // A seafaring scenario brings its own modules, options and board, beside the base rules.
+      const next: GameConfig = seafaring
+        ? scenarioConfig(seafaring, seatCount, { base: { ...options } })
+        : {
+            ...previous,
+            modules,
+            seats: seats.slice(0, seatCount),
+            options: moduleOptions,
+            ...(fixed ? { board: previousBoard ?? standardFixedBoard() } : {}),
+          };
       const key = toHex(hashValue([next, selectedSeed, takeoverDraft]));
       const draftKey = JSON.stringify([
         seatCount,
         options,
+        seafaringId,
         fixedSeed,
         seedHex.toLowerCase(),
         takeoverDraft,
@@ -164,7 +187,17 @@ export function OnlineConfiguration({
       setError(!result.ok);
     }, SAVE_DELAY_MS);
     return () => window.clearTimeout(timer);
-  }, [editable, externalKey, fixedSeed, options, revision, seatCount, seedHex, takeoverDraft]);
+  }, [
+    editable,
+    externalKey,
+    fixedSeed,
+    options,
+    revision,
+    seafaringId,
+    seatCount,
+    seedHex,
+    takeoverDraft,
+  ]);
 
   const changed = () => {
     setRevision((current) => current + 1);
@@ -194,12 +227,23 @@ export function OnlineConfiguration({
     changed();
   };
   const fixedScenario = options.mapLayout === 'standard-fixed' && seatCount <= 4;
-  const scenarioId = fixedScenario
-    ? (scenarioById('standard-fixed')?.id ?? 'standard-fixed')
-    : defaultScenario(seatCount).id;
+  const scenarioId =
+    seafaringId ??
+    (fixedScenario
+      ? (scenarioById('standard-fixed')?.id ?? 'standard-fixed')
+      : defaultScenario(seatCount).id);
   const changeSeats = (count: number) => {
     setSeatCount(count);
-    if (count > 4 && options.mapLayout === 'standard-fixed')
+    const seafaring = seafaringId === null ? undefined : scenarioById(seafaringId);
+    if (seafaring && (count < seafaring.seats.min || count > seafaring.seats.max)) {
+      // The seafaring board does not fit this seat count: fall back to the classic default.
+      setSeafaringId(null);
+      setOptions((current) => ({
+        ...current,
+        vpTarget: defaultScenario(count).vpTarget,
+        mapLayout: 'balanced-random',
+      }));
+    } else if (count > 4 && options.mapLayout === 'standard-fixed')
       setOptions((current) => ({ ...current, mapLayout: 'balanced-random' }));
     changed();
   };
@@ -231,15 +275,28 @@ export function OnlineConfiguration({
             scenarioId={scenarioId}
             disabled={!editable}
             onScenario={(scenario) => {
+              const wasSeafaring = seafaringId !== null;
+              if (isSeafaringScenario(scenario)) {
+                // The scenario's own board and victory target replace the classic map choice.
+                setSeafaringId(scenario.id);
+                setOptions((current) => ({
+                  ...current,
+                  vpTarget: scenario.vpTarget,
+                  mapLayout: 'balanced-random',
+                }));
+                changed();
+                return;
+              }
+              setSeafaringId(null);
+              if (wasSeafaring) patch('vpTarget', scenario.vpTarget);
               if (scenario.board.kind === 'fixed') patch('mapLayout', 'standard-fixed');
-              else if (options.mapLayout === 'standard-fixed')
+              else if (options.mapLayout === 'standard-fixed' || wasSeafaring)
                 patch('mapLayout', 'balanced-random');
             }}
             onSeatCount={changeSeats}
-            classicOnly
           />
           {rules.optionsSchema
-            .filter((spec) => spec.key !== 'mapLayout' || !fixedScenario)
+            .filter((spec) => spec.key !== 'mapLayout' || (!fixedScenario && seafaringId === null))
             .map((spec) => (
               <RuleField
                 key={spec.key}

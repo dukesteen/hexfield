@@ -7,7 +7,7 @@ import { Link } from '@tanstack/react-router';
 import { useSettings } from '../../queries/hooks';
 import { DEFAULT_NETWORK_SETTINGS, effectiveNetworkSettings } from '../../queries/network-config';
 import { beginOnlineRoomOpen, closeOnlineRoom } from './room-registry.js';
-import { ScenarioPicker } from '../setup/ScenarioPicker';
+import { ScenarioPicker, isSeafaringScenario } from '../setup/ScenarioPicker';
 import { MAX_PLAYERS, MIN_PLAYERS } from '../players/identity';
 import './online.css';
 
@@ -46,12 +46,17 @@ export function OnlineCreate() {
   const [seatCount, setSeatCount] = useState(4);
   const [scenario, setScenario] = useState<Scenario>(() => defaultScenario(4));
   const [mapLayout, setMapLayout] = useState<BaseOptions['mapLayout']>('balanced-random');
+  const [vpTarget, setVpTarget] = useState(10);
+  /** A scenario brings its own victory target, so the field follows the choice. */
+  const chooseScenario = (next: Scenario) => {
+    setScenario(next);
+    setVpTarget(next.vpTarget);
+  };
   const changeSeatCount = (count: number) => {
     setSeatCount(count);
     if (count < scenario.seats.min || count > scenario.seats.max)
-      setScenario(defaultScenario(count));
+      chooseScenario(defaultScenario(count));
   };
-  const [vpTarget, setVpTarget] = useState(10);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(false);
 
@@ -193,11 +198,10 @@ export function OnlineCreate() {
             <ScenarioPicker
               seatCount={seatCount}
               scenarioId={scenario.id}
-              onScenario={setScenario}
+              onScenario={chooseScenario}
               onSeatCount={changeSeatCount}
-              classicOnly
             />
-            {scenario.board.kind === 'generator' && (
+            {scenario.board.kind === 'generator' && !isSeafaringScenario(scenario) && (
               <label>
                 {t('lobby:mapLayout')}
                 <select
