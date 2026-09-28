@@ -424,6 +424,8 @@ test('four humans certify takeover, recovered bot continues, and original device
       );
     }
     expect(returnedCommand).toBe(true);
+    await dialog.getByRole('button', { name: 'Close', exact: true }).click();
+    await expect(dialog).not.toBeVisible();
     await returnedPage.close();
     const secondRequest = initiator.getByRole('button', { name: /Request takeover of Original/ });
     // The original four-seat quorum still has all three surviving human voters.

@@ -1,0 +1,19 @@
+{
+  "sourceBase": "917e9d8",
+  "isolatedBase": "8000f80",
+  "phaseDeadlineMs": 20000,
+  "totalDeadlineMs": 600000,
+  "finishDeadlineMs": 300000,
+  "maxPlayerCommands": 1500,
+  "targetVP": 10,
+  "earlyStop": false,
+  "scope": "full four-human departure, bot command, fresh-key human return/command, second takeover if quorum permits, recovered-bot finish and all three independent surviving-human audits",
+  "isolatedTypecheck": "PASS",
+  "signalingProcess": 96383,
+  "signalingRuntimeSha256": "b576fa79f9e467401ea89119ec2318689d427b2c31d8c890c645281733f6eb46",
+  "rootRepairFiles": {
+    "packages/protocol/src/consensus-controller.ts": "55b9fc6cd750fcf0e1ae28410eb1711974b8a3b4ffb6d3c2b6846f57b0fe30bd",
+    "packages/protocol/src/consensus.ts": "03188297861b2f06435b8389558e30faa397a5e8711d779b1f56d83eba15d827",
+    "packages/protocol/src/replicated-log.ts": "0c012422017768f7ce8ad760b765bef7a35f6f66be4ade5e0b1b47fd1f40cadd"
+  }
+}
