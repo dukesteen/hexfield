@@ -8,6 +8,8 @@ import { MemoryCheatCandidateStore } from './cheat-candidates.js';
 import { composeCommandProofs } from './command-proofs.js';
 import { validateCommandForEntry, validateCommandStatement } from './command-validation.js';
 import { MemoryCountContributionStore } from './count-contributions.js';
+import { validateDeckCeremony } from './deck-genesis.js';
+import type { ReplayPolicy } from './replay.js';
 import { entryHash, genesisDigest } from './genesis.js';
 import { createHandSecretSource } from './hand-source.js';
 import { handProofContext, proveHandObligation } from './hand-transition.js';
@@ -47,6 +49,12 @@ const costs: Readonly<Record<string, Partial<Record<Resource, number>>>> = {
 
 test('a live engine-legal overspend at a certified hidden-steal parent yields an owner finding without applying the spend', async () => {
   const fixture = createVerifiedDeckSession(317, 2, 128);
+  const policy: ReplayPolicy = {
+    ...fixture.policy,
+    genesis: {
+      verifyCommitments: (candidate) => validateDeckCeremony(candidate, fixture.deck.transcripts),
+    },
+  };
   const peers = fixture.humans.map((human) => human.publicKey);
   const network = createMemnet({ peers });
   const drivers = new Map<Seat, VerifiedSessionDriver>();
@@ -64,7 +72,7 @@ test('a live engine-legal overspend at a certified hidden-steal parent yields an
         return P2PSession.create({
           genesisEntry: fixture.entry,
           engine: fixture.simulation.engine,
-          policy: fixture.policy,
+          policy,
           seat: human.seat,
           secretKey: required(fixture.simulation.identities.get(human.seat)).secretKey,
           botKeys: fixture.botKeysFor(human.seat),
@@ -182,12 +190,7 @@ test('a live engine-legal overspend at a certified hidden-steal parent yields an
       throw new Error('No real hidden-balance overspend parent within 100 legal choices');
     const saved = required(live[0]).exportSave();
     const context = value(
-      replayCertifiedPrefix(
-        fixture.entry,
-        saved.entries,
-        fixture.simulation.engine,
-        fixture.policy,
-      ),
+      replayCertifiedPrefix(fixture.entry, saved.entries, fixture.simulation.engine, policy),
     ).context;
     expect(
       fixture.simulation.engine.validate(context.log.state, {
@@ -284,12 +287,7 @@ test('a live engine-legal overspend at a certified hidden-steal parent yields an
         },
       });
       const replayed = value(
-        replayCertifiedPrefix(
-          fixture.entry,
-          after.entries,
-          fixture.simulation.engine,
-          fixture.policy,
-        ),
+        replayCertifiedPrefix(fixture.entry, after.entries, fixture.simulation.engine, policy),
       ).context;
       expect(replayed.log.state).toEqual(context.log.state);
       expect(replayed.excludedProposers).toEqual(context.excludedProposers);
