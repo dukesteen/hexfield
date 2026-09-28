@@ -7,7 +7,7 @@ import type {
   PrivateState,
   Seat,
 } from '@cp2p/engine';
-import { DEV_CARD_COUNTS, RESOURCES } from '@cp2p/engine';
+import { DEV_CARD_COUNTS, RESOURCES, decksFor, isPublicDraw, publicDrawInput } from '@cp2p/engine';
 import { createRng } from '@cp2p/engine/rng';
 
 type SystemPending = Extract<Pending, { kind: 'random' | 'reveal' }>;
@@ -85,6 +85,28 @@ export function createLocalRandomSource(
   )
     throw new RangeError('Directed development deck must contain exactly the configured cards');
   const devDeck = ordered ? [...ordered].toReversed() : rng.shuffle(cards);
+  // Every module deck other than `dev` (fog tiles, progress cards) gets its own hidden stack. Its
+  // order comes only from this source's seed, never from the genesis (board) seed.
+  const moduleStacks = new Map<string, string[]>();
+  const moduleCard = (
+    state: Readonly<GameState>,
+    deckId: unknown,
+    reveal: 'private' | 'public',
+  ): string => {
+    if (typeof deckId !== 'string') throw new Error('Draw has no deck');
+    let stack = moduleStacks.get(deckId);
+    if (!stack) {
+      const declared = decksFor(state.config)[deckId];
+      if (declared?.reveal !== reveal) throw new Error(`Deck ${deckId} is not a ${reveal} deck`);
+      stack = createRng(hashValue(['cp2p-local-deck-v1', seed, deckId])).shuffle(
+        deckCards(declared.cards),
+      );
+      moduleStacks.set(deckId, stack);
+    }
+    const card = stack.pop();
+    if (!card) throw new Error(`Deck ${deckId} is empty`);
+    return card;
+  };
   return {
     remainingCards: () => [...devDeck],
     resolve(
@@ -92,6 +114,10 @@ export function createLocalRandomSource(
       state: Readonly<GameState>,
       privates: ReadonlyMap<Seat, PrivateState>,
     ): LocalRandomAnswer {
+      if (isPublicDraw(pending))
+        return {
+          input: publicDrawInput(pending, moduleCard(state, pending.request.deck, 'public')),
+        };
       switch (pending.systemType) {
         case 'START_SEAT': {
           const seat = state.config.seats[rng.int(state.config.seats.length)];
@@ -133,11 +159,12 @@ export function createLocalRandomSource(
           const seatValue = requiredInteger(pending.request.seat, 'draw seat');
           const seat = state.config.seats.find((candidate) => candidate === seatValue);
           const slotId = pending.request.slotId;
-          const card = devDeck.pop();
+          const deckId = pending.request.deck ?? 'dev';
+          const card = deckId === 'dev' ? devDeck.pop() : moduleCard(state, deckId, 'private');
           if (seat === undefined || typeof slotId !== 'string' || !card)
             throw new Error('Invalid development draw');
           return {
-            input: { kind: 'system', type: 'CARD_DEALT', deck: 'dev', seat, slotId, card },
+            input: { kind: 'system', type: 'CARD_DEALT', deck: deckId, seat, slotId, card },
           };
         }
         case 'STEAL_RESULT': {

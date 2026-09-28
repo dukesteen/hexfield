@@ -1,4 +1,4 @@
-import { RESOURCES, devCardCountsFor } from '@cp2p/engine';
+import { RESOURCES, decksFor, devCardCountsFor, isPublicDraw, publicDrawInput } from '@cp2p/engine';
 import type {
   GameState,
   LocalRandomAnswer,
@@ -77,9 +77,16 @@ function diceDeck(state: GameState): number[] {
 export function remainingDevPool(
   state: GameState,
   privates: ReadonlyMap<Seat, PrivateState>,
+  deckId = 'dev',
 ): string[] {
-  const remaining = new Map<string, number>(Object.entries(devCardCountsFor(state.config)));
-  const deck = state.decks.dev;
+  const remaining = new Map<string, number>(
+    Object.entries(
+      deckId === 'dev'
+        ? devCardCountsFor(state.config)
+        : (decksFor(state.config)[deckId]?.cards ?? {}),
+    ),
+  );
+  const deck = state.decks[deckId];
   if (!deck) throw new Error('Development deck is missing');
   for (const ref of deck.drawn) {
     const slot = state.seats
@@ -107,6 +114,22 @@ export interface BrowserRandomSource extends LocalRandomSource {
 /** Local system input source. It keeps no secret deck order, so a save can resume safely. */
 export function createBrowserRandomSource(entropy: Entropy = browserEntropy): BrowserRandomSource {
   let forcedDice: readonly [number, number] | null = null;
+  // Public-deck cards already shown in this session; the rest of the deck is picked uniformly.
+  const shown = new Map<string, Map<string, number>>();
+  const publicCard = (state: Readonly<GameState>, deckId: unknown): string => {
+    if (typeof deckId !== 'string') throw new Error('Public draw has no deck');
+    const declared = decksFor(state.config)[deckId];
+    if (declared?.reveal !== 'public') throw new Error(`Deck ${deckId} is not a public deck`);
+    const seen = shown.get(deckId) ?? new Map<string, number>();
+    const pool = Object.entries(declared.cards).flatMap(([card, count]) =>
+      Array<string>(Math.max(0, count - (seen.get(card) ?? 0))).fill(card),
+    );
+    const card = pool[randomIndex(entropy, pool.length)];
+    if (!card) throw new Error(`Public deck ${deckId} is empty`);
+    seen.set(card, (seen.get(card) ?? 0) + 1);
+    shown.set(deckId, seen);
+    return card;
+  };
   return {
     forceNextDice(dice) {
       if (
@@ -124,6 +147,8 @@ export function createBrowserRandomSource(entropy: Entropy = browserEntropy): Br
       state: Readonly<GameState>,
       privates: ReadonlyMap<Seat, PrivateState>,
     ): LocalRandomAnswer {
+      if (isPublicDraw(pending))
+        return { input: publicDrawInput(pending, publicCard(state, pending.request.deck)) };
       switch (pending.systemType) {
         case 'START_SEAT': {
           const seat = state.config.seats[randomIndex(entropy, state.config.seats.length)];
@@ -154,10 +179,13 @@ export function createBrowserRandomSource(entropy: Entropy = browserEntropy): Br
           const seat = seatFrom(state, pending.request.seat);
           const slotId = pending.request.slotId;
           if (typeof slotId !== 'string') throw new Error('Draw request is missing a slot id');
-          const pool = remainingDevPool(state, privates);
+          const deckId = typeof pending.request.deck === 'string' ? pending.request.deck : 'dev';
+          const pool = remainingDevPool(state, privates, deckId);
           const card = pool[randomIndex(entropy, pool.length)];
           if (!card) throw new Error('Development deck is empty');
-          return { input: { kind: 'system', type: 'CARD_DEALT', deck: 'dev', seat, slotId, card } };
+          return {
+            input: { kind: 'system', type: 'CARD_DEALT', deck: deckId, seat, slotId, card },
+          };
         }
         case 'STEAL_RESULT': {
           const thief = seatFrom(state, pending.request.thief);

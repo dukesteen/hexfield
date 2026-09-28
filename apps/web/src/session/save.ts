@@ -108,7 +108,11 @@ export class ReplayRandomSource implements LocalRandomSource {
     if (!input || input.kind !== 'system' || input.type !== pending.systemType)
       throw new Error(`Saved system outcome does not match ${pending.systemType}`);
     if (input.type === 'CARD_DEALT') {
-      const pool = remainingDevPool(state, privates);
+      const pool = remainingDevPool(
+        state,
+        privates,
+        typeof input.deck === 'string' ? input.deck : 'dev',
+      );
       if (typeof input.card !== 'string' || !pool.includes(input.card))
         throw new Error('Saved development card exceeds remaining stock');
     }
