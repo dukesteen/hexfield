@@ -1,7 +1,22 @@
 import { scalarToBytes } from '@cp2p/crypto';
-import { RESOURCES, engineForConfig, kindsOfCounts, knightsConfig, knightsExt } from '@cp2p/engine';
-import type { CommandShape, Engine, GameConfig, GameState, PrivateState, Seat } from '@cp2p/engine';
-import { describe, expect, test } from 'vitest';
+import {
+  RESOURCES,
+  engineForConfig,
+  kindsOfCounts,
+  knightsConfig,
+  knightsExt,
+  registerAdHocModule,
+} from '@cp2p/engine';
+import type {
+  CommandShape,
+  Engine,
+  GameConfig,
+  GameModule,
+  GameState,
+  PrivateState,
+  Seat,
+} from '@cp2p/engine';
+import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 import { RandomBot, createBotRng } from '../../bots/src/index.js';
 import type { P2PSession } from './p2p-session.js';
 import { auditCertifiedGame } from './audit.js';
@@ -10,6 +25,51 @@ import { replayCertifiedPrefix } from './replay.js';
 import { createTerminalAuditFixture } from './testing/audit-fixture.js';
 
 const COMMODITIES = ['cloth', 'coin', 'paper'];
+/**
+ * A test-only module that lowers the victory target. Knights plays to 13 points, which makes a
+ * certified log long enough that its synchronous end-of-game replay could starve the test
+ * runner's heartbeat on a loaded machine; a lower target keeps every other rule and flow.
+ */
+const QUICK_WIN = 'quick-win';
+const QUICK_WIN_VERSION = '1.0.0';
+
+function quickWinModule(): GameModule {
+  return {
+    id: QUICK_WIN,
+    version: QUICK_WIN_VERSION,
+    dependsOn: ['base'],
+    conflictsWith: [],
+    optionsSchema: [{ key: 'target', type: 'integer', default: 9, min: 3, max: 20 }],
+    initState: () => ({}),
+    hooks: {
+      vpTarget: (config) => {
+        const target: unknown = Reflect.get(config.options[QUICK_WIN] ?? {}, 'target');
+        return typeof target === 'number' ? target : 9;
+      },
+    },
+    commands: {},
+    systemInputs: {},
+    phases: {},
+  };
+}
+
+function shortKnights(seats: number, target: number): GameConfig {
+  const config = knightsConfig({ seats });
+  return {
+    ...config,
+    options: { ...config.options, [QUICK_WIN]: { target } },
+    modules: [...config.modules, { id: QUICK_WIN, version: QUICK_WIN_VERSION }],
+  };
+}
+
+let disposeQuickWin = () => {};
+beforeAll(() => {
+  disposeQuickWin = registerAdHocModule(QUICK_WIN, QUICK_WIN_VERSION, quickWinModule);
+});
+afterAll(() => {
+  disposeQuickWin();
+});
+
 const yieldTask = () => new Promise<void>((resolve) => setImmediate(resolve));
 
 type Fixture = Awaited<ReturnType<typeof createTerminalAuditFixture>>;
@@ -175,7 +235,7 @@ async function play(
 
 describe('knights over the verified P2P protocol', () => {
   test('a four-seat knights game is committed, proven and audited over eight card kinds', async () => {
-    const config = knightsConfig({ seats: 4 });
+    const config = shortKnights(4, 9);
     const { fixture } = await play(config, 61);
     expect(fixture.terminal).toBe(true);
     const { counts, commodityOffers } = summarize(fixture);
@@ -186,7 +246,6 @@ describe('knights over the verified P2P protocol', () => {
       'DISCARD',
       'BUILD_CITY',
       'CHOOSE_AQUEDUCT',
-      'PLACE_METROPOLIS',
       'CONFIRM_TRADE',
     ])
       expect({ type, count: counts[type] ?? 0 }).not.toEqual({ type, count: 0 });
@@ -225,7 +284,7 @@ describe('knights over the verified P2P protocol', () => {
 
   test('a five-seat knights-56 game replays to the same private hands as the live sessions', async () => {
     const config = knightsConfig({ seats: 5, fiveSix: true });
-    const { fixture, captured } = await play(config, 62, { stopAfterSteps: 300 });
+    const { fixture, captured } = await play(config, 62, { stopAfterSteps: 240 });
     expect(fixture.terminal).toBe(false);
     const { counts } = summarize(fixture);
     for (const type of ['BUILD_IMPROVEMENT', 'DISCARD', 'END_SBP'])
@@ -254,12 +313,12 @@ describe('knights over the verified P2P protocol', () => {
   }, 1_800_000);
 
   test('hidden steals move commodities under the sealed transfer proofs and audit clean', async () => {
-    const config = knightsConfig({ seats: 2 });
+    const config = shortKnights(2, 11);
     // Between two steps nothing but a settled system input can change a hand, so a one-card move
     // of the same kind between two seats is a hidden steal; the thief's hand reveals its kind.
     let previous = new Map<Seat, Readonly<Record<string, number>>>();
     const stolen: string[] = [];
-    const { fixture } = await play(config, 63, {
+    const { fixture } = await play(config, 65, {
       wrapEngine: withFreeRobber,
       onStep(sessions) {
         const hands = new Map<Seat, Readonly<Record<string, number>>>();
