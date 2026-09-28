@@ -278,182 +278,227 @@ test('a second live tab cannot sign until the original game writer closes', asyn
   }
 });
 
-test('refresh and whole-browser restart preserve the certified game through its final audit', async ({
-  playwright,
-  baseURL,
-}, testInfo) => {
-  test.setTimeout(180_000);
-  if (!baseURL) throw new Error('The native resume test requires a configured app URL');
-  const profileRoot = await mkdtemp(join(tmpdir(), 'hexfield-resume-'));
-  const contexts: BrowserContext[] = [];
-  const launch = async (name: string) => {
-    const context = await playwright.chromium.launchPersistentContext(join(profileRoot, name), {
-      channel: 'chrome',
-      headless: true,
-      baseURL,
-      viewport: { width: 1280, height: 900 },
-    });
-    // Settings plus the game load more resources than the browser's default timing buffer.
-    await context.addInitScript(() => performance.setResourceTimingBufferSize(5_000));
-    contexts.push(context);
-    return context;
-  };
-  let [hostContext, guestContext] = await Promise.all([launch('host'), launch('guest')]);
-  if (!hostContext || !guestContext) throw new Error('Missing test contexts');
-  let host = await hostContext.newPage();
-  let guest = await guestContext.newPage();
-  const errors: string[] = [];
-  const watch = (page: Page) => page.on('pageerror', (error) => errors.push(error.message));
-  watch(host);
-  watch(guest);
-  try {
-    if (encrypted) await Promise.all([enableProtection(host), enableProtection(guest)]);
-    await host.goto('/#/online/create');
-    await host.getByLabel('Room name').fill('Resume acceptance');
-    await host.getByLabel('Your player name').fill('Resume host');
-    await host.getByText('Advanced connection options', { exact: true }).click();
-    await host.getByLabel('Invite friends with').selectOption('server');
-    await host.getByLabel('Custom room server').fill('ws://127.0.0.1:8909');
-    await host.getByLabel('Player count').selectOption('2');
-    await host.getByLabel('Victory points to win').fill('3');
-    await host.getByRole('button', { name: 'Create room' }).click();
-    const invitation = host.getByRole('textbox', { name: /^Invitation link/ });
-    await expect(invitation).toBeVisible();
-    await guest.goto(await invitation.inputValue());
-    await guest.getByRole('button', { name: 'Take seat' }).click();
-    await host.getByRole('button', { name: 'Ready up' }).click();
-    await guest.getByRole('button', { name: 'Ready up' }).click();
-    await expect(host.getByRole('button', { name: 'Start game' })).toBeEnabled();
-    await host.getByRole('button', { name: 'Start game' }).click();
-    await expect(host).toHaveURL(/\/game\/[^/]+$/, { timeout: 60_000 });
-    await expect(guest).toHaveURL(/\/game\/[^/]+$/, { timeout: 60_000 });
-    const route = host.url();
-    const gameId = new URL(route).hash.match(/\/game\/([^/?]+)/)?.[1];
-    if (!gameId) throw new Error('Missing game identifier');
-    await expect
-      .poll(
-        async () => (await inspect(host, gameId))?.legal || (await inspect(guest, gameId))?.legal,
-        { timeout: 30_000 },
-      )
-      .toBe(true);
-    // Refresh the higher-ID responder, which cannot send a canonical opening
-    // offer itself. This exercises the survivor's lost-offer retry path.
-    const hostPeer = (await inspect(host, gameId))?.devicePeer;
-    const guestPeer = (await inspect(guest, gameId))?.devicePeer;
-    if (!hostPeer || !guestPeer) throw new Error('Missing device peer identifiers');
-    const second = hostPeer > guestPeer ? host : guest;
-    const first = second === host ? guest : host;
-    if (!(await inspect(second, gameId))?.legal) {
-      await certifyMove(first, second, gameId);
-      await certifyMove(first, second, gameId);
-    }
-    await certifyMove(second, first, gameId);
-    const beforeRefresh = (await inspect(second, gameId))?.head;
-    const refreshSeats = (await inspect(second, gameId))?.seats;
-    const guestSeats = (await inspect(guest, gameId))?.seats;
-    const hostSeats = (await inspect(host, gameId))?.seats;
-    const refreshStart = performance.now();
-    await second.reload();
-    await unlockSavedGame(second);
-    await expect
-      .poll(async () => (await inspect(second, gameId))?.head, { timeout: 20_000, intervals: [50] })
-      .toEqual(beforeRefresh);
-    expect((await inspect(second, gameId))?.seats).toEqual(refreshSeats);
-    const refreshToRestoredMs = performance.now() - refreshStart;
-    await certifyMove(second, first, gameId);
-    const refreshToPeerAcceptedMoveMs = performance.now() - refreshStart;
-    const savedHead = (await inspect(host, gameId))?.head;
-    if (!savedHead) throw new Error('Missing pre-close certified head');
+for (const refreshOnly of [false, true]) {
+  test(
+    refreshOnly
+      ? 'encrypted refresh is peer-ready within three seconds'
+      : 'refresh and whole-browser restart preserve the certified game through its final audit',
+    async ({ playwright, baseURL }, testInfo) => {
+      test.skip(
+        refreshOnly && process.env.CP2P_REFRESH_BENCH_E2E !== '1',
+        'Opt-in refresh benchmark',
+      );
+      test.setTimeout(refreshOnly ? 90_000 : 180_000);
+      if (refreshOnly && !encrypted)
+        throw new Error('The refresh benchmark requires encrypted storage');
+      if (!baseURL) throw new Error('The native resume test requires a configured app URL');
+      const profileRoot = await mkdtemp(join(tmpdir(), 'hexfield-resume-'));
+      const contexts: BrowserContext[] = [];
+      const launch = async (name: string) => {
+        const context = await playwright.chromium.launchPersistentContext(join(profileRoot, name), {
+          channel: 'chrome',
+          headless: true,
+          baseURL,
+          viewport: { width: 1280, height: 900 },
+        });
+        // Settings plus the game load more resources than the browser's default timing buffer.
+        await context.addInitScript(() => performance.setResourceTimingBufferSize(5_000));
+        contexts.push(context);
+        return context;
+      };
+      let [hostContext, guestContext] = await Promise.all([launch('host'), launch('guest')]);
+      if (!hostContext || !guestContext) throw new Error('Missing test contexts');
+      let host = await hostContext.newPage();
+      let guest = await guestContext.newPage();
+      const errors: string[] = [];
+      const watch = (page: Page) => page.on('pageerror', (error) => errors.push(error.message));
+      watch(host);
+      watch(guest);
+      try {
+        if (encrypted) await Promise.all([enableProtection(host), enableProtection(guest)]);
+        await host.goto('/#/online/create');
+        await host.getByLabel('Room name').fill('Resume acceptance');
+        await host.getByLabel('Your player name').fill('Resume host');
+        await host.getByText('Advanced connection options', { exact: true }).click();
+        await host.getByLabel('Invite friends with').selectOption('server');
+        await host.getByLabel('Custom room server').fill('ws://127.0.0.1:8909');
+        await host.getByLabel('Player count').selectOption('2');
+        await host.getByLabel('Victory points to win').fill('3');
+        await host.getByRole('button', { name: 'Create room' }).click();
+        const invitation = host.getByRole('textbox', { name: /^Invitation link/ });
+        await expect(invitation).toBeVisible();
+        await guest.goto(await invitation.inputValue());
+        await guest.getByRole('button', { name: 'Take seat' }).click();
+        await host.getByRole('button', { name: 'Ready up' }).click();
+        await guest.getByRole('button', { name: 'Ready up' }).click();
+        await expect(host.getByRole('button', { name: 'Start game' })).toBeEnabled();
+        await host.getByRole('button', { name: 'Start game' }).click();
+        await expect(host).toHaveURL(/\/game\/[^/]+$/, { timeout: 60_000 });
+        await expect(guest).toHaveURL(/\/game\/[^/]+$/, { timeout: 60_000 });
+        const route = host.url();
+        const gameId = new URL(route).hash.match(/\/game\/([^/?]+)/)?.[1];
+        if (!gameId) throw new Error('Missing game identifier');
+        await expect
+          .poll(
+            async () =>
+              (await inspect(host, gameId))?.legal || (await inspect(guest, gameId))?.legal,
+            { timeout: 30_000 },
+          )
+          .toBe(true);
+        // Refresh the higher-ID responder, which cannot send a canonical opening
+        // offer itself. This exercises the survivor's lost-offer retry path.
+        const hostPeer = (await inspect(host, gameId))?.devicePeer;
+        const guestPeer = (await inspect(guest, gameId))?.devicePeer;
+        if (!hostPeer || !guestPeer) throw new Error('Missing device peer identifiers');
+        const second = hostPeer > guestPeer ? host : guest;
+        const first = second === host ? guest : host;
+        if (!(await inspect(second, gameId))?.legal) {
+          await certifyMove(first, second, gameId);
+          await certifyMove(first, second, gameId);
+        }
+        await certifyMove(second, first, gameId);
+        const beforeRefresh = (await inspect(second, gameId))?.head;
+        const refreshSeats = (await inspect(second, gameId))?.seats;
+        const guestSeats = (await inspect(guest, gameId))?.seats;
+        const hostSeats = (await inspect(host, gameId))?.seats;
+        const refreshStart = performance.now();
+        await second.reload();
+        await unlockSavedGame(second);
+        await expect
+          .poll(async () => (await inspect(second, gameId))?.head, {
+            timeout: 20_000,
+            intervals: [50],
+          })
+          .toEqual(beforeRefresh);
+        expect((await inspect(second, gameId))?.seats).toEqual(refreshSeats);
+        const refreshToRestoredMs = performance.now() - refreshStart;
+        await certifyMove(second, first, gameId);
+        const refreshToPeerAcceptedMoveMs = performance.now() - refreshStart;
+        if (refreshOnly) {
+          const measurements = JSON.stringify(
+            {
+              gameId,
+              encrypted,
+              refreshedTransportRole: 'higher-ID responder',
+              beforeRefresh,
+              peerAcceptedHead: (await inspect(first, gameId))?.head,
+              refreshToRestoredMs,
+              refreshToPeerAcceptedMoveMs,
+              withinThreeSecondTarget: refreshToPeerAcceptedMoveMs < 3_000,
+              scope: 'encrypted refresh and one peer-certified move; no restart or terminal audit',
+            },
+            null,
+            2,
+          );
+          await writeFile(testInfo.outputPath('refresh-measurements.json'), measurements);
+          await testInfo.attach('refresh-measurements', {
+            body: measurements,
+            contentType: 'application/json',
+          });
+          expect(errors).toEqual([]);
+          expect(refreshToPeerAcceptedMoveMs).toBeLessThan(3_000);
+          return;
+        }
+        const savedHead = (await inspect(host, gameId))?.head;
+        if (!savedHead) throw new Error('Missing pre-close certified head');
 
-    // Persistent-context close exits each independent browser process. Relaunch
-    // from the same disk profiles, without copying or injecting browser storage.
-    await Promise.all([hostContext.close(), guestContext.close()]);
-    guestContext = await launch('guest');
-    guest = await guestContext.newPage();
-    watch(guest);
-    await guest.goto(route);
-    await unlockSavedGame(guest);
-    await expect
-      .poll(async () => (await inspect(guest, gameId))?.head, { timeout: 20_000 })
-      .toEqual(savedHead);
-    expect((await inspect(guest, gameId))?.seats).toEqual(guestSeats);
-    hostContext = await launch('host');
-    host = await hostContext.newPage();
-    watch(host);
-    await host.goto(route);
-    await unlockSavedGame(host);
-    await expect
-      .poll(async () => (await inspect(host, gameId))?.head, { timeout: 20_000 })
-      .toEqual(savedHead);
-    expect((await inspect(host, gameId))?.seats).toEqual(hostSeats);
-    const hostActs = (await inspect(host, gameId))?.legal;
-    const finalHead = await certifyMove(hostActs ? host : guest, hostActs ? guest : host, gameId);
-    const terminal = await finishGame([host, guest], gameId);
-    expect(terminal.head?.seq).toBeGreaterThanOrEqual(minimumFinishHead);
-    const snapshotChecks: { sequences: number[] }[] = [];
-    const measurements = JSON.stringify(
-      {
-        gameId,
-        encrypted,
-        refreshedTransportRole: 'higher-ID responder',
-        savedHead,
-        finalHead,
-        terminal,
-        restartScope: 'two independent Chrome processes with persistent disk profiles',
-        refreshToRestoredMs,
-        refreshToPeerAcceptedMoveMs,
-        withinThreeSecondTarget: refreshToPeerAcceptedMoveMs < 3_000,
-      },
-      null,
-      2,
-    );
-    await writeFile(testInfo.outputPath('resume-measurements.json'), measurements);
-    for (const page of [host, guest]) {
-      // Use the player's close action, which drains pending history writes.
-      // oxlint-disable-next-line no-await-in-loop -- Check each saved device independently.
-      await page.getByRole('button', { name: 'View board', exact: true }).click();
-      // oxlint-disable-next-line no-await-in-loop
-      await page.getByLabel('Open game menu', { exact: true }).click();
-      // oxlint-disable-next-line no-await-in-loop
-      await page.getByRole('button', { name: 'Leave game', exact: true }).click();
-      // oxlint-disable-next-line no-await-in-loop
-      await page
-        .getByRole('dialog')
-        .getByRole('button', { name: 'Save and leave', exact: true })
-        .click();
-      // oxlint-disable-next-line no-await-in-loop
-      await expect(page).toHaveURL((url) => url.pathname === '/' && ['#/', ''].includes(url.hash));
-      // oxlint-disable-next-line no-await-in-loop
-      await expect(page.locator('.online-history-audit[data-audit="verified"]')).toHaveCount(1);
-      // oxlint-disable-next-line no-await-in-loop
-      await expect(page.locator('.online-history-stats dd').first()).toHaveText('1');
-      if (!terminal.head) throw new Error('Missing completed game head');
-      // oxlint-disable-next-line no-await-in-loop -- Closing each writer drains its snapshot writes.
-      snapshotChecks.push(await verifyPublicSnapshots(page, gameId, terminal.head.seq));
-    }
-    expect(errors).toEqual([]);
-    await writeFile(
-      testInfo.outputPath('snapshot-measurements.json'),
-      JSON.stringify(snapshotChecks, null, 2),
-    );
-    await testInfo.attach('resume-measurements', {
-      body: measurements,
-      contentType: 'application/json',
-    });
-  } catch (error) {
-    await testInfo.attach('host-visible-state', {
-      body: await host
-        .locator('body')
-        .innerText()
-        .catch(() => 'Page closed'),
-      contentType: 'text/plain',
-    });
-    throw error;
-  } finally {
-    await Promise.all(contexts.map((context) => context.close()));
-    await rm(profileRoot, { recursive: true, force: true });
-  }
-});
+        // Persistent-context close exits each independent browser process. Relaunch
+        // from the same disk profiles, without copying or injecting browser storage.
+        await Promise.all([hostContext.close(), guestContext.close()]);
+        guestContext = await launch('guest');
+        guest = await guestContext.newPage();
+        watch(guest);
+        await guest.goto(route);
+        await unlockSavedGame(guest);
+        await expect
+          .poll(async () => (await inspect(guest, gameId))?.head, { timeout: 20_000 })
+          .toEqual(savedHead);
+        expect((await inspect(guest, gameId))?.seats).toEqual(guestSeats);
+        hostContext = await launch('host');
+        host = await hostContext.newPage();
+        watch(host);
+        await host.goto(route);
+        await unlockSavedGame(host);
+        await expect
+          .poll(async () => (await inspect(host, gameId))?.head, { timeout: 20_000 })
+          .toEqual(savedHead);
+        expect((await inspect(host, gameId))?.seats).toEqual(hostSeats);
+        const hostActs = (await inspect(host, gameId))?.legal;
+        const finalHead = await certifyMove(
+          hostActs ? host : guest,
+          hostActs ? guest : host,
+          gameId,
+        );
+        const terminal = await finishGame([host, guest], gameId);
+        expect(terminal.head?.seq).toBeGreaterThanOrEqual(minimumFinishHead);
+        const snapshotChecks: { sequences: number[] }[] = [];
+        const measurements = JSON.stringify(
+          {
+            gameId,
+            encrypted,
+            refreshedTransportRole: 'higher-ID responder',
+            savedHead,
+            finalHead,
+            terminal,
+            restartScope: 'two independent Chrome processes with persistent disk profiles',
+            refreshToRestoredMs,
+            refreshToPeerAcceptedMoveMs,
+            withinThreeSecondTarget: refreshToPeerAcceptedMoveMs < 3_000,
+          },
+          null,
+          2,
+        );
+        await writeFile(testInfo.outputPath('resume-measurements.json'), measurements);
+        for (const page of [host, guest]) {
+          // Use the player's close action, which drains pending history writes.
+          // oxlint-disable-next-line no-await-in-loop -- Check each saved device independently.
+          await page.getByRole('button', { name: 'View board', exact: true }).click();
+          // oxlint-disable-next-line no-await-in-loop
+          await page.getByLabel('Open game menu', { exact: true }).click();
+          // oxlint-disable-next-line no-await-in-loop
+          await page.getByRole('button', { name: 'Leave game', exact: true }).click();
+          // oxlint-disable-next-line no-await-in-loop
+          await page
+            .getByRole('dialog')
+            .getByRole('button', { name: 'Save and leave', exact: true })
+            .click();
+          // oxlint-disable-next-line no-await-in-loop
+          await expect(page).toHaveURL(
+            (url) => url.pathname === '/' && ['#/', ''].includes(url.hash),
+          );
+          // oxlint-disable-next-line no-await-in-loop
+          await expect(page.locator('.online-history-audit[data-audit="verified"]')).toHaveCount(1);
+          // oxlint-disable-next-line no-await-in-loop
+          await expect(page.locator('.online-history-stats dd').first()).toHaveText('1');
+          if (!terminal.head) throw new Error('Missing completed game head');
+          // oxlint-disable-next-line no-await-in-loop -- Closing each writer drains its snapshot writes.
+          snapshotChecks.push(await verifyPublicSnapshots(page, gameId, terminal.head.seq));
+        }
+        expect(errors).toEqual([]);
+        await writeFile(
+          testInfo.outputPath('snapshot-measurements.json'),
+          JSON.stringify(snapshotChecks, null, 2),
+        );
+        await testInfo.attach('resume-measurements', {
+          body: measurements,
+          contentType: 'application/json',
+        });
+      } catch (error) {
+        await testInfo.attach('host-visible-state', {
+          body: await host
+            .locator('body')
+            .innerText()
+            .catch(() => 'Page closed'),
+          contentType: 'text/plain',
+        });
+        throw error;
+      } finally {
+        await Promise.all(contexts.map((context) => context.close()));
+        await rm(profileRoot, { recursive: true, force: true });
+      }
+    },
+  );
+}
 
 async function finishGame(pages: readonly Page[], gameId: string) {
   const snapshots = async (
