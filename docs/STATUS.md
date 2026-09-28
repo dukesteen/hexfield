@@ -502,7 +502,7 @@ Source: [12-seafaring.md](12-seafaring.md)
 - [ ] All scenarios are playable locally and P2P; fog draws are verified on the move.
 - [ ] 20k simulated games per scenario pass the invariants (new invariants: ships ≤ 15, ships only on sea/coastal edges, pirate only at sea, robber only on land).
 - [ ] The trade-route fixtures pass, including the transition rules.
-- [ ] Fog contents are provably not derivable from genesis (a test: two games with the same genesis seed but different deck secrets reveal different fog tiles).
+- [x] Fog contents are provably not derivable from genesis (a test: two games with the same genesis seed but different deck secrets reveal different fog tiles).
 
 ## 13 — Knights & Commerce Module (`knights`)
 
