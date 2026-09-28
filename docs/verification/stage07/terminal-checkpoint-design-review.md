@@ -20,14 +20,14 @@ The source-only Claude review also needed two corrections against the pinned cod
 
 The review ran with Claude Code `2.1.283`, tools disabled, strict MCP isolation, and session persistence off. No saved games or production credentials were sent. The two raw responses and their source manifests are archived in [`terminal-checkpoint-review-evidence.tar.gz`](./terminal-checkpoint-review-evidence.tar.gz), whose SHA-256 is `14643a150dad0e2564ec96f37960941b2a2decc76351a3f01e81ff9188115e30`.
 
-| Artifact | Path | SHA-256 |
-| --- | --- | --- |
-| Design brief | `/private/tmp/hexfield-terminal-checkpoint-review-brief.md` | `1b9003ad36438f12116c1c417b349f776d94674a6d0f2cec7447264103b3e601` |
-| Initial prompt and pinned source excerpts | `/private/tmp/hexfield-terminal-checkpoint-review/prompt.md` | `6555a8078c79a9f77922e258364276b02c1b390038624014b7178df749b4fdcf` |
-| Source manifest | `initial-source-manifest.json` in the archive | `2d89aa3668b57c028044258ad360e30e057b9dc6da27f2b9d9fcbba70673bf84` |
-| Initial raw response | `initial-raw-response.json` in the archive | `f0b05489f8b74f0a4a55167a938c7b5aac8f1fb69dd879aab1ac38b77fdd722b` |
-| Follow-up prompt and repair/export excerpts | `/private/tmp/hexfield-terminal-checkpoint-review/followup-prompt.md` | `8d5e6628b301a4c73600ec26e0c7e6277bb5912f6b92489f88021f5c593565c1` |
-| Follow-up source manifest | `followup-source-manifest.json` in the archive | `ae8de3b681c0ef85d2eced1ac4261e4b495cf7c405695176843102781442d49b` |
-| Follow-up raw response with repair and export excerpts | `followup-raw-response.json` in the archive | `a86b7f6f8dd0422a3a5b004231dfb831340eb6cd75a47c46d5013c7216a1395c` |
+| Artifact                                               | Path                                                                  | SHA-256                                                            |
+| ------------------------------------------------------ | --------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| Design brief                                           | `/private/tmp/hexfield-terminal-checkpoint-review-brief.md`           | `1b9003ad36438f12116c1c417b349f776d94674a6d0f2cec7447264103b3e601` |
+| Initial prompt and pinned source excerpts              | `/private/tmp/hexfield-terminal-checkpoint-review/prompt.md`          | `6555a8078c79a9f77922e258364276b02c1b390038624014b7178df749b4fdcf` |
+| Source manifest                                        | `initial-source-manifest.json` in the archive                         | `2d89aa3668b57c028044258ad360e30e057b9dc6da27f2b9d9fcbba70673bf84` |
+| Initial raw response                                   | `initial-raw-response.json` in the archive                            | `f0b05489f8b74f0a4a55167a938c7b5aac8f1fb69dd879aab1ac38b77fdd722b` |
+| Follow-up prompt and repair/export excerpts            | `/private/tmp/hexfield-terminal-checkpoint-review/followup-prompt.md` | `8d5e6628b301a4c73600ec26e0c7e6277bb5912f6b92489f88021f5c593565c1` |
+| Follow-up source manifest                              | `followup-source-manifest.json` in the archive                        | `ae8de3b681c0ef85d2eced1ac4261e4b495cf7c405695176843102781442d49b` |
+| Follow-up raw response with repair and export excerpts | `followup-raw-response.json` in the archive                           | `a86b7f6f8dd0422a3a5b004231dfb831340eb6cd75a47c46d5013c7216a1395c` |
 
 Both CLI calls completed with exit status 0 and no permission denials. The prompts, excerpt bundles and extracted responses remain in the temporary review directory; the raw responses and manifests needed to verify the review are in the repository archive.
