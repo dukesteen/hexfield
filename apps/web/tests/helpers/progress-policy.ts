@@ -3,14 +3,13 @@ import {
   SETTLEMENT_COST,
   ROAD_COST,
   RESOURCES,
-  createBaseEngine,
+  engineForConfig,
   enumerateCommands,
 } from '@cp2p/engine';
 import type { CommandShape, Pending, ResourceCounts } from '@cp2p/engine';
 import { buildBoardGraph } from '@cp2p/engine/geometry';
 import type { Bot, BotRng, BotView } from '@cp2p/bots';
 
-const engine = createBaseEngine();
 const terrainResource: Readonly<Record<string, string>> = {
   mountains: 'ore',
   fields: 'grain',
@@ -35,7 +34,7 @@ export function progressCommand(
     return delegate.decide(view, pending, rng);
   if (phase === 'main' && !pending.allowed.includes('END_TURN'))
     return delegate.decide(view, pending, rng);
-  const candidates = enumerateCommands(engine, view.state, view.seat, view.priv, {
+  const candidates = enumerateCommands(engineForConfig(view.state.config), view.state, view.seat, view.priv, {
     candidateFilter: (command) =>
       pending.allowed.includes(command.type) &&
       [

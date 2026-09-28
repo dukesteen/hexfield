@@ -2,6 +2,9 @@ import { createFileRoute, notFound } from '@tanstack/react-router';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { standardFixedBoard } from '@cp2p/maps';
+import { FIVE_SIX_BOARD, engineForConfig, moduleSelection } from '@cp2p/engine';
+import * as v from 'valibot';
+import { toRenderModel } from '../../features/board/toRenderModel.js';
 import { buildBoardGraph } from '@cp2p/engine/geometry';
 import { BoardView } from '../../features/board/BoardView.js';
 import type { BoardEffect, BoardHit, BoardRenderer, RenderModel } from '@cp2p/renderer';
@@ -19,7 +22,7 @@ function required<T>(value: T | undefined, label: string): T {
   return value;
 }
 
-const model: RenderModel = {
+const standardModel: RenderModel = {
   hexes: board.hexes.map((hex) => ({
     ...hex,
     id: required(
@@ -49,6 +52,32 @@ const model: RenderModel = {
         ),
 };
 
+/** A generated 30-hex board with a sample two-hex fixture in the shape's fixture slot. */
+function fiveSixModel(): RenderModel {
+  const config = {
+    modules: moduleSelection(['base', 'five-six']),
+    seats: [0, 1, 2, 3, 4, 5] as const,
+    options: {},
+  };
+  const state = engineForConfig(config).createGame(
+    { ...config, seats: [...config.seats] },
+    new Uint8Array(32).fill(7),
+  );
+  const slot = required(FIVE_SIX_BOARD.fixtureSlots[0], 'five-six fixture slot');
+  return {
+    ...toRenderModel(state, 'spectator'),
+    fixtures: [
+      {
+        id: 'preview-track',
+        module: 'preview',
+        footprint: [slot.anchor, slot.outer],
+        orientation: 2,
+        art: 'barbarian-track',
+      },
+    ],
+  };
+}
+
 declare global {
   interface Window {
     __cp2pBoard?: { readonly renderer: BoardRenderer; readonly model: RenderModel };
@@ -56,6 +85,7 @@ declare global {
 }
 
 export const Route = createFileRoute('/dev/board')({
+  validateSearch: v.object({ layout: v.optional(v.picklist(['standard', 'five-six'])) }),
   beforeLoad: () => {
     if (!import.meta.env.DEV) throw notFound();
   },
@@ -64,6 +94,10 @@ export const Route = createFileRoute('/dev/board')({
 
 function BoardDevelopmentPage() {
   const { t } = useTranslation('common');
+  const layout = Route.useSearch().layout ?? 'standard';
+  const [model] = useState<RenderModel>(() =>
+    layout === 'five-six' ? fiveSixModel() : standardModel,
+  );
   const [rendererError, setRendererError] = useState<string | null>(null);
   const [reducedMotion, setReducedMotion] = useState(false);
   const [diagnostics, setDiagnostics] = useState({

@@ -3,9 +3,19 @@ import type { Texture } from 'pixi.js';
 import { buildBoardGraph, edgeToPixel, hexToPixel, vertexToPixel } from '@cp2p/engine/geometry';
 import type { BoardGraph, EdgeId, HexId, Point, VertexId } from '@cp2p/engine/geometry';
 import { hitTestBoard } from './input/hitTest.js';
-import { drawDefaultFixture, fixtureAnchorIds, fixtureBounds, hitTestFixture } from './fixtures.js';
+import {
+  drawDefaultFixture,
+  fixtureAnchorIds,
+  fixtureBounds,
+  fixtureCenters,
+  hitTestFixture,
+} from './fixtures.js';
 import { cameraPositionAtAnchor, clampCameraAxis, fitZoomToBounds } from './input/camera.js';
-import { artColorFromNumber, loadBoardTextures } from './assets/terrainTextures.js';
+import {
+  FIXTURE_ART_SIZE,
+  artColorFromNumber,
+  loadBoardTextures,
+} from './assets/terrainTextures.js';
 import { assignTerrainVariants } from './assets/terrainVariants.js';
 import { roadVariantForEdge } from './roadVariant.js';
 import type { BoardTextures } from './assets/terrainTextures.js';
@@ -28,6 +38,7 @@ import type {
   BoardHit,
   BoardRenderer,
   BoardRendererOptions,
+  RenderFixture,
   RenderLayerContext,
   RenderLayerPlugin,
   RenderModel,
@@ -1058,8 +1069,13 @@ export class PixiBoardRenderer implements BoardRenderer {
       if (name === 'fixtures')
         for (const fixture of model.fixtures ?? []) {
           const art = this.fixtureArt[fixture.art];
+          const texture = this.textures.fixtures[fixture.art];
           layer.addChild(
-            art ? art(fixture, context) : drawDefaultFixture(fixture, this.hexSize, context.theme),
+            art
+              ? art(fixture, context)
+              : texture
+                ? this.fixtureSprite(fixture, texture)
+                : drawDefaultFixture(fixture, this.hexSize, context.theme),
           );
         }
       const band =
@@ -1222,6 +1238,23 @@ export class PixiBoardRenderer implements BoardRenderer {
     sprite.height = this.hexSize * 1.25;
     sprite.rotation = Math.atan2(outward.y, outward.x) + Math.PI / 2;
     layer.addChild(sprite);
+  }
+
+  /**
+   * Two-hex art is authored east to west with its landing end on the right. Centre it on the
+   * footprint and rotate the landing end onto the anchor, next to the island.
+   */
+  private fixtureSprite(fixture: RenderFixture, texture: Texture): Sprite {
+    const [anchor, outer] = fixtureCenters(fixture, this.hexSize);
+    const sprite = new Sprite(texture);
+    sprite.anchor.set(0.5);
+    sprite.width = this.hexSize * 2 * Math.sqrt(3);
+    sprite.height = (sprite.width * FIXTURE_ART_SIZE.height) / FIXTURE_ART_SIZE.width;
+    if (anchor && outer) {
+      sprite.position.set((anchor.x + outer.x) / 2, (anchor.y + outer.y) / 2);
+      sprite.rotation = Math.atan2(anchor.y - outer.y, anchor.x - outer.x);
+    }
+    return sprite;
   }
 
   /** The fixture under a client point, when a fixture handler is registered. */

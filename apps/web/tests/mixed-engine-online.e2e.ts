@@ -14,7 +14,18 @@ test.skip(
 
 const signalingUrl = 'ws://127.0.0.1:8909';
 const appBaseUrl = `http://127.0.0.1:${process.env.PLAYWRIGHT_TEST_PORT ?? '5187'}`;
-const engineNames = ['chromium-a', 'chromium-b', 'firefox', 'webkit'] as const;
+/** Whole-test budget. Six seats add peers, deck passes and special build phases. */
+function modeTimeout(mode: 'signaling' | 'manual'): number {
+  const base = mode === 'manual' ? 300_000 : 240_000;
+  return seatCount === 6 ? base * 3 : base;
+}
+
+/** Four seats by default; `CP2P_MIXED_ENGINE_SEATS=6` runs the five-six acceptance game. */
+const seatCount = process.env.CP2P_MIXED_ENGINE_SEATS === '6' ? 6 : 4;
+const engineNames =
+  seatCount === 6
+    ? (['chromium-a', 'chromium-b', 'firefox-a', 'firefox-b', 'webkit-a', 'webkit-b'] as const)
+    : (['chromium-a', 'chromium-b', 'firefox', 'webkit'] as const);
 type EngineName = (typeof engineNames)[number];
 type Playwright = PlaywrightWorkerArgs['playwright'];
 const registryPaths = new WeakMap<Page, string>();
@@ -26,7 +37,7 @@ interface OpenedBrowserSet {
   readonly pages: readonly Page[];
 }
 
-async function launchFourEngines(playwright: Playwright): Promise<OpenedBrowserSet> {
+async function launchEngines(playwright: Playwright): Promise<OpenedBrowserSet> {
   const browsers: Browser[] = [];
   const contexts: BrowserContext[] = [];
   try {
@@ -41,14 +52,11 @@ async function launchFourEngines(playwright: Playwright): Promise<OpenedBrowserS
       reducedMotion: 'reduce',
       viewport: { width: 1280, height: 900 },
     } as const;
-    const first = await chromium.newContext(contextOptions);
-    contexts.push(first);
-    const second = await chromium.newContext(contextOptions);
-    contexts.push(second);
-    const third = await firefox.newContext(contextOptions);
-    contexts.push(third);
-    const fourth = await webkit.newContext(contextOptions);
-    contexts.push(fourth);
+    const owners =
+      seatCount === 6
+        ? [chromium, chromium, firefox, firefox, webkit, webkit]
+        : [chromium, chromium, firefox, webkit];
+    for (const owner of owners) contexts.push(await owner.newContext(contextOptions));
     await Promise.all(
       contexts.map(async (context) => {
         context.setDefaultTimeout(15_000);
@@ -650,13 +658,14 @@ async function withinDeadline<T>(work: Promise<T>, deadline: number): Promise<T>
   }
 }
 
-async function startFourPlayerRoom(
+async function startRoom(
   pages: readonly Page[],
   mode: 'signaling' | 'manual',
   deadline: number,
 ) {
   const [host, ...guests] = pages;
-  if (!host || guests.length !== 3) throw new Error('Expected four isolated browser pages');
+  if (!host || guests.length !== seatCount - 1)
+    throw new Error(`Expected ${seatCount} isolated browser pages`);
   const gameName = mode === 'signaling' ? 'Mixed signaling acceptance' : 'Mixed manual acceptance';
   await host.goto('/#/online/create');
   await expect(host.getByLabel('Room name', { exact: true })).toBeVisible();
@@ -664,7 +673,7 @@ async function startFourPlayerRoom(
   await host.getByLabel('Room name', { exact: true }).fill(gameName);
   await host.getByLabel('Your player name', { exact: true }).fill('Player 1');
   await host.getByText('Advanced connection options', { exact: true }).click();
-  await host.getByLabel('Player count').selectOption('4');
+  await host.getByLabel('Player count').selectOption(String(seatCount));
   await host.getByLabel('Victory points to win', { exact: true }).fill('3');
   await host
     .getByLabel('Invite friends with')
@@ -730,7 +739,7 @@ async function startFourPlayerRoom(
       // The overall test and subsequent play/audit limits stay unchanged.
       { timeout: remaining(deadline, 45_000), intervals: [100] },
     )
-    .toEqual([3, 3, 3, 3]);
+    .toEqual(pages.map(() => seatCount - 1));
   await Promise.all(pages.map((page) => page.getByRole('button', { name: 'Ready up' }).click()));
   await expect(host.getByRole('button', { name: 'Start game', exact: true })).toBeEnabled({
     timeout: remaining(deadline, 45_000),
@@ -1060,17 +1069,16 @@ async function finishAndAudit(
     expect(view?.audit).toBe('complete');
     expect(view?.auditOk).toBe(true);
     expect(view?.auditComplete).toBe(true);
-    expect(view?.peerCount).toBe(3);
+    expect(view?.peerCount).toBe(seatCount - 1);
   }
   return { ...diagnostic(), terminalSeq: head.seq, modeAuditCount: final.length };
 }
 
 async function runMode(playwright: Playwright, mode: 'signaling' | 'manual') {
   const started = Date.now();
-  const deadline = started + (mode === 'manual' ? 300_000 : 240_000) - 10_000;
-  const opened = await launchFourEngines(playwright);
-  const [host, second, third, fourth] = opened.pages;
-  if (!host || !second || !third || !fourth) throw new Error('Missing mixed-engine page');
+  const deadline = started + modeTimeout(mode) - 10_000;
+  const opened = await launchEngines(playwright);
+  if (opened.pages.length !== seatCount) throw new Error('Missing mixed-engine page');
   const errors: EngineName[] = [];
   for (const [index, page] of opened.pages.entries()) {
     const engine = engineNames[index];
@@ -1110,7 +1118,7 @@ async function runMode(playwright: Playwright, mode: 'signaling' | 'manual') {
       });
   }, 10_000);
   try {
-    const fixture = await startFourPlayerRoom(opened.pages, mode, deadline);
+    const fixture = await startRoom(opened.pages, mode, deadline);
     const lobbyElapsedMs = Date.now() - started;
     setPhase('setup');
     const setupStarted = Date.now();
@@ -1157,14 +1165,14 @@ async function runMode(playwright: Playwright, mode: 'signaling' | 'manual') {
   }
 }
 
-test('four mixed-engine contexts finish a signaling full-mesh game with matching audits', async ({
+test(`${seatCount} mixed-engine contexts finish a signaling full-mesh game with matching audits`, async ({
   playwright,
 }, testInfo) => {
   test.skip(
     process.env.CP2P_MIXED_ENGINE_MODE !== 'signaling',
     'The workflow runs one connection mode per job',
   );
-  test.setTimeout(240_000);
+  test.setTimeout(modeTimeout('signaling'));
   const result = await runMode(playwright, 'signaling');
   await testInfo.attach('mixed-engine-summary', {
     body: JSON.stringify(result, null, 2),
@@ -1172,14 +1180,14 @@ test('four mixed-engine contexts finish a signaling full-mesh game with matching
   });
 });
 
-test('four mixed-engine contexts finish a manual-relay full-mesh game with matching audits', async ({
+test(`${seatCount} mixed-engine contexts finish a manual-relay full-mesh game with matching audits`, async ({
   playwright,
 }, testInfo) => {
   test.skip(
     process.env.CP2P_MIXED_ENGINE_MODE !== 'manual-relay',
     'The workflow runs one connection mode per job',
   );
-  test.setTimeout(300_000);
+  test.setTimeout(modeTimeout('manual'));
   const result = await runMode(playwright, 'manual');
   await testInfo.attach('mixed-engine-summary', {
     body: JSON.stringify(result, null, 2),

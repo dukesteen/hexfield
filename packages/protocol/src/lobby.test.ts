@@ -1,6 +1,6 @@
 import { canonicalEncode, toBase64Url } from '@cp2p/codec';
 import { identityFromSecret, signObject } from '@cp2p/crypto';
-import { BASE_VERSION, ENGINE_VERSION } from '@cp2p/engine';
+import { BASE_VERSION, ENGINE_VERSION, FIVE_SIX_VERSION } from '@cp2p/engine';
 import type { GameConfig, Result } from '@cp2p/engine';
 import { afterEach, describe, expect, test } from 'vitest';
 import { LobbyController, verifyLobbyFreezeAgreement } from './lobby.js';
@@ -435,6 +435,44 @@ describe('signed lobby controller', () => {
     room.flush();
     expect(elected.state()?.version).toBe(2);
     expect(elected.state()?.seats[senderIndex]?.ready).toBe(true);
+  });
+
+  test('host configuration enforces the module catalogue, compatibility and seat ranges', () => {
+    const room = setup();
+    active.push(room);
+    room.flush();
+    const base = { id: 'base', version: BASE_VERSION };
+    const fiveSix = { id: 'five-six', version: FIVE_SIX_VERSION };
+    const seats = (count: number) => ([0, 1, 2, 3, 4, 5] as const).slice(0, count);
+    const attempt = (config: GameConfig) => room.host.configure(config);
+    // Five or six seats need five-six; five-six needs five or six seats.
+    expect(attempt({ modules: [base], seats: [...seats(5)], options: {} }).ok).toBe(false);
+    expect(attempt({ modules: [base, fiveSix], seats: [...seats(4)], options: {} }).ok).toBe(false);
+    // Unknown, later and repeated modules are refused before signing.
+    expect(
+      attempt({
+        modules: [base, fiveSix, { id: 'knights', version: '1.0.0' }],
+        seats: [...seats(6)],
+        options: {},
+      }).ok,
+    ).toBe(false);
+    expect(attempt({ modules: [base, base], seats: [...seats(3)], options: {} }).ok).toBe(false);
+    expect(attempt({ modules: [fiveSix], seats: [...seats(5)], options: {} }).ok).toBe(false);
+    expect(
+      attempt({
+        modules: [base, { ...fiveSix, version: '0.0.1' }],
+        seats: [...seats(6)],
+        options: {},
+      }).ok,
+    ).toBe(false);
+    // A valid six-seat five-six game is accepted and replicated.
+    value(attempt({ modules: [base, fiveSix], seats: [...seats(6)], options: {} }));
+    room.flush();
+    expect(room.second.state()?.config.modules.map((module) => module.id)).toEqual([
+      'base',
+      'five-six',
+    ]);
+    expect(room.second.state()?.seats).toHaveLength(6);
   });
 
   test('rejects unauthorized edits, spoofed requests, stale replay, and reports version mismatch', () => {
