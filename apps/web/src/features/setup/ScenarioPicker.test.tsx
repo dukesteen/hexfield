@@ -64,12 +64,12 @@ test('a five to six player game is offered the large seafaring variants only', (
 
 test('the seafaring switch is an indicator: it is never a way to add the bare module', () => {
   const onScenario = mount({ scenarioId: 'new-horizons' });
-  const seafaring = screen.getByRole('checkbox', { name: /Seafaring/ });
+  const seafaring = screen.getByRole('checkbox', { name: /^Seafaring/ });
   expect(seafaring).toHaveProperty('checked', true);
   expect(seafaring).toHaveProperty('disabled', true);
   cleanup();
   mount({ scenarioId: 'standard' });
-  const off = screen.getByRole('checkbox', { name: /Seafaring/ });
+  const off = screen.getByRole('checkbox', { name: /^Seafaring/ });
   expect(off).toHaveProperty('checked', false);
   expect(off).toHaveProperty('disabled', true);
   expect(screen.getByText(/choose a seafaring scenario above/)).toBeTruthy();
@@ -85,7 +85,7 @@ test('screens that cannot carry a seafaring board offer the classic scenarios on
       .getAllByRole('option')
       .map((option) => option.textContent),
   ).toEqual(['Standard island', 'Fixed island']);
-  const row = screen.getByRole('checkbox', { name: /Seafaring/ }).closest('label');
+  const row = screen.getByRole('checkbox', { name: /^Seafaring/ }).closest('label');
   expect(row?.textContent).toContain('not available yet');
 });
 

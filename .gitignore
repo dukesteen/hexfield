@@ -15,3 +15,6 @@ apps/web/dev/recovered-audit-fixture.json
 .dev.vars.*
 .env
 .env.*
+
+# Agent worktrees
+.claude/worktrees/

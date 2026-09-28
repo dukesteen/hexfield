@@ -30,6 +30,9 @@ interface ScenarioPickerProps {
   readonly classicOnly?: boolean;
 }
 
+/** Modules whose play screens are not built yet; their scenarios stay out of the picker. */
+const UNPLAYABLE_IN_UI = new Set(['knights']);
+
 /** Seafaring is only ever chosen through its scenarios, never as a bare module. */
 export function isSeafaringScenario(scenario: Scenario): boolean {
   return scenario.modules.includes('seafaring');
@@ -46,7 +49,9 @@ export function ScenarioPicker({
 }: ScenarioPickerProps) {
   const { t } = useTranslation('lobby');
   const choices = scenariosForSeats(seatCount).filter(
-    (scenario) => !classicOnly || !isSeafaringScenario(scenario),
+    (scenario) =>
+      (!classicOnly || !isSeafaringScenario(scenario)) &&
+      !scenario.modules.some((id) => UNPLAYABLE_IN_UI.has(id)),
   );
   const classic = choices.filter((scenario) => !isSeafaringScenario(scenario));
   const seafaring = choices.filter(isSeafaringScenario);
@@ -101,7 +106,11 @@ export function ScenarioPicker({
               : id === 'five-six'
                 ? t('lobby:expansionFiveSixSeats')
                 : state.kind === 'available'
-                  ? t(classicOnly ? 'lobby:expansionLater' : 'lobby:expansionViaScenario')
+                  ? t(
+                      classicOnly || UNPLAYABLE_IN_UI.has(id)
+                        ? 'lobby:expansionLater'
+                        : 'lobby:expansionViaScenario',
+                    )
                   : '';
           return (
             <label className="checkbox-row" key={id} data-expansion={id}>
