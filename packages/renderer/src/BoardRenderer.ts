@@ -13,12 +13,18 @@ import {
 import { cameraPositionAtAnchor, clampCameraAxis, fitZoomToBounds } from './input/camera.js';
 import {
   FIXTURE_ART_SIZE,
+  PIRATE_ART_SIZE,
+  SHIP_ART_SIZE,
   artColorFromNumber,
   loadBoardTextures,
+  loadSeafaringTextures,
 } from './assets/terrainTextures.js';
 import { assignTerrainVariants } from './assets/terrainVariants.js';
+import { hexExtents, isLandTerrain, islandBoundarySegments } from './boardShape.js';
+import { fogRevealShape } from './fogReveal.js';
 import { roadVariantForEdge } from './roadVariant.js';
-import type { BoardTextures } from './assets/terrainTextures.js';
+import { shipVariantForEdge } from './shipVariant.js';
+import type { BoardTextures, SeafaringTextures } from './assets/terrainTextures.js';
 import { sameAppearance } from './appearance.js';
 import {
   DICE_ROLL_DURATION_MS,
@@ -52,6 +58,8 @@ const HEX_SIZE = 54;
 const MIN_ZOOM = 0.35;
 const MAX_ZOOM = 3.2;
 const FIT_PADDING = 24;
+/** A seafaring board keeps more room, because the phone layout bleeds the canvas 30px past the screen. */
+const SEA_FIT_PADDING = 40;
 const ROAD_ART_SCALE = 0.64;
 const ROBBER_GROUND_ANCHOR = 70 / 92;
 const LANE_INSET = 0.22;
@@ -63,6 +71,8 @@ const EDGE_RING_LENGTH = 0.82;
 const EDGE_RING_HEIGHT = 0.32;
 const EDGE_INK = 0x18332b;
 const EDGE_PAPER = 0xfcfdfc;
+const WAKE_WIDTH = 0.26;
+const WAKE_INK = 0x0e3f5c;
 const SITE_HALO = 0.2;
 const SITE_RING = 0.11;
 const SITE_RING_WIDTH = 0.04;
@@ -70,6 +80,24 @@ const BRACKET_HALF = 0.46;
 const BRACKET_ARM = 0.16;
 const BADGE_RADIUS = 0.13;
 const PREVIEW_CORNER = 0.12;
+/** Ship art width in hex sizes, and where its waterline center sits in the art. */
+const SHIP_WIDTH = 0.95;
+const SHIP_ANCHOR = { x: 0.53, y: 0.66 } as const;
+const PIRATE_WIDTH = 1.2;
+const PIRATE_ANCHOR_Y = 0.8;
+const BONUS_CHIT_SIZE = 0.46;
+const BONUS_CHIT_OFFSET = { x: 0.3, y: -0.32 } as const;
+/** Extra water kept around an explicit-sea board and its scenery ring when fitting the camera. */
+const SEA_FIT_MARGIN = 0.1;
+/** The smallest zoom a fit may pick, below the pinch floor, so a large board still fits whole. */
+const FIT_FLOOR_ZOOM = 0.1;
+const SHIP_MOVE_MS = 700;
+/** One fog tile turning over, and the wait between the tiles of a batch. */
+const FOG_REVEAL_MS = 1000;
+const FOG_STAGGER_MS = 450;
+const FOG_MAX_STAGGERED = 4;
+const FOG_COLOR = 0xa9bcc6;
+const DEBUG_ISLAND_COLORS = [0xe63946, 0x1d7874, 0xf4a261, 0x6a4c93, 0x2a9d8f, 0xd62828, 0x3a86ff];
 const LAYER_NAMES = [
   'background',
   'fixtures',
@@ -77,11 +105,14 @@ const LAYER_NAMES = [
   'harbors',
   'tokens',
   'roads',
+  'ships',
   'edgeTargets',
   'edgeFocus',
   'buildings',
+  'bonus',
   'robber',
   'modulePieces',
+  'debug',
   'highlights',
   'focus',
   'effects',
@@ -129,6 +160,16 @@ function hexCorners(center: Point, size: number): number[] {
   return points;
 }
 
+/** True when a model draws with gold, fog, ships, the pirate or island bonus chits. */
+function needsSeafaringArt(model: RenderModel): boolean {
+  return (
+    model.ships !== undefined ||
+    model.pirateHex !== undefined ||
+    (model.islandBonuses?.length ?? 0) > 0 ||
+    model.hexes.some((hex) => hex.terrain === 'gold' || hex.terrain === 'fog')
+  );
+}
+
 /** A rules-neutral Pixi renderer. Coordinates passed to public methods are CSS client coordinates. */
 export class PixiBoardRenderer implements BoardRenderer {
   private readonly app: Application;
@@ -155,9 +196,19 @@ export class PixiBoardRenderer implements BoardRenderer {
   private effectFrame = 0;
   private robberSprite: Sprite | null = null;
   private robberMoveActive = false;
+  private pirateSprite: Sprite | null = null;
+  private pirateMoveActive = false;
+  private readonly shipNodes = new Map<EdgeId, Sprite>();
+  private readonly hiddenShips = new Set<EdgeId>();
+  private seafaring: SeafaringTextures | null = null;
+  private seafaringLoading: Promise<void> | null = null;
+  private debugIslands: boolean;
+  private readonly loadSeafaring: () => Promise<SeafaringTextures>;
   private readonly signatures = new Map<LayerName, string>();
   private readonly terrainVariants = new Map<string, 1 | 2 | 3>();
+  private readonly terrainByHex = new Map<string, string>();
   private terrainIdentity = '';
+  private terrainGraph = '';
   private graphIdentity = '';
   private readonly viewChangeListeners = new Set<() => void>();
   private viewSignature = '';
@@ -179,6 +230,7 @@ export class PixiBoardRenderer implements BoardRenderer {
   private hiddenBuilding: VertexId | null = null;
   private appearance: BoardAppearance;
   private zoom = 1;
+  private minZoom = MIN_ZOOM;
   private cameraX = 0;
   private cameraY = 0;
   private drag: { pointerId: number; x: number; y: number; moved: boolean } | null = null;
@@ -198,9 +250,14 @@ export class PixiBoardRenderer implements BoardRenderer {
     app: Application,
     options: BoardRendererOptions,
     private readonly textures: BoardTextures,
+    seafaring: SeafaringTextures | null,
+    loadSeafaring: () => Promise<SeafaringTextures>,
   ) {
     this.app = app;
     this.host = host;
+    this.seafaring = seafaring;
+    this.loadSeafaring = loadSeafaring;
+    this.debugIslands = options.debugIslands ?? false;
     this.hexSize = options.hexSize ?? HEX_SIZE;
     this.onSelect = options.onSelect;
     this.onHover = options.onHover;
@@ -220,11 +277,14 @@ export class PixiBoardRenderer implements BoardRenderer {
       harbors: new Container(),
       tokens: new Container(),
       roads: new Container(),
+      ships: new Container(),
       edgeTargets: new Container(),
       edgeFocus: new Container(),
       buildings: new Container(),
+      bonus: new Container(),
       robber: new Container(),
       modulePieces: new Container(),
+      debug: new Container(),
       highlights: new Container(),
       focus: new Container(),
       effects: new Container(),
@@ -276,7 +336,10 @@ export class PixiBoardRenderer implements BoardRenderer {
         MAX_ZOOM,
         hexSize,
       );
-      return new PixiBoardRenderer(host, app, options, textures);
+      const loadSeafaring = () =>
+        loadSeafaringTextures(devicePixelRatio, options.maxPixelRatio ?? 2, MAX_ZOOM, hexSize);
+      const seafaring = options.seafaring ? await loadSeafaring() : null;
+      return new PixiBoardRenderer(host, app, options, textures, seafaring, loadSeafaring);
     } catch (error) {
       try {
         if (app.renderer)
@@ -309,21 +372,46 @@ export class PixiBoardRenderer implements BoardRenderer {
         terrain: 'sea',
         token: null,
       }));
+      // A fog reveal changes one hex in place. Every other tile keeps the art it had.
+      const previous = graphIdentity === this.terrainGraph ? new Map(this.terrainVariants) : null;
+      const previousTerrain = new Map(this.terrainByHex);
       this.terrainVariants.clear();
-      for (const [id, variant] of assignTerrainVariants([...model.hexes, ...waterHexes]))
-        this.terrainVariants.set(id, variant);
+      this.terrainByHex.clear();
+      for (const hex of [...model.hexes, ...waterHexes]) this.terrainByHex.set(hex.id, hex.terrain);
+      for (const [id, variant] of assignTerrainVariants([...model.hexes, ...waterHexes])) {
+        const kept =
+          previous && previousTerrain.get(id) === this.terrainByHex.get(id)
+            ? previous.get(id)
+            : undefined;
+        this.terrainVariants.set(id, kept ?? variant);
+      }
       this.terrainIdentity = terrainIdentity;
+      this.terrainGraph = graphIdentity;
     }
+    this.ensureSeafaring(model);
     this.drawChanged('background', [
       this.appearance.theme,
       model.hexes.map(({ q, r, terrain }) => ({ q, r, terrain })),
     ]);
-    this.drawChanged('terrain', [model.hexes, model.fixtures ?? []]);
-    this.drawChanged('harbors', [model.harbors]);
+    this.drawChanged('terrain', [model.hexes, model.fixtures ?? [], this.seafaring !== null]);
+    this.drawChanged('harbors', [
+      model.harbors,
+      model.hexes.map(({ id, terrain }) => [id, terrain]),
+    ]);
     this.drawChanged('tokens', [model.hexes.map(({ id, q, r, token }) => ({ id, q, r, token }))]);
     this.drawChanged('roads', [model.roads, this.appearance.players]);
+    this.drawChanged('ships', [
+      model.ships ?? [],
+      this.appearance.players,
+      this.seafaring !== null,
+    ]);
     this.drawChanged('buildings', [model.buildings, this.appearance.players]);
-    this.drawChanged('robber', [model.robberHex, model.pirateHex]);
+    this.drawChanged('bonus', [model.islandBonuses ?? [], this.seafaring !== null]);
+    this.drawChanged('robber', [model.robberHex, model.pirateHex, this.seafaring !== null]);
+    this.drawChanged('debug', [
+      this.debugIslands,
+      model.hexes.map(({ q, r, terrain }) => [q, r, terrain]),
+    ]);
     this.drawChanged('fixtures', [
       model.fixtures ?? [],
       this.pluginSlices('fixtures'),
@@ -381,9 +469,16 @@ export class PixiBoardRenderer implements BoardRenderer {
     for (const id of highlights.edges ?? []) {
       const endpoints = this.edgeEndpoints(id);
       if (!endpoints) continue;
+      if (style.edgeTarget === 'ring') {
+        this.layers.edgeTargets.addChild(this.edgeRing(id, 0.9, 0.5, EDGE_PAPER));
+        continue;
+      }
       this.traceEdgeLane(lanes, dashes, endpoints[0], endpoints[1]);
       hasEdgeGeometry = true;
     }
+    const wake = style.edgeTarget === 'wake';
+    for (const id of highlights.selectedEdges ?? [])
+      if (this.edgeEndpoints(id)) layer.addChild(this.edgeRing(id, 1.05, 0.62, 0xf0b64a));
     const vertices = (highlights.vertices ?? []).filter(
       (id) => this.graph?.vertexIndex[id] !== undefined,
     );
@@ -430,15 +525,14 @@ export class PixiBoardRenderer implements BoardRenderer {
     }
     if (hasGeometry) layer.addChild(graphics);
     if (hasEdgeGeometry) {
-      lanes.stroke({
-        color: EDGE_INK,
-        alpha: 0.32,
-        width: this.hexSize * LANE_WIDTH,
-        cap: 'round',
-      });
+      lanes.stroke(
+        wake
+          ? { color: EDGE_PAPER, alpha: 0.62, width: this.hexSize * WAKE_WIDTH, cap: 'round' }
+          : { color: EDGE_INK, alpha: 0.32, width: this.hexSize * LANE_WIDTH, cap: 'round' },
+      );
       dashes.stroke({
-        color: EDGE_PAPER,
-        width: this.hexSize * LANE_DASH_WIDTH,
+        color: wake ? WAKE_INK : EDGE_PAPER,
+        width: this.hexSize * (wake ? LANE_DASH_WIDTH * 1.3 : LANE_DASH_WIDTH),
         cap: 'butt',
       });
       this.layers.edgeTargets.addChild(lanes, dashes);
@@ -497,6 +591,7 @@ export class PixiBoardRenderer implements BoardRenderer {
       }
       if (this.reducedMotion) continue;
       if (effect.kind === 'robber-move') this.cancelRobberMove();
+      if (effect.kind === 'pirate-move') this.cancelPirateMove();
       if (effect.kind === 'production-pulse') this.cancelProductionPulse();
       const active = this.createEffect(effect);
       if (active)
@@ -519,6 +614,7 @@ export class PixiBoardRenderer implements BoardRenderer {
     }
     this.activeEffects.clear();
     this.setRobberMoveActive(false);
+    this.setPirateMoveActive(false);
     this.renderFrame();
   }
 
@@ -543,7 +639,11 @@ export class PixiBoardRenderer implements BoardRenderer {
         ? DICE_ROLL_DURATION_MS
         : effect.kind === 'production-pulse'
           ? DICE_ROLL_DURATION_MS + PRODUCTION_TOKEN_PULSE_MS
-          : 420;
+          : effect.kind === 'ship-move'
+            ? SHIP_MOVE_MS
+            : effect.kind === 'fog-reveal'
+              ? FOG_REVEAL_MS + Math.min(effect.order ?? 0, FOG_MAX_STAGGERED) * FOG_STAGGER_MS
+              : 420;
     if (effect.kind === 'dice-roll') {
       if (effect.dice.some((face) => !Number.isInteger(face) || face < 1 || face > 6)) return null;
       const faceSize = Math.min(64, Math.max(56, this.app.screen.width * 0.07));
@@ -612,6 +712,93 @@ export class PixiBoardRenderer implements BoardRenderer {
         },
       };
     }
+    if (effect.kind === 'piece-pop' && effect.piece === 'ship') {
+      if (effect.at.kind !== 'edge') return null;
+      const sprite = this.shipSprite(
+        effect.at.id,
+        this.playerStyleMap().get(effect.seat)?.color ?? DEFAULT_PLAYER_STYLE.color,
+      );
+      const point = this.pointForHit(effect.at);
+      if (!sprite || !point) return null;
+      node.position.set(point.x, point.y);
+      sprite.position.set(0, 0);
+      node.addChild(sprite);
+      this.layers.effects.addChild(node);
+      return {
+        node,
+        duration,
+        update: (progress) => {
+          node.alpha = Math.min(1, progress * 4) * Math.max(0, 1 - progress * 0.25);
+          node.scale.set(0.65 + 0.45 * Math.sin(Math.PI * progress));
+          return progress >= 1;
+        },
+      };
+    }
+    if (effect.kind === 'ship-move') {
+      const sprite = this.shipSprite(
+        effect.toEdge,
+        this.playerStyleMap().get(effect.seat)?.color ?? DEFAULT_PLAYER_STYLE.color,
+      );
+      if (!sprite) return null;
+      const start = edgeToPixel(effect.fromEdge, this.hexSize).midpoint;
+      const end = edgeToPixel(effect.toEdge, this.hexSize).midpoint;
+      node.addChild(sprite);
+      this.layers.effects.addChild(node);
+      this.hiddenShips.add(effect.toEdge);
+      this.applyHiddenShips();
+      return {
+        node,
+        duration,
+        cleanup: () => {
+          this.hiddenShips.delete(effect.toEdge);
+          this.applyHiddenShips();
+        },
+        update: (progress) => {
+          const position = robberPosition(start, end, progress, this.hexSize * 0.12);
+          sprite.position.set(position.x, position.y);
+          return progress >= 1;
+        },
+      };
+    }
+    if (effect.kind === 'fog-reveal') {
+      const hex = this.model?.hexes.find((candidate) => candidate.id === effect.hex);
+      const texture = this.seafaring?.fog;
+      if (!hex || !texture) return null;
+      const center = hexToPixel(hex.q, hex.r, this.hexSize);
+      const sprite = new Sprite(texture);
+      sprite.anchor.set(0.5);
+      sprite.position.set(center.x, center.y);
+      sprite.width = (150 / 80) * this.hexSize;
+      sprite.height = (174 / 80) * this.hexSize;
+      const scaleX = sprite.scale.x;
+      const scaleY = sprite.scale.y;
+      // The new terrain is already drawn underneath. The fog turns edge-on to show it, and a
+      // light ring marks the tile as it lands.
+      const ring = new Graphics()
+        .poly(hexCorners(center, this.hexSize * 0.98), true)
+        .stroke({ color: 0xfff6d6, width: Math.max(2, this.hexSize * 0.08) });
+      ring.alpha = 0;
+      // Scale the ring about the hex centre.
+      ring.pivot.set(center.x, center.y);
+      ring.position.set(center.x, center.y);
+      node.addChild(sprite);
+      node.addChild(ring);
+      this.layers.effects.addChild(node);
+      const wait = Math.min(effect.order ?? 0, FOG_MAX_STAGGERED) * FOG_STAGGER_MS;
+      return {
+        node,
+        duration,
+        update: (progress) => {
+          const shown = fogRevealShape((progress * duration - wait) / FOG_REVEAL_MS);
+          sprite.scale.set(scaleX * shown.flip, scaleY * shown.lift);
+          sprite.position.y = center.y - shown.rise * this.hexSize;
+          sprite.visible = shown.flip > 0.002;
+          ring.alpha = shown.glow;
+          ring.scale.set(shown.glowScale);
+          return progress >= 1;
+        },
+      };
+    }
     if (effect.kind === 'piece-pop') {
       const point = this.pointForHit(effect.at);
       if (!point) return null;
@@ -649,18 +836,28 @@ export class PixiBoardRenderer implements BoardRenderer {
         },
       };
     }
+    if (effect.kind !== 'robber-move' && effect.kind !== 'pirate-move') return null;
+    const pirate = effect.kind === 'pirate-move';
     const from = this.model?.hexes.find((hex) => hex.id === effect.fromHex);
     const to = this.model?.hexes.find((hex) => hex.id === effect.toHex);
-    if (!from || !to) return null;
-    const sprite = new Sprite(this.textures.robber);
-    sprite.anchor.set(0.5, ROBBER_GROUND_ANCHOR);
-    sprite.width = this.hexSize * 0.8;
-    sprite.height = this.hexSize * 1.15;
+    const texture = pirate ? this.seafaring?.pirate : this.textures.robber;
+    if (!to || !texture || (!from && !pirate)) return null;
+    const sprite = new Sprite(texture);
+    if (pirate) {
+      sprite.anchor.set(0.5, PIRATE_ANCHOR_Y);
+      sprite.width = this.hexSize * PIRATE_WIDTH;
+      sprite.height = (sprite.width * PIRATE_ART_SIZE.height) / PIRATE_ART_SIZE.width;
+    } else {
+      sprite.anchor.set(0.5, ROBBER_GROUND_ANCHOR);
+      sprite.width = this.hexSize * 0.8;
+      sprite.height = this.hexSize * 1.15;
+    }
     node.addChild(sprite);
     this.layers.effects.addChild(node);
-    const start = hexToPixel(from.q, from.r, this.hexSize);
     const end = hexToPixel(to.q, to.r, this.hexSize);
-    this.setRobberMoveActive(true);
+    const start = from ? hexToPixel(from.q, from.r, this.hexSize) : end;
+    if (pirate) this.setPirateMoveActive(true);
+    else this.setRobberMoveActive(true);
     return {
       node,
       duration,
@@ -682,6 +879,7 @@ export class PixiBoardRenderer implements BoardRenderer {
         this.retireNode(effect.node);
         this.activeEffects.delete(id);
         if (effect.kind === 'robber-move') this.setRobberMoveActive(false);
+        if (effect.kind === 'pirate-move') this.setPirateMoveActive(false);
       }
     }
     this.renderFrame();
@@ -701,6 +899,24 @@ export class PixiBoardRenderer implements BoardRenderer {
   private setRobberMoveActive(active: boolean): void {
     this.robberMoveActive = active;
     if (this.robberSprite) this.robberSprite.visible = !active;
+  }
+
+  private setPirateMoveActive(active: boolean): void {
+    this.pirateMoveActive = active;
+    if (this.pirateSprite) this.pirateSprite.visible = !active;
+  }
+
+  private cancelPirateMove(): void {
+    for (const [id, effect] of this.activeEffects) {
+      if (effect.kind !== 'pirate-move') continue;
+      this.retireNode(effect.node);
+      this.activeEffects.delete(id);
+    }
+    this.setPirateMoveActive(false);
+  }
+
+  private applyHiddenShips(): void {
+    for (const [edge, sprite] of this.shipNodes) sprite.visible = !this.hiddenShips.has(edge);
   }
 
   private cancelRobberMove(): void {
@@ -789,6 +1005,35 @@ export class PixiBoardRenderer implements BoardRenderer {
     sprite.width = this.hexSize * ROAD_ART_SCALE;
     sprite.height = this.hexSize * ROAD_ART_SCALE;
     return sprite;
+  }
+
+  /** A ship at the edge midpoint, or null while the seafaring art is not loaded. */
+  private shipSprite(id: EdgeId, color: number): Sprite | null {
+    const textures = this.seafaring?.ships[artColorFromNumber(color)];
+    const texture = textures?.[shipVariantForEdge(id) - 1];
+    if (!texture) return null;
+    const sprite = new Sprite(texture);
+    const midpoint = edgeToPixel(id, this.hexSize).midpoint;
+    sprite.anchor.set(SHIP_ANCHOR.x, SHIP_ANCHOR.y);
+    sprite.position.set(midpoint.x, midpoint.y);
+    sprite.width = this.hexSize * SHIP_WIDTH;
+    sprite.height = (sprite.width * SHIP_ART_SIZE.height) / SHIP_ART_SIZE.width;
+    return sprite;
+  }
+
+  /** An outlined capsule around an edge, in board units of the hex size. */
+  private edgeRing(id: EdgeId, length: number, height: number, inner: number): Graphics {
+    const edge = edgeToPixel(id, this.hexSize);
+    const width = this.hexSize * length;
+    const tall = this.hexSize * height;
+    const ring = new Graphics()
+      .roundRect(-width / 2, -tall / 2, width, tall, tall / 2)
+      .stroke({ color: EDGE_INK, width: this.hexSize * 0.065 })
+      .roundRect(-width / 2, -tall / 2, width, tall, tall / 2)
+      .stroke({ color: inner, width: this.hexSize * 0.032 });
+    ring.position.set(edge.midpoint.x, edge.midpoint.y);
+    ring.rotation = edge.angle;
+    return ring;
   }
 
   private buildingNode(
@@ -890,6 +1135,33 @@ export class PixiBoardRenderer implements BoardRenderer {
     this.renderFrame();
   }
 
+  setDebugIslands(enabled: boolean): void {
+    if (this.destroyed || this.debugIslands === enabled) return;
+    this.debugIslands = enabled;
+    if (this.model) {
+      this.drawChanged('debug', [
+        enabled,
+        this.model.hexes.map(({ q, r, terrain }) => [q, r, terrain]),
+      ]);
+      this.renderFrame();
+    }
+  }
+
+  /** Load the seafaring art the first time a model needs it, then redraw the pieces that use it. */
+  private ensureSeafaring(model: RenderModel): void {
+    if (this.seafaring || this.seafaringLoading || !needsSeafaringArt(model)) return;
+    this.seafaringLoading = this.loadSeafaring()
+      .then((art) => {
+        if (this.destroyed) return undefined;
+        this.seafaring = art;
+        if (this.model) this.render(this.model);
+        return undefined;
+      })
+      .catch(() => {
+        this.seafaringLoading = null;
+      });
+  }
+
   setHarborLabelFormatter(formatter: (kind: string) => string): void {
     if (this.destroyed) return;
     this.harborLabelFormatter = formatter;
@@ -973,10 +1245,12 @@ export class PixiBoardRenderer implements BoardRenderer {
       height,
       this.app.screen.width,
       this.app.screen.height,
-      FIT_PADDING,
-      MIN_ZOOM,
+      this.hasSeaHexes() ? SEA_FIT_PADDING : FIT_PADDING,
+      FIT_FLOOR_ZOOM,
       MAX_ZOOM,
     );
+    // A board too big to fit at the usual floor lets the player zoom back out to the fit.
+    this.minZoom = Math.min(MIN_ZOOM, this.zoom);
     const centerX = (bounds.minX + bounds.maxX) / 2;
     const centerY = (bounds.minY + bounds.maxY) / 2;
     this.cameraX = this.app.screen.width / 2 - centerX * this.zoom;
@@ -1032,7 +1306,10 @@ export class PixiBoardRenderer implements BoardRenderer {
         for (const hex of model.hexes) {
           underlay
             .poly(hexCorners(hexToPixel(hex.q, hex.r, this.hexSize), this.hexSize * 1.01), true)
-            .fill({ color: hex.terrain === 'sea' ? 0x4d97ae : 0xe3c98f });
+            .fill({
+              color:
+                hex.terrain === 'sea' ? 0x4d97ae : hex.terrain === 'fog' ? FOG_COLOR : 0xe3c98f,
+            });
         }
         for (const center of this.waterCenters()) {
           underlay.poly(hexCorners(center, this.hexSize * 1.01), true).fill({ color: 0x4d97ae });
@@ -1050,6 +1327,15 @@ export class PixiBoardRenderer implements BoardRenderer {
 
       for (const hex of model.hexes) {
         const center = hexToPixel(hex.q, hex.r, this.hexSize);
+        if (hex.terrain === 'gold' || hex.terrain === 'fog') {
+          const art = this.seafaring;
+          const texture =
+            hex.terrain === 'fog'
+              ? art?.fog
+              : (art?.gold[(this.terrainVariants.get(hex.id) ?? 1) - 1] ?? art?.gold[0]);
+          if (texture) this.drawTerrainTile(layer, center, texture);
+          continue;
+        }
         const textureKey = TERRAIN_TEXTURES[hex.terrain];
         if (textureKey) {
           const variants = this.textures.terrain[textureKey];
@@ -1117,7 +1403,12 @@ export class PixiBoardRenderer implements BoardRenderer {
           .stroke({ color: 0xffffff, width: 7 })
           .stroke({ color, width: 3 });
       } else if (hit.kind === 'edge') {
-        if (this.focusPreview && this.focusPreview.piece !== 'road') return;
+        if (
+          this.focusPreview &&
+          this.focusPreview.piece !== 'road' &&
+          this.focusPreview.piece !== 'ship'
+        )
+          return;
         const endpoints = this.edgeEndpoints(hit.id);
         if (!endpoints) return;
         const edge = edgeToPixel(hit.id, this.hexSize);
@@ -1131,12 +1422,17 @@ export class PixiBoardRenderer implements BoardRenderer {
         ring.position.set(edge.midpoint.x, edge.midpoint.y);
         ring.rotation = edge.angle;
         this.layers.edgeFocus.addChild(ring);
-        if (this.focusPreview)
-          this.layers.edgeFocus.addChild(this.roadSprite(hit.id, this.focusPreview.color));
+        if (this.focusPreview) {
+          const preview =
+            this.focusPreview.piece === 'ship'
+              ? this.shipSprite(hit.id, this.focusPreview.color)
+              : this.roadSprite(hit.id, this.focusPreview.color);
+          if (preview) this.layers.edgeFocus.addChild(preview);
+        }
         return;
       } else {
         const previewPiece = this.focusPreview?.piece;
-        if (previewPiece === 'road') return;
+        if (previewPiece === 'road' || previewPiece === 'ship') return;
         const point = vertexToPixel(hit.id, this.hexSize);
         if (this.graph?.vertexIndex[hit.id] === undefined) return;
         const existing = model.buildings.find((building) => building.vertex === hit.id);
@@ -1191,8 +1487,64 @@ export class PixiBoardRenderer implements BoardRenderer {
         this.buildingNodes.set(building.vertex, node);
         layer.addChild(node);
       }
+    } else if (name === 'ships') {
+      this.shipNodes.clear();
+      const styles = this.playerStyleMap();
+      const ships = (model.ships ?? [])
+        .map((ship) => ({ ship, y: edgeToPixel(ship.edge, this.hexSize).midpoint.y }))
+        .toSorted((a, b) => a.y - b.y);
+      for (const { ship } of ships) {
+        const sprite = this.shipSprite(ship.edge, styles.get(ship.seat)?.color ?? 0x49665b);
+        if (!sprite) continue;
+        sprite.visible = !this.hiddenShips.has(ship.edge);
+        this.shipNodes.set(ship.edge, sprite);
+        layer.addChild(sprite);
+      }
+    } else if (name === 'bonus') {
+      const chits = this.seafaring?.chits;
+      for (const bonus of model.islandBonuses ?? []) {
+        const texture = chits?.[bonus.vp <= 1 ? 1 : 2];
+        if (!texture) continue;
+        const point = vertexToPixel(bonus.vertex, this.hexSize);
+        const sprite = new Sprite(texture);
+        sprite.anchor.set(0.5);
+        sprite.position.set(
+          point.x + this.hexSize * BONUS_CHIT_OFFSET.x,
+          point.y + this.hexSize * BONUS_CHIT_OFFSET.y,
+        );
+        sprite.width = this.hexSize * BONUS_CHIT_SIZE;
+        sprite.height = this.hexSize * BONUS_CHIT_SIZE;
+        layer.addChild(sprite);
+      }
+    } else if (name === 'debug') {
+      if (!this.debugIslands) return;
+      const outlines = new Graphics();
+      for (const { island, from, to } of islandBoundarySegments(model.hexes, this.hexSize)) {
+        outlines
+          .moveTo(from.x, from.y)
+          .lineTo(to.x, to.y)
+          .stroke({
+            color: DEBUG_ISLAND_COLORS[island % DEBUG_ISLAND_COLORS.length] ?? 0xe63946,
+            width: 3,
+          });
+      }
+      layer.addChild(outlines);
     } else if (name === 'robber') {
       this.robberSprite = null;
+      this.pirateSprite = null;
+      const pirateHex = model.hexes.find((candidate) => candidate.id === model.pirateHex);
+      const pirateTexture = this.seafaring?.pirate;
+      if (pirateHex && pirateTexture) {
+        const center = hexToPixel(pirateHex.q, pirateHex.r, this.hexSize);
+        const sprite = new Sprite(pirateTexture);
+        sprite.anchor.set(0.5, PIRATE_ANCHOR_Y);
+        sprite.position.set(center.x, center.y);
+        sprite.width = this.hexSize * PIRATE_WIDTH;
+        sprite.height = (sprite.width * PIRATE_ART_SIZE.height) / PIRATE_ART_SIZE.width;
+        sprite.visible = !this.pirateMoveActive;
+        layer.addChild(sprite);
+        this.pirateSprite = sprite;
+      }
       const hex = model.hexes.find((candidate) => candidate.id === model.robberHex);
       if (hex) {
         const center = hexToPixel(hex.q, hex.r, this.hexSize);
@@ -1219,7 +1571,7 @@ export class PixiBoardRenderer implements BoardRenderer {
     const second = vertexToPixel(endpoints[1], this.hexSize);
     const landHexId = graph.edgeHexes[edgeIndex]?.find((id) => {
       const hex = model.hexes.find((candidate) => candidate.id === id);
-      return hex !== undefined && hex.terrain !== 'sea';
+      return hex !== undefined && isLandTerrain(hex.terrain);
     });
     const landHex = model.hexes.find((hex) => hex.id === landHexId);
     if (!landHex) return;
@@ -1267,6 +1619,11 @@ export class PixiBoardRenderer implements BoardRenderer {
     return this.plugins
       .filter((plugin) => plugin.band === band)
       .map((plugin) => [plugin.id, this.model?.layers?.[plugin.id] ?? null]);
+  }
+
+  /** True for a board that lists its own sea hexes, which is how seafaring boards are made. */
+  private hasSeaHexes(): boolean {
+    return this.model?.hexes.some((hex) => hex.terrain === 'sea') ?? false;
   }
 
   private isStandardFootprint(): boolean {
@@ -1377,6 +1734,14 @@ export class PixiBoardRenderer implements BoardRenderer {
         maxY: this.hexSize * 6.5,
       };
     }
+    // Seafaring boards list their sea hexes. The scenery water ring around them is part of the
+    // picture, so the whole thing is fitted, not only the game hexes.
+    if (this.hasSeaHexes())
+      return hexExtents(
+        [...this.model.hexes, ...this.waterCells()],
+        this.hexSize,
+        this.hexSize * SEA_FIT_MARGIN,
+      );
     const centers = [
       ...this.model.hexes.map((hex) => hexToPixel(hex.q, hex.r, this.hexSize)),
       ...this.waterCenters(),
@@ -1414,7 +1779,7 @@ export class PixiBoardRenderer implements BoardRenderer {
           ? undefined
           : this.graph?.edgeHexes[edgeIndex]?.find((id) => {
               const hex = this.model?.hexes.find((candidate) => candidate.id === id);
-              return hex !== undefined && hex.terrain !== 'sea';
+              return hex !== undefined && isLandTerrain(hex.terrain);
             });
       const landHex = this.model.hexes.find((hex) => hex.id === landHexId);
       if (!endpoints || !landHex) continue;
@@ -1468,7 +1833,7 @@ export class PixiBoardRenderer implements BoardRenderer {
 
   private zoomAt(client: ScreenPoint, factor: number): void {
     const before = this.screenToBoard(client);
-    this.zoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, this.zoom * factor));
+    this.zoom = Math.max(this.minZoom, Math.min(MAX_ZOOM, this.zoom * factor));
     const rect = this.app.canvas.getBoundingClientRect();
     const scaleX = this.app.screen.width / rect.width || 1;
     const scaleY = this.app.screen.height / rect.height || 1;
@@ -1531,7 +1896,7 @@ export class PixiBoardRenderer implements BoardRenderer {
         const center = { x: (first.x + second.x) / 2, y: (first.y + second.y) / 2 };
         const worldAnchor = this.screenToBoard({ x: this.pinch.x, y: this.pinch.y });
         this.zoom = Math.max(
-          MIN_ZOOM,
+          this.minZoom,
           Math.min(MAX_ZOOM, this.pinch.zoom * (nextDistance / Math.max(1, this.pinch.distance))),
         );
         const rect = this.app.canvas.getBoundingClientRect();

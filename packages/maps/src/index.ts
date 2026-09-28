@@ -15,6 +15,7 @@ export {
 export type { Scenario, ScenarioBoard } from './scenarios.js';
 export {
   FIXED_SEAFARING,
+  FOGBOUND_FOG,
   OPEN_SEA_OPTIONS,
   harborProblems,
   tokenProblems,

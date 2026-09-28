@@ -205,6 +205,8 @@ export class LocalSession implements GameSession<LocalSessionSave> {
         throw new Error('Saved input log differs from replay');
       if (stateHash(made.value.state) !== save.finalHash)
         throw new Error('Saved final hash differs');
+      // Public-deck cards already shown live only in the log, so the live source learns them.
+      source.resume(made.value.log, made.value.state);
       replay.goLive();
       const session = new LocalSession(
         made.value,

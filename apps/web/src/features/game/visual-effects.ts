@@ -120,6 +120,23 @@ function tradeOfferById(state: GameState, id: unknown): PublicTradeTerms | undef
   };
 }
 
+/** The pirate's hex before a move, or null while it was off the board. */
+function pirateHexOf(state: GameState): HexId | null {
+  const ext = state.ext.seafaring;
+  return record(ext) && isHexId(ext.pirateHex) ? ext.pirateHex : null;
+}
+
+/** Hexes that were fog in `before` and are terrain now: each is a reveal to show. */
+function revealedHexes(before: GameState, after: GameState): HexId[] {
+  const fogged = new Set(
+    before.board.hexes.filter((hex) => hex.terrain === 'fog').map((hex) => hex.id),
+  );
+  if (fogged.size === 0) return [];
+  return after.board.hexes.flatMap((hex) =>
+    fogged.has(hex.id) && hex.terrain !== 'fog' && isHexId(hex.id) ? [hex.id] : [],
+  );
+}
+
 /** Translate an accepted public event batch into rule-neutral, deduplicated motion cues. */
 export function deriveVisualEffects(
   before: GameState,
@@ -127,7 +144,8 @@ export function deriveVisualEffects(
   events: readonly GameEvent[],
   revision: number,
 ): VisualEffects {
-  if (events.length === 0)
+  const reveals = revealedHexes(before, after);
+  if (events.length === 0 && reveals.length === 0)
     return { board: [], flights: [], tradeFlights: [], stealFlights: [], productionGains: [] };
   const board: BoardEffect[] = [];
   const flights: ResourceFlight[] = [];
@@ -152,6 +170,30 @@ export function deriveVisualEffects(
         seat: event.seat,
         at: { kind: 'edge', id: event.edge },
       });
+    } else if (event.type === 'shipBuilt' && isSeat(after, event.seat) && isEdgeId(event.edge)) {
+      board.push({
+        id,
+        kind: 'piece-pop',
+        piece: 'ship',
+        seat: event.seat,
+        at: { kind: 'edge', id: event.edge },
+      });
+    } else if (
+      event.type === 'shipMoved' &&
+      isSeat(after, event.seat) &&
+      isEdgeId(event.from) &&
+      isEdgeId(event.to)
+    ) {
+      board.push({
+        id,
+        kind: 'ship-move',
+        seat: event.seat,
+        fromEdge: event.from,
+        toEdge: event.to,
+      });
+    } else if (event.type === 'pirateMoved' && isHexId(event.hex)) {
+      const from = pirateHexOf(before);
+      board.push({ id, kind: 'pirate-move', fromHex: from, toHex: event.hex });
     } else if (
       (event.type === 'settlementBuilt' || event.type === 'cityBuilt') &&
       isSeat(after, event.seat) &&
@@ -202,6 +244,18 @@ export function deriveVisualEffects(
       event.victim !== event.thief
     ) {
       stealFlights.push({ id: `${id}:steal`, from: event.victim, to: event.thief });
+    } else if (
+      event.type === 'goldChosen' &&
+      isSeat(after, event.seat) &&
+      record(event.resources) &&
+      validResourceCounts(event.resources)
+    ) {
+      const gold = event.resources;
+      const resources: Partial<Record<Resource, number>> = {};
+      for (const resource of RESOURCES)
+        if (gold[resource] > 0) resources[resource] = gold[resource];
+      if (Object.keys(resources).length > 0)
+        productionGains.push({ id: `${id}:gold`, seat: event.seat, resources });
     } else if (event.type === 'resourcesProduced' && record(event.bySeat)) {
       for (const seat of after.config.seats) {
         const gains = event.bySeat[String(seat)];
@@ -256,6 +310,13 @@ export function deriveVisualEffects(
       }
     }
   }
+  for (const [order, hex] of reveals.entries())
+    board.push({
+      id: `${revision}:reveal:${hex}`,
+      kind: 'fog-reveal',
+      hex,
+      ...(order > 0 ? { order } : {}),
+    });
   if (board.some((effect) => effect.kind === 'dice-roll')) {
     const hexes = after.board.hexes.flatMap((hex) =>
       hex.token === roll && hex.id !== after.board.robberHex && isHexId(hex.id) ? [hex.id] : [],

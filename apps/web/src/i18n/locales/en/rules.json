@@ -1,10 +1,14 @@
 {
-  "action": { "confirm": "Confirm", "cancel": "Cancel" },
+  "action": {
+    "confirm": "Confirm",
+    "cancel": "Cancel"
+  },
   "validation": {
     "checking": "Checking this move…",
     "plenty": "These resource choices cannot be played right now.",
     "trade": "These trade terms cannot be offered right now. Check your cards and recipients.",
-    "bank": "This bank trade cannot be made right now. Check the amounts and available cards."
+    "bank": "This bank trade cannot be made right now. Check the amounts and available cards.",
+    "gold": "These resource choices cannot be taken right now."
   },
   "resource": {
     "brick": "Brick",
@@ -34,7 +38,7 @@
   },
   "steal": {
     "title": "Steal a card",
-    "instruction": "Choose a player next to the robber.",
+    "instruction": "Choose a player to steal from.",
     "seat_one": "{{player}} — {{count}} card",
     "seat_other": "{{player}} — {{count}} cards"
   },
@@ -87,5 +91,14 @@
     "get": "Bank gives",
     "rateBadge": "{{rate}} for 1",
     "cardsForUnits": "Give {{cards}} cards for {{units}} from the bank"
+  },
+  "gold": {
+    "title": "Gold field",
+    "instruction_one": "Your gold field paid out. Take 1 card of any kind.",
+    "instruction_other": "Your gold field paid out. Take {{count}} cards of any kind.",
+    "cards": "Cards to take",
+    "bankShort": "The bank cannot pay {{claim}} cards, so you take fewer.",
+    "bankHidden": "Bank counts are hidden. Choose only kinds the bank can still pay.",
+    "waiting": "Then: {{players}}"
   }
 }

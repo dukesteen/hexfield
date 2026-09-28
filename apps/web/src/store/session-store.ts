@@ -10,10 +10,11 @@ import type {
 import type { GameSession, SessionStatus, SessionTimer } from '../session';
 import type { RecoveryApprovalCandidate, SessionAuditState, SessionFairness } from '@cp2p/protocol';
 import type { EdgeId, VertexId } from '@cp2p/engine/geometry';
+import type { PlacementKind } from '../features/actions/availability';
 import { requiredHumanSeat } from './pending-actors';
 
 export type PlacementCandidate =
-  | { readonly kind: 'road' | 'freeRoad'; readonly id: EdgeId }
+  | { readonly kind: 'road' | 'freeRoad' | 'ship' | 'freeShip' | 'moveShip'; readonly id: EdgeId }
   | { readonly kind: 'settlement' | 'city'; readonly id: VertexId };
 
 interface SessionView {
@@ -31,9 +32,11 @@ interface SessionView {
   revealedSeat: Seat | null;
   privateState: PrivateState | null;
   legal: LegalCommandSet | null;
-  placementMode: 'road' | 'settlement' | 'city' | 'freeRoad' | 'robber' | null;
+  placementMode: PlacementKind | null;
   placementCancelled: boolean;
   previewPlacement: PlacementCandidate | null;
+  /** The ship chosen to sail, while its destination is still to be picked. */
+  shipMoveFrom: EdgeId | null;
   openDialog: 'discard' | 'steal' | 'trade' | 'bank' | 'plenty' | 'monopoly' | 'knight' | null;
   selectedCardSlot: string | null;
   optionalChoices: readonly Seat[];
@@ -50,6 +53,8 @@ interface SessionActions {
   cancelPlacement(): void;
   selectPlacementCandidate(candidate: PlacementCandidate): void;
   clearPlacementCandidate(): void;
+  /** Choose the ship to move, or `null` to go back to choosing one. */
+  selectShipToMove(edge: EdgeId | null): void;
   openActionDialog(dialog: SessionView['openDialog'], slotId?: string): void;
   closeActionDialog(): void;
   viewOptionalSeat(seat: Seat): void;
@@ -76,6 +81,7 @@ const emptyView: SessionView = {
   placementMode: null,
   placementCancelled: false,
   previewPlacement: null,
+  shipMoveFrom: null,
   openDialog: null,
   selectedCardSlot: null,
   optionalChoices: [],
@@ -96,6 +102,7 @@ const emptyActionView = {
   placementMode: null,
   placementCancelled: false,
   previewPlacement: null,
+  shipMoveFrom: null,
   openDialog: null,
   selectedCardSlot: null,
 } as const;
@@ -167,18 +174,26 @@ export const useSessionStore = create<SessionStore>((set) => ({
       placementMode: mode,
       placementCancelled: false,
       previewPlacement: null,
+      shipMoveFrom: null,
       openDialog: null,
     }),
   cancelPlacement: () =>
-    set({ placementMode: null, placementCancelled: true, previewPlacement: null }),
+    set({
+      placementMode: null,
+      placementCancelled: true,
+      previewPlacement: null,
+      shipMoveFrom: null,
+    }),
   selectPlacementCandidate: (candidate) => set({ previewPlacement: candidate }),
   clearPlacementCandidate: () => set({ previewPlacement: null }),
+  selectShipToMove: (edge) => set({ shipMoveFrom: edge, previewPlacement: null }),
   openActionDialog: (dialog, slotId) =>
     set({
       openDialog: dialog,
       selectedCardSlot: slotId ?? null,
       placementMode: null,
       previewPlacement: null,
+      shipMoveFrom: null,
     }),
   closeActionDialog: () => set({ openDialog: null, selectedCardSlot: null }),
   viewOptionalSeat: (seat) => {
@@ -315,7 +330,7 @@ export function attachSession(gameId: string, session: GameSession): () => void 
       ...(resetAction || visibleSeat === null
         ? emptyActionView
         : update.revision !== current.revision
-          ? { previewPlacement: null }
+          ? { previewPlacement: null, shipMoveFrom: null }
           : {}),
     });
     setPrivacyPaused(coverSeat !== null && visibleSeat === null);

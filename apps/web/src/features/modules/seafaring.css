@@ -1,0 +1,62 @@
+.desktop-build-grid[data-seafaring='true'] {
+  grid-template-columns: repeat(3, max-content);
+}
+.desktop-build-button {
+  position: relative;
+}
+.build-supply {
+  position: absolute;
+  right: 3px;
+  bottom: 2px;
+  min-width: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: var(--text);
+  color: var(--surface);
+  font-size: 10px;
+  line-height: 16px;
+  text-align: center;
+}
+.build-move {
+  font-size: 11px;
+}
+.build-supply-text {
+  color: var(--muted);
+  font:
+    12px 'DM Mono',
+    monospace;
+}
+.piece-choice {
+  display: inline-flex;
+  flex: none;
+  gap: 4px;
+}
+.mobile-next-step .piece-choice-button {
+  min-height: 44px;
+  padding: 4px 10px;
+}
+.island-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.island-chip img {
+  width: 18px;
+  height: 18px;
+}
+.gold-dialog-intro {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+/* Ships and moving them add two build buttons, so the first column takes a third grid column. */
+@media (min-width: 768px) and (min-height: 501px) {
+  .game-page .game-bottom:has(.desktop-build-grid[data-seafaring='true']) {
+    grid-template-columns: 206px minmax(0, 1fr) 116px 96px;
+  }
+}
+@media (min-width: 768px) and (max-width: 1100px) and (min-height: 501px) {
+  .game-page .game-bottom:has(.desktop-build-grid[data-seafaring='true']) {
+    grid-template-columns: 176px minmax(0, 1fr) 90px 78px;
+  }
+}

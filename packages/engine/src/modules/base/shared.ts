@@ -350,5 +350,5 @@ export function afterInput(state: GameState, ctx: HandlerContext): GameState {
       result: { winner: active.seat, reason: 'public-vp', atTurn: next.turn.number },
     };
   }
-  return next;
+  return next.result ? next : ctx.hooks.afterInput(next);
 }

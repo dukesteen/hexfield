@@ -4,6 +4,8 @@ import {
   getGameArtUrl,
   getPieceIconUrl,
   getResourceIconUrl,
+  getSeafaringIconUrl,
+  getShipIconUrl,
   type BoardHighlights,
   type BoardHit,
 } from '@cp2p/renderer';
@@ -15,14 +17,25 @@ import {
   RESOURCES,
   ROAD_COST,
   SETTLEMENT_COST,
+  SHIP_COST,
   type CommandShape,
   type GameState,
   type Pending,
   type Resource,
   type Seat,
 } from '@cp2p/engine';
-import { deriveActionAvailability, type PlacementKind } from '../actions/availability';
-import { DiscardDialog, MonopolyDialog, StealDialog, YearOfPlentyDialog } from '../dialogs';
+import {
+  deriveActionAvailability,
+  type PlacementChoice,
+  type PlacementKind,
+} from '../actions/availability';
+import {
+  DiscardDialog,
+  GoldDialog,
+  MonopolyDialog,
+  StealDialog,
+  YearOfPlentyDialog,
+} from '../dialogs';
 import { ActionPendingContext } from '../dialogs/DialogFrame';
 import { BankTradePicker, IncomingOffers, TradeComposer } from '../trade';
 import {
@@ -34,8 +47,54 @@ import { actingSeat } from '../../store/pending-actors';
 import type { GamePresentation } from '../../queries/repositories/saved-games';
 import { recordOrdinaryActionRejection } from './action-diagnostics';
 import { BuildCostsDialog } from './BuildCostsDialog.js';
+import { fogDrawPending, isSeafaring } from './seafaring';
 
-const boardOrder: readonly PlacementKind[] = ['settlement', 'road', 'city', 'freeRoad', 'robber'];
+const boardOrder: readonly PlacementKind[] = [
+  'settlement',
+  'road',
+  'ship',
+  'city',
+  'freeRoad',
+  'freeShip',
+  'robber',
+  'pirate',
+  'moveShip',
+];
+/** Kinds that only exist while a placement is forced, so they sit beside the board. */
+const STATUS_KINDS: ReadonlySet<PlacementKind> = new Set([
+  'freeRoad',
+  'freeShip',
+  'robber',
+  'pirate',
+]);
+type EdgeKind = 'road' | 'freeRoad' | 'ship' | 'freeShip' | 'moveShip';
+const EDGE_KINDS: ReadonlySet<PlacementKind> = new Set([
+  'road',
+  'freeRoad',
+  'ship',
+  'freeShip',
+  'moveShip',
+]);
+
+function isEdgeKind(kind: PlacementKind | undefined): kind is EdgeKind {
+  return kind !== undefined && EDGE_KINDS.has(kind);
+}
+
+/** Which forced choice a kind belongs to: a route piece, a free piece or the blocker. */
+function choiceFamily(kind: PlacementKind): 'route' | 'free' | 'blocker' | null {
+  if (kind === 'road' || kind === 'ship') return 'route';
+  if (kind === 'freeRoad' || kind === 'freeShip') return 'free';
+  if (kind === 'robber' || kind === 'pirate') return 'blocker';
+  return null;
+}
+
+/** The piece a confirmed placement puts on the board. */
+function placedPiece(kind: PlacementKind): 'road' | 'ship' | 'settlement' | 'city' | null {
+  if (kind === 'road' || kind === 'freeRoad') return 'road';
+  if (kind === 'ship' || kind === 'freeShip' || kind === 'moveShip') return 'ship';
+  if (kind === 'settlement' || kind === 'city') return kind;
+  return null;
+}
 const normalActionOrder: Readonly<Record<string, number>> = {
   ROLL_DICE: 0,
   END_TURN: 0,
@@ -63,6 +122,12 @@ const TURN_COMMANDS: ReadonlySet<string> = new Set(['ROLL_DICE', 'END_TURN', 'EN
 const closeForm = () => useSessionStore.getState().closeActionDialog();
 
 function ActionIcon({ kind, color }: { kind: string; color?: string | undefined }) {
+  if (kind === 'ship' || kind === 'freeShip' || kind === 'moveShip')
+    return <img className="action-icon" src={getShipIconUrl(color)} alt="" aria-hidden="true" />;
+  if (kind === 'pirate')
+    return (
+      <img className="action-icon" src={getSeafaringIconUrl('pirate')} alt="" aria-hidden="true" />
+    );
   const piece = kind === 'freeRoad' ? 'road' : kind;
   if (piece === 'road' || piece === 'settlement' || piece === 'city')
     return (
@@ -83,7 +148,7 @@ function ActionIcon({ kind, color }: { kind: string; color?: string | undefined 
 }
 
 function boardHitKind(kind: PlacementKind): BoardHit['kind'] {
-  return kind === 'road' || kind === 'freeRoad' ? 'edge' : kind === 'robber' ? 'hex' : 'vertex';
+  return isEdgeKind(kind) ? 'edge' : kind === 'robber' || kind === 'pirate' ? 'hex' : 'vertex';
 }
 
 function isEdgeId(id: string): id is EdgeId {
@@ -102,6 +167,9 @@ function placementHit(candidate: PlacementCandidate): BoardHit {
   switch (candidate.kind) {
     case 'road':
     case 'freeRoad':
+    case 'ship':
+    case 'freeShip':
+    case 'moveShip':
       return { kind: 'edge', id: candidate.id };
     case 'settlement':
     case 'city':
@@ -117,7 +185,9 @@ export interface GameActionController {
   highlights: BoardHighlights;
   focusTarget: BoardHit | null;
   placementConfirmation: {
-    piece: 'road' | 'settlement' | 'city';
+    piece: 'road' | 'ship' | 'settlement' | 'city';
+    /** True when the ship already exists and only sails to the marked edge. */
+    move: boolean;
     hit: BoardHit;
     label: string;
     confirm: () => void;
@@ -144,7 +214,18 @@ export interface GameActionController {
 
 export type NextStep =
   | { kind: 'command'; label: string; rollDice: boolean; run: () => void }
-  | { kind: 'board'; text: string; cancel?: () => void }
+  | {
+      kind: 'board';
+      text: string;
+      cancel?: () => void;
+      /** Pieces the seat may pick between for one forced placement, such as robber or pirate. */
+      alternatives?: readonly {
+        kind: PlacementKind;
+        label: string;
+        active: boolean;
+        select: () => void;
+      }[];
+    }
   | {
       kind: 'pending';
       text: string;
@@ -173,12 +254,20 @@ function afterNextPaint(): Promise<void> {
   });
 }
 
+/** How long a gold reveal plays on the board before its choice dialog covers it. */
+const GOLD_AFTER_REVEAL_MS = 1100;
+
 /** The controller only offers engine-provided commands and checks the live revision on submission. */
 export function useGameActions(
   state: GameState,
   pending: readonly Pending[],
   presentation: GamePresentation,
-  options: { compact?: boolean; onHandOff?: () => void; onFormClosed?: () => void } = {},
+  options: {
+    compact?: boolean;
+    reducedMotion?: boolean;
+    onHandOff?: () => void;
+    onFormClosed?: () => void;
+  } = {},
 ): GameActionController {
   const { t } = useTranslation('game');
   const seat = useSessionStore((store) => store.revealedSeat);
@@ -188,9 +277,11 @@ export function useGameActions(
   const voided = status?.kind === 'void';
   const conflicted = useSessionStore((store) => store.conflicted);
   const revision = useSessionStore((store) => store.revision);
+  const lastEvent = useSessionStore((store) => store.events)?.at(-1);
   const boardKind = useSessionStore((store) => store.placementMode);
   const boardCancelled = useSessionStore((store) => store.placementCancelled);
   const previewPlacement = useSessionStore((store) => store.previewPlacement);
+  const shipMoveFrom = useSessionStore((store) => store.shipMoveFrom);
   const form = useSessionStore((store) => store.openDialog);
   const slotId = useSessionStore((store) => store.selectedCardSlot);
   const optionalChoices = useSessionStore((store) => store.optionalChoices);
@@ -201,6 +292,16 @@ export function useGameActions(
   const [submittingCommand, setSubmittingCommand] = useState<CommandShape['type'] | null>(null);
   const isSubmitting = submittingCommand !== null;
   const actorSeat = actingSeat(state, pending);
+  // A gold reveal is answered at once, but its dialog waits until the tile has turned over.
+  const goldReveal = lastEvent?.type === 'fogRevealed' && lastEvent.terrain === 'gold';
+  const [goldShownAt, setGoldShownAt] = useState<number | null>(null);
+  const goldHeld = goldReveal && goldShownAt !== revision && !options.reducedMotion;
+  useEffect(() => {
+    if (!goldHeld) return undefined;
+    const timer = window.setTimeout(() => setGoldShownAt(revision), GOLD_AFTER_REVEAL_MS);
+    return () => window.clearTimeout(timer);
+  }, [goldHeld, revision]);
+  const revealing = fogDrawPending(pending) !== null || goldHeld;
   const availability = useMemo(
     () =>
       !voided && seat !== null && legal ? deriveActionAvailability(legal, pending, seat) : null,
@@ -218,7 +319,26 @@ export function useGameActions(
       : mandatoryPlacement
         ? availableBoardKinds[0]
         : undefined;
-  const choices = selectedKind && availability ? availability.placements[selectedKind] : noChoices;
+  const rawChoices =
+    selectedKind && availability ? availability.placements[selectedKind] : noChoices;
+  const movingShip = selectedKind === 'moveShip';
+  const moveFrom =
+    movingShip && shipMoveFrom !== null && rawChoices.some((choice) => choice.from === shipMoveFrom)
+      ? shipMoveFrom
+      : null;
+  const choices = useMemo(() => {
+    if (!movingShip) return rawChoices;
+    if (moveFrom !== null) return rawChoices.filter((choice) => choice.from === moveFrom);
+    // Choosing the ship comes first: one target per ship that has a move.
+    const seen = new Set<string>();
+    const ships: PlacementChoice[] = [];
+    for (const choice of rawChoices)
+      if (choice.from !== undefined && !seen.has(choice.from)) {
+        seen.add(choice.from);
+        ships.push({ id: choice.from, type: choice.type, command: choice.command });
+      }
+    return ships;
+  }, [movingShip, moveFrom, rawChoices]);
   const selectedPlacement =
     selectedKind && previewPlacement?.kind === selectedKind
       ? choices.find((choice) => choice.id === previewPlacement.id)
@@ -235,6 +355,7 @@ export function useGameActions(
         : {}),
       ...(hitKind === 'hex' ? { hexes: choices.map((choice) => choice.id).filter(isHexId) } : {}),
       mode: hitKind,
+      ...(moveFrom !== null && isEdgeId(moveFrom) ? { selectedEdges: [moveFrom] } : {}),
       style: {
         color: 0x61b89a,
         pulse: true,
@@ -243,9 +364,14 @@ export function useGameActions(
           : selectedKind === 'city'
             ? { vertexTarget: 'upgrade' as const }
             : {}),
+        ...(movingShip && moveFrom === null
+          ? { edgeTarget: 'ring' as const }
+          : movingShip || selectedKind === 'ship' || selectedKind === 'freeShip'
+            ? { edgeTarget: 'wake' as const }
+            : {}),
       },
     };
-  }, [choices, hitKind, selectedKind]);
+  }, [choices, hitKind, selectedKind, movingShip, moveFrom]);
   const playerLabel = (candidate: Seat) =>
     presentation.players.find((player) => player.seat === candidate)?.name ??
     t('game:playerFallback', { number: candidate + 1 });
@@ -346,6 +472,10 @@ export function useGameActions(
           useSessionStore.getState().clearPlacementCandidate();
           return;
         }
+        if (moveFrom !== null) {
+          useSessionStore.getState().selectShipToMove(null);
+          return;
+        }
         if (!mandatoryPlacement) useSessionStore.getState().cancelPlacement();
         useSessionStore.getState().closeActionDialog();
         return;
@@ -355,6 +485,7 @@ export function useGameActions(
         '1': 'road',
         '2': 'settlement',
         '3': 'city',
+        '4': 'ship',
       };
       const kind = shortcuts[event.key];
       if (previewPlacement) return;
@@ -392,7 +523,11 @@ export function useGameActions(
       useSessionStore.getState().clearPlacementCandidate();
       return;
     }
-    if ((selectedKind === 'road' || selectedKind === 'freeRoad') && hit.kind === 'edge') {
+    if (selectedKind === 'moveShip' && moveFrom === null && hit.kind === 'edge') {
+      useSessionStore.getState().selectShipToMove(hit.id);
+      return;
+    }
+    if (isEdgeKind(selectedKind) && hit.kind === 'edge') {
       useSessionStore.getState().selectPlacementCandidate({ kind: selectedKind, id: hit.id });
       return;
     }
@@ -440,7 +575,9 @@ export function useGameActions(
       : null;
     const context = harborLabel ? t('game:tileAndHarbor', { tiles, harbor: harborLabel }) : tiles;
     return t('game:targetOptionDetail', {
-      action: t(`game:placement.${selectedKind ?? 'road'}`),
+      action: t(
+        `game:placement.${selectedKind === 'moveShip' && moveFrom !== null ? 'moveShipTarget' : (selectedKind ?? 'road')}`,
+      ),
       number,
       context,
     });
@@ -468,7 +605,9 @@ export function useGameActions(
     ? 'discard'
     : availability?.availableTypes.includes('STEAL')
       ? 'steal'
-      : null;
+      : availability?.availableTypes.includes('CHOOSE_GOLD') && !goldHeld
+        ? 'gold'
+        : null;
   const visibleForm = forcedForm ?? form;
   const cardPlays = availability?.cardPlays ?? [];
   const closeFormAndFocus = () => {
@@ -515,6 +654,7 @@ export function useGameActions(
     options.onHandOff?.();
     const store = useSessionStore.getState();
     if (selectedKind !== kind) store.choosePlacement(kind);
+    else if (kind === 'moveShip' && moveFrom !== null) store.selectShipToMove(null);
     else if (mandatoryPlacement) store.clearPlacementCandidate();
     else store.cancelPlacement();
   };
@@ -525,7 +665,14 @@ export function useGameActions(
   const actionButtons = (groups: typeof primary) =>
     groups.flatMap((group) => {
       if (
-        ['RESPOND_TRADE', 'CANCEL_TRADE', 'CONFIRM_TRADE', 'STEAL', 'DISCARD'].includes(group.type)
+        [
+          'RESPOND_TRADE',
+          'CANCEL_TRADE',
+          'CONFIRM_TRADE',
+          'STEAL',
+          'DISCARD',
+          'CHOOSE_GOLD',
+        ].includes(group.type)
       )
         return [];
       const buttonClass = `button button-quiet action-control ${group.type in normalActionOrder ? 'action-normal-control' : ''} ${group.type === 'ROLL_DICE' ? 'action-roll-dice' : ''}`;
@@ -627,23 +774,37 @@ export function useGameActions(
   const placementInstruction = selectedKind
     ? selectedPlacement
       ? t('game:placementSelectedInstruction', {
-          piece: t(`game:piece.${selectedKind === 'freeRoad' ? 'road' : selectedKind}`),
+          piece: t(`game:piece.${placedPiece(selectedKind) ?? 'road'}`),
         })
       : selectedKind === 'road' || selectedKind === 'freeRoad'
         ? t('game:roadInstruction', { count: choices.length })
-        : selectedKind === 'settlement' || selectedKind === 'city'
-          ? t('game:buildingInstruction', { count: choices.length })
-          : t('game:boardInstruction', { action: t(`game:placement.${selectedKind}`) })
+        : selectedKind === 'ship' || selectedKind === 'freeShip'
+          ? t('game:shipInstruction', { count: choices.length })
+          : selectedKind === 'moveShip'
+            ? t(moveFrom === null ? 'game:moveShipPick' : 'game:moveShipTarget', {
+                count: choices.length,
+              })
+            : selectedKind === 'settlement' || selectedKind === 'city'
+              ? t('game:buildingInstruction', { count: choices.length })
+              : t('game:boardInstruction', { action: t(`game:placement.${selectedKind}`) })
     : null;
+  const alternativeFamily = selectedKind ? choiceFamily(selectedKind) : null;
+  const alternatives =
+    mandatoryPlacement && alternativeFamily !== null
+      ? availableBoardKinds.filter((kind) => choiceFamily(kind) === alternativeFamily)
+      : [];
+  const contextKinds = availableBoardKinds.filter(
+    (kind) => STATUS_KINDS.has(kind) || (alternatives.length > 1 && alternatives.includes(kind)),
+  );
 
   const dock = (
     <section className="action-dock" aria-label={t('game:actions')} aria-busy={isSubmitting}>
       <div className="action-dock-heading">
         <h2>{t('game:actions')}</h2>
-        {isSubmitting ? (
+        {isSubmitting || revealing ? (
           <span className="action-pending" role="status">
             <span className="action-spinner" aria-hidden="true" />
-            {t('game:submittingAction')}
+            {t(isSubmitting ? 'game:submittingAction' : 'game:fogRevealing')}
           </span>
         ) : (
           <button
@@ -761,11 +922,27 @@ export function useGameActions(
       )}
     </span>
   );
+  const seafaring = isSeafaring(state);
+  const shipsLeft = state.seats.find((item) => item.seat === (seat ?? actorSeat))?.piecesLeft.ship;
   const buildChoices = [
     { kind: 'road', label: t('game:buildCosts.road'), cost: ROAD_COST },
     { kind: 'settlement', label: t('game:buildCosts.settlement'), cost: SETTLEMENT_COST },
     { kind: 'city', label: t('game:buildCosts.city'), cost: CITY_COST },
+    ...(seafaring
+      ? [
+          {
+            kind: 'ship' as const,
+            label: t('game:buildCosts.ship'),
+            cost: { ...SHIP_COST, brick: 0, grain: 0, ore: 0 },
+          },
+        ]
+      : []),
   ] as const;
+  const pieceIcon = (kind: (typeof buildChoices)[number]['kind']) =>
+    kind === 'ship' ? getShipIconUrl(playerColor) : getPieceIconUrl(kind, playerColor);
+  const supplyLabel = (kind: (typeof buildChoices)[number]['kind']) =>
+    kind === 'ship' ? t('game:shipsLeft', { count: shipsLeft ?? 0 }) : '';
+  const moveShipAvailable = availability?.placements.moveShip.length ?? 0;
   const buyDevCard = primary.find((group) => group.type === 'BUY_DEV_CARD')?.commands[0];
   const bankTrade = normalGroups.find((group) => group.type === 'MARITIME_TRADE');
   const playerTrade = normalGroups.find(
@@ -794,24 +971,55 @@ export function useGameActions(
           ?
         </button>
       </div>
-      <div className="desktop-build-grid" role="group" aria-label={t('game:chooseBoardAction')}>
+      <div
+        className="desktop-build-grid"
+        data-seafaring={seafaring}
+        role="group"
+        aria-label={t('game:chooseBoardAction')}
+      >
         {buildChoices.map(({ kind, label, cost }) => {
           const available = availability?.placements[kind].length;
+          const supply = supplyLabel(kind);
           return (
             <button
               className={`desktop-build-button ${selectedKind === kind ? 'is-selected' : ''}`}
               type="button"
               key={kind}
               disabled={!actionsEnabled || !available}
-              aria-label={t(`game:buildAction.${kind}`)}
-              title={`${label} · ${costTitle(cost)}`}
+              aria-label={
+                supply
+                  ? `${t(`game:buildAction.${kind}`)}, ${supply}`
+                  : t(`game:buildAction.${kind}`)
+              }
+              title={`${label} · ${costTitle(cost)}${supply ? ` · ${supply}` : ''}`}
               aria-pressed={selectedKind === kind}
               onClick={() => chooseBoardAction(kind)}
             >
-              <img src={getPieceIconUrl(kind, playerColor)} alt="" aria-hidden="true" />
+              <img src={pieceIcon(kind)} alt="" aria-hidden="true" />
+              {kind === 'ship' && (
+                <b className="build-supply" aria-hidden="true">
+                  {shipsLeft ?? 0}
+                </b>
+              )}
             </button>
           );
         })}
+        {seafaring && (
+          <button
+            className={`desktop-build-button ${selectedKind === 'moveShip' ? 'is-selected' : ''}`}
+            type="button"
+            disabled={!actionsEnabled || moveShipAvailable === 0}
+            aria-label={t('game:buildAction.moveShip')}
+            title={`${t('game:buildAction.moveShip')} · ${t('game:moveShipOnce')}`}
+            aria-pressed={selectedKind === 'moveShip'}
+            onClick={() => chooseBoardAction('moveShip')}
+          >
+            <img src={getShipIconUrl(playerColor, 5)} alt="" aria-hidden="true" />
+            <b className="build-supply build-move" aria-hidden="true">
+              ⇄
+            </b>
+          </button>
+        )}
         <button
           className="desktop-build-button"
           type="button"
@@ -831,26 +1039,28 @@ export function useGameActions(
     </section>
   );
   const desktopStatus = (
-    <div className="desktop-action-status" aria-busy={isSubmitting}>
-      {(availableBoardKinds.some((kind) => kind === 'freeRoad' || kind === 'robber') ||
-        contextualGroups.length > 0 ||
-        cardPlayButtons.length > 0) && (
+    <div className="desktop-action-status" aria-busy={isSubmitting || revealing}>
+      {revealing && (
+        <p className="desktop-fog-revealing action-pending" role="status">
+          <span className="action-spinner" aria-hidden="true" />
+          {t('game:fogRevealing')}
+        </p>
+      )}
+      {(contextKinds.length > 0 || contextualGroups.length > 0 || cardPlayButtons.length > 0) && (
         <div className="desktop-context-actions" role="group" aria-label={t('game:contextActions')}>
-          {availableBoardKinds
-            .filter((kind) => kind === 'freeRoad' || kind === 'robber')
-            .map((kind) => (
-              <button
-                className={`button action-control ${selectedKind === kind ? 'button-primary' : 'button-quiet'}`}
-                type="button"
-                key={kind}
-                disabled={!actionsEnabled}
-                aria-pressed={selectedKind === kind}
-                onClick={() => chooseBoardAction(kind)}
-              >
-                <ActionIcon kind={kind} color={playerColor} />
-                <span>{t(`game:buildAction.${kind}`)}</span>
-              </button>
-            ))}
+          {contextKinds.map((kind) => (
+            <button
+              className={`button action-control ${selectedKind === kind ? 'button-primary' : 'button-quiet'}`}
+              type="button"
+              key={kind}
+              disabled={!actionsEnabled}
+              aria-pressed={selectedKind === kind}
+              onClick={() => chooseBoardAction(kind)}
+            >
+              <ActionIcon kind={kind} color={playerColor} />
+              <span>{t(`game:buildAction.${kind}`)}</span>
+            </button>
+          ))}
           {actionButtons(contextualGroups.filter((group) => group.type !== 'BUY_DEV_CARD'))}
           {cardPlayButtons}
         </div>
@@ -955,18 +1165,37 @@ export function useGameActions(
             aria-pressed={selectedKind === kind}
             onClick={() => chooseBoardAction(kind)}
           >
+            <img className="mobile-build-art" src={pieceIcon(kind)} alt="" aria-hidden="true" />
+            <span className="mobile-build-copy">
+              <strong>{label}</strong>
+              {costIcons(cost)}
+              {supplyLabel(kind) && (
+                <small className="build-supply-text">{supplyLabel(kind)}</small>
+              )}
+            </span>
+          </button>
+        ))}
+        {seafaring && (
+          <button
+            className={`mobile-build-row ${selectedKind === 'moveShip' ? 'is-selected' : ''}`}
+            type="button"
+            disabled={!actionsEnabled || moveShipAvailable === 0}
+            aria-label={t('game:buildAction.moveShip')}
+            aria-pressed={selectedKind === 'moveShip'}
+            onClick={() => chooseBoardAction('moveShip')}
+          >
             <img
               className="mobile-build-art"
-              src={getPieceIconUrl(kind, playerColor)}
+              src={getShipIconUrl(playerColor, 5)}
               alt=""
               aria-hidden="true"
             />
             <span className="mobile-build-copy">
-              <strong>{label}</strong>
-              {costIcons(cost)}
+              <strong>{t('game:buildAction.moveShip')}</strong>
+              <small className="build-supply-text">{t('game:moveShipOnce')}</small>
             </span>
           </button>
-        ))}
+        )}
         <button
           className="mobile-build-row"
           type="button"
@@ -1029,6 +1258,7 @@ export function useGameActions(
           <>
             {visibleForm === 'discard' && <DiscardDialog {...formProps} />}
             {visibleForm === 'steal' && <StealDialog {...formProps} />}
+            {visibleForm === 'gold' && <GoldDialog {...formProps} />}
             {visibleForm === 'trade' && (
               <TradeComposer {...formProps} onCancel={closeFormAndFocus} />
             )}
@@ -1084,6 +1314,8 @@ export function useGameActions(
           }
         : {}),
     };
+  } else if (revealing) {
+    nextStep = { kind: 'pending', text: t('game:fogRevealing') };
   } else if (error) {
     nextStep = { kind: 'text', tone: 'alert', text: error };
   } else if (seat === null || !availability) {
@@ -1093,9 +1325,28 @@ export function useGameActions(
       kind: 'board',
       text: selectedPlacement
         ? t('game:cockpit.confirmOnBoard')
-        : t('game:cockpit.tapTarget', { target: t(`game:placement.${selectedKind}`) }),
+        : t('game:cockpit.tapTarget', {
+            target: t(
+              `game:placement.${selectedKind === 'moveShip' && moveFrom !== null ? 'moveShipTarget' : selectedKind}`,
+            ),
+          }),
       ...(!mandatoryPlacement && !selectedPlacement
-        ? { cancel: () => useSessionStore.getState().cancelPlacement() }
+        ? {
+            cancel: () =>
+              moveFrom !== null
+                ? useSessionStore.getState().selectShipToMove(null)
+                : useSessionStore.getState().cancelPlacement(),
+          }
+        : {}),
+      ...(alternatives.length > 1
+        ? {
+            alternatives: alternatives.map((kind) => ({
+              kind,
+              label: t(`game:choice.${kind}`),
+              active: kind === selectedKind,
+              select: () => chooseBoardAction(kind),
+            })),
+          }
         : {}),
     };
   } else if (promotedCommand) {
@@ -1114,10 +1365,12 @@ export function useGameActions(
     contextualGroups.length +
     sheetNormalGroups.length;
 
+  const confirmedPiece = selectedKind ? placedPiece(selectedKind) : null;
   const placementConfirmation =
-    selectedPlacement && focusTarget && selectedKind && selectedKind !== 'robber'
+    selectedPlacement && focusTarget && confirmedPiece
       ? {
-          piece: selectedKind === 'freeRoad' ? ('road' as const) : selectedKind,
+          piece: confirmedPiece,
+          move: selectedKind === 'moveShip',
           hit: focusTarget,
           label: targetLabel(focusTarget),
           confirm: () => submit(selectedPlacement.command),

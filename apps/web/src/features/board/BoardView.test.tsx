@@ -54,6 +54,7 @@ function prepareRenderer(): void {
     setFocusTarget,
     setAppearance: vi.fn<BoardRenderer['setAppearance']>(),
     setReducedMotion: vi.fn<BoardRenderer['setReducedMotion']>(),
+    setDebugIslands: vi.fn<BoardRenderer['setDebugIslands']>(),
     playEffects: vi.fn<BoardRenderer['playEffects']>(),
     skipAnimations: vi.fn<BoardRenderer['skipAnimations']>(),
     getDiagnostics: vi.fn<BoardRenderer['getDiagnostics']>(() => ({

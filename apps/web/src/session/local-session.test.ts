@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import type { GameConfig, Seat } from '@cp2p/engine';
-import { standardFixedBoard } from '@cp2p/maps';
+import { FOGBOUND_FOG, SCENARIOS, scenarioConfig, standardFixedBoard } from '@cp2p/maps';
 import { LocalSession } from './local-session.js';
 import type { Entropy } from './random.js';
 import type { SessionScheduler, SessionUpdate } from './types.js';
@@ -57,6 +57,8 @@ class Clock implements SessionScheduler {
 }
 
 const seats: Seat[] = [0, 1, 2];
+const drawn = (state: { decks: Record<string, { drawn: unknown[] }> }) =>
+  state.decks['fog-terrain']?.drawn.length ?? 0;
 function config(options: Record<string, unknown> = {}): GameConfig {
   return {
     modules: [{ id: 'base', version: '1.0.0' }],
@@ -283,5 +285,55 @@ describe('LocalSession', () => {
     expect(restored.value.getState()).toEqual(session.getState());
     restored.value.dispose();
     session.dispose();
+  });
+
+  test('a saved fogbound game resumed mid-reveal never shows a fog tile twice', () => {
+    const scenario = SCENARIOS.find((item) => item.id === 'fogbound');
+    if (!scenario) throw new Error('Missing fogbound scenario');
+    const clock = new Clock();
+    const made = LocalSession.create({
+      config: scenarioConfig(scenario, 3),
+      humanSeats: [],
+      botSeats: seats,
+      genesisSeed: new Uint8Array(32).fill(4),
+      botDelayMs: 0,
+      entropy: entropy(7),
+      scheduler: clock,
+    });
+    if (!made.ok) throw new Error(made.error.message);
+    // Play until some tiles are revealed but the stacks are far from empty.
+    for (let ticks = 0; drawn(made.value.getState()) < 2 && ticks < 20_000; ticks++)
+      if (!clock.tick()) break;
+    expect(drawn(made.value.getState())).toBeGreaterThanOrEqual(2);
+    expect(made.value.getState().result).toBeNull();
+    const save = made.value.exportSave();
+    made.value.dispose();
+    const resumed = LocalSession.restore(save, { entropy: entropy(99), scheduler: new Clock() });
+    if (!resumed.ok) throw new Error(resumed.error.message);
+    const shown = drawn(resumed.value.getState());
+    // Play the resumed game to its end, then count every tile of the whole log.
+    const later = new Clock();
+    const again = LocalSession.restore(save, { entropy: entropy(99), scheduler: later });
+    if (!again.ok) throw new Error(again.error.message);
+    for (let ticks = 0; !again.value.getState().result && ticks < 20_000; ticks++)
+      if (!later.tick()) break;
+    const inputs = [
+      ...again.value.exportSave().genesis,
+      ...again.value.exportSave().batches.flatMap((batch) => [batch.submitted, ...batch.generated]),
+    ];
+    for (const [deck, declared] of [
+      ['fog-terrain', FOGBOUND_FOG.terrains],
+      ['fog-token', FOGBOUND_FOG.tokens],
+    ] as [string, Record<string, number>][]) {
+      const counts: Record<string, number> = {};
+      for (const input of inputs)
+        if (input.kind === 'system' && input.deck === deck && typeof input.card === 'string')
+          counts[input.card] = (counts[input.card] ?? 0) + 1;
+      for (const [card, count] of Object.entries(counts))
+        expect(count, `${deck} ${card}`).toBeLessThanOrEqual(declared[card] ?? 0);
+    }
+    expect(drawn(again.value.getState())).toBeGreaterThanOrEqual(shown);
+    resumed.value.dispose();
+    again.value.dispose();
   });
 });
