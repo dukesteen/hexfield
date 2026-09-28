@@ -470,5 +470,8 @@
   "expansion_explorers": "Explorers",
   "expansionLater": "not available yet",
   "expansionConflict": "can't be combined with {{module}}",
-  "expansionFiveSixSeats": "turned on automatically for five or six players"
+  "expansionFiveSixSeats": "turned on automatically for five or six players",
+  "scenarioGroupClassic": "Classic",
+  "scenarioGroupSeafaring": "Seafaring",
+  "expansionViaScenario": "choose a seafaring scenario above"
 }

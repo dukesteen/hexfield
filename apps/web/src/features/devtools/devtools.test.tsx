@@ -42,6 +42,7 @@ describe('development diagnostics', () => {
       setFocusTarget() {},
       setAppearance() {},
       setReducedMotion() {},
+      setDebugIslands() {},
       playEffects() {},
       skipAnimations() {},
       getDiagnostics: () => ({

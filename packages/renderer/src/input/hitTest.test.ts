@@ -123,3 +123,47 @@ test('edge distance uses exact topology endpoints and selects only legal edges',
     }),
   ).toBeNull();
 });
+
+/** A land hex among sea hexes, like a seafaring board. */
+const seaBoard = buildBoardGraph([
+  { q: 0, r: 0 },
+  { q: 1, r: 0 },
+  { q: 1, r: -1 },
+]);
+
+test('a ship edge between two sea hexes is hit only while it is a legal target', () => {
+  const edge = seaBoard.edgeIds.find((id) => {
+    const owners = seaBoard.edgeHexes[seaBoard.edgeIndex[id] ?? -1] ?? [];
+    return owners.length === 2 && owners.includes('h:1,0') && owners.includes('h:1,-1');
+  });
+  if (!edge) throw new Error('The sea board has no edge between the two sea hexes');
+  const middle = edgeToPixel(edge, 54).midpoint;
+  const options = {
+    graph: seaBoard,
+    point: middle,
+    hexSize: 54,
+    worldUnitsPerCssPixel: 1,
+    mode: 'edge' as const,
+  };
+  expect(hitTestBoard({ ...options, legalEdges: new Set([edge]) })).toEqual({
+    kind: 'edge',
+    id: edge,
+  });
+  expect(hitTestBoard({ ...options, legalEdges: new Set() })).toBeNull();
+});
+
+test('the pirate can be sent to any legal sea hex and to no other hex', () => {
+  const sea = 'h:1,0';
+  const options = {
+    graph: seaBoard,
+    point: hexToPixel(1, 0, 54),
+    hexSize: 54,
+    worldUnitsPerCssPixel: 1,
+    mode: 'hex' as const,
+  };
+  expect(hitTestBoard({ ...options, legalHexes: new Set([sea]) })).toEqual({
+    kind: 'hex',
+    id: sea,
+  });
+  expect(hitTestBoard({ ...options, legalHexes: new Set(['h:0,0']) })).toBeNull();
+});

@@ -320,6 +320,43 @@ test('building candidate remains changeable and clears on cancellation, privacy,
   }
 });
 
+test('the chosen ship and its destination clear when the choice, privacy or revision changes', () => {
+  const source = sessionFixture();
+  const human = source.getState().turn.activeSeat;
+  const fixture = fakeView(source, [human]);
+  const detach = attachSession('ship-move', fixture.session);
+  const ship = 'e:1,1,W' as EdgeId;
+  const target = { kind: 'moveShip' as const, id: 'e:4,4,W' as EdgeId };
+  try {
+    useSessionStore.getState().choosePlacement('moveShip');
+    expect(useSessionStore.getState().shipMoveFrom).toBeNull();
+    useSessionStore.getState().selectShipToMove(ship);
+    expect(useSessionStore.getState().shipMoveFrom).toBe(ship);
+    useSessionStore.getState().selectPlacementCandidate(target);
+    expect(useSessionStore.getState().previewPlacement).toEqual(target);
+    // Going back to choose another ship drops the destination too.
+    useSessionStore.getState().selectShipToMove(null);
+    expect(useSessionStore.getState().shipMoveFrom).toBeNull();
+    expect(useSessionStore.getState().previewPlacement).toBeNull();
+    useSessionStore.getState().selectShipToMove(ship);
+    useSessionStore.getState().choosePlacement('ship');
+    expect(useSessionStore.getState().shipMoveFrom).toBeNull();
+    useSessionStore.getState().choosePlacement('moveShip');
+    useSessionStore.getState().selectShipToMove(ship);
+    useSessionStore.getState().cancelPlacement();
+    expect(useSessionStore.getState().shipMoveFrom).toBeNull();
+    useSessionStore.getState().choosePlacement('moveShip');
+    useSessionStore.getState().selectShipToMove(ship);
+    fixture.advanceRevision();
+    expect(useSessionStore.getState().shipMoveFrom).toBeNull();
+    useSessionStore.getState().selectShipToMove(ship);
+    useSessionStore.getState().conceal();
+    expect(useSessionStore.getState().shipMoveFrom).toBeNull();
+  } finally {
+    detach();
+  }
+});
+
 test('real three-human snake setup hands control to each pending placement seat', async () => {
   const session = sessionFixture([0, 1, 2]);
   const detach = attachSession('snake-setup', session);

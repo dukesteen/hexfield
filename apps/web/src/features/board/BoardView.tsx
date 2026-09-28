@@ -32,6 +32,19 @@ export interface BoardViewProps {
   readonly moduleIds?: readonly string[];
   /** A tap on a board fixture, such as a module track. */
   readonly onFixtureSelect?: (fixtureId: string) => void;
+  /** Outline every island. Defaults to the `debugIslands` flag in development builds. */
+  readonly debugIslands?: boolean;
+}
+
+/** Development builds outline islands when the page URL, or its hash route, has `debugIslands`. */
+function islandDebugFlag(): boolean {
+  if (!import.meta.env.DEV || typeof window === 'undefined') return false;
+  const { search, hash } = window.location;
+  const hashQuery = hash.includes('?') ? hash.slice(hash.indexOf('?')) : '';
+  return (
+    new URLSearchParams(search).has('debugIslands') ||
+    new URLSearchParams(hashQuery).has('debugIslands')
+  );
 }
 
 /** Renderer plugin layers and fixture art registered by the game's module UIs. */
@@ -64,6 +77,7 @@ export function BoardView({
   targetLabel,
   moduleIds = [],
   onFixtureSelect,
+  debugIslands = islandDebugFlag(),
 }: BoardViewProps) {
   const { t } = useTranslation('common');
   const keyboardHelpId = useId();
@@ -108,6 +122,7 @@ export function BoardView({
     formatHarborLabel,
     moduleIds,
     onFixtureSelect,
+    debugIslands,
   });
   propsRef.current = {
     model,
@@ -123,6 +138,7 @@ export function BoardView({
     formatHarborLabel,
     moduleIds,
     onFixtureSelect,
+    debugIslands,
   };
 
   useEffect(() => {
@@ -134,6 +150,8 @@ export function BoardView({
         const renderer = await createBoardRenderer(host, {
           ...(propsRef.current.appearance ? { appearance: propsRef.current.appearance } : {}),
           reducedMotion: propsRef.current.reducedMotion,
+          seafaring: propsRef.current.model.ships !== undefined,
+          debugIslands: propsRef.current.debugIslands,
           accessibleLabel: propsRef.current.label,
           formatHarborLabel: (kind) => propsRef.current.formatHarborLabel(kind),
           onSelect: (hit) => propsRef.current.onSelect?.(hit),
@@ -185,6 +203,7 @@ export function BoardView({
     [formatHarborLabel],
   );
   useEffect(() => rendererRef.current?.setReducedMotion(reducedMotion), [reducedMotion]);
+  useEffect(() => rendererRef.current?.setDebugIslands(debugIslands), [debugIslands]);
 
   const keyboardTargets: BoardHit[] = [
     ...(highlights?.vertices ?? []).map((id) => ({ kind: 'vertex' as const, id })),

@@ -2,13 +2,24 @@ import type { CommandShape, LegalCommandSet, Pending, Seat } from '@cp2p/engine'
 
 type CommandTemplate = LegalCommandSet['templates'][number];
 
-export type PlacementKind = 'road' | 'settlement' | 'city' | 'freeRoad' | 'robber';
+export type PlacementKind =
+  | 'road'
+  | 'settlement'
+  | 'city'
+  | 'freeRoad'
+  | 'robber'
+  | 'ship'
+  | 'freeShip'
+  | 'pirate'
+  | 'moveShip';
 
 export interface PlacementChoice {
   /** Canonical board id used by BoardView highlights and hit selection. */
   id: string;
   type: string;
   command: CommandShape;
+  /** For a ship move, the edge the ship sails from; `id` is the edge it sails to. */
+  from?: string;
 }
 
 export interface ActionGroup {
@@ -49,6 +60,10 @@ const placementTypes: Readonly<Record<string, { kind: PlacementKind; field: stri
   BUILD_CITY: { kind: 'city', field: 'vertex' },
   PLACE_FREE_ROAD: { kind: 'freeRoad', field: 'edge' },
   MOVE_ROBBER: { kind: 'robber', field: 'hex' },
+  BUILD_SHIP: { kind: 'ship', field: 'edge' },
+  PLACE_SETUP_SHIP: { kind: 'ship', field: 'edge' },
+  PLACE_FREE_SHIP: { kind: 'freeShip', field: 'edge' },
+  MOVE_PIRATE: { kind: 'pirate', field: 'hex' },
 };
 
 function groupByType(
@@ -96,6 +111,10 @@ export function deriveActionAvailability(
     city: [],
     freeRoad: [],
     robber: [],
+    ship: [],
+    freeShip: [],
+    pirate: [],
+    moveShip: [],
   };
   const primaryCommands: CommandShape[] = [];
   const primaryTemplates: CommandTemplate[] = [];
@@ -121,6 +140,14 @@ export function deriveActionAvailability(
   };
 
   for (const command of commands) {
+    if (
+      command.type === 'MOVE_SHIP' &&
+      typeof command.from === 'string' &&
+      typeof command.to === 'string'
+    ) {
+      placements.moveShip.push({ id: command.to, from: command.from, type: command.type, command });
+      continue;
+    }
     const placement = Object.hasOwn(placementTypes, command.type)
       ? placementTypes[command.type]
       : undefined;

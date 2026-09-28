@@ -236,6 +236,7 @@ export function OnlineConfiguration({
                 patch('mapLayout', 'balanced-random');
             }}
             onSeatCount={changeSeats}
+            classicOnly
           />
           {rules.optionsSchema
             .filter((spec) => spec.key !== 'mapLayout' || !fixedScenario)

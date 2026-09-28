@@ -26,6 +26,13 @@ interface ScenarioPickerProps {
   /** Request a seat count that enables or disables an expansion (five-six). */
   readonly onSeatCount: (count: number) => void;
   readonly disabled?: boolean;
+  /** Offer only the classic scenarios, for screens that cannot carry a seafaring board yet. */
+  readonly classicOnly?: boolean;
+}
+
+/** Seafaring is only ever chosen through its scenarios, never as a bare module. */
+export function isSeafaringScenario(scenario: Scenario): boolean {
+  return scenario.modules.includes('seafaring');
 }
 
 /** Scenario choice filtered by seat count, with the expansion matrix shown alongside. */
@@ -35,10 +42,15 @@ export function ScenarioPicker({
   onScenario,
   onSeatCount,
   disabled = false,
+  classicOnly = false,
 }: ScenarioPickerProps) {
   const { t } = useTranslation('lobby');
-  const choices = scenariosForSeats(seatCount);
-  const current = scenarioById(scenarioId) ?? choices[0];
+  const choices = scenariosForSeats(seatCount).filter(
+    (scenario) => !classicOnly || !isSeafaringScenario(scenario),
+  );
+  const classic = choices.filter((scenario) => !isSeafaringScenario(scenario));
+  const seafaring = choices.filter(isSeafaringScenario);
+  const current = choices.find((scenario) => scenario.id === scenarioId) ?? choices[0];
   const selected = current?.modules ?? ['base'];
   return (
     <div className="scenario-picker">
@@ -52,11 +64,26 @@ export function ScenarioPicker({
             if (next) onScenario(next);
           }}
         >
-          {choices.map((scenario) => (
-            <option key={scenario.id} value={scenario.id}>
-              {t(`lobby:${scenario.titleKey}`)}
-            </option>
-          ))}
+          {seafaring.length === 0
+            ? classic.map((scenario) => (
+                <option key={scenario.id} value={scenario.id}>
+                  {t(`lobby:${scenario.titleKey}`)}
+                </option>
+              ))
+            : [
+                { key: 'classic', label: t('lobby:scenarioGroupClassic'), items: classic },
+                { key: 'seafaring', label: t('lobby:scenarioGroupSeafaring'), items: seafaring },
+              ]
+                .filter((group) => group.items.length > 0)
+                .map((group) => (
+                  <optgroup key={group.key} label={group.label}>
+                    {group.items.map((scenario) => (
+                      <option key={scenario.id} value={scenario.id}>
+                        {t(`lobby:${scenario.titleKey}`)}
+                      </option>
+                    ))}
+                  </optgroup>
+                ))}
         </select>
       </label>
       {current && <p className="muted scenario-about">{t(`lobby:${current.aboutKey}`)}</p>}
@@ -64,6 +91,8 @@ export function ScenarioPicker({
         <legend>{t('lobby:expansions')}</legend>
         {EXPANSION_IDS.map((id) => {
           const state = expansionState(id, selected);
+          // Only five-six is a switch. Other expansions arrive with their scenarios.
+          const viaScenario = id !== 'five-six';
           const reason =
             state.kind === 'unavailable'
               ? state.reason === 'later'
@@ -71,13 +100,15 @@ export function ScenarioPicker({
                 : t('lobby:expansionConflict', { module: t(`lobby:expansion_${state.with ?? ''}`) })
               : id === 'five-six'
                 ? t('lobby:expansionFiveSixSeats')
-                : '';
+                : state.kind === 'available'
+                  ? t(classicOnly ? 'lobby:expansionLater' : 'lobby:expansionViaScenario')
+                  : '';
           return (
             <label className="checkbox-row" key={id} data-expansion={id}>
               <input
                 type="checkbox"
                 checked={state.kind === 'selected'}
-                disabled={disabled || state.kind === 'unavailable'}
+                disabled={disabled || state.kind === 'unavailable' || viaScenario}
                 onChange={(event) => {
                   if (id === 'five-six') onSeatCount(event.target.checked ? 5 : 4);
                 }}

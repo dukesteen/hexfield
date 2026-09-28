@@ -118,6 +118,51 @@ import token8Url from './redesign/token-8.svg?no-inline';
 import token9Url from './redesign/token-9.svg?no-inline';
 import turnMarkerUrl from './redesign/turn-marker.svg?no-inline';
 import fixtureBarbarianTrackUrl from './redesign/fixture-barbarian-track.svg?no-inline';
+import sfShipBlack1Url from './redesign/sf-ship-black-1.svg?no-inline';
+import sfShipBlack2Url from './redesign/sf-ship-black-2.svg?no-inline';
+import sfShipBlack3Url from './redesign/sf-ship-black-3.svg?no-inline';
+import sfShipBlack4Url from './redesign/sf-ship-black-4.svg?no-inline';
+import sfShipBlack5Url from './redesign/sf-ship-black-5.svg?no-inline';
+import sfShipBlack6Url from './redesign/sf-ship-black-6.svg?no-inline';
+import sfShipBlue1Url from './redesign/sf-ship-blue-1.svg?no-inline';
+import sfShipBlue2Url from './redesign/sf-ship-blue-2.svg?no-inline';
+import sfShipBlue3Url from './redesign/sf-ship-blue-3.svg?no-inline';
+import sfShipBlue4Url from './redesign/sf-ship-blue-4.svg?no-inline';
+import sfShipBlue5Url from './redesign/sf-ship-blue-5.svg?no-inline';
+import sfShipBlue6Url from './redesign/sf-ship-blue-6.svg?no-inline';
+import sfShipGreen1Url from './redesign/sf-ship-green-1.svg?no-inline';
+import sfShipGreen2Url from './redesign/sf-ship-green-2.svg?no-inline';
+import sfShipGreen3Url from './redesign/sf-ship-green-3.svg?no-inline';
+import sfShipGreen4Url from './redesign/sf-ship-green-4.svg?no-inline';
+import sfShipGreen5Url from './redesign/sf-ship-green-5.svg?no-inline';
+import sfShipGreen6Url from './redesign/sf-ship-green-6.svg?no-inline';
+import sfShipOrange1Url from './redesign/sf-ship-orange-1.svg?no-inline';
+import sfShipOrange2Url from './redesign/sf-ship-orange-2.svg?no-inline';
+import sfShipOrange3Url from './redesign/sf-ship-orange-3.svg?no-inline';
+import sfShipOrange4Url from './redesign/sf-ship-orange-4.svg?no-inline';
+import sfShipOrange5Url from './redesign/sf-ship-orange-5.svg?no-inline';
+import sfShipOrange6Url from './redesign/sf-ship-orange-6.svg?no-inline';
+import sfShipRed1Url from './redesign/sf-ship-red-1.svg?no-inline';
+import sfShipRed2Url from './redesign/sf-ship-red-2.svg?no-inline';
+import sfShipRed3Url from './redesign/sf-ship-red-3.svg?no-inline';
+import sfShipRed4Url from './redesign/sf-ship-red-4.svg?no-inline';
+import sfShipRed5Url from './redesign/sf-ship-red-5.svg?no-inline';
+import sfShipRed6Url from './redesign/sf-ship-red-6.svg?no-inline';
+import sfShipWhite1Url from './redesign/sf-ship-white-1.svg?no-inline';
+import sfShipWhite2Url from './redesign/sf-ship-white-2.svg?no-inline';
+import sfShipWhite3Url from './redesign/sf-ship-white-3.svg?no-inline';
+import sfShipWhite4Url from './redesign/sf-ship-white-4.svg?no-inline';
+import sfShipWhite5Url from './redesign/sf-ship-white-5.svg?no-inline';
+import sfShipWhite6Url from './redesign/sf-ship-white-6.svg?no-inline';
+import sfPirateShipUrl from './redesign/sf-pirate-ship.svg?no-inline';
+import sfTileFogUrl from './redesign/sf-tile-fog.svg?no-inline';
+import sfTileGold1Url from './redesign/sf-tile-gold-1.svg?no-inline';
+import sfTileGold2Url from './redesign/sf-tile-gold-2.svg?no-inline';
+import sfTileGold3Url from './redesign/sf-tile-gold-3.svg?no-inline';
+import sfChit1Url from './redesign/sf-chit-1.svg?no-inline';
+import sfChit2Url from './redesign/sf-chit-2.svg?no-inline';
+import sfIconGoldUrl from './redesign/sf-icon-gold.svg?no-inline';
+import sfIconShipUrl from './redesign/sf-icon-ship.svg?no-inline';
 
 const ART: Readonly<Record<string, string>> = {
   'board-background': boardBackgroundUrl,
@@ -236,6 +281,51 @@ const ART: Readonly<Record<string, string>> = {
   'token-8': token8Url,
   'token-9': token9Url,
   'turn-marker': turnMarkerUrl,
+  'sf-ship-black-1': sfShipBlack1Url,
+  'sf-ship-black-2': sfShipBlack2Url,
+  'sf-ship-black-3': sfShipBlack3Url,
+  'sf-ship-black-4': sfShipBlack4Url,
+  'sf-ship-black-5': sfShipBlack5Url,
+  'sf-ship-black-6': sfShipBlack6Url,
+  'sf-ship-blue-1': sfShipBlue1Url,
+  'sf-ship-blue-2': sfShipBlue2Url,
+  'sf-ship-blue-3': sfShipBlue3Url,
+  'sf-ship-blue-4': sfShipBlue4Url,
+  'sf-ship-blue-5': sfShipBlue5Url,
+  'sf-ship-blue-6': sfShipBlue6Url,
+  'sf-ship-green-1': sfShipGreen1Url,
+  'sf-ship-green-2': sfShipGreen2Url,
+  'sf-ship-green-3': sfShipGreen3Url,
+  'sf-ship-green-4': sfShipGreen4Url,
+  'sf-ship-green-5': sfShipGreen5Url,
+  'sf-ship-green-6': sfShipGreen6Url,
+  'sf-ship-orange-1': sfShipOrange1Url,
+  'sf-ship-orange-2': sfShipOrange2Url,
+  'sf-ship-orange-3': sfShipOrange3Url,
+  'sf-ship-orange-4': sfShipOrange4Url,
+  'sf-ship-orange-5': sfShipOrange5Url,
+  'sf-ship-orange-6': sfShipOrange6Url,
+  'sf-ship-red-1': sfShipRed1Url,
+  'sf-ship-red-2': sfShipRed2Url,
+  'sf-ship-red-3': sfShipRed3Url,
+  'sf-ship-red-4': sfShipRed4Url,
+  'sf-ship-red-5': sfShipRed5Url,
+  'sf-ship-red-6': sfShipRed6Url,
+  'sf-ship-white-1': sfShipWhite1Url,
+  'sf-ship-white-2': sfShipWhite2Url,
+  'sf-ship-white-3': sfShipWhite3Url,
+  'sf-ship-white-4': sfShipWhite4Url,
+  'sf-ship-white-5': sfShipWhite5Url,
+  'sf-ship-white-6': sfShipWhite6Url,
+  'sf-pirate-ship': sfPirateShipUrl,
+  'sf-tile-fog': sfTileFogUrl,
+  'sf-tile-gold-1': sfTileGold1Url,
+  'sf-tile-gold-2': sfTileGold2Url,
+  'sf-tile-gold-3': sfTileGold3Url,
+  'sf-chit-1': sfChit1Url,
+  'sf-chit-2': sfChit2Url,
+  'sf-icon-gold': sfIconGoldUrl,
+  'sf-icon-ship': sfIconShipUrl,
 };
 const texturePromises = new Map<string, Promise<Texture>>();
 const TERRAIN_NAMES = ['forest', 'hills', 'pasture', 'fields', 'mountains', 'sea'] as const;
@@ -279,6 +369,21 @@ export interface BoardTextures {
   readonly fixtures: Readonly<Record<string, Texture>>;
 }
 
+/** Seafaring art, loaded on demand for boards that use it. Ship index 0 to 5 is variant 1 to 6. */
+export interface SeafaringTextures {
+  readonly gold: readonly Texture[];
+  readonly fog: Texture;
+  readonly ships: Readonly<Record<ArtColor, readonly Texture[]>>;
+  readonly pirate: Texture;
+  readonly chits: Readonly<Record<1 | 2, Texture>>;
+}
+
+/** Authored sizes of the seafaring piece art. */
+export const SHIP_ART_SIZE = { width: 40, height: 38 } as const;
+export const PIRATE_ART_SIZE = { width: 84, height: 80 } as const;
+export const SHIP_VARIANTS = 6;
+const ART_COLORS: readonly ArtColor[] = ['blue', 'orange', 'green', 'red', 'black', 'white'];
+
 /** Authored size of the two-hex fixture art: two pointy-top hexes joined east to west. */
 export const FIXTURE_ART_SIZE = { width: 289, height: 174 } as const;
 
@@ -303,6 +408,18 @@ export function getFactionUrl(color: string): string {
 }
 export function getAwardCardUrl(award: 'longestRoad' | 'largestArmy'): string {
   return artUrl(award === 'longestRoad' ? 'card-longest-road' : 'card-largest-army');
+}
+/** A colored ship for lists and buttons. The default heading points up and to the right. */
+export function getShipIconUrl(color = 'blue', variant = 3): string {
+  const clamped = Math.min(SHIP_VARIANTS, Math.max(1, Math.trunc(variant) || 1));
+  return artUrl(`sf-ship-${normalizeArtColor(color)}-${clamped}`);
+}
+export function getSeafaringIconUrl(icon: 'gold' | 'ship' | 'pirate'): string {
+  return artUrl(icon === 'pirate' ? 'sf-pirate-ship' : `sf-icon-${icon}`);
+}
+/** The island-bonus chit for a bonus worth `vp` points. Only 1 and 2 have their own art. */
+export function getIslandChitUrl(vp: number): string {
+  return artUrl(vp <= 1 ? 'sf-chit-1' : 'sf-chit-2');
 }
 export function getGameArtUrl(art: GameArt): string {
   return artUrl(GAME_ART[art]);
@@ -521,6 +638,76 @@ export async function loadBoardTextures(
     frame: get('board-frame'),
     underlay: get('board-underlay'),
     fixtures: { 'barbarian-track': get('fixture-barbarian-track') },
+  };
+}
+
+function loadSized(
+  key: string,
+  size: { width: number; height: number },
+  resolution: number,
+): Promise<Texture> {
+  return loadTexture(key, size.width, size.height, resolution);
+}
+
+export async function loadSeafaringTextures(
+  devicePixelRatio: number,
+  maxPixelRatio: number,
+  maxZoom: number,
+  hexSize: number,
+): Promise<SeafaringTextures> {
+  const resolution = (width: number, height: number, source: { width: number; height: number }) =>
+    rasterResolution(
+      devicePixelRatio,
+      maxPixelRatio,
+      maxZoom,
+      width,
+      height,
+      source.width,
+      source.height,
+    );
+  const tile = { width: 150, height: 174 };
+  const chit = { width: 50, height: 50 };
+  const tileResolution = resolution((150 / 80) * hexSize, (174 / 80) * hexSize, tile);
+  const shipResolution = resolution(hexSize * 0.95, hexSize * 0.9, SHIP_ART_SIZE);
+  const [gold, fog, ships, pirate, chit1, chit2] = await Promise.all([
+    Promise.all([1, 2, 3].map((v) => loadSized(`sf-tile-gold-${v}`, tile, tileResolution))),
+    loadSized('sf-tile-fog', tile, tileResolution),
+    Promise.all(
+      ART_COLORS.map(
+        async (color) =>
+          [
+            color,
+            await Promise.all(
+              Array.from({ length: SHIP_VARIANTS }, (_, index) =>
+                loadSized(`sf-ship-${color}-${index + 1}`, SHIP_ART_SIZE, shipResolution),
+              ),
+            ),
+          ] as const,
+      ),
+    ),
+    loadSized(
+      'sf-pirate-ship',
+      PIRATE_ART_SIZE,
+      resolution(hexSize * 1.2, hexSize * 1.15, PIRATE_ART_SIZE),
+    ),
+    loadSized('sf-chit-1', chit, resolution(hexSize * 0.46, hexSize * 0.46, chit)),
+    loadSized('sf-chit-2', chit, resolution(hexSize * 0.46, hexSize * 0.46, chit)),
+  ]);
+  const byColor = new Map(ships);
+  const shipsFor = (color: ArtColor): readonly Texture[] => byColor.get(color) ?? [];
+  return {
+    gold,
+    fog,
+    ships: {
+      blue: shipsFor('blue'),
+      orange: shipsFor('orange'),
+      green: shipsFor('green'),
+      red: shipsFor('red'),
+      black: shipsFor('black'),
+      white: shipsFor('white'),
+    },
+    pirate,
+    chits: { 1: chit1, 2: chit2 },
   };
 }
 

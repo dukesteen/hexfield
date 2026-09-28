@@ -143,6 +143,7 @@ const renderer: BoardRenderer = {
   setFocusTarget: (_hit: BoardHit | null, _preview?: BoardFocusPreview) => undefined,
   setAppearance: (_appearance: BoardAppearance) => undefined,
   setReducedMotion: (_reduced: boolean) => undefined,
+  setDebugIslands: (_enabled: boolean) => undefined,
   playEffects: (_effects: readonly BoardEffect[]) => undefined,
   skipAnimations,
   getDiagnostics: (): BoardRendererDiagnostics => ({

@@ -10,10 +10,16 @@ export {
   getDieUrl,
   getFactionUrl,
   getGameArtUrl,
+  getIslandChitUrl,
   getPieceIconUrl,
   getResourceCardUrl,
   getResourceIconUrl,
+  getSeafaringIconUrl,
+  getShipIconUrl,
 } from './assets/terrainTextures.js';
+export { hexExtents, isLandTerrain, islandBoundarySegments, landIslands } from './boardShape.js';
+export { shipVariantForEdge } from './shipVariant.js';
+export type { ShipVariant } from './shipVariant.js';
 export type {
   BoardAppearance,
   BoardEffect,

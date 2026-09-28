@@ -19,7 +19,16 @@ export interface RenderModel {
     readonly kind: 'settlement' | 'city';
   }[];
   readonly robberHex: HexId | null;
+  /** Ships on sea edges. Present, possibly empty, on seafaring boards. */
+  readonly ships?: readonly { readonly edge: EdgeId; readonly seat: Seat }[];
+  /** The pirate's sea hex. `null` while it is off the board. */
   readonly pirateHex?: HexId | null;
+  /** New-island bonus chits, each drawn beside its settlement. */
+  readonly islandBonuses?: readonly {
+    readonly vertex: VertexId;
+    readonly seat: Seat;
+    readonly vp: number;
+  }[];
   /** Non-hex board pieces such as a two-hex track. Rules ignore them; the camera fits them. */
   readonly fixtures?: readonly RenderFixture[];
   /** Per-plugin render-model slices, keyed by plugin layer id. */
@@ -84,7 +93,14 @@ export interface BoardHighlights {
     readonly pulse?: boolean;
     /** Empty settlement sites or existing settlements available for city upgrade. */
     readonly vertexTarget?: 'site' | 'upgrade';
+    /**
+     * Edge targets as a dashed lane, a brighter wake for open water, or a ring around a piece
+     * already there.
+     */
+    readonly edgeTarget?: 'lane' | 'wake' | 'ring';
   };
+  /** Edges of pieces marked as the chosen one, such as the ship about to move. */
+  readonly selectedEdges?: readonly EdgeId[];
 }
 
 export interface BoardAppearance {
@@ -112,6 +128,10 @@ export interface BoardRendererOptions {
   readonly fixtureArt?: Readonly<Record<string, FixtureArt>>;
   readonly onHover?: (hit: BoardHit | null) => void;
   readonly onReady?: (renderer: BoardRenderer) => void;
+  /** Load the seafaring art (gold, fog, ships, pirate) before the first draw. */
+  readonly seafaring?: boolean;
+  /** Outline every island, for debugging generated and revealed boards. */
+  readonly debugIslands?: boolean;
 }
 
 /** Read-only counters for acceptance and performance diagnostics. */
@@ -124,7 +144,7 @@ export interface BoardRendererDiagnostics {
 
 export interface BoardFocusPreview {
   /** Temporary, uncommitted piece shown at the focused legal target. */
-  readonly piece: 'road' | 'settlement' | 'city';
+  readonly piece: 'road' | 'ship' | 'settlement' | 'city';
   /** The active player's public board color. */
   readonly color: number;
   /** Player marker shape, used behind building previews. */
@@ -143,7 +163,7 @@ export type BoardEffect =
   | {
       readonly id: string;
       readonly kind: 'piece-pop';
-      readonly piece: 'road' | 'settlement' | 'city';
+      readonly piece: 'road' | 'ship' | 'settlement' | 'city';
       readonly seat: Seat;
       readonly at: BoardHit;
     }
@@ -152,7 +172,22 @@ export type BoardEffect =
       readonly kind: 'robber-move';
       readonly fromHex: HexId;
       readonly toHex: HexId;
-    };
+    }
+  | {
+      readonly id: string;
+      readonly kind: 'pirate-move';
+      /** `null` when the pirate enters from off the board. */
+      readonly fromHex: HexId | null;
+      readonly toHex: HexId;
+    }
+  | {
+      readonly id: string;
+      readonly kind: 'ship-move';
+      readonly seat: Seat;
+      readonly fromEdge: EdgeId;
+      readonly toEdge: EdgeId;
+    }
+  | { readonly id: string; readonly kind: 'fog-reveal'; readonly hex: HexId };
 
 export interface BoardRenderer {
   render(model: RenderModel): void;
@@ -161,6 +196,8 @@ export interface BoardRenderer {
   setFocusTarget(hit: BoardHit | null, preview?: BoardFocusPreview): void;
   setAppearance(appearance: BoardAppearance): void;
   setReducedMotion(reduced: boolean): void;
+  /** Draw or remove the island outlines. */
+  setDebugIslands(enabled: boolean): void;
   /** Play public, board-contained effects; repeated IDs are ignored. */
   playEffects(effects: readonly BoardEffect[]): void;
   /** Immediately removes all active effects. */

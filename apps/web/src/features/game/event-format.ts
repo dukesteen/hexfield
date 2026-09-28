@@ -15,6 +15,19 @@ export function formatGameEvent(
   if (event.type === 'roadBuilt' && actor) return t('log:roadBuilt', { player: actor });
   if (event.type === 'settlementBuilt' && actor) return t('log:settlementBuilt', { player: actor });
   if (event.type === 'cityBuilt' && actor) return t('log:cityBuilt', { player: actor });
+  if (event.type === 'shipBuilt' && actor) return t('log:shipBuilt', { player: actor });
+  if (event.type === 'shipMoved' && actor) return t('log:shipMoved', { player: actor });
+  if (event.type === 'pirateMoved' && actor) return t('log:pirateMoved', { player: actor });
+  if (event.type === 'goldChosen' && actor && record(event.resources)) {
+    const counts = event.resources;
+    const details = RESOURCES.flatMap((resource) => {
+      const count = counts[resource];
+      return typeof count === 'number' && count > 0
+        ? [t('log:resourceGain', { count, resource: t(`game:${resource}`) })]
+        : [];
+    });
+    return t('log:goldChosen', { player: actor, details: details.join(', ') });
+  }
   if (event.type === 'diceRolled' && typeof event.roll === 'number')
     return t('log:diceRolled', { count: event.roll });
   if (event.type === 'resourcesProduced' && record(event.bySeat)) {

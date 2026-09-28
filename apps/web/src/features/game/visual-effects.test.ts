@@ -272,3 +272,75 @@ test('a steal creates only a public victim-to-thief card-back cue', () => {
     made.value.dispose();
   }
 });
+
+test('seafaring events become ship, pirate and gold cues, and a revealed fog hex a reveal', () => {
+  const made = LocalSession.create({
+    config: {
+      modules: [{ id: 'base', version: '1.0.0' }],
+      seats: [0, 1],
+      options: { base: { mapLayout: 'standard-fixed' } },
+      board: standardFixedBoard(),
+    },
+    humanSeats: [0, 1],
+    botSeats: [],
+    genesisSeed: new Uint8Array(32).fill(4),
+  });
+  if (!made.ok) throw new Error(made.error.message);
+  try {
+    const before = made.value.getState();
+    const fogged = {
+      ...before,
+      board: {
+        ...before.board,
+        hexes: before.board.hexes.map((hex, index) =>
+          index === 0 ? { ...hex, terrain: 'fog', token: null } : hex,
+        ),
+      },
+      ext: { ...before.ext, seafaring: { pirateHex: 'h:-3,0' } },
+    };
+    const first = before.board.hexes[0];
+    if (!first) throw new Error('The board needs a hex');
+    const effects = deriveVisualEffects(
+      fogged,
+      before,
+      [
+        { type: 'shipBuilt', seat: 0, edge: 'e:0,0,W' },
+        { type: 'shipMoved', seat: 1, from: 'e:0,0,W', to: 'e:1,0,W' },
+        { type: 'pirateMoved', seat: 0, hex: 'h:2,0' },
+        {
+          type: 'goldChosen',
+          seat: 1,
+          resources: { brick: 0, lumber: 2, wool: 0, grain: 0, ore: 0 },
+        },
+      ],
+      7,
+    );
+    expect(effects.board).toEqual([
+      {
+        id: '7:0',
+        kind: 'piece-pop',
+        piece: 'ship',
+        seat: 0,
+        at: { kind: 'edge', id: 'e:0,0,W' },
+      },
+      { id: '7:1', kind: 'ship-move', seat: 1, fromEdge: 'e:0,0,W', toEdge: 'e:1,0,W' },
+      { id: '7:2', kind: 'pirate-move', fromHex: 'h:-3,0', toHex: 'h:2,0' },
+      { id: `7:reveal:${first.id}`, kind: 'fog-reveal', hex: first.id },
+    ]);
+    expect(effects.productionGains).toEqual([
+      { id: '7:3:gold', seat: 1, resources: { lumber: 2 } },
+    ]);
+    // A reveal alone, with no events, still plays.
+    expect(deriveVisualEffects(fogged, before, [], 8).board).toEqual([
+      { id: `8:reveal:${first.id}`, kind: 'fog-reveal', hex: first.id },
+    ]);
+    // A pirate entering from off the board has no origin.
+    const offBoard = { ...fogged, ext: { ...fogged.ext, seafaring: { pirateHex: null } } };
+    expect(
+      deriveVisualEffects(offBoard, offBoard, [{ type: 'pirateMoved', seat: 0, hex: 'h:2,0' }], 9)
+        .board,
+    ).toEqual([{ id: '9:0', kind: 'pirate-move', fromHex: null, toHex: 'h:2,0' }]);
+  } finally {
+    made.value.dispose();
+  }
+});
