@@ -10,6 +10,7 @@ import { describe, expect, test, vi } from 'vitest';
 import { MemoryBeaconContributionStore } from './beacon-contributions.js';
 import { MemoryCheatCandidateStore } from './cheat-candidates.js';
 import { MemoryCountContributionStore } from './count-contributions.js';
+import { ConsensusController } from './consensus-controller.js';
 import { MemoryStealDeliveryStore } from './steal-contributions.js';
 import { createStealSecretSource } from './steal-source.js';
 import type { DeckContributionStore } from './deck-outbox.js';
@@ -24,7 +25,9 @@ import { genesisDeckDefinitions, validateDeckCeremony } from './deck-genesis.js'
 import { COMMAND_PROOFS_PROTOCOL, composeCommandProofs } from './command-proofs.js';
 import { validateCommandForEntry, validateCommandStatement } from './command-validation.js';
 import { entryHash, genesisDigest } from './genesis.js';
+import { proposerFor } from './proposal.js';
 import { MemoryProtocolJournal } from './journal.js';
+import type { ProtocolJournal } from './journal.js';
 import { signCommand } from './log.js';
 import { decodeProtocolMessage, encodeProtocolMessage } from './messages.js';
 import type { ProtocolMessage } from './messages.js';
@@ -1444,6 +1447,333 @@ describe('live verified deck replication', () => {
     sessions.forEach((session) => session.dispose());
     network.dispose();
   }, 120_000);
+
+  test.each([
+    'before-persist',
+    'persisted-before-send',
+    'peer-accepted-before-local-deal',
+  ] as const)(
+    'restores the elected sequencer during unlock (%s)',
+    async (boundary) => {
+      const fixture = createVerifiedDeckSession(3, 2, 128, {
+        boardSeed: new Uint8Array(32).fill(50),
+        ceremonyNonce: toBase64Url(new Uint8Array(32).fill(4)),
+      });
+      const peers = fixture.humans.map(
+        (seat) => required(fixture.simulation.identities.get(seat.seat)).peerId,
+      );
+      const network = createMemnet({ peers });
+      const replicas: ReplicatedLog[] = [];
+      const sessions: P2PSession[] = [];
+      const sent: ProtocolMessage[][] = peers.map(() => []);
+      let target = -1;
+      let armed = false;
+      let interrupted = false;
+      let operationId = '';
+      let parentHash = '';
+      let round = 0;
+      let acceptedDealHash = '';
+      let unlockKey = '';
+      let unlockBytes: Uint8Array | null = null;
+      let enter: (() => void) | undefined;
+      let release: (() => void) | undefined;
+      const entered = new Promise<void>((resolve) => {
+        enter = resolve;
+      });
+      const resumed = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const selectTarget = (position: number) => {
+        const context = required(replicas[position]).getContext();
+        const draw = required(context.log.crypto?.decks.active);
+        const controller: unknown = Reflect.get(required(replicas[position]), 'controller');
+        if (!(controller instanceof ConsensusController))
+          throw new Error('Missing live controller');
+        round = value(controller.snapshot()).round;
+        const proposer = proposerFor(context.log.head.seq + 1, round, context.membership);
+        target = peers.indexOf(proposer.publicKey);
+        if (target < 0) throw new Error('Draw proposer is not an active human');
+        operationId = deckDrawOperationId(draw);
+        parentHash = entryHash(context.log.head);
+        return target;
+      };
+      const stores = peers.map(
+        (_, position) =>
+          new (class extends MemoryDeckContributionStore {
+            override async putIfAbsent(id: string, bytes: Uint8Array): Promise<boolean> {
+              if (!armed || interrupted || !id.startsWith('deck-unlock/'))
+                return super.putIfAbsent(id, bytes);
+              if (target < 0) selectTarget(position);
+              if (position !== target) return super.putIfAbsent(id, bytes);
+              unlockKey = id;
+              unlockBytes = bytes.slice();
+              if (boundary === 'peer-accepted-before-local-deal')
+                return super.putIfAbsent(id, bytes);
+              interrupted = true;
+              if (boundary === 'persisted-before-send') await super.putIfAbsent(id, bytes);
+              required(enter)();
+              await resumed;
+              if (boundary === 'before-persist') throw new Error('Crash before unlock insertion');
+              return true;
+            }
+          })(),
+      );
+      const journals = peers.map(
+        (_, position) =>
+          new (class extends MemoryProtocolJournal {
+            override async commit(
+              ...args: Parameters<ProtocolJournal['commit']>
+            ): Promise<boolean> {
+              const payload = args[2].entry.payload;
+              if (
+                armed &&
+                !interrupted &&
+                position === target &&
+                boundary === 'peer-accepted-before-local-deal' &&
+                payload.kind === 'system' &&
+                payload.input.type === 'CARD_DEALT'
+              ) {
+                interrupted = true;
+                required(enter)();
+                await resumed;
+                throw new Error('Crash before local deal transaction');
+              }
+              return super.commit(...args);
+            }
+          })(),
+      );
+      const transports = peers.map((peer, position) =>
+        observe(network.transport(peer), required(sent[position])),
+      );
+      try {
+        const opened = await Promise.all(
+          peers.map((_, position) =>
+            ReplicatedLog.create(
+              optionsFor(
+                fixture,
+                position,
+                required(transports[position]),
+                network.clock,
+                required(journals[position]),
+                required(stores[position]),
+              ),
+            ),
+          ),
+        );
+        replicas.push(...opened.map(value));
+        await settle(replicas, network.clock);
+        const beforePurchase = await driveToDraw(fixture, replicas, network.clock, {
+          stopBeforePurchase: true,
+          settlementOrder: BOARD_50_SETTLEMENT_ORDER,
+          buyerSeat: required(fixture.humans[0]).seat,
+        });
+        expect(beforePurchase.log.crypto?.decks.active).toBeNull();
+        const buyer = required(fixture.humans[0]).seat;
+        const signer = required(fixture.simulation.identities.get(buyer));
+        const purchase = required(
+          fixture.simulation.engine
+            .getLegalCommands(beforePurchase.log.state, buyer)
+            .commands.find((command) => command.type === 'BUY_DEV_CARD'),
+        );
+        armed = true;
+        const submitted = required(replicas[0]).submit(
+          signCommand(
+            {
+              gameId: fixture.genesis.gameId,
+              genesisDigest: genesisDigest(fixture.genesis),
+              seat: buyer,
+              nonce: (beforePurchase.log.lastNonces.get(buyer) ?? 0) + 1,
+              headSeq: beforePurchase.log.head.seq,
+              headHash: entryHash(beforePurchase.log.head),
+              command: purchase,
+            },
+            signer.secretKey,
+          ),
+        );
+        // Keep this drain pending at the selected real storage boundary.
+        const draining = settle(replicas, network.clock, 64);
+        await Promise.race([
+          entered,
+          draining.then(() => {
+            throw new Error(
+              `Unlock boundary not reached: target=${target}, interrupted=${interrupted}`,
+            );
+          }),
+        ]);
+        const crashed = required(replicas[target]);
+        const recipient = required(replicas[1 - target]);
+        const atFault = crashed.getContext();
+        expect(entryHash(atFault.log.head)).toBe(parentHash);
+        const faultController: unknown = Reflect.get(crashed, 'controller');
+        if (!(faultController instanceof ConsensusController))
+          throw new Error('Missing fault controller');
+        expect(value(faultController.snapshot()).round).toBe(round);
+        expect(proposerFor(atFault.log.head.seq + 1, round, atFault.membership).publicKey).toBe(
+          required(peers[target]),
+        );
+        expect(deckDrawOperationId(required(atFault.log.crypto?.decks.active))).toBe(operationId);
+        const retained = required(await required(journals[target]).load());
+        const storedUnlock = await required(stores[target]).load(unlockKey);
+        const retainedOutbox = new Map(
+          [...required(stores[target]).records].map(([key, bytes]) => [key, bytes.slice()]),
+        );
+        expect(storedUnlock).toEqual(boundary === 'before-persist' ? null : unlockBytes);
+        const beforeCrashMessages = required(sent[target]).slice();
+        // oxlint-disable vitest/no-conditional-expect -- Each boundary requires distinct safety observations.
+        if (boundary === 'peer-accepted-before-local-deal') {
+          const proposed = required(
+            beforeCrashMessages.find(
+              (message) =>
+                message.t === 'PROPOSAL' &&
+                message.proposal.body.entry.payload.kind === 'system' &&
+                message.proposal.body.entry.payload.input.type === 'CARD_DEALT',
+            ),
+          );
+          if (proposed.t !== 'PROPOSAL') throw new Error('Missing elected deal proposal');
+          expect(proposed.proposal.body.entry.sequencer).toBe(required(peers[target]));
+          expect(proposed.proposal.body.entry.payload).toMatchObject({
+            kind: 'system',
+            evidence: {
+              kind: 'proof',
+              data: expect.arrayContaining([canonicalDecode(required(storedUnlock))]),
+            },
+          });
+          // The other peer has actually accepted and durably committed this deal.
+          for (
+            let pass = 0;
+            pass < 32 && recipient.getContext().log.head.seq === atFault.log.head.seq;
+            pass++
+          ) {
+            network.clock.advanceBy(0);
+            // oxlint-disable-next-line no-await-in-loop -- Advance the recipient while the sender's journal is gated.
+            await recipient.flush();
+          }
+          expect(recipient.getContext().log.head.seq).toBe(atFault.log.head.seq + 1);
+          expect(recipient.getEntries().at(-1)?.entry).toEqual(proposed.proposal.body.entry);
+          acceptedDealHash = entryHash(proposed.proposal.body.entry);
+          expect(
+            retained.entries.some(
+              ({ entry }) =>
+                entry.payload.kind === 'system' && entry.payload.input.type === 'CARD_DEALT',
+            ),
+          ).toBe(false);
+        } else {
+          expect(
+            beforeCrashMessages.some(
+              (message) =>
+                message.t === 'DECK_CONTRIB' && message.contribution.operationId === operationId,
+            ),
+          ).toBe(false);
+          expect(
+            beforeCrashMessages.some(
+              (message) =>
+                message.t === 'VOTE' && message.vote.body.seq === atFault.log.head.seq + 1,
+            ),
+          ).toBe(false);
+        }
+        // oxlint-enable vitest/no-conditional-expect
+        crashed.dispose();
+        network.crash(required(peers[target]));
+        required(release)();
+        await draining;
+        await submitted;
+        expect(required(sent[target])).toHaveLength(beforeCrashMessages.length);
+        expect(required(await required(journals[target]).load())).toEqual(retained);
+        const retransmitted: ProtocolMessage[] = [];
+        const restartedTransport = observe(network.restart(required(peers[target])), retransmitted);
+        const restored = value(
+          await ReplicatedLog.restore(
+            optionsFor(
+              fixture,
+              target,
+              restartedTransport,
+              network.clock,
+              required(journals[target]),
+              required(stores[target]),
+            ),
+          ),
+        );
+        replicas[target] = restored;
+        await settle(replicas, network.clock, 64);
+        const finalUnlock = required(await required(stores[target]).load(unlockKey));
+        expect(finalUnlock).toEqual(unlockBytes);
+        for (const [key, bytes] of retainedOutbox)
+          expect(required(stores[target]).records.get(key)).toEqual(bytes);
+        // A restored, already-certified deal completes before preparing another unlock.
+        expect(
+          retransmitted.some(
+            (message) =>
+              (message.t === 'DECK_CONTRIB' && message.contribution.operationId === operationId) ||
+              (message.t === 'COMMIT' && entryHash(message.certified.entry) === acceptedDealHash),
+          ),
+        ).toBe(true);
+        const histories = replicas.map((replica) => replica.getEntries());
+        expect(histories[0]).toEqual(histories[1]);
+        for (const entries of histories) {
+          const deals = entries.filter(
+            ({ entry }) =>
+              entry.payload.kind === 'system' && entry.payload.input.type === 'CARD_DEALT',
+          );
+          expect(deals).toHaveLength(1);
+          expect(required(deals[0]).certificate).toHaveLength(2);
+          expect(
+            value(
+              replayCertifiedPrefix(
+                fixture.entry,
+                entries,
+                fixture.simulation.engine,
+                fixture.policy,
+              ),
+            ).context.log.head,
+          ).toEqual(restored.getContext().log.head);
+        }
+        const finalDeck = required(restored.getContext().log.crypto?.decks.decks[0]);
+        const slot = required(finalDeck.slots[0]);
+        expect(finalDeck.nextPosition).toBe(1);
+        const owner = fixture.createDeckSourceFor(buyer)('dev', buyer);
+        let card: string;
+        try {
+          card = value(decodeDeckCard(finalDeck.setup, slot.receipt, owner.lock(0))).card;
+        } finally {
+          owner.dispose();
+        }
+        replicas.forEach((replica) => replica.dispose());
+        const resumedSessions = await Promise.all(
+          peers.map((_, position) => {
+            const base = optionsFor(
+              fixture,
+              position,
+              position === target ? restartedTransport : required(transports[position]),
+              network.clock,
+              required(journals[position]),
+              required(stores[position]),
+            );
+            return P2PSession.restore({
+              ...base,
+              createDriver: (engine, genesis, _clock, ownedSeats) =>
+                new VerifiedSessionDriver(
+                  engine,
+                  genesis,
+                  ownedSeats,
+                  required(base.createDeckSource),
+                  undefined,
+                  fixture.createStealSourceFor(base.seat),
+                ),
+            });
+          }),
+        );
+        sessions.push(...resumedSessions.map(value));
+        expect(required(sessions[0]).getPrivate(buyer)?.slots).toEqual({ [slot.slotId]: card });
+        expect(required(sessions[1]).getPrivate(buyer)).toBeNull();
+      } finally {
+        required(release)();
+        replicas.forEach((replica) => replica.dispose());
+        sessions.forEach((session) => session.dispose());
+        network.dispose();
+      }
+    },
+    120_000,
+  );
 
   test('captures and certifies a real signed false partial unlock at an active draw', async () => {
     const fixture = createVerifiedDeckSession(3, 2, 128, {
