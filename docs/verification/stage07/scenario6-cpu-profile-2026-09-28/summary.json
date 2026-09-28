@@ -1,0 +1,498 @@
+{
+  "sampledMilliseconds": 60377.104,
+  "samples": 48306,
+  "self": [
+    {
+      "function": "encodeValue",
+      "url": "file:///Users/duke/Dev/Personal/colonist-p2p/packages/codec/dist/canonical.js",
+      "line": 56,
+      "milliseconds": 15387.499,
+      "percent": 25.49
+    },
+    {
+      "function": "pow2",
+      "url": "file:///Users/duke/Dev/Personal/colonist-p2p/node_modules/.pnpm/@noble+curves@2.4.0/node_modules/@noble/curves/abstract/modular.js",
+      "line": 124,
+      "milliseconds": 12063.245,
+      "percent": 19.98
+    },
+    {
+      "function": "mod",
+      "url": "file:///Users/duke/Dev/Personal/colonist-p2p/node_modules/.pnpm/@noble+curves@2.4.0/node_modules/@noble/curves/abstract/modular.js",
+      "line": 32,
+      "milliseconds": 6979.128,
+      "percent": 11.56
+    },
+    {
+      "function": "process",
+      "url": "file:///Users/duke/Dev/Personal/colonist-p2p/node_modules/.pnpm/@noble+hashes@2.4.0/node_modules/@noble/hashes/sha2.js",
+      "line": 72,
+      "milliseconds": 4042.666,
+      "percent": 6.7
+    },
+    {
+      "function": "(anonymous)",
+      "url": "file:///Users/duke/Dev/Personal/colonist-p2p/packages/codec/dist/canonical.js",
+      "line": 111,
+      "milliseconds": 3048.918,
+      "percent": 5.05
+    },
+    {
+      "function": "canonicalDecode",
+      "url": "file:///Users/duke/Dev/Personal/colonist-p2p/packages/codec/dist/canonical.js",
+      "line": 160,
+      "milliseconds": 2281.877,
+      "percent": 3.78
+    },
+    {
+      "function": "sameBytes",
+      "url": "file:///Users/duke/Dev/Personal/colonist-p2p/packages/protocol/dist/consensus.js",
+      "line": 85,
+      "milliseconds": 1573.696,
+      "percent": 2.61
+    },
+    {
+      "function": "decodeTagged",
+      "url": "file:///Users/duke/Dev/Personal/colonist-p2p/packages/codec/dist/canonical.js",
+      "line": 134,
+      "milliseconds": 1449.61,
+      "percent": 2.4
+    },
+    {
+      "function": "fromBase64UrlInternal",
+      "url": "file:///Users/duke/Dev/Personal/colonist-p2p/packages/codec/dist/canonical.js",
+      "line": 25,
+      "milliseconds": 1325.922,
+      "percent": 2.2
+    },
+    {
+      "function": "(anonymous)",
+      "url": "file:///Users/duke/Dev/Personal/colonist-p2p/packages/protocol/dist/consensus.js",
+      "line": 86,
+      "milliseconds": 842.615,
+      "percent": 1.4
+    },
+    {
+      "function": "(anonymous)",
+      "url": "file:///Users/duke/Dev/Personal/colonist-p2p/packages/codec/dist/canonical.js",
+      "line": 172,
+      "milliseconds": 761.901,
+      "percent": 1.26
+    },
+    {
+      "function": "mul",
+      "url": "file:///Users/duke/Dev/Personal/colonist-p2p/node_modules/.pnpm/@noble+curves@2.4.0/node_modules/@noble/curves/abstract/modular.js",
+      "line": 728,
+      "milliseconds": 693.701,
+      "percent": 1.15
+    },
+    {
+      "function": "(program)",
+      "url": "",
+      "line": 0,
+      "milliseconds": 588.147,
+      "percent": 0.97
+    },
+    {
+      "function": "ed25519_pow_2_252_3",
+      "url": "file:///Users/duke/Dev/Personal/colonist-p2p/node_modules/.pnpm/@noble+curves@2.4.0/node_modules/@noble/curves/ed25519.js",
+      "line": 37,
+      "milliseconds": 586.409,
+      "percent": 0.97
+    },
+    {
+      "function": "(garbage collector)",
+      "url": "",
+      "line": 0,
+      "milliseconds": 582.571,
+      "percent": 0.96
+    },
+    {
+      "function": "invert",
+      "url": "file:///Users/duke/Dev/Personal/colonist-p2p/node_modules/.pnpm/@noble+curves@2.4.0/node_modules/@noble/curves/abstract/modular.js",
+      "line": 150,
+      "milliseconds": 574.83,
+      "percent": 0.95
+    },
+    {
+      "function": "encode",
+      "url": "node:internal/encoding",
+      "line": 355,
+      "milliseconds": 411.516,
+      "percent": 0.68
+    },
+    {
+      "function": "~run",
+      "url": "file:///Users/duke/Dev/Personal/colonist-p2p/node_modules/.pnpm/valibot@1.5.0_typescript@5.9.3/node_modules/valibot/dist/index.mjs",
+      "line": 991,
+      "milliseconds": 301.491,
+      "percent": 0.5
+    },
+    {
+      "function": "~run",
+      "url": "file:///Users/duke/Dev/Personal/colonist-p2p/node_modules/.pnpm/valibot@1.5.0_typescript@5.9.3/node_modules/valibot/dist/index.mjs",
+      "line": 6325,
+      "milliseconds": 291.898,
+      "percent": 0.48
+    },
+    {
+      "function": "wnafCachedCT",
+      "url": "file:///Users/duke/Dev/Personal/colonist-p2p/node_modules/.pnpm/@noble+curves@2.4.0/node_modules/@noble/curves/abstract/curve.js",
+      "line": 319,
+      "milliseconds": 214.04,
+      "percent": 0.35
+    },
+    {
+      "function": "Point",
+      "url": "file:///Users/duke/Dev/Personal/colonist-p2p/node_modules/.pnpm/@noble+curves@2.4.0/node_modules/@noble/curves/abstract/edwards.js",
+      "line": 114,
+      "milliseconds": 190.51,
+      "percent": 0.32
+    },
+    {
+      "function": "toBase64UrlInternal",
+      "url": "file:///Users/duke/Dev/Personal/colonist-p2p/packages/codec/dist/canonical.js",
+      "line": 7,
+      "milliseconds": 184.88,
+      "percent": 0.31
+    },
+    {
+      "function": "isPlainObject",
+      "url": "file:///Users/duke/Dev/Personal/colonist-p2p/packages/codec/dist/canonical.js",
+      "line": 52,
+      "milliseconds": 183.168,
+      "percent": 0.3
+    },
+    {
+      "function": "uvRatio",
+      "url": "file:///Users/duke/Dev/Personal/colonist-p2p/node_modules/.pnpm/@noble+curves@2.4.0/node_modules/@noble/curves/ed25519.js",
+      "line": 72,
+      "milliseconds": 181.511,
+      "percent": 0.3
+    },
+    {
+      "function": "clean",
+      "url": "file:///Users/duke/Dev/Personal/colonist-p2p/node_modules/.pnpm/@noble+hashes@2.4.0/node_modules/@noble/hashes/utils.js",
+      "line": 231,
+      "milliseconds": 181.345,
+      "percent": 0.3
+    },
+    {
+      "function": "readSync",
+      "url": "node:fs",
+      "line": 691,
+      "milliseconds": 147.01,
+      "percent": 0.24
+    },
+    {
+      "function": "double",
+      "url": "file:///Users/duke/Dev/Personal/colonist-p2p/node_modules/.pnpm/@noble+curves@2.4.0/node_modules/@noble/curves/abstract/edwards.js",
+      "line": 234,
+      "milliseconds": 143.728,
+      "percent": 0.24
+    },
+    {
+      "function": "visit",
+      "url": "file:///Users/duke/Dev/Personal/colonist-p2p/packages/engine/dist/core/state/json.js",
+      "line": 3,
+      "milliseconds": 139.319,
+      "percent": 0.23
+    },
+    {
+      "function": "utf8ToBytes",
+      "url": "file:///Users/duke/Dev/Personal/colonist-p2p/node_modules/.pnpm/@noble+hashes@2.4.0/node_modules/@noble/hashes/utils.js",
+      "line": 488,
+      "milliseconds": 133.613,
+      "percent": 0.22
+    },
+    {
+      "function": "hexToBytes",
+      "url": "file:///Users/duke/Dev/Personal/colonist-p2p/node_modules/.pnpm/@noble+hashes@2.4.0/node_modules/@noble/hashes/utils.js",
+      "line": 390,
+      "milliseconds": 132.701,
+      "percent": 0.22
+    },
+    {
+      "function": "add",
+      "url": "file:///Users/duke/Dev/Personal/colonist-p2p/node_modules/.pnpm/@noble+curves@2.4.0/node_modules/@noble/curves/abstract/edwards.js",
+      "line": 254,
+      "milliseconds": 123.758,
+      "percent": 0.2
+    },
+    {
+      "function": "mulN",
+      "url": "file:///Users/duke/Dev/Personal/colonist-p2p/node_modules/.pnpm/@noble+curves@2.4.0/node_modules/@noble/curves/abstract/modular.js",
+      "line": 747,
+      "milliseconds": 116.376,
+      "percent": 0.19
+    },
+    {
+      "function": "neg",
+      "url": "file:///Users/duke/Dev/Personal/colonist-p2p/node_modules/.pnpm/@noble+curves@2.4.0/node_modules/@noble/curves/abstract/modular.js",
+      "line": 713,
+      "milliseconds": 109.687,
+      "percent": 0.18
+    },
+    {
+      "function": "subN",
+      "url": "file:///Users/duke/Dev/Personal/colonist-p2p/node_modules/.pnpm/@noble+curves@2.4.0/node_modules/@noble/curves/abstract/modular.js",
+      "line": 744,
+      "milliseconds": 105.9,
+      "percent": 0.18
+    },
+    {
+      "function": "addN",
+      "url": "file:///Users/duke/Dev/Personal/colonist-p2p/node_modules/.pnpm/@noble+curves@2.4.0/node_modules/@noble/curves/abstract/modular.js",
+      "line": 741,
+      "milliseconds": 99.804,
+      "percent": 0.17
+    }
+  ],
+  "inclusive": [
+    {
+      "function": "(root)",
+      "url": "",
+      "line": 0,
+      "milliseconds": 60377.104,
+      "percent": 100.0
+    },
+    {
+      "function": "(anonymous)",
+      "url": "file:///Users/duke/Dev/Personal/colonist-p2p/packages/protocol/dist/consensus-controller.js",
+      "line": 141,
+      "milliseconds": 24352.84,
+      "percent": 40.33
+    },
+    {
+      "function": "canonicalEncode",
+      "url": "file:///Users/duke/Dev/Personal/colonist-p2p/packages/codec/dist/canonical.js",
+      "line": 125,
+      "milliseconds": 19393.914,
+      "percent": 32.12
+    },
+    {
+      "function": "encodeValue",
+      "url": "file:///Users/duke/Dev/Personal/colonist-p2p/packages/codec/dist/canonical.js",
+      "line": 56,
+      "milliseconds": 18666.305,
+      "percent": 30.92
+    },
+    {
+      "function": "(anonymous)",
+      "url": "file:///Users/duke/Dev/Personal/colonist-p2p/packages/codec/dist/canonical.js",
+      "line": 111,
+      "milliseconds": 18168.276,
+      "percent": 30.09
+    },
+    {
+      "function": "validateNextEntry",
+      "url": "file:///Users/duke/Dev/Personal/colonist-p2p/packages/protocol/dist/log.js",
+      "line": 91,
+      "milliseconds": 18080.684,
+      "percent": 29.95
+    },
+    {
+      "function": "(anonymous)",
+      "url": "file:///Users/duke/Dev/Personal/colonist-p2p/packages/protocol/dist/consensus-controller.js",
+      "line": 259,
+      "milliseconds": 16079.604,
+      "percent": 26.63
+    },
+    {
+      "function": "validateEntry",
+      "url": "file:///Users/duke/Dev/Personal/colonist-p2p/packages/protocol/dist/proposal.js",
+      "line": 129,
+      "milliseconds": 16010.304,
+      "percent": 26.52
+    },
+    {
+      "function": "reduce",
+      "url": "file:///Users/duke/Dev/Personal/colonist-p2p/packages/protocol/dist/consensus-controller.js",
+      "line": 274,
+      "milliseconds": 14609.103,
+      "percent": 24.2
+    },
+    {
+      "function": "dispatch",
+      "url": "file:///Users/duke/Dev/Personal/colonist-p2p/packages/protocol/dist/consensus.js",
+      "line": 1199,
+      "milliseconds": 14605.348,
+      "percent": 24.19
+    },
+    {
+      "function": "validateCertifiedEntry",
+      "url": "file:///Users/duke/Dev/Personal/colonist-p2p/packages/protocol/dist/proposal.js",
+      "line": 283,
+      "milliseconds": 13695.799,
+      "percent": 22.68
+    },
+    {
+      "function": "uvRatio",
+      "url": "file:///Users/duke/Dev/Personal/colonist-p2p/node_modules/.pnpm/@noble+curves@2.4.0/node_modules/@noble/curves/ed25519.js",
+      "line": 72,
+      "milliseconds": 13129.467,
+      "percent": 21.75
+    },
+    {
+      "function": "ed25519_pow_2_252_3",
+      "url": "file:///Users/duke/Dev/Personal/colonist-p2p/node_modules/.pnpm/@noble+curves@2.4.0/node_modules/@noble/curves/ed25519.js",
+      "line": 37,
+      "milliseconds": 12648.423,
+      "percent": 20.95
+    },
+    {
+      "function": "persistCommit",
+      "url": "file:///Users/duke/Dev/Personal/colonist-p2p/packages/protocol/dist/replicated-log.js",
+      "line": 3338,
+      "milliseconds": 12632.588,
+      "percent": 20.92
+    },
+    {
+      "function": "invertSqrt",
+      "url": "file:///Users/duke/Dev/Personal/colonist-p2p/node_modules/.pnpm/@noble+curves@2.4.0/node_modules/@noble/curves/ed25519.js",
+      "line": 354,
+      "milliseconds": 12110.665,
+      "percent": 20.06
+    },
+    {
+      "function": "pow2",
+      "url": "file:///Users/duke/Dev/Personal/colonist-p2p/node_modules/.pnpm/@noble+curves@2.4.0/node_modules/@noble/curves/abstract/modular.js",
+      "line": 124,
+      "milliseconds": 12063.245,
+      "percent": 19.98
+    },
+    {
+      "function": "hashValue",
+      "url": "file:///Users/duke/Dev/Personal/colonist-p2p/packages/codec/dist/hash.js",
+      "line": 9,
+      "milliseconds": 11088.649,
+      "percent": 18.37
+    },
+    {
+      "function": "transition",
+      "url": "file:///Users/duke/Dev/Personal/colonist-p2p/packages/protocol/dist/consensus.js",
+      "line": 474,
+      "milliseconds": 10063.104,
+      "percent": 16.67
+    },
+    {
+      "function": "validateHandCommitments",
+      "url": "file:///Users/duke/Dev/Personal/colonist-p2p/packages/protocol/dist/hand-commitments.js",
+      "line": 53,
+      "milliseconds": 9646.985,
+      "percent": 15.98
+    },
+    {
+      "function": "runNetworkGame",
+      "url": "file:///Users/duke/Dev/Personal/colonist-p2p/tools/sim/dist/net.js",
+      "line": 21,
+      "milliseconds": 9545.335,
+      "percent": 15.81
+    },
+    {
+      "function": "validateCryptoTransition",
+      "url": "file:///Users/duke/Dev/Personal/colonist-p2p/packages/protocol/dist/crypto-context.js",
+      "line": 68,
+      "milliseconds": 8261.201,
+      "percent": 13.68
+    },
+    {
+      "function": "decodePoint",
+      "url": "file:///Users/duke/Dev/Personal/colonist-p2p/packages/crypto/dist/group.js",
+      "line": 65,
+      "milliseconds": 8207.989,
+      "percent": 13.59
+    },
+    {
+      "function": "canonicalDecode",
+      "url": "file:///Users/duke/Dev/Personal/colonist-p2p/packages/codec/dist/canonical.js",
+      "line": 160,
+      "milliseconds": 8172.841,
+      "percent": 13.54
+    },
+    {
+      "function": "genesisDigest",
+      "url": "file:///Users/duke/Dev/Personal/colonist-p2p/packages/protocol/dist/genesis-identity.js",
+      "line": 21,
+      "milliseconds": 8112.059,
+      "percent": 13.44
+    },
+    {
+      "function": "pointFromBytes",
+      "url": "file:///Users/duke/Dev/Personal/colonist-p2p/packages/crypto/dist/group.js",
+      "line": 41,
+      "milliseconds": 8043.974,
+      "percent": 13.32
+    },
+    {
+      "function": "fromBytes",
+      "url": "file:///Users/duke/Dev/Personal/colonist-p2p/node_modules/.pnpm/@noble+curves@2.4.0/node_modules/@noble/curves/ed25519.js",
+      "line": 430,
+      "milliseconds": 8012.762,
+      "percent": 13.27
+    },
+    {
+      "function": "multiply",
+      "url": "file:///Users/duke/Dev/Personal/colonist-p2p/node_modules/.pnpm/@noble+curves@2.4.0/node_modules/@noble/curves/abstract/edwards.js",
+      "line": 281,
+      "milliseconds": 7993.513,
+      "percent": 13.24
+    },
+    {
+      "function": "receive",
+      "url": "file:///Users/duke/Dev/Personal/colonist-p2p/packages/protocol/dist/replicated-log.js",
+      "line": 1580,
+      "milliseconds": 7755.254,
+      "percent": 12.84
+    },
+    {
+      "function": "main",
+      "url": "file:///Users/duke/Dev/Personal/colonist-p2p/tools/sim/dist/cli.js",
+      "line": 391,
+      "milliseconds": 7418.208,
+      "percent": 12.29
+    },
+    {
+      "function": "run",
+      "url": "node:internal/modules/esm/module_job",
+      "line": 426,
+      "milliseconds": 7361.672,
+      "percent": 12.19
+    },
+    {
+      "function": "(anonymous)",
+      "url": "file:///Users/duke/Dev/Personal/colonist-p2p/tools/sim/dist/index.js",
+      "line": 1,
+      "milliseconds": 7328.147,
+      "percent": 12.14
+    },
+    {
+      "function": "runIndices",
+      "url": "file:///Users/duke/Dev/Personal/colonist-p2p/tools/sim/dist/net-batch.js",
+      "line": 114,
+      "milliseconds": 7251.855,
+      "percent": 12.01
+    },
+    {
+      "function": "runNetworkBatch",
+      "url": "file:///Users/duke/Dev/Personal/colonist-p2p/tools/sim/dist/net-batch.js",
+      "line": 137,
+      "milliseconds": 7251.855,
+      "percent": 12.01
+    },
+    {
+      "function": "mulSecret",
+      "url": "file:///Users/duke/Dev/Personal/colonist-p2p/node_modules/.pnpm/@noble+curves@2.4.0/node_modules/@noble/curves/abstract/curve.js",
+      "line": 466,
+      "milliseconds": 7190.153,
+      "percent": 11.91
+    },
+    {
+      "function": "runCT",
+      "url": "file:///Users/duke/Dev/Personal/colonist-p2p/node_modules/.pnpm/@noble+curves@2.4.0/node_modules/@noble/curves/abstract/curve.js",
+      "line": 374,
+      "milliseconds": 7089.813,
+      "percent": 11.74
+    }
+  ]
+}

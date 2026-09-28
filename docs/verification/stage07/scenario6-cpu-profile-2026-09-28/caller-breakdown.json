@@ -1,0 +1,94 @@
+{
+  "decodePoint": [
+    {
+      "caller": "validateHandCommitments hand-commitments.js:53",
+      "ms": 6186.802
+    },
+    {
+      "caller": "checkedPoints deck-setup.js:100",
+      "ms": 1171.131
+    },
+    {
+      "caller": "validateStealOperation steal-delivery.js:104",
+      "ms": 239.477
+    },
+    {
+      "caller": "parseAndCheckEnvelope escrow-distribution.js:118",
+      "ms": 129.921
+    },
+    {
+      "caller": "applyPublicResourceEffect hand-commitments.js:94",
+      "ms": 61.986
+    },
+    {
+      "caller": "schnorrStatement sigma.js:3",
+      "ms": 60.61
+    },
+    {
+      "caller": "dleqStatement sigma.js:14",
+      "ms": 41.884
+    },
+    {
+      "caller": "validateGenesisMasters genesis-masters.js:10",
+      "ms": 40.391
+    },
+    {
+      "caller": "readPayload seal.js:20",
+      "ms": 39.665
+    },
+    {
+      "caller": "validPoint online-bindings.js:36",
+      "ms": 36.432
+    }
+  ],
+  "validateHandCommitments": [
+    {
+      "caller": "validateCryptoTransition crypto-context.js:68",
+      "ms": 3169.059
+    },
+    {
+      "caller": "planHandTransition hand-transition.js:62",
+      "ms": 2884.333
+    },
+    {
+      "caller": "applyPublicResourceEffect hand-commitments.js:94",
+      "ms": 1892.447
+    },
+    {
+      "caller": "verifyHandOpening hand-commitments.js:128",
+      "ms": 1638.118
+    },
+    {
+      "caller": "completeStealResult steal-state.js:190",
+      "ms": 63.028
+    }
+  ],
+  "contextStamp": [
+    {
+      "caller": "checkContext consensus.js:1179",
+      "ms": 3056.652
+    },
+    {
+      "caller": "commit consensus.js:1251",
+      "ms": 968.337
+    },
+    {
+      "caller": "openOwnedConsensusState consensus.js:1271",
+      "ms": 156.379
+    },
+    {
+      "caller": "dispatch consensus.js:1199",
+      "ms": 1.251
+    }
+  ],
+  "sameContextStamp": [
+    {
+      "caller": "checkContext consensus.js:1179",
+      "ms": 1779.522
+    },
+    {
+      "caller": "commit consensus.js:1251",
+      "ms": 567.53
+    }
+  ]
+}

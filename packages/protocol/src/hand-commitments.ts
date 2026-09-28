@@ -15,6 +15,11 @@ import { parseCanonical } from './validation.js';
 
 export const MAX_HAND_RESOURCE_COUNT = 63;
 
+// Memoize only successful canonical public encodings, never points or proof results.
+// Identity remains a legal commitment. Untrusted traffic can retain at most 256 strings.
+const VALIDATED_COMMITMENT_LIMIT = 256;
+const validatedCommitments = new Set<string>();
+
 export interface SeatHandCommitments {
   seat: Seat;
   commitments: Readonly<Record<Resource, string>>;
@@ -116,11 +121,18 @@ export function validateHandCommitments(
     };
     for (const resource of RESOURCES) {
       const commitment = row.commitments[resource];
-      try {
-        if (encodePoint(decodePoint(commitment)) !== commitment)
-          return failure('hand-commitment-point', 'Commitment point is not canonically encoded');
-      } catch {
-        return failure('hand-commitment-point', 'Commitment point is malformed');
+      if (!validatedCommitments.has(commitment)) {
+        try {
+          if (encodePoint(decodePoint(commitment)) !== commitment)
+            return failure('hand-commitment-point', 'Commitment point is not canonically encoded');
+        } catch {
+          return failure('hand-commitment-point', 'Commitment point is malformed');
+        }
+        validatedCommitments.add(commitment);
+        if (validatedCommitments.size > VALIDATED_COMMITMENT_LIMIT) {
+          const oldest = validatedCommitments.values().next().value;
+          if (oldest !== undefined) validatedCommitments.delete(oldest);
+        }
       }
       commitments[resource] = commitment;
     }

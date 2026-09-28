@@ -1,7 +1,8 @@
 import { encodeScalar, pedersenCommit, SCALAR_ORDER } from '@cp2p/crypto';
 import { toBase64Url } from '@cp2p/codec';
 import { RESOURCES } from '@cp2p/engine';
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test, vi } from 'vitest';
+import * as crypto from '@cp2p/crypto';
 import {
   applyPublicResourceEffect,
   emptyHandCommitments,
@@ -36,6 +37,15 @@ function noncanonicalScalar(scalar: bigint): string {
   return toBase64Url(bytes);
 }
 
+function pointLedger(encoded: string) {
+  return [
+    {
+      seat: 0 as const,
+      commitments: Object.fromEntries(RESOURCES.map((resource) => [resource, encoded])),
+    },
+  ];
+}
+
 describe('public hand commitments', () => {
   test('initializes identity commitments in exact seat and resource order', () => {
     const empty = value(emptyHandCommitments(seats));
@@ -52,6 +62,59 @@ describe('public hand commitments', () => {
       ok: false,
       error: { code: 'hand-seats' },
     });
+  });
+
+  test('memoizes exact successful point encodings without sharing ledgers or caching failures', () => {
+    const encoded = crypto.encodePoint(crypto.scalePoint(crypto.G, 712345n));
+    const ledger = [
+      {
+        seat: 0 as const,
+        commitments: Object.fromEntries(RESOURCES.map((resource) => [resource, encoded])),
+      },
+    ];
+    const decode = vi.spyOn(crypto, 'decodePoint');
+    try {
+      const first = value(validateHandCommitments(ledger, [0]));
+      const second = value(validateHandCommitments(ledger, [0]));
+      expect(decode).toHaveBeenCalledTimes(1);
+      expect(second).toEqual(first);
+      expect(second).not.toBe(first);
+      expect(second[0]?.commitments).not.toBe(first[0]?.commitments);
+      for (const malformed of ['', encoded + '=', toBase64Url(new Uint8Array(32).fill(255))]) {
+        const changed = [
+          { ...ledger[0], commitments: { ...ledger[0]?.commitments, brick: malformed } },
+        ];
+        const before = decode.mock.calls.length;
+        expect(validateHandCommitments(changed, [0])).toMatchObject({
+          ok: false,
+          error: { code: 'hand-commitment-point' },
+        });
+        expect(validateHandCommitments(changed, [0])).toMatchObject({
+          ok: false,
+          error: { code: 'hand-commitment-point' },
+        });
+        expect(decode.mock.calls.length - before).toBe(2);
+      }
+      expect(validateHandCommitments(ledger, [1]).ok).toBe(false);
+    } finally {
+      decode.mockRestore();
+    }
+  });
+
+  test('bounds retained point encodings and revalidates evicted successes', () => {
+    const encodings = Array.from({ length: 257 }, (_, index) =>
+      crypto.encodePoint(crypto.scalePoint(crypto.G, BigInt(800000 + index))),
+    );
+    const decode = vi.spyOn(crypto, 'decodePoint');
+    try {
+      for (const encoded of encodings)
+        expect(validateHandCommitments(pointLedger(encoded), [0]).ok).toBe(true);
+      expect(decode).toHaveBeenCalledTimes(257);
+      expect(validateHandCommitments(pointLedger(encodings[0] ?? ''), [0]).ok).toBe(true);
+      expect(decode).toHaveBeenCalledTimes(258);
+    } finally {
+      decode.mockRestore();
+    }
   });
 
   test('applies fresh public credits and debits as independent group arithmetic', () => {

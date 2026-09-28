@@ -1,0 +1,54 @@
+{
+  "profileSha256": "42f87199eb449e70d23ef982578b0fd33c0bf99ff646ba9d665feba1592ce999",
+  "profileBytes": 13663569,
+  "profileLocalPath": "/private/tmp/hexfield-scenario6-cpu-profile/scenario6-60s.cpuprofile",
+  "compiledManifestExactMatch": true,
+  "sourceUnchanged": true,
+  "scenario": 6,
+  "security": "verified",
+  "seed": 42,
+  "gameIndex": 0,
+  "maxElapsedMs": 60000,
+  "elapsedMilliseconds": 60038.640875,
+  "revision": 95,
+  "turn": 18,
+  "operationTimings": {
+    "sessionFlush": {
+      "calls": 3626,
+      "totalMilliseconds": 45831.376382999755,
+      "maximumMilliseconds": 1879.2085829999996
+    },
+    "networkDelivery": {
+      "calls": 3575,
+      "totalMilliseconds": 725.2978600001261,
+      "maximumMilliseconds": 7.204499999999825
+    },
+    "botDecide": {
+      "calls": 51,
+      "totalMilliseconds": 19.173285999992004,
+      "maximumMilliseconds": 1.554667000000336
+    },
+    "actorExport": {
+      "calls": 75,
+      "totalMilliseconds": 551.8238360000214,
+      "maximumMilliseconds": 16.60616700000537
+    },
+    "actorAdvance": {
+      "calls": 75,
+      "totalMilliseconds": 3451.862544000018,
+      "maximumMilliseconds": 437.12525000000096
+    },
+    "actorDecide": {
+      "calls": 14,
+      "totalMilliseconds": 5.952080000002752,
+      "maximumMilliseconds": 0.8323750000054133
+    }
+  },
+  "artifacts": {
+    "caller-breakdown.json": "1c468e1ffdca2d0cd2c91c139ee13dbb249a6027fe93858703beaa7ac2485388",
+    "compiled-after.json": "b9cb47c2bfaa8d3da3958541e142dced7177a2ec9e37ed990ce1c700c0c0e183",
+    "compiled-before.json": "b9cb47c2bfaa8d3da3958541e142dced7177a2ec9e37ed990ce1c700c0c0e183",
+    "node-version.txt": "9b8856ee50cf06a9ce94d984812927448e9be59b03931bc1478b1d1d49a0d7b5",
+    "summary.json": "b8322ab8f4872e9109accdcb2ae8776d216fcf7e7af8e66e621ec4d7d057c3de"
+  }
+}
