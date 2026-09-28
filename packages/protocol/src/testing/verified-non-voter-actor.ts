@@ -494,7 +494,12 @@ export function createVerifiedNonVoterActor(
             ? driver.committed(before.log, validated.value.input, advanced.value.log.state)
             : failure('non-voter-driver', 'Driver cannot apply protocol-only certified entries');
         if (!committed.ok) return committed;
-        entries.push(validated.value);
+        // Journal replay accepts only the certified wire envelope. Derived state
+        // includes Maps and engine metadata which cannot cross canonical boundaries.
+        entries.push({
+          entry: validated.value.entry,
+          certificate: [...validated.value.certificate],
+        });
         context = advanced.value;
         tradeResponses.clear();
         if (

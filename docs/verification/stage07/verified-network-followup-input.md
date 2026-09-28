@@ -1,7 +1,7 @@
 Read-only follow-up security/correctness review of a TEST-ONLY real-cryptography network runner and non-voting seat actor. Previous review identified per-loop contribution floods, missing automatic victory commands, missing SUBMIT retry, actor async/prefix races and insufficient acceptance assertions. Current source below incorporates fixes. Focus on concrete remaining defects, especially how the runner schedules retries and handles asynchronous head changes, strict 3-of-4 certificates after proposer exclusion, per-seat private authority, and honest terminal audits. The actor focused test has SYNTHETIC quorum-certified exclusion/next command, explicitly not live replica acceptance. Scenario6 live full-game is still pending; don't interpret that test as proof of it. Alternate wrapper reuse retains a previously validated signed entry, not a new certificate. This code never ships to browser gameplay. Don't alter files or use tools. Return findings with severity/path/why, and distinguish test limitations from actual correctness defects. Do not request repeated unrelated full suites.
 
-
 ### tools/sim/src/net.ts
+
 ```
 import { RandomBot, createBotRng } from '@cp2p/bots';
 import { canonicalDecode, hashValue, toHex } from '@cp2p/codec';
@@ -1088,8 +1088,8 @@ function corruptDerivedBank(session: P2PSession): void {
 
 ```
 
-
 ### tools/sim/src/non-voter-command.ts
+
 ```
 import { failure } from '@cp2p/engine';
 import type { CommandShape, Result } from '@cp2p/engine';
@@ -1158,8 +1158,8 @@ export class NonVoterCommand {
 
 ```
 
-
 ### tools/sim/src/non-voter-command.test.ts
+
 ```
 import { describe, expect, test, vi } from 'vitest';
 import { success } from '@cp2p/engine';
@@ -1255,8 +1255,8 @@ describe('non-voter command delivery', () => {
 
 ```
 
-
 ### tools/sim/src/net-adversary.ts
+
 ```
 import { identityFromSecret, parsePeerId, verifyObject } from '@cp2p/crypto';
 import {
@@ -1331,8 +1331,8 @@ export function invalidCommandProposal(
 
 ```
 
-
 ### tools/sim/src/net-batch.ts
+
 ```
 import { Worker } from 'node:worker_threads';
 import { runNetworkGame } from './net.js';
@@ -1522,8 +1522,8 @@ export async function runNetworkBatch(options: NetBatchOptions): Promise<NetBatc
 
 ```
 
-
 ### tools/sim/src/cli.ts
+
 ```
 import { existsSync, readFileSync } from 'node:fs';
 import { Worker } from 'node:worker_threads';
@@ -1986,8 +1986,8 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
 
 ```
 
-
 ### packages/protocol/src/testing/verified-non-voter-actor.ts
+
 ```
 import { canonicalDecode, canonicalEncode } from '@cp2p/codec';
 import { identityFromSecret } from '@cp2p/crypto';
@@ -2929,8 +2929,8 @@ function guard<T>(run: () => Promise<Result<T>>): Promise<Result<T>> {
 
 ```
 
-
 ### packages/protocol/src/testing/verified-non-voter-actor.test.ts
+
 ```
 import { enumerateCommands } from '@cp2p/engine';
 import type { Seat } from '@cp2p/engine';
@@ -3463,8 +3463,8 @@ describe('VerifiedNonVoterActor', () => {
 
 ```
 
-
 ### packages/protocol/src/testing/verified-network-fixture.ts
+
 ```
 import { fromBase64Url, hashValue, toBase64Url, toHex } from '@cp2p/codec';
 import { scalarToBytes } from '@cp2p/crypto';
@@ -3781,8 +3781,8 @@ export function createVerifiedNetworkFixture(options: VerifiedNetworkFixtureOpti
 
 ```
 
-
 ### packages/protocol/src/testing/memnet.ts
+
 ```
 import type { PeerId, ProtocolClock, Transport, Unsubscribe } from '../transport.js';
 import { VirtualClock } from './virtual-clock.js';
@@ -4264,8 +4264,8 @@ class SeededRandom {
 
 ```
 
-
 ### docs/verification/stage07/verified-non-voter-review-disposition.md
+
 ```
 # Verified non-voter actor review disposition
 
@@ -4286,8 +4286,8 @@ The alternate certificate wrapper check proves that an already-accepted signed e
 
 ```
 
-
 ### .github/workflows/verified-network.yml
+
 ```
 name: Verified network acceptance
 

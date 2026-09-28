@@ -3,6 +3,7 @@ import type { Seat } from '@cp2p/engine';
 import { canonicalEncode, hashValue, toHex } from '@cp2p/codec';
 import { describe, expect, test, vi } from 'vitest';
 import { entryHash, genesisDigest, signEntry } from '../genesis.js';
+import { MasterRevealCoordinator } from '../master-reveal.js';
 import { MemoryProtocolJournal } from '../journal.js';
 import { decodeProtocolMessage } from '../messages.js';
 import type { ProtocolMessage } from '../messages.js';
@@ -563,6 +564,27 @@ describe('VerifiedNonVoterActor', () => {
         false,
       );
       expect(publishedOwnedContribution).toBe(true);
+      // Exercise the actual journal-to-terminal-replay path while the retained
+      // prefix is available. It is valid but unfinished, so encoding must succeed.
+      const metadataChecks: ReturnType<MasterRevealCoordinator['metadata']>[] = [];
+      // oxlint-disable-next-line typescript/unbound-method -- The saved implementation is called with its coordinator receiver.
+      const dispose = MasterRevealCoordinator.prototype.dispose;
+      const metadataSpy = vi
+        .spyOn(MasterRevealCoordinator.prototype, 'dispose')
+        .mockImplementation(function (this: MasterRevealCoordinator) {
+          metadataChecks.push(this.metadata().finally(() => dispose.call(this)));
+        });
+      try {
+        nonVoter.dispose();
+        actor = null;
+        const checked = metadataChecks[0];
+        if (!checked || metadataChecks.length !== 1)
+          throw new Error('Missing actor master journal check');
+        const metadata = await checked;
+        expect(metadata).toMatchObject({ ok: false, error: { code: 'master-reveal-unfinished' } });
+      } finally {
+        metadataSpy.mockRestore();
+      }
     } finally {
       actor?.dispose();
       for (const session of sessions.values()) session.dispose();
