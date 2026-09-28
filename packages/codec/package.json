@@ -9,6 +9,11 @@
       "types": "./src/index.ts",
       "@cp2p/source": "./src/index.ts",
       "default": "./dist/index.js"
+    },
+    "./internal": {
+      "types": "./src/internal.ts",
+      "@cp2p/source": "./src/internal.ts",
+      "default": "./dist/internal.js"
     }
   },
   "scripts": {

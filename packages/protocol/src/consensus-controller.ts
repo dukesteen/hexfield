@@ -348,7 +348,9 @@ export class ConsensusController {
 }
 
 function sameBytes(a: Uint8Array, b: Uint8Array): boolean {
-  return a.length === b.length && a.every((byte, index) => byte === b[index]);
+  if (a.length !== b.length) return false;
+  for (let index = 0; index < a.length; index++) if (a[index] !== b[index]) return false;
+  return true;
 }
 
 function checkLocalKey(options: ConsensusControllerOptions): Result<void> {

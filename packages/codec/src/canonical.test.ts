@@ -1,4 +1,6 @@
 import { describe, expect, test } from 'vitest';
+import * as publicCodec from './index.js';
+import { canonicalText } from './internal.js';
 import {
   canonicalDecode,
   canonicalEncode,
@@ -18,6 +20,21 @@ function mustThrow(action: () => unknown): void {
 }
 
 describe('canonical codec', () => {
+  test('internal canonical text preserves Unicode distinctions without a wire change', () => {
+    expect(Object.hasOwn(publicCodec, 'canonicalText')).toBe(false);
+    for (const value of ['é', 'e\u0301', '🌲', '\ud800', '\ud801']) {
+      expect(canonicalText({ text: value })).toBe(`{"text":${JSON.stringify(value)}}`);
+      expect(new TextEncoder().encode(canonicalText({ text: value }))).toEqual(
+        canonicalEncode({ text: value }),
+      );
+      expect(canonicalDecode(canonicalEncode({ text: value }))).toEqual({ text: value });
+    }
+    // UTF-8 encoders replace lone surrogates in raw strings. Canonical JSON
+    // escapes them, so the guard must continue distinguishing the originals.
+    expect(canonicalText('\ud800')).not.toBe(canonicalText('\ud801'));
+    expect(canonicalText('é')).not.toBe(canonicalText('e\u0301'));
+  });
+
   test('sorts keys by UTF-16 code units and ignores insertion order', () => {
     const first = { z: 1, a: { y: 2, x: 3 }, '😀': 4, ä: 5 };
     const second = { ä: 5, '😀': 4, a: { x: 3, y: 2 }, z: 1 };

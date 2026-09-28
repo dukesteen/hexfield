@@ -141,9 +141,14 @@ function encodeValue(value: unknown, ancestors: WeakSet<object>): string {
   }
 }
 
+/** Internal text representation for exact in-process comparisons; wire data remains UTF-8. */
+export function canonicalText(value: unknown): string {
+  return encodeValue(value, new WeakSet<object>());
+}
+
 /** Encodes plain JSON-like values as canonical UTF-8 bytes. */
 export function canonicalEncode(value: unknown): Uint8Array {
-  return utf8ToBytes(encodeValue(value, new WeakSet<object>()));
+  return utf8ToBytes(canonicalText(value));
 }
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {

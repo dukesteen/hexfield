@@ -1,4 +1,5 @@
 import { canonicalDecode, canonicalEncode, hashValue, toHex } from '@cp2p/codec';
+import { canonicalText } from '@cp2p/codec/internal';
 import { parsePeerId } from '@cp2p/crypto';
 import { failure, success } from '@cp2p/engine';
 import type { Result, Seat } from '@cp2p/engine';
@@ -189,17 +190,13 @@ const stateSchema = v.strictObject({
 });
 
 interface ContextStamp {
-  contextBytes: Uint8Array;
+  contextText: string;
   functions: readonly (readonly [string, unknown])[];
 }
 
 // Only an OwnedConsensusState's private state enters this set. Public transition
 // functions continue to verify every caller-supplied state in full.
 const ownedStates = new WeakSet<ConsensusState>();
-
-function sameBytes(left: Uint8Array, right: Uint8Array): boolean {
-  return left.length === right.length && left.every((byte, index) => byte === right[index]);
-}
 
 function nonfunctions(value: object): Record<string, unknown> {
   return Object.fromEntries(Object.entries(value).filter(([, item]) => typeof item !== 'function'));
@@ -237,7 +234,7 @@ function contextStamp(context: ProposalContext): ContextStamp {
   delete other.log;
   delete other.policy;
   return {
-    contextBytes: canonicalEncode({
+    contextText: canonicalText({
       ...other,
       log: {
         ...log,
@@ -255,7 +252,7 @@ function contextStamp(context: ProposalContext): ContextStamp {
 
 function sameContextStamp(left: ContextStamp, right: ContextStamp): boolean {
   return (
-    sameBytes(left.contextBytes, right.contextBytes) &&
+    left.contextText === right.contextText &&
     left.functions.length === right.functions.length &&
     left.functions.every(
       ([name, value], index) =>
@@ -1672,7 +1669,7 @@ class OwnedConsensusStateImpl implements OwnedConsensusState {
       const openedFunctions = this.stamp.functions.filter(([name]) => !rebuilt.has(name));
       const replayedFunctions = replayed.functions.filter(([name]) => !rebuilt.has(name));
       return (
-        sameBytes(this.stamp.contextBytes, replayed.contextBytes) &&
+        this.stamp.contextText === replayed.contextText &&
         openedFunctions.length === replayedFunctions.length &&
         openedFunctions.every(
           ([name, reference], index) =>

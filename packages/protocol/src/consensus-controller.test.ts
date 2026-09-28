@@ -576,6 +576,27 @@ describe('durable consensus controller', () => {
     expect(await store.load()).toBeNull();
   });
 
+  test.each([
+    ['abcd', 'abce'],
+    ['café🌲', 'café🌳'],
+    ['\ud800', '\ud801'],
+  ])('rejects same-length text mutation %j to %j during persistence', async (before, after) => {
+    const store = new PausableStore();
+    const { options, candidate, emissions } = setup(store);
+    const annotation = { nested: { text: before } };
+    Object.assign(options.context, { annotation });
+    const controller = await create(options);
+    store.pauseUpdates = true;
+    const pending = controller.dispatch({ kind: 'propose', candidate });
+    await store.entered.promise;
+    annotation.nested.text = after;
+    store.resume.release();
+    expect(errorCode(await pending)).toBe('consensus-context');
+    expect(controller.hasContextFault()).toBe(true);
+    expect(emissions).toHaveLength(0);
+    expect((await store.load())?.revision).toBe(1);
+  });
+
   test('rejects a local callback that changes the certified context during reduction', async () => {
     const { options, candidate, store, emissions } = setup();
     const controller = await create({
