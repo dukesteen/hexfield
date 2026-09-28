@@ -1,5 +1,9 @@
 import { scalarToBytes } from '@cp2p/crypto';
 import { describe, expect, test } from 'vitest';
+import type {
+  VerifiedNetworkAuditRequest,
+  VerifiedNetworkAuditResult,
+} from './verified-network-audit.js';
 import { genesisDeckDefinitions } from '../deck-genesis.js';
 import { validateGenesisEntry } from '../genesis.js';
 import { VirtualClock } from './virtual-clock.js';
@@ -88,6 +92,49 @@ describe('verified network fixture', () => {
       expect(beacon?.link(0, 1)).toHaveLength(32);
       expect(beacon?.extension(1)).toMatchObject({ length: 128 });
       expect(beacon?.extension(1).tip).toHaveLength(32);
+    } finally {
+      fixture.dispose();
+    }
+  }, 30_000);
+  test('reserves private comparison before dispatch and retains async failures', async () => {
+    const requests: VerifiedNetworkAuditRequest[] = [];
+    const rejectors: ((error: Error) => void)[] = [];
+    const fixture = createVerifiedNetworkFixture({
+      seed: 803,
+      verifyLivePrivateStates: true,
+      auditExecutor(request) {
+        requests.push(request);
+        return {
+          result: new Promise<VerifiedNetworkAuditResult>((_resolve, reject) =>
+            rejectors.push(reject),
+          ),
+          cancel() {},
+        };
+      },
+    });
+    try {
+      const firstRunner = fixture.sessionOptions(0).auditRunner;
+      const secondRunner = fixture.sessionOptions(1).auditRunner;
+      if (!firstRunner || !secondRunner) throw new Error('Missing audit runner');
+      const first = firstRunner({
+        genesisEntry: fixture.entry,
+        entries: [],
+        masters: fixture.mastersForAudit(),
+      });
+      const second = secondRunner({
+        genesisEntry: fixture.entry,
+        entries: [],
+        masters: fixture.mastersForAudit(),
+      });
+      expect(requests[0]?.privateStates).toBeDefined();
+      expect(requests[1]?.privateStates).toBeUndefined();
+      const failed = Promise.allSettled([first.result, second.result]);
+      const waiting = fixture.waitForAudits().catch((error: unknown) => error);
+      for (const reject of rejectors) reject(new Error('comparison failed'));
+      expect((await failed).every((item) => item.status === 'rejected')).toBe(true);
+      expect(await waiting).toMatchObject({ message: 'comparison failed' });
+      expect(fixture.privateStateEvidence().checkedSequences).toBe(0);
+      await expect(fixture.waitForAudits()).rejects.toThrow('comparison failed');
     } finally {
       fixture.dispose();
     }

@@ -67,7 +67,13 @@ evidence from older traces. Reviewed lobby readiness and ceremony delivery fixes
 are committed locally and on `acceptance/mc-md-v6`; they are not deployed.
 The [persistence profile](verification/stage10/persistence-lifecycle-acceptance.md)
 now checks exact restoration, restored-voter participation and private state at
-every sequence. Its full-game result is still pending.
+every sequence. The follow-up reached victory but timed out during synchronous
+audits. The [worker correction](verification/stage10/worker-audit-scheduling.md)
+preserves independent audits and private comparisons while allowing reveal
+delivery to continue; full-game acceptance remains open. The
+[derived-state repair review](verification/stage10/derived-context-repair-review-disposition.md)
+now covers locked safety records, pending writes and the commit boundary.
+Focused tests pass; the complete corruption scenario still needs a rerun.
 
 ## 01 — Repository Foundation
 

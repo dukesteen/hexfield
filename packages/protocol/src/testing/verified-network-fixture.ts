@@ -1,10 +1,6 @@
 import { fromBase64Url, hashValue, toBase64Url, toHex } from '@cp2p/codec';
 import { scalarToBytes } from '@cp2p/crypto';
-import { failure, success } from '@cp2p/engine';
 import type { Seat } from '@cp2p/engine';
-import { reconstructPrivateSeats } from '../private-replay.js';
-import { auditCertifiedGame } from '../audit.js';
-import type { AuditReport } from '../audit-types.js';
 import { createBeaconSecretSource } from '../beacon-source.js';
 import type { BeaconSecretProvider } from '../beacon-source.js';
 import { MemoryBeaconContributionStore } from '../beacon-contributions.js';
@@ -32,6 +28,11 @@ import type { P2PSessionOptions } from '../p2p-session.js';
 import { VerifiedSessionDriver } from '../verified-session-driver.js';
 import { createGenesisDeckFixture } from './deck-fixture.js';
 import { createSimulationGenesis } from './simulation-genesis.js';
+import { performVerifiedNetworkAudit } from './verified-network-audit.js';
+import type {
+  VerifiedNetworkAuditJob,
+  VerifiedNetworkAuditRequest,
+} from './verified-network-audit.js';
 
 declare const performance: { now(): number };
 
@@ -109,6 +110,7 @@ export interface VerifiedNetworkFixtureOptions {
   readonly vpTarget?: number;
   /** Compare session-owned snapshots with terminal reconstruction and the independent audit. */
   readonly verifyLivePrivateStates?: boolean;
+  readonly auditExecutor?: (request: VerifiedNetworkAuditRequest) => VerifiedNetworkAuditJob;
 }
 
 export interface VerifiedNetworkAuditTiming {
@@ -153,7 +155,12 @@ export function createVerifiedNetworkFixture(options: VerifiedNetworkFixtureOpti
   );
   const providers = new Map<Seat, BeaconSecretProvider>();
   const stores = new Map<Seat, SeatStores>();
+  const auditJobs = new Set<VerifiedNetworkAuditJob>();
+  const auditResults = new Set<Promise<unknown>>();
+  let comparisonReserved = false;
+  let auditFailure: unknown;
   const dispose = (): void => {
+    for (const job of auditJobs) job.cancel();
     for (const provider of providers.values()) provider.dispose();
     for (const bytes of masterSecrets.values()) bytes.fill(0);
     for (const identity of simulation.identities.values()) identity.secretKey.fill(0);
@@ -302,61 +309,67 @@ export function createVerifiedNetworkFixture(options: VerifiedNetworkFixtureOpti
           };
           auditTimings.set(seat, timing);
           const started = performance.now();
-          let report: AuditReport;
+          const compare = options.verifyLivePrivateStates && !comparisonReserved;
+          if (compare) {
+            comparisonReserved = true;
+            timing.privateComparisonInvocations++;
+          }
+          const snapshots = compare
+            ? [...livePrivateHashes]
+                .map(([seq, hashes]) => ({ seq, seats: [...hashes].toSorted(([a], [b]) => a - b) }))
+                .toSorted((a, b) => a.seq - b.seq)
+            : undefined;
+          const privateStates = snapshots
+            ? { snapshots, digest: toHex(hashValue(snapshots)) }
+            : undefined;
+          const request: VerifiedNetworkAuditRequest = {
+            ...input,
+            deckTranscripts: deck.transcripts,
+            ...(privateStates ? { privateStates } : {}),
+          };
+          let job: VerifiedNetworkAuditJob;
           try {
-            if (options.verifyLivePrivateStates && checkedPrivateSequences === 0) {
-              const comparisonStarted = performance.now();
-              try {
-                const rebuilt = reconstructPrivateSeats({
-                  genesisEntry: input.genesisEntry,
-                  entries: input.entries,
-                  engine: simulation.engine,
-                  policy,
-                  secrets: input.masters,
-                  verifyPrivateState(seq, states) {
-                    const hashes = livePrivateHashes.get(seq);
-                    if (
-                      !hashes ||
-                      hashes.size !== HUMAN_SEATS.length ||
-                      states.size !== hashes.size ||
-                      [...states].some(
-                        ([ownedSeat, privateState]) =>
-                          hashes.get(ownedSeat) !== toHex(hashValue(privateState)),
-                      )
-                    )
-                      return failure(
-                        'fixture-live-private-state',
-                        'Live owned state differs from terminal reconstruction',
-                        { seq },
-                      );
-                    return success(undefined);
-                  },
-                });
-                if (!rebuilt.ok) throw new Error(`${rebuilt.error.code}: ${rebuilt.error.message}`);
-                rebuilt.value.dispose();
-                checkedPrivateSequences = input.entries.length + 1;
-                if (livePrivateHashes.size !== checkedPrivateSequences)
-                  throw new Error('Live private capture omitted a certified sequence');
-              } finally {
-                timing.privateComparisonInvocations++;
-                timing.privateComparisonMilliseconds += performance.now() - comparisonStarted;
-              }
-            }
-            report = auditCertifiedGame({
-              genesisEntry: input.genesisEntry,
-              entries: input.entries,
-              masters: input.masters,
-              engine: simulation.engine,
-              policy,
-            });
+            job = options.auditExecutor
+              ? options.auditExecutor(request)
+              : {
+                  result: Promise.resolve(performVerifiedNetworkAudit(request)),
+                  cancel() {},
+                };
+          } catch (error) {
+            job = { result: Promise.reject(error), cancel() {} };
           } finally {
-            for (const item of input.masters) item.master.fill(0);
+            for (const item of input.masters) if (item.master.byteLength) item.master.fill(0);
+          }
+          auditJobs.add(job);
+          const result = job.result.then((value) => {
+            if (privateStates) {
+              if (
+                value.checkedPrivateSequences !== input.entries.length + 1 ||
+                value.privateStateDigest !== privateStates.digest
+              )
+                throw new Error('Live private comparison worker omitted certified evidence');
+              checkedPrivateSequences = value.checkedPrivateSequences;
+              timing.privateComparisonMilliseconds += value.privateComparisonMilliseconds;
+            }
+            return value.report;
+          });
+          auditResults.add(result);
+          void result.then(
+            () => finish(),
+            (error: unknown) => {
+              auditFailure = error;
+              finish();
+            },
+          );
+          function finish() {
+            auditJobs.delete(job);
+            auditResults.delete(result);
             const elapsed = performance.now() - started;
             timing.invocations++;
             timing.totalMilliseconds += elapsed;
             timing.lastMilliseconds = elapsed;
           }
-          return { result: Promise.resolve(report), cancel() {} };
+          return { result, cancel: () => job.cancel() };
         },
         createDriver: (engine, signedGenesis, _clock, ownedSeats) => {
           if (ownedSeats.length !== 1 || ownedSeats[0] !== seat)
@@ -400,6 +413,10 @@ export function createVerifiedNetworkFixture(options: VerifiedNetworkFixtureOpti
       entry,
       policy,
       sessionOptions,
+      waitForAudits: async (): Promise<void> => {
+        await Promise.all(auditResults);
+        if (auditFailure) throw auditFailure;
+      },
       privateStateEvidence: () => ({
         capturedSequences: livePrivateHashes.size,
         capturedSnapshots: [...livePrivateHashes.values()].reduce(

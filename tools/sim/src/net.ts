@@ -1,4 +1,5 @@
 import { RandomBot, createBotRng } from '@cp2p/bots';
+import { setImmediate as yieldEventLoop } from 'node:timers/promises';
 import { canonicalDecode, hashValue, toHex } from '@cp2p/codec';
 import type { CommandShape, GameState, Pending, PrivateState, Result, Seat } from '@cp2p/engine';
 import {
@@ -44,6 +45,7 @@ import {
 } from './persistence-lifecycle.js';
 import type { LifecycleHistoryEntry, LifecycleRestart } from './persistence-lifecycle.js';
 import { observeOutgoingTransport } from './observed-transport.js';
+import { createVerifiedNetworkAuditJob } from './node-audit-client.js';
 
 export interface NetworkGameOptions {
   seed: number;
@@ -73,6 +75,10 @@ export interface NetworkGameResult {
   inputs: number;
   virtualMilliseconds: number;
   elapsedMilliseconds: number;
+  operationTimings: Record<
+    string,
+    { calls: number; totalMilliseconds: number; maximumMilliseconds: number }
+  >;
   finalStateHash: string;
   finalLogHash: string;
   audits: {
@@ -113,6 +119,11 @@ export interface NetworkGameResult {
     censoredCommandCommitted: boolean;
     snapshotRequests: number;
     snapshotResponses: number;
+    derivedContextDiagnostic: string | null;
+    snapshotRepairAdopted: boolean;
+    repairSnapshotParentSeq: number | null;
+    repairSnapshotHash: string | null;
+    continuationCommandHash: string | null;
     duplicateDeliveries: number;
     certifiedExclusionPeers: number;
     byzantineCommandCommits: number;
@@ -156,6 +167,7 @@ export async function runNetworkGame(options: NetworkGameOptions): Promise<Netwo
           seed: options.seed,
           gameIndex: options.gameIndex,
           verifyLivePrivateStates: lifecycle !== null,
+          auditExecutor: createVerifiedNetworkAuditJob,
         })
       : null;
   const game =
@@ -201,6 +213,11 @@ export async function runNetworkGame(options: NetworkGameOptions): Promise<Netwo
   let censoredCommandHash: string | null = null;
   let corruptedHeight: number | null = null;
   let desyncObserved = false;
+  let derivedContextDiagnostic: string | null = null;
+  let snapshotRepairAdopted = false;
+  let repairSnapshotParentSeq: number | null = null;
+  let repairSnapshotHash: string | null = null;
+  let continuationCommandHash: string | null = null;
   const snapshotRequestAtSeqs = new Set<number>();
   const snapshotResponsePairs = new Set<string>();
   let certifiedExclusionPeers = 0;
@@ -234,6 +251,7 @@ export async function runNetworkGame(options: NetworkGameOptions): Promise<Netwo
   let lastProgressMilliseconds = 0;
   let highestProgressRevision = -1;
   let terminalReachedMilliseconds: number | null = null;
+  const operationTimings: NetworkGameResult['operationTimings'] = {};
   const packetCounts = new Map<
     Seat,
     { sent: Map<string, number>; received: Map<string, number> }
@@ -269,14 +287,44 @@ export async function runNetworkGame(options: NetworkGameOptions): Promise<Netwo
       throw new Error(`Peer game exceeded ${options.maxElapsedMs} ms: ${progressDiagnostic()}`);
   }
 
+  function recordOperation(name: string, operationStarted: number): void {
+    const elapsed = performance.now() - operationStarted;
+    const timing = (operationTimings[name] ??= {
+      calls: 0,
+      totalMilliseconds: 0,
+      maximumMilliseconds: 0,
+    });
+    timing.calls++;
+    timing.totalMilliseconds += elapsed;
+    timing.maximumMilliseconds = Math.max(timing.maximumMilliseconds, elapsed);
+  }
+
+  function measure<T>(name: string, operation: () => T): T {
+    const operationStarted = performance.now();
+    try {
+      return operation();
+    } finally {
+      recordOperation(name, operationStarted);
+    }
+  }
+
   function observe(seat: Seat, update: SessionUpdate): void {
     const prior = updates.get(seat);
+    const session = sessions.get(seat);
+    const protocolStatus = session?.getProtocolStatus();
     if (prior && update.revision < prior.revision)
       failures.push(`Peer ${seat} rolled back a commit`);
     if (update.status.kind === 'error') {
-      if (options.scenario === 8 && seat === 0 && faultInjected && !faultRecovered)
+      if (
+        options.scenario === 8 &&
+        seat === 0 &&
+        faultInjected &&
+        protocolStatus?.kind === 'halted' &&
+        protocolStatus.code === 'consensus-context'
+      ) {
         desyncObserved = true;
-      else if (
+        derivedContextDiagnostic = protocolStatus.code;
+      } else if (
         options.scenario === 6 &&
         seat === 0 &&
         faultInjected &&
@@ -313,10 +361,28 @@ export async function runNetworkGame(options: NetworkGameOptions): Promise<Netwo
       seat === 0 &&
       desyncObserved &&
       corruptedHeight !== null &&
+      protocolStatus === null &&
       update.revision >= corruptedHeight &&
-      update.status.kind === 'running'
+      update.status.kind === 'running' &&
+      repairSnapshotParentSeq === corruptedHeight - 1 &&
+      repairSnapshotHash !== null
     )
-      faultRecovered = true;
+      snapshotRepairAdopted = true;
+    if (
+      options.scenario === 8 &&
+      seat === 0 &&
+      snapshotRepairAdopted &&
+      !faultRecovered &&
+      corruptedHeight !== null &&
+      update.revision > corruptedHeight &&
+      protocolStatus === null
+    ) {
+      const continued = session?.exportSave().entries[update.revision - 1];
+      if (continued?.entry.payload.kind === 'command') {
+        continuationCommandHash = entryHash(continued.entry);
+        faultRecovered = true;
+      }
+    }
     if (
       (options.scenario === 6 || seat === 0) &&
       maliciousHeight !== null &&
@@ -357,7 +423,37 @@ export async function runNetworkGame(options: NetworkGameOptions): Promise<Netwo
   }
 
   async function flush(): Promise<void> {
-    await Promise.all([...sessions.values()].map((session) => session.flush()));
+    const operationStarted = performance.now();
+    try {
+      await Promise.all([...sessions.values()].map((session) => session.flush()));
+    } finally {
+      recordOperation('sessionFlush', operationStarted);
+    }
+  }
+
+  async function waitForTerminalAudits(): Promise<void> {
+    if (!verified) return;
+    checkDeadline();
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    const completed = verified.waitForAudits();
+    try {
+      if (options.maxElapsedMs === undefined) await completed;
+      else {
+        const limit = options.maxElapsedMs;
+        await Promise.race([
+          completed,
+          new Promise<never>((_resolve, reject) => {
+            timeout = setTimeout(
+              () => reject(new Error(`Peer game exceeded ${limit} ms: ${progressDiagnostic()}`)),
+              Math.max(0, Math.ceil(limit - (performance.now() - started))),
+            );
+          }),
+        ]);
+      }
+      checkDeadline();
+    } finally {
+      if (timeout !== undefined) clearTimeout(timeout);
+    }
   }
 
   function progressDiagnostic(): string {
@@ -379,6 +475,7 @@ export async function runNetworkGame(options: NetworkGameOptions): Promise<Netwo
           }
         : null,
       auditTimings: verified?.auditTimingEvidence() ?? [],
+      operationTimings,
       submission,
       peers: [...sessions].map(([seat, session]) => ({
         seat,
@@ -542,38 +639,37 @@ export async function runNetworkGame(options: NetworkGameOptions): Promise<Netwo
               partitionProposalSeen.add(seat);
           }
           if (options.scenario === 8 && seat === 0 && !faultRecovered) {
-            const current = updates.get(seat);
-            if (
-              corruptedHeight === null &&
-              current &&
-              current.revision >= 20 &&
-              current.revision % keys.length !== 0
-            )
-              corruptedHeight = current.revision + 1;
             const decoded = unwrap(decodeProtocolMessage(bytes));
+            const session = sessions.get(seat);
+            const head = session?.getCommittedHead();
+            const vote = decoded.t === 'VOTE' ? decoded.vote.body : null;
+            if (
+              !faultInjected &&
+              corruptedHeight === null &&
+              session &&
+              head &&
+              head.seq >= 20 &&
+              head.seq % keys.length !== 0 &&
+              vote?.seq === head.seq + 1 &&
+              vote.phase === 'precommit' &&
+              vote.valueHash !== null
+            ) {
+              corruptedHeight = vote.seq;
+              faultRevision = head.seq;
+              corruptDerivedBank(session);
+              faultInjected = true;
+            }
             if (
               decoded.t === 'SNAPSHOT_RES' &&
               from !== game.identities.get(0)?.peerId &&
               desyncObserved &&
-              snapshotRequestAtSeqs.has(decoded.atSeq)
-            )
-              snapshotResponsePairs.add(`${from}:${decoded.atSeq}`);
-            // Keep this peer's target-height voting record empty while the other three certify.
-            if (
-              (decoded.t === 'PROPOSAL' && decoded.proposal.body.entry.seq === corruptedHeight) ||
-              (decoded.t === 'VOTE' && decoded.vote.body.seq === corruptedHeight)
-            )
-              return;
-            if (
-              !faultInjected &&
-              decoded.t === 'COMMIT' &&
-              decoded.certified.entry.seq === corruptedHeight
+              corruptedHeight !== null &&
+              decoded.atSeq === corruptedHeight - 1 &&
+              snapshotRequestAtSeqs.has(corruptedHeight - 1)
             ) {
-              const session = sessions.get(seat);
-              if (!session) throw new Error('Missing peer for cache corruption');
-              corruptDerivedBank(session);
-              faultInjected = true;
-              faultRevision = decoded.certified.entry.seq - 1;
+              snapshotResponsePairs.add(`${from}:${decoded.atSeq}`);
+              repairSnapshotParentSeq ??= decoded.atSeq;
+              repairSnapshotHash ??= toHex(hashValue(decoded.snapshot));
             }
           }
           listener(from, bytes);
@@ -946,6 +1042,11 @@ export async function runNetworkGame(options: NetworkGameOptions): Promise<Netwo
     const maxSteps = options.maxSteps ?? 1_000_000;
     for (let step = 0; step < maxSteps; step++) {
       checkDeadline();
+      if (verified && step % 256 === 0) {
+        // Let worker messages settle without altering virtual packet/timer order.
+        // oxlint-disable-next-line no-await-in-loop -- Real worker delivery must not starve behind virtual microtasks.
+        await yieldEventLoop();
+      }
       // oxlint-disable-next-line no-await-in-loop -- Virtual network delivery and peer queues alternate causally.
       await flush();
       checkDeadline();
@@ -1024,12 +1125,17 @@ export async function runNetworkGame(options: NetworkGameOptions): Promise<Netwo
         const sameHead = actorHead.seq === honestHead.seq && actorHead.hash === honestHead.hash;
         if (!sameHead || network.clock.now() >= nonVoterContributionRetryAt) {
           nonVoterContributionRetryAt = network.clock.now() + 250;
-          unwrap(
-            // oxlint-disable-next-line no-await-in-loop -- Each certified prefix authorizes the next private contribution.
-            await (sameHead
-              ? verifiedNonVoter.publishContributions()
-              : verifiedNonVoter.advance(honest.exportSave().entries)),
-          );
+          const operationStarted = performance.now();
+          try {
+            unwrap(
+              // oxlint-disable-next-line no-await-in-loop -- Each certified prefix authorizes the next private contribution.
+              await (sameHead
+                ? verifiedNonVoter.publishContributions()
+                : verifiedNonVoter.advance(honest.exportSave().entries)),
+            );
+          } finally {
+            recordOperation(sameHead ? 'actorContribution' : 'actorAdvance', operationStarted);
+          }
         }
         // A peer may finish queued async work during private proof preparation.
         if ([...updates.values()].some((update) => update.revision > latest.revision)) continue;
@@ -1042,10 +1148,25 @@ export async function runNetworkGame(options: NetworkGameOptions): Promise<Netwo
           } else if (result) submission.result = result;
         }
       }
+      const allTerminal = [...updates.values()].every(
+        (update) => update.state.result && update.revision === latest.revision,
+      );
       if (
-        [...updates.values()].every(
-          (update) => update.state.result && update.revision === latest.revision,
-        ) &&
+        verified &&
+        allTerminal &&
+        [...sessions.values()].some((session) => session.getAudit().kind === 'verifying') &&
+        [...sessions.values()].every((session) =>
+          ['verifying', 'complete'].includes(session.getAudit().kind),
+        )
+      ) {
+        // All peers have their reveals. Await real worker completion instead of
+        // racing through virtual heartbeat timers while CPU audits are running.
+        // oxlint-disable-next-line no-await-in-loop -- Terminal worker jobs finish before result validation.
+        await waitForTerminalAudits();
+        continue;
+      }
+      if (
+        allTerminal &&
         (!verified ||
           [...sessions.values()].every((session) => session.getAudit().kind === 'complete'))
       ) {
@@ -1123,12 +1244,25 @@ export async function runNetworkGame(options: NetworkGameOptions): Promise<Netwo
         }
         if (options.scenario === 2 && network.diagnostics().duplicateDeliveries === 0)
           throw new Error('The latency scenario completed without delivering a duplicate packet');
+        const repairParentSeq = corruptedHeight === null ? null : corruptedHeight - 1;
+        const matchingRepairSnapshot =
+          repairParentSeq !== null &&
+          [...snapshotResponsePairs].some((pair) => pair.endsWith(`:${repairParentSeq}`));
         if (
           options.scenario === 8 &&
-          (!desyncObserved || !snapshotRequestAtSeqs.size || !snapshotResponsePairs.size)
+          (!desyncObserved ||
+            derivedContextDiagnostic !== 'consensus-context' ||
+            repairParentSeq === null ||
+            !snapshotRequestAtSeqs.has(repairParentSeq) ||
+            !matchingRepairSnapshot ||
+            !snapshotRepairAdopted ||
+            repairSnapshotParentSeq !== repairParentSeq ||
+            repairSnapshotHash === null ||
+            !faultRecovered ||
+            continuationCommandHash === null)
         )
           throw new Error(
-            'Desync did not trigger a matching snapshot request and response after corruption',
+            'Derived-context repair did not adopt the parent snapshot and certify a later command',
           );
         const hashes = new Set(
           [...updates.values()].map((update) => toHex(hashValue(update.state))),
@@ -1224,6 +1358,7 @@ export async function runNetworkGame(options: NetworkGameOptions): Promise<Netwo
           inputs: latest.revision,
           virtualMilliseconds: network.clock.now(),
           elapsedMilliseconds: performance.now() - started,
+          operationTimings,
           finalStateHash: toHex(hashValue(latest.state)),
           finalLogHash,
           audits,
@@ -1239,6 +1374,11 @@ export async function runNetworkGame(options: NetworkGameOptions): Promise<Netwo
             censoredCommandCommitted,
             snapshotRequests: snapshotRequestAtSeqs.size,
             snapshotResponses: snapshotResponsePairs.size,
+            derivedContextDiagnostic,
+            snapshotRepairAdopted,
+            repairSnapshotParentSeq,
+            repairSnapshotHash,
+            continuationCommandHash,
             duplicateDeliveries: network.diagnostics().duplicateDeliveries,
             certifiedExclusionPeers,
             byzantineCommandCommits,
@@ -1346,10 +1486,12 @@ export async function runNetworkGame(options: NetworkGameOptions): Promise<Netwo
             );
           const chosen =
             nonVoterAutomatic ??
-            actor.bot.decide(
-              { state: latest.state, seat: 0, priv: privateState },
-              pending,
-              actor.rng,
+            measure('actorDecide', () =>
+              actor.bot.decide(
+                { state: latest.state, seat: 0, priv: privateState },
+                pending,
+                actor.rng,
+              ),
             );
           if (verifiedNonVoter) {
             submission = { seat: 0, result: null };
@@ -1382,10 +1524,12 @@ export async function runNetworkGame(options: NetworkGameOptions): Promise<Netwo
           const actor = bots.get(pending.seat);
           const privateState = session.getPrivate(pending.seat);
           if (!actor || !privateState) throw new Error('Simulation actor is missing its own hand');
-          const chosen = actor.bot.decide(
-            { state: latest.state, seat: pending.seat, priv: privateState },
-            pending,
-            actor.rng,
+          const chosen = measure('botDecide', () =>
+            actor.bot.decide(
+              { state: latest.state, seat: pending.seat, priv: privateState },
+              pending,
+              actor.rng,
+            ),
           );
           const waiting = { seat: pending.seat, result: null as Result<void> | null };
           submission = waiting;
@@ -1399,7 +1543,7 @@ export async function runNetworkGame(options: NetworkGameOptions): Promise<Netwo
           await flush();
         }
       }
-      if (!network.clock.runNext())
+      if (!measure('networkDelivery', () => network.clock.runNext()))
         throw new Error('Live peer game has no queued network/timer work');
       if (network.clock.now() > 7_200_000)
         throw new Error(`Peer game exceeded two virtual hours: ${progressDiagnostic()}`);

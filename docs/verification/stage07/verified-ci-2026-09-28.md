@@ -43,3 +43,34 @@ the lobby, before connection setup; its selector correction awaits a new run.
 This is partial acceptance. It does not mark M-C or M-D complete, establish the
 remaining six real-crypto cases, or claim that later source changes have already
 been tested by this run.
+
+## Follow-up at `f520e83`
+
+[Run 36393891485](https://github.com/dukesteen/hexfield/actions/runs/36393891485)
+completed with failures. All four unit shards, static checks, build and engine
+simulation passed. Stub scenario 8 still failed on the repair gap; the proposed
+repair implementation was not in this commit. The two selected real-crypto jobs
+retained seed 42, index 0, the default ten-point target and the 900-second limit.
+Both report unchanged source fingerprint
+`8aeeb2282ba76ee42fc67fd63ce441a07e9617416077e428d196988a8ad0b96d`.
+
+- [Invalid proposer](verified-ci-2026-09-28/followup-invalid-proposer.json)
+  timed out at 900.13 seconds, revision 763, turn 133. Its latest certified
+  progress was at 899.64 seconds. Three honest peers remained active, with no
+  protocol error and no terminal result. The first beacon extension had already
+  completed. This run shows continued progress, not a deadlock; it does not
+  establish completion within the budget. Operation timing is the next check.
+- [Persistence lifecycle](verified-ci-2026-09-28/followup-persistence.json)
+  reached victory at 601.04 seconds, revision 641, turn 104. All four peers had
+  the same certified head at exit. Three audits completed; the fourth awaited
+  seat 1's reveal when the deadline check fired at 911.09 seconds. The three
+  synchronous audit invocations consumed 70.33, 121.73 and 70.93 seconds; the
+  middle invocation included 51.07 seconds of private-state comparison.
+
+The persistence timeout does not prove that a reveal was lost. The fixture runs
+each audit synchronously before returning its promise. That blocks the simulated
+network pump, and the next deadline check can stop the run before an already
+queued reveal is delivered. Browser sessions instead run audits in workers. The
+fixture will use the same scheduling separation, while retaining an independent
+audit for each peer, exact private-state comparisons at every sequence and the
+existing deadline. This failed run is not full lifecycle acceptance.

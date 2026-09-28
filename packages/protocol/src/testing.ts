@@ -40,3 +40,10 @@ export {
 } from './transfer-readiness.js';
 export { MemoryEscrowLifecycleStore } from './escrow-lifecycle.js';
 export { acceptEscrowShare, escrowShareEnvelopeHash } from './escrow-distribution.js';
+export { performVerifiedNetworkAudit } from './testing/verified-network-audit.js';
+export type {
+  VerifiedNetworkAuditRequest,
+  VerifiedNetworkAuditResult,
+  VerifiedNetworkAuditJob,
+  VerifiedNetworkPrivateSnapshot,
+} from './testing/verified-network-audit.js';

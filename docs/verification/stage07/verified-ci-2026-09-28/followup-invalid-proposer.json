@@ -1,0 +1,28 @@
+{
+  "mode": "net",
+  "options": {
+    "scenario": 6,
+    "seeds": 1,
+    "startIndex": 0,
+    "seed": 42,
+    "parallel": 1,
+    "security": "verified",
+    "maxElapsedMs": 900000
+  },
+  "requestedSeeds": 1,
+  "completedGames": 0,
+  "averageTurns": null,
+  "averageInputs": null,
+  "averageVirtualMilliseconds": null,
+  "averageElapsedMilliseconds": null,
+  "results": [],
+  "failures": [
+    {
+      "gameIndex": 0,
+      "message": "Peer game exceeded 900000 ms: {\"elapsedMilliseconds\":900129.5350909999,\"lastProgressMilliseconds\":899641.7895079999,\"terminalReachedMilliseconds\":null,\"virtualMilliseconds\":4683,\"public\":{\"revision\":763,\"turn\":133,\"phase\":[{\"data\":null,\"id\":\"preRoll\",\"module\":\"base\"},{\"data\":{\"returnTo\":\"pop\",\"targets\":[2],\"thief\":1},\"id\":\"steal\",\"module\":\"base\"}],\"result\":null,\"publicVp\":[{\"seat\":0,\"publicVp\":5},{\"seat\":1,\"publicVp\":6},{\"seat\":2,\"publicVp\":7},{\"seat\":3,\"publicVp\":6}]},\"auditTimings\":[],\"submission\":{\"seat\":1,\"result\":null},\"peers\":[{\"seat\":1,\"head\":{\"seq\":763,\"hash\":\"9d88d0b8b60ca4721bff8f4eb8021059075b6d569e401cbf72c509605214a565\"},\"revision\":763,\"turn\":{\"activeSeat\":1,\"number\":133,\"phase\":[{\"data\":null,\"id\":\"preRoll\",\"module\":\"base\"},{\"data\":{\"returnTo\":\"pop\",\"targets\":[2],\"thief\":1},\"id\":\"steal\",\"module\":\"base\"}]},\"phase\":[{\"data\":null,\"id\":\"preRoll\",\"module\":\"base\"},{\"data\":{\"returnTo\":\"pop\",\"targets\":[2],\"thief\":1},\"id\":\"steal\",\"module\":\"base\"}],\"publicVp\":[{\"seat\":0,\"publicVp\":5},{\"seat\":1,\"publicVp\":6},{\"seat\":2,\"publicVp\":7},{\"seat\":3,\"publicVp\":6}],\"result\":null,\"pending\":[{\"kind\":\"player\",\"seat\":1,\"allowed\":[\"STEAL\",\"CLAIM_VICTORY\"]}],\"protocol\":null,\"beacon\":{\"round\":148,\"chains\":[{\"seat\":0,\"chainEpoch\":1,\"index\":20,\"length\":128},{\"seat\":1,\"chainEpoch\":1,\"index\":20,\"length\":128},{\"seat\":2,\"chainEpoch\":1,\"index\":20,\"length\":128},{\"seat\":3,\"chainEpoch\":1,\"index\":20,\"length\":128}],\"active\":null},\"packets\":{\"sent\":{\"SYS_CONTRIB/beacon-reveal\":148,\"SYS_CONTRIB/beacon-extension\":1},\"received\":{\"SYS_CONTRIB/beacon-reveal\":444,\"SYS_CONTRIB/beacon-extension\":3}},\"audit\":{\"kind\":\"not-started\"},\"automaticParent\":null},{\"seat\":2,\"head\":{\"seq\":762,\"hash\":\"cb014455e6bf8605f705292f1a1381e829b46869ad59f93cc091b724202521cf\"},\"revision\":762,\"turn\":{\"activeSeat\":1,\"number\":133,\"phase\":[{\"data\":null,\"id\":\"preRoll\",\"module\":\"base\"},{\"data\":{\"returnTo\":\"pop\"},\"id\":\"moveRobber\",\"module\":\"base\"}]},\"phase\":[{\"data\":null,\"id\":\"preRoll\",\"module\":\"base\"},{\"data\":{\"returnTo\":\"pop\"},\"id\":\"moveRobber\",\"module\":\"base\"}],\"publicVp\":[{\"seat\":0,\"publicVp\":5},{\"seat\":1,\"publicVp\":6},{\"seat\":2,\"publicVp\":7},{\"seat\":3,\"publicVp\":6}],\"result\":null,\"pending\":[{\"kind\":\"player\",\"seat\":1,\"allowed\":[\"MOVE_ROBBER\",\"CLAIM_VICTORY\"]}],\"protocol\":null,\"beacon\":{\"round\":148,\"chains\":[{\"seat\":0,\"chainEpoch\":1,\"index\":20,\"length\":128},{\"seat\":1,\"chainEpoch\":1,\"index\":20,\"length\":128},{\"seat\":2,\"chainEpoch\":1,\"index\":20,\"length\":128},{\"seat\":3,\"chainEpoch\":1,\"index\":20,\"length\":128}],\"active\":null},\"packets\":{\"sent\":{\"SYS_CONTRIB/beacon-reveal\":148,\"SYS_CONTRIB/beacon-extension\":1},\"received\":{\"SYS_CONTRIB/beacon-reveal\":444,\"SYS_CONTRIB/beacon-extension\":3}},\"audit\":{\"kind\":\"not-started\"},\"automaticParent\":null},{\"seat\":3,\"head\":{\"seq\":763,\"hash\":\"9d88d0b8b60ca4721bff8f4eb8021059075b6d569e401cbf72c509605214a565\"},\"revision\":763,\"turn\":{\"activeSeat\":1,\"number\":133,\"phase\":[{\"data\":null,\"id\":\"preRoll\",\"module\":\"base\"},{\"data\":{\"returnTo\":\"pop\",\"targets\":[2],\"thief\":1},\"id\":\"steal\",\"module\":\"base\"}]},\"phase\":[{\"data\":null,\"id\":\"preRoll\",\"module\":\"base\"},{\"data\":{\"returnTo\":\"pop\",\"targets\":[2],\"thief\":1},\"id\":\"steal\",\"module\":\"base\"}],\"publicVp\":[{\"seat\":0,\"publicVp\":5},{\"seat\":1,\"publicVp\":6},{\"seat\":2,\"publicVp\":7},{\"seat\":3,\"publicVp\":6}],\"result\":null,\"pending\":[{\"kind\":\"player\",\"seat\":1,\"allowed\":[\"STEAL\",\"CLAIM_VICTORY\"]}],\"protocol\":null,\"beacon\":{\"round\":148,\"chains\":[{\"seat\":0,\"chainEpoch\":1,\"index\":20,\"length\":128},{\"seat\":1,\"chainEpoch\":1,\"index\":20,\"length\":128},{\"seat\":2,\"chainEpoch\":1,\"index\":20,\"length\":128},{\"seat\":3,\"chainEpoch\":1,\"index\":20,\"length\":128}],\"active\":null},\"packets\":{\"sent\":{\"SYS_CONTRIB/beacon-reveal\":148,\"SYS_CONTRIB/beacon-extension\":1},\"received\":{\"SYS_CONTRIB/beacon-reveal\":444,\"SYS_CONTRIB/beacon-extension\":3}},\"audit\":{\"kind\":\"not-started\"},\"automaticParent\":null}]}"
+    }
+  ],
+  "parallel": 1,
+  "sourceFingerprint": "8aeeb2282ba76ee42fc67fd63ce441a07e9617416077e428d196988a8ad0b96d",
+  "sourceUnchanged": true
+}
