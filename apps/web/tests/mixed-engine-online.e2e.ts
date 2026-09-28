@@ -4,6 +4,7 @@ import type { Browser, BrowserContext, Page, PlaywrightWorkerArgs } from '@playw
 import { RandomBot, createBotRng } from '@cp2p/bots';
 import { chooseBotPending } from '@cp2p/protocol';
 import type { CommandShape, Seat } from '@cp2p/engine';
+import { stableBotConfig } from './helpers/stable-bot-config.js';
 
 test.skip(
   process.env.CP2P_MIXED_ENGINE_ACCEPTANCE !== '1',
@@ -768,6 +769,7 @@ async function certifyPostSetupMove(pages: readonly Page[], gameId: string): Pro
   const ready = async () => Promise.all(pages.map((page) => inspectGame(page, gameId)));
   const setupBots = pages.map((_, index) => ({
     bot: new RandomBot(),
+    state: stableBotConfig(),
     rng: createBotRng(new Uint8Array(32).fill(index + 101)),
   }));
   await expect
@@ -795,7 +797,7 @@ async function certifyPostSetupMove(pages: readonly Page[], gameId: string): Pro
         )
           return false;
         const command = actor.bot.decide(
-          { state: view.state, priv: view.privateState, seat: view.seat },
+          { state: actor.state(view.state), priv: view.privateState, seat: view.seat },
           view.pending,
           actor.rng,
         );
@@ -846,43 +848,66 @@ async function certifyPostSetupMove(pages: readonly Page[], gameId: string): Pro
 async function finishAndAudit(pages: readonly Page[], gameId: string) {
   const bots = pages.map((_, index) => ({
     bot: new RandomBot(),
+    state: stableBotConfig(),
     rng: createBotRng(new Uint8Array(32).fill(index + 31)),
   }));
   let commands = 0;
-  await expect
-    .poll(
-      async () => {
-        for (const [index, page] of pages.entries()) {
-          const view = await inspectGame(page, gameId);
-          if (
-            !view ||
-            view.result ||
-            view.seat === undefined ||
-            view.pending?.kind !== 'player' ||
-            !view.privateState ||
-            !view.legal ||
-            !view.head
-          )
-            continue;
-          const actor = bots[index];
-          if (!actor) throw new Error('Missing deterministic browser bot');
-          const command = actor.bot.decide(
-            { state: view.state, priv: view.privateState, seat: view.seat },
-            view.pending,
-            actor.rng,
-          );
-          const refused = await submit(page, gameId, view.seat, command, view.head.seq);
-          if (refused && refused !== 'stale-head' && refused !== 'stale-revision')
-            throw new Error(`A legal browser move was rejected: ${refused}`);
-          if (!refused) commands += 1;
-          if (commands > 300) throw new Error('The bounded mixed-engine game exceeded 300 moves');
-        }
-        const views = await Promise.all(pages.map((page) => inspectGame(page, gameId)));
-        return views.every((view) => view?.result && view.audit?.kind === 'complete');
-      },
-      { timeout: 150_000, intervals: [100] },
-    )
-    .toBe(true);
+  const started = Date.now();
+  let terminalAt: number | undefined;
+  const accepted: Record<string, number> = {};
+  const refusedCommands: Record<string, number> = {};
+  const diagnostic = () => ({
+    commands,
+    accepted,
+    refusedCommands,
+    playElapsedMs: (terminalAt ?? Date.now()) - started,
+    auditElapsedMs: terminalAt === undefined ? 0 : Date.now() - terminalAt,
+  });
+  try {
+    await expect
+      .poll(
+        async () => {
+          for (const [index, page] of pages.entries()) {
+            const view = await inspectGame(page, gameId);
+            if (
+              !view ||
+              view.result ||
+              view.seat === undefined ||
+              view.pending?.kind !== 'player' ||
+              !view.privateState ||
+              !view.legal ||
+              !view.head
+            )
+              continue;
+            const actor = bots[index];
+            if (!actor) throw new Error('Missing deterministic browser bot');
+            const command = actor.bot.decide(
+              { state: actor.state(view.state), priv: view.privateState, seat: view.seat },
+              view.pending,
+              actor.rng,
+            );
+            const refused = await submit(page, gameId, view.seat, command, view.head.seq);
+            if (refused) refusedCommands[refused] = (refusedCommands[refused] ?? 0) + 1;
+            if (refused && refused !== 'stale-head' && refused !== 'stale-revision')
+              throw new Error(`A legal browser move was rejected: ${refused}`);
+            if (!refused) {
+              commands += 1;
+              accepted[command.type] = (accepted[command.type] ?? 0) + 1;
+            }
+            if (commands > 300) throw new Error('The bounded mixed-engine game exceeded 300 moves');
+          }
+          const views = await Promise.all(pages.map((page) => inspectGame(page, gameId)));
+          if (views.every((view) => view?.result)) terminalAt ??= Date.now();
+          return views.every((view) => view?.result && view.audit?.kind === 'complete');
+        },
+        { timeout: 150_000, intervals: [100] },
+      )
+      .toBe(true);
+  } catch (error) {
+    throw new Error(`Mixed-engine play/audit driver: ${JSON.stringify(diagnostic())}`, {
+      cause: error,
+    });
+  }
   const final = await Promise.all(pages.map((page) => inspectGame(page, gameId)));
   const head = final[0]?.head;
   const result = final[0]?.result;
@@ -893,7 +918,7 @@ async function finishAndAudit(pages: readonly Page[], gameId: string) {
     expect(view?.audit).toMatchObject({ kind: 'complete', report: { ok: true, complete: true } });
     expect(view?.peerCount).toBe(3);
   }
-  return { commands, terminalSeq: head.seq, modeAuditCount: final.length };
+  return { ...diagnostic(), terminalSeq: head.seq, modeAuditCount: final.length };
 }
 
 async function runMode(playwright: Playwright, mode: 'signaling' | 'manual') {
@@ -932,12 +957,15 @@ async function runMode(playwright: Playwright, mode: 'signaling' | 'manual') {
   }, 10_000);
   try {
     const fixture = await startFourPlayerRoom(opened.pages, mode);
+    const lobbyElapsedMs = Date.now() - started;
     phase = 'setup';
+    const setupStarted = Date.now();
     await certifyPostSetupMove(opened.pages, fixture.gameId);
+    const setupElapsedMs = Date.now() - setupStarted;
     phase = 'play-and-audit';
     const completion = await finishAndAudit(opened.pages, fixture.gameId);
     expect(errors).toEqual([]);
-    return { mode, browserSet: engineNames, ...completion };
+    return { mode, browserSet: engineNames, lobbyElapsedMs, setupElapsedMs, ...completion };
   } catch (error) {
     const diagnostics = await Promise.all(
       opened.pages.map(async (page, index) => ({
