@@ -18,6 +18,7 @@ const workerSchema = v.strictObject({
   lifecycle: v.optional(v.literal('persistence')),
   maxElapsedMs: v.optional(v.pipe(safeInteger, v.minValue(1))),
   players: v.optional(v.picklist([4, 6])),
+  map: v.optional(v.pipe(v.string(), v.regex(/^[a-z0-9-]+$/))),
 });
 
 async function execute(): Promise<void> {
@@ -35,6 +36,7 @@ async function execute(): Promise<void> {
         gameIndex,
         scenario: parsed.output.scenario,
         ...(parsed.output.players === undefined ? {} : { players: parsed.output.players }),
+        ...(parsed.output.map === undefined ? {} : { map: parsed.output.map }),
         ...(parsed.output.security === undefined ? {} : { security: parsed.output.security }),
         ...(parsed.output.lifecycle === undefined ? {} : { lifecycle: parsed.output.lifecycle }),
         ...(parsed.output.maxElapsedMs === undefined
