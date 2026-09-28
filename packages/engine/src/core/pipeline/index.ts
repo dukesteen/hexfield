@@ -1,6 +1,6 @@
 export { createEngine } from './engine.js';
 export { LocalGame } from './localGame.js';
-export { isPublicDraw, publicDrawInput } from './draws.js';
+export { extraDiceOf, isPublicDraw, publicDrawInput, rollExtraDice } from './draws.js';
 export type { Engine } from './engine.js';
 export type {
   LocalGameOptions,

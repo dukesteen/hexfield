@@ -59,6 +59,7 @@ function writeFailure(
         attemptedInput: error.attemptedInput ?? null,
         players: options.players ?? 4,
         baseOptions: options.baseOptions ?? {},
+        knights: options.knights === true,
         maxTurns: options.maxTurns ?? 500,
         maxInputsWithoutTurn: options.maxInputsWithoutTurn ?? 2_000,
         verify: options.verify !== false,

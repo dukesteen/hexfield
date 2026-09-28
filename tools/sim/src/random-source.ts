@@ -7,7 +7,15 @@ import type {
   PrivateState,
   Seat,
 } from '@cp2p/engine';
-import { DEV_CARD_COUNTS, RESOURCES, decksFor, isPublicDraw, publicDrawInput } from '@cp2p/engine';
+import {
+  DEV_CARD_COUNTS,
+  RESOURCES,
+  decksFor,
+  isPublicDraw,
+  kindsOfCounts,
+  publicDrawInput,
+  rollExtraDice,
+} from '@cp2p/engine';
 import { createRng } from '@cp2p/engine/rng';
 
 type SystemPending = Extract<Pending, { kind: 'random' | 'reveal' }>;
@@ -125,6 +133,10 @@ export function createLocalRandomSource(
           return { input: { kind: 'system', type: 'START_SEAT', seat } };
         }
         case 'DICE_RESULT': {
+          const extraDice = (): { extra?: Record<string, string> } => {
+            const extra = rollExtraDice(pending.request, (bound) => rng.int(bound));
+            return Object.keys(extra).length ? { extra } : {};
+          };
           if (pending.request.mode === 'balanced') {
             if (options.fixedDiceTotal !== undefined)
               throw new Error('Directed dice total cannot override balanced dice');
@@ -138,6 +150,7 @@ export function createLocalRandomSource(
                 type: 'DICE_RESULT',
                 index,
                 dice: [Math.floor(card / 6) + 1, (card % 6) + 1],
+                ...extraDice(),
               },
             };
           }
@@ -148,11 +161,13 @@ export function createLocalRandomSource(
                 kind: 'system',
                 type: 'DICE_RESULT',
                 dice: [first, options.fixedDiceTotal - first],
+                ...extraDice(),
               },
             };
           }
+          const dice = [rng.int(6) + 1, rng.int(6) + 1];
           return {
-            input: { kind: 'system', type: 'DICE_RESULT', dice: [rng.int(6) + 1, rng.int(6) + 1] },
+            input: { kind: 'system', type: 'DICE_RESULT', dice, ...extraDice() },
           };
         }
         case 'CARD_DEALT': {
@@ -176,9 +191,10 @@ export function createLocalRandomSource(
           );
           if (thief === undefined || victim === undefined) throw new Error('Unknown steal seat');
           const hand = requiredPrivate(privates, victim).hand;
-          const size = RESOURCES.reduce((sum, resource) => sum + (hand[resource] ?? 0), 0);
+          const kinds = kindsOfCounts(hand);
+          const size = kinds.reduce((sum, resource) => sum + (hand[resource] ?? 0), 0);
           let index = rng.int(size);
-          for (const resource of RESOURCES) {
+          for (const resource of kinds) {
             index -= hand[resource] ?? 0;
             if (index < 0)
               return { input: { kind: 'system', type: 'STEAL_RESULT', thief, victim, resource } };

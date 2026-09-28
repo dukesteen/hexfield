@@ -1,4 +1,12 @@
-import { RESOURCES, decksFor, devCardCountsFor, isPublicDraw, publicDrawInput } from '@cp2p/engine';
+import {
+  RESOURCES,
+  decksFor,
+  devCardCountsFor,
+  isPublicDraw,
+  kindsOfCounts,
+  publicDrawInput,
+  rollExtraDice,
+} from '@cp2p/engine';
 import type {
   GameState,
   LocalRandomAnswer,
@@ -130,6 +138,11 @@ export function createBrowserRandomSource(entropy: Entropy = browserEntropy): Br
     shown.set(deckId, seen);
     return card;
   };
+  // The faces of the extra dice (an event die) a dice request adds; nothing in a base game.
+  const extraDice = (pending: SystemPending): { extra?: Record<string, string> } => {
+    const extra = rollExtraDice(pending.request, (bound) => randomIndex(entropy, bound));
+    return Object.keys(extra).length ? { extra } : {};
+  };
   return {
     forceNextDice(dice) {
       if (
@@ -168,12 +181,13 @@ export function createBrowserRandomSource(entropy: Entropy = browserEntropy): Br
                 type: 'DICE_RESULT',
                 index,
                 dice: [Math.floor(card / 6) + 1, (card % 6) + 1],
+                ...extraDice(pending),
               },
             };
           }
           const dice = forcedDice ?? [randomIndex(entropy, 6) + 1, randomIndex(entropy, 6) + 1];
           forcedDice = null;
-          return { input: { kind: 'system', type: 'DICE_RESULT', dice } };
+          return { input: { kind: 'system', type: 'DICE_RESULT', dice, ...extraDice(pending) } };
         }
         case 'CARD_DEALT': {
           const seat = seatFrom(state, pending.request.seat);
@@ -191,9 +205,10 @@ export function createBrowserRandomSource(entropy: Entropy = browserEntropy): Br
           const thief = seatFrom(state, pending.request.thief);
           const victim = seatFrom(state, pending.request.victim);
           const hand = privateFor(privates, victim).hand;
-          const size = RESOURCES.reduce((sum, resource) => sum + (hand[resource] ?? 0), 0);
+          const kinds = kindsOfCounts(hand);
+          const size = kinds.reduce((sum, resource) => sum + (hand[resource] ?? 0), 0);
           let index = randomIndex(entropy, size);
-          for (const resource of RESOURCES) {
+          for (const resource of kinds) {
             index -= hand[resource] ?? 0;
             if (index < 0)
               return { input: { kind: 'system', type: 'STEAL_RESULT', thief, victim, resource } };

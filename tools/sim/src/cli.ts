@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { Worker } from 'node:worker_threads';
 import { fromBase64Url, hashValue, toHex } from '@cp2p/codec';
-import { RESOURCES, engineForConfig } from '@cp2p/engine';
+import { engineForConfig, kindBounds, kindsOfCounts } from '@cp2p/engine';
 import type { Engine } from '@cp2p/engine';
 import type { GameState, Input, PrivateState, Seat } from '@cp2p/engine';
 import { runBatch } from './batch.js';
@@ -56,9 +56,24 @@ function parseBaseOptions(value: string | boolean | undefined): Record<string, u
   return Object.fromEntries(Object.entries(parsed));
 }
 
+/** `--modules` lists base, five-six (chosen by --players) and optionally knights. */
+function parseModules(value: string | boolean | undefined): {
+  fiveSix?: boolean;
+  knights: boolean;
+} {
+  if (value === undefined) return { knights: false };
+  if (typeof value !== 'string') throw new Error('--modules needs a list');
+  const listed = value.split(',');
+  const known = new Set(['base', 'five-six', 'knights']);
+  if (!listed.includes('base') || listed.some((id) => !known.has(id)))
+    throw new Error('--modules must list base and optionally five-six and knights');
+  return { fiveSix: listed.includes('five-six'), knights: listed.includes('knights') };
+}
+
 function runOptions(args: ParsedArgs, verify: boolean): BatchOptions & { parallel: number } {
-  if (args.modules !== undefined && args.modules !== 'base' && args.modules !== 'base,five-six')
-    throw new Error('--modules must be base or base,five-six (chosen by --players)');
+  const modules = parseModules(args.modules);
+  if (modules.fiveSix !== undefined && modules.fiveSix !== integer(args.players, 4, 'players') > 4)
+    throw new Error('--modules must list five-six exactly when --players is 5 or 6');
   if (
     args.bots !== undefined &&
     (typeof args.bots !== 'string' || args.bots.split(',').some((bot) => bot !== 'random'))
@@ -70,6 +85,7 @@ function runOptions(args: ParsedArgs, verify: boolean): BatchOptions & { paralle
     seed: integer(args.seed, 42, 'seed'),
     parallel: integer(args.parallel, 1, 'parallel'),
     baseOptions: parseBaseOptions(args.options),
+    ...(modules.knights ? { knights: true } : {}),
     verify,
   };
 }
@@ -142,6 +158,7 @@ async function runCommand(args: ParsedArgs, bench: boolean): Promise<void> {
     seed: batch.seed,
     players: batch.players,
     baseOptions: batch.baseOptions,
+    knights: batch.knights === true,
     requestedGames: batch.games,
     parallel,
     warmupGames,
@@ -259,13 +276,13 @@ function observePrivateAttempt(
     const priv = next.get(holder.seat);
     if (!priv) return 'private-invariant-violation';
     let total = 0;
-    for (const resource of RESOURCES) {
+    for (const resource of kindsOfCounts(holder.resources.min)) {
       const count = priv.hand[resource];
       if (
         typeof count !== 'number' ||
         !Number.isSafeInteger(count) ||
-        count < holder.resources.min[resource] ||
-        count > holder.resources.max[resource]
+        count < (kindBounds(holder.resources).min[resource] ?? 0) ||
+        count > (kindBounds(holder.resources).max[resource] ?? 0)
       )
         return 'private-invariant-violation';
       total += count;
@@ -358,6 +375,7 @@ export function replayCommand(path: string): Record<string, unknown> {
         // Checked above; the JSON sidecar uses only base option fields.
         // oxlint-disable-next-line typescript/no-unsafe-type-assertion
         baseOptions: failure.baseOptions as Record<string, unknown>,
+        knights: failure.knights === true,
       });
       observed = 'completed';
     } catch (error) {
