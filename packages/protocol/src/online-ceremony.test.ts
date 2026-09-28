@@ -1105,6 +1105,60 @@ describe('online genesis ceremony', () => {
     });
   });
 
+  test.each([
+    { phase: 'frozen', kind: 'created-at', sender: 0, observer: 1 },
+    { phase: 'approvals', kind: 'approval', sender: 1, observer: 0 },
+    { phase: 'beacon-tips', kind: 'beacon-tip', sender: 1, observer: 0 },
+    { phase: 'seed-reveals', kind: 'seed-reveal', sender: 1, observer: 0 },
+  ])(
+    'missing $kind retires $phase before consent and stays retired on restore',
+    async ({ phase, kind, sender, observer }) => {
+      const room = setup();
+      let consentSends = 0;
+      const transports = [0, 1].map((device) =>
+        interceptTransport(room, device, (_to, _bytes, packet) => {
+          if (packet.body.kind === 'consent') consentSends += 1;
+          return device === sender && packet.body.kind === kind;
+        }),
+      );
+      const peers = [0, 1].map((device) =>
+        room.create(device, required(room.stores[device]), required(transports[device])),
+      );
+      active.push(...peers, room.network);
+      for (const peer of peers) {
+        // oxlint-disable-next-line no-await-in-loop -- Start both members of the same signed frozen attempt.
+        expect((await peer.start()).ok).toBe(true);
+      }
+      const target = required(peers[observer]);
+      await until(room, () => target.snapshot().phase === phase);
+      expect(target.snapshot().locallyConsented).toBe(false);
+      room.network.clock.advanceBy(20_001);
+      await until(room, () => target.snapshot().phase === 'retired');
+      expect(target.snapshot().error).toBe(`online-ceremony-timeout:${phase}`);
+      expect(target.result()).toBeNull();
+      expect(consentSends).toBe(0);
+      target.dispose();
+      const restored = room.create(
+        observer,
+        required(room.stores[observer]),
+        required(transports[observer]),
+      );
+      active.push(restored);
+      expect(await restored.start()).toMatchObject({
+        ok: false,
+        error: { code: 'online-ceremony-timeout' },
+      });
+      expect(restored.snapshot()).toMatchObject({
+        phase: 'retired',
+        locallyConsented: false,
+        error: `online-ceremony-timeout:${phase}`,
+      });
+      expect(restored.result()).toBeNull();
+      expect(consentSends).toBe(0);
+    },
+    60_000,
+  );
+
   test('later signed phases get their own 20-second window without renewing earlier phases', async () => {
     const room = setup();
     let holdGuestCommit = true;

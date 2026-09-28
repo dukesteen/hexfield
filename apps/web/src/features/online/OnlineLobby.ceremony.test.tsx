@@ -1,15 +1,23 @@
 // @vitest-environment happy-dom
-import { canonicalDecode } from '@cp2p/codec';
+import { canonicalDecode, canonicalEncode, fromBase64Url, hashValue, toHex } from '@cp2p/codec';
+import { decodePoint, encodePoint, G, proveDleq, scalePoint, signObject } from '@cp2p/crypto';
 import { BASE_VERSION, createBaseEngine } from '@cp2p/engine';
 import type { Result } from '@cp2p/engine';
-import { LobbyController } from '@cp2p/protocol';
-import type { Transport } from '@cp2p/protocol';
-import { createMemnet, MemoryEscrowLifecycleStore } from '@cp2p/protocol/testing';
+import { createStealSecretSource, LobbyController } from '@cp2p/protocol';
+import type { EscrowShareEnvelope, Transport } from '@cp2p/protocol';
+import {
+  createMemnet,
+  escrowShareEnvelopeHash,
+  MemoryEscrowLifecycleStore,
+} from '@cp2p/protocol/testing';
 import { act, cleanup, render } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, expect, test, vi } from 'vitest';
 import englishLobby from '../../i18n/locales/en/lobby.json';
-import { loadOrCreateOnlineIdentity } from '../../session/online-credentials.js';
+import {
+  loadCeremonyMaterial,
+  loadOrCreateOnlineIdentity,
+} from '../../session/online-credentials.js';
 import { createOnlineLobbyTransport } from '../../session/online-lobby-transport.js';
 import { OnlineStartup } from '../../session/online-startup.js';
 import type { OnlineRoomSnapshot } from '../../session/online-room.js';
@@ -76,8 +84,8 @@ function ceremonyKind(bytes: Uint8Array): string | null {
   }
 }
 
-async function fixture(heldKind: 'seed-commit' | 'consent') {
-  const stores = [new MemoryEscrowLifecycleStore(), new MemoryEscrowLifecycleStore()];
+async function fixture(heldKind: 'seed-commit' | 'consent', humanCount: 2 | 4 = 2) {
+  const stores = Array.from({ length: humanCount }, () => new MemoryEscrowLifecycleStore());
   const identities = await Promise.all(
     stores.map((store, index) =>
       loadOrCreateOnlineIdentity(store, (length) => new Uint8Array(length).fill(index + 31)),
@@ -90,10 +98,16 @@ async function fixture(heldKind: 'seed-commit' | 'consent') {
   let held = true;
   const guestPackets: Uint8Array[] = [];
   const hostConsents: Uint8Array[] = [];
+  const envelopes: EscrowShareEnvelope[] = [];
   const transports: Transport[] = identities.map((identity, index) => {
     const device = network.transport(identity.peerId);
     const send = (to: string, bytes: Uint8Array) => {
       const kind = ceremonyKind(bytes);
+      if (kind === 'escrow-envelope') {
+        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Capture an actual coordinator-produced canonical envelope; production authenticates it again on disclosure.
+        const packet = canonicalDecode(bytes) as { body: { payload: EscrowShareEnvelope } };
+        envelopes.push(packet.body.payload);
+      }
       if (index === 0 && kind === 'consent') hostConsents.push(bytes.slice());
       if (index === 1 && kind === heldKind && held) {
         guestPackets.push(bytes.slice());
@@ -128,7 +142,7 @@ async function fixture(heldKind: 'seed-commit' | 'consent') {
             hostName: 'Host',
             config: {
               modules: [{ id: 'base', version: BASE_VERSION }],
-              seats: [0, 1],
+              seats: humanCount === 4 ? [0, 1, 2, 3] : [0, 1],
               options: { base: { mapLayout: 'random', vpTarget: 10 } },
             },
           })
@@ -195,12 +209,20 @@ async function fixture(heldKind: 'seed-commit' | 'consent') {
     );
   };
   network.clock.advanceBy(0);
-  value(required(lobbies[1]).request({ kind: 'takeSeat', seat: 1 }));
-  network.clock.advanceBy(0);
-  value(required(lobbies[0]).request({ kind: 'setReady', ready: true }));
-  network.clock.advanceBy(0);
-  value(required(lobbies[1]).request({ kind: 'setReady', ready: true }));
-  network.clock.advanceBy(0);
+  for (const [index, lobby] of lobbies.entries()) {
+    if (index > 0)
+      value(
+        lobby.request({
+          kind: 'takeSeat',
+          seat: required(required(lobby.state()).seats[index]).seat,
+        }),
+      );
+    network.clock.advanceBy(0);
+  }
+  for (const lobby of lobbies) {
+    value(lobby.request({ kind: 'setReady', ready: true }));
+    network.clock.advanceBy(0);
+  }
   value(required(starts[0]).begin());
   return {
     network,
@@ -210,6 +232,75 @@ async function fixture(heldKind: 'seed-commit' | 'consent') {
     guestPackets,
     settle,
     snapshot,
+    async discloseSignedShare() {
+      const agreement = required(required(starts[0]).agreement());
+      const nonce = required(agreement.state.ceremonyNonce);
+      const material = await loadCeremonyMaterial({
+        store: required(stores[1]),
+        identity: guestIdentity,
+        ceremonyNonce: fromBase64Url(nonce),
+        layout: agreement.state.seats.map((seat) => {
+          if (seat.kind !== 'human') throw new Error('Disclosure fixture requires human seats');
+          return { seat: seat.seat, kind: 'human', devicePeerId: seat.peer };
+        }),
+      });
+      try {
+        const owner = required(material.keys.find((seat) => seat.seat === 1));
+        const envelope = required(
+          envelopes.find((item) => item.body.dealer.seat === 0 && item.body.holder.seat === 1),
+        );
+        const source = createStealSecretSource(owner.master, nonce, 1, owner.peerId);
+        try {
+          const context = {
+            protocol: 'escrow-share-dispute-v1' as const,
+            ceremonyId: envelope.body.ceremonyId,
+            dealerSeat: 0,
+            holderSeat: 1,
+            envelopeHash: escrowShareEnvelopeHash(envelope),
+          };
+          const secret = source.encryptionSecret();
+          const sharedPoint = encodePoint(
+            scalePoint(decodePoint(envelope.body.sealed.ephemeral), secret),
+          );
+          const proof = proveDleq(
+            {
+              base1: encodePoint(G),
+              point1: envelope.body.holder.encryptionKey,
+              base2: envelope.body.sealed.ephemeral,
+              point2: sharedPoint,
+            },
+            secret,
+            new Uint8Array(32).fill(99),
+            context,
+          );
+          const disputeBody = { ...context, sharedPoint, proof };
+          const dispute = {
+            body: disputeBody,
+            sig: signObject('escrow-share-dispute', disputeBody, owner.signingKey),
+          };
+          const body = {
+            protocol: 'online-ceremony-v1',
+            freezeHash: toHex(hashValue(agreement.state)),
+            ceremonyNonce: nonce,
+            senderDevice: guestIdentity.peerId,
+            kind: 'escrow-dispute',
+            seat: 1,
+            step: 0,
+            payload: { envelope, dispute },
+          };
+          const packet = canonicalEncode({
+            body,
+            sig: signObject('online-ceremony-message-v1', body, guestIdentity.secretKey),
+          });
+          network.transport(guestIdentity.peerId).send(hostIdentity.peerId, packet);
+          return packet;
+        } finally {
+          source.dispose();
+        }
+      } finally {
+        material.dispose();
+      }
+    },
     async restoreHost() {
       unsubscribe();
       await required(starts[0]).close();
@@ -300,6 +391,43 @@ test('genuine post-consent timeout emits recoverable waiting and restores before
     expect(
       room.snapshots.some((snapshot) => snapshot.phase === 'opening' && snapshot.locallyConsented),
     ).toBe(true);
+  } finally {
+    await room.close();
+  }
+}, 60_000);
+
+test('authenticated post-consent share disclosure reaches halted UI and retains its promise on restore', async () => {
+  const room = await fixture('consent', 4);
+  try {
+    await room.settle(() =>
+      Boolean(room.snapshot().startup?.locallyConsented && room.guestPackets.length),
+    );
+    const consent = required(room.hostConsents[0]);
+    const page = render(<OnlineLobby lobbyId="ceremonyui" />);
+    await act(async () => {
+      await room.discloseSignedShare();
+      await room.settle(() => room.snapshot().startup?.phase === 'halted');
+    });
+    expect(room.snapshot().startup).toMatchObject({
+      phase: 'halted',
+      locallyConsented: true,
+      error: 'online-ceremony-disputed',
+    });
+    expect(page.getByText('lobby:onlineGameHalted')).toBeTruthy();
+    expect(page.queryByRole('button', { name: 'lobby:onlineRetryStart' })).toBeNull();
+    expect(page.queryByRole('button', { name: 'lobby:onlineNewRoom' })).toBeNull();
+    expect(openOnlineGame).not.toHaveBeenCalled();
+    await act(async () => {
+      await room.restoreHost();
+      await room.settle(() => room.snapshot().startup?.phase === 'halted');
+    });
+    expect(room.snapshot().startup).toMatchObject({
+      locallyConsented: true,
+      error: 'online-ceremony-disputed',
+    });
+    expect(page.getByText('lobby:onlineGameHalted')).toBeTruthy();
+    for (const bytes of room.hostConsents) expect(bytes).toEqual(consent);
+    expect(openOnlineGame).not.toHaveBeenCalled();
   } finally {
     await room.close();
   }
