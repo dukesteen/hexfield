@@ -1785,9 +1785,7 @@ export function openOwnedConsensusState(
   const restored = restoreConsensusState(value, context, seat);
   if (!restored.ok) return restored;
   try {
-    return success(
-      new OwnedConsensusStateImpl(restored.value, context, contextStamp(context)),
-    );
+    return success(new OwnedConsensusStateImpl(restored.value, context, contextStamp(context)));
   } catch {
     return failure('consensus-restore', 'Certified context is not canonical data');
   }

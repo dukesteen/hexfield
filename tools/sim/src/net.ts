@@ -1131,7 +1131,9 @@ export async function runNetworkGame(options: NetworkGameOptions): Promise<Netwo
               // oxlint-disable-next-line no-await-in-loop -- Each certified prefix authorizes the next private contribution.
               await (sameHead
                 ? verifiedNonVoter.publishContributions()
-                : verifiedNonVoter.advance(honest.exportSave().entries)),
+                : verifiedNonVoter.advance(
+                    measure('actorExport', () => honest.exportSave().entries),
+                  )),
             );
           } finally {
             recordOperation(sameHead ? 'actorContribution' : 'actorAdvance', operationStarted);

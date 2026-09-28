@@ -60,9 +60,7 @@
       "epochMs": 1790584413754.6,
       "event": "progress",
       "phase": "frozen",
-      "awaitingSeats": [
-        0
-      ],
+      "awaitingSeats": [0],
       "error": null
     },
     {
@@ -82,9 +80,7 @@
       "epochMs": 1790584413759.7,
       "event": "progress",
       "phase": "frozen",
-      "awaitingSeats": [
-        0
-      ],
+      "awaitingSeats": [0],
       "error": null
     },
     {
@@ -104,9 +100,7 @@
       "epochMs": 1790584413762.5,
       "event": "progress",
       "phase": "frozen",
-      "awaitingSeats": [
-        0
-      ],
+      "awaitingSeats": [0],
       "error": null
     },
     {
@@ -156,11 +150,7 @@
       "epochMs": 1790584413806.5999,
       "event": "progress",
       "phase": "bindings",
-      "awaitingSeats": [
-        1,
-        2,
-        3
-      ],
+      "awaitingSeats": [1, 2, 3],
       "error": null
     },
     {
@@ -170,11 +160,7 @@
       "epochMs": 1790584413809.8,
       "event": "progress",
       "phase": "bindings",
-      "awaitingSeats": [
-        0,
-        2,
-        3
-      ],
+      "awaitingSeats": [0, 2, 3],
       "error": null
     },
     {
@@ -184,11 +170,7 @@
       "epochMs": 1790584413819,
       "event": "progress",
       "phase": "bindings",
-      "awaitingSeats": [
-        0,
-        1,
-        2
-      ],
+      "awaitingSeats": [0, 1, 2],
       "error": null
     },
     {
@@ -198,11 +180,7 @@
       "epochMs": 1790584413823.5,
       "event": "progress",
       "phase": "bindings",
-      "awaitingSeats": [
-        0,
-        1,
-        3
-      ],
+      "awaitingSeats": [0, 1, 3],
       "error": null
     },
     {
@@ -212,10 +190,7 @@
       "epochMs": 1790584413839.7,
       "event": "progress",
       "phase": "bindings",
-      "awaitingSeats": [
-        2,
-        3
-      ],
+      "awaitingSeats": [2, 3],
       "error": null
     },
     {
@@ -225,10 +200,7 @@
       "epochMs": 1790584413841,
       "event": "progress",
       "phase": "bindings",
-      "awaitingSeats": [
-        1,
-        2
-      ],
+      "awaitingSeats": [1, 2],
       "error": null
     },
     {
@@ -238,10 +210,7 @@
       "epochMs": 1790584413845.6,
       "event": "progress",
       "phase": "bindings",
-      "awaitingSeats": [
-        1,
-        3
-      ],
+      "awaitingSeats": [1, 3],
       "error": null
     },
     {
@@ -251,10 +220,7 @@
       "epochMs": 1790584413848.0999,
       "event": "progress",
       "phase": "bindings",
-      "awaitingSeats": [
-        2,
-        3
-      ],
+      "awaitingSeats": [2, 3],
       "error": null
     },
     {
@@ -264,9 +230,7 @@
       "epochMs": 1790584413860.5999,
       "event": "progress",
       "phase": "bindings",
-      "awaitingSeats": [
-        3
-      ],
+      "awaitingSeats": [3],
       "error": null
     },
     {
@@ -276,9 +240,7 @@
       "epochMs": 1790584413862,
       "event": "progress",
       "phase": "bindings",
-      "awaitingSeats": [
-        2
-      ],
+      "awaitingSeats": [2],
       "error": null
     },
     {
@@ -288,9 +250,7 @@
       "epochMs": 1790584413864.1,
       "event": "progress",
       "phase": "bindings",
-      "awaitingSeats": [
-        3
-      ],
+      "awaitingSeats": [3],
       "error": null
     },
     {
@@ -300,9 +260,7 @@
       "epochMs": 1790584413869.9,
       "event": "progress",
       "phase": "bindings",
-      "awaitingSeats": [
-        3
-      ],
+      "awaitingSeats": [3],
       "error": null
     },
     {
@@ -352,11 +310,7 @@
       "epochMs": 1790584413930.0999,
       "event": "progress",
       "phase": "approvals",
-      "awaitingSeats": [
-        0,
-        2,
-        3
-      ],
+      "awaitingSeats": [0, 2, 3],
       "error": null
     },
     {
@@ -366,11 +320,7 @@
       "epochMs": 1790584413931.2,
       "event": "progress",
       "phase": "approvals",
-      "awaitingSeats": [
-        0,
-        1,
-        2
-      ],
+      "awaitingSeats": [0, 1, 2],
       "error": null
     },
     {
@@ -380,11 +330,7 @@
       "epochMs": 1790584413932.2,
       "event": "progress",
       "phase": "approvals",
-      "awaitingSeats": [
-        0,
-        1,
-        3
-      ],
+      "awaitingSeats": [0, 1, 3],
       "error": null
     },
     {
@@ -394,11 +340,7 @@
       "epochMs": 1790584413941.7,
       "event": "progress",
       "phase": "approvals",
-      "awaitingSeats": [
-        1,
-        2,
-        3
-      ],
+      "awaitingSeats": [1, 2, 3],
       "error": null
     },
     {
@@ -408,10 +350,7 @@
       "epochMs": 1790584413962.6,
       "event": "progress",
       "phase": "approvals",
-      "awaitingSeats": [
-        0,
-        2
-      ],
+      "awaitingSeats": [0, 2],
       "error": null
     },
     {
@@ -421,10 +360,7 @@
       "epochMs": 1790584413963,
       "event": "progress",
       "phase": "approvals",
-      "awaitingSeats": [
-        0,
-        3
-      ],
+      "awaitingSeats": [0, 3],
       "error": null
     },
     {
@@ -434,10 +370,7 @@
       "epochMs": 1790584413966.4,
       "event": "progress",
       "phase": "approvals",
-      "awaitingSeats": [
-        0,
-        2
-      ],
+      "awaitingSeats": [0, 2],
       "error": null
     },
     {
@@ -447,10 +380,7 @@
       "epochMs": 1790584413969.2,
       "event": "progress",
       "phase": "approvals",
-      "awaitingSeats": [
-        2,
-        3
-      ],
+      "awaitingSeats": [2, 3],
       "error": null
     },
     {
@@ -460,9 +390,7 @@
       "epochMs": 1790584413992.4001,
       "event": "progress",
       "phase": "approvals",
-      "awaitingSeats": [
-        0
-      ],
+      "awaitingSeats": [0],
       "error": null
     },
     {
@@ -472,9 +400,7 @@
       "epochMs": 1790584413992.6,
       "event": "progress",
       "phase": "approvals",
-      "awaitingSeats": [
-        0
-      ],
+      "awaitingSeats": [0],
       "error": null
     },
     {
@@ -484,9 +410,7 @@
       "epochMs": 1790584413997.5999,
       "event": "progress",
       "phase": "approvals",
-      "awaitingSeats": [
-        0
-      ],
+      "awaitingSeats": [0],
       "error": null
     },
     {
@@ -496,9 +420,7 @@
       "epochMs": 1790584414004.5999,
       "event": "progress",
       "phase": "approvals",
-      "awaitingSeats": [
-        2
-      ],
+      "awaitingSeats": [2],
       "error": null
     },
     {
@@ -548,11 +470,7 @@
       "epochMs": 1790584414088.6,
       "event": "progress",
       "phase": "escrow",
-      "awaitingSeats": [
-        0,
-        1,
-        2
-      ],
+      "awaitingSeats": [0, 1, 2],
       "error": null
     },
     {
@@ -562,11 +480,7 @@
       "epochMs": 1790584414088.6,
       "event": "progress",
       "phase": "escrow",
-      "awaitingSeats": [
-        0,
-        1,
-        3
-      ],
+      "awaitingSeats": [0, 1, 3],
       "error": null
     },
     {
@@ -576,11 +490,7 @@
       "epochMs": 1790584414092.7,
       "event": "progress",
       "phase": "escrow",
-      "awaitingSeats": [
-        1,
-        2,
-        3
-      ],
+      "awaitingSeats": [1, 2, 3],
       "error": null
     },
     {
@@ -590,11 +500,7 @@
       "epochMs": 1790584414093,
       "event": "progress",
       "phase": "escrow",
-      "awaitingSeats": [
-        0,
-        2,
-        3
-      ],
+      "awaitingSeats": [0, 2, 3],
       "error": null
     },
     {
@@ -604,10 +510,7 @@
       "epochMs": 1790584414128.4001,
       "event": "progress",
       "phase": "escrow",
-      "awaitingSeats": [
-        0,
-        1
-      ],
+      "awaitingSeats": [0, 1],
       "error": null
     },
     {
@@ -617,10 +520,7 @@
       "epochMs": 1790584414128.9001,
       "event": "progress",
       "phase": "escrow",
-      "awaitingSeats": [
-        1,
-        3
-      ],
+      "awaitingSeats": [1, 3],
       "error": null
     },
     {
@@ -630,10 +530,7 @@
       "epochMs": 1790584414132,
       "event": "progress",
       "phase": "escrow",
-      "awaitingSeats": [
-        1,
-        3
-      ],
+      "awaitingSeats": [1, 3],
       "error": null
     },
     {
@@ -643,10 +540,7 @@
       "epochMs": 1790584414132.7,
       "event": "progress",
       "phase": "escrow",
-      "awaitingSeats": [
-        2,
-        3
-      ],
+      "awaitingSeats": [2, 3],
       "error": null
     },
     {
@@ -656,9 +550,7 @@
       "epochMs": 1790584414171.6,
       "event": "progress",
       "phase": "escrow",
-      "awaitingSeats": [
-        3
-      ],
+      "awaitingSeats": [3],
       "error": null
     },
     {
@@ -668,9 +560,7 @@
       "epochMs": 1790584414171.5999,
       "event": "progress",
       "phase": "escrow",
-      "awaitingSeats": [
-        1
-      ],
+      "awaitingSeats": [1],
       "error": null
     },
     {
@@ -680,9 +570,7 @@
       "epochMs": 1790584414180.7,
       "event": "progress",
       "phase": "escrow",
-      "awaitingSeats": [
-        1
-      ],
+      "awaitingSeats": [1],
       "error": null
     },
     {
@@ -692,9 +580,7 @@
       "epochMs": 1790584414183.0999,
       "event": "progress",
       "phase": "escrow",
-      "awaitingSeats": [
-        2
-      ],
+      "awaitingSeats": [2],
       "error": null
     },
     {
@@ -704,17 +590,7 @@
       "epochMs": 1790584414317.9001,
       "event": "progress",
       "phase": "escrow",
-      "awaitingSeats": [
-        1,
-        3,
-        0,
-        3,
-        0,
-        1,
-        3,
-        0,
-        1
-      ],
+      "awaitingSeats": [1, 3, 0, 3, 0, 1, 3, 0, 1],
       "error": null
     },
     {
@@ -724,17 +600,7 @@
       "epochMs": 1790584414322.7,
       "event": "progress",
       "phase": "escrow",
-      "awaitingSeats": [
-        2,
-        3,
-        0,
-        2,
-        3,
-        0,
-        3,
-        0,
-        2
-      ],
+      "awaitingSeats": [2, 3, 0, 2, 3, 0, 3, 0, 2],
       "error": null
     },
     {
@@ -744,17 +610,7 @@
       "epochMs": 1790584414324.2,
       "event": "progress",
       "phase": "escrow",
-      "awaitingSeats": [
-        1,
-        2,
-        3,
-        2,
-        3,
-        1,
-        3,
-        1,
-        2
-      ],
+      "awaitingSeats": [1, 2, 3, 2, 3, 1, 3, 1, 2],
       "error": null
     },
     {
@@ -764,17 +620,7 @@
       "epochMs": 1790584414322.4001,
       "event": "progress",
       "phase": "escrow",
-      "awaitingSeats": [
-        1,
-        2,
-        0,
-        2,
-        0,
-        1,
-        0,
-        1,
-        2
-      ],
+      "awaitingSeats": [1, 2, 0, 2, 0, 1, 0, 1, 2],
       "error": null
     },
     {
@@ -784,16 +630,7 @@
       "epochMs": 1790584414366.1,
       "event": "progress",
       "phase": "escrow",
-      "awaitingSeats": [
-        1,
-        3,
-        3,
-        0,
-        1,
-        3,
-        0,
-        1
-      ],
+      "awaitingSeats": [1, 3, 3, 0, 1, 3, 0, 1],
       "error": null
     },
     {
@@ -803,16 +640,7 @@
       "epochMs": 1790584414367.5,
       "event": "progress",
       "phase": "escrow",
-      "awaitingSeats": [
-        1,
-        2,
-        2,
-        0,
-        1,
-        0,
-        1,
-        2
-      ],
+      "awaitingSeats": [1, 2, 2, 0, 1, 0, 1, 2],
       "error": null
     },
     {
@@ -822,16 +650,7 @@
       "epochMs": 1790584414370.2,
       "event": "progress",
       "phase": "escrow",
-      "awaitingSeats": [
-        2,
-        3,
-        2,
-        3,
-        0,
-        3,
-        0,
-        2
-      ],
+      "awaitingSeats": [2, 3, 2, 3, 0, 3, 0, 2],
       "error": null
     },
     {
@@ -841,16 +660,7 @@
       "epochMs": 1790584414370.7998,
       "event": "progress",
       "phase": "escrow",
-      "awaitingSeats": [
-        1,
-        2,
-        2,
-        3,
-        1,
-        3,
-        1,
-        2
-      ],
+      "awaitingSeats": [1, 2, 2, 3, 1, 3, 1, 2],
       "error": null
     },
     {
@@ -860,15 +670,7 @@
       "epochMs": 1790584414417,
       "event": "progress",
       "phase": "escrow",
-      "awaitingSeats": [
-        3,
-        3,
-        0,
-        1,
-        3,
-        0,
-        1
-      ],
+      "awaitingSeats": [3, 3, 0, 1, 3, 0, 1],
       "error": null
     },
     {
@@ -878,15 +680,7 @@
       "epochMs": 1790584414417.6,
       "event": "progress",
       "phase": "escrow",
-      "awaitingSeats": [
-        2,
-        2,
-        0,
-        1,
-        0,
-        1,
-        2
-      ],
+      "awaitingSeats": [2, 2, 0, 1, 0, 1, 2],
       "error": null
     },
     {
@@ -896,15 +690,7 @@
       "epochMs": 1790584414423.8,
       "event": "progress",
       "phase": "escrow",
-      "awaitingSeats": [
-        2,
-        2,
-        3,
-        0,
-        3,
-        0,
-        2
-      ],
+      "awaitingSeats": [2, 2, 3, 0, 3, 0, 2],
       "error": null
     },
     {
@@ -914,15 +700,7 @@
       "epochMs": 1790584414424.2998,
       "event": "progress",
       "phase": "escrow",
-      "awaitingSeats": [
-        2,
-        2,
-        3,
-        1,
-        3,
-        1,
-        2
-      ],
+      "awaitingSeats": [2, 2, 3, 1, 3, 1, 2],
       "error": null
     },
     {
@@ -932,14 +710,7 @@
       "epochMs": 1790584414465.3,
       "event": "progress",
       "phase": "escrow",
-      "awaitingSeats": [
-        3,
-        0,
-        1,
-        3,
-        0,
-        1
-      ],
+      "awaitingSeats": [3, 0, 1, 3, 0, 1],
       "error": null
     },
     {
@@ -949,14 +720,7 @@
       "epochMs": 1790584414465.3,
       "event": "progress",
       "phase": "escrow",
-      "awaitingSeats": [
-        2,
-        0,
-        1,
-        0,
-        1,
-        2
-      ],
+      "awaitingSeats": [2, 0, 1, 0, 1, 2],
       "error": null
     },
     {
@@ -966,14 +730,7 @@
       "epochMs": 1790584414469.2,
       "event": "progress",
       "phase": "escrow",
-      "awaitingSeats": [
-        2,
-        3,
-        0,
-        3,
-        0,
-        2
-      ],
+      "awaitingSeats": [2, 3, 0, 3, 0, 2],
       "error": null
     },
     {
@@ -983,14 +740,7 @@
       "epochMs": 1790584414470.5999,
       "event": "progress",
       "phase": "escrow",
-      "awaitingSeats": [
-        2,
-        3,
-        1,
-        3,
-        1,
-        2
-      ],
+      "awaitingSeats": [2, 3, 1, 3, 1, 2],
       "error": null
     },
     {
@@ -1000,13 +750,7 @@
       "epochMs": 1790584414511.5,
       "event": "progress",
       "phase": "escrow",
-      "awaitingSeats": [
-        0,
-        1,
-        0,
-        1,
-        2
-      ],
+      "awaitingSeats": [0, 1, 0, 1, 2],
       "error": null
     },
     {
@@ -1016,13 +760,7 @@
       "epochMs": 1790584414511.6,
       "event": "progress",
       "phase": "escrow",
-      "awaitingSeats": [
-        0,
-        1,
-        3,
-        0,
-        1
-      ],
+      "awaitingSeats": [0, 1, 3, 0, 1],
       "error": null
     },
     {
@@ -1032,13 +770,7 @@
       "epochMs": 1790584414515.3,
       "event": "progress",
       "phase": "escrow",
-      "awaitingSeats": [
-        2,
-        0,
-        3,
-        0,
-        2
-      ],
+      "awaitingSeats": [2, 0, 3, 0, 2],
       "error": null
     },
     {
@@ -1048,13 +780,7 @@
       "epochMs": 1790584414515.2,
       "event": "progress",
       "phase": "escrow",
-      "awaitingSeats": [
-        2,
-        1,
-        3,
-        1,
-        2
-      ],
+      "awaitingSeats": [2, 1, 3, 1, 2],
       "error": null
     },
     {
@@ -1064,12 +790,7 @@
       "epochMs": 1790584414556.3,
       "event": "progress",
       "phase": "escrow",
-      "awaitingSeats": [
-        0,
-        0,
-        1,
-        2
-      ],
+      "awaitingSeats": [0, 0, 1, 2],
       "error": null
     },
     {
@@ -1079,12 +800,7 @@
       "epochMs": 1790584414556.4001,
       "event": "progress",
       "phase": "escrow",
-      "awaitingSeats": [
-        0,
-        3,
-        0,
-        1
-      ],
+      "awaitingSeats": [0, 3, 0, 1],
       "error": null
     },
     {
@@ -1094,12 +810,7 @@
       "epochMs": 1790584414563.3,
       "event": "progress",
       "phase": "escrow",
-      "awaitingSeats": [
-        0,
-        3,
-        0,
-        2
-      ],
+      "awaitingSeats": [0, 3, 0, 2],
       "error": null
     },
     {
@@ -1109,12 +820,7 @@
       "epochMs": 1790584414563.2998,
       "event": "progress",
       "phase": "escrow",
-      "awaitingSeats": [
-        1,
-        3,
-        1,
-        2
-      ],
+      "awaitingSeats": [1, 3, 1, 2],
       "error": null
     },
     {
@@ -1124,11 +830,7 @@
       "epochMs": 1790584414600.5,
       "event": "progress",
       "phase": "escrow",
-      "awaitingSeats": [
-        3,
-        0,
-        1
-      ],
+      "awaitingSeats": [3, 0, 1],
       "error": null
     },
     {
@@ -1138,11 +840,7 @@
       "epochMs": 1790584414601,
       "event": "progress",
       "phase": "escrow",
-      "awaitingSeats": [
-        0,
-        1,
-        2
-      ],
+      "awaitingSeats": [0, 1, 2],
       "error": null
     },
     {
@@ -1152,11 +850,7 @@
       "epochMs": 1790584414607.8,
       "event": "progress",
       "phase": "escrow",
-      "awaitingSeats": [
-        3,
-        0,
-        2
-      ],
+      "awaitingSeats": [3, 0, 2],
       "error": null
     },
     {
@@ -1166,11 +860,7 @@
       "epochMs": 1790584414607.7998,
       "event": "progress",
       "phase": "escrow",
-      "awaitingSeats": [
-        3,
-        1,
-        2
-      ],
+      "awaitingSeats": [3, 1, 2],
       "error": null
     },
     {
@@ -1180,10 +870,7 @@
       "epochMs": 1790584414642.9001,
       "event": "progress",
       "phase": "escrow",
-      "awaitingSeats": [
-        0,
-        1
-      ],
+      "awaitingSeats": [0, 1],
       "error": null
     },
     {
@@ -1193,10 +880,7 @@
       "epochMs": 1790584414642.9001,
       "event": "progress",
       "phase": "escrow",
-      "awaitingSeats": [
-        1,
-        2
-      ],
+      "awaitingSeats": [1, 2],
       "error": null
     },
     {
@@ -1206,10 +890,7 @@
       "epochMs": 1790584414649.8,
       "event": "progress",
       "phase": "escrow",
-      "awaitingSeats": [
-        0,
-        2
-      ],
+      "awaitingSeats": [0, 2],
       "error": null
     },
     {
@@ -1219,10 +900,7 @@
       "epochMs": 1790584414655.4,
       "event": "progress",
       "phase": "escrow",
-      "awaitingSeats": [
-        1,
-        2
-      ],
+      "awaitingSeats": [1, 2],
       "error": null
     },
     {
@@ -1232,9 +910,7 @@
       "epochMs": 1790584414685.8,
       "event": "progress",
       "phase": "escrow",
-      "awaitingSeats": [
-        2
-      ],
+      "awaitingSeats": [2],
       "error": null
     },
     {
@@ -1244,9 +920,7 @@
       "epochMs": 1790584414687.9001,
       "event": "progress",
       "phase": "escrow",
-      "awaitingSeats": [
-        1
-      ],
+      "awaitingSeats": [1],
       "error": null
     },
     {
@@ -1256,9 +930,7 @@
       "epochMs": 1790584414691.5999,
       "event": "progress",
       "phase": "escrow",
-      "awaitingSeats": [
-        2
-      ],
+      "awaitingSeats": [2],
       "error": null
     },
     {
@@ -1268,9 +940,7 @@
       "epochMs": 1790584414702.9,
       "event": "progress",
       "phase": "escrow",
-      "awaitingSeats": [
-        1
-      ],
+      "awaitingSeats": [1],
       "error": null
     },
     {
@@ -1310,11 +980,7 @@
       "epochMs": 1790584414765.1,
       "event": "progress",
       "phase": "beacon-tips",
-      "awaitingSeats": [
-        0,
-        1,
-        2
-      ],
+      "awaitingSeats": [0, 1, 2],
       "error": null
     },
     {
@@ -1334,11 +1000,7 @@
       "epochMs": 1790584414771.6,
       "event": "progress",
       "phase": "beacon-tips",
-      "awaitingSeats": [
-        0,
-        1,
-        3
-      ],
+      "awaitingSeats": [0, 1, 3],
       "error": null
     },
     {
@@ -1348,11 +1010,7 @@
       "epochMs": 1790584414772.7,
       "event": "progress",
       "phase": "beacon-tips",
-      "awaitingSeats": [
-        0,
-        2,
-        3
-      ],
+      "awaitingSeats": [0, 2, 3],
       "error": null
     },
     {
@@ -1362,11 +1020,7 @@
       "epochMs": 1790584414785.2,
       "event": "progress",
       "phase": "beacon-tips",
-      "awaitingSeats": [
-        1,
-        2,
-        3
-      ],
+      "awaitingSeats": [1, 2, 3],
       "error": null
     },
     {
@@ -1376,10 +1030,7 @@
       "epochMs": 1790584414868,
       "event": "progress",
       "phase": "beacon-tips",
-      "awaitingSeats": [
-        1,
-        2
-      ],
+      "awaitingSeats": [1, 2],
       "error": null
     },
     {
@@ -1389,10 +1040,7 @@
       "epochMs": 1790584414963.2,
       "event": "progress",
       "phase": "beacon-tips",
-      "awaitingSeats": [
-        0,
-        1
-      ],
+      "awaitingSeats": [0, 1],
       "error": null
     },
     {
@@ -1402,10 +1050,7 @@
       "epochMs": 1790584414966.9,
       "event": "progress",
       "phase": "beacon-tips",
-      "awaitingSeats": [
-        0,
-        3
-      ],
+      "awaitingSeats": [0, 3],
       "error": null
     },
     {
@@ -1415,10 +1060,7 @@
       "epochMs": 1790584414966.8,
       "event": "progress",
       "phase": "beacon-tips",
-      "awaitingSeats": [
-        0,
-        3
-      ],
+      "awaitingSeats": [0, 3],
       "error": null
     },
     {
@@ -1428,9 +1070,7 @@
       "epochMs": 1790584415060.1,
       "event": "progress",
       "phase": "beacon-tips",
-      "awaitingSeats": [
-        0
-      ],
+      "awaitingSeats": [0],
       "error": null
     },
     {
@@ -1440,9 +1080,7 @@
       "epochMs": 1790584415072.7,
       "event": "progress",
       "phase": "beacon-tips",
-      "awaitingSeats": [
-        0
-      ],
+      "awaitingSeats": [0],
       "error": null
     },
     {
@@ -1452,9 +1090,7 @@
       "epochMs": 1790584415076.5,
       "event": "progress",
       "phase": "beacon-tips",
-      "awaitingSeats": [
-        0
-      ],
+      "awaitingSeats": [0],
       "error": null
     },
     {
@@ -1464,9 +1100,7 @@
       "epochMs": 1790584415078.7,
       "event": "progress",
       "phase": "beacon-tips",
-      "awaitingSeats": [
-        1
-      ],
+      "awaitingSeats": [1],
       "error": null
     },
     {
@@ -1506,11 +1140,7 @@
       "epochMs": 1790584415271.4001,
       "event": "progress",
       "phase": "seed-commits",
-      "awaitingSeats": [
-        0,
-        1,
-        2
-      ],
+      "awaitingSeats": [0, 1, 2],
       "error": null
     },
     {
@@ -1520,11 +1150,7 @@
       "epochMs": 1790584415275.8,
       "event": "progress",
       "phase": "seed-commits",
-      "awaitingSeats": [
-        0,
-        2,
-        3
-      ],
+      "awaitingSeats": [0, 2, 3],
       "error": null
     },
     {
@@ -1534,11 +1160,7 @@
       "epochMs": 1790584415278.3,
       "event": "progress",
       "phase": "seed-commits",
-      "awaitingSeats": [
-        0,
-        1,
-        3
-      ],
+      "awaitingSeats": [0, 1, 3],
       "error": null
     },
     {
@@ -1558,11 +1180,7 @@
       "epochMs": 1790584415298.2998,
       "event": "progress",
       "phase": "seed-commits",
-      "awaitingSeats": [
-        1,
-        2,
-        3
-      ],
+      "awaitingSeats": [1, 2, 3],
       "error": null
     },
     {
@@ -1572,10 +1190,7 @@
       "epochMs": 1790584415359.7,
       "event": "progress",
       "phase": "seed-commits",
-      "awaitingSeats": [
-        0,
-        2
-      ],
+      "awaitingSeats": [0, 2],
       "error": null
     },
     {
@@ -1585,10 +1200,7 @@
       "epochMs": 1790584415359.8,
       "event": "progress",
       "phase": "seed-commits",
-      "awaitingSeats": [
-        0,
-        3
-      ],
+      "awaitingSeats": [0, 3],
       "error": null
     },
     {
@@ -1598,10 +1210,7 @@
       "epochMs": 1790584415362.8,
       "event": "progress",
       "phase": "seed-commits",
-      "awaitingSeats": [
-        0,
-        3
-      ],
+      "awaitingSeats": [0, 3],
       "error": null
     },
     {
@@ -1611,10 +1220,7 @@
       "epochMs": 1790584415375.9,
       "event": "progress",
       "phase": "seed-commits",
-      "awaitingSeats": [
-        1,
-        2
-      ],
+      "awaitingSeats": [1, 2],
       "error": null
     },
     {
@@ -1624,9 +1230,7 @@
       "epochMs": 1790584415479.5,
       "event": "progress",
       "phase": "seed-commits",
-      "awaitingSeats": [
-        0
-      ],
+      "awaitingSeats": [0],
       "error": null
     },
     {
@@ -1636,9 +1240,7 @@
       "epochMs": 1790584415480.2,
       "event": "progress",
       "phase": "seed-commits",
-      "awaitingSeats": [
-        0
-      ],
+      "awaitingSeats": [0],
       "error": null
     },
     {
@@ -1648,9 +1250,7 @@
       "epochMs": 1790584415489.5,
       "event": "progress",
       "phase": "seed-commits",
-      "awaitingSeats": [
-        0
-      ],
+      "awaitingSeats": [0],
       "error": null
     },
     {
@@ -1660,9 +1260,7 @@
       "epochMs": 1790584415526.5,
       "event": "progress",
       "phase": "seed-commits",
-      "awaitingSeats": [
-        2
-      ],
+      "awaitingSeats": [2],
       "error": null
     },
     {
@@ -1702,11 +1300,7 @@
       "epochMs": 1790584415590.5,
       "event": "progress",
       "phase": "seed-reveals",
-      "awaitingSeats": [
-        0,
-        1,
-        2
-      ],
+      "awaitingSeats": [0, 1, 2],
       "error": null
     },
     {
@@ -1716,11 +1310,7 @@
       "epochMs": 1790584415590.8,
       "event": "progress",
       "phase": "seed-reveals",
-      "awaitingSeats": [
-        0,
-        2,
-        3
-      ],
+      "awaitingSeats": [0, 2, 3],
       "error": null
     },
     {
@@ -1730,11 +1320,7 @@
       "epochMs": 1790584415595.3,
       "event": "progress",
       "phase": "seed-reveals",
-      "awaitingSeats": [
-        0,
-        1,
-        3
-      ],
+      "awaitingSeats": [0, 1, 3],
       "error": null
     },
     {
@@ -1754,11 +1340,7 @@
       "epochMs": 1790584415623.5,
       "event": "progress",
       "phase": "seed-reveals",
-      "awaitingSeats": [
-        1,
-        2,
-        3
-      ],
+      "awaitingSeats": [1, 2, 3],
       "error": null
     },
     {
@@ -1768,10 +1350,7 @@
       "epochMs": 1790584415722.5,
       "event": "progress",
       "phase": "seed-reveals",
-      "awaitingSeats": [
-        2,
-        3
-      ],
+      "awaitingSeats": [2, 3],
       "error": null
     },
     {
@@ -1781,10 +1360,7 @@
       "epochMs": 1790584415731,
       "event": "progress",
       "phase": "seed-reveals",
-      "awaitingSeats": [
-        0,
-        2
-      ],
+      "awaitingSeats": [0, 2],
       "error": null
     },
     {
@@ -1794,10 +1370,7 @@
       "epochMs": 1790584415731.0999,
       "event": "progress",
       "phase": "seed-reveals",
-      "awaitingSeats": [
-        0,
-        3
-      ],
+      "awaitingSeats": [0, 3],
       "error": null
     },
     {
@@ -1807,10 +1380,7 @@
       "epochMs": 1790584415731.1,
       "event": "progress",
       "phase": "seed-reveals",
-      "awaitingSeats": [
-        0,
-        3
-      ],
+      "awaitingSeats": [0, 3],
       "error": null
     },
     {
@@ -1820,9 +1390,7 @@
       "epochMs": 1790584415799.0999,
       "event": "progress",
       "phase": "seed-reveals",
-      "awaitingSeats": [
-        2
-      ],
+      "awaitingSeats": [2],
       "error": null
     },
     {
@@ -1832,9 +1400,7 @@
       "epochMs": 1790584415804.8,
       "event": "progress",
       "phase": "seed-reveals",
-      "awaitingSeats": [
-        0
-      ],
+      "awaitingSeats": [0],
       "error": null
     },
     {
@@ -1844,9 +1410,7 @@
       "epochMs": 1790584415805.4001,
       "event": "progress",
       "phase": "seed-reveals",
-      "awaitingSeats": [
-        0
-      ],
+      "awaitingSeats": [0],
       "error": null
     },
     {
@@ -1856,9 +1420,7 @@
       "epochMs": 1790584415805.7,
       "event": "progress",
       "phase": "seed-reveals",
-      "awaitingSeats": [
-        0
-      ],
+      "awaitingSeats": [0],
       "error": null
     },
     {
@@ -1888,9 +1450,7 @@
       "epochMs": 1790584415887.7,
       "event": "progress",
       "phase": "deck",
-      "awaitingSeats": [
-        0
-      ],
+      "awaitingSeats": [0],
       "error": null
     },
     {
@@ -1920,9 +1480,7 @@
       "epochMs": 1790584415890.7,
       "event": "progress",
       "phase": "deck",
-      "awaitingSeats": [
-        0
-      ],
+      "awaitingSeats": [0],
       "error": null
     },
     {
@@ -1932,9 +1490,7 @@
       "epochMs": 1790584415891.0999,
       "event": "progress",
       "phase": "deck",
-      "awaitingSeats": [
-        0
-      ],
+      "awaitingSeats": [0],
       "error": null
     },
     {
@@ -1995,9 +1551,7 @@
       "epochMs": 1790584416320.2,
       "event": "progress",
       "phase": "deck",
-      "awaitingSeats": [
-        1
-      ],
+      "awaitingSeats": [1],
       "error": null
     },
     {
@@ -2133,9 +1687,7 @@
       "epochMs": 1790584416701.3,
       "event": "progress",
       "phase": "deck",
-      "awaitingSeats": [
-        1
-      ],
+      "awaitingSeats": [1],
       "error": null
     },
     {
@@ -2145,9 +1697,7 @@
       "epochMs": 1790584416701.6,
       "event": "progress",
       "phase": "deck",
-      "awaitingSeats": [
-        1
-      ],
+      "awaitingSeats": [1],
       "error": null
     },
     {
@@ -2208,9 +1758,7 @@
       "epochMs": 1790584417148.3,
       "event": "progress",
       "phase": "deck",
-      "awaitingSeats": [
-        2
-      ],
+      "awaitingSeats": [2],
       "error": null
     },
     {
@@ -2335,9 +1883,7 @@
       "epochMs": 1790584417428,
       "event": "progress",
       "phase": "deck",
-      "awaitingSeats": [
-        2
-      ],
+      "awaitingSeats": [2],
       "error": null
     },
     {
@@ -2358,9 +1904,7 @@
       "epochMs": 1790584417439.2,
       "event": "progress",
       "phase": "deck",
-      "awaitingSeats": [
-        2
-      ],
+      "awaitingSeats": [2],
       "error": null
     },
     {
@@ -2443,9 +1987,7 @@
       "epochMs": 1790584417843.7,
       "event": "progress",
       "phase": "deck",
-      "awaitingSeats": [
-        3
-      ],
+      "awaitingSeats": [3],
       "error": null
     },
     {
@@ -2570,9 +2112,7 @@
       "epochMs": 1790584418105.5999,
       "event": "progress",
       "phase": "deck",
-      "awaitingSeats": [
-        3
-      ],
+      "awaitingSeats": [3],
       "error": null
     },
     {
@@ -2604,9 +2144,7 @@
       "epochMs": 1790584418109.2998,
       "event": "progress",
       "phase": "deck",
-      "awaitingSeats": [
-        3
-      ],
+      "awaitingSeats": [3],
       "error": null
     },
     {
@@ -2689,9 +2227,7 @@
       "epochMs": 1790584418518.8,
       "event": "progress",
       "phase": "deck",
-      "awaitingSeats": [
-        0
-      ],
+      "awaitingSeats": [0],
       "error": null
     },
     {
@@ -2827,9 +2363,7 @@
       "epochMs": 1790584418752.7,
       "event": "progress",
       "phase": "deck",
-      "awaitingSeats": [
-        0
-      ],
+      "awaitingSeats": [0],
       "error": null
     },
     {
@@ -2839,9 +2373,7 @@
       "epochMs": 1790584418753.3,
       "event": "progress",
       "phase": "deck",
-      "awaitingSeats": [
-        0
-      ],
+      "awaitingSeats": [0],
       "error": null
     },
     {
@@ -2930,9 +2462,7 @@
       "epochMs": 1790584418826.5999,
       "event": "progress",
       "phase": "deck",
-      "awaitingSeats": [
-        1
-      ],
+      "awaitingSeats": [1],
       "error": null
     },
     {
@@ -3033,9 +2563,7 @@
       "epochMs": 1790584418923.5,
       "event": "progress",
       "phase": "deck",
-      "awaitingSeats": [
-        1
-      ],
+      "awaitingSeats": [1],
       "error": null
     },
     {
@@ -3056,9 +2584,7 @@
       "epochMs": 1790584418925.5,
       "event": "progress",
       "phase": "deck",
-      "awaitingSeats": [
-        1
-      ],
+      "awaitingSeats": [1],
       "error": null
     },
     {
@@ -3125,9 +2651,7 @@
       "epochMs": 1790584418994.0999,
       "event": "progress",
       "phase": "deck",
-      "awaitingSeats": [
-        2
-      ],
+      "awaitingSeats": [2],
       "error": null
     },
     {
@@ -3250,9 +2774,7 @@
       "epochMs": 1790584419082.1,
       "event": "progress",
       "phase": "deck",
-      "awaitingSeats": [
-        2
-      ],
+      "awaitingSeats": [2],
       "error": null
     },
     {
@@ -3262,9 +2784,7 @@
       "epochMs": 1790584419082.2,
       "event": "progress",
       "phase": "deck",
-      "awaitingSeats": [
-        2
-      ],
+      "awaitingSeats": [2],
       "error": null
     },
     {
@@ -3309,9 +2829,7 @@
       "epochMs": 1790584419148.2,
       "event": "progress",
       "phase": "deck",
-      "awaitingSeats": [
-        3
-      ],
+      "awaitingSeats": [3],
       "error": null
     },
     {
@@ -3423,9 +2941,7 @@
       "epochMs": 1790584419255.7998,
       "event": "progress",
       "phase": "deck",
-      "awaitingSeats": [
-        3
-      ],
+      "awaitingSeats": [3],
       "error": null
     },
     {
@@ -3435,9 +2951,7 @@
       "epochMs": 1790584419256.0999,
       "event": "progress",
       "phase": "deck",
-      "awaitingSeats": [
-        3
-      ],
+      "awaitingSeats": [3],
       "error": null
     },
     {
@@ -3643,11 +3157,7 @@
       "epochMs": 1790584419641.1,
       "event": "progress",
       "phase": "consent",
-      "awaitingSeats": [
-        0,
-        1,
-        2
-      ],
+      "awaitingSeats": [0, 1, 2],
       "error": null,
       "prefixHits": {
         "0": 7,
@@ -3710,11 +3220,7 @@
       "epochMs": 1790584419758.2,
       "event": "progress",
       "phase": "consent",
-      "awaitingSeats": [
-        1,
-        2,
-        3
-      ],
+      "awaitingSeats": [1, 2, 3],
       "error": null,
       "prefixHits": {
         "0": 9,
@@ -3746,11 +3252,7 @@
       "epochMs": 1790584419762.3,
       "event": "progress",
       "phase": "consent",
-      "awaitingSeats": [
-        0,
-        1,
-        3
-      ],
+      "awaitingSeats": [0, 1, 3],
       "error": null,
       "prefixHits": {
         "0": 8,
@@ -3782,11 +3284,7 @@
       "epochMs": 1790584419877.5999,
       "event": "progress",
       "phase": "consent",
-      "awaitingSeats": [
-        0,
-        2,
-        3
-      ],
+      "awaitingSeats": [0, 2, 3],
       "error": null,
       "prefixHits": {
         "0": 8,
@@ -3807,10 +3305,7 @@
       "epochMs": 1790584419914.5999,
       "event": "progress",
       "phase": "consent",
-      "awaitingSeats": [
-        1,
-        2
-      ],
+      "awaitingSeats": [1, 2],
       "error": null,
       "prefixHits": {
         "0": 10,
@@ -3843,10 +3338,7 @@
       "epochMs": 1790584419919,
       "event": "progress",
       "phase": "consent",
-      "awaitingSeats": [
-        0,
-        1
-      ],
+      "awaitingSeats": [0, 1],
       "error": null,
       "prefixHits": {
         "0": 9,
@@ -3879,10 +3371,7 @@
       "epochMs": 1790584419934.7,
       "event": "progress",
       "phase": "consent",
-      "awaitingSeats": [
-        1,
-        2
-      ],
+      "awaitingSeats": [1, 2],
       "error": null,
       "prefixHits": {
         "0": 9,
@@ -3904,10 +3393,7 @@
       "epochMs": 1790584420040.2,
       "event": "progress",
       "phase": "consent",
-      "awaitingSeats": [
-        0,
-        2
-      ],
+      "awaitingSeats": [0, 2],
       "error": null,
       "prefixHits": {
         "0": 9,
@@ -3940,9 +3426,7 @@
       "epochMs": 1790584420049.7998,
       "event": "progress",
       "phase": "consent",
-      "awaitingSeats": [
-        1
-      ],
+      "awaitingSeats": [1],
       "error": null,
       "prefixHits": {
         "0": 11,
@@ -3964,9 +3448,7 @@
       "epochMs": 1790584420055.8,
       "event": "progress",
       "phase": "consent",
-      "awaitingSeats": [
-        1
-      ],
+      "awaitingSeats": [1],
       "error": null,
       "prefixHits": {
         "0": 10,
@@ -3988,9 +3470,7 @@
       "epochMs": 1790584420058.9001,
       "event": "progress",
       "phase": "consent",
-      "awaitingSeats": [
-        1
-      ],
+      "awaitingSeats": [1],
       "error": null,
       "prefixHits": {
         "0": 10,
@@ -4056,9 +3536,7 @@
       "epochMs": 1790584420178.5999,
       "event": "progress",
       "phase": "consent",
-      "awaitingSeats": [
-        2
-      ],
+      "awaitingSeats": [2],
       "error": null,
       "prefixHits": {
         "0": 10,
@@ -4100,9 +3578,7 @@
       "epochMs": 1790584420242.6,
       "event": "progress",
       "phase": "waiting",
-      "awaitingSeats": [
-        0
-      ],
+      "awaitingSeats": [0],
       "error": null
     },
     {
@@ -4133,9 +3609,7 @@
       "epochMs": 1790584420248.7,
       "event": "progress",
       "phase": "waiting",
-      "awaitingSeats": [
-        0
-      ],
+      "awaitingSeats": [0],
       "error": null
     },
     {
@@ -4188,9 +3662,7 @@
       "epochMs": 1790584420379,
       "event": "progress",
       "phase": "waiting",
-      "awaitingSeats": [
-        0
-      ],
+      "awaitingSeats": [0],
       "error": null
     },
     {
@@ -8053,11 +7525,7 @@
         },
         "pending": [
           {
-            "allowed": [
-              "ROLL_DICE",
-              "PLAY_DEV_CARD",
-              "CLAIM_VICTORY"
-            ],
+            "allowed": ["ROLL_DICE", "PLAY_DEV_CARD", "CLAIM_VICTORY"],
             "kind": "player",
             "seat": 1
           }
@@ -8091,11 +7559,7 @@
         },
         "pending": [
           {
-            "allowed": [
-              "ROLL_DICE",
-              "PLAY_DEV_CARD",
-              "CLAIM_VICTORY"
-            ],
+            "allowed": ["ROLL_DICE", "PLAY_DEV_CARD", "CLAIM_VICTORY"],
             "kind": "player",
             "seat": 1
           }
@@ -8129,11 +7593,7 @@
         },
         "pending": [
           {
-            "allowed": [
-              "ROLL_DICE",
-              "PLAY_DEV_CARD",
-              "CLAIM_VICTORY"
-            ],
+            "allowed": ["ROLL_DICE", "PLAY_DEV_CARD", "CLAIM_VICTORY"],
             "kind": "player",
             "seat": 1
           }
