@@ -1,10 +1,11 @@
-import { RESOURCES, failure, success } from '@cp2p/engine';
-import type { Engine, GameState, Resource, Result, Seat } from '@cp2p/engine';
+import { failure, kindBounds, kindsOfCounts, success } from '@cp2p/engine';
+import type { Engine, GameState, Result, Seat } from '@cp2p/engine';
 import * as v from 'valibot';
 import type { EntryRef } from './beacon-state.js';
 import {
   COUNT_EVIDENCE_PROTOCOL,
   countOperationId,
+  kindNameSchema,
   countOperationSchema,
   validateCountOperation,
 } from './count-reveal.js';
@@ -22,7 +23,7 @@ const remainingSchema = v.pipe(v.array(seatSchema), v.minLength(1), v.maxLength(
 const stateSchema = v.strictObject({ operation: countOperationSchema, remaining: remainingSchema });
 const phaseDataSchema = v.strictObject({
   seat: seatSchema,
-  resource: v.picklist(RESOURCES),
+  resource: kindNameSchema,
   remaining: remainingSchema,
 });
 const pendingSchema = v.strictObject({
@@ -30,7 +31,7 @@ const pendingSchema = v.strictObject({
   seat: seatSchema,
   request: v.strictObject({
     type: v.literal('monopolyCount'),
-    resource: v.picklist(RESOURCES),
+    resource: kindNameSchema,
     max: v.pipe(nonnegativeIntegerSchema, v.minValue(1), v.maxValue(MAX_HAND_RESOURCE_COUNT)),
   }),
   systemType: v.literal('REVEAL_COUNT'),
@@ -38,7 +39,7 @@ const pendingSchema = v.strictObject({
 
 interface PendingCounts {
   monopolist: Seat;
-  resource: Resource;
+  resource: string;
   remaining: readonly Seat[];
 }
 
@@ -64,7 +65,9 @@ function pendingCounts(engine: Engine, state: GameState): Result<PendingCounts |
       parsed.value.request.resource !== data.value.resource ||
       parsed.value.seat === data.value.seat ||
       !data.value.remaining.includes(parsed.value.seat) ||
-      holder?.resources.max[data.value.resource] !== parsed.value.request.max
+      !kindsOfCounts(state.bank).includes(data.value.resource) ||
+      (holder ? kindBounds(holder.resources).max[data.value.resource] : undefined) !==
+        parsed.value.request.max
     )
       return failure('count-pending', 'Count request differs from public resource bounds');
     remaining.push(parsed.value.seat);

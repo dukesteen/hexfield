@@ -25,7 +25,7 @@ import {
   deckCeremonyId,
   genesisDeckDefinitions,
 } from './deck-genesis.js';
-import { validateDeckCeremony } from './deck-genesis.js';
+import { ceremonyDeckIds, validateDeckCeremony } from './deck-genesis.js';
 import { createDeckSecretSource } from './deck-source.js';
 import {
   escrowShareEnvelopeHash,
@@ -854,7 +854,7 @@ export class OnlineCeremony {
   /** Decks the frozen configuration declares; every one runs the full pass ceremony. */
   #deckCount(): number {
     try {
-      return Math.max(1, Object.keys(decksFor(this.#agreement.state.config)).length);
+      return Math.max(1, ceremonyDeckIds(this.#agreement.state.config).length);
     } catch {
       return 1;
     }

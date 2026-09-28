@@ -1,11 +1,11 @@
 import { canonicalEncode } from '@cp2p/codec';
 import {
-  RESOURCES,
   checkBounds,
   failure,
   gainHidden,
   gainKnown,
-  isBaseResource,
+  kindBounds,
+  kindsOfCounts,
   loseHidden,
   loseKnown,
   revealExact,
@@ -15,7 +15,6 @@ import {
 import type {
   EngineEffect,
   GameState,
-  Resource,
   ResourceBounds,
   ResourceEndpoint,
   Result,
@@ -38,14 +37,8 @@ function same(left: unknown, right: unknown): boolean {
   return a.length === b.length && a.every((byte, index) => byte === b[index]);
 }
 
-/** P2P hand accounting covers the base resources only; other card kinds are not supported yet. */
-function baseResource(kind: string): Resource {
-  if (!isBaseResource(kind)) throw new Error(`Card kind ${kind} has no P2P hand accounting`);
-  return kind;
-}
-
-function checkResourceCount(resource: Resource, count: number): void {
-  requireAccounting(RESOURCES.includes(resource), 'Unsupported accounting resource');
+function checkResourceCount(kinds: readonly string[], resource: string, count: number): void {
+  requireAccounting(kinds.includes(resource), 'Unsupported accounting resource');
   requireAccounting(
     Number.isSafeInteger(count) && count >= 0 && count <= MAX_HAND_RESOURCE_COUNT,
     'Resource effect count exceeds the six-bit base range',
@@ -77,13 +70,15 @@ export function verifyResourceAccounting(
       ),
       'Seat roster changed',
     );
+    // The game's card kinds are its bank keys; a transition never adds or drops one.
+    const kinds = kindsOfCounts(before.bank);
     requireAccounting(
-      same(Object.keys(before.bank).toSorted(), RESOURCES.toSorted()) &&
-        same(Object.keys(after.bank).toSorted(), RESOURCES.toSorted()),
+      same(Object.keys(before.bank).toSorted(), kinds.toSorted()) &&
+        same(Object.keys(after.bank).toSorted(), kinds.toSorted()),
       'Unsupported bank resource dimensions',
     );
     const bank = { ...before.bank };
-    const hands = new Map<Seat, ResourceBounds>();
+    const hands = new Map<Seat, ResourceBounds<string>>();
     const slots = new Map(
       before.seats.map((seat) => [seat.seat, seat.cardSlots.map((slot) => ({ ...slot }))]),
     );
@@ -97,37 +92,32 @@ export function verifyResourceAccounting(
       ]),
     );
     for (const seat of before.seats) {
-      checked(checkBounds(seat.resources));
-      hands.set(seat.seat, seat.resources);
+      checked(checkBounds(kindBounds(seat.resources), kinds));
+      hands.set(seat.seat, kindBounds(seat.resources));
     }
-    for (const resource of RESOURCES)
+    for (const resource of kinds)
       requireAccounting(
         Number.isSafeInteger(bank[resource]) && (bank[resource] ?? -1) >= 0,
         'Invalid bank count',
       );
     const moved = new Set<string>();
     const revealed = new Set<string>();
-    const hand = (seat: Seat): ResourceBounds => {
+    const hand = (seat: Seat): ResourceBounds<string> => {
       const result = hands.get(seat);
       if (!result) throw new Error('Effect names an unknown seat');
       return result;
     };
-    const move = (
-      endpoint: ResourceEndpoint,
-      resource: Resource,
-      count: number,
-      credit: boolean,
-    ) => {
+    const move = (endpoint: ResourceEndpoint, resource: string, count: number, credit: boolean) => {
       if (endpoint.kind === 'bank') {
         const next = (bank[resource] ?? 0) + (credit ? count : -count);
         requireAccounting(Number.isSafeInteger(next) && next >= 0, 'Effect overdraws the bank');
         bank[resource] = next;
       } else {
         requireAccounting(endpoint.kind === 'seat', 'Invalid transfer endpoint');
-        const counts = { ...zeroCounts(RESOURCES), [resource]: count };
+        const counts = { ...zeroCounts(kinds), [resource]: count };
         const update = credit
-          ? gainKnown(hand(endpoint.seat), counts)
-          : loseKnown(hand(endpoint.seat), counts);
+          ? gainKnown(hand(endpoint.seat), counts, kinds)
+          : loseKnown(hand(endpoint.seat), counts, kinds);
         hands.set(endpoint.seat, checked(update));
         moved.add(`${endpoint.seat}:${resource}`);
       }
@@ -135,7 +125,7 @@ export function verifyResourceAccounting(
     for (const effect of effects) {
       switch (effect.type) {
         case 'resource-transfer':
-          checkResourceCount(baseResource(effect.resource), effect.count);
+          checkResourceCount(kinds, effect.resource, effect.count);
           requireAccounting(effect.count > 0, 'Public transfer effects must be nonzero');
           requireAccounting(
             effect.from.kind !== effect.to.kind ||
@@ -144,11 +134,11 @@ export function verifyResourceAccounting(
                 effect.from.seat !== effect.to.seat),
             'Transfer endpoints must differ',
           );
-          move(effect.from, baseResource(effect.resource), effect.count, false);
-          move(effect.to, baseResource(effect.resource), effect.count, true);
+          move(effect.from, effect.resource, effect.count, false);
+          move(effect.to, effect.resource, effect.count, true);
           break;
         case 'resource-count-revealed': {
-          checkResourceCount(baseResource(effect.resource), effect.count);
+          checkResourceCount(kinds, effect.resource, effect.count);
           const key = `${effect.seat}:${effect.resource}`;
           requireAccounting(
             !moved.has(key) && !revealed.has(key),
@@ -156,7 +146,7 @@ export function verifyResourceAccounting(
           );
           hands.set(
             effect.seat,
-            checked(revealExact(hand(effect.seat), baseResource(effect.resource), effect.count)),
+            checked(revealExact(hand(effect.seat), effect.resource, effect.count, kinds)),
           );
           revealed.add(key);
           break;
@@ -166,9 +156,9 @@ export function verifyResourceAccounting(
             effect.count === 1 && effect.from !== effect.to,
             'Invalid hidden transfer',
           );
-          hands.set(effect.from, checked(loseHidden(hand(effect.from), 1)));
-          hands.set(effect.to, checked(gainHidden(hand(effect.to), 1)));
-          for (const resource of RESOURCES) {
+          hands.set(effect.from, checked(loseHidden(hand(effect.from), 1, kinds)));
+          hands.set(effect.to, checked(gainHidden(hand(effect.to), 1, kinds)));
+          for (const resource of kinds) {
             moved.add(`${effect.from}:${resource}`);
             moved.add(`${effect.to}:${resource}`);
           }

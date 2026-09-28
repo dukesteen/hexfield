@@ -1,5 +1,5 @@
 import { hashValue, toHex } from '@cp2p/codec';
-import { RESOURCES, failure, isPublicDraw, success } from '@cp2p/engine';
+import { failure, isPublicDraw, kindBounds, kindsOfCounts, success } from '@cp2p/engine';
 import type { Engine, GameState, Input, Result } from '@cp2p/engine';
 import {
   completeBeaconState,
@@ -125,13 +125,14 @@ export function initializeCryptoContext(
     state.seats.some(
       ({ resources }) =>
         resources.total !== 0 ||
-        RESOURCES.some(
-          (resource) => resources.min[resource] !== 0 || resources.max[resource] !== 0,
+        kindsOfCounts(state.bank).some(
+          (resource) =>
+            kindBounds(resources).min[resource] !== 0 || kindBounds(resources).max[resource] !== 0,
         ),
     )
   )
     return failure('crypto-genesis-hands', 'Verified genesis must start with empty resource hands');
-  const hands = emptyHandCommitments(genesis.config.seats);
+  const hands = emptyHandCommitments(genesis.config.seats, kindsOfCounts(state.bank));
   if (!hands.ok) return hands;
   return captureCryptoPending(
     {
@@ -187,7 +188,11 @@ export function validateCryptoTransition(
   if (!beacon.ok) return beacon;
   const decks = validateDeckLedger(current.decks);
   if (!decks.ok) return decks;
-  const hands = validateHandCommitments(current.hands, genesis.config.seats);
+  const hands = validateHandCommitments(
+    current.hands,
+    genesis.config.seats,
+    kindsOfCounts(state.bank),
+  );
   if (!hands.ok) return hands;
   const counts = validateCountState(
     current.counts,
