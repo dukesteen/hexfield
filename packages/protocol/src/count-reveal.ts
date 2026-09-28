@@ -14,11 +14,12 @@ import {
   verifySchnorr,
 } from '@cp2p/crypto';
 import type { SchnorrProof } from '@cp2p/crypto';
-import { RESOURCES, failure, success } from '@cp2p/engine';
-import type { Resource, Result, Seat, SystemInput } from '@cp2p/engine';
+import { failure, success } from '@cp2p/engine';
+import type { Result, Seat, SystemInput } from '@cp2p/engine';
 import * as v from 'valibot';
 import type { ArtifactSigner } from './authority-types.js';
 import type { EntryRef } from './beacon-state.js';
+import { isKindName } from './card-kinds.js';
 import { MAX_HAND_RESOURCE_COUNT } from './hand-commitments.js';
 import type { HandTransitionPlan } from './hand-transition.js';
 import {
@@ -40,7 +41,7 @@ export interface CountOperation {
   epoch: number;
   anchor: EntryRef;
   monopolist: Seat;
-  resource: Resource;
+  resource: string;
   victims: readonly { seat: Seat; publicKey: string; commitment: string }[];
 }
 
@@ -54,6 +55,11 @@ export interface SignedCountContribution {
   sig: string;
 }
 
+/** A card kind name; the frozen game supplies the kinds this may take. */
+export const kindNameSchema = v.pipe(
+  v.string(),
+  v.check((value: string) => isKindName(value)),
+);
 const countSchema = v.pipe(nonnegativeIntegerSchema, v.maxValue(MAX_HAND_RESOURCE_COUNT));
 export const countOperationSchema = v.strictObject({
   protocol: v.literal(COUNT_EVIDENCE_PROTOCOL),
@@ -61,7 +67,7 @@ export const countOperationSchema = v.strictObject({
   epoch: nonnegativeIntegerSchema,
   anchor: v.strictObject({ seq: nonnegativeIntegerSchema, hash: hashSchema }),
   monopolist: seatSchema,
-  resource: v.picklist(RESOURCES),
+  resource: kindNameSchema,
   victims: v.pipe(
     v.array(v.strictObject({ seat: seatSchema, publicKey: key32Schema, commitment: key32Schema })),
     v.minLength(1),
@@ -81,7 +87,7 @@ const countInputSchema = v.strictObject({
   kind: v.literal('system'),
   type: v.literal('REVEAL_COUNT'),
   seat: seatSchema,
-  resource: v.picklist(RESOURCES),
+  resource: kindNameSchema,
   count: countSchema,
 });
 

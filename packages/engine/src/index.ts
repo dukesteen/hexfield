@@ -80,6 +80,7 @@ export { finishTurnFlowFrame } from './modules/base/phases/turn.js';
 export { STANDARD_BOARD, STANDARD_HEXES } from './modules/base/board/shapes.js';
 export {
   MODULE_CATALOGUE,
+  cardKindsFor,
   checkModuleSelection,
   createCatalogueEngine,
   deckCatalogueFor,

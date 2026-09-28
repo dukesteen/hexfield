@@ -12,17 +12,11 @@ import {
   verifySchnorr,
 } from '@cp2p/crypto';
 import type { RangeProof, SchnorrProof } from '@cp2p/crypto';
-import { RESOURCES, failure, isBaseResource, success } from '@cp2p/engine';
-import type {
-  EngineEffect,
-  GameState,
-  Input,
-  Resource,
-  Result,
-  Seat,
-  Transition,
-} from '@cp2p/engine';
+import { failure, kindBounds, kindsOfCounts, success } from '@cp2p/engine';
+import type { EngineEffect, GameState, Input, Result, Seat, Transition } from '@cp2p/engine';
 import * as v from 'valibot';
+import { kindRecordSchema } from './card-kinds.js';
+import type { CardKinds } from './card-kinds.js';
 import type { EntryRef } from './beacon-state.js';
 import {
   MAX_HAND_RESOURCE_COUNT,
@@ -40,7 +34,7 @@ import { parseCanonical } from './validation.js';
 export interface HandObligation {
   kind: 'range' | 'count';
   seat: Seat;
-  resource: Resource;
+  resource: string;
   /** Gross debit for a range proof; exact parent count for a count opening. */
   count: number;
   commitment: string;
@@ -49,6 +43,8 @@ export interface HandObligation {
 
 /** Local engine-derived plan. Never deserialize a plan from a peer. */
 export interface HandTransitionPlan {
+  /** The game's card kinds, derived from its public bank. */
+  kinds: CardKinds;
   input: Input;
   effects: readonly EngineEffect[];
   obligations: readonly HandObligation[];
@@ -65,7 +61,7 @@ export interface HandProofBinding {
 
 export type HandProof = {
   seat: Seat;
-  resource: Resource;
+  resource: string;
   count: number;
 } & ({ kind: 'range'; proof: RangeProof } | { kind: 'count'; proof: SchnorrProof });
 
@@ -74,7 +70,12 @@ const bitProofSchema = v.strictObject({
   challenges: v.tuple([key32Schema, key32Schema]),
   responses: v.tuple([key32Schema, key32Schema]),
 });
-const proofFields = { seat: seatSchema, resource: v.picklist(RESOURCES), count: countSchema };
+// The resource must name one of the game's kinds; verification compares it to the obligation.
+const proofFields = {
+  seat: seatSchema,
+  resource: v.pipe(v.string(), v.minLength(1), v.maxLength(16)),
+  count: countSchema,
+};
 const handProofSchema = v.variant('kind', [
   v.strictObject({
     ...proofFields,
@@ -97,20 +98,7 @@ const bindingSchema = v.strictObject({
   anchor: v.strictObject({ seq: nonnegativeIntegerSchema, hash: hashSchema }),
   command: v.nullable(v.omit(signedCommandSchema.entries.body, ['evidence'])),
 });
-const countsSchema = v.strictObject({
-  brick: countSchema,
-  lumber: countSchema,
-  wool: countSchema,
-  grain: countSchema,
-  ore: countSchema,
-});
-const blindingsSchema = v.strictObject({
-  brick: key32Schema,
-  lumber: key32Schema,
-  wool: key32Schema,
-  grain: key32Schema,
-  ore: key32Schema,
-});
+const scalarCountSchema = countSchema;
 
 function copy<T>(value: T): T {
   // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- This only detaches typed engine output or schema-validated protocol data.
@@ -138,24 +126,27 @@ export function planHandTransition(
     const accounting = verifyResourceAccounting(before, transition.state, transition.effects);
     if (!accounting.ok) return accounting;
     const seats = before.seats.map((seat) => seat.seat);
-    const parent = validateHandCommitments(ledger, seats);
+    const kinds = kindsOfCounts(before.bank);
+    const parent = validateHandCommitments(ledger, seats, kinds);
     if (!parent.ok) return parent;
     for (const state of [before, transition.state])
       for (const seat of state.seats)
-        for (const resource of RESOURCES)
-          if ((seat.resources.max[resource] ?? Infinity) > MAX_HAND_RESOURCE_COUNT)
+        for (const resource of kinds)
+          if ((kindBounds(seat.resources).max[resource] ?? Infinity) > MAX_HAND_RESOURCE_COUNT)
             return failure('hand-count-bound', 'Public bounds exceed the six-bit hand range');
 
     const effects = copy(transition.effects);
     const debits = new Map<
       string,
-      { seat: Seat; resource: Resource; count: number; indices: number[] }
+      { seat: Seat; resource: string; count: number; indices: number[] }
     >();
     const reveals = new Map<string, HandObligation>();
-    const commitment = (seat: Seat, resource: Resource): string => {
+    const commitment = (seat: Seat, resource: string): string => {
       const row = parent.value.find((item) => item.seat === seat);
       if (!row) throw new Error('Unknown hand commitment seat');
-      return row.commitments[resource];
+      const point = row.commitments[resource];
+      if (point === undefined) throw new Error('Unknown hand commitment kind');
+      return point;
     };
     let hands = parent.value;
     for (const [index, effect] of effects.entries()) {
@@ -166,10 +157,10 @@ export function planHandTransition(
         );
       if (
         (effect.type === 'resource-count-revealed' || effect.type === 'resource-transfer') &&
-        !isBaseResource(effect.resource)
+        !kinds.includes(effect.resource)
       )
-        return failure('hand-card-kind-unsupported', 'Hand proofs cover the base resources only');
-      if (effect.type === 'resource-count-revealed' && isBaseResource(effect.resource)) {
+        return failure('hand-card-kind-unsupported', 'Hand proofs cover this game card kinds only');
+      if (effect.type === 'resource-count-revealed') {
         reveals.set(`${effect.seat}:${effect.resource}`, {
           kind: 'count',
           seat: effect.seat,
@@ -179,7 +170,7 @@ export function planHandTransition(
           effectIndices: [index],
         });
       }
-      if (effect.type !== 'resource-transfer' || !isBaseResource(effect.resource)) continue;
+      if (effect.type !== 'resource-transfer') continue;
       if (effect.from.kind === 'seat') {
         const key = `${effect.from.seat}:${effect.resource}`;
         const debit = debits.get(key) ?? {
@@ -194,27 +185,37 @@ export function planHandTransition(
           return failure('hand-debit-bound', 'Gross debit exceeds the six-bit hand range');
         debits.set(key, debit);
         hands = requireValue(
-          applyPublicResourceEffect(hands, seats, {
-            seat: effect.from.seat,
-            resource: effect.resource,
-            direction: 'debit',
-            count: effect.count,
-          }),
+          applyPublicResourceEffect(
+            hands,
+            seats,
+            {
+              seat: effect.from.seat,
+              resource: effect.resource,
+              direction: 'debit',
+              count: effect.count,
+            },
+            kinds,
+          ),
         );
       }
       if (effect.to.kind === 'seat')
         hands = requireValue(
-          applyPublicResourceEffect(hands, seats, {
-            seat: effect.to.seat,
-            resource: effect.resource,
-            direction: 'credit',
-            count: effect.count,
-          }),
+          applyPublicResourceEffect(
+            hands,
+            seats,
+            {
+              seat: effect.to.seat,
+              resource: effect.resource,
+              direction: 'credit',
+              count: effect.count,
+            },
+            kinds,
+          ),
         );
     }
     const obligations: HandObligation[] = [...reveals.values()];
     for (const seat of before.seats)
-      for (const resource of RESOURCES) {
+      for (const resource of kinds) {
         const key = `${seat.seat}:${resource}`;
         const debit = debits.get(key);
         if (!debit) continue;
@@ -227,7 +228,7 @@ export function planHandTransition(
             );
           continue;
         }
-        if (debit.count <= (seat.resources.min[resource] ?? 0)) continue;
+        if (debit.count <= (kindBounds(seat.resources).min[resource] ?? 0)) continue;
         obligations.push({
           kind: 'range',
           seat: seat.seat,
@@ -237,7 +238,14 @@ export function planHandTransition(
           effectIndices: debit.indices,
         });
       }
-    return success({ input: copy(input), effects, obligations, parentHands: parent.value, hands });
+    return success({
+      kinds,
+      input: copy(input),
+      effects,
+      obligations,
+      parentHands: parent.value,
+      hands,
+    });
   } catch {
     return failure('hand-transition', 'Could not derive committed hand transition');
   }
@@ -347,8 +355,8 @@ export function proveHandObligation(
   try {
     const obligation = plan.obligations[index];
     if (!obligation) return failure('hand-proof-obligation', 'Unknown hand proof obligation');
-    const parsedCounts = parseCanonical(counts, countsSchema);
-    const parsedBlindings = parseCanonical(blindings, blindingsSchema);
+    const parsedCounts = parseCanonical(counts, kindRecordSchema(plan.kinds, scalarCountSchema));
+    const parsedBlindings = parseCanonical(blindings, kindRecordSchema(plan.kinds, key32Schema));
     if (!parsedCounts.ok) return parsedCounts;
     if (!parsedBlindings.ok) return parsedBlindings;
     const opening = verifyHandOpening(
@@ -357,12 +365,16 @@ export function proveHandObligation(
       obligation.seat,
       parsedCounts.value,
       parsedBlindings.value,
+      plan.kinds,
     );
     if (!opening.ok) return opening;
     const count = parsedCounts.value[obligation.resource];
+    const encodedBlinding = parsedBlindings.value[obligation.resource];
+    if (count === undefined || encodedBlinding === undefined)
+      return failure('hand-proof-obligation', 'Obligation names an unknown card kind');
     if (count < obligation.count || (obligation.kind === 'count' && count !== obligation.count))
       return failure('hand-proof-witness', 'Owned hand does not satisfy the required count');
-    const blinding = decodeScalar(parsedBlindings.value[obligation.resource]);
+    const blinding = decodeScalar(encodedBlinding);
     const context = handProofContext(plan, index, binding);
     const point = adjustedPoint(obligation);
     const common = {

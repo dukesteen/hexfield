@@ -1,7 +1,7 @@
 import { genesisDigest, genesisId } from './genesis-identity.js';
 import { fromBase64Url, hashValue, toHex } from '@cp2p/codec';
 import { identityFromSecret, parsePeerId, signObject, verifyObject } from '@cp2p/crypto';
-import { ENGINE_VERSION, RESOURCES, failure, success } from '@cp2p/engine';
+import { ENGINE_VERSION, failure, kindBounds, kindsOfCounts, success } from '@cp2p/engine';
 import type { Engine, GameState, Result } from '@cp2p/engine';
 import { genesisSchema, logEntrySchema } from './schemas.js';
 import { PROTOCOL_VERSION } from './types.js';
@@ -184,8 +184,10 @@ export function validateGenesis(
         state.seats.some(
           ({ resources }) =>
             resources.total !== 0 ||
-            RESOURCES.some(
-              (resource) => resources.min[resource] !== 0 || resources.max[resource] !== 0,
+            kindsOfCounts(state.bank).some(
+              (resource) =>
+                kindBounds(resources).min[resource] !== 0 ||
+                kindBounds(resources).max[resource] !== 0,
             ),
         )
       )

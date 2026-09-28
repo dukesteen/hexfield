@@ -1,6 +1,6 @@
 import { fromBase64Url, hashValue, toBase64Url, toHex } from '@cp2p/codec';
 import { scalarToBytes } from '@cp2p/crypto';
-import { RESOURCES } from '@cp2p/engine';
+import { kindBounds, kindsOfCounts, zeroCounts } from '@cp2p/engine';
 import type { CommandShape, GameState, Pending, Result, Seat } from '@cp2p/engine';
 import { createBeaconSecretSource } from '../beacon-source.js';
 import { MemoryBeaconContributionStore } from '../beacon-contributions.js';
@@ -68,9 +68,10 @@ async function settleMessages(sessions: readonly P2PSession[], clock: VirtualClo
 function discard(state: GameState, seat: Seat): CommandShape {
   const holder = required(state.seats.find((item) => item.seat === seat));
   let remaining = Math.floor(holder.resources.total / 2);
-  const cards = { brick: 0, lumber: 0, wool: 0, grain: 0, ore: 0 };
-  for (const resource of RESOURCES) {
-    cards[resource] = Math.min(holder.resources.min[resource], remaining);
+  const kinds = kindsOfCounts(state.bank);
+  const cards = { ...zeroCounts(kinds) };
+  for (const resource of kinds) {
+    cards[resource] = Math.min(kindBounds(holder.resources).min[resource] ?? 0, remaining);
     remaining -= cards[resource];
   }
   if (remaining !== 0) throw new Error('No deterministic public discard');

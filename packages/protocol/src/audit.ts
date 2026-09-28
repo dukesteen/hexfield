@@ -1,6 +1,6 @@
 import { fromBase64Url, hashValue, toBase64Url, toHex } from '@cp2p/codec';
 import { scalarFromBytes } from '@cp2p/crypto';
-import { LocalGame, RESOURCES, failure, success } from '@cp2p/engine';
+import { LocalGame, failure, kindsOfCounts, success } from '@cp2p/engine';
 import type { Engine, PrivateInputData, Result, Seat } from '@cp2p/engine';
 import { decodeDeckCard } from './deck-draw.js';
 import { createDeckSecretSource } from './deck-source.js';
@@ -42,12 +42,9 @@ function issue(seq: number, seat: Seat | null, kind: string): AuditViolation {
   return { seq, seat, kind, detail: kind };
 }
 
-function selectedResource(
-  hand: Readonly<Record<string, number>>,
-  index: number,
-): (typeof RESOURCES)[number] | null {
+function selectedResource(hand: Readonly<Record<string, number>>, index: number): string | null {
   let cursor = index;
-  for (const resource of RESOURCES) {
+  for (const resource of kindsOfCounts(hand)) {
     cursor -= hand[resource] ?? 0;
     if (cursor < 0) return resource;
   }
@@ -98,7 +95,7 @@ function privateDataFor(
       return failure('audit-steal-context', 'Certified steal lacks its fixed operation');
     const victimHand = game.privateView(operation.victim.seat)?.hand;
     const victimTotal = victimHand
-      ? RESOURCES.reduce((sum, resource) => sum + (victimHand[resource] ?? 0), 0)
+      ? kindsOfCounts(victimHand).reduce((sum, resource) => sum + (victimHand[resource] ?? 0), 0)
       : -1;
     const expected = victimHand ? selectedResource(victimHand, operation.index) : null;
     if (!expected || victimTotal !== operation.handSize)

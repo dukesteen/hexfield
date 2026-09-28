@@ -1,6 +1,6 @@
 import { hashValue, toHex } from '@cp2p/codec';
 import { decodePoint, encodePoint } from '@cp2p/crypto';
-import { RESOURCES, failure, success } from '@cp2p/engine';
+import { failure, kindBounds, kindsOfCounts, success } from '@cp2p/engine';
 import type { EngineEffect, GameState, Result } from '@cp2p/engine';
 import * as v from 'valibot';
 import { beaconOperationId } from './beacon.js';
@@ -298,12 +298,13 @@ export function completeStealResult(
     return failure('steal-result-effect', 'Engine must produce exactly the frozen hidden transfer');
   const accounting = verifyResourceAccounting(before, after, effects);
   if (!accounting.ok) return accounting;
+  const kinds = kindsOfCounts(before.bank);
   if (
     after.seats.some((seat) =>
-      RESOURCES.some(
+      kinds.some(
         (resource) =>
-          seat.resources.min[resource] < 0 ||
-          seat.resources.max[resource] > MAX_HAND_RESOURCE_COUNT,
+          (kindBounds(seat.resources).min[resource] ?? 0) < 0 ||
+          (kindBounds(seat.resources).max[resource] ?? Infinity) > MAX_HAND_RESOURCE_COUNT,
       ),
     )
   )
@@ -311,18 +312,19 @@ export function completeStealResult(
   const checked = validateHandCommitments(
     hands,
     before.seats.map((seat) => seat.seat),
+    kinds,
   );
   if (!checked.ok) return checked;
   try {
     const transferPoints = steal.fixed.contribution.body.transfer.map((point) =>
       decodePoint(point),
     );
-    if (transferPoints.length !== RESOURCES.length)
+    if (transferPoints.length !== kinds.length)
       return failure('steal-result-transfer', 'Fixed transfer has the wrong resource width');
     const next = checked.value.map((row) => {
       const commitments = { ...row.commitments };
-      for (const [index, resource] of RESOURCES.entries()) {
-        const point = decodePoint(row.commitments[resource]);
+      for (const [index, resource] of kinds.entries()) {
+        const point = decodePoint(row.commitments[resource] ?? '');
         const moved = transferPoints[index];
         if (!moved) throw new TypeError('Missing transfer point');
         const updated =
@@ -338,6 +340,7 @@ export function completeStealResult(
     const folded = validateHandCommitments(
       next,
       before.seats.map((seat) => seat.seat),
+      kinds,
     );
     if (!folded.ok) return folded;
     const consumed = consumeFixedBeacon(beacon, steal.operation.anchor);

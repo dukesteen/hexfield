@@ -3,7 +3,8 @@ import type { Engine } from '../core/pipeline/index.js';
 import { withMetadata } from '../core/pipeline/engine.js';
 import type { DeckSpec, GameModule } from '../core/modules/index.js';
 import type { GameConfig, ModuleSelection } from '../core/state/index.js';
-import { failure } from '../core/types/index.js';
+import { canonicalKinds } from '../core/resources/index.js';
+import { RESOURCES, failure } from '../core/types/index.js';
 import type { Result } from '../core/types/index.js';
 import { baseModule } from './base/index.js';
 import { BASE_DECKS, BASE_VERSION, DEV_CARD_COUNTS, devCardCatalogue } from './base/constants.js';
@@ -141,6 +142,14 @@ export function createCatalogueEngine(): Engine {
       engineForConfig(state.config).checkPrivateInvariants(state, privates),
   };
   return withMetadata(routed, base.modules, base.hooks);
+}
+
+/**
+ * The card kinds a game's module selection declares, base resources first and module kinds by
+ * name: the keys of `state.bank`. Base-only selections return the `RESOURCES` constant itself.
+ */
+export function cardKindsFor(config: GameConfig): readonly string[] {
+  return canonicalKinds(engineForConfig(config).hooks.cardKinds(RESOURCES));
 }
 
 /** Every deck a game's module selection declares, keyed and iterated by ascending deck id. */

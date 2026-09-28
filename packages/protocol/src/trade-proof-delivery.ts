@@ -1,6 +1,6 @@
 import { hashValue, toHex } from '@cp2p/codec';
 import { parsePeerId, signObject, verifyObject } from '@cp2p/crypto';
-import { RESOURCES, failure, success } from '@cp2p/engine';
+import { failure, kindsOfCounts, success } from '@cp2p/engine';
 import type { Result, Seat, TradeOffer } from '@cp2p/engine';
 import * as v from 'valibot';
 import { resolveArtifactSigner } from './authority.js';
@@ -168,12 +168,13 @@ function planCurrentTradeProof(body: unknown, context: LogContext): Result<Trade
     anchor: { seq: request.headSeq, hash: request.headHash },
     command: request,
   };
+  const kinds = kindsOfCounts(context.state.bank);
   const termsHash = toHex(
     hashValue({
       offerId: offer.id,
       proposer: offer.proposer,
-      give: Object.fromEntries(RESOURCES.map((resource) => [resource, offer.give[resource]])),
-      want: Object.fromEntries(RESOURCES.map((resource) => [resource, offer.want[resource]])),
+      give: Object.fromEntries(kinds.map((resource) => [resource, offer.give[resource]])),
+      want: Object.fromEntries(kinds.map((resource) => [resource, offer.want[resource]])),
       withSeat: owner,
     }),
   );

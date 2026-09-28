@@ -22,9 +22,11 @@ import {
   verifySealedEphemeralProof,
 } from '@cp2p/crypto';
 import type { DleqProof, SchnorrProof, SealedPayload } from '@cp2p/crypto';
-import { RESOURCES, failure, success } from '@cp2p/engine';
-import type { Resource, Result, Seat } from '@cp2p/engine';
+import { RESOURCES, failure, kindsOfCounts, success } from '@cp2p/engine';
+import type { Result, Seat } from '@cp2p/engine';
 import * as v from 'valibot';
+import { MAX_CARD_KINDS, isKindName, kindRecordSchema } from './card-kinds.js';
+import type { CardKinds } from './card-kinds.js';
 import type { EntryRef } from './beacon-state.js';
 import type { ArtifactSigner } from './authority-types.js';
 import { MAX_HAND_RESOURCE_COUNT, verifyHandOpening } from './hand-commitments.js';
@@ -51,7 +53,8 @@ export interface StealOperation {
   victim: { seat: Seat; publicKey: string };
   handSize: number;
   index: number;
-  commitments: Readonly<Record<Resource, string>>;
+  /** The victim's parent commitments, one per card kind of the game (base kinds first). */
+  commitments: Readonly<Record<string, string>>;
 }
 
 export interface SignedStealContribution {
@@ -76,8 +79,8 @@ export interface FixedSteal {
 }
 
 export interface StealOpening {
-  resource: Resource;
-  blindings: Readonly<Record<Resource, string>>;
+  resource: string;
+  blindings: Readonly<Record<string, string>>;
 }
 
 interface StealReceiptBody {
@@ -103,21 +106,21 @@ export interface SignedStealDispute {
   sig: string;
 }
 
-const resourcePoints = v.strictObject({
-  brick: key32Schema,
-  lumber: key32Schema,
-  wool: key32Schema,
-  grain: key32Schema,
-  ore: key32Schema,
-});
+const resourcePoint = key32Schema;
 const resourceCount = v.pipe(nonnegativeIntegerSchema, v.maxValue(MAX_HAND_RESOURCE_COUNT));
-const resourceCounts = v.strictObject({
-  brick: resourceCount,
-  lumber: resourceCount,
-  wool: resourceCount,
-  grain: resourceCount,
-  ore: resourceCount,
-});
+/** The commitments of a valid steal name every base resource plus at most three module kinds. */
+const operationCommitments = v.pipe(
+  v.record(v.string(), key32Schema),
+  v.check((record) => {
+    const keys = Object.keys(record);
+    return (
+      keys.length >= RESOURCES.length &&
+      keys.length <= MAX_CARD_KINDS &&
+      RESOURCES.every((resource) => Object.hasOwn(record, resource)) &&
+      keys.every(isKindName)
+    );
+  }),
+);
 const entryRefSchema = v.strictObject({ seq: nonnegativeIntegerSchema, hash: hashSchema });
 const participantSchema = v.strictObject({ seat: seatSchema, publicKey: key32Schema });
 const operationSchema = v.strictObject({
@@ -135,29 +138,53 @@ const operationSchema = v.strictObject({
   handSize: v.pipe(
     nonnegativeIntegerSchema,
     v.minValue(1),
-    v.maxValue(5 * MAX_HAND_RESOURCE_COUNT),
+    v.maxValue(MAX_CARD_KINDS * MAX_HAND_RESOURCE_COUNT),
   ),
   index: nonnegativeIntegerSchema,
-  commitments: resourcePoints,
+  commitments: operationCommitments,
 });
-const openingSchema = v.strictObject({
-  type: v.picklist([0, 1, 2, 3, 4]),
-  blindings: v.pipe(v.array(key32Schema), v.length(5)),
-});
-// Every resource uses one digit; every scalar uses 43 characters. Ciphertext length
-// must not disclose the resource through variable-length names or encodings.
-export const STEAL_OPENING_BYTES = canonicalEncode({
-  type: 0,
-  blindings: Array.from({ length: 5 }, () => encodeScalar(0n)),
-}).length;
+const openingSchemaCache = new Map<number, v.GenericSchema<unknown, StealOpeningPayload>>();
+interface StealOpeningPayload {
+  type: number;
+  blindings: string[];
+}
+
+/** One digit for the kind index and one 43-character scalar per kind, whatever the kind. */
+export function stealOpeningBytes(kindCount: number): number {
+  return canonicalEncode({
+    type: 0,
+    blindings: Array.from({ length: kindCount }, () => encodeScalar(0n)),
+  }).length;
+}
+
+function openingSchemaFor(kindCount: number): v.GenericSchema<unknown, StealOpeningPayload> {
+  const known = openingSchemaCache.get(kindCount);
+  if (known) return known;
+  const schema = v.strictObject({
+    type: v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(kindCount - 1)),
+    blindings: v.pipe(v.array(key32Schema), v.length(kindCount)),
+  });
+  openingSchemaCache.set(kindCount, schema);
+  return schema;
+}
+
+// Every kind uses one digit; every scalar uses 43 characters. Ciphertext length
+// must not disclose the kind through variable-length names or encodings. It depends only
+// on the public number of card kinds of the game (five for base games).
+export const STEAL_OPENING_BYTES = stealOpeningBytes(RESOURCES.length);
+const OPENING_LENGTHS = new Set(
+  Array.from({ length: MAX_CARD_KINDS - RESOURCES.length + 1 }, (_, extra) =>
+    stealOpeningBytes(RESOURCES.length + extra),
+  ),
+);
 const sealedSchema = v.strictObject({
   ephemeral: key32Schema,
   ciphertext: v.pipe(
     v.string(),
-    v.length(Math.ceil((STEAL_OPENING_BYTES * 4) / 3)),
+    v.maxLength(Math.ceil((stealOpeningBytes(MAX_CARD_KINDS) * 4) / 3)),
     v.check((value) => {
       try {
-        return fromBase64Url(value).length === STEAL_OPENING_BYTES;
+        return OPENING_LENGTHS.has(fromBase64Url(value).length);
       } catch {
         return false;
       }
@@ -168,7 +195,11 @@ export const signedStealContributionSchema = v.strictObject({
   body: v.strictObject({
     operationId: hashSchema,
     seat: seatSchema,
-    transfer: v.pipe(v.array(key32Schema), v.length(5)),
+    transfer: v.pipe(
+      v.array(key32Schema),
+      v.minLength(RESOURCES.length),
+      v.maxLength(MAX_CARD_KINDS),
+    ),
     sealed: sealedSchema,
     ephemeralProof: v.strictObject({ commitment: key32Schema, response: key32Schema }),
     proof: v.unknown(),
@@ -219,7 +250,7 @@ export function validateStealOperation(value: unknown): Result<StealOperation> {
     parsePeerId(operation.thief.publicKey);
     parsePeerId(operation.victim.publicKey);
     decodePoint(operation.thief.encryptionKey, { nonIdentity: true });
-    for (const resource of RESOURCES) decodePoint(operation.commitments[resource]);
+    for (const commitment of Object.values(operation.commitments)) decodePoint(commitment);
   } catch {
     return failure('steal-operation-key', 'Steal contains an invalid key or commitment');
   }
@@ -233,6 +264,11 @@ export function stealOperationId(operation: StealOperation): string {
       operation: checked(validateStealOperation(operation)),
     }),
   );
+}
+
+/** The card kinds a steal covers, read from the frozen victim commitments (canonical order). */
+function operationKinds(operation: StealOperation): CardKinds {
+  return kindsOfCounts(operation.commitments);
 }
 
 function assertSigner(key: Uint8Array, publicKey: string): void {
@@ -254,9 +290,15 @@ function ephemeralContext(operation: StealOperation, transfer: readonly string[]
   return { protocol: 'steal-ephemeral-v1', operationId: stealOperationId(operation), transfer };
 }
 
+function commitmentOf(operation: StealOperation, resource: string): string {
+  const commitment = operation.commitments[resource];
+  if (commitment === undefined) throw new TypeError('Steal operation lacks a commitment');
+  return commitment;
+}
+
 function transferStatement(operation: StealOperation, body: SignedStealContribution['body']) {
   return {
-    commitments: RESOURCES.map((resource) => operation.commitments[resource]),
+    commitments: operationKinds(operation).map((resource) => commitmentOf(operation, resource)),
     transfer: body.transfer,
     handSize: operation.handSize,
     index: operation.index,
@@ -267,8 +309,8 @@ function transferStatement(operation: StealOperation, body: SignedStealContribut
 /** The private driver checks current ownership/head before calling this pure producer. */
 export function createStealContribution(
   operation: StealOperation,
-  counts: Readonly<Record<Resource, number>>,
-  blindings: Readonly<Record<Resource, string>>,
+  counts: Readonly<Record<string, number>>,
+  blindings: Readonly<Record<string, string>>,
   seed: Uint8Array,
   signingKey: Uint8Array,
   signer?: ArtifactSigner,
@@ -278,17 +320,21 @@ export function createStealContribution(
     if (signer && signer.seat !== op.victim.seat)
       return failure('steal-contribution-signer', 'Controller is not the frozen victim');
     assertSigner(signingKey, signer?.publicKey ?? op.victim.publicKey);
-    const ownedCounts = checked(parseCanonical(counts, resourceCounts));
-    const ownedBlindings = checked(parseCanonical(blindings, resourcePoints));
+    const kinds = operationKinds(op);
+    const ownedCounts = checked(parseCanonical(counts, kindRecordSchema(kinds, resourceCount)));
+    const ownedBlindings = checked(
+      parseCanonical(blindings, kindRecordSchema(kinds, resourcePoint)),
+    );
     const opening = verifyHandOpening(
       [{ seat: op.victim.seat, commitments: op.commitments }],
       [op.victim.seat],
       op.victim.seat,
       ownedCounts,
       ownedBlindings,
+      kinds,
     );
     if (!opening.ok) return opening;
-    const values = RESOURCES.map((resource) => ownedCounts[resource]);
+    const values = kinds.map((resource) => ownedCounts[resource] ?? 0);
     if (values.reduce((sum, count) => sum + count, 0) !== op.handSize)
       return failure('steal-hand-size', 'Private hand differs from the frozen public total');
     let prefix = 0;
@@ -298,7 +344,7 @@ export function createStealContribution(
     });
     if (type < 0) return failure('steal-index', 'Frozen index has no private resource');
     const operationId = stealOperationId(op);
-    const transferBlindings = RESOURCES.map((resource) =>
+    const transferBlindings = kinds.map((resource) =>
       deriveScalar(seed, DERIVATION_LABELS.transferBlind, { operationId, resource }),
     );
     const transfer = transferBlindings.map((blinding, index) =>
@@ -330,7 +376,7 @@ export function createStealContribution(
       transferStatement(op, partial),
       {
         counts: values,
-        blindings: RESOURCES.map((resource) => decodeScalar(ownedBlindings[resource])),
+        blindings: kinds.map((resource) => decodeScalar(ownedBlindings[resource] ?? '')),
         transferBlindings,
       },
       seed,
@@ -350,8 +396,8 @@ export function createStealContribution(
 export function recoverStealTransferOpening(
   operation: StealOperation,
   contribution: SignedStealContribution,
-  counts: Readonly<Record<Resource, number>>,
-  blindings: Readonly<Record<Resource, string>>,
+  counts: Readonly<Record<string, number>>,
+  blindings: Readonly<Record<string, string>>,
   seed: Uint8Array,
 ): Result<StealOpening> {
   try {
@@ -363,9 +409,11 @@ export function recoverStealTransferOpening(
       op.victim.seat,
       counts,
       blindings,
+      operationKinds(op),
     );
     if (!opened.ok) return opened;
-    const values = RESOURCES.map((resource) => counts[resource]);
+    const kinds = operationKinds(op);
+    const values = kinds.map((resource) => counts[resource] ?? 0);
     if (values.reduce((sum, count) => sum + count, 0) !== op.handSize)
       return failure('steal-hand-size', 'Private hand differs from the frozen public total');
     let prefix = 0;
@@ -375,7 +423,7 @@ export function recoverStealTransferOpening(
     });
     if (type < 0) return failure('steal-index', 'Frozen index has no private resource');
     const operationId = stealOperationId(op);
-    const transferBlindings = RESOURCES.map((resource) =>
+    const transferBlindings = kinds.map((resource) =>
       deriveScalar(seed, DERIVATION_LABELS.transferBlind, { operationId, resource }),
     );
     for (const [index, blinding] of transferBlindings.entries())
@@ -384,26 +432,13 @@ export function recoverStealTransferOpening(
         checkedContribution.body.transfer[index]
       )
         return failure('steal-transfer-opening', 'Fixed transfer differs from owned derivation');
-    const resource = RESOURCES[type];
-    const [brick, lumber, wool, grain, ore] = transferBlindings;
-    if (
-      !resource ||
-      brick === undefined ||
-      lumber === undefined ||
-      wool === undefined ||
-      grain === undefined ||
-      ore === undefined
-    )
-      throw new Error('Incomplete fixed transfer');
+    const resource = kinds[type];
+    if (!resource) throw new Error('Incomplete fixed transfer');
     return success({
       resource,
-      blindings: {
-        brick: encodeScalar(brick),
-        lumber: encodeScalar(lumber),
-        wool: encodeScalar(wool),
-        grain: encodeScalar(grain),
-        ore: encodeScalar(ore),
-      },
+      blindings: Object.fromEntries(
+        kinds.map((kind, index) => [kind, encodeScalar(transferBlindings[index] ?? 0n)]),
+      ),
     });
   } catch {
     return failure('steal-transfer-opening', 'Could not recover the fixed owned transfer');
@@ -421,6 +456,12 @@ export function verifyStealContribution(
     if (signed.body.operationId !== stealOperationId(op) || signed.body.seat !== op.victim.seat)
       return failure('steal-contribution-operation', 'Contribution belongs to another steal');
     decodePoint(signed.body.sealed.ephemeral, { nonIdentity: true });
+    const kinds = operationKinds(op);
+    if (
+      signed.body.transfer.length !== kinds.length ||
+      fromBase64Url(signed.body.sealed.ciphertext).length !== stealOpeningBytes(kinds.length)
+    )
+      return failure('steal-contribution-shape', 'Contribution does not cover the game card kinds');
     if (
       (signer !== undefined && signer.seat !== op.victim.seat) ||
       !verifyObject(
@@ -454,21 +495,19 @@ export function verifyStealContribution(
   }
 }
 
-function openingFromBytes(bytes: Uint8Array, transfer: readonly string[]): Result<StealOpening> {
+function openingFromBytes(
+  bytes: Uint8Array,
+  transfer: readonly string[],
+  kinds: CardKinds,
+): Result<StealOpening> {
   try {
-    if (bytes.length !== STEAL_OPENING_BYTES)
+    if (bytes.length !== stealOpeningBytes(kinds.length) || transfer.length !== kinds.length)
       return failure('steal-opening-size', 'Sealed opening has an invalid length');
-    const parsed = checked(parseCanonical(canonicalDecode(bytes), openingSchema));
-    const resource = RESOURCES[parsed.type];
+    const parsed = checked(parseCanonical(canonicalDecode(bytes), openingSchemaFor(kinds.length)));
+    const resource = kinds[parsed.type];
     if (!resource) return failure('steal-opening-type', 'Unknown resource index');
-    const blindings: Record<Resource, string> = {
-      brick: '',
-      lumber: '',
-      wool: '',
-      grain: '',
-      ore: '',
-    };
-    for (const [index, item] of RESOURCES.entries()) {
+    const blindings: Record<string, string> = {};
+    for (const [index, item] of kinds.entries()) {
       const scalar = parsed.blindings[index];
       if (
         !scalar ||
@@ -502,6 +541,7 @@ function openChecked(
       sealContext(operation, contribution.body.transfer),
     ),
     contribution.body.transfer,
+    operationKinds(operation),
   );
 }
 
@@ -647,6 +687,7 @@ function openDisputed(fixed: FixedSteal, sharedPoint: string): Result<StealOpeni
       sealContext(fixed.operation, fixed.contribution.body.transfer),
     ),
     fixed.contribution.body.transfer,
+    operationKinds(fixed.operation),
   );
 }
 
