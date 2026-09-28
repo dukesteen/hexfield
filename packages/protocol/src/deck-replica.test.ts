@@ -1,4 +1,4 @@
-import { canonicalDecode, fromBase64Url, toBase64Url } from '@cp2p/codec';
+import { canonicalDecode, canonicalEncode, fromBase64Url, toBase64Url } from '@cp2p/codec';
 import { BASE_DEV_CARD_CATALOGUE, RESOURCES, failure } from '@cp2p/engine';
 import { encodeScalar, scalarToBytes, signObject } from '@cp2p/crypto';
 import type { CommandShape, GameState, PrivateState, Result, Seat } from '@cp2p/engine';
@@ -16,18 +16,22 @@ import type { DeckContributionStore } from './deck-outbox.js';
 import {
   deckDrawOperationId,
   decodeDeckCard,
+  proveDeckReveal,
   signDeckUnlock,
   verifyDeckUnlockPrefix,
 } from './deck-draw.js';
-import { genesisDeckDefinitions } from './deck-genesis.js';
-import { COMMAND_PROOFS_PROTOCOL } from './command-proofs.js';
-import { entryHash } from './genesis.js';
+import { genesisDeckDefinitions, validateDeckCeremony } from './deck-genesis.js';
+import { COMMAND_PROOFS_PROTOCOL, composeCommandProofs } from './command-proofs.js';
+import { validateCommandForEntry, validateCommandStatement } from './command-validation.js';
+import { entryHash, genesisDigest } from './genesis.js';
 import { MemoryProtocolJournal } from './journal.js';
 import { signCommand } from './log.js';
 import { decodeProtocolMessage, encodeProtocolMessage } from './messages.js';
 import type { ProtocolMessage } from './messages.js';
 import { P2PSession } from './p2p-session.js';
 import { reconstructPrivateSeats } from './private-replay.js';
+import { replayCertifiedPrefix } from './replay.js';
+import type { ReplayPolicy } from './replay.js';
 import { ReplicatedLog } from './replicated-log.js';
 import type { ReplicatedLogOptions } from './replicated-log.js';
 import { createMemnet } from './testing/memnet.js';
@@ -1639,6 +1643,305 @@ describe('live verified deck replication', () => {
       }
     } finally {
       replicas.forEach((replica) => replica.dispose());
+      network.dispose();
+    }
+  }, 120_000);
+
+  test('captures a signed play that claims a card different from its certified hidden card', async () => {
+    const fixture = createVerifiedDeckSession(3, 2, 128, {
+      boardSeed: new Uint8Array(32).fill(50),
+      ceremonyNonce: toBase64Url(new Uint8Array(32).fill(4)),
+    });
+    const policy: ReplayPolicy = {
+      ...fixture.policy,
+      genesis: {
+        verifyCommitments: (candidate) => validateDeckCeremony(candidate, fixture.deck.transcripts),
+      },
+    };
+    const peers = fixture.humans.map(
+      (human) => required(fixture.simulation.identities.get(human.seat)).peerId,
+    );
+    const network = createMemnet({ peers });
+    const journals = peers.map(() => new MemoryProtocolJournal());
+    const stores = peers.map(() => new MemoryDeckContributionStore());
+    const sent: ProtocolMessage[][] = peers.map(() => []);
+    const transports = peers.map((peer, position) =>
+      observe(network.transport(peer), required(sent[position])),
+    );
+    let replicas: ReplicatedLog[] = [];
+    let sessions: P2PSession[] = [];
+    try {
+      replicas = (
+        await Promise.all(
+          peers.map((_, position) =>
+            ReplicatedLog.create({
+              ...optionsFor(
+                fixture,
+                position,
+                required(transports[position]),
+                network.clock,
+                required(journals[position]),
+                required(stores[position]),
+              ),
+              policy,
+            }),
+          ),
+        )
+      ).map(value);
+      await settle(replicas, network.clock);
+      const ownerSeat = required(fixture.humans[0]).seat;
+      await driveToDraw(fixture, replicas, network.clock, {
+        settlementOrder: BOARD_50_SETTLEMENT_ORDER,
+        buyerSeat: ownerSeat,
+      });
+      expect(
+        await settleUntil(replicas, network.clock, () => allReplicasDealtFirstCard(replicas), 64),
+      ).toBe(true);
+      const originalDeck = required(replicas[0]).getContext().log.crypto?.decks.decks[0];
+      const slot = required(originalDeck?.slots.find((item) => item.seat === ownerSeat));
+      const ownerPeer = required(fixture.genesis.seats.find((item) => item.seat === ownerSeat));
+      const ownerAddress = ownerPeer.kind === 'bot' ? ownerPeer.botHost : ownerPeer.publicKey;
+      const ownerIndex = peers.indexOf(ownerAddress);
+      expect(ownerIndex).toBeGreaterThanOrEqual(0);
+      const ownerHuman = required(fixture.humans.find((human) => human.publicKey === ownerAddress));
+      const source = fixture.createDeckSourceFor(ownerHuman.seat)(
+        required(originalDeck).commitment.definition.deckId,
+        ownerSeat,
+      );
+      try {
+        const decoded = value(
+          decodeDeckCard(
+            required(originalDeck).setup,
+            slot.receipt,
+            source.lock(slot.receipt.operation.position),
+            slot.unlockSigners,
+          ),
+        );
+        expect(decoded.card).toBe('knight');
+      } finally {
+        source.dispose();
+      }
+      replicas.forEach((replica) => replica.dispose());
+      replicas = [];
+
+      sessions = (
+        await Promise.all(
+          peers.map((_, position) => {
+            const base = {
+              ...optionsFor(
+                fixture,
+                position,
+                required(transports[position]),
+                network.clock,
+                required(journals[position]),
+                required(stores[position]),
+              ),
+              policy,
+            };
+            return P2PSession.restore({
+              ...base,
+              createDriver: (engine, genesis, _clock, ownedSeats) =>
+                new VerifiedSessionDriver(
+                  engine,
+                  genesis,
+                  ownedSeats,
+                  required(base.createDeckSource),
+                  undefined,
+                  fixture.createStealSourceFor(base.seat),
+                ),
+            });
+          }),
+        )
+      ).map(value);
+      const ownerSession = required(sessions[ownerIndex]);
+      expect(ownerSession.getPrivate(ownerSeat)?.slots[slot.slotId]).toBe('knight');
+      expect(required(sessions[1 - ownerIndex]).getPrivate(ownerSeat)).toBeNull();
+      const knightPlay = await driveSessionToPlayableKnight(
+        fixture,
+        sessions,
+        network.clock,
+        ownerSeat,
+        slot.slotId,
+      );
+      const wrongCommand: CommandShape = { ...knightPlay, card: 'roadBuilding' };
+      const beforeSave = ownerSession.exportSave();
+      const before = value(
+        replayCertifiedPrefix(fixture.entry, beforeSave.entries, fixture.simulation.engine, policy),
+      ).context;
+      const head = before.log.head;
+      const nonce = (before.log.lastNonces.get(ownerSeat) ?? 0) + 1;
+      expect(
+        fixture.simulation.engine.validate(before.log.state, {
+          kind: 'command',
+          seat: ownerSeat,
+          command: wrongCommand,
+        }).ok,
+      ).toBe(true);
+      const beforeDeck = required(
+        before.log.crypto?.decks.decks.find((deck) =>
+          deck.slots.some((item) => item.slotId === slot.slotId),
+        ),
+      );
+      const decksBefore = canonicalEncode(required(before.log.crypto).decks.decks);
+      const certifiedSlot = required(beforeDeck.slots.find((item) => item.slotId === slot.slotId));
+      const revealContext = {
+        genesisDigest: genesisDigest(before.log.genesis),
+        epoch: required(before.log.crypto).epoch,
+        anchor: { seq: head.seq, hash: entryHash(head) },
+        seat: ownerSeat,
+        nonce,
+        command: wrongCommand,
+      };
+      const ownerSource = fixture.createDeckSourceFor(ownerHuman.seat)(
+        beforeDeck.commitment.definition.deckId,
+        ownerSeat,
+      );
+      const revealData = (() => {
+        try {
+          const decoded = value(
+            decodeDeckCard(
+              beforeDeck.setup,
+              certifiedSlot.receipt,
+              ownerSource.lock(certifiedSlot.receipt.operation.position),
+              certifiedSlot.unlockSigners,
+            ),
+          );
+          const seed = new Uint8Array(32).fill(93);
+          try {
+            return {
+              identity: decoded.identity,
+              reveal: proveDeckReveal(
+                beforeDeck.setup,
+                certifiedSlot.receipt,
+                decoded.identity,
+                ownerSource.lock(certifiedSlot.receipt.operation.position),
+                seed,
+                revealContext,
+                certifiedSlot.unlockSigners,
+              ),
+            };
+          } finally {
+            seed.fill(0);
+          }
+        } finally {
+          ownerSource.dispose();
+        }
+      })();
+      const evidence = composeCommandProofs(
+        [{ slotId: slot.slotId, identity: revealData.identity, proof: revealData.reveal.proof }],
+        [],
+      );
+      const body = {
+        gameId: fixture.genesis.gameId,
+        genesisDigest: genesisDigest(fixture.genesis),
+        seat: ownerSeat,
+        nonce,
+        headSeq: head.seq,
+        headHash: entryHash(head),
+        command: wrongCommand,
+        ...(evidence ? { evidence } : {}),
+      };
+      const signed = signCommand(
+        body,
+        required(fixture.simulation.identities.get(ownerSeat)).secretKey,
+      );
+      expect(validateCommandStatement(signed, before.log).ok).toBe(true);
+      expect(validateCommandForEntry(signed, before.log, policy.entry)).toMatchObject({
+        ok: false,
+        error: { code: 'deck-reveal-kind' },
+      });
+      const publicBefore = canonicalEncode(before.log.state);
+      const privateBefore = canonicalEncode(required(ownerSession.getPrivate(ownerSeat)));
+      const parentHash = entryHash(head);
+      const submit: ProtocolMessage = { t: 'SUBMIT', cmd: signed };
+      network
+        .transport(required(peers[ownerIndex]))
+        .broadcast(value(encodeProtocolMessage(submit)));
+      const certified = await settleUntil(
+        sessions,
+        network.clock,
+        () =>
+          sessions.every((session) =>
+            session
+              .exportSave()
+              .entries.some(
+                ({ entry }) =>
+                  entry.payload.kind === 'cheat-proof' &&
+                  entry.payload.claim.evidence.kind === 'command-proof',
+              ),
+          ),
+        64,
+      );
+      expect(certified).toBe(true);
+      expect(
+        sent
+          .flat()
+          .some(
+            (message) =>
+              message.t === 'CHEAT_CLAIM' &&
+              message.claim.seat === ownerSeat &&
+              message.claim.evidence.kind === 'command-proof' &&
+              message.claim.evidence.artifact.sig === signed.sig,
+          ),
+      ).toBe(true);
+      const histories = sessions.map((session) => session.exportSave().entries);
+      for (const entries of histories) {
+        const findings = entries.filter(
+          ({ entry }) =>
+            entry.payload.kind === 'cheat-proof' &&
+            entry.payload.claim.evidence.kind === 'command-proof',
+        );
+        expect(findings).toHaveLength(1);
+        const finding = required(findings[0]);
+        expect(finding.certificate).toHaveLength(peers.length);
+        expect(finding.entry.payload).toMatchObject({
+          kind: 'cheat-proof',
+          claim: {
+            seat: ownerSeat,
+            evidence: {
+              kind: 'command-proof',
+              at: { seq: head.seq, hash: parentHash },
+              artifact: signed,
+            },
+          },
+        });
+        expect(
+          entries.some(
+            ({ entry }) =>
+              entry.payload.kind === 'command' &&
+              entry.payload.signed.body.command.type === 'PLAY_DEV_CARD' &&
+              entry.payload.signed.body.command.slotId === slot.slotId,
+          ),
+        ).toBe(false);
+        const replayed = value(
+          replayCertifiedPrefix(fixture.entry, entries, fixture.simulation.engine, policy),
+        ).context;
+        expect(canonicalEncode(replayed.log.state)).toEqual(publicBefore);
+        expect(canonicalEncode(required(replayed.log.crypto).decks.decks)).toEqual(decksBefore);
+        expect(replayed.log.crypto?.cheats).toContainEqual(
+          expect.objectContaining({
+            seat: ownerSeat,
+            kind: 'command-proof',
+            at: { seq: head.seq, hash: parentHash },
+          }),
+        );
+      }
+      expect(entryHash(required(required(histories[0]).at(-1)).entry)).toBe(
+        entryHash(required(required(histories[1]).at(-1)).entry),
+      );
+      expect(canonicalEncode(required(ownerSession.getPrivate(ownerSeat)))).toEqual(privateBefore);
+      expect(ownerSession.getPrivate(ownerSeat)?.slots[slot.slotId]).toBe('knight');
+      expect(required(sessions[1 - ownerIndex]).getPrivate(ownerSeat)).toBeNull();
+      expect(ownerSession.getState()).toEqual(required(sessions[1 - ownerIndex]).getState());
+      expect(
+        ownerSession
+          .getState()
+          ?.seats.find((item) => item.seat === ownerSeat)
+          ?.cardSlots.find((item) => item.slotId === slot.slotId)?.revealed,
+      ).toBeUndefined();
+    } finally {
+      replicas.forEach((replica) => replica.dispose());
+      sessions.forEach((session) => session.dispose());
       network.dispose();
     }
   }, 120_000);
