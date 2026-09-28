@@ -1,0 +1,8043 @@
+{
+  "format": "cp2p-replay",
+  "version": 1,
+  "engineVersion": "0.1.0",
+  "config": {
+    "board": {
+      "buildings": [],
+      "harbors": [
+        {
+          "edge": "e:2,0,NW",
+          "kind": "generic"
+        },
+        {
+          "edge": "e:2,3,NW",
+          "kind": "ore"
+        },
+        {
+          "edge": "e:0,2,NE",
+          "kind": "grain"
+        },
+        {
+          "edge": "e:7,0,NE",
+          "kind": "generic"
+        },
+        {
+          "edge": "e:4,3,NE",
+          "kind": "wool"
+        },
+        {
+          "edge": "e:-2,7,NE",
+          "kind": "lumber"
+        },
+        {
+          "edge": "e:1,4,NE",
+          "kind": "generic"
+        },
+        {
+          "edge": "e:4,7,NW",
+          "kind": "brick"
+        },
+        {
+          "edge": "e:4,4,NW",
+          "kind": "generic"
+        }
+      ],
+      "hexes": [
+        {
+          "id": "h:0,0",
+          "q": 0,
+          "r": 0,
+          "terrain": "sea",
+          "token": null
+        },
+        {
+          "id": "h:1,0",
+          "q": 1,
+          "r": 0,
+          "terrain": "sea",
+          "token": null
+        },
+        {
+          "id": "h:2,0",
+          "q": 2,
+          "r": 0,
+          "terrain": "forest",
+          "token": 5
+        },
+        {
+          "id": "h:3,0",
+          "q": 3,
+          "r": 0,
+          "terrain": "pasture",
+          "token": 4
+        },
+        {
+          "id": "h:4,0",
+          "q": 4,
+          "r": 0,
+          "terrain": "sea",
+          "token": null
+        },
+        {
+          "id": "h:5,0",
+          "q": 5,
+          "r": 0,
+          "terrain": "sea",
+          "token": null
+        },
+        {
+          "id": "h:6,0",
+          "q": 6,
+          "r": 0,
+          "terrain": "fields",
+          "token": 11
+        },
+        {
+          "id": "h:7,0",
+          "q": 7,
+          "r": 0,
+          "terrain": "mountains",
+          "token": 5
+        },
+        {
+          "id": "h:8,0",
+          "q": 8,
+          "r": 0,
+          "terrain": "sea",
+          "token": null
+        },
+        {
+          "id": "h:0,1",
+          "q": 0,
+          "r": 1,
+          "terrain": "sea",
+          "token": null
+        },
+        {
+          "id": "h:1,1",
+          "q": 1,
+          "r": 1,
+          "terrain": "desert",
+          "token": null
+        },
+        {
+          "id": "h:2,1",
+          "q": 2,
+          "r": 1,
+          "terrain": "fields",
+          "token": 8
+        },
+        {
+          "id": "h:3,1",
+          "q": 3,
+          "r": 1,
+          "terrain": "mountains",
+          "token": 3
+        },
+        {
+          "id": "h:4,1",
+          "q": 4,
+          "r": 1,
+          "terrain": "sea",
+          "token": null
+        },
+        {
+          "id": "h:5,1",
+          "q": 5,
+          "r": 1,
+          "terrain": "pasture",
+          "token": 8
+        },
+        {
+          "id": "h:6,1",
+          "q": 6,
+          "r": 1,
+          "terrain": "forest",
+          "token": 2
+        },
+        {
+          "id": "h:7,1",
+          "q": 7,
+          "r": 1,
+          "terrain": "gold",
+          "token": 9
+        },
+        {
+          "id": "h:8,1",
+          "q": 8,
+          "r": 1,
+          "terrain": "sea",
+          "token": null
+        },
+        {
+          "id": "h:-1,2",
+          "q": -1,
+          "r": 2,
+          "terrain": "sea",
+          "token": null
+        },
+        {
+          "id": "h:0,2",
+          "q": 0,
+          "r": 2,
+          "terrain": "sea",
+          "token": null
+        },
+        {
+          "id": "h:1,2",
+          "q": 1,
+          "r": 2,
+          "terrain": "hills",
+          "token": 11
+        },
+        {
+          "id": "h:2,2",
+          "q": 2,
+          "r": 2,
+          "terrain": "forest",
+          "token": 9
+        },
+        {
+          "id": "h:3,2",
+          "q": 3,
+          "r": 2,
+          "terrain": "sea",
+          "token": null
+        },
+        {
+          "id": "h:4,2",
+          "q": 4,
+          "r": 2,
+          "terrain": "sea",
+          "token": null
+        },
+        {
+          "id": "h:5,2",
+          "q": 5,
+          "r": 2,
+          "terrain": "hills",
+          "token": 3
+        },
+        {
+          "id": "h:6,2",
+          "q": 6,
+          "r": 2,
+          "terrain": "fields",
+          "token": 4
+        },
+        {
+          "id": "h:7,2",
+          "q": 7,
+          "r": 2,
+          "terrain": "sea",
+          "token": null
+        },
+        {
+          "id": "h:-1,3",
+          "q": -1,
+          "r": 3,
+          "terrain": "sea",
+          "token": null
+        },
+        {
+          "id": "h:0,3",
+          "q": 0,
+          "r": 3,
+          "terrain": "sea",
+          "token": null
+        },
+        {
+          "id": "h:1,3",
+          "q": 1,
+          "r": 3,
+          "terrain": "sea",
+          "token": null
+        },
+        {
+          "id": "h:2,3",
+          "q": 2,
+          "r": 3,
+          "terrain": "sea",
+          "token": null
+        },
+        {
+          "id": "h:3,3",
+          "q": 3,
+          "r": 3,
+          "terrain": "sea",
+          "token": null
+        },
+        {
+          "id": "h:4,3",
+          "q": 4,
+          "r": 3,
+          "terrain": "sea",
+          "token": null
+        },
+        {
+          "id": "h:5,3",
+          "q": 5,
+          "r": 3,
+          "terrain": "sea",
+          "token": null
+        },
+        {
+          "id": "h:6,3",
+          "q": 6,
+          "r": 3,
+          "terrain": "sea",
+          "token": null
+        },
+        {
+          "id": "h:7,3",
+          "q": 7,
+          "r": 3,
+          "terrain": "sea",
+          "token": null
+        },
+        {
+          "id": "h:-2,4",
+          "q": -2,
+          "r": 4,
+          "terrain": "sea",
+          "token": null
+        },
+        {
+          "id": "h:-1,4",
+          "q": -1,
+          "r": 4,
+          "terrain": "sea",
+          "token": null
+        },
+        {
+          "id": "h:0,4",
+          "q": 0,
+          "r": 4,
+          "terrain": "hills",
+          "token": 9
+        },
+        {
+          "id": "h:1,4",
+          "q": 1,
+          "r": 4,
+          "terrain": "pasture",
+          "token": 10
+        },
+        {
+          "id": "h:2,4",
+          "q": 2,
+          "r": 4,
+          "terrain": "sea",
+          "token": null
+        },
+        {
+          "id": "h:3,4",
+          "q": 3,
+          "r": 4,
+          "terrain": "sea",
+          "token": null
+        },
+        {
+          "id": "h:4,4",
+          "q": 4,
+          "r": 4,
+          "terrain": "forest",
+          "token": 6
+        },
+        {
+          "id": "h:5,4",
+          "q": 5,
+          "r": 4,
+          "terrain": "hills",
+          "token": 4
+        },
+        {
+          "id": "h:6,4",
+          "q": 6,
+          "r": 4,
+          "terrain": "sea",
+          "token": null
+        },
+        {
+          "id": "h:-2,5",
+          "q": -2,
+          "r": 5,
+          "terrain": "sea",
+          "token": null
+        },
+        {
+          "id": "h:-1,5",
+          "q": -1,
+          "r": 5,
+          "terrain": "gold",
+          "token": 8
+        },
+        {
+          "id": "h:0,5",
+          "q": 0,
+          "r": 5,
+          "terrain": "mountains",
+          "token": 3
+        },
+        {
+          "id": "h:1,5",
+          "q": 1,
+          "r": 5,
+          "terrain": "fields",
+          "token": 6
+        },
+        {
+          "id": "h:2,5",
+          "q": 2,
+          "r": 5,
+          "terrain": "sea",
+          "token": null
+        },
+        {
+          "id": "h:3,5",
+          "q": 3,
+          "r": 5,
+          "terrain": "fields",
+          "token": 12
+        },
+        {
+          "id": "h:4,5",
+          "q": 4,
+          "r": 5,
+          "terrain": "desert",
+          "token": null
+        },
+        {
+          "id": "h:5,5",
+          "q": 5,
+          "r": 5,
+          "terrain": "pasture",
+          "token": 10
+        },
+        {
+          "id": "h:6,5",
+          "q": 6,
+          "r": 5,
+          "terrain": "sea",
+          "token": null
+        },
+        {
+          "id": "h:-3,6",
+          "q": -3,
+          "r": 6,
+          "terrain": "sea",
+          "token": null
+        },
+        {
+          "id": "h:-2,6",
+          "q": -2,
+          "r": 6,
+          "terrain": "sea",
+          "token": null
+        },
+        {
+          "id": "h:-1,6",
+          "q": -1,
+          "r": 6,
+          "terrain": "forest",
+          "token": 10
+        },
+        {
+          "id": "h:0,6",
+          "q": 0,
+          "r": 6,
+          "terrain": "pasture",
+          "token": 11
+        },
+        {
+          "id": "h:1,6",
+          "q": 1,
+          "r": 6,
+          "terrain": "sea",
+          "token": null
+        },
+        {
+          "id": "h:2,6",
+          "q": 2,
+          "r": 6,
+          "terrain": "sea",
+          "token": null
+        },
+        {
+          "id": "h:3,6",
+          "q": 3,
+          "r": 6,
+          "terrain": "mountains",
+          "token": 5
+        },
+        {
+          "id": "h:4,6",
+          "q": 4,
+          "r": 6,
+          "terrain": "hills",
+          "token": 6
+        },
+        {
+          "id": "h:5,6",
+          "q": 5,
+          "r": 6,
+          "terrain": "sea",
+          "token": null
+        }
+      ],
+      "roads": [],
+      "robberHex": "h:1,1"
+    },
+    "modules": [
+      {
+        "id": "base",
+        "version": "1.0.0"
+      },
+      {
+        "id": "seafaring",
+        "version": "1.0.0"
+      }
+    ],
+    "options": {
+      "base": {
+        "diceMode": "random",
+        "discardLimit": 7,
+        "friendlyRobber": false,
+        "hideBankCounts": false,
+        "mapLayout": "standard-fixed",
+        "playerTrades": true,
+        "strictBalance": false,
+        "turnTimer": null,
+        "vpTarget": 13
+      },
+      "seafaring": {
+        "bonusRegions": null,
+        "fog": null,
+        "islandBonus": {
+          "vp": 2
+        },
+        "layout": "fixed",
+        "pirateHex": "h:3,3",
+        "setupAreas": [
+          "h:2,0",
+          "h:3,0",
+          "h:6,0",
+          "h:7,0",
+          "h:1,1",
+          "h:2,1",
+          "h:3,1",
+          "h:5,1",
+          "h:6,1",
+          "h:7,1",
+          "h:1,2",
+          "h:2,2",
+          "h:5,2",
+          "h:6,2",
+          "h:0,4",
+          "h:1,4",
+          "h:4,4",
+          "h:5,4",
+          "h:-1,5",
+          "h:0,5",
+          "h:1,5",
+          "h:3,5",
+          "h:4,5",
+          "h:5,5",
+          "h:-1,6",
+          "h:0,6",
+          "h:3,6",
+          "h:4,6"
+        ]
+      }
+    },
+    "seats": [
+      0,
+      1,
+      2,
+      3
+    ]
+  },
+  "genesisSeed": "cRpgTvGfBVVjViUU7p17-QgdQRYyyIgpk5l1bNFUI-Q",
+  "inputs": [
+    {
+      "kind": "system",
+      "seat": 0,
+      "type": "START_SEAT"
+    },
+    {
+      "command": {
+        "type": "PLACE_SETTLEMENT",
+        "vertex": "v:1,4,S"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "edge": "e:0,5,NE",
+        "type": "PLACE_ROAD"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "PLACE_SETTLEMENT",
+        "vertex": "v:-1,6,N"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "edge": "e:0,5,W",
+        "type": "PLACE_ROAD"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "PLACE_SETTLEMENT",
+        "vertex": "v:2,1,N"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "edge": "e:2,1,NW",
+        "type": "PLACE_ROAD"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "PLACE_SETTLEMENT",
+        "vertex": "v:7,0,S"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "edge": "e:7,1,NW",
+        "type": "PLACE_ROAD"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "PLACE_SETTLEMENT",
+        "vertex": "v:4,5,S"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "edge": "e:4,6,W",
+        "type": "PLACE_ROAD"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "PLACE_SETTLEMENT",
+        "vertex": "v:2,1,S"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "edge": "e:2,2,W",
+        "type": "PLACE_ROAD"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "PLACE_SETTLEMENT",
+        "vertex": "v:5,1,S"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "edge": "e:4,2,NE",
+        "type": "PLACE_ROAD"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "PLACE_SETTLEMENT",
+        "vertex": "v:7,1,S"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "edge": "e:6,2,NE",
+        "type": "PLACE_ROAD"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "dice": [
+        4,
+        4
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "resources": {
+          "brick": 0,
+          "grain": 0,
+          "lumber": 1,
+          "ore": 0,
+          "wool": 0
+        },
+        "type": "CHOOSE_GOLD"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "dice": [
+        4,
+        4
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "resources": {
+          "brick": 1,
+          "grain": 0,
+          "lumber": 0,
+          "ore": 0,
+          "wool": 0
+        },
+        "type": "CHOOSE_GOLD"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "edge": "e:5,2,W",
+        "type": "BUILD_SHIP"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "dice": [
+        6,
+        4
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "edge": "e:1,3,NE",
+        "type": "BUILD_ROAD"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "dice": [
+        5,
+        6
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "dice": [
+        5,
+        3
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "resources": {
+          "brick": 0,
+          "grain": 0,
+          "lumber": 0,
+          "ore": 0,
+          "wool": 1
+        },
+        "type": "CHOOSE_GOLD"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "give": {
+          "wool": 1
+        },
+        "type": "OFFER_TRADE",
+        "want": {
+          "ore": 1
+        }
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "accept": false,
+        "offerId": 0,
+        "type": "RESPOND_TRADE"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "accept": false,
+        "offerId": 0,
+        "type": "RESPOND_TRADE"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "dice": [
+        3,
+        3
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "edge": "e:4,3,NE",
+        "type": "BUILD_SHIP"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "dice": [
+        4,
+        1
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "get": {
+          "wool": 1
+        },
+        "give": {
+          "grain": 4
+        },
+        "type": "MARITIME_TRADE"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "BUILD_SETTLEMENT",
+        "vertex": "v:2,2,S"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "dice": [
+        3,
+        6
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "resources": {
+          "brick": 1,
+          "grain": 0,
+          "lumber": 0,
+          "ore": 0,
+          "wool": 0
+        },
+        "type": "CHOOSE_GOLD"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "resources": {
+          "brick": 0,
+          "grain": 1,
+          "lumber": 0,
+          "ore": 0,
+          "wool": 0
+        },
+        "type": "CHOOSE_GOLD"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "dice": [
+        4,
+        5
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "resources": {
+          "brick": 0,
+          "grain": 1,
+          "lumber": 0,
+          "ore": 0,
+          "wool": 0
+        },
+        "type": "CHOOSE_GOLD"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "resources": {
+          "brick": 0,
+          "grain": 0,
+          "lumber": 1,
+          "ore": 0,
+          "wool": 0
+        },
+        "type": "CHOOSE_GOLD"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "dice": [
+        1,
+        1
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "dice": [
+        2,
+        3
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "dice": [
+        1,
+        3
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "edge": "e:3,7,NE",
+        "type": "BUILD_ROAD"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "dice": [
+        1,
+        4
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "dice": [
+        3,
+        1
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "dice": [
+        5,
+        2
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "cards": {
+          "brick": 0,
+          "grain": 0,
+          "lumber": 5,
+          "ore": 0,
+          "wool": 0
+        },
+        "type": "DISCARD"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "cards": {
+          "brick": 0,
+          "grain": 0,
+          "lumber": 1,
+          "ore": 4,
+          "wool": 0
+        },
+        "type": "DISCARD"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "hex": "h:4,2",
+        "type": "MOVE_PIRATE"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "STEAL",
+        "victim": 1
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "kind": "system",
+      "resource": "wool",
+      "thief": 2,
+      "type": "STEAL_RESULT",
+      "victim": 1
+    },
+    {
+      "command": {
+        "edge": "e:2,3,W",
+        "type": "BUILD_SHIP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "dice": [
+        1,
+        4
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "dice": [
+        5,
+        6
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "dice": [
+        2,
+        2
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "give": {
+          "wool": 1
+        },
+        "type": "OFFER_TRADE",
+        "want": {
+          "ore": 1
+        }
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "accept": false,
+        "offerId": 1,
+        "type": "RESPOND_TRADE"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "dice": [
+        1,
+        6
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "cards": {
+          "brick": 0,
+          "grain": 3,
+          "lumber": 0,
+          "ore": 0,
+          "wool": 1
+        },
+        "type": "DISCARD"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "hex": "h:2,3",
+        "type": "MOVE_PIRATE"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "edge": "e:1,4,NW",
+        "type": "BUILD_SHIP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "dice": [
+        4,
+        2
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "give": {
+          "brick": 1
+        },
+        "type": "OFFER_TRADE",
+        "want": {
+          "grain": 1
+        }
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "accept": false,
+        "offerId": 2,
+        "type": "RESPOND_TRADE"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "dice": [
+        5,
+        6
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "dice": [
+        5,
+        6
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "from": "e:4,3,NE",
+        "to": "e:4,3,NW",
+        "type": "MOVE_SHIP"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "dice": [
+        4,
+        4
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "resources": {
+          "brick": 0,
+          "grain": 1,
+          "lumber": 0,
+          "ore": 0,
+          "wool": 0
+        },
+        "type": "CHOOSE_GOLD"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "dice": [
+        1,
+        1
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "dice": [
+        4,
+        4
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "resources": {
+          "brick": 1,
+          "grain": 0,
+          "lumber": 0,
+          "ore": 0,
+          "wool": 0
+        },
+        "type": "CHOOSE_GOLD"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "dice": [
+        4,
+        6
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "dice": [
+        3,
+        6
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "resources": {
+          "brick": 0,
+          "grain": 0,
+          "lumber": 0,
+          "ore": 1,
+          "wool": 0
+        },
+        "type": "CHOOSE_GOLD"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "resources": {
+          "brick": 0,
+          "grain": 0,
+          "lumber": 1,
+          "ore": 0,
+          "wool": 0
+        },
+        "type": "CHOOSE_GOLD"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "edge": "e:1,3,NW",
+        "type": "BUILD_ROAD"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "BUILD_SETTLEMENT",
+        "vertex": "v:1,3,S"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "get": {
+          "lumber": 1
+        },
+        "give": {
+          "grain": 4
+        },
+        "type": "MARITIME_TRADE"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "edge": "e:0,4,NE",
+        "type": "BUILD_SHIP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "dice": [
+        3,
+        6
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "resources": {
+          "brick": 0,
+          "grain": 0,
+          "lumber": 0,
+          "ore": 1,
+          "wool": 0
+        },
+        "type": "CHOOSE_GOLD"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "resources": {
+          "brick": 0,
+          "grain": 0,
+          "lumber": 0,
+          "ore": 1,
+          "wool": 0
+        },
+        "type": "CHOOSE_GOLD"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "get": {
+          "grain": 1
+        },
+        "give": {
+          "ore": 4
+        },
+        "type": "MARITIME_TRADE"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "dice": [
+        2,
+        3
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "dice": [
+        1,
+        2
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "edge": "e:5,1,W",
+        "type": "BUILD_ROAD"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "dice": [
+        1,
+        2
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "give": {
+          "brick": 1
+        },
+        "type": "OFFER_TRADE",
+        "want": {
+          "wool": 1
+        }
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "accept": false,
+        "offerId": 3,
+        "type": "RESPOND_TRADE"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "offerId": 3,
+        "type": "CANCEL_TRADE"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "dice": [
+        6,
+        4
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "dice": [
+        3,
+        5
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "resources": {
+          "brick": 1,
+          "grain": 0,
+          "lumber": 0,
+          "ore": 0,
+          "wool": 0
+        },
+        "type": "CHOOSE_GOLD"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "BUILD_CITY",
+        "vertex": "v:7,1,S"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "give": {
+          "wool": 1
+        },
+        "type": "OFFER_TRADE",
+        "want": {
+          "ore": 1
+        }
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "accept": false,
+        "offerId": 4,
+        "type": "RESPOND_TRADE"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "dice": [
+        3,
+        2
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "type": "BUILD_SETTLEMENT",
+        "vertex": "v:5,0,S"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "from": "e:4,3,NW",
+        "to": "e:4,1,NE",
+        "type": "MOVE_SHIP"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "dice": [
+        2,
+        4
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "type": "BUILD_SETTLEMENT",
+        "vertex": "v:1,2,S"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "from": "e:0,4,NE",
+        "to": "e:0,3,NE",
+        "type": "MOVE_SHIP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "dice": [
+        5,
+        5
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "dice": [
+        4,
+        4
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "resources": {
+          "brick": 0,
+          "grain": 0,
+          "lumber": 1,
+          "ore": 0,
+          "wool": 0
+        },
+        "type": "CHOOSE_GOLD"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "edge": "e:7,2,W",
+        "type": "BUILD_SHIP"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "give": {
+          "grain": 2
+        },
+        "type": "OFFER_TRADE",
+        "want": {
+          "ore": 1
+        }
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "dice": [
+        1,
+        1
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "edge": "e:5,0,W",
+        "type": "BUILD_SHIP"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "from": "e:5,2,W",
+        "to": "e:4,0,NE",
+        "type": "MOVE_SHIP"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "dice": [
+        6,
+        3
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "resources": {
+          "brick": 0,
+          "grain": 0,
+          "lumber": 1,
+          "ore": 0,
+          "wool": 0
+        },
+        "type": "CHOOSE_GOLD"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "resources": {
+          "brick": 0,
+          "grain": 0,
+          "lumber": 0,
+          "ore": 1,
+          "wool": 1
+        },
+        "type": "CHOOSE_GOLD"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "edge": "e:1,3,W",
+        "type": "BUILD_SHIP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "from": "e:0,3,NE",
+        "to": "e:0,4,NW",
+        "type": "MOVE_SHIP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "edge": "e:1,1,NE",
+        "type": "BUILD_ROAD"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "give": {
+          "grain": 1
+        },
+        "type": "OFFER_TRADE",
+        "want": {
+          "ore": 1
+        }
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "accept": false,
+        "offerId": 6,
+        "type": "RESPOND_TRADE"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "dice": [
+        2,
+        2
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "dice": [
+        3,
+        3
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "get": {
+          "ore": 1
+        },
+        "give": {
+          "grain": 4
+        },
+        "type": "MARITIME_TRADE"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "dice": [
+        5,
+        3
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "resources": {
+          "brick": 0,
+          "grain": 1,
+          "lumber": 0,
+          "ore": 0,
+          "wool": 0
+        },
+        "type": "CHOOSE_GOLD"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "edge": "e:-1,5,NE",
+        "type": "BUILD_ROAD"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "get": {
+          "lumber": 1
+        },
+        "give": {
+          "wool": 4
+        },
+        "type": "MARITIME_TRADE"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "BUILD_SETTLEMENT",
+        "vertex": "v:-1,5,N"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "from": "e:4,0,NE",
+        "to": "e:-1,5,NW",
+        "type": "MOVE_SHIP"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "dice": [
+        4,
+        3
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "cards": {
+          "brick": 0,
+          "grain": 1,
+          "lumber": 0,
+          "ore": 0,
+          "wool": 3
+        },
+        "type": "DISCARD"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "cards": {
+          "brick": 1,
+          "grain": 2,
+          "lumber": 2,
+          "ore": 0,
+          "wool": 0
+        },
+        "type": "DISCARD"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "cards": {
+          "brick": 5,
+          "grain": 0,
+          "lumber": 3,
+          "ore": 0,
+          "wool": 0
+        },
+        "type": "DISCARD"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "hex": "h:0,5",
+        "type": "MOVE_ROBBER"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "STEAL",
+        "victim": 0
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "kind": "system",
+      "resource": "grain",
+      "thief": 2,
+      "type": "STEAL_RESULT",
+      "victim": 0
+    },
+    {
+      "command": {
+        "from": "e:0,4,NW",
+        "to": "e:0,3,NE",
+        "type": "MOVE_SHIP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "edge": "e:1,2,W",
+        "type": "BUILD_SHIP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "dice": [
+        3,
+        6
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "resources": {
+          "brick": 0,
+          "grain": 0,
+          "lumber": 1,
+          "ore": 0,
+          "wool": 0
+        },
+        "type": "CHOOSE_GOLD"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "resources": {
+          "brick": 0,
+          "grain": 2,
+          "lumber": 0,
+          "ore": 0,
+          "wool": 0
+        },
+        "type": "CHOOSE_GOLD"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "dice": [
+        4,
+        6
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "dice": [
+        5,
+        4
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "resources": {
+          "brick": 1,
+          "grain": 0,
+          "lumber": 0,
+          "ore": 0,
+          "wool": 0
+        },
+        "type": "CHOOSE_GOLD"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "resources": {
+          "brick": 0,
+          "grain": 1,
+          "lumber": 0,
+          "ore": 0,
+          "wool": 1
+        },
+        "type": "CHOOSE_GOLD"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "dice": [
+        2,
+        5
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "cards": {
+          "brick": 0,
+          "grain": 2,
+          "lumber": 0,
+          "ore": 0,
+          "wool": 2
+        },
+        "type": "DISCARD"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "cards": {
+          "brick": 2,
+          "grain": 0,
+          "lumber": 1,
+          "ore": 0,
+          "wool": 1
+        },
+        "type": "DISCARD"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "cards": {
+          "brick": 0,
+          "grain": 1,
+          "lumber": 4,
+          "ore": 0,
+          "wool": 1
+        },
+        "type": "DISCARD"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "cards": {
+          "brick": 0,
+          "grain": 0,
+          "lumber": 1,
+          "ore": 4,
+          "wool": 0
+        },
+        "type": "DISCARD"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "hex": "h:4,5",
+        "type": "MOVE_ROBBER"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "STEAL",
+        "victim": 3
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "kind": "system",
+      "resource": "ore",
+      "thief": 2,
+      "type": "STEAL_RESULT",
+      "victim": 3
+    },
+    {
+      "command": {
+        "give": {
+          "grain": 2
+        },
+        "type": "OFFER_TRADE",
+        "want": {
+          "ore": 1
+        }
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "accept": false,
+        "offerId": 7,
+        "type": "RESPOND_TRADE"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "offerId": 7,
+        "type": "CANCEL_TRADE"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "dice": [
+        3,
+        3
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "dice": [
+        4,
+        6
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "dice": [
+        3,
+        4
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "cards": {
+          "brick": 2,
+          "grain": 1,
+          "lumber": 0,
+          "ore": 0,
+          "wool": 1
+        },
+        "type": "DISCARD"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "hex": "h:6,1",
+        "type": "MOVE_ROBBER"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "STEAL",
+        "victim": 3
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "kind": "system",
+      "resource": "ore",
+      "thief": 1,
+      "type": "STEAL_RESULT",
+      "victim": 3
+    },
+    {
+      "command": {
+        "edge": "e:0,5,NW",
+        "type": "BUILD_ROAD"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "from": "e:5,0,W",
+        "to": "e:4,1,NW",
+        "type": "MOVE_SHIP"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "dice": [
+        2,
+        1
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "from": "e:1,2,W",
+        "to": "e:0,3,NW",
+        "type": "MOVE_SHIP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "dice": [
+        1,
+        1
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "give": {
+          "ore": 1
+        },
+        "type": "OFFER_TRADE",
+        "want": {
+          "lumber": 1
+        }
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "accept": false,
+        "offerId": 8,
+        "type": "RESPOND_TRADE"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "accept": false,
+        "offerId": 8,
+        "type": "RESPOND_TRADE"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "offerId": 8,
+        "type": "CANCEL_TRADE"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "dice": [
+        6,
+        3
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "resources": {
+          "brick": 2,
+          "grain": 0,
+          "lumber": 0,
+          "ore": 0,
+          "wool": 0
+        },
+        "type": "CHOOSE_GOLD"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "resources": {
+          "brick": 0,
+          "grain": 1,
+          "lumber": 0,
+          "ore": 0,
+          "wool": 0
+        },
+        "type": "CHOOSE_GOLD"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "from": "e:7,2,W",
+        "to": "e:7,2,NW",
+        "type": "MOVE_SHIP"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "BUILD_CITY",
+        "vertex": "v:1,4,S"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "dice": [
+        1,
+        1
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "dice": [
+        6,
+        2
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "resources": {
+          "brick": 1,
+          "grain": 0,
+          "lumber": 0,
+          "ore": 0,
+          "wool": 1
+        },
+        "type": "CHOOSE_GOLD"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "dice": [
+        1,
+        1
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "dice": [
+        1,
+        2
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "dice": [
+        1,
+        1
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "from": "e:-1,5,NW",
+        "to": "e:5,2,W",
+        "type": "MOVE_SHIP"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "dice": [
+        5,
+        4
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "resources": {
+          "brick": 0,
+          "grain": 1,
+          "lumber": 0,
+          "ore": 0,
+          "wool": 0
+        },
+        "type": "CHOOSE_GOLD"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "resources": {
+          "brick": 0,
+          "grain": 1,
+          "lumber": 0,
+          "ore": 1,
+          "wool": 0
+        },
+        "type": "CHOOSE_GOLD"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "from": "e:0,3,NW",
+        "to": "e:0,4,NW",
+        "type": "MOVE_SHIP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "dice": [
+        6,
+        1
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "cards": {
+          "brick": 1,
+          "grain": 0,
+          "lumber": 0,
+          "ore": 3,
+          "wool": 0
+        },
+        "type": "DISCARD"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "cards": {
+          "brick": 4,
+          "grain": 0,
+          "lumber": 0,
+          "ore": 2,
+          "wool": 1
+        },
+        "type": "DISCARD"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "cards": {
+          "brick": 2,
+          "grain": 0,
+          "lumber": 4,
+          "ore": 0,
+          "wool": 0
+        },
+        "type": "DISCARD"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "hex": "h:0,2",
+        "type": "MOVE_PIRATE"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "give": {
+          "brick": 2
+        },
+        "type": "OFFER_TRADE",
+        "want": {
+          "ore": 1
+        }
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "accept": false,
+        "offerId": 9,
+        "type": "RESPOND_TRADE"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "dice": [
+        1,
+        2
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "type": "BUY_DEV_CARD"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "card": "knight",
+      "deck": "dev",
+      "kind": "system",
+      "seat": 0,
+      "slotId": "dev:0",
+      "type": "CARD_DEALT"
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "dice": [
+        4,
+        1
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "dice": [
+        2,
+        3
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "dice": [
+        2,
+        1
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "type": "BUILD_CITY",
+        "vertex": "v:7,0,S"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "give": {
+          "brick": 1
+        },
+        "type": "OFFER_TRADE",
+        "want": {
+          "ore": 1
+        }
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "accept": true,
+        "offerId": 10,
+        "type": "RESPOND_TRADE"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "accept": true,
+        "offerId": 10,
+        "type": "RESPOND_TRADE"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "accept": false,
+        "offerId": 10,
+        "type": "RESPOND_TRADE"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "offerId": 10,
+        "type": "CANCEL_TRADE"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "dice": [
+        4,
+        1
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "dice": [
+        6,
+        1
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "cards": {
+          "brick": 3,
+          "grain": 0,
+          "lumber": 0,
+          "ore": 1,
+          "wool": 2
+        },
+        "type": "DISCARD"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "cards": {
+          "brick": 0,
+          "grain": 2,
+          "lumber": 2,
+          "ore": 0,
+          "wool": 0
+        },
+        "type": "DISCARD"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "cards": {
+          "brick": 2,
+          "grain": 0,
+          "lumber": 0,
+          "ore": 2,
+          "wool": 0
+        },
+        "type": "DISCARD"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "hex": "h:-1,6",
+        "type": "MOVE_ROBBER"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "from": "e:5,2,W",
+        "to": "e:4,1,W",
+        "type": "MOVE_SHIP"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "dice": [
+        4,
+        5
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "resources": {
+          "brick": 0,
+          "grain": 0,
+          "lumber": 2,
+          "ore": 0,
+          "wool": 0
+        },
+        "type": "CHOOSE_GOLD"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "resources": {
+          "brick": 0,
+          "grain": 0,
+          "lumber": 0,
+          "ore": 1,
+          "wool": 1
+        },
+        "type": "CHOOSE_GOLD"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "from": "e:0,3,NE",
+        "to": "e:1,4,NE",
+        "type": "MOVE_SHIP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "dice": [
+        1,
+        3
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "card": "knight",
+        "slotId": "dev:0",
+        "type": "PLAY_DEV_CARD"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "hex": "h:6,2",
+        "type": "MOVE_ROBBER"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "dice": [
+        3,
+        6
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "resources": {
+          "brick": 0,
+          "grain": 1,
+          "lumber": 0,
+          "ore": 1,
+          "wool": 0
+        },
+        "type": "CHOOSE_GOLD"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "resources": {
+          "brick": 1,
+          "grain": 0,
+          "lumber": 0,
+          "ore": 0,
+          "wool": 1
+        },
+        "type": "CHOOSE_GOLD"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "dice": [
+        2,
+        6
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "resources": {
+          "brick": 0,
+          "grain": 1,
+          "lumber": 0,
+          "ore": 0,
+          "wool": 1
+        },
+        "type": "CHOOSE_GOLD"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "give": {
+          "brick": 1
+        },
+        "type": "OFFER_TRADE",
+        "want": {
+          "grain": 1
+        }
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "accept": false,
+        "offerId": 11,
+        "type": "RESPOND_TRADE"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "dice": [
+        1,
+        2
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "get": {
+          "ore": 1
+        },
+        "give": {
+          "lumber": 4
+        },
+        "type": "MARITIME_TRADE"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "edge": "e:2,4,W",
+        "type": "BUILD_SHIP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "dice": [
+        2,
+        5
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "cards": {
+          "brick": 0,
+          "grain": 4,
+          "lumber": 0,
+          "ore": 1,
+          "wool": 1
+        },
+        "type": "DISCARD"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "cards": {
+          "brick": 1,
+          "grain": 0,
+          "lumber": 0,
+          "ore": 2,
+          "wool": 4
+        },
+        "type": "DISCARD"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "cards": {
+          "brick": 1,
+          "grain": 3,
+          "lumber": 0,
+          "ore": 0,
+          "wool": 0
+        },
+        "type": "DISCARD"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "cards": {
+          "brick": 0,
+          "grain": 0,
+          "lumber": 1,
+          "ore": 3,
+          "wool": 0
+        },
+        "type": "DISCARD"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "hex": "h:3,0",
+        "type": "MOVE_ROBBER"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "STEAL",
+        "victim": 2
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "kind": "system",
+      "resource": "ore",
+      "thief": 3,
+      "type": "STEAL_RESULT",
+      "victim": 2
+    },
+    {
+      "command": {
+        "type": "BUILD_SETTLEMENT",
+        "vertex": "v:4,6,S"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "dice": [
+        6,
+        3
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "resources": {
+          "brick": 0,
+          "grain": 0,
+          "lumber": 0,
+          "ore": 1,
+          "wool": 1
+        },
+        "type": "CHOOSE_GOLD"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "resources": {
+          "brick": 1,
+          "grain": 0,
+          "lumber": 0,
+          "ore": 1,
+          "wool": 0
+        },
+        "type": "CHOOSE_GOLD"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "get": {
+          "lumber": 1
+        },
+        "give": {
+          "ore": 4
+        },
+        "type": "MARITIME_TRADE"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "from": "e:7,2,NW",
+        "to": "e:7,2,W",
+        "type": "MOVE_SHIP"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "edge": "e:6,3,NW",
+        "type": "BUILD_SHIP"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "dice": [
+        5,
+        1
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "from": "e:4,1,W",
+        "to": "e:5,2,W",
+        "type": "MOVE_SHIP"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "dice": [
+        3,
+        1
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "from": "e:0,4,NW",
+        "to": "e:0,3,NE",
+        "type": "MOVE_SHIP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "dice": [
+        4,
+        6
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "dice": [
+        5,
+        4
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "resources": {
+          "brick": 0,
+          "grain": 2,
+          "lumber": 0,
+          "ore": 0,
+          "wool": 0
+        },
+        "type": "CHOOSE_GOLD"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "resources": {
+          "brick": 0,
+          "grain": 1,
+          "lumber": 1,
+          "ore": 0,
+          "wool": 0
+        },
+        "type": "CHOOSE_GOLD"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "BUY_DEV_CARD"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "card": "knight",
+      "deck": "dev",
+      "kind": "system",
+      "seat": 0,
+      "slotId": "dev:1",
+      "type": "CARD_DEALT"
+    },
+    {
+      "command": {
+        "get": {
+          "lumber": 1
+        },
+        "give": {
+          "grain": 4
+        },
+        "type": "MARITIME_TRADE"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "edge": "e:6,2,NW",
+        "type": "BUILD_ROAD"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "dice": [
+        5,
+        1
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "edge": "e:1,4,W",
+        "type": "BUILD_ROAD"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "from": "e:5,2,W",
+        "to": "e:5,0,W",
+        "type": "MOVE_SHIP"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "dice": [
+        4,
+        2
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "edge": "e:2,4,NW",
+        "type": "BUILD_SHIP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "dice": [
+        6,
+        4
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "edge": "e:8,0,W",
+        "type": "BUILD_ROAD"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "card": "knight",
+        "slotId": "dev:1",
+        "type": "PLAY_DEV_CARD"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "hex": "h:6,0",
+        "type": "MOVE_ROBBER"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "dice": [
+        1,
+        4
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "from": "e:6,3,NW",
+        "to": "e:6,3,NE",
+        "type": "MOVE_SHIP"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "BUY_DEV_CARD"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "card": "knight",
+      "deck": "dev",
+      "kind": "system",
+      "seat": 0,
+      "slotId": "dev:2",
+      "type": "CARD_DEALT"
+    },
+    {
+      "command": {
+        "type": "BUY_DEV_CARD"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "card": "victoryPoint",
+      "deck": "dev",
+      "kind": "system",
+      "seat": 0,
+      "slotId": "dev:3",
+      "type": "CARD_DEALT"
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "dice": [
+        6,
+        5
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "edge": "e:0,4,W",
+        "type": "BUILD_ROAD"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "from": "e:5,0,W",
+        "to": "e:-1,5,NW",
+        "type": "MOVE_SHIP"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "dice": [
+        1,
+        1
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "edge": "e:1,5,NE",
+        "type": "BUILD_SHIP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "get": {
+          "ore": 1
+        },
+        "give": {
+          "brick": 4
+        },
+        "type": "MARITIME_TRADE"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "dice": [
+        6,
+        1
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "cards": {
+          "brick": 1,
+          "grain": 0,
+          "lumber": 3,
+          "ore": 0,
+          "wool": 0
+        },
+        "type": "DISCARD"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "cards": {
+          "brick": 6,
+          "grain": 0,
+          "lumber": 0,
+          "ore": 1,
+          "wool": 0
+        },
+        "type": "DISCARD"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "hex": "h:-1,6",
+        "type": "MOVE_ROBBER"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "STEAL",
+        "victim": 1
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "kind": "system",
+      "resource": "ore",
+      "thief": 3,
+      "type": "STEAL_RESULT",
+      "victim": 1
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "dice": [
+        1,
+        1
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "card": "knight",
+        "slotId": "dev:2",
+        "type": "PLAY_DEV_CARD"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "hex": "h:4,4",
+        "type": "MOVE_ROBBER"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "from": "e:6,3,NE",
+        "to": "e:6,3,NW",
+        "type": "MOVE_SHIP"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "dice": [
+        1,
+        2
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "dice": [
+        2,
+        5
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "cards": {
+          "brick": 4,
+          "grain": 0,
+          "lumber": 0,
+          "ore": 0,
+          "wool": 0
+        },
+        "type": "DISCARD"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "cards": {
+          "brick": 0,
+          "grain": 0,
+          "lumber": 4,
+          "ore": 1,
+          "wool": 0
+        },
+        "type": "DISCARD"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "hex": "h:0,4",
+        "type": "MOVE_ROBBER"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "STEAL",
+        "victim": 1
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "kind": "system",
+      "resource": "ore",
+      "thief": 2,
+      "type": "STEAL_RESULT",
+      "victim": 1
+    },
+    {
+      "command": {
+        "type": "BUILD_CITY",
+        "vertex": "v:2,1,N"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "dice": [
+        2,
+        6
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "resources": {
+          "brick": 0,
+          "grain": 0,
+          "lumber": 0,
+          "ore": 2,
+          "wool": 0
+        },
+        "type": "CHOOSE_GOLD"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "give": {
+          "ore": 1
+        },
+        "type": "OFFER_TRADE",
+        "want": {
+          "grain": 1
+        }
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "accept": true,
+        "offerId": 12,
+        "type": "RESPOND_TRADE"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "accept": false,
+        "offerId": 12,
+        "type": "RESPOND_TRADE"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "offerId": 12,
+        "type": "CANCEL_TRADE"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "dice": [
+        1,
+        4
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "dice": [
+        3,
+        1
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "dice": [
+        4,
+        3
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "cards": {
+          "brick": 0,
+          "grain": 3,
+          "lumber": 0,
+          "ore": 1,
+          "wool": 0
+        },
+        "type": "DISCARD"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "cards": {
+          "brick": 0,
+          "grain": 0,
+          "lumber": 0,
+          "ore": 4,
+          "wool": 0
+        },
+        "type": "DISCARD"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "hex": "h:1,3",
+        "type": "MOVE_PIRATE"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "edge": "e:2,3,NW",
+        "type": "BUILD_SHIP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "from": "e:0,3,NE",
+        "to": "e:2,5,NW",
+        "type": "MOVE_SHIP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "edge": "e:2,4,NE",
+        "type": "BUILD_SHIP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "dice": [
+        1,
+        2
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "dice": [
+        5,
+        4
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "resources": {
+          "brick": 1,
+          "grain": 0,
+          "lumber": 0,
+          "ore": 0,
+          "wool": 1
+        },
+        "type": "CHOOSE_GOLD"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "resources": {
+          "brick": 0,
+          "grain": 0,
+          "lumber": 1,
+          "ore": 1,
+          "wool": 0
+        },
+        "type": "CHOOSE_GOLD"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "BUY_DEV_CARD"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "card": "knight",
+      "deck": "dev",
+      "kind": "system",
+      "seat": 0,
+      "slotId": "dev:4",
+      "type": "CARD_DEALT"
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "dice": [
+        4,
+        2
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "from": "e:-1,5,NW",
+        "to": "e:5,1,NW",
+        "type": "MOVE_SHIP"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "dice": [
+        2,
+        1
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "dice": [
+        1,
+        4
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "get": {
+          "grain": 1
+        },
+        "give": {
+          "brick": 2
+        },
+        "type": "MARITIME_TRADE"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "card": "knight",
+        "slotId": "dev:4",
+        "type": "PLAY_DEV_CARD"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "hex": "h:3,1",
+        "type": "MOVE_ROBBER"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "dice": [
+        2,
+        1
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "get": {
+          "lumber": 1
+        },
+        "give": {
+          "ore": 4
+        },
+        "type": "MARITIME_TRADE"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "edge": "e:6,3,NE",
+        "type": "BUILD_SHIP"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "dice": [
+        4,
+        5
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "resources": {
+          "brick": 0,
+          "grain": 1,
+          "lumber": 0,
+          "ore": 1,
+          "wool": 0
+        },
+        "type": "CHOOSE_GOLD"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "resources": {
+          "brick": 0,
+          "grain": 0,
+          "lumber": 0,
+          "ore": 1,
+          "wool": 1
+        },
+        "type": "CHOOSE_GOLD"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "get": {
+          "grain": 1
+        },
+        "give": {
+          "brick": 4
+        },
+        "type": "MARITIME_TRADE"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "BUILD_CITY",
+        "vertex": "v:-1,6,N"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "from": "e:4,1,NW",
+        "to": "e:6,0,W",
+        "type": "MOVE_SHIP"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "dice": [
+        6,
+        3
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "resources": {
+          "brick": 0,
+          "grain": 1,
+          "lumber": 0,
+          "ore": 0,
+          "wool": 1
+        },
+        "type": "CHOOSE_GOLD"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "resources": {
+          "brick": 1,
+          "grain": 0,
+          "lumber": 1,
+          "ore": 0,
+          "wool": 0
+        },
+        "type": "CHOOSE_GOLD"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "get": {
+          "wool": 1
+        },
+        "give": {
+          "lumber": 4
+        },
+        "type": "MARITIME_TRADE"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "BUILD_SETTLEMENT",
+        "vertex": "v:2,4,S"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "from": "e:2,3,NW",
+        "to": "e:2,5,NE",
+        "type": "MOVE_SHIP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "dice": [
+        5,
+        4
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "resources": {
+          "brick": 1,
+          "grain": 1,
+          "lumber": 0,
+          "ore": 0,
+          "wool": 0
+        },
+        "type": "CHOOSE_GOLD"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "resources": {
+          "brick": 0,
+          "grain": 0,
+          "lumber": 0,
+          "ore": 1,
+          "wool": 1
+        },
+        "type": "CHOOSE_GOLD"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "BUILD_CITY",
+        "vertex": "v:4,5,S"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "BUILD_CITY",
+        "vertex": "v:4,6,S"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "BUILD_SETTLEMENT",
+        "vertex": "v:8,-1,S"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "dice": [
+        1,
+        6
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "cards": {
+          "brick": 1,
+          "grain": 2,
+          "lumber": 0,
+          "ore": 2,
+          "wool": 0
+        },
+        "type": "DISCARD"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "cards": {
+          "brick": 2,
+          "grain": 0,
+          "lumber": 2,
+          "ore": 0,
+          "wool": 0
+        },
+        "type": "DISCARD"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "hex": "h:4,3",
+        "type": "MOVE_PIRATE"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "dice": [
+        6,
+        6
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "from": "e:4,1,NE",
+        "to": "e:5,0,NE",
+        "type": "MOVE_SHIP"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "dice": [
+        6,
+        3
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "resources": {
+          "brick": 1,
+          "grain": 1,
+          "lumber": 0,
+          "ore": 0,
+          "wool": 0
+        },
+        "type": "CHOOSE_GOLD"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "resources": {
+          "brick": 0,
+          "grain": 0,
+          "lumber": 1,
+          "ore": 1,
+          "wool": 0
+        },
+        "type": "CHOOSE_GOLD"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "dice": [
+        3,
+        3
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "give": {
+          "brick": 1
+        },
+        "type": "OFFER_TRADE",
+        "want": {
+          "ore": 1
+        }
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "accept": false,
+        "offerId": 13,
+        "type": "RESPOND_TRADE"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "accept": false,
+        "offerId": 13,
+        "type": "RESPOND_TRADE"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "dice": [
+        2,
+        5
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "cards": {
+          "brick": 0,
+          "grain": 2,
+          "lumber": 1,
+          "ore": 0,
+          "wool": 1
+        },
+        "type": "DISCARD"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "cards": {
+          "brick": 2,
+          "grain": 0,
+          "lumber": 0,
+          "ore": 0,
+          "wool": 2
+        },
+        "type": "DISCARD"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "cards": {
+          "brick": 0,
+          "grain": 1,
+          "lumber": 3,
+          "ore": 0,
+          "wool": 0
+        },
+        "type": "DISCARD"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "cards": {
+          "brick": 4,
+          "grain": 0,
+          "lumber": 0,
+          "ore": 0,
+          "wool": 0
+        },
+        "type": "DISCARD"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "hex": "h:1,4",
+        "type": "MOVE_ROBBER"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "STEAL",
+        "victim": 2
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "kind": "system",
+      "resource": "grain",
+      "thief": 0,
+      "type": "STEAL_RESULT",
+      "victim": 2
+    },
+    {
+      "command": {
+        "type": "BUILD_SETTLEMENT",
+        "vertex": "v:6,1,S"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "dice": [
+        6,
+        3
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "resources": {
+          "brick": 1,
+          "grain": 0,
+          "lumber": 0,
+          "ore": 1,
+          "wool": 0
+        },
+        "type": "CHOOSE_GOLD"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "resources": {
+          "brick": 0,
+          "grain": 1,
+          "lumber": 0,
+          "ore": 0,
+          "wool": 1
+        },
+        "type": "CHOOSE_GOLD"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "dice": [
+        2,
+        2
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "edge": "e:0,4,NW",
+        "type": "BUILD_SHIP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "edge": "e:0,4,NE",
+        "type": "BUILD_SHIP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "dice": [
+        5,
+        3
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "resources": {
+          "brick": 0,
+          "grain": 2,
+          "lumber": 1,
+          "ore": 0,
+          "wool": 0
+        },
+        "type": "CHOOSE_GOLD"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "give": {
+          "brick": 2
+        },
+        "type": "OFFER_TRADE",
+        "want": {
+          "grain": 1
+        }
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "accept": false,
+        "offerId": 14,
+        "type": "RESPOND_TRADE"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "accept": false,
+        "offerId": 14,
+        "type": "RESPOND_TRADE"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "accept": false,
+        "offerId": 14,
+        "type": "RESPOND_TRADE"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "offerId": 14,
+        "type": "CANCEL_TRADE"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "dice": [
+        4,
+        5
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "resources": {
+          "brick": 0,
+          "grain": 0,
+          "lumber": 2,
+          "ore": 0,
+          "wool": 0
+        },
+        "type": "CHOOSE_GOLD"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "resources": {
+          "brick": 0,
+          "grain": 1,
+          "lumber": 0,
+          "ore": 1,
+          "wool": 0
+        },
+        "type": "CHOOSE_GOLD"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "edge": "e:5,3,NE",
+        "type": "BUILD_SHIP"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "from": "e:6,3,NE",
+        "to": "e:6,3,W",
+        "type": "MOVE_SHIP"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "dice": [
+        6,
+        4
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "edge": "e:5,0,NW",
+        "type": "BUILD_SHIP"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "edge": "e:5,0,W",
+        "type": "BUILD_SHIP"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "edge": "e:5,2,W",
+        "type": "BUILD_ROAD"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "BUILD_CITY",
+        "vertex": "v:-1,5,N"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "dice": [
+        2,
+        5
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "cards": {
+          "brick": 2,
+          "grain": 0,
+          "lumber": 3,
+          "ore": 0,
+          "wool": 0
+        },
+        "type": "DISCARD"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "cards": {
+          "brick": 2,
+          "grain": 1,
+          "lumber": 0,
+          "ore": 1,
+          "wool": 0
+        },
+        "type": "DISCARD"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "hex": "h:4,1",
+        "type": "MOVE_PIRATE"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "give": {
+          "brick": 1
+        },
+        "type": "OFFER_TRADE",
+        "want": {
+          "ore": 1
+        }
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "accept": true,
+        "offerId": 15,
+        "type": "RESPOND_TRADE"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "dice": [
+        3,
+        1
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "dice": [
+        3,
+        4
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "cards": {
+          "brick": 0,
+          "grain": 5,
+          "lumber": 0,
+          "ore": 0,
+          "wool": 0
+        },
+        "type": "DISCARD"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "cards": {
+          "brick": 0,
+          "grain": 2,
+          "lumber": 1,
+          "ore": 0,
+          "wool": 1
+        },
+        "type": "DISCARD"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "hex": "h:-2,5",
+        "type": "MOVE_PIRATE"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "dice": [
+        2,
+        6
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "resources": {
+          "brick": 0,
+          "grain": 4,
+          "lumber": 0,
+          "ore": 0,
+          "wool": 0
+        },
+        "type": "CHOOSE_GOLD"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "dice": [
+        4,
+        5
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "resources": {
+          "brick": 2,
+          "grain": 0,
+          "lumber": 0,
+          "ore": 0,
+          "wool": 0
+        },
+        "type": "CHOOSE_GOLD"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "resources": {
+          "brick": 1,
+          "grain": 0,
+          "lumber": 0,
+          "ore": 1,
+          "wool": 0
+        },
+        "type": "CHOOSE_GOLD"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "from": "e:2,5,NE",
+        "to": "e:3,3,W",
+        "type": "MOVE_SHIP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "edge": "e:0,3,NE",
+        "type": "BUILD_SHIP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "dice": [
+        4,
+        4
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "resources": {
+          "brick": 0,
+          "grain": 0,
+          "lumber": 0,
+          "ore": 0,
+          "wool": 4
+        },
+        "type": "CHOOSE_GOLD"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "dice": [
+        4,
+        6
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "edge": "e:7,2,NW",
+        "type": "BUILD_ROAD"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "dice": [
+        4,
+        5
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "resources": {
+          "brick": 1,
+          "grain": 0,
+          "lumber": 1,
+          "ore": 0,
+          "wool": 0
+        },
+        "type": "CHOOSE_GOLD"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "resources": {
+          "brick": 0,
+          "grain": 0,
+          "lumber": 1,
+          "ore": 0,
+          "wool": 1
+        },
+        "type": "CHOOSE_GOLD"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "dice": [
+        6,
+        4
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "dice": [
+        5,
+        1
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "dice": [
+        4,
+        2
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "edge": "e:5,4,NW",
+        "type": "BUILD_SHIP"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "dice": [
+        2,
+        6
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "resources": {
+          "brick": 0,
+          "grain": 0,
+          "lumber": 0,
+          "ore": 2,
+          "wool": 2
+        },
+        "type": "CHOOSE_GOLD"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "BUILD_SETTLEMENT",
+        "vertex": "v:6,-1,S"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "from": "e:5,0,W",
+        "to": "e:-1,5,NW",
+        "type": "MOVE_SHIP"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "edge": "e:4,3,NE",
+        "type": "BUILD_ROAD"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "BUILD_SETTLEMENT",
+        "vertex": "v:5,2,S"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "edge": "e:5,2,NW",
+        "type": "BUILD_ROAD"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "get": {
+          "ore": 1
+        },
+        "give": {
+          "wool": 2
+        },
+        "type": "MARITIME_TRADE"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "BUILD_CITY",
+        "vertex": "v:6,-1,S"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "give": {
+          "brick": 1
+        },
+        "type": "OFFER_TRADE",
+        "want": {
+          "ore": 1
+        }
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "accept": false,
+        "offerId": 16,
+        "type": "RESPOND_TRADE"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "accept": false,
+        "offerId": 16,
+        "type": "RESPOND_TRADE"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "get": {
+          "ore": 1
+        },
+        "give": {
+          "wool": 2
+        },
+        "type": "MARITIME_TRADE"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "get": {
+          "ore": 1
+        },
+        "give": {
+          "wool": 2
+        },
+        "type": "MARITIME_TRADE"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "dice": [
+        1,
+        6
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "cards": {
+          "brick": 0,
+          "grain": 0,
+          "lumber": 0,
+          "ore": 0,
+          "wool": 4
+        },
+        "type": "DISCARD"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "cards": {
+          "brick": 3,
+          "grain": 3,
+          "lumber": 1,
+          "ore": 0,
+          "wool": 0
+        },
+        "type": "DISCARD"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "cards": {
+          "brick": 7,
+          "grain": 0,
+          "lumber": 0,
+          "ore": 0,
+          "wool": 0
+        },
+        "type": "DISCARD"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "hex": "h:-1,5",
+        "type": "MOVE_ROBBER"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "STEAL",
+        "victim": 1
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "kind": "system",
+      "resource": "brick",
+      "thief": 2,
+      "type": "STEAL_RESULT",
+      "victim": 1
+    },
+    {
+      "command": {
+        "get": {
+          "ore": 1
+        },
+        "give": {
+          "grain": 4
+        },
+        "type": "MARITIME_TRADE"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "from": "e:2,5,NW",
+        "to": "e:1,2,W",
+        "type": "MOVE_SHIP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "dice": [
+        2,
+        1
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "edge": "e:7,1,NE",
+        "type": "BUILD_ROAD"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "give": {
+          "brick": 1
+        },
+        "type": "OFFER_TRADE",
+        "want": {
+          "grain": 1
+        }
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "accept": false,
+        "offerId": 17,
+        "type": "RESPOND_TRADE"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "accept": false,
+        "offerId": 17,
+        "type": "RESPOND_TRADE"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "accept": false,
+        "offerId": 17,
+        "type": "RESPOND_TRADE"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "dice": [
+        4,
+        1
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "from": "e:5,3,NE",
+        "to": "e:5,4,NE",
+        "type": "MOVE_SHIP"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "BUILD_CITY",
+        "vertex": "v:6,1,S"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "dice": [
+        5,
+        4
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "resources": {
+          "brick": 0,
+          "grain": 0,
+          "lumber": 0,
+          "ore": 1,
+          "wool": 1
+        },
+        "type": "CHOOSE_GOLD"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "resources": {
+          "brick": 0,
+          "grain": 1,
+          "lumber": 0,
+          "ore": 1,
+          "wool": 0
+        },
+        "type": "CHOOSE_GOLD"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "dice": [
+        2,
+        2
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "edge": "e:3,4,W",
+        "type": "BUILD_SHIP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "edge": "e:2,5,NE",
+        "type": "BUILD_SHIP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "from": "e:1,2,W",
+        "to": "e:3,4,NW",
+        "type": "MOVE_SHIP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "dice": [
+        1,
+        6
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "cards": {
+          "brick": 0,
+          "grain": 3,
+          "lumber": 0,
+          "ore": 2,
+          "wool": 0
+        },
+        "type": "DISCARD"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "cards": {
+          "brick": 4,
+          "grain": 0,
+          "lumber": 0,
+          "ore": 0,
+          "wool": 0
+        },
+        "type": "DISCARD"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "cards": {
+          "brick": 2,
+          "grain": 0,
+          "lumber": 2,
+          "ore": 0,
+          "wool": 0
+        },
+        "type": "DISCARD"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "cards": {
+          "brick": 1,
+          "grain": 0,
+          "lumber": 0,
+          "ore": 5,
+          "wool": 0
+        },
+        "type": "DISCARD"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "hex": "h:-1,6",
+        "type": "MOVE_ROBBER"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "STEAL",
+        "victim": 1
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "kind": "system",
+      "resource": "ore",
+      "thief": 3,
+      "type": "STEAL_RESULT",
+      "victim": 1
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "dice": [
+        4,
+        5
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "resources": {
+          "brick": 0,
+          "grain": 1,
+          "lumber": 0,
+          "ore": 0,
+          "wool": 1
+        },
+        "type": "CHOOSE_GOLD"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "resources": {
+          "brick": 0,
+          "grain": 1,
+          "lumber": 1,
+          "ore": 0,
+          "wool": 0
+        },
+        "type": "CHOOSE_GOLD"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "dice": [
+        5,
+        5
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "dice": [
+        6,
+        1
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "cards": {
+          "brick": 0,
+          "grain": 2,
+          "lumber": 0,
+          "ore": 0,
+          "wool": 3
+        },
+        "type": "DISCARD"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "cards": {
+          "brick": 1,
+          "grain": 0,
+          "lumber": 2,
+          "ore": 0,
+          "wool": 1
+        },
+        "type": "DISCARD"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "cards": {
+          "brick": 1,
+          "grain": 0,
+          "lumber": 1,
+          "ore": 2,
+          "wool": 1
+        },
+        "type": "DISCARD"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "hex": "h:-1,3",
+        "type": "MOVE_PIRATE"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "dice": [
+        2,
+        6
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "resources": {
+          "brick": 0,
+          "grain": 4,
+          "lumber": 0,
+          "ore": 0,
+          "wool": 0
+        },
+        "type": "CHOOSE_GOLD"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "BUILD_CITY",
+        "vertex": "v:8,-1,S"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "dice": [
+        2,
+        5
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "cards": {
+          "brick": 3,
+          "grain": 2,
+          "lumber": 0,
+          "ore": 0,
+          "wool": 1
+        },
+        "type": "DISCARD"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "cards": {
+          "brick": 0,
+          "grain": 3,
+          "lumber": 1,
+          "ore": 0,
+          "wool": 0
+        },
+        "type": "DISCARD"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "hex": "h:6,1",
+        "type": "MOVE_ROBBER"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "dice": [
+        4,
+        5
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "resources": {
+          "brick": 0,
+          "grain": 1,
+          "lumber": 1,
+          "ore": 0,
+          "wool": 0
+        },
+        "type": "CHOOSE_GOLD"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "resources": {
+          "brick": 0,
+          "grain": 0,
+          "lumber": 0,
+          "ore": 0,
+          "wool": 2
+        },
+        "type": "CHOOSE_GOLD"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "dice": [
+        1,
+        4
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "dice": [
+        3,
+        1
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "dice": [
+        6,
+        6
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "from": "e:5,4,NE",
+        "to": "e:4,4,NE",
+        "type": "MOVE_SHIP"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "dice": [
+        4,
+        4
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "resources": {
+          "brick": 0,
+          "grain": 3,
+          "lumber": 0,
+          "ore": 1,
+          "wool": 0
+        },
+        "type": "CHOOSE_GOLD"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "BUILD_CITY",
+        "vertex": "v:5,0,S"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "BUY_DEV_CARD"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "card": "victoryPoint",
+      "deck": "dev",
+      "kind": "system",
+      "seat": 1,
+      "slotId": "dev:5",
+      "type": "CARD_DEALT"
+    },
+    {
+      "command": {
+        "give": {
+          "wool": 1
+        },
+        "type": "OFFER_TRADE",
+        "want": {
+          "lumber": 1
+        }
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "accept": false,
+        "offerId": 18,
+        "type": "RESPOND_TRADE"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "from": "e:5,0,NW",
+        "to": "e:-1,5,W",
+        "type": "MOVE_SHIP"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "accept": false,
+        "offerId": 18,
+        "type": "RESPOND_TRADE"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "accept": false,
+        "offerId": 18,
+        "type": "RESPOND_TRADE"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "dice": [
+        5,
+        3
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "resources": {
+          "brick": 0,
+          "grain": 0,
+          "lumber": 2,
+          "ore": 0,
+          "wool": 2
+        },
+        "type": "CHOOSE_GOLD"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "get": {
+          "ore": 1
+        },
+        "give": {
+          "lumber": 4
+        },
+        "type": "MARITIME_TRADE"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "from": "e:0,3,NE",
+        "to": "e:3,5,NW",
+        "type": "MOVE_SHIP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "dice": [
+        6,
+        4
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "dice": [
+        5,
+        4
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "resources": {
+          "brick": 0,
+          "grain": 0,
+          "lumber": 0,
+          "ore": 0,
+          "wool": 2
+        },
+        "type": "CHOOSE_GOLD"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "resources": {
+          "brick": 1,
+          "grain": 0,
+          "lumber": 1,
+          "ore": 0,
+          "wool": 0
+        },
+        "type": "CHOOSE_GOLD"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "from": "e:4,4,NE",
+        "to": "e:6,3,NE",
+        "type": "MOVE_SHIP"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "get": {
+          "lumber": 1
+        },
+        "give": {
+          "wool": 4
+        },
+        "type": "MARITIME_TRADE"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "BUILD_SETTLEMENT",
+        "vertex": "v:5,3,S"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "dice": [
+        6,
+        1
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "cards": {
+          "brick": 0,
+          "grain": 3,
+          "lumber": 0,
+          "ore": 0,
+          "wool": 1
+        },
+        "type": "DISCARD"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "cards": {
+          "brick": 3,
+          "grain": 1,
+          "lumber": 0,
+          "ore": 0,
+          "wool": 4
+        },
+        "type": "DISCARD"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "cards": {
+          "brick": 1,
+          "grain": 3,
+          "lumber": 3,
+          "ore": 0,
+          "wool": 2
+        },
+        "type": "DISCARD"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "cards": {
+          "brick": 0,
+          "grain": 0,
+          "lumber": 0,
+          "ore": 5,
+          "wool": 0
+        },
+        "type": "DISCARD"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "hex": "h:2,2",
+        "type": "MOVE_ROBBER"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "STEAL",
+        "victim": 2
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "kind": "system",
+      "resource": "grain",
+      "thief": 1,
+      "type": "STEAL_RESULT",
+      "victim": 2
+    },
+    {
+      "command": {
+        "type": "BUILD_SETTLEMENT",
+        "vertex": "v:-2,6,N"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "from": "e:5,0,NE",
+        "to": "e:4,1,NE",
+        "type": "MOVE_SHIP"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "get": {
+          "brick": 1
+        },
+        "give": {
+          "wool": 2
+        },
+        "type": "MARITIME_TRADE"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "edge": "e:6,1,W",
+        "type": "BUILD_ROAD"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "give": {
+          "lumber": 1
+        },
+        "type": "OFFER_TRADE",
+        "want": {
+          "brick": 1
+        }
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "accept": false,
+        "offerId": 19,
+        "type": "RESPOND_TRADE"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "offerId": 19,
+        "type": "CANCEL_TRADE"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "dice": [
+        3,
+        3
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "dice": [
+        3,
+        6
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "resources": {
+          "brick": 0,
+          "grain": 0,
+          "lumber": 0,
+          "ore": 0,
+          "wool": 2
+        },
+        "type": "CHOOSE_GOLD"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "resources": {
+          "brick": 1,
+          "grain": 0,
+          "lumber": 0,
+          "ore": 0,
+          "wool": 1
+        },
+        "type": "CHOOSE_GOLD"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "edge": "e:4,7,NW",
+        "type": "BUILD_SHIP"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "BUILD_SETTLEMENT",
+        "vertex": "v:8,0,S"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "get": {
+          "lumber": 1
+        },
+        "give": {
+          "brick": 2
+        },
+        "type": "MARITIME_TRADE"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "edge": "e:3,7,NW",
+        "type": "BUILD_ROAD"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "dice": [
+        1,
+        4
+      ],
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "type": "BUILD_SETTLEMENT",
+        "vertex": "v:6,2,S"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "slotIds": [
+          "dev:3"
+        ],
+        "type": "CLAIM_VICTORY"
+      },
+      "kind": "command",
+      "seat": 0
+    }
+  ],
+  "checkpoints": [
+    {
+      "index": 0,
+      "stateHash": "d694be5a4f613e1ad610ff0576403c1bcec3224cd71d4a48acbf9943db99cb72"
+    },
+    {
+      "index": 25,
+      "stateHash": "6c29228c55244d41dae95b82138fcf002934ee6ded88bd4719bc99d6c4a530a4"
+    },
+    {
+      "index": 50,
+      "stateHash": "30458d4b1ec575ffb8a897d761c27f0a1eb13c9e0705bb86e0ecd4f255dcee14"
+    },
+    {
+      "index": 75,
+      "stateHash": "a88b1b3e1da1eae87a04d95736692b302094e410827b389e5413dcb873f92c78"
+    },
+    {
+      "index": 100,
+      "stateHash": "494ac519e5336d674840deb6d1b7eb903089582c2340c8a8c1503bafd901bba3"
+    },
+    {
+      "index": 125,
+      "stateHash": "8cd0ff2331a4ad6938f2b0b623b6c3a2979893a77f1cb688e025ac978e485ce9"
+    },
+    {
+      "index": 150,
+      "stateHash": "8b1d3a962eb78bfe388acaa3cf9816f8f93a8bb5bfcada3cae960b63113a5d4c"
+    },
+    {
+      "index": 175,
+      "stateHash": "634a41ab5478247d0857fb477aebdbc02822ed13945412e3bdd67b6799fe47c5"
+    },
+    {
+      "index": 200,
+      "stateHash": "5c5d97d269eec731753c5bcd52d91687767f3fec915fac38ef3d46f98d565ec1"
+    },
+    {
+      "index": 225,
+      "stateHash": "1ce805eac77bf0ce493afc7a3e47f92edb74d372ccc8509cc8fa4826932a28b2"
+    },
+    {
+      "index": 250,
+      "stateHash": "eace92a1e146dfce82edf7a484545f76c3cc78c7778886ad9d84703ef8209db3"
+    },
+    {
+      "index": 275,
+      "stateHash": "5ad126fa0d5ada9caec009e99d472e97d59f1bdd5f3c803323070b6e442d6497"
+    },
+    {
+      "index": 300,
+      "stateHash": "1e013f18c1179c0f8f074dbf9c5bf3e7758678dea135b5d45c8ff3c0153c3ca6"
+    },
+    {
+      "index": 325,
+      "stateHash": "8d0eb99c0e6de7205879c63b1873cacec8acb5848762ff017902ed48313baecd"
+    },
+    {
+      "index": 350,
+      "stateHash": "7ebd4fc58cdf82fc8b648c2fdc0382f21e56dd0d1c472bb458de3500b7f8d04f"
+    },
+    {
+      "index": 375,
+      "stateHash": "24b2c6ac62a19d0e3406d952263da1502987e165ba40a1fee32497f174548108"
+    },
+    {
+      "index": 400,
+      "stateHash": "e39f7c40adeae6348920d280ff4ec91b03881228ddc62b0dc02d87058cea6c46"
+    },
+    {
+      "index": 425,
+      "stateHash": "877a4a18f881fad0e468581814f4bf1b889d65460feb0ec9a7a51793d64dc728"
+    },
+    {
+      "index": 450,
+      "stateHash": "091ca4b94475ab0508d285d8e7a161c2354492738ec4f43b1ba28f17555fe462"
+    },
+    {
+      "index": 475,
+      "stateHash": "e5e4828dab66bc1e7a373078f4df318044a3453deb44efa48ad1477d45264c93"
+    },
+    {
+      "index": 500,
+      "stateHash": "eac1ec3678067fc7f976cc43d648c16247a722270c07f4fca7e50cf05dd6f1d7"
+    },
+    {
+      "index": 525,
+      "stateHash": "514dba4a6e4ea8417a9acff1c9ee3bf534a3a721c51ca0744c1effe6e8acf287"
+    },
+    {
+      "index": 550,
+      "stateHash": "420e6210af5a129209cd1cee73a7026383931efc72277771ed03be8c296d0c09"
+    },
+    {
+      "index": 575,
+      "stateHash": "10e9506654059b0a470ce30422f40dc962478984ebace47ea32baced678ccf07"
+    },
+    {
+      "index": 600,
+      "stateHash": "4fdb9cf5c3fc3562d310d60e96a6c7fb1416be781d049a88cf7222302fb3daaf"
+    },
+    {
+      "index": 625,
+      "stateHash": "e6e53bc366ac1e778c5831fad5d330de01b6353b5ccefe483c6b7ff31e918530"
+    },
+    {
+      "index": 650,
+      "stateHash": "351cb275639bd6136011faf9b9c26782338760b105212295980530482420b136"
+    },
+    {
+      "index": 675,
+      "stateHash": "31044060d1c9f8ef66597974ca723cb2b036ffda8d6930e6dcfb1f1353697a15"
+    },
+    {
+      "index": 700,
+      "stateHash": "862ac9df607b8ede4a510b41d1a56e699a45e4d51037a240842211b65889394c"
+    },
+    {
+      "index": 725,
+      "stateHash": "22303e42415390b8c07cb3f4fb57b5f891748abaa8e2efd49b95d9517a6931e4"
+    },
+    {
+      "index": 750,
+      "stateHash": "160e92f25bcfa1650fa31b234f7c058b0a5907e2b093d8a664683758611682a2"
+    },
+    {
+      "index": 775,
+      "stateHash": "9fe367744f043489ccdb59429a224916b7e4544a034b27a17a766ec778440578"
+    },
+    {
+      "index": 800,
+      "stateHash": "ce59d7235bd1f10314f7fb2c16d08fe1d78a3177b51c726028e8f885303d6918"
+    },
+    {
+      "index": 825,
+      "stateHash": "b97d21f5124f58bae6402ca3af72ffddaf2fa3001fc97018d6ac2e2b3d0e8acd"
+    },
+    {
+      "index": 827,
+      "stateHash": "7ebc6f15f6d6f12aae9d57db79c5a58b6073d976885fad5b4b778a3add892c79"
+    }
+  ]
+}

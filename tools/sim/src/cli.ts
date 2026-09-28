@@ -10,6 +10,7 @@ import type { BatchOptions, BatchResult } from './batch.js';
 import { runGame, SimulationFailure } from './run-game.js';
 import { fuzz } from './fuzz.js';
 import { updateGoldens } from './golden.js';
+import { updateSeafaringGoldens } from './seafaring-golden.js';
 import { readReplay, verifyReplay } from './replay.js';
 import type { ReplayFile } from './replay.js';
 import { sourceFingerprint } from './provenance.js';
@@ -457,9 +458,19 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     return;
   }
   if (command === 'golden') {
-    if (rest.length !== 1 || rest[0] !== '--update')
-      throw new Error('Golden fixtures can only be regenerated with --update');
-    console.log(JSON.stringify(updateGoldens({ update: true })));
+    if (
+      rest[0] !== '--update' ||
+      rest.length > 2 ||
+      (rest.length === 2 && rest[1] !== '--seafaring')
+    )
+      throw new Error('Golden fixtures can only be regenerated with --update [--seafaring]');
+    console.log(
+      JSON.stringify(
+        rest[1] === '--seafaring'
+          ? updateSeafaringGoldens({ update: true })
+          : updateGoldens({ update: true }),
+      ),
+    );
     return;
   }
   if (command === 'fuzz') {
