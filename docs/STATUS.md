@@ -245,10 +245,10 @@ cross-device acceptance remain open.
 
 - [ ] All nine real-crypto fault scenarios pass one reproducible complete game under the [bounded acceptance policy](verification/p2p-acceptance-policy.md).
 - [ ] Every row in the cheat table is covered by a passing test that checks the cheat is caught at the listed time.
-- [ ] Human-only, hosted-bot and recovered-bot compositions finish without false `CHEAT_PROOF` entries and with successful independent audits from every survivor, under the [bounded acceptance policy](verification/p2p-acceptance-policy.md).
+- [x] Human-only, hosted-bot and recovered-bot compositions finish without false `CHEAT_PROOF` entries and with successful independent audits from every survivor, under the [bounded acceptance policy](verification/p2p-acceptance-policy.md).
 - [x] Dice outcomes from the beacon pass the 100,000-round chi-square check; the [measured checkpoint](verification/stage09/local-checkpoint-2026-09-27.md) records the face and sum distributions.
-- [ ] Escrow recovery works after a seat departs mid-game, and the recovered seat continues as a bot.
-- [ ] Shuffle and steal proofs meet the performance targets in Steps 3 and 5.
+- [x] Escrow recovery works after a seat departs mid-game, and the recovered seat continues as a bot. The [current-v6 native lifecycle](verification/stage10/native-takeover-acceptance.md) passes two takeovers, human return, default-ten-point finish and all three surviving audits.
+- [ ] Shuffle and steal proofs meet the performance targets in Steps 3 and 5. The [M-C matrix](verification/stage09/mc-remaining-acceptance.md) links the measured results; confirm the full draw target on the current v6 path.
 
 ## 08 — WebRTC Networking & Signaling
 
@@ -443,7 +443,7 @@ process restart and cross-device performance remain separate checks.
 
 - [ ] All five chaos additions and every distinct unlock persistence boundary pass deterministic traces under the [bounded acceptance policy](verification/p2p-acceptance-policy.md).
 - [x] Refresh-resume takes < 3 s to be back in play on a typical laptop (measured).
-- [ ] Four-human takeover and audit pass; two-/three-human departure pauses safely and resumes when the required voter returns.
+- [x] Four-human takeover and audit pass; two-/three-human departure pauses safely and resumes when the required voter returns. See the [current-v6 native lifecycle](verification/stage10/native-takeover-acceptance.md) and [signed departure tests](verification/stage10/product-acceptance-checkpoint.md#departure-safety).
 - [ ] A game can be exported and resumed in another browser as the same seat through a certified key transfer; a stale save cannot reactivate a retired key.
 
 ## 11 — Module Framework Hardening & 5–6 Players (`five-six`)

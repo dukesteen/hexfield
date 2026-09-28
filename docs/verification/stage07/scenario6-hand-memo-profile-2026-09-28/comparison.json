@@ -199,8 +199,6 @@
     },
     "sourceUnchanged": true
   },
-  "changedCompiledSinceBaseline": [
-    "packages/protocol/dist/hand-commitments.js"
-  ],
+  "changedCompiledSinceBaseline": ["packages/protocol/dist/hand-commitments.js"],
   "postCompiledExactMatch": true
 }

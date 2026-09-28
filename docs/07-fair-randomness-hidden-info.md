@@ -289,7 +289,7 @@ Every hidden action was already verified when it happened, so this step doesn't 
 
 - [ ] P2P games over memnet with real crypto pass all nine stage-06 chaos scenarios, one deterministic full-game trace per scenario under the [bounded acceptance policy](verification/p2p-acceptance-policy.md).
 - [ ] Every row in the cheat table is covered by a passing test that checks the cheat is caught at the listed time.
-- [ ] Human-only, hosted-bot and recovered-bot games each complete on the current protocol with no false `CHEAT_PROOF` entries and `AuditReport.ok === true` from every surviving human, as specified in the [bounded acceptance policy](verification/p2p-acceptance-policy.md).
-- [ ] Dice outcomes from the beacon pass a chi-square test over 100k rounds.
-- [ ] Escrow recovery works after a seat departs mid-game, and the recovered seat continues as a bot.
-- [ ] Shuffle and steal proofs meet the performance targets in Steps 3 and 5.
+- [x] Human-only, hosted-bot and recovered-bot games each complete on the current protocol with no false `CHEAT_PROOF` entries and `AuditReport.ok === true` from every surviving human, as specified in the [bounded acceptance policy](verification/p2p-acceptance-policy.md). The [composition evidence](verification/stage09/mc-remaining-acceptance.md) records all three passing traces and their scope.
+- [x] Dice outcomes from the beacon pass a chi-square test over 100k rounds. See the [distribution checkpoint](verification/stage09/local-checkpoint-2026-09-27.md).
+- [x] Escrow recovery works after a seat departs mid-game, and the recovered seat continues as a bot. The [current-v6 native lifecycle](verification/stage10/native-takeover-acceptance.md) includes two takeovers, actual bot commands and complete independent audits.
+- [ ] Shuffle and steal proofs meet the performance targets in Steps 3 and 5. The [shuffle/draw measurements](verification/stage07/step3-victory-local-checks.md) predate the full v6 hand-proof path; confirm current draw timing. The [eight-type hidden-transfer measurements](verification/stage07/step5-zero-scalar-hardening.md) cover the reviewed proof implementation.
