@@ -1,0 +1,22 @@
+{
+  "runId": 36408263093,
+  "sourceCommit": "95a1f6393428529d32ac21403582d044d189c5a7",
+  "sourceTestSha256": "c5329d571d387586fc2f33ed6171364686009e6daa0f92101b4756cfd5d81551",
+  "workflowSha256": "faa828e65054886ee8ac9af5d5056425832e5385808674679385cde5cb36e50a",
+  "logs": {
+    "manual-job.log": "8cc15ad172a12094dbe154684d64561b563b930b1605bfb38d804e69268543b7",
+    "signaling-job.log": "e1da5510d51b6e8ae0179be7a8203d663da11bb947e2393388b94848f779d427"
+  },
+  "artifactReportHtmlSha256": {
+    "manual-relay": "4098d9328ab646860ce2e7eb1a35c83607a607aaa051373601641c0c1791661b",
+    "signaling": "fc1e6bd54a88fffd3978a1d5b7e23bb5e99ec7448853332ded07d35f54b96ef8"
+  },
+  "provenance": "GitHub run metadata and report commitHash agree; tested source exported with git show at exact commit. Latest diagnostic sample precedes test end.",
+  "artifacts": {
+    "manual-job.log.gz": "9015824a94818eac7a3fc7fd67a6afc8c406045a310676039f5910969712a662",
+    "signaling-job.log.gz": "dac6f21cc00e852d0e18b586a76c705c4a9166cc28b028214d57bd965d3bd62f",
+    "summary.json": "ad1b0bf628da2ec9bf9dd274665c4dae55c91eb89512d93c75ab6d68eaf11347",
+    "tested-mixed-engine-online.e2e.ts.gz": "a2917a5cdd22273a17bfdb13a0cb245bdbb3d973a0ab0fb93234eeaf2091e65a",
+    "tested-workflow.yml.gz": "093ce914cd665d4fefb037aeea3c5f95366f318ffbe81a95bc57bca2996c6f9e"
+  }
+}

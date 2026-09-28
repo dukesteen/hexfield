@@ -1,0 +1,332 @@
+{
+  "run": {
+    "conclusion": "failure",
+    "createdAt": "2026-09-28T10:12:04Z",
+    "event": "workflow_dispatch",
+    "headBranch": "acceptance/mc-md-v6",
+    "headSha": "95a1f6393428529d32ac21403582d044d189c5a7",
+    "updatedAt": "2026-09-28T10:18:08Z",
+    "url": "https://github.com/dukesteen/hexfield/actions/runs/36408263093"
+  },
+  "modes": {
+    "manual-relay": {
+      "jobId": 108882073883,
+      "jobUrl": "https://github.com/dukesteen/hexfield/actions/runs/36408263093/job/108882073883",
+      "status": "passed",
+      "testDurationMs": 239277,
+      "testLimitMs": 300000,
+      "errors": [],
+      "lastSample": {
+        "phase": "play-and-audit",
+        "elapsedMs": 230058,
+        "peers": [
+          {
+            "engine": "chromium-a",
+            "peerCount": 3,
+            "startup": "playing",
+            "connectionError": null,
+            "diagnostic": null,
+            "game": {
+              "head": {
+                "hash": "6323f2758dbc879636a072463e5d5fafd3a79908bd50bfbd71f93573ce5ac71c",
+                "seq": 47
+              },
+              "phase": "main",
+              "turn": 6,
+              "activeSeat": 2,
+              "controlledSeats": [0],
+              "pending": [],
+              "audit": "complete"
+            }
+          },
+          {
+            "engine": "chromium-b",
+            "peerCount": 3,
+            "startup": "playing",
+            "connectionError": null,
+            "diagnostic": null,
+            "game": {
+              "head": {
+                "hash": "6323f2758dbc879636a072463e5d5fafd3a79908bd50bfbd71f93573ce5ac71c",
+                "seq": 47
+              },
+              "phase": "main",
+              "turn": 6,
+              "activeSeat": 2,
+              "controlledSeats": [1],
+              "pending": [],
+              "audit": "complete"
+            }
+          },
+          {
+            "engine": "firefox",
+            "peerCount": 3,
+            "startup": "playing",
+            "connectionError": null,
+            "diagnostic": null,
+            "game": {
+              "head": {
+                "hash": "6323f2758dbc879636a072463e5d5fafd3a79908bd50bfbd71f93573ce5ac71c",
+                "seq": 47
+              },
+              "phase": "main",
+              "turn": 6,
+              "activeSeat": 2,
+              "controlledSeats": [2],
+              "pending": [],
+              "audit": "verifying"
+            }
+          },
+          {
+            "engine": "webkit",
+            "peerCount": 3,
+            "startup": "playing",
+            "connectionError": null,
+            "diagnostic": null,
+            "game": {
+              "head": {
+                "hash": "6323f2758dbc879636a072463e5d5fafd3a79908bd50bfbd71f93573ce5ac71c",
+                "seq": 47
+              },
+              "phase": "main",
+              "turn": 6,
+              "activeSeat": 2,
+              "controlledSeats": [3],
+              "pending": [],
+              "audit": "complete"
+            }
+          }
+        ]
+      },
+      "attachedSummary": {
+        "mode": "manual",
+        "browserSet": ["chromium-a", "chromium-b", "firefox", "webkit"],
+        "commands": 15,
+        "terminalSeq": 47,
+        "modeAuditCount": 4
+      }
+    },
+    "signaling": {
+      "jobId": 108882073548,
+      "jobUrl": "https://github.com/dukesteen/hexfield/actions/runs/36408263093/job/108882073548",
+      "status": "timedOut",
+      "testDurationMs": 240004,
+      "testLimitMs": 240000,
+      "errors": ["Test timeout of 240000ms exceeded."],
+      "lastSample": {
+        "phase": "play-and-audit",
+        "elapsedMs": 230079,
+        "peers": [
+          {
+            "engine": "chromium-a",
+            "peerCount": 3,
+            "startup": "playing",
+            "connectionError": null,
+            "diagnostic": null,
+            "game": {
+              "head": {
+                "hash": "a2111f59dd1022611dadb358bbe1609807190e346743238e52bfba1ada1a72d9",
+                "seq": 62
+              },
+              "phase": "main",
+              "turn": 10,
+              "activeSeat": 2,
+              "controlledSeats": [0],
+              "pending": [
+                {
+                  "kind": "player",
+                  "seat": 2,
+                  "allowed": [
+                    "BUILD_ROAD",
+                    "BUILD_SETTLEMENT",
+                    "BUILD_CITY",
+                    "BUY_DEV_CARD",
+                    "PLAY_DEV_CARD",
+                    "MARITIME_TRADE",
+                    "OFFER_TRADE",
+                    "CONFIRM_TRADE",
+                    "CANCEL_TRADE",
+                    "END_TURN",
+                    "CLAIM_VICTORY"
+                  ]
+                },
+                {
+                  "kind": "player",
+                  "seat": 0,
+                  "allowed": ["PROPOSE_TRADE"]
+                },
+                {
+                  "kind": "player",
+                  "seat": 1,
+                  "allowed": ["PROPOSE_TRADE"]
+                },
+                {
+                  "kind": "player",
+                  "seat": 3,
+                  "allowed": ["PROPOSE_TRADE"]
+                }
+              ],
+              "audit": "not-started"
+            }
+          },
+          {
+            "engine": "chromium-b",
+            "peerCount": 3,
+            "startup": "playing",
+            "connectionError": null,
+            "diagnostic": null,
+            "game": {
+              "head": {
+                "hash": "a2111f59dd1022611dadb358bbe1609807190e346743238e52bfba1ada1a72d9",
+                "seq": 62
+              },
+              "phase": "main",
+              "turn": 10,
+              "activeSeat": 2,
+              "controlledSeats": [1],
+              "pending": [
+                {
+                  "kind": "player",
+                  "seat": 2,
+                  "allowed": [
+                    "BUILD_ROAD",
+                    "BUILD_SETTLEMENT",
+                    "BUILD_CITY",
+                    "BUY_DEV_CARD",
+                    "PLAY_DEV_CARD",
+                    "MARITIME_TRADE",
+                    "OFFER_TRADE",
+                    "CONFIRM_TRADE",
+                    "CANCEL_TRADE",
+                    "END_TURN",
+                    "CLAIM_VICTORY"
+                  ]
+                },
+                {
+                  "kind": "player",
+                  "seat": 0,
+                  "allowed": ["PROPOSE_TRADE"]
+                },
+                {
+                  "kind": "player",
+                  "seat": 1,
+                  "allowed": ["PROPOSE_TRADE"]
+                },
+                {
+                  "kind": "player",
+                  "seat": 3,
+                  "allowed": ["PROPOSE_TRADE"]
+                }
+              ],
+              "audit": "not-started"
+            }
+          },
+          {
+            "engine": "firefox",
+            "peerCount": 3,
+            "startup": "playing",
+            "connectionError": null,
+            "diagnostic": null,
+            "game": {
+              "head": {
+                "hash": "a2111f59dd1022611dadb358bbe1609807190e346743238e52bfba1ada1a72d9",
+                "seq": 62
+              },
+              "phase": "main",
+              "turn": 10,
+              "activeSeat": 2,
+              "controlledSeats": [2],
+              "pending": [
+                {
+                  "kind": "player",
+                  "seat": 2,
+                  "allowed": [
+                    "BUILD_ROAD",
+                    "BUILD_SETTLEMENT",
+                    "BUILD_CITY",
+                    "BUY_DEV_CARD",
+                    "PLAY_DEV_CARD",
+                    "MARITIME_TRADE",
+                    "OFFER_TRADE",
+                    "CONFIRM_TRADE",
+                    "CANCEL_TRADE",
+                    "END_TURN",
+                    "CLAIM_VICTORY"
+                  ]
+                },
+                {
+                  "kind": "player",
+                  "seat": 0,
+                  "allowed": ["PROPOSE_TRADE"]
+                },
+                {
+                  "kind": "player",
+                  "seat": 1,
+                  "allowed": ["PROPOSE_TRADE"]
+                },
+                {
+                  "kind": "player",
+                  "seat": 3,
+                  "allowed": ["PROPOSE_TRADE"]
+                }
+              ],
+              "audit": "not-started"
+            }
+          },
+          {
+            "engine": "webkit",
+            "peerCount": 3,
+            "startup": "playing",
+            "connectionError": null,
+            "diagnostic": null,
+            "game": {
+              "head": {
+                "hash": "a2111f59dd1022611dadb358bbe1609807190e346743238e52bfba1ada1a72d9",
+                "seq": 62
+              },
+              "phase": "main",
+              "turn": 10,
+              "activeSeat": 2,
+              "controlledSeats": [3],
+              "pending": [
+                {
+                  "kind": "player",
+                  "seat": 2,
+                  "allowed": [
+                    "BUILD_ROAD",
+                    "BUILD_SETTLEMENT",
+                    "BUILD_CITY",
+                    "BUY_DEV_CARD",
+                    "PLAY_DEV_CARD",
+                    "MARITIME_TRADE",
+                    "OFFER_TRADE",
+                    "CONFIRM_TRADE",
+                    "CANCEL_TRADE",
+                    "END_TURN",
+                    "CLAIM_VICTORY"
+                  ]
+                },
+                {
+                  "kind": "player",
+                  "seat": 0,
+                  "allowed": ["PROPOSE_TRADE"]
+                },
+                {
+                  "kind": "player",
+                  "seat": 1,
+                  "allowed": ["PROPOSE_TRADE"]
+                },
+                {
+                  "kind": "player",
+                  "seat": 3,
+                  "allowed": ["PROPOSE_TRADE"]
+                }
+              ],
+              "audit": "not-started"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

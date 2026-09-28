@@ -276,7 +276,7 @@ RTC-configuration, credential-query and room-registry tests pass, including
 expiry, retry and disposal. App typechecking and scoped lint pass. Cross-browser,
 phone-camera, cross-network and deployment acceptance remain open.
 
-- [ ] 4 browsers (including Firefox and WebKit) form a full mesh via the signaling server and via manual codes plus mesh relay.
+- [x] 4 browsers (including Firefox and WebKit) form a full mesh via the signaling server and via manual codes plus mesh relay. Verified in [run 36408263093](verification/stage08/mixed-engine-manual-2026-09-28.md) at `95a1f63`; manual relay also finished with four audits, while signaling hit its unchanged 240-second game limit.
 - [ ] Offer codes fit a QR code and scan successfully on a phone camera (manual test, recorded in STATUS.md).
 - [x] The identity binding rejects a tampered signaling path (unit test with a MITM fake signaling adapter swapping fingerprints).
 - [x] A 1 MiB message transfers correctly with backpressure.
