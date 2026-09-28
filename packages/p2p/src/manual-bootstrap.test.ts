@@ -58,6 +58,7 @@ class FakeChannel extends EventTarget {
 class FakePc extends EventTarget {
   static readonly all: FakePc[] = [];
   static emitCandidates = true;
+  static emitEmptyEndCandidate = false;
   readonly id = FakePc.all.length + 1;
   localDescription: RTCSessionDescriptionInit | null = null;
   remoteDescription: RTCSessionDescriptionInit | null = null;
@@ -114,6 +115,12 @@ class FakePc extends EventTarget {
           candidate: { toJSON: () => candidate },
         }),
       );
+      if (FakePc.emitEmptyEndCandidate)
+        this.dispatchEvent(
+          Object.assign(new Event('icecandidate'), {
+            candidate: { toJSON: () => ({ candidate: '', sdpMid: 'data' }) },
+          }),
+        );
       this.iceGatheringState = 'complete';
       this.dispatchEvent(new Event('icegatheringstatechange'));
       this.dispatchEvent(Object.assign(new Event('icecandidate'), { candidate: null }));
@@ -155,6 +162,41 @@ function rtcFactory(): RTCPeerConnection {
   // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The fake covers the bootstrap's RTC contract.
   return new FakePc() as unknown as RTCPeerConnection;
 }
+
+test('treats an empty ICE candidate object as the end-of-candidates marker', async () => {
+  FakePc.all.length = 0;
+  FakePc.emitCandidates = true;
+  FakePc.emitEmptyEndCandidate = true;
+  const host = identityFromSecret(new Uint8Array(32).fill(31));
+  const guest = identityFromSecret(new Uint8Array(32).fill(32));
+  const common = { scope: 'lobby:abcde23456', clock, rtcFactory };
+  let invitation: Awaited<ReturnType<typeof createManualOffer>> | null = null;
+  let answer: Awaited<ReturnType<typeof answerManualOffer>> | null = null;
+  try {
+    invitation = await createManualOffer({
+      ...common,
+      self: host.peerId,
+      secretKey: host.secretKey,
+    });
+    answer = await answerManualOffer(
+      {
+        ...common,
+        self: guest.peerId,
+        secretKey: guest.secretKey,
+      },
+      invitation.code,
+    );
+    expect(invitation.gatheringComplete).toBe(true);
+    expect(answer.gatheringComplete).toBe(true);
+    expect(answer.code.startsWith('HX1.')).toBe(true);
+  } finally {
+    invitation?.close();
+    answer?.bridge.close();
+    FakePc.emitEmptyEndCandidate = false;
+    host.secretKey.fill(0);
+    guest.secretKey.fill(0);
+  }
+});
 
 test('two signed codes bootstrap an unknown joiner, then carry exact verified signaling', async () => {
   FakePc.all.length = 0;

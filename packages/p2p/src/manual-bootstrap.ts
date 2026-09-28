@@ -124,7 +124,14 @@ function gatherCandidates(
       settle(true);
       return;
     }
-    if (candidates.length < MAX_PENDING_CANDIDATES) candidates.push(event.candidate.toJSON());
+    const candidate = event.candidate.toJSON();
+    // Firefox may report end-of-candidates as an RTCIceCandidate with an empty
+    // candidate string before it dispatches the final null candidate event.
+    if (candidate.candidate === '') {
+      settle(true);
+      return;
+    }
+    if (candidates.length < MAX_PENDING_CANDIDATES) candidates.push(candidate);
   };
   const onState = () => {
     if (pc.iceGatheringState === 'complete') settle(true);
