@@ -1,0 +1,9 @@
+ ✓ |@cp2p/protocol| src/private-discard-timer.test.ts (1 test) 34460ms
+   ✓ verified hidden-hand timer signs only the owner discard after local expiry  34459ms
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  13:00:33
+   Duration  35.58s (transform 590ms, setup 0ms, collect 886ms, tests 34.46s, environment 0ms, prepare 36ms)
+
+

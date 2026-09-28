@@ -108,6 +108,14 @@ export interface VerifiedNetworkFixtureOptions {
   readonly seed: number;
   readonly gameIndex?: number;
   readonly vpTarget?: number;
+  /** Test-only settings applied before the genuine genesis is signed. */
+  readonly discardLimit?: number;
+  readonly turnTimer?: {
+    readonly preRollSec: number;
+    readonly mainSec: number;
+    readonly discardSec: number;
+    readonly robberSec: number;
+  };
   /** Compare session-owned snapshots with terminal reconstruction and the independent audit. */
   readonly verifyLivePrivateStates?: boolean;
   readonly auditExecutor?: (request: VerifiedNetworkAuditRequest) => VerifiedNetworkAuditJob;
@@ -131,15 +139,18 @@ export function createVerifiedNetworkFixture(options: VerifiedNetworkFixtureOpti
     seed: options.seed,
     gameIndex: options.gameIndex ?? 0,
     humanCount: HUMAN_SEATS.length,
-    ...(options.vpTarget === undefined
-      ? {}
-      : {
-          config: {
-            modules: [{ id: 'base', version: '1.0.0' }],
-            seats: [...HUMAN_SEATS],
-            options: { base: { mapLayout: 'random', vpTarget: options.vpTarget } },
-          },
-        }),
+    config: {
+      modules: [{ id: 'base', version: '1.0.0' }],
+      seats: [...HUMAN_SEATS],
+      options: {
+        base: {
+          mapLayout: 'random',
+          ...(options.vpTarget === undefined ? {} : { vpTarget: options.vpTarget }),
+          ...(options.discardLimit === undefined ? {} : { discardLimit: options.discardLimit }),
+          ...(options.turnTimer === undefined ? {} : { turnTimer: options.turnTimer }),
+        },
+      },
+    },
   });
   const genesisDraft: GenesisBody = {
     ...genesisBody(simulation.genesis),

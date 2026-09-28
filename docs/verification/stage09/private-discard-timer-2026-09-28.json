@@ -1,0 +1,21 @@
+{
+  "head": "0c56aa114f111ad2d5373d50c211effdd4408023",
+  "command": "pnpm exec vitest run packages/protocol/src/private-discard-timer.test.ts --maxWorkers=1 --minWorkers=1",
+  "result": "pass",
+  "testMilliseconds": 34459,
+  "runnerSeconds": 35.58,
+  "scope": "Final source hashes captured after test; no before/after source pin claim. Actual verified four-human legal trace, not full game or browser.",
+  "sourceSha256": {
+    "packages/protocol/src/private-discard-timer.test.ts": "71331ff386dbbb4f11557704a38a529fdad05d27c3820675f4459e8447cb1521",
+    "packages/protocol/src/testing/verified-network-fixture.ts": "90caf64fac9ec08356d9894ec4d2496ef89e41091572dbe0b02773bcbdbb7804",
+    "packages/protocol/src/p2p-session.ts": "e9b00de5f497b0ba7c5ed11fd0e01fc4e0983c26a83c96fffe17972eac67c2c0",
+    "packages/protocol/src/replicated-log.ts": "89f28ff166f5063e172bcae4d3eb83b22fb881cc34658eb2071769837d210245",
+    "packages/protocol/src/turn-timeout.ts": "8f4bfa066d49b31f1c96260325ac763e7d99ee31f7fc62579f71c8c50a41fcd7",
+    "packages/protocol/src/verified-session-driver.ts": "5200c89d416c203ba87a0170e3336b4ef917c2ad1db960954ddc8c7d88f34e32",
+    "packages/protocol/src/genesis-identity.ts": "0e9434dc00c1ef178403656cba9c61eeaf7b81972eb7d18cbdb3d522157d1797",
+    "packages/protocol/src/replay.ts": "d77491fbd533f1bdf6a621d54b09657e99e9c3a5436089271c907e1a12f2187d",
+    "packages/engine/src/modules/base/config.ts": "0fa68d9803b2ff3089ac11c8f438a63b49b32910e2e1c35dbf9b288662dc13d5",
+    "packages/engine/src/modules/base/timeouts.ts": "0684257a1f7c6d449fddcfacf20a7f648ca22dee3eb0798ff2e6fc5399a51fcb"
+  },
+  "terminalStdoutSha256": "ce60536a19c169cdf11c391b696d5a8bc98b2f79cd008184cf38cc9aa6a2d33f"
+}
