@@ -1,0 +1,38 @@
+{
+  "entries": 2,
+  "bytes": 2518,
+  "iterations": 1000,
+  "samples": [
+    {
+      "baselineMs": 73.2633330000001,
+      "optimizedMs": 10.484625000000051
+    },
+    {
+      "baselineMs": 68.86954199999991,
+      "optimizedMs": 10.172500000000127
+    },
+    {
+      "baselineMs": 69.63583399999993,
+      "optimizedMs": 10.112583000000086
+    },
+    {
+      "baselineMs": 68.73770800000011,
+      "optimizedMs": 9.502292000000125
+    },
+    {
+      "baselineMs": 69.16324999999983,
+      "optimizedMs": 10.20420799999988
+    }
+  ],
+  "result": "PASS",
+  "testDurationMs": 549,
+  "runnerDurationSeconds": 1.75,
+  "baselineMedianMs": 69.16324999999983,
+  "optimizedMedianMs": 10.172500000000127,
+  "cloneSpeedup": 6.799041533546225,
+  "sourceHashes": {
+    "packages/protocol/src/replicated-log.ts": "8be8a5b4bf1ea7e3e226058823ae882d4d8365583434161cfca9e69298e3c18a",
+    "packages/protocol/src/replicated-log.test.ts": "ce3fe2577f44f8b0498a78910ecb07145b903340245b7fe87ecb2cbe5aee6432",
+    "packages/protocol/src/testing/fixtures.ts": "733ae95e20dfd0376fd6aa37167ee9d46090d9110f6594bc7e1ae317efd96bd9"
+  }
+}

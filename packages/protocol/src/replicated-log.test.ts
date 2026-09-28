@@ -2254,7 +2254,50 @@ describe('replicated certified log adapter', () => {
     expect(replica.getContext().log.recovery?.pending).toBeNull();
     const detachedEntries = replica.getEntries();
     expect(detachedEntries).toHaveLength(2);
+    const originalBytes = canonicalEncode(detachedEntries);
+    expect(detachedEntries).toEqual(canonicalDecode(originalBytes));
+    expect(canonicalEncode((await journal.load())?.entries)).toEqual(originalBytes);
+    if (process.env.CP2P_ENTRY_EXPORT_BENCH === '1') {
+      const baseline = () => canonicalDecode(canonicalEncode(detachedEntries));
+      const optimized = () => replica.getEntries();
+      const samples: { baselineMs: number; optimizedMs: number }[] = [];
+      const iterations = 1_000;
+      const measureExport = (exportEntries: () => unknown): number => {
+        const started = performance.now();
+        for (let index = 0; index < iterations; index += 1) exportEntries();
+        return performance.now() - started;
+      };
+      for (let round = 0; round < 5; round += 1) {
+        let baselineMs: number;
+        let optimizedMs: number;
+        if (round % 2 === 0) {
+          baselineMs = measureExport(baseline);
+          optimizedMs = measureExport(optimized);
+        } else {
+          optimizedMs = measureExport(optimized);
+          baselineMs = measureExport(baseline);
+        }
+        samples.push({ baselineMs, optimizedMs });
+      }
+      // oxlint-disable-next-line no-console -- Opt-in bounded clone benchmark, never a runtime acceptance threshold.
+      console.log(
+        'PUBLIC_ENTRY_EXPORT_BENCHMARK',
+        JSON.stringify({
+          entries: detachedEntries.length,
+          bytes: originalBytes.byteLength,
+          iterations,
+          samples,
+        }),
+      );
+    }
     Reflect.set(detachedEntries[0]?.entry ?? {}, 'seq', 999);
+    Reflect.set(detachedEntries[0]?.certificate[0]?.body ?? {}, 'seat', 5);
+    Reflect.set(detachedEntries[0]?.certificate[0] ?? {}, 'sig', 'invalid');
+    const commandPayload = detachedEntries[1]?.entry.payload;
+    if (commandPayload?.kind !== 'command') throw new Error('Expected nested signed command');
+    Reflect.set(commandPayload.signed.body, 'nonce', 999);
+    Reflect.set(commandPayload.signed.body.command, 'type', 'invalid');
+    expect(canonicalEncode(replica.getEntries())).toEqual(originalBytes);
     expect(replica.getEntries()[0]?.entry.seq).toBe(1);
     replica.dispose();
     const restored = value(

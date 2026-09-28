@@ -1,0 +1,15 @@
+ DEPRECATED  The workspace file is deprecated and will be removed in the next major. Please, use the `test.projects` field in /Users/duke/Dev/Personal/colonist-p2p/vitest.config.ts instead.
+
+ RUN  v3.2.7 /Users/duke/Dev/Personal/colonist-p2p
+
+stdout | src/replicated-log.test.ts > replicated certified log adapter > persists genesis, certified entries and next-height safety before notifying; restores without reset
+PUBLIC_ENTRY_EXPORT_BENCHMARK {"entries":2,"bytes":2518,"iterations":1000,"samples":[{"baselineMs":73.2633330000001,"optimizedMs":10.484625000000051},{"baselineMs":68.86954199999991,"optimizedMs":10.172500000000127},{"baselineMs":69.63583399999993,"optimizedMs":10.112583000000086},{"baselineMs":68.73770800000011,"optimizedMs":9.502292000000125},{"baselineMs":69.16324999999983,"optimizedMs":10.20420799999988}]}
+
+ ✓ |@cp2p/protocol| src/replicated-log.test.ts (36 tests | 35 skipped) 549ms
+   ✓ replicated certified log adapter > persists genesis, certified entries and next-height safety before notifying; restores without reset  548ms
+
+ Test Files  1 passed (1)
+      Tests  1 passed | 35 skipped (36)
+   Start at  11:48:17
+   Duration  1.75s (transform 640ms, setup 0ms, collect 965ms, tests 549ms, environment 0ms, prepare 41ms)
+

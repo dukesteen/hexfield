@@ -500,7 +500,8 @@ export class ReplicatedLog {
   }
 
   getEntries(): readonly CertifiedEntry[] {
-    return copyCanonical(this.entries);
+    // Entries are already owned, validated wire values; export only needs a detached copy.
+    return structuredClone(this.entries);
   }
 
   getTimers(): readonly SessionTimer[] {
