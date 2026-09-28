@@ -29,6 +29,7 @@ on:
           - '7'
           - '8'
           - '9'
+          - '2,5,6'
       lifecycle:
         description: Run the four-human persistence profile instead of fault scenarios
         type: boolean
