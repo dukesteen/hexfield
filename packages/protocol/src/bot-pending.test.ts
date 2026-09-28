@@ -37,3 +37,16 @@ test('an out-of-turn optional trade cannot starve the active player', () => {
   expect(chooseBotPending(state(2), [optional, active], new Set([1]))).toBeNull();
   expect(chooseBotPending(state(2), [optional, active], new Set([2]))).toBe(active);
 });
+
+test('a hosted bot takes its special build phase while another seat is active', () => {
+  const build = player(
+    3,
+    'BUILD_ROAD',
+    'BUILD_SETTLEMENT',
+    'BUILD_CITY',
+    'BUY_DEV_CARD',
+    'END_SBP',
+  );
+  expect(chooseBotPending(state(2), [build], new Set([3]))).toBe(build);
+  expect(chooseBotPending(state(2), [build], new Set([2]))).toBeNull();
+});

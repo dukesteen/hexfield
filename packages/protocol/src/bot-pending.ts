@@ -22,6 +22,10 @@ export function chooseBotPending(
   );
   if (response) return botSeats.has(response.seat) ? response : null;
 
-  const active = players.find((item) => item.seat === state.turn.activeSeat);
+  // Between turns (a special build phase) the only actionable request can belong to
+  // a seat other than the active one.
+  const active =
+    players.find((item) => item.seat === state.turn.activeSeat) ??
+    (players.length === 1 ? players[0] : undefined);
   return active && botSeats.has(active.seat) ? active : null;
 }

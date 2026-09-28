@@ -17,6 +17,7 @@ const workerSchema = v.strictObject({
   security: v.optional(v.picklist(['stub', 'verified'])),
   lifecycle: v.optional(v.literal('persistence')),
   maxElapsedMs: v.optional(v.pipe(safeInteger, v.minValue(1))),
+  players: v.optional(v.picklist([4, 6])),
 });
 
 async function execute(): Promise<void> {
@@ -33,6 +34,7 @@ async function execute(): Promise<void> {
         seed: parsed.output.seed,
         gameIndex,
         scenario: parsed.output.scenario,
+        ...(parsed.output.players === undefined ? {} : { players: parsed.output.players }),
         ...(parsed.output.security === undefined ? {} : { security: parsed.output.security }),
         ...(parsed.output.lifecycle === undefined ? {} : { lifecycle: parsed.output.lifecycle }),
         ...(parsed.output.maxElapsedMs === undefined

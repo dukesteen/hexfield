@@ -202,11 +202,9 @@ try {
   fixtureDirs.push(dependentModule);
   const dependentId = path.basename(dependentModule);
   const dependentIndex = path.join(dependentModule, 'index.ts');
-  await writeFile(
-    dependentIndex,
-    `export const manifest = { dependsOn: ['${secondId}'] };\n`,
-    { flag: 'wx' },
-  );
+  await writeFile(dependentIndex, `export const manifest = { dependsOn: ['${secondId}'] };\n`, {
+    flag: 'wx',
+  });
   fixtures.push(dependentIndex);
   await checkFixture(
     `packages/engine/src/modules/${dependentId}/rule.ts`,

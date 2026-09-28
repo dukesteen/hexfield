@@ -1,6 +1,7 @@
 import { canonicalDecode, canonicalEncode, hashValue, toBase64Url, toHex } from '@cp2p/codec';
 import { identityFromSecret } from '@cp2p/crypto';
-import { createBaseEngine, ENGINE_VERSION } from '@cp2p/engine';
+import { ENGINE_VERSION, engineForConfig } from '@cp2p/engine';
+import type { Engine } from '@cp2p/engine';
 import type { GameConfig, Seat } from '@cp2p/engine';
 import { GENESIS_PREVIOUS_HASH, genesisId, signEntry, signGenesis } from '../genesis.js';
 import { PROTOCOL_VERSION } from '../types.js';
@@ -15,7 +16,7 @@ export interface SimulationGenesisOptions {
 }
 
 export interface SimulationGenesis {
-  engine: ReturnType<typeof createBaseEngine>;
+  engine: Engine;
   identities: ReadonlyMap<Seat, ReturnType<typeof identityFromSecret>>;
   genesis: Genesis;
   entry: LogEntry;
@@ -81,7 +82,7 @@ export function createSimulationGenesis(options: SimulationGenesisOptions): Simu
   if (!Number.isSafeInteger(humanCount) || humanCount < 1 || humanCount > config.seats.length)
     throw new RangeError('humanCount must be between one and the configured seat count');
 
-  const engine = createBaseEngine();
+  const engine = engineForConfig(config);
   const identities = new Map<Seat, ReturnType<typeof identityFromSecret>>();
   for (const seat of config.seats) {
     const secret = hashValue({

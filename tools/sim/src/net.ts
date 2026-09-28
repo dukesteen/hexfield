@@ -2,6 +2,7 @@ import { RandomBot, createBotRng } from '@cp2p/bots';
 import { setImmediate as yieldEventLoop } from 'node:timers/promises';
 import { canonicalDecode, hashValue, toHex } from '@cp2p/codec';
 import type { CommandShape, GameState, Pending, PrivateState, Result, Seat } from '@cp2p/engine';
+import { moduleSelection } from '@cp2p/engine';
 import {
   MemoryProtocolJournal,
   P2PSession,
@@ -51,6 +52,8 @@ export interface NetworkGameOptions {
   seed: number;
   gameIndex: number;
   scenario: number;
+  /** Four seats by default; six uses the five-six module (stub security only). */
+  players?: 4 | 6;
   maxSteps?: number;
   /** Stage 07 acceptance uses genuine private sources and proofs on the same fault schedules. */
   security?: 'stub' | 'verified';
@@ -151,6 +154,9 @@ export async function runNetworkGame(options: NetworkGameOptions): Promise<Netwo
     throw new Error('This network scenario is not implemented yet');
   if (options.lifecycle && (options.security !== 'verified' || options.scenario !== 1))
     throw new Error('Persistence lifecycle requires clean scenario 1 with verified security');
+  const players = options.players ?? 4;
+  if (players === 6 && options.security === 'verified')
+    throw new Error('Six-peer network games use stub security');
   const lifecycle = options.lifecycle ? new PersistenceLifecycle() : null;
   let lifecycleObservedRevision = -1;
   const started = performance.now();
@@ -164,7 +170,20 @@ export async function runNetworkGame(options: NetworkGameOptions): Promise<Netwo
         })
       : null;
   const game =
-    verified ?? createSimulationGenesis({ seed: options.seed, gameIndex: options.gameIndex });
+    verified ??
+    createSimulationGenesis({
+      seed: options.seed,
+      gameIndex: options.gameIndex,
+      ...(players === 6
+        ? {
+            config: {
+              modules: moduleSelection(['base', 'five-six']),
+              seats: [0, 1, 2, 3, 4, 5],
+              options: { base: { mapLayout: 'random' } },
+            },
+          }
+        : {}),
+    });
   const keys = [...game.identities.values()];
   const network = createMemnet({
     peers: keys.map((identity) => identity.peerId),
@@ -923,9 +942,10 @@ export async function runNetworkGame(options: NetworkGameOptions): Promise<Netwo
       }
     }
     const requestedPartition = partitionRequested;
+    const half = game.genesis.config.seats.length / 2;
     const bothHalvesSawProposal =
-      [...partitionProposalSeen].some((seat) => seat < 2) &&
-      [...partitionProposalSeen].some((seat) => seat >= 2);
+      [...partitionProposalSeen].some((seat) => seat < half) &&
+      [...partitionProposalSeen].some((seat) => seat >= half);
     if (
       !faultInjected &&
       [4, 5].includes(options.scenario) &&
@@ -943,7 +963,7 @@ export async function runNetworkGame(options: NetworkGameOptions): Promise<Netwo
       partitionIsolatedSeat = options.scenario === 5 ? isolated : null;
       const groups =
         options.scenario === 4
-          ? [seats.slice(0, 2), seats.slice(2)]
+          ? [seats.slice(0, seats.length / 2), seats.slice(seats.length / 2)]
           : [seats.filter((seat) => seat !== isolated), [isolated]];
       network.partition(
         groups.map((group) =>
@@ -978,7 +998,7 @@ export async function runNetworkGame(options: NetworkGameOptions): Promise<Netwo
           update.revision !== partitionStableRevisions.get(seat) ||
           update.revision > faultRevision + 1
         )
-          throw new Error(`Peer ${seat} committed without a quorum during 2|2 partition`);
+          throw new Error(`Peer ${seat} committed without a quorum during an even partition`);
         pausedPeersDuringPartition++;
       }
     }
@@ -992,7 +1012,7 @@ export async function runNetworkGame(options: NetworkGameOptions): Promise<Netwo
           (session) => session.exportSave().entries[targetHeight - 1],
         );
         if (
-          certified.length !== 3 ||
+          certified.length !== game.genesis.config.seats.length - 1 ||
           certified.some(
             (item) =>
               !item ||
@@ -1009,13 +1029,13 @@ export async function runNetworkGame(options: NetworkGameOptions): Promise<Netwo
           .filter(([seat]) => seat !== partitionIsolatedSeat)
           .map(([, update]) => update.revision);
         const isolated = updates.get(partitionIsolatedSeat ?? 0)?.revision;
-        if (majority.length !== 3 || isolated === undefined)
-          throw new Error('Missing 3|1 partition observations');
+        if (majority.length !== game.genesis.config.seats.length - 1 || isolated === undefined)
+          throw new Error('Missing majority/isolated partition observations');
         const leastMajority = Math.min(...majority);
         majorityCommitsDuringPartition = leastMajority - faultRevision;
         isolatedCommitsDuringPartition = isolated - faultRevision;
         if (majorityCommitsDuringPartition < 1 || isolated >= leastMajority)
-          throw new Error('The 3-peer quorum did not advance ahead of its isolated peer');
+          throw new Error('The majority quorum did not advance ahead of its isolated peer');
       }
       for (const seat of offline) {
         const identity = game.identities.get(seat);
@@ -1179,13 +1199,17 @@ export async function runNetworkGame(options: NetworkGameOptions): Promise<Netwo
             throw new Error('Crashed proposer was not replaced in a later round');
           replacementTerm = committed.entry.term;
         }
-        if (options.scenario === 4 && pausedPeersDuringPartition !== 4)
-          throw new Error('The 2|2 partition was not observed long enough to prove a pause');
+        if (
+          options.scenario === 4 &&
+          pausedPeersDuringPartition !== game.genesis.config.seats.length
+        )
+          throw new Error('The even partition was not observed long enough to prove a pause');
         if (options.scenario === 6) {
           if (maliciousHeight === null || !maliciousEntryHash || !maliciousCommandHash)
             throw new Error('No signed invalid proposal was recorded');
-          if (!byzantineHalted || sessions.size !== 3)
-            throw new Error('The Byzantine signer did not halt while three honest peers completed');
+          const honest = game.genesis.config.seats.length - 1;
+          if (!byzantineHalted || sessions.size !== honest)
+            throw new Error('The Byzantine signer did not halt while the honest peers completed');
           certifiedExclusionPeers = 0;
           for (const [seat, session] of sessions) {
             const history = session.exportSave().entries;
@@ -1211,12 +1235,12 @@ export async function runNetworkGame(options: NetworkGameOptions): Promise<Netwo
             for (const certified of history.slice(maliciousHeight - 1)) {
               const voters = new Set(certified.certificate.map((vote) => vote.body.seat));
               if (
-                voters.size !== 3 ||
-                !([1, 2, 3] as const).every((voter) => voters.has(voter)) ||
+                voters.size < quorumSize(game.genesis.config.seats.length) ||
+                voters.has(0) ||
                 certified.certificate.some((vote) => vote.body.epoch !== 0) ||
                 certified.entry.payload.kind === 'membership'
               )
-                throw new Error(`Peer ${seat} changed the original three-of-four quorum`);
+                throw new Error(`Peer ${seat} changed the original voter quorum`);
             }
             if (
               history
@@ -1225,8 +1249,8 @@ export async function runNetworkGame(options: NetworkGameOptions): Promise<Netwo
             )
               throw new Error(`Excluded proposer authored a later entry at peer ${seat}`);
           }
-          if (certifiedExclusionPeers !== 3)
-            throw new Error('The three honest peers did not converge after exclusion');
+          if (certifiedExclusionPeers !== honest)
+            throw new Error('The honest peers did not converge after exclusion');
           if (byzantineCommandCommits < 1)
             throw new Error('The faulty actor supplied no later certified player command');
           if (
@@ -1565,7 +1589,8 @@ function choosePending(state: GameState, pending: readonly Pending[], nonVoterSe
     players.find(
       (item) => item.seat !== state.turn.activeSeat && item.allowed.includes('RESPOND_TRADE'),
     ) ??
-    players.find((item) => item.seat === state.turn.activeSeat)
+    players.find((item) => item.seat === state.turn.activeSeat) ??
+    (players.length === 1 ? players[0] : undefined)
   );
 }
 

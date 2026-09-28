@@ -34,18 +34,24 @@ export function progressCommand(
     return delegate.decide(view, pending, rng);
   if (phase === 'main' && !pending.allowed.includes('END_TURN'))
     return delegate.decide(view, pending, rng);
-  const candidates = enumerateCommands(engineForConfig(view.state.config), view.state, view.seat, view.priv, {
-    candidateFilter: (command) =>
-      pending.allowed.includes(command.type) &&
-      [
-        'PLACE_SETTLEMENT',
-        'BUILD_CITY',
-        'BUILD_SETTLEMENT',
-        'BUILD_ROAD',
-        'MARITIME_TRADE',
-        'END_TURN',
-      ].includes(command.type),
-  });
+  const candidates = enumerateCommands(
+    engineForConfig(view.state.config),
+    view.state,
+    view.seat,
+    view.priv,
+    {
+      candidateFilter: (command) =>
+        pending.allowed.includes(command.type) &&
+        [
+          'PLACE_SETTLEMENT',
+          'BUILD_CITY',
+          'BUILD_SETTLEMENT',
+          'BUILD_ROAD',
+          'MARITIME_TRADE',
+          'END_TURN',
+        ].includes(command.type),
+    },
+  );
   const graph = buildBoardGraph(view.state.board.hexes);
   const buildings = new Map(view.state.board.buildings.map((piece) => [piece.vertex, piece]));
   const hexes = new Map(view.state.board.hexes.map((hex) => [hex.id, hex]));

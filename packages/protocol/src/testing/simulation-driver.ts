@@ -1,5 +1,5 @@
 import { canonicalDecode, canonicalEncode, hashValue, toHex } from '@cp2p/codec';
-import { DEV_CARD_COUNTS, RESOURCES, failure, success } from '@cp2p/engine';
+import { RESOURCES, devCardCountsFor, failure, success } from '@cp2p/engine';
 import type {
   Engine,
   GameState,
@@ -128,7 +128,7 @@ export class SimulationDriver {
         const card = privateData?.[seat]?.card;
         if (
           typeof card !== 'string' ||
-          !Object.hasOwn(DEV_CARD_COUNTS, card) ||
+          !Object.hasOwn(devCardCountsFor(before.state.config), card) ||
           this.dealtCards.has(slotId)
         )
           return failure('simulation-deck', 'Committed draw has no unique private card identity');
@@ -240,7 +240,7 @@ export class SimulationDriver {
         const owner = seat(pending.request.seat);
         const slotId = pending.request.slotId;
         if (typeof slotId !== 'string') throw new Error('Draw request has no slot');
-        const remaining = new Map<string, number>(Object.entries(DEV_CARD_COUNTS));
+        const remaining = new Map<string, number>(Object.entries(devCardCountsFor(state.config)));
         const deck = state.decks.dev;
         if (!deck) throw new Error('Development deck missing');
         if (this.dealtCards.size !== deck.drawn.length)

@@ -13,6 +13,7 @@ export interface NetBatchOptions {
   security?: 'stub' | 'verified';
   lifecycle?: 'persistence';
   maxElapsedMs?: number;
+  players?: 4 | 6;
 }
 
 export interface NetBatchFailure {
@@ -46,6 +47,7 @@ export function parseNetBatchOptions(args: readonly string[]): NetBatchOptions {
     'security',
     'lifecycle',
     'max-elapsed-ms',
+    'players',
   ]);
   for (let index = 0; index < args.length; index++) {
     const flag = args[index];
@@ -83,9 +85,14 @@ export function parseNetBatchOptions(args: readonly string[]): NetBatchOptions {
     ...(values.has('security') ? { security } : {}),
     ...(values.has('lifecycle') ? { lifecycle: 'persistence' as const } : {}),
     ...(maxElapsedMs === undefined ? {} : { maxElapsedMs }),
+    ...(values.has('players') ? { players: parse('players', 4) === 6 ? 6 : 4 } : {}),
   };
   if (options.scenario < 1 || options.scenario > 9)
     throw new Error('--scenario must be between 1 and 9');
+  if (values.has('players') && ![4, 6].includes(parse('players', 4)))
+    throw new Error('--players must be 4 or 6');
+  if (options.players === 6 && options.security === 'verified')
+    throw new Error('--players 6 runs with stub security');
   if (options.seeds < 1) throw new Error('--seeds must be positive');
   if (options.startIndex < 0) throw new Error('--start-index must be non-negative');
   if (options.startIndex > Number.MAX_SAFE_INTEGER - (options.seeds - 1))
@@ -129,6 +136,7 @@ async function runWorker(indices: number[], options: NetBatchOptions): Promise<N
         ...(options.security === undefined ? {} : { security: options.security }),
         ...(options.lifecycle === undefined ? {} : { lifecycle: options.lifecycle }),
         ...(options.maxElapsedMs === undefined ? {} : { maxElapsedMs: options.maxElapsedMs }),
+        ...(options.players === undefined ? {} : { players: options.players }),
       },
     });
     let settled = false;
@@ -156,6 +164,7 @@ async function runIndices(
         seed: options.seed,
         gameIndex,
         scenario: options.scenario,
+        ...(options.players === undefined ? {} : { players: options.players }),
         ...(options.security === undefined ? {} : { security: options.security }),
         ...(options.lifecycle === undefined ? {} : { lifecycle: options.lifecycle }),
         ...(options.maxElapsedMs === undefined ? {} : { maxElapsedMs: options.maxElapsedMs }),

@@ -22,10 +22,16 @@ function modeTimeout(mode: 'signaling' | 'manual'): number {
 
 /** Four seats by default; `CP2P_MIXED_ENGINE_SEATS=6` runs the five-six acceptance game. */
 const seatCount = process.env.CP2P_MIXED_ENGINE_SEATS === '6' ? 6 : 4;
+/** `CP2P_MIXED_ENGINE_NO_WEBKIT=1` swaps WebKit for Chromium/Firefox where WebKit lacks WebRTC. */
+const noWebkit = process.env.CP2P_MIXED_ENGINE_NO_WEBKIT === '1';
 const engineNames =
   seatCount === 6
-    ? (['chromium-a', 'chromium-b', 'firefox-a', 'firefox-b', 'webkit-a', 'webkit-b'] as const)
-    : (['chromium-a', 'chromium-b', 'firefox', 'webkit'] as const);
+    ? noWebkit
+      ? (['chromium-a', 'chromium-b', 'chromium-c', 'firefox-a', 'firefox-b', 'firefox-c'] as const)
+      : (['chromium-a', 'chromium-b', 'firefox-a', 'firefox-b', 'webkit-a', 'webkit-b'] as const)
+    : noWebkit
+      ? (['chromium-a', 'chromium-b', 'firefox-a', 'firefox-b'] as const)
+      : (['chromium-a', 'chromium-b', 'firefox', 'webkit'] as const);
 type EngineName = (typeof engineNames)[number];
 type Playwright = PlaywrightWorkerArgs['playwright'];
 const registryPaths = new WeakMap<Page, string>();
@@ -52,10 +58,9 @@ async function launchEngines(playwright: Playwright): Promise<OpenedBrowserSet> 
       reducedMotion: 'reduce',
       viewport: { width: 1280, height: 900 },
     } as const;
-    const owners =
-      seatCount === 6
-        ? [chromium, chromium, firefox, firefox, webkit, webkit]
-        : [chromium, chromium, firefox, webkit];
+    const owners = engineNames.map((name) =>
+      name.startsWith('chromium') ? chromium : name.startsWith('firefox') ? firefox : webkit,
+    );
     for (const owner of owners) contexts.push(await owner.newContext(contextOptions));
     await Promise.all(
       contexts.map(async (context) => {
@@ -658,11 +663,7 @@ async function withinDeadline<T>(work: Promise<T>, deadline: number): Promise<T>
   }
 }
 
-async function startRoom(
-  pages: readonly Page[],
-  mode: 'signaling' | 'manual',
-  deadline: number,
-) {
+async function startRoom(pages: readonly Page[], mode: 'signaling' | 'manual', deadline: number) {
   const [host, ...guests] = pages;
   if (!host || guests.length !== seatCount - 1)
     throw new Error(`Expected ${seatCount} isolated browser pages`);
