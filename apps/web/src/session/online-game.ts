@@ -17,6 +17,7 @@ import {
   transferChangeSchema,
   validateTransferOwnedMaterial,
   P2PSession,
+  prepareOnlineDisclosureGuard,
   validateDeckCeremony,
   validateGenesisOnlineStart,
   VerifiedSessionDriver,
@@ -96,6 +97,13 @@ export interface OnlineGame<T extends GameSession = P2PSession> {
   close(): Promise<void>;
 }
 
+export class OnlineGameDisclosureError extends Error {
+  constructor() {
+    super('online-ceremony-disputed');
+    this.name = 'OnlineGameDisclosureError';
+  }
+}
+
 /** Opens only an authenticated, fully verified ceremony result under an exclusive game writer. */
 export async function openOnlineGame(
   supplied: OnlineGameInput,
@@ -114,6 +122,37 @@ export async function openOnlineGame(
     signingKey: new Uint8Array(item.signingKey),
     master: new Uint8Array(item.master),
   }));
+  // Opening cannot publish prepared game output until its final shared-store check.
+  const openingOutput: { to: string; bytes: Uint8Array }[] = [];
+  let openingBytes = 0;
+  let opening = true;
+  let outputStopped = false;
+  let openingOverflowed = false;
+  const device = input.deviceTransport;
+  const send = (to: string, bytes: Uint8Array) => {
+    if (outputStopped) return;
+    if (!opening) {
+      device.send(to, bytes);
+      return;
+    }
+    if (openingOutput.length >= 128 || openingBytes + bytes.byteLength > 1024 * 1024) {
+      openingOverflowed = true;
+      return;
+    }
+    openingOutput.push({ to, bytes: bytes.slice() });
+    openingBytes += bytes.byteLength;
+  };
+  const openingTransport: Transport = {
+    self: device.self,
+    peers: () => device.peers(),
+    send,
+    broadcast: (bytes) => {
+      for (const peer of device.peers()) send(peer, bytes);
+    },
+    onMessage: (listener) => device.onMessage(listener),
+    onPeerChange: (listener) => device.onPeerChange(listener),
+    disconnect: (peer) => device.disconnect(peer),
+  };
   let journal: OnlineJournal | null = null;
   let snapshotStore: IndexedDbPublicSnapshotStore | null = null;
   let lease: GameWriterLease | null = null;
@@ -125,12 +164,18 @@ export async function openOnlineGame(
   let leaseLost = false;
   const providers = new Map<Seat, BeaconSecretProvider>();
   const checkCancelled = () => {
-    if (input.signal?.aborted || leaseLost)
+    if (input.signal?.aborted || leaseLost || outputStopped)
       throw new DOMException('Online game opening was cancelled', 'AbortError');
   };
-  const stopOutput = () => transport?.dispose();
+  const stopOutput = () => {
+    outputStopped = true;
+    openingOutput.length = 0;
+    openingBytes = 0;
+    transport?.dispose();
+  };
   input.signal?.addEventListener('abort', stopOutput, { once: true });
   const cleanup = async () => {
+    stopOutput();
     input.signal?.removeEventListener('abort', stopOutput);
     historyWriter?.stop();
     activityWriter?.stop();
@@ -174,6 +219,15 @@ export async function openOnlineGame(
     const startup = validateGenesisOnlineStart(genesis);
     if (!startup.ok) throw new Error(startup.error.message);
     if (!crypto) throw new Error('Verified game commitments are missing');
+    const disclosure = prepareOnlineDisclosureGuard(genesis);
+    if (!disclosure.ok) throw new Error(disclosure.error.message);
+    const checkDisclosure = async () => {
+      const checkedDisclosure = await disclosure.value.check(input.store);
+      if (!checkedDisclosure.ok) throw new Error(checkedDisclosure.error.message);
+      if (checkedDisclosure.value) throw new OnlineGameDisclosureError();
+      checkCancelled();
+    };
+    await checkDisclosure();
     const humans = material.filter((seat) => seat.kind === 'human');
     const local = humans[0];
     if (humans.length !== 1 || !local) throw new Error('Stored material needs one human seat');
@@ -296,7 +350,7 @@ export async function openOnlineGame(
       }
     }
     const projection = createOnlineGameTransport({
-      deviceTransport: input.deviceTransport,
+      deviceTransport: openingTransport,
       validatedGenesis: { genesis, state },
       agreement: input.agreement,
       bindings: input.bindings,
@@ -497,6 +551,7 @@ export async function openOnlineGame(
     // Injected journals have no equivalent proof and must remain restore-only.
     if (input.journalMode === 'restore-only' && !saved && runtime.createJournal)
       throw new Error('The certified online game journal is missing');
+    await checkDisclosure();
     const opened = await lease.run(() => {
       checkCancelled();
       return saved ? P2PSession.restore(options) : P2PSession.create(options);
@@ -504,6 +559,24 @@ export async function openOnlineGame(
     if (!opened.ok) throw new Error(opened.error.message);
     session = opened.value;
     checkCancelled();
+    // Evidence insertion uses this attempt lock. This callback only loads and
+    // sends synchronously; it does not acquire another ceremony or writer lock.
+    await input.store.withCeremonyLock(disclosure.value.attemptId, async () => {
+      await checkDisclosure();
+      checkCancelled();
+      if (openingOverflowed) throw new Error('Online opening output exceeds its bounded queue');
+      for (const output of openingOutput) {
+        checkCancelled();
+        try {
+          device.send(output.to, output.bytes);
+        } catch {
+          // Match GameKeyTransport's lossy-send contract for disconnected peers.
+        }
+      }
+      openingOutput.length = 0;
+      openingBytes = 0;
+      opening = false;
+    });
     historyWriter = createOnlineGameHistoryWriter({
       store: input.store,
       gameId: genesis.gameId,

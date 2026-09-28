@@ -35,6 +35,7 @@ export type { GenesisPolicy, ValidatedGenesis } from './genesis.js';
 export { validateGenesisOnlineStart } from './genesis-online-start.js';
 export type { VerifiedOnlineStart } from './genesis-online-start.js';
 export type { GenesisSeedMode } from './genesis-seed.js';
+export { prepareOnlineDisclosureGuard } from './online-disclosure.js';
 export { OnlineCeremony } from './online-ceremony.js';
 export type {
   OnlineCeremonyOptions,

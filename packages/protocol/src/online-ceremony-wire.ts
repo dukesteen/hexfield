@@ -48,6 +48,15 @@ export function onlineCeremonySlot(kind: OnlineCeremonyKind, seat: Seat, step: n
   return `${kind}/${seat}/${step}`;
 }
 
+export function onlineCeremonyPacketKey(
+  attemptId: string,
+  kind: OnlineCeremonyKind,
+  seat: Seat,
+  step: number,
+): string {
+  return `online-ceremony/${attemptId}/${onlineCeremonySlot(kind, seat, step)}`;
+}
+
 export function onlineCeremonyAttemptId(freezeHash: string, nonce: string): string {
   return toHex(hashValue({ domain: 'cp2p/v1/online-attempt', freezeHash, nonce }));
 }

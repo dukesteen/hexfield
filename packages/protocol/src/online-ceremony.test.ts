@@ -21,6 +21,7 @@ import type { DeckSetupState } from './deck-setup.js';
 import { MemoryEscrowLifecycleStore } from './escrow-lifecycle.js';
 import { LOBBY_COLOURS } from './lobby-types.js';
 import type { LobbyFreezeAgreement, LobbyState } from './lobby-types.js';
+import { prepareOnlineDisclosureGuard } from './online-disclosure.js';
 import { OnlineCeremony } from './online-ceremony.js';
 import type { OnlineCeremonyResult } from './online-ceremony.js';
 import { signOnlineCeremonyPacket, verifyOnlineCeremonyPacket } from './online-ceremony-wire.js';
@@ -695,6 +696,9 @@ describe('online genesis ceremony', () => {
     );
     room.network.transport(holder.peer).send(host.peer, packet.bytes);
     await until(room, () => peers[0]?.snapshot().error === 'online-ceremony-disputed');
+    expect(
+      await value(prepareOnlineDisclosureGuard(genesis)).check(required(room.stores[0])),
+    ).toEqual({ ok: true, value: true });
     expect(peers[0]?.result()).toBeNull();
     expect(peers[0]?.snapshot()).toMatchObject({ phase: 'waiting', locallyConsented: true });
     peers[0]?.dispose();

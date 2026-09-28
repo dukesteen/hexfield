@@ -1,0 +1,69 @@
+{
+  "scope": "Opening-only, not already-active independent coordinator lifetime. Post-check hashes only.",
+  "negativeRun": {
+    "handle": 81339,
+    "cleanMilliseconds": 9311,
+    "disclosedMilliseconds": 3971,
+    "result": "disclosed entered playing instead of halted"
+  },
+  "positiveRun": {
+    "handle": 34012,
+    "tests": 5,
+    "testMilliseconds": 24282,
+    "runnerSeconds": 25.94
+  },
+  "normalRegressionRun": {
+    "handle": 91888,
+    "tests": 3,
+    "runnerSeconds": 22.61
+  },
+  "static": {
+    "sharedTypecheck": 77161,
+    "scopedChecks": 68581
+  },
+  "sourceSha256": {
+    "packages/protocol/src/online-ceremony-wire.ts": "b187e2c769049204248cb5bfff383ffa03f0c4bad99cd709d36acb92b81b5f60",
+    "packages/protocol/src/online-ceremony.ts": "9147307d1b82af2ef8fdeb898bc7c4f51819866fd2da084cdf76033e1d408579",
+    "packages/protocol/src/online-ceremony.test.ts": "68bba3eae34d8a1172b84aaeddc32342fa606e634dc19c74de4f25d1356c0ae5",
+    "packages/protocol/src/online-disclosure.ts": "ba3a46af2a42dcf71486fbeddb1d8e545b30cf678adccc9f693bf6fe1f11e7a7",
+    "packages/protocol/src/index.ts": "d799898f2d17d28844d0265dde5f96a576cc0affac6ecdb9c635873bf7c0258e",
+    "apps/web/src/session/online-game.ts": "6cfa9f73127dc4c087ee82eb1e6103d55678dc22a7b88960e9afb3d576d6c67a",
+    "apps/web/src/session/online-startup.ts": "e2acad42fcbcb39323f5160fff8ccc4bb87a70f1eb7b5bb4ebaeb5df71e6ef19",
+    "apps/web/src/session/online-resume-binding.test.ts": "157ff8fe180109d3c0b2478e504085293345d15da738bafa60fab0021211fa8e"
+  },
+  "cleanupFollowup": {
+    "handle": 39382,
+    "tests": 2,
+    "runnerSeconds": 12.22,
+    "scope": "Monotonic output stop; selected disputed-opening and deferred-close regressions after initial five-case pass.",
+    "formatAndLint": 8810
+  },
+  "finalPositiveRun": {
+    "handle": 72771,
+    "tests": 7,
+    "testMilliseconds": 35148,
+    "runnerSeconds": 37.15
+  },
+  "realCoordinatorRun": {
+    "handle": 50844,
+    "tests": 1,
+    "testMilliseconds": 16989,
+    "runnerSeconds": 17.7
+  },
+  "lossyFifoRun": {
+    "handle": 29455,
+    "tests": 1,
+    "testMilliseconds": 9764,
+    "runnerSeconds": 11.22
+  },
+  "finalStatic": {
+    "sharedTypecheck": 29226,
+    "scopedTypeAwareLint": "passed"
+  },
+  "reviewArtifactsSha256": {
+    "input.md": "d229a100aca283371034102cc6e4ea8f896a5551cf2d5edb2e250f1403e3d3ee",
+    "manifest.json": "12d711fe7916b4847df34dfd405225f599b1ef221819d42a835f6e878eb66e9b",
+    "response.json": "36ca5c190d8e231da938c1d6f51964e030b7143358d713f985d2043a86c1a1df",
+    "stderr.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  }
+}

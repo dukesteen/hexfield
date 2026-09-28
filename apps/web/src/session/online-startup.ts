@@ -21,7 +21,7 @@ import type {
 } from '@cp2p/protocol';
 import { loadCeremonyMaterial, prepareCeremonyMaterial } from './online-credentials.js';
 import type { DisposableOnlineIdentity, OwnedCeremonyMaterial } from './online-credentials.js';
-import { openOnlineGame } from './online-game.js';
+import { OnlineGameDisclosureError, openOnlineGame } from './online-game.js';
 import type { OnlineGame, OnlineGameRuntime } from './online-game.js';
 import type { OnlineDeviceRoutes } from './online-game-transport.js';
 import type { OnlineInvite } from './online-invite.js';
@@ -238,6 +238,10 @@ export class OnlineStartup {
 
   private fail(error: unknown): void {
     if (this.revoked) return;
+    if (error instanceof OnlineGameDisclosureError) {
+      this.haltDisputedGame();
+      return;
+    }
     this.update({
       phase: 'error',
       awaitingSeats: [],

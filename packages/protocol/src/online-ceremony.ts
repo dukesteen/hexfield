@@ -71,7 +71,7 @@ import { signGameSeatBinding, verifyGameSeatBindings } from './online-bindings.j
 import type { SignedGameSeatBinding, VerifiedGameSeatBindings } from './online-bindings.js';
 import {
   onlineCeremonyAttemptId,
-  onlineCeremonySlot,
+  onlineCeremonyPacketKey,
   signOnlineCeremonyPacket,
   verifyOnlineCeremonyPacket,
 } from './online-ceremony-wire.js';
@@ -907,7 +907,7 @@ export class OnlineCeremony {
   }
 
   #packetKey(kind: OnlineCeremonyKind, seat: Seat, step: number): string {
-    return `online-ceremony/${this.#attemptId}/${onlineCeremonySlot(kind, seat, step)}`;
+    return onlineCeremonyPacketKey(this.#attemptId, kind, seat, step);
   }
 
   #ownerDevice(seat: Seat): PeerId | null {
