@@ -1,0 +1,140 @@
+{
+  "moves": 247,
+  "certifiedActionCounts": {
+    "PLACE_SETTLEMENT": 8,
+    "PLACE_ROAD": 8,
+    "ROLL_DICE": 82,
+    "END_TURN": 81,
+    "BUILD_ROAD": 18,
+    "MOVE_ROBBER": 13,
+    "STEAL": 9,
+    "OFFER_TRADE": 20,
+    "RESPOND_TRADE": 60,
+    "CANCEL_TRADE": 10,
+    "BUILD_CITY": 9,
+    "DISCARD": 18,
+    "MARITIME_TRADE": 12,
+    "BUILD_SETTLEMENT": 5,
+    "BUY_DEV_CARD": 4,
+    "PLAY_DEV_CARD": 2
+  },
+  "peers": [
+    {
+      "seat": 1,
+      "head": {
+        "hash": "8a80c203666cad7041a7186ba6174f819051fb13c275c66dacc201d7748b0119",
+        "seq": 489
+      },
+      "result": {
+        "atTurn": 82,
+        "reason": "public-vp",
+        "winner": 3
+      },
+      "audit": {
+        "kind": "complete",
+        "report": {
+          "auditError": null,
+          "cheatFindings": [],
+          "complete": true,
+          "finalHead": {
+            "hash": "8a80c203666cad7041a7186ba6174f819051fb13c275c66dacc201d7748b0119",
+            "seq": 489
+          },
+          "finalHiddenVictoryPoints": {
+            "0": 0,
+            "1": 0,
+            "2": 1,
+            "3": 0
+          },
+          "historyError": null,
+          "inputErrors": [],
+          "missingSeats": [],
+          "ok": true,
+          "terminal": {
+            "hash": "8a80c203666cad7041a7186ba6174f819051fb13c275c66dacc201d7748b0119",
+            "seq": 489
+          },
+          "violations": []
+        }
+      }
+    },
+    {
+      "seat": 2,
+      "head": {
+        "hash": "8a80c203666cad7041a7186ba6174f819051fb13c275c66dacc201d7748b0119",
+        "seq": 489
+      },
+      "result": {
+        "atTurn": 82,
+        "reason": "public-vp",
+        "winner": 3
+      },
+      "audit": {
+        "kind": "complete",
+        "report": {
+          "auditError": null,
+          "cheatFindings": [],
+          "complete": true,
+          "finalHead": {
+            "hash": "8a80c203666cad7041a7186ba6174f819051fb13c275c66dacc201d7748b0119",
+            "seq": 489
+          },
+          "finalHiddenVictoryPoints": {
+            "0": 0,
+            "1": 0,
+            "2": 1,
+            "3": 0
+          },
+          "historyError": null,
+          "inputErrors": [],
+          "missingSeats": [],
+          "ok": true,
+          "terminal": {
+            "hash": "8a80c203666cad7041a7186ba6174f819051fb13c275c66dacc201d7748b0119",
+            "seq": 489
+          },
+          "violations": []
+        }
+      }
+    },
+    {
+      "seat": 3,
+      "head": {
+        "hash": "8a80c203666cad7041a7186ba6174f819051fb13c275c66dacc201d7748b0119",
+        "seq": 489
+      },
+      "result": {
+        "atTurn": 82,
+        "reason": "public-vp",
+        "winner": 3
+      },
+      "audit": {
+        "kind": "complete",
+        "report": {
+          "auditError": null,
+          "cheatFindings": [],
+          "complete": true,
+          "finalHead": {
+            "hash": "8a80c203666cad7041a7186ba6174f819051fb13c275c66dacc201d7748b0119",
+            "seq": 489
+          },
+          "finalHiddenVictoryPoints": {
+            "0": 0,
+            "1": 0,
+            "2": 1,
+            "3": 0
+          },
+          "historyError": null,
+          "inputErrors": [],
+          "missingSeats": [],
+          "ok": true,
+          "terminal": {
+            "hash": "8a80c203666cad7041a7186ba6174f819051fb13c275c66dacc201d7748b0119",
+            "seq": 489
+          },
+          "violations": []
+        }
+      }
+    }
+  ]
+}
