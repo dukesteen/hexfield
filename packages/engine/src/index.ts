@@ -29,12 +29,23 @@ export {
 } from './modules/compat.js';
 export type { Compatibility, ExpansionId } from './modules/compat.js';
 export {
+  SEAFARING_TERRAINS,
   boardShapeProblems,
+  classifyEdge,
   coastEdgeCycle,
+  coastalEdges,
+  detectIslands,
   fixtureSlotProblem,
   frameHexes,
+  isFogTerrain,
+  isLandTerrain,
+  isSeaTerrain,
+  isTokenlessTerrain,
+  landHexes,
   seaSideOfEdge,
+  vertexTouchesLand,
 } from './core/board/index.js';
+export type { EdgeKind, Island } from './core/board/index.js';
 export { FixtureSlotError } from './core/state/createGame.js';
 export { CITY_COST, DEV_COST, ROAD_COST, SETTLEMENT_COST } from './modules/base/constants.js';
 export {
@@ -45,8 +56,19 @@ export {
   PIECES_START,
   devCardCatalogue,
 } from './modules/base/constants.js';
-export { harborRate as baseHarborRate } from './modules/base/board/index.js';
-export { longestRoadLength as baseLongestRoadLength } from './modules/base/awards/index.js';
+export {
+  harborRate as baseHarborRate,
+  boardIslands,
+  edgeKindOf,
+  isLandHex,
+  vertexOnLand,
+} from './modules/base/board/index.js';
+export {
+  kindTransitions,
+  longestRoadLength as baseLongestRoadLength,
+  longestTrailLength,
+} from './modules/base/awards/index.js';
+export type { TransitionAllowed, TrailEdge } from './modules/base/awards/index.js';
 export type { BaseOptions, TurnTimer, MapLayout, DiceMode } from './modules/base/config.js';
 export type { TradeOffer } from './modules/base/types.js';
 export { enumerateCommands } from './core/enumerate.js';

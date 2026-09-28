@@ -1,3 +1,9 @@
+import {
+  SEAFARING_TERRAINS,
+  coastalEdges,
+  isLandTerrain,
+  isTokenlessTerrain,
+} from '../../../../core/board/index.js';
 import { buildBoardGraph, hexId } from '../../../../core/geometry/index.js';
 import type { BoardGraph, HexCoord, HexId } from '../../../../core/geometry/index.js';
 import type { BoardShapeSpec, GenesisRandom } from '../../../../core/modules/types.js';
@@ -123,26 +129,38 @@ export function validateFixedBoard(board: BoardState, spec: BoardShapeSpec): voi
   ) {
     throw new BoardGenerationError(`Fixed board must have the ${size} ${spec.id} hexes`);
   }
+  const seafaring = spec.seafaring === true;
+  const tokenless = (terrain: string) =>
+    seafaring ? isTokenlessTerrain(terrain) : terrain === 'desert';
   if (
+    (!seafaring && board.hexes.some((hex) => SEAFARING_TERRAINS.includes(hex.terrain))) ||
     !sameCounts(
       board.hexes.map((hex) => hex.terrain),
       spec.terrains,
     ) ||
     !sameCounts(
       board.hexes
-        .filter((hex) => hex.terrain !== 'desert')
+        .filter((hex) => !tokenless(hex.terrain))
         .flatMap((hex) => (hex.token === null ? [] : [hex.token])),
       spec.tokens,
     ) ||
-    board.hexes.some((hex) => (hex.terrain === 'desert') !== (hex.token === null))
+    board.hexes.some((hex) => tokenless(hex.terrain) !== (hex.token === null))
   ) {
     throw new BoardGenerationError('Fixed board has incorrect terrain or tokens');
   }
   const robber = board.hexes.find((hex) => hex.id === board.robberHex);
-  if (robber?.terrain !== 'desert' || board.roads.length !== 0 || board.buildings.length !== 0) {
-    throw new BoardGenerationError('Fixed board must start empty with robber on desert');
+  const robberOk = seafaring
+    ? robber && isLandTerrain(robber.terrain)
+    : robber?.terrain === 'desert';
+  if (!robberOk || board.roads.length !== 0 || board.buildings.length !== 0) {
+    throw new BoardGenerationError(
+      seafaring
+        ? 'Fixed board must start empty with robber on land'
+        : 'Fixed board must start empty with robber on desert',
+    );
   }
-  const slots = new Set<string>(spec.harborSlots);
+  // A seafaring board's coast depends on its sea hexes, so harbors need only be coastal.
+  const slots = new Set<string>(seafaring ? coastalEdges(board.hexes) : spec.harborSlots);
   if (
     board.harbors.length !== spec.harbors.length ||
     board.harbors.some((harbor) => !harbor || !slots.has(harbor.edge)) ||
@@ -239,6 +257,8 @@ export function generateBoard(
       robberHex: providedBoard.robberHex,
     };
   }
+  if (spec.seafaring === true)
+    throw new BoardGenerationError('Seafaring shapes need a fixed board');
   if (options.mapLayout !== 'random' && options.mapLayout !== 'balanced-random') {
     throw new BoardGenerationError('Unknown map layout');
   }

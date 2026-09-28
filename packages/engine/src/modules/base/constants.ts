@@ -41,6 +41,7 @@ export function devCardCatalogue(
 /** Canonical physical development cards; identities, types and order are game rules. */
 export const BASE_DEV_CARD_CATALOGUE = devCardCatalogue(DEV_CARD_COUNTS);
 
+/** Terrains without a resource entry (desert, sea, fog and gold) never produce in base. Gold is paid by a module's `production` hook. */
 export const TERRAIN_RESOURCE: Readonly<Record<string, Resource | null>> = Object.freeze({
   hills: 'brick',
   forest: 'lumber',

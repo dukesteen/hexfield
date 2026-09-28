@@ -2,7 +2,7 @@ import type { BoardGraph } from '../../../core/geometry/index.js';
 import type { HandlerContext } from '../../../core/modules/types.js';
 import type { GameState } from '../../../core/state/types.js';
 import type { Seat } from '../../../core/types/index.js';
-import { boardGraph, edgeEndpoints } from '../board/index.js';
+import { boardGraph, edgeEndpoints, edgeKindOf, vertexOnLand } from '../board/index.js';
 
 /** A settlement's setup rule omits the ordinary road connection. */
 export interface SettlementOptions {
@@ -28,7 +28,11 @@ function canSettle(
   ctx?: HandlerContext,
 ): boolean {
   const index = graph.vertexIndex[vertex];
-  if (index === undefined || state.board.buildings.some((piece) => piece.vertex === vertex))
+  if (
+    index === undefined ||
+    !vertexOnLand(state, vertex) ||
+    state.board.buildings.some((piece) => piece.vertex === vertex)
+  )
     return false;
   const neighbors = graph.vertexNeighbors[index] ?? [];
   if (
@@ -60,7 +64,12 @@ function canRoad(
   connectors: ReadonlySet<string>,
 ): boolean {
   const endpoints = edgeEndpoints(graph, edge);
-  if (!endpoints || state.board.roads.some((road) => road.edge === edge)) return false;
+  if (
+    !endpoints ||
+    edgeKindOf(state, edge) === 'sea' ||
+    state.board.roads.some((road) => road.edge === edge)
+  )
+    return false;
   if (options.setupVertex !== undefined)
     return (
       endpoints.some((vertex) => vertex === options.setupVertex) &&
@@ -113,9 +122,10 @@ export function legalSettlementVertices(
     if (index !== undefined)
       for (const neighbor of graph.vertexNeighbors[index] ?? []) blocked.add(neighbor);
   }
-  if (options.setup === true) return graph.vertexIds.filter((vertex) => !blocked.has(vertex));
+  const open = (vertex: string) => !blocked.has(vertex) && vertexOnLand(state, vertex);
+  if (options.setup === true) return graph.vertexIds.filter(open);
   const connected = connectedVertices(graph, connectorEdges(state, seat, ctx));
-  return graph.vertexIds.filter((vertex) => !blocked.has(vertex) && connected.has(vertex));
+  return graph.vertexIds.filter((vertex) => open(vertex) && connected.has(vertex));
 }
 
 function connectedVertices(graph: BoardGraph, connectors: ReadonlySet<string>): Set<string> {
@@ -145,7 +155,7 @@ export function legalRoadEdges(
     if (!buildings.has(building.vertex)) buildings.set(building.vertex, building.seat);
   const connected = connectedVertices(graph, connectors);
   return graph.edgeIds.filter((edge) => {
-    if (occupied.has(edge)) return false;
+    if (occupied.has(edge) || edgeKindOf(state, edge) === 'sea') return false;
     const index = graph.edgeIndex[edge];
     if (index === undefined) return false;
     return (graph.edgeVertices[index] ?? []).some((vertex) =>

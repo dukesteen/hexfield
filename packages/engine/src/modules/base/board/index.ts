@@ -1,3 +1,10 @@
+import {
+  classifyEdge,
+  detectIslands,
+  isLandTerrain,
+  vertexTouchesLand,
+} from '../../../core/board/index.js';
+import type { EdgeKind, Island } from '../../../core/board/index.js';
 import { buildBoardGraph } from '../../../core/geometry/index.js';
 import type { BoardGraph, VertexId } from '../../../core/geometry/index.js';
 import type { GameState } from '../../../core/state/types.js';
@@ -39,6 +46,59 @@ export function boardGraph(state: GameState): BoardGraph {
     graphs.set(hexes, graph);
   }
   return graph;
+}
+
+interface Terrain {
+  land: ReadonlySet<string>;
+  waterVertices: ReadonlySet<string>;
+  edgeKinds: ReadonlyMap<string, EdgeKind>;
+  islands: readonly Island[];
+}
+
+const terrains = new WeakMap<GameState['board']['hexes'], Terrain>();
+
+function terrain(state: GameState): Terrain {
+  const hexes = state.board.hexes;
+  let cached = terrains.get(hexes);
+  if (!cached) {
+    const graph = boardGraph(state);
+    const land = new Set(hexes.filter((hex) => isLandTerrain(hex.terrain)).map((hex) => hex.id));
+    cached = {
+      land,
+      waterVertices: new Set(graph.vertexIds.filter((id) => !vertexTouchesLand(graph, id, land))),
+      edgeKinds: new Map(
+        graph.edgeIds.flatMap((id) => {
+          const kind = classifyEdge(graph, id, land);
+          return kind ? [[id, kind] as const] : [];
+        }),
+      ),
+      islands: detectIslands(hexes),
+    };
+    terrains.set(hexes, cached);
+  }
+  return cached;
+}
+
+/** True for a board hex that is land: not sea and not unrevealed fog. */
+export function isLandHex(state: GameState, hex: string): boolean {
+  return terrain(state).land.has(hex);
+}
+
+/** True when a vertex touches at least one land hex, so a base piece may stand there. */
+export function vertexOnLand(state: GameState, vertex: string): boolean {
+  return (
+    boardGraph(state).vertexIndex[vertex] !== undefined && !terrain(state).waterVertices.has(vertex)
+  );
+}
+
+/** An edge's position relative to land, or null off board. Base roads need `land` or `coastal`. */
+export function edgeKindOf(state: GameState, edge: string): EdgeKind | null {
+  return terrain(state).edgeKinds.get(edge) ?? null;
+}
+
+/** The board's islands, cached per hex list. Recomputed automatically when a reveal replaces hexes. */
+export function boardIslands(state: GameState): readonly Island[] {
+  return terrain(state).islands;
 }
 
 /** Canonical vertices bordering a land hex, or an empty list for an unknown hex. */

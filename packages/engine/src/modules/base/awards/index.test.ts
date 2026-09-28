@@ -1,9 +1,12 @@
 import { describe, expect, test } from 'vitest';
 import { performance as clock } from 'node:perf_hooks';
 import { buildBoardGraph } from '../../../core/geometry/index.js';
+import { createRegistry } from '../../../core/modules/index.js';
 import type { BoardState, GameState } from '../../../core/state/types.js';
 import type { Seat } from '../../../core/types/index.js';
+import { baseModule } from '../index.js';
 import {
+  kindTransitions,
   longestRoadLength,
   longestTrailLength,
   recomputeLargestArmyAward,
@@ -252,5 +255,96 @@ describe('longest road', () => {
     const awardStart = clock.now();
     for (let index = 0; index < 100; index++) recomputeLongestRoadAward(fixture);
     expect((clock.now() - awardStart) / 100).toBeLessThan(1);
+  });
+});
+
+function typed(kind: string, ...pairs: [string, string][]): TrailEdge[] {
+  return pairs.map(([a, b], index) => ({ id: `${kind}${index}`, vertices: [a, b], kind }));
+}
+const length = (edges: TrailEdge[], blocked: string[], joins: string[]) =>
+  longestTrailLength(edges, new Set(blocked), kindTransitions(joins));
+const own = (vertex: string) => ({ vertex, seat: 0 as const, kind: 'settlement' });
+const rival = (vertex: string) => ({ vertex, seat: 1 as const, kind: 'settlement' });
+
+describe('generalized route graph', () => {
+  const roads = typed('road', ['a', 'b'], ['b', 'c']);
+  const ships = typed('ship', ['c', 'd'], ['d', 'e']);
+
+  test('without a predicate, or with untyped edges, every join is allowed', () => {
+    expect(longestTrailLength([...roads, ...ships], new Set())).toBe(4);
+    expect(
+      longestTrailLength(
+        trail([
+          ['a', 'b'],
+          ['b', 'c'],
+        ]),
+        new Set(),
+        kindTransitions(),
+      ),
+    ).toBe(2);
+  });
+  test('a road-settlement-ship chain counts through the settlement vertex only', () => {
+    expect(length([...roads, ...ships], [], ['c'])).toBe(4);
+    expect(length([...roads, ...ships], [], [])).toBe(2);
+    expect(length([...roads, ...ships], [], ['x'])).toBe(2);
+  });
+  test('a road meeting a ship at an empty vertex does not connect', () => {
+    expect(length(typed('road', ['a', 'b']).concat(typed('ship', ['b', 'c'])), [], [])).toBe(1);
+    expect(length(typed('road', ['a', 'b']).concat(typed('ship', ['b', 'c'])), [], ['b'])).toBe(2);
+  });
+  test('same-kind edges join at any vertex; only a kind change needs the transition', () => {
+    const chain = [...typed('road', ['a', 'b']), ...typed('ship', ['b', 'c'], ['c', 'd'])];
+    expect(length(chain, [], [])).toBe(2);
+    expect(length(chain, [], ['b'])).toBe(3);
+    expect(length(chain, [], ['c'])).toBe(2);
+  });
+  test('an opponent building ends the route at its vertex', () => {
+    const line = typed('road', ['a', 'b'], ['b', 'c'], ['c', 'd']);
+    expect(length(line, [], [])).toBe(3);
+    expect(length(line, ['b'], [])).toBe(2);
+    expect(length([...roads, ...ships], ['d'], ['c'])).toBe(3);
+  });
+
+  describe('through the routeGraph hook on a real board', () => {
+    const path = pathOf(4);
+    const vertices = pathVertices(path);
+    const [v1, v2] = [vertices[1] ?? '', vertices[2] ?? ''];
+    const shipEdges = path.slice(2);
+    const hooks = createRegistry([
+      {
+        ...baseModule(),
+        hooks: {
+          routeGraph: (current, seat, acc) => ({
+            edges: [
+              ...acc.edges.map((edge) => ({ ...edge, kind: 'road' })),
+              ...shipEdges.map((edge) => ({ id: edge, vertices: endpoints(edge), kind: 'ship' })),
+            ],
+            blocked: acc.blocked,
+            transitions: current.board.buildings
+              .filter((building) => building.seat === seat)
+              .map((building) => building.vertex),
+          }),
+        },
+      },
+    ]).hooks;
+    const ctx = { hooks };
+    const layout = (buildings: BoardState['buildings']) =>
+      state(
+        path.slice(0, 2).map((edge) => ({ edge, seat: 0 as const })),
+        buildings,
+      );
+
+    test('roads and ships join only at the own settlement between them', () => {
+      expect(longestRoadLength(layout([own(v2)]), 0, ctx)).toBe(4);
+      expect(longestRoadLength(layout([]), 0, ctx)).toBe(2);
+      expect(longestRoadLength(layout([own(v1)]), 0, ctx)).toBe(2);
+    });
+    test('an opponent settlement on the road part breaks the route there', () => {
+      expect(longestRoadLength(layout([own(v2), rival(v1)]), 0, ctx)).toBe(3);
+    });
+    test('base roads alone are unchanged by the extra fields', () => {
+      const plain = state(path.map((edge) => ({ edge, seat: 0 as const })));
+      expect(longestRoadLength(plain, 0)).toBe(4);
+    });
   });
 });

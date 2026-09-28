@@ -3,16 +3,30 @@ import type { GameState } from '../../../core/state/types.js';
 import type { Seat } from '../../../core/types/index.js';
 import { boardGraph, edgeEndpoints } from '../board/index.js';
 
-/** One road in a graph used by the edge-unique trail search. */
+/** One edge (a road, or a ship in a seafaring route) in a graph used by the edge-unique trail search. */
 export interface TrailEdge {
   id: string;
   vertices: readonly [string, string];
+  kind?: string;
 }
 
-/** Longest trail in any undirected road graph. A blocked vertex can end a trail. */
+/** Whether a trail that arrived over `from` may leave `vertex` over `to`. */
+export type TransitionAllowed = (vertex: string, from: TrailEdge, to: TrailEdge) => boolean;
+
+/** Edges of the same kind always join; differing kinds join only at the listed vertices. */
+export function kindTransitions(transitions: readonly string[] = []): TransitionAllowed {
+  const allowed = new Set(transitions);
+  return (vertex, from, to) => from.kind === to.kind || allowed.has(vertex);
+}
+
+/**
+ * Longest trail in any undirected edge graph. A blocked vertex can end a trail but not be passed
+ * through. `allowed` may forbid joining two edges at a vertex; without it every join is allowed.
+ */
 export function longestTrailLength(
   edges: readonly TrailEdge[],
   blockedVertices: ReadonlySet<string>,
+  allowed?: TransitionAllowed,
 ): number {
   const touching = new Map<string, number[]>();
   for (let index = 0; index < edges.length; index++) {
@@ -26,7 +40,7 @@ export function longestTrailLength(
   }
   let best = 0;
   const used = new Set<number>();
-  function walk(vertex: string, length: number): void {
+  function walk(vertex: string, length: number, arrived: TrailEdge | null): void {
     if (length > best) best = length;
     if (best === edges.length) return;
     if (length > 0 && blockedVertices.has(vertex)) return;
@@ -34,14 +48,15 @@ export function longestTrailLength(
       if (used.has(index)) continue;
       const edge = edges[index];
       if (!edge) continue;
+      if (allowed && arrived && !allowed(vertex, arrived, edge)) continue;
       used.add(index);
-      walk(edge.vertices[0] === vertex ? edge.vertices[1] : edge.vertices[0], length + 1);
+      walk(edge.vertices[0] === vertex ? edge.vertices[1] : edge.vertices[0], length + 1, edge);
       used.delete(index);
     }
   }
   for (const vertex of touching.keys()) {
     if (best === edges.length) break;
-    walk(vertex, 0);
+    walk(vertex, 0, null);
   }
   return best;
 }
@@ -65,7 +80,13 @@ export function baseRouteGraph(state: GameState, seat: Seat): RouteGraph {
 export function longestRoadLength(state: GameState, seat: Seat, ctx?: HandlerContext): number {
   const base = baseRouteGraph(state, seat);
   const route = ctx ? ctx.hooks.routeGraph(state, seat, base) : base;
-  return longestTrailLength(route.edges, new Set(route.blocked));
+  return longestTrailLength(
+    route.edges,
+    new Set(route.blocked),
+    route.transitions || route.edges.some((edge) => edge.kind !== undefined)
+      ? kindTransitions(route.transitions)
+      : undefined,
+  );
 }
 
 function awardHolder(

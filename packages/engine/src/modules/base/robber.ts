@@ -8,7 +8,7 @@ import { gainHidden, gainKnown, loseHidden, loseKnown } from '../../core/resourc
 import type { GameState, PrivateState } from '../../core/state/index.js';
 import { failure, success } from '../../core/types/index.js';
 import type { Resource, Result, Seat } from '../../core/types/index.js';
-import { verticesForHex } from './board/index.js';
+import { isLandHex, verticesForHex } from './board/index.js';
 import { claimCommands } from './legal.js';
 import { oneResource } from './constants.js';
 import { baseOptions } from './types.js';
@@ -67,7 +67,7 @@ function resume(state: GameState, returnTo: 'main' | 'pop'): GameState {
 export function legalRobberHexes(state: GameState): string[] {
   const candidates = state.board.hexes
     .map((hex) => hex.id)
-    .filter((id) => id !== state.board.robberHex)
+    .filter((id) => id !== state.board.robberHex && isLandHex(state, id))
     .toSorted();
   if (!baseOptions(state.config.options.base).friendlyRobber) return candidates;
   const friendly = candidates.filter((hex) => {

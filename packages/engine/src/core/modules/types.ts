@@ -74,6 +74,12 @@ export interface BoardShapeSpec {
   fixtureSlots: readonly FixtureSlot[];
   /** Strict-balance cap on the summed token pips of each terrain. */
   pipCaps: Readonly<Record<string, number>>;
+  /**
+   * Set by a seafaring module. `hexes` then lists every board hex including sea, and a fixed board
+   * may use `sea`, `gold` and `fog` terrains. Sea and fog hexes carry no token, harbors need only be
+   * coastal, and the robber may start on any land hex. Only fixed boards are accepted.
+   */
+  seafaring?: boolean;
 }
 
 /** A module's request for a fixture. Genesis assigns declarations to slots in order. */
@@ -98,10 +104,16 @@ export interface Blocker {
   legalHexes: readonly string[];
 }
 
-/** Undirected route edges and the vertices that interrupt a route for longest-route awards. */
+/**
+ * Undirected route edges and the vertices that interrupt a route for longest-route awards.
+ * An edge may carry a `kind` (for example `road` or `ship`). Edges of the same kind always join at
+ * a shared vertex; edges of different kinds join only at a vertex listed in `transitions`
+ * (for example the seat's own settlements). Base edges have no kind, so they always join.
+ */
 export interface RouteGraph {
-  edges: readonly { id: string; vertices: readonly [string, string] }[];
+  edges: readonly { id: string; vertices: readonly [string, string]; kind?: string }[];
   blocked: readonly string[];
+  transitions?: readonly string[];
 }
 
 /** The public request that a TIMEOUT answers. */

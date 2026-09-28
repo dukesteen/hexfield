@@ -2,7 +2,7 @@ import type { HandlerContext } from '../../core/modules/index.js';
 import type { GameState, PrivateState } from '../../core/state/index.js';
 import { RESOURCES } from '../../core/types/index.js';
 import type { Seat } from '../../core/types/index.js';
-import { boardGraph } from './board/index.js';
+import { boardGraph, edgeKindOf, isLandHex } from './board/index.js';
 import { longestRoadLength } from './awards/index.js';
 import { BANK_START, DEV_CARD_COUNTS, PIECES_START } from './constants.js';
 import { baseExt } from './types.js';
@@ -37,8 +37,16 @@ export function baseInvariants(state: GameState, ctx: HandlerContext): string[] 
     errors.push('building has unknown kind');
   if (state.board.harbors.some((harbor) => graph.edgeIndex[harbor.edge] === undefined))
     errors.push('harbor uses unknown edge');
+  if (
+    state.board.harbors.some((harbor) => {
+      const kind = edgeKindOf(state, harbor.edge);
+      return kind !== null && kind !== 'coastal';
+    })
+  )
+    errors.push('harbor must be on a coastal edge');
   if (!state.board.robberHex || graph.hexIndex[state.board.robberHex] === undefined)
     errors.push('robber must occupy one board hex');
+  else if (!isLandHex(state, state.board.robberHex)) errors.push('robber must occupy a land hex');
   for (const seat of state.seats) {
     const ownedRoads = state.board.roads.filter((road) => road.seat === seat.seat).length;
     const settlements = state.board.buildings.filter(

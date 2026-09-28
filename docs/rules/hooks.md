@@ -13,36 +13,36 @@ Hooks never mutate their arguments. The kitchen-sink test in `packages/engine/te
 
 ## Catalogue
 
-| Hook                                                       | Kind        | Starting value at the call site      | Call site                                                                                          |
-| ---------------------------------------------------------- | ----------- | ------------------------------------ | -------------------------------------------------------------------------------------------------- |
-| `seatRange(config, acc)`                                   | accumulator | `{ min: 2, max: 6 }`                 | `createGame` config check. Base narrows it to 2–4; `five-six` to 5–6.                              |
-| `boardSpec(config, acc)`                                   | accumulator | `null`                               | Base `buildBoard` (generator and fixed-board validation) and genesis fixture placement.            |
-| `boardFixtures(config, board, acc)`                        | accumulator | `[]`                                 | `createGame`, after every `buildBoard`. Declarations are assigned to slots in order.               |
-| `cardKinds(acc)`                                           | accumulator | base resources                       | Base public and private supply invariants.                                                         |
-| `bankInit(config, acc)`                                    | accumulator | base bank (19 each)                  | Base `initializeState`; base supply invariants.                                                    |
-| `pieceLimits(config, acc)`                                 | accumulator | 5 settlements, 4 cities, 15 roads    | Base `initializeState`; base piece invariants.                                                     |
-| `devDeck(config, acc)`                                     | accumulator | 25-card base composition             | Base `initializeState`; deck invariant; `devCardCatalogueFor` for the P2P deck ceremony.           |
-| `costs(config, acc)`                                       | accumulator | base cost table                      | `buildCost`, before `costOf`.                                                                      |
-| `costOf(state, buildType, cost)`                           | accumulator | the `costs` entry                    | `buildCost` for every build and purchase, including legal-command enumeration.                     |
-| `diceSpec(state, acc)`                                     | accumulator | two six-sided dice, no extra dice    | The `dice` phase random request (random mode).                                                     |
-| `onDiceResult(state, dice)`                                | state       | —                                    | `DICE_RESULT`, before production or the 7 branch. Also used for the owner's private production.    |
-| `production(state, roll, acc)`                             | accumulator | base demand by seat                  | `productionPayments`, before the per-resource bank-shortage rule.                                  |
-| `onNoProduction(state, seat)`                              | state       | —                                    | `DICE_RESULT` on a non-7 roll, for each seat that received nothing.                                |
-| `placement.settlement / road / city(state, seat, loc, ok)` | accumulator | base legality                        | Setup placements, builds, free roads and legal-command enumeration.                                |
-| `connectivity(state, seat, acc)`                           | accumulator | the seat's road edges                | Road and settlement connection checks and enumeration.                                             |
-| `routeGraph(state, seat, acc)`                             | accumulator | the seat's roads, opponent buildings | Longest-road length and award recomputation.                                                       |
-| `robberLike(state, acc)`                                   | accumulator | the robber and its legal hexes       | `MOVE_ROBBER` validation, enumeration and the timeout robber choice.                               |
-| `stealTargets(state, seat, blocker, hex, acc)`             | accumulator | occupied opponents with cards        | After a blocker moves.                                                                             |
-| `handLimit(state, seat, limit)`                            | accumulator | `discardLimit` option                | The 7 branch of `DICE_RESULT`.                                                                     |
-| `afterBuild(state, seat, type, loc)`                       | state       | —                                    | After every placement and build.                                                                   |
-| `onTurnStart(state, seat)` / `onTurnEnd(state, seat)`      | state       | —                                    | `END_TURN` and the end of setup.                                                                   |
-| `turnFlow(state, acc)`                                     | accumulator | `[]`                                 | `END_TURN`. Non-empty frames run between turns above a base `turnEnd` marker.                      |
-| `pending(state, acc)`                                      | accumulator | the top phase's pending list         | `getPending`, so a module can allow its commands in another module's phase.                        |
-| `victoryPoints(state, seat, priv, acc)`                    | accumulator | `[]`                                 | `computeVictoryPoints`. Base contributes hidden victory-point cards.                               |
-| `vpTarget(config, acc)`                                    | accumulator | base `vpTarget` option               | Public victory check, `CLAIM_VICTORY` and the automatic hidden claim.                              |
-| `legalCommands(state, seat, priv, acc)`                    | accumulator | the top phase's legal set            | `getLegalCommands`, before the final validation filter.                                            |
-| `timeoutAction(state, request, acc)`                       | accumulator | `null`                               | `TIMEOUT` when a module owns the top phase. The returned command is dispatched as the auto-action. |
-| `renderHints(state, acc)`                                  | accumulator | `[]`                                 | UI only, through `engine.hooks.renderHints`. Never read by rules.                                  |
+| Hook                                                       | Kind        | Starting value at the call site      | Call site                                                                                                            |
+| ---------------------------------------------------------- | ----------- | ------------------------------------ | -------------------------------------------------------------------------------------------------------------------- |
+| `seatRange(config, acc)`                                   | accumulator | `{ min: 2, max: 6 }`                 | `createGame` config check. Base narrows it to 2–4; `five-six` to 5–6.                                                |
+| `boardSpec(config, acc)`                                   | accumulator | `null`                               | Base `buildBoard` (generator and fixed-board validation) and genesis fixture placement. A shape may set `seafaring`. |
+| `boardFixtures(config, board, acc)`                        | accumulator | `[]`                                 | `createGame`, after every `buildBoard`. Declarations are assigned to slots in order.                                 |
+| `cardKinds(acc)`                                           | accumulator | base resources                       | Base public and private supply invariants.                                                                           |
+| `bankInit(config, acc)`                                    | accumulator | base bank (19 each)                  | Base `initializeState`; base supply invariants.                                                                      |
+| `pieceLimits(config, acc)`                                 | accumulator | 5 settlements, 4 cities, 15 roads    | Base `initializeState`; base piece invariants.                                                                       |
+| `devDeck(config, acc)`                                     | accumulator | 25-card base composition             | Base `initializeState`; deck invariant; `devCardCatalogueFor` for the P2P deck ceremony.                             |
+| `costs(config, acc)`                                       | accumulator | base cost table                      | `buildCost`, before `costOf`.                                                                                        |
+| `costOf(state, buildType, cost)`                           | accumulator | the `costs` entry                    | `buildCost` for every build and purchase, including legal-command enumeration.                                       |
+| `diceSpec(state, acc)`                                     | accumulator | two six-sided dice, no extra dice    | The `dice` phase random request (random mode).                                                                       |
+| `onDiceResult(state, dice)`                                | state       | —                                    | `DICE_RESULT`, before production or the 7 branch. Also used for the owner's private production.                      |
+| `production(state, roll, acc)`                             | accumulator | base demand by seat                  | `productionPayments`, before the per-resource bank-shortage rule.                                                    |
+| `onNoProduction(state, seat)`                              | state       | —                                    | `DICE_RESULT` on a non-7 roll, for each seat that received nothing.                                                  |
+| `placement.settlement / road / city(state, seat, loc, ok)` | accumulator | base legality                        | Setup placements, builds, free roads and legal-command enumeration.                                                  |
+| `connectivity(state, seat, acc)`                           | accumulator | the seat's road edges                | Road and settlement connection checks and enumeration.                                                               |
+| `routeGraph(state, seat, acc)`                             | accumulator | the seat's roads, opponent buildings | Longest-road length and award recomputation. Edges may be typed; see Route graph below.                              |
+| `robberLike(state, acc)`                                   | accumulator | the robber and its legal hexes       | `MOVE_ROBBER` validation, enumeration and the timeout robber choice.                                                 |
+| `stealTargets(state, seat, blocker, hex, acc)`             | accumulator | occupied opponents with cards        | After a blocker moves.                                                                                               |
+| `handLimit(state, seat, limit)`                            | accumulator | `discardLimit` option                | The 7 branch of `DICE_RESULT`.                                                                                       |
+| `afterBuild(state, seat, type, loc)`                       | state       | —                                    | After every placement and build.                                                                                     |
+| `onTurnStart(state, seat)` / `onTurnEnd(state, seat)`      | state       | —                                    | `END_TURN` and the end of setup.                                                                                     |
+| `turnFlow(state, acc)`                                     | accumulator | `[]`                                 | `END_TURN`. Non-empty frames run between turns above a base `turnEnd` marker.                                        |
+| `pending(state, acc)`                                      | accumulator | the top phase's pending list         | `getPending`, so a module can allow its commands in another module's phase.                                          |
+| `victoryPoints(state, seat, priv, acc)`                    | accumulator | `[]`                                 | `computeVictoryPoints`. Base contributes hidden victory-point cards.                                                 |
+| `vpTarget(config, acc)`                                    | accumulator | base `vpTarget` option               | Public victory check, `CLAIM_VICTORY` and the automatic hidden claim.                                                |
+| `legalCommands(state, seat, priv, acc)`                    | accumulator | the top phase's legal set            | `getLegalCommands`, before the final validation filter.                                                              |
+| `timeoutAction(state, request, acc)`                       | accumulator | `null`                               | `TIMEOUT` when a module owns the top phase. The returned command is dispatched as the auto-action.                   |
+| `renderHints(state, acc)`                                  | accumulator | `[]`                                 | UI only, through `engine.hooks.renderHints`. Never read by rules.                                                    |
 
 ## Turn flow
 
@@ -58,3 +58,19 @@ A slot's anchor is a sea-frame hex that touches land and has no harbor. Its oute
 | ---------- | ------------ | -------- | -------- |
 | `standard` | `north`      | `h:0,-3` | `h:0,-4` |
 | `five-six` | `north-west` | `h:1,-4` | `h:1,-5` |
+
+## Route graph
+
+`routeGraph` returns `RouteGraph`: `edges` (`id`, two `vertices` and an optional `kind`), `blocked` vertices and optional `transitions`. `longestTrailLength` finds the longest edge-unique trail. A blocked vertex (an opponent building) can end a trail but is never passed through. Two edges of the same `kind` always join at a shared vertex. Edges of different kinds join only at a vertex listed in `transitions`, so a seafaring module lists the seat's own settlements and cities and a road that meets a ship at an empty vertex does not connect. Base edges have no `kind` and no `transitions`, so every join is allowed and the result is the plain longest road. The algorithm takes a predicate, `TransitionAllowed(vertex, from, to)`, and `kindTransitions(transitions)` builds the kind-based one. A hook that adds `kind` to some edges must give every edge a kind, because an untyped edge and a typed edge count as different kinds.
+
+## Sea-aware boards
+
+Board hexes may use the terrains `sea`, `gold` and `fog` (`SEAFARING_TERRAINS`). Land is every terrain except `sea` and `fog` (`isLandTerrain`), so a fog hex counts as water until a reveal replaces it. Sea hexes stay in `board.hexes`, so the board graph has vertices and edges around them. Base uses these classifications, which are identical to the old behaviour on a land-only board:
+
+- A settlement needs a vertex that touches at least one land hex (`vertexOnLand`).
+- A road needs an edge that is not a sea edge (`edgeKindOf` is `land` or `coastal`). `classifyEdge` gives `land` for land on both sides, `coastal` for land on one side (a land hex on the outer rim counts, with off-board as its other side, as do sea and fog) and `sea` for no land side.
+- The robber's legal hexes are land hexes only (`isLandHex`). The base invariants require the robber on a land hex and each harbor on a coastal edge.
+- Production and setup resources come from `TERRAIN_RESOURCE`, which has no `gold` entry, so base ignores gold. A module's `production` hook pays it.
+- `detectIslands` returns the connected components of land hexes, each named by its least hex id. `boardIslands(state)` caches them per hex list, so a reveal that replaces the hexes recomputes them.
+
+A seafaring shape sets `seafaring: true` in `BoardShapeSpec`. Its `hexes` list every hex including sea, and only fixed boards are accepted (`generateBoard` rejects random layouts). Validation still checks the terrain and token bags, but sea and fog carry no token, gold carries one, the robber may start on any land hex and harbors need only be on coastal edges of the supplied board. Without the flag, `sea`, `gold` and `fog` are rejected. `coastEdgeCycle`, `frameHexes` and `seaSideOfEdge` still take land hexes only. Pass `landHexes(board.hexes)`, and expect `coastEdgeCycle` to throw on a board with several islands. Use `coastalEdges` there.
