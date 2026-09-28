@@ -69,6 +69,119 @@ function installFactory(): void {
 
 afterEach(() => vi.unstubAllGlobals());
 
+test('idle deletion releases its own parent lock and blocks new scopes until completion', async () => {
+  installFactory();
+  const locks = new TestLocks();
+  const controller = new OnlineVaultController({ lockManager: locks, channel: null });
+  const scope = await controller.acquireScope(async () => undefined);
+  await controller.releaseScope(scope);
+  expect(locks.active()).toBe(1);
+  let finish!: () => void;
+  let entered!: () => void;
+  const started = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  const pending = new Promise<void>((resolve) => {
+    finish = resolve;
+  });
+  const deletion = controller.withIdleVaultReleased(() =>
+    locks.request('cp2p/local-vault/v1', { mode: 'exclusive', ifAvailable: true }, async (lock) => {
+      expect(lock).not.toBeNull();
+      entered();
+      await pending;
+      return 'deleted';
+    }),
+  );
+  await started;
+  expect(controller.snapshot().state).toBe('busy');
+  await expect(controller.acquireScope(async () => undefined)).rejects.toMatchObject({
+    code: 'busy',
+  });
+  finish();
+  await expect(deletion).resolves.toBe('deleted');
+  expect(locks.active()).toBe(0);
+  expect(controller.snapshot()).toEqual({ mode: 'clear', state: 'ready', generation: 0 });
+  await controller.dispose();
+});
+
+test('deletion refuses a live scope without closing its signer', async () => {
+  installFactory();
+  const locks = new TestLocks();
+  const controller = new OnlineVaultController({ lockManager: locks, channel: null });
+  const closeSigner = vi.fn<() => Promise<void>>(async () => undefined);
+  const scope = await controller.acquireScope(closeSigner);
+  const task = vi.fn<() => Promise<string>>(async () => 'deleted');
+  await expect(controller.withIdleVaultReleased(task)).resolves.toBeNull();
+  expect(task).not.toHaveBeenCalled();
+  expect(closeSigner).not.toHaveBeenCalled();
+  scope.assertActive();
+  await controller.releaseScope(scope);
+  await controller.dispose();
+});
+
+test('deletion invalidates a scope still opening its parent lease', async () => {
+  installFactory();
+  const locks = new TestLocks();
+  const controller = new OnlineVaultController({ lockManager: locks, channel: null });
+  await controller.ready();
+  const opening = controller.acquireScope(async () => undefined);
+  const observed = opening.catch((error: unknown) => error);
+  await expect(
+    controller.withIdleVaultReleased(() =>
+      locks.request('cp2p/local-vault/v1', { mode: 'exclusive', ifAvailable: true }, (lock) => {
+        expect(lock).not.toBeNull();
+        return 'deleted';
+      }),
+    ),
+  ).resolves.toBe('deleted');
+  expect(await observed).toMatchObject({ code: 'closed' });
+  expect(locks.active()).toBe(0);
+  await controller.dispose();
+});
+
+test('deletion failure drops an idle unlock key and leaves protected vault locked', async () => {
+  installFactory();
+  const locks = new TestLocks();
+  const controller = new OnlineVaultController({ lockManager: locks, channel: null });
+  await controller.enable('deletion vault passphrase');
+  await controller.unlock('deletion vault passphrase');
+  await expect(
+    controller.withIdleVaultReleased(async () => {
+      throw new Error('deletion failed');
+    }),
+  ).rejects.toThrow('deletion failed');
+  expect(controller.snapshot()).toEqual({ mode: 'locked', state: 'locked', generation: 1 });
+  expect(controller.handoff()).toBeNull();
+  expect(locks.active()).toBe(0);
+  await expect(controller.acquireScope(async () => undefined)).rejects.toMatchObject({
+    code: 'locked',
+  });
+  await controller.dispose();
+});
+
+test('status refresh failure reports error without trapping the controller busy or masking deletion failure', async () => {
+  installFactory();
+  const factory = indexedDB;
+  const controller = new OnlineVaultController({ lockManager: new TestLocks(), channel: null });
+  await controller.ready();
+  await expect(
+    controller.withIdleVaultReleased(async () => {
+      vi.stubGlobal('indexedDB', {
+        open: () => {
+          throw new Error('status unavailable');
+        },
+      });
+      throw new Error('original deletion failure');
+    }),
+  ).rejects.toThrow('original deletion failure');
+  expect(controller.snapshot().state).toBe('error');
+  expect(controller.handoff()).toBeNull();
+  vi.stubGlobal('indexedDB', factory);
+  await controller.ready();
+  expect(controller.snapshot().state).toBe('ready');
+  await controller.dispose();
+});
+
 test('enables, unlocks and locks without allowing a protected identity remint', async () => {
   installFactory();
   const controller = new OnlineVaultController({ lockManager: new TestLocks(), channel: null });

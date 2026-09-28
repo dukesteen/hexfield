@@ -1,0 +1,28 @@
+{
+  "result": "PASS",
+  "testDurationSeconds": 20.8,
+  "runnerDurationSeconds": 24.2,
+  "timeoutSeconds": 90,
+  "browser": "installed Chrome",
+  "contexts": 1,
+  "sourceComparison": {
+    "checked": 439,
+    "changed": []
+  },
+  "evidence": {
+    "protocolVersion": 6,
+    "gameId": "OkBMgYtlo7vY_qJpary94k",
+    "lastCertifiedSequence": 8,
+    "inactivityDays": 31,
+    "deletion": {
+      "tombstone": {
+        "protocol": "online-game-deletion-v1",
+        "gameId": "OkBMgYtlo7vY_qJpary94k",
+        "genesisDigest": "OkBMgYtlo7vY_qJpary94k4fmcCIJqS-JR98PKi5MOA",
+        "deletedAt": 1790588160288
+      },
+      "savedAgain": "This online game was deleted locally and cannot be restarted",
+      "initializedAgain": "Online game was deleted locally"
+    }
+  }
+}

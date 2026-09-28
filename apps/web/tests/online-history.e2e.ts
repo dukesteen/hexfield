@@ -1,6 +1,11 @@
 import { expect, test } from '@playwright/test';
 import { canonicalEncode } from '@cp2p/codec';
-import { createConsensusState, validateGenesisOnlineStart } from '@cp2p/protocol';
+import {
+  createConsensusState,
+  entryHash,
+  genesisDigest,
+  validateGenesisOnlineStart,
+} from '@cp2p/protocol';
 import { advanceRecoveryFixture, createRecoveryFixture } from '@cp2p/protocol/testing';
 import type { Result } from '@cp2p/engine';
 import { fileURLToPath } from 'node:url';
@@ -14,7 +19,7 @@ function value<T>(result: Result<T>): T {
   return result.value;
 }
 
-test('saved history exports, opens read-only, survives reload, and removes only the live save', async ({
+test('inactive history stays readable and deletion prevents revival of its signed save', async ({
   page,
 }, testInfo) => {
   test.setTimeout(90_000);
@@ -55,6 +60,7 @@ test('saved history exports, opens read-only, survives reload, and removes only 
       initialSafety: firstSafety,
       entries: certifiedEntries,
       storagePath: storageModulePath,
+      activity,
     }) => {
       // oxlint-disable typescript/no-unsafe-type-assertion -- Known local Vite modules in an isolated browser test context.
       const { IndexedDbByteStore, IndexedDbProtocolJournal } = (await import(
@@ -64,6 +70,10 @@ test('saved history exports, opens read-only, survives reload, and removes only 
       const { saveOnlineGameRecord } = (await import(
         /* @vite-ignore */ recordsPath
       )) as typeof import('../src/session/online-game-records.js');
+      const activityPath = '/src/session/online-game-activity.ts';
+      const { saveOnlineGameActivity } = (await import(
+        /* @vite-ignore */ activityPath
+      )) as typeof import('../src/session/online-game-activity.js');
       // oxlint-enable typescript/no-unsafe-type-assertion
       const store = new IndexedDbByteStore();
       const journal = new IndexedDbProtocolJournal(savedStart.result.genesis.gameId);
@@ -81,16 +91,29 @@ test('saved history exports, opens read-only, survives reload, and removes only 
           );
           if (!committed) throw new Error('Fixture journal failed to commit');
         }
+        await saveOnlineGameActivity(store, activity);
       } finally {
         await journal.close();
         await store.close();
       }
     },
-    { start, initialSafety, entries, storagePath },
+    {
+      start,
+      initialSafety,
+      entries,
+      storagePath,
+      activity: {
+        gameId: fixture.genesis.gameId,
+        genesisDigest: genesisDigest(fixture.genesis),
+        head: { seq: context.log.head.seq, hash: entryHash(context.log.head) },
+        lastActivityAt: Date.now() - 31 * 24 * 60 * 60 * 1_000,
+      },
+    },
   );
   await page.reload();
   const saved = page.locator('.online-history-item');
   await expect(saved).toHaveCount(1);
+  await expect(saved.locator('.online-history-inactive')).toBeVisible();
   const [download] = await Promise.all([
     page.waitForEvent('download'),
     saved.getByRole('button', { name: 'Export replay', exact: true }).click(),
@@ -127,9 +150,82 @@ test('saved history exports, opens read-only, survives reload, and removes only 
   await expect(saved).toHaveCount(1);
   await saved.getByRole('button', { name: 'Remove', exact: true }).click();
   await dialog.getByRole('button', { name: 'Remove', exact: true }).click();
+  // The vault gate hides history while deletion is busy. Wait for durable completion
+  // before reloading; an empty transient view is not a deletion acknowledgement.
+  await expect
+    .poll(() =>
+      page.evaluate(
+        async ({ storagePath: modulePath, gameId }) => {
+          // oxlint-disable typescript/no-unsafe-type-assertion -- Known local Vite modules in an isolated browser test context.
+          const { readOnlineGameTombstone } = (await import(
+            /* @vite-ignore */ modulePath
+          )) as typeof import('@cp2p/storage');
+          const controllerPath = '/src/session/online-vault-controller.ts';
+          const { getOnlineVaultController } = (await import(
+            /* @vite-ignore */ controllerPath
+          )) as typeof import('../src/session/online-vault-controller.js');
+          // oxlint-enable typescript/no-unsafe-type-assertion
+          return {
+            deleted: (await readOnlineGameTombstone(gameId)) !== null,
+            vaultState: getOnlineVaultController().snapshot().state,
+          };
+        },
+        { storagePath, gameId: fixture.genesis.gameId },
+      ),
+    )
+    .toEqual({ deleted: true, vaultState: 'ready' });
   await expect(saved).toHaveCount(0);
   await page.reload();
   await expect(saved).toHaveCount(0);
+  const deletion = await page.evaluate(
+    async ({ start: savedStart, initialSafety: safety, storagePath: storageModulePath }) => {
+      // oxlint-disable typescript/no-unsafe-type-assertion -- Known local Vite modules in an isolated browser test context.
+      const { IndexedDbByteStore, IndexedDbProtocolJournal, readOnlineGameTombstone } =
+        (await import(/* @vite-ignore */ storageModulePath)) as typeof import('@cp2p/storage');
+      const recordsPath = '/src/session/online-game-records.ts';
+      const { saveOnlineGameRecord } = (await import(
+        /* @vite-ignore */ recordsPath
+      )) as typeof import('../src/session/online-game-records.js');
+      // oxlint-enable typescript/no-unsafe-type-assertion
+      const gameId = savedStart.result.genesis.gameId;
+      const store = new IndexedDbByteStore();
+      const journal = new IndexedDbProtocolJournal(gameId);
+      try {
+        const tombstone = await readOnlineGameTombstone(gameId);
+        const savedAgain = await saveOnlineGameRecord(store, savedStart).then(
+          () => 'accepted',
+          (error: unknown) => (error instanceof Error ? error.message : 'unknown'),
+        );
+        const initializedAgain = await journal
+          .initialize(savedStart.result.entry, new Uint8Array(safety))
+          .then(
+            () => 'accepted',
+            (error: unknown) => (error instanceof Error ? error.message : 'unknown'),
+          );
+        return { tombstone, savedAgain, initializedAgain };
+      } finally {
+        await journal.close();
+        await store.close();
+      }
+    },
+    { start, initialSafety, storagePath },
+  );
+  expect(deletion.tombstone).toMatchObject({
+    gameId: fixture.genesis.gameId,
+    genesisDigest: genesisDigest(fixture.genesis),
+  });
+  expect(deletion.savedAgain).toContain('deleted locally');
+  expect(deletion.initializedAgain).toContain('deleted locally');
+  await testInfo.attach('history-deletion-evidence', {
+    body: JSON.stringify({
+      protocolVersion: fixture.genesis.protocolVersion,
+      gameId: fixture.genesis.gameId,
+      lastCertifiedSequence: context.log.head.seq,
+      inactivityDays: 31,
+      deletion,
+    }),
+    contentType: 'application/json',
+  });
   await page.getByRole('link', { name: /^Open public replay:/ }).click();
   await expect(page.getByRole('heading', { name: 'Public game replay' })).toBeVisible();
   await page.getByRole('link', { name: 'Back to home' }).click();

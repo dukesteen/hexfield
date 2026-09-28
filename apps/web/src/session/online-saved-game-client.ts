@@ -1,6 +1,7 @@
 import type { DeleteOnlineGameDataResult } from '@cp2p/storage';
 import { MAX_ONLINE_PUBLIC_ARCHIVE_BYTES } from './online-public-archive-format.js';
 import type { OnlineSavedGameWorkerResponse } from './online-saved-game-worker.js';
+import { getOnlineVaultController } from './online-vault-controller.js';
 
 interface SavedGameWorkerPort {
   postMessage(message: unknown): void;
@@ -136,7 +137,10 @@ export async function deleteStoredGame(
 ): Promise<DeleteOnlineGameDataResult> {
   if (!GAME_ID.test(gameId) || !DIGEST.test(genesisDigest))
     throw new Error('Invalid online game identity');
-  const response = await runJob({ kind: 'delete', gameId, genesisDigest }, defaultWorker);
+  const response = await getOnlineVaultController().withIdleVaultReleased(() =>
+    runJob({ kind: 'delete', gameId, genesisDigest }, defaultWorker),
+  );
+  if (response === null) return 'busy';
   if (response.kind !== 'deleted') throw new Error('Saved-game worker returned the wrong result');
   return response.result;
 }

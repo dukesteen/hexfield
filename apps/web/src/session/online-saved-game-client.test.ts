@@ -6,6 +6,11 @@ import {
   exportStoredGameReplayWithSignal,
 } from './online-saved-game-client.js';
 
+const vault = vi.hoisted(() => ({
+  withIdleVaultReleased: vi.fn<(task: () => Promise<unknown>) => Promise<unknown>>(),
+}));
+vi.mock('./online-vault-controller.js', () => ({ getOnlineVaultController: () => vault }));
+
 type Request = { id: number; kind: string; gameId: string; genesisDigest?: string };
 
 function isRequest(value: unknown): value is Request {
@@ -75,6 +80,7 @@ afterEach(() => {
 
 function installWorker(): void {
   vi.stubGlobal('Worker', FakeWorker);
+  vault.withIdleVaultReleased.mockImplementation((task) => task());
 }
 
 test('export sends only a game locator and returns detached bounded bytes', async () => {
@@ -108,6 +114,13 @@ test('delete returns busy without treating the saved game as deleted', async () 
     genesisDigest,
   });
   expect(FakeWorker.last?.terminated).toBe(true);
+});
+
+test('a live vault scope refuses deletion before starting a worker', async () => {
+  installWorker();
+  vault.withIdleVaultReleased.mockResolvedValueOnce(null);
+  await expect(deleteStoredGame(gameId, genesisDigest)).resolves.toBe('busy');
+  expect(FakeWorker.last).toBeNull();
 });
 
 test('invalid identity never starts a worker and abort terminates an active export', async () => {

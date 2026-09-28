@@ -183,6 +183,40 @@ export class OnlineVaultController {
     await scope.close();
   }
 
+  /** Deletion needs an exclusive vault lock; never close a live signer to obtain it. */
+  async withIdleVaultReleased<T>(task: () => Promise<T>): Promise<T | null> {
+    await this.ready();
+    this.#assertIdle();
+    if (this.#scopes.size > 0) return null;
+    this.#migration = true;
+    this.#lockEpoch += 1;
+    this.#set({ ...this.#current, state: 'busy' });
+    let failed = false;
+    try {
+      // An acquisition already opening must notice the changed epoch and close itself.
+      await this.#ownerOpening?.catch(() => undefined);
+      const owner = this.#owner;
+      this.#owner = null;
+      await owner?.close();
+      return await task();
+    } catch (error) {
+      failed = true;
+      throw error;
+    } finally {
+      // Deletion drops the idle unlock key. A protected vault must be unlocked again.
+      try {
+        const status = await readLocalVaultStatus();
+        this.#set({ ...status, state: status.mode === 'locked' ? 'locked' : 'ready' });
+      } catch (error) {
+        this.#set({ ...this.#current, state: 'error', errorCode: vaultCode(error) });
+        // oxlint-disable-next-line no-unsafe-finally -- Preserve task failures; report refresh failure only after a successful task.
+        if (!failed) throw error;
+      } finally {
+        this.#migration = false;
+      }
+    }
+  }
+
   lock(): Promise<void> {
     if (this.#closing) return this.#closing;
     this.#lockEpoch += 1;
@@ -347,7 +381,7 @@ export class OnlineVaultController {
       (this.#owner.generation !== status.generation || this.#owner.mode !== status.mode)
     )
       await this.lock();
-    if (!this.#disposed && !this.#owner && !this.#closing)
+    if (!this.#disposed && !this.#owner && !this.#closing && !this.#migration)
       this.#set({ ...status, state: status.mode === 'locked' ? 'locked' : 'ready' });
   }
 
