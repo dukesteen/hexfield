@@ -11,4 +11,5 @@ bf6634ef519bd4541f3b0d5e9678194c58c2d2ccd79ea11316fa06cda9e12e89  tools/sim/src/
 e72263e667df080eed63966cbf2bcfa22861ff43510d1bb692d85abca207db0e  packages/protocol/src/testing/verified-network-fixture.test.ts
 7ac235658b0899ccdbd4dff3315dc39709b74a89a7bfa975ac570235d4bdf112  packages/protocol/src/testing/verified-non-voter-actor.ts
 85626548f53919d778e7e83440618dcc93f1b83dca0f028fffbab3f21f4b1db8  packages/protocol/src/testing/verified-non-voter-actor.test.ts
-abb533b185c0659c1ec4febd9ac4888ddcb4e010566347ea181da62df83d7b4f  .github/workflows/verified-network.yml
+004d2fe79d661324c0aeb8cc3c2d97e4d92796267e179816686d62a9f10ceba5  .github/workflows/verified-network.yml
+54edb89ea4c3503f33c3143b13ee650905793699a22b6194de4b8b2ff8c8ad3b  .github/workflows/ci.yml

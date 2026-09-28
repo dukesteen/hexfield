@@ -10,6 +10,11 @@ on:
         type: boolean
         required: false
         default: false
+      verified_network:
+        description: Run the nine bounded real-crypto fault games
+        type: boolean
+        required: false
+        default: false
       network_seeds:
         description: Full-game seeds per scenario (1–1000; default 20)
         type: number
@@ -28,6 +33,12 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  verified-network:
+    if: github.event_name == 'workflow_dispatch' && inputs.verified_network
+    uses: ./.github/workflows/verified-network.yml
+    with:
+      scenario: all
+
   check:
     runs-on: ubuntu-latest
     steps:

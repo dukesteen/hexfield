@@ -1,6 +1,12 @@
 name: Verified network acceptance
 
 on:
+  workflow_call:
+    inputs:
+      scenario:
+        type: string
+        required: false
+        default: all
   workflow_dispatch:
     inputs:
       scenario:
