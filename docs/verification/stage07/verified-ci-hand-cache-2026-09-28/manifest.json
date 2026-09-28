@@ -1,0 +1,76 @@
+{
+  "run": "https://github.com/dukesteen/hexfield/actions/runs/36402607911",
+  "sourceFingerprint": "4d58da91e5eafe41793b1cadb5224d4a118a42221ab6c111fa6a3a819249c286",
+  "files": [
+    {
+      "file": "verified-network-1.json.gz",
+      "sourceRevision": "86acf16d11301d1b8b219800c8572a8b45c53177",
+      "rawSha256": "15737036872a9a248f49f66826266ca651e14ec3699e1e84723ad5d0b6d270bb",
+      "gzipSha256": "7dc9418b68e6353cff9d5cdfd2cc0cb2f13da14543ea1ca8e30dc220ddad7525",
+      "completedGames": 1
+    },
+    {
+      "file": "verified-network-2.json.gz",
+      "sourceRevision": "86acf16d11301d1b8b219800c8572a8b45c53177",
+      "rawSha256": "c03dc538d8493d42deab98bcc89fa4ee2e412eec49a6240d77bd421ea0ed2c0b",
+      "gzipSha256": "6b233ceff23b73015df252f9345aa5b51b6cd17b6ff2451917d2a6226c91c43d",
+      "completedGames": 0
+    },
+    {
+      "file": "verified-network-3.json.gz",
+      "sourceRevision": "86acf16d11301d1b8b219800c8572a8b45c53177",
+      "rawSha256": "2fa40f5746b571eac9e9076a4247253ef539b4f2df27f8e4501feff2dc7ca019",
+      "gzipSha256": "fcf3d687b917c77bf139e9ea53626cb69901dd7a5334d6ed9fee0c87e08988af",
+      "completedGames": 1
+    },
+    {
+      "file": "verified-network-4.json.gz",
+      "sourceRevision": "86acf16d11301d1b8b219800c8572a8b45c53177",
+      "rawSha256": "330b139812b074804acf269737c8348419d881eee30f07e644999919bbad8b60",
+      "gzipSha256": "b65f1537a0ca0c87a59994d70f02aced259d30144b99a2c346327eb4565e9c25",
+      "completedGames": 1
+    },
+    {
+      "file": "verified-network-5.json.gz",
+      "sourceRevision": "86acf16d11301d1b8b219800c8572a8b45c53177",
+      "rawSha256": "a1a638278f3aa39b7e6fe8baa410bd68ad56082e40aee3a0e8f179c1e259702d",
+      "gzipSha256": "2babc93ec9c4692b51e188997a699b96bfb532849b91883b5ce895de0a80f6e0",
+      "completedGames": 0
+    },
+    {
+      "file": "verified-network-6.json.gz",
+      "sourceRevision": "86acf16d11301d1b8b219800c8572a8b45c53177",
+      "rawSha256": "adc8d80f28344dc4e3cbfd836a7a48368b79027e32e6b0851a6a3197a8fec2ac",
+      "gzipSha256": "07843bffe5b743d589042c3805f477b690ac9af0dcbd844c89e5f038efc92dea",
+      "completedGames": 0
+    },
+    {
+      "file": "verified-network-7.json.gz",
+      "sourceRevision": "86acf16d11301d1b8b219800c8572a8b45c53177",
+      "rawSha256": "ffdb28a4782577e96e40bfef624d6336b67c1ed8d4cfd09d26e9f127555f67ee",
+      "gzipSha256": "22b1064553fe24d4368a44c8e4c609ed9f82a3f768a724381d9d349a79b6b5e1",
+      "completedGames": 1
+    },
+    {
+      "file": "verified-network-8.json.gz",
+      "sourceRevision": "86acf16d11301d1b8b219800c8572a8b45c53177",
+      "rawSha256": "8d08242220e5425fd86ec33740c382d8d9f6f3a84f19cfbedfde0727948bf05e",
+      "gzipSha256": "ee1b9a34ee1059bdd57a450b607bdccb8cff4e853d9d5fcfb80597a74e4db527",
+      "completedGames": 1
+    },
+    {
+      "file": "verified-network-9.json.gz",
+      "sourceRevision": "86acf16d11301d1b8b219800c8572a8b45c53177",
+      "rawSha256": "f242767a45d44be3085329b78dccd2aba82e1cd6ca08497236ad8b8175dd3a5b",
+      "gzipSha256": "31ba8f92013dadeab6961d553301584761d5d620096fbcc9385fdb16091cdbb2",
+      "completedGames": 1
+    },
+    {
+      "file": "verified-persistence.json.gz",
+      "sourceRevision": "86acf16d11301d1b8b219800c8572a8b45c53177",
+      "rawSha256": "bfa1728a53f367ecf32de5be5e6123c6f3c902f1caca31ad03ae8931a1626057",
+      "gzipSha256": "e6a347b04918b649b7bca1e2c30cc42c5a2d383133e5bb1bd4487e069596b311",
+      "completedGames": 0
+    }
+  ]
+}
