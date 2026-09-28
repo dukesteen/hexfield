@@ -2492,123 +2492,146 @@ describe('replicated certified log adapter', () => {
     expect(await pending).toMatchObject({ ok: false, error: { code: 'replica-outcome-unknown' } });
   });
 
-  test('repair retains a certified value until a fresh replay accepts it', async () => {
-    // A valid remote quorum excludes this replica's key while its local engine
-    // cannot derive the certified value.
-    const fixture = fourHumanFixture();
-    const first = fixtureAt(fixture.identities, 0);
-    const second = fixtureAt(fixture.identities, 1);
-    const local = fixtureAt(fixture.identities, 3);
-    const journal = new MemoryProtocolJournal();
-    const transport = new CapturingTransport(local.peerId);
-    let broken = true;
-    const engine: Engine = {
-      ...fixture.engine,
-      apply: (state, input) =>
-        broken
-          ? failure('test-engine-failure', 'Engine cannot derive the certified value')
-          : fixture.engine.apply(state, input),
-    };
-    const replica = value(
-      await ReplicatedLog.create({
-        genesisEntry: fixture.entry,
-        engine,
-        policy: { genesis: { allowStub: true }, entry: { allowStub: true } },
-        seat: 3,
-        secretKey: local.secretKey,
-        transport,
-        clock: new ManualClock(),
-        journal,
-      }),
-    );
-    const context = replica.getContext();
-    transport.inject(second.peerId, {
-      t: 'SNAPSHOT_REQ',
-      genesisDigest: context.membership.genesisDigest,
-      atSeq: 0,
-    });
-    await replica.flush();
-    expect(transport.sent.find((message) => message.t === 'SNAPSHOT_RES')).toMatchObject({
-      t: 'SNAPSHOT_RES',
-      atSeq: 0,
-      snapshot: snapshotFromContext(context),
-    });
-    const input: SystemInput = { kind: 'system', type: 'START_SEAT', seat: 0 };
-    const applied = value(fixture.engine.apply(context.log.state, input));
-    const entry = signEntry(
-      {
-        seq: 1,
-        term: 1,
-        prevHash: entryHash(context.log.head),
-        payload: { kind: 'system', input, evidence: stubEvidence(context.log, input) },
-        stateHash: toHex(hashValue(applied.state)),
-        sequencer: first.peerId,
-      },
-      first.secretKey,
-    );
-    const hash = entryHash(entry);
-    const vote = (seat: 0 | 1 | 2) =>
-      signVote(
+  test.each(['unchanged', 'changed-engine'] as const)(
+    'repair retains a certified value until a fresh replay accepts it (%s)',
+    async (runtime) => {
+      // A valid remote quorum excludes this replica's key while its local engine
+      // cannot derive the certified value.
+      const fixture = fourHumanFixture();
+      const first = fixtureAt(fixture.identities, 0);
+      const second = fixtureAt(fixture.identities, 1);
+      const local = fixtureAt(fixture.identities, 3);
+      const journal = new MemoryProtocolJournal();
+      const transport = new CapturingTransport(local.peerId);
+      let broken = true;
+      const engine: Engine = {
+        ...fixture.engine,
+        apply: (state, input) =>
+          broken
+            ? failure('test-engine-failure', 'Engine cannot derive the certified value')
+            : fixture.engine.apply(state, input),
+      };
+      const replica = value(
+        await ReplicatedLog.create({
+          genesisEntry: fixture.entry,
+          engine,
+          policy: { genesis: { allowStub: true }, entry: { allowStub: true } },
+          seat: 3,
+          secretKey: local.secretKey,
+          transport,
+          clock: new ManualClock(),
+          journal,
+        }),
+      );
+      const context = replica.getContext();
+      transport.inject(second.peerId, {
+        t: 'SNAPSHOT_REQ',
+        genesisDigest: context.membership.genesisDigest,
+        atSeq: 0,
+      });
+      await replica.flush();
+      expect(transport.sent.find((message) => message.t === 'SNAPSHOT_RES')).toMatchObject({
+        t: 'SNAPSHOT_RES',
+        atSeq: 0,
+        snapshot: snapshotFromContext(context),
+      });
+      const input: SystemInput = { kind: 'system', type: 'START_SEAT', seat: 0 };
+      const applied = value(fixture.engine.apply(context.log.state, input));
+      const entry = signEntry(
         {
-          genesisDigest: genesisDigest(fixture.genesis),
-          epoch: 0,
-          seat,
           seq: 1,
           term: 1,
-          phase: 'precommit',
-          valueHash: hash,
+          prevHash: entryHash(context.log.head),
+          payload: { kind: 'system', input, evidence: stubEvidence(context.log, input) },
+          stateHash: toHex(hashValue(applied.state)),
+          sequencer: first.peerId,
         },
-        fixtureAt(fixture.identities, seat).secretKey,
+        first.secretKey,
       );
-    transport.inject(second.peerId, {
-      t: 'COMMIT',
-      certified: { entry, certificate: [vote(0), vote(1), vote(2)] },
-    });
-    await replica.flush();
-    expect((await journal.load())?.height).toBe(1);
-    expect(transport.sent.some((message) => message.t === 'SNAPSHOT_REQ')).toBe(true);
-    expect(
-      await replica.submit(
-        signCommand(
+      const hash = entryHash(entry);
+      const vote = (seat: 0 | 1 | 2) =>
+        signVote(
           {
-            gameId: fixture.genesis.gameId,
             genesisDigest: genesisDigest(fixture.genesis),
-            seat: 0,
-            nonce: 1,
-            headSeq: 0,
-            headHash: entryHash(context.log.head),
-            command: { type: 'END_TURN' },
+            epoch: 0,
+            seat,
+            seq: 1,
+            term: 1,
+            phase: 'precommit',
+            valueHash: hash,
           },
-          first.secretKey,
+          fixtureAt(fixture.identities, seat).secretKey,
+        );
+      transport.inject(second.peerId, {
+        t: 'COMMIT',
+        certified: { entry, certificate: [vote(0), vote(1), vote(2)] },
+      });
+      await replica.flush();
+      expect((await journal.load())?.height).toBe(1);
+      expect(transport.sent.some((message) => message.t === 'SNAPSHOT_REQ')).toBe(true);
+      expect(
+        await replica.submit(
+          signCommand(
+            {
+              gameId: fixture.genesis.gameId,
+              genesisDigest: genesisDigest(fixture.genesis),
+              seat: 0,
+              nonce: 1,
+              headSeq: 0,
+              headHash: entryHash(context.log.head),
+              command: { type: 'END_TURN' },
+            },
+            first.secretKey,
+          ),
         ),
-      ),
-    ).toMatchObject({ ok: false, error: { code: 'replica-halted' } });
-    expect(await replica.repair()).toMatchObject({
-      ok: false,
-      error: { code: 'consensus-repair-incomplete' },
-    });
-    expect((await journal.load())?.height).toBe(1);
-    expect(replica.getContext().log.head.seq).toBe(0);
-    broken = false;
-    transport.inject(second.peerId, {
-      t: 'SNAPSHOT_RES',
-      genesisDigest: context.membership.genesisDigest,
-      atSeq: 0,
-      snapshot: { bogus: true },
-    });
-    await replica.flush();
-    expect((await journal.load())?.height).toBe(1);
-    transport.inject(second.peerId, {
-      t: 'SNAPSHOT_RES',
-      genesisDigest: context.membership.genesisDigest,
-      atSeq: 0,
-      snapshot: snapshotFromContext(context),
-    });
-    await replica.flush();
-    expect((await journal.load())?.height).toBe(2);
-    expect(replica.getContext().log.head.seq).toBe(1);
-    replica.dispose();
-  });
+      ).toMatchObject({ ok: false, error: { code: 'replica-halted' } });
+      expect(await replica.repair()).toMatchObject({
+        ok: false,
+        error: { code: 'consensus-repair-incomplete' },
+      });
+      expect((await journal.load())?.height).toBe(1);
+      expect(replica.getContext().log.head.seq).toBe(0);
+      broken = false;
+      if (runtime === 'changed-engine') {
+        const durable = await journal.load();
+        const load = journal.load.bind(journal);
+        const originalApply = engine.apply.bind(engine);
+        journal.load = async () => {
+          // Change identity after the halted controller's snapshot check, while
+          // repair awaits its durable parent. The replacement has the same behavior.
+          engine.apply = (state, nextInput) => originalApply(state, nextInput);
+          return load();
+        };
+        const rejected = await replica.repair();
+        if (rejected.ok || rejected.error.code !== 'replica-authority')
+          throw new Error('Repair blessed a changed engine function');
+        if (toHex(hashValue(await load())) !== toHex(hashValue(durable)))
+          throw new Error('Rejected repair changed durable safety or history');
+        if (replica.getContext().log.head.seq !== 0)
+          throw new Error('Rejected repair advanced the certified head');
+        replica.dispose();
+        return;
+      }
+      transport.inject(second.peerId, {
+        t: 'SNAPSHOT_RES',
+        genesisDigest: context.membership.genesisDigest,
+        atSeq: 0,
+        snapshot: { bogus: true },
+      });
+      await replica.flush();
+      expect((await journal.load())?.height).toBe(1);
+      transport.inject(second.peerId, {
+        t: 'SNAPSHOT_RES',
+        genesisDigest: context.membership.genesisDigest,
+        atSeq: 0,
+        snapshot: snapshotFromContext(context),
+      });
+      await replica.flush();
+      expect((await journal.load())?.height).toBe(2);
+      expect(replica.getContext().log.head.seq).toBe(1);
+      replica.dispose();
+    },
+  );
 
   test('verified incremental contexts match durable replay at genesis and two certified deck passes', () => {
     const fixture = createVerifiedNetworkFixture({ seed: 42 });

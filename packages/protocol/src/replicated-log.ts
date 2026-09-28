@@ -72,11 +72,13 @@ import type {
 import type { RecoveryRelease } from './recovery-release.js';
 import type { SignedRecoveryCheck } from './recovery-check.js';
 import type { SignedRecoveryVoidCheck } from './recovery-void.js';
-import { MasterRevealCoordinator } from './master-reveal.js';
+import { createLiveMasterRevealCoordinator } from './master-reveal.js';
 import type {
+  MasterRevealCoordinator,
   MasterRevealOptions,
   MasterRevealVerdict,
   SignedMasterReveal,
+  Terminal,
 } from './master-reveal.js';
 import {
   advanceContext,
@@ -253,6 +255,8 @@ export class ReplicatedLog {
   private queue: Promise<unknown> = Promise.resolve();
   private readonly secretKey: Uint8Array;
   private readonly self: PeerId;
+  private readonly genesisHash: string;
+  private readonly matchesReplayPolicy: () => boolean;
   private readonly timers = new Map<string, unknown>();
   private readonly pending: PendingCommand[] = [];
   private membershipIntent: PendingMembership | null = null;
@@ -272,6 +276,8 @@ export class ReplicatedLog {
   private readonly beaconInbox = new BeaconInbox();
   private recoveryParticipant: RecoveryParticipant | null = null;
   private masterRevealCoordinator: MasterRevealCoordinator | null = null;
+  private firstResult: EntryRef | null = null;
+  private terminalCheckpoint: Terminal | null = null;
   private masterRevealsRestored = false;
   private readonly acceptedMasterSeats = new Set<Seat>();
   private readonly localMasterReveals = new Map<
@@ -361,6 +367,7 @@ export class ReplicatedLog {
       entries: CertifiedEntry[];
       snapshotHash: string;
       prefixHash: string;
+      firstResult: EntryRef | null;
     };
   } | null = null;
 
@@ -371,6 +378,18 @@ export class ReplicatedLog {
     private entries: CertifiedEntry[],
     local: LocalConfiguration,
   ) {
+    this.genesisHash = entryHash(genesisEntry);
+    const { engine, policy } = options;
+    const { genesis, entry } = policy;
+    const { allowStub, verifyCommitments } = genesis;
+    this.matchesReplayPolicy = () =>
+      this.options === options &&
+      options.engine === engine &&
+      options.policy === policy &&
+      policy.genesis === genesis &&
+      policy.entry === entry &&
+      genesis.allowStub === allowStub &&
+      genesis.verifyCommitments === verifyCommitments;
     this.secretKey = local.signingKey;
     this.deckKeys = local.keys;
     this.deckSetupPasses = local.passes;
@@ -423,11 +442,17 @@ export class ReplicatedLog {
     if (!requested.ok) return requested;
     if (!sameBytes(canonicalEncode(requested.value.log.head), canonicalEncode(record.genesis)))
       return failure('replica-genesis', 'Requested genesis differs from the certified journal');
+    let firstResult: EntryRef | null = null;
     const replayed = replayCertifiedPrefix(
       record.genesis,
       record.entries,
       options.engine,
       options.policy,
+      (entry, next) => {
+        if (!firstResult && next.log.state.result !== null)
+          firstResult = { seq: entry.entry.seq, hash: entryHash(entry.entry) };
+        return success(undefined);
+      },
     );
     if (!replayed.ok) return replayed;
     const context = replayed.value.context;
@@ -465,6 +490,7 @@ export class ReplicatedLog {
       replayed.value.entries,
       key.value,
     );
+    replica.firstResult = firstResult;
     const opened = await replica.openController();
     if (!opened.ok) {
       replica.dispose();
@@ -482,6 +508,7 @@ export class ReplicatedLog {
       replica.broadcastNextCheatClaim();
       const resumed = await replica.activeController().resume();
       if (!resumed.ok) return resumed;
+      replica.mintTerminalCheckpoint();
       await replica.captureCertifiedDelivery();
       const offered = await replica.offerAvailableInput();
       if (!offered.ok) return offered;
@@ -518,6 +545,10 @@ export class ReplicatedLog {
 
   private async repairNow(snapshot?: unknown): Promise<Result<void>> {
     const hold = this.derivedRepair;
+    const originalController = hold?.stopped ?? this.activeController();
+    const originalContext = this.context;
+    const current = () =>
+      !this.disposed && this.derivedRepair === hold && this.context === originalContext;
     if (hold) await hold.stopped.settled();
     else {
       const state = this.activeController().snapshot();
@@ -525,6 +556,8 @@ export class ReplicatedLog {
       if (state.value.haltKind !== 'certified-validation')
         return failure('replica-repair', 'Only a certified validation halt can be repaired');
     }
+    if (!current()) return failure('replica-disposed', 'Repair was invalidated');
+    this.terminalCheckpoint = null;
     if (
       hold?.replayed &&
       snapshot !== undefined &&
@@ -538,6 +571,7 @@ export class ReplicatedLog {
     } catch {
       return failure('replica-storage', 'Could not read the certified journal for repair');
     }
+    if (!current()) return failure('replica-disposed', 'Repair was invalidated');
     if (!record)
       return this.failClosed('replica-journal', 'Certified journal is missing during repair');
     if (
@@ -548,6 +582,7 @@ export class ReplicatedLog {
     const prefixHash = toHex(hashValue({ genesis: record.genesis, entries: record.entries }));
     if (hold?.replayed && prefixHash !== hold.replayed.prefixHash)
       return this.failClosed('replica-journal', 'Certified journal changed during repair');
+    let firstResult: EntryRef | null = hold?.replayed?.firstResult ?? null;
     const replayed = hold?.replayed
       ? success(hold.replayed)
       : replayCertifiedPrefix(
@@ -555,6 +590,11 @@ export class ReplicatedLog {
           record.entries,
           this.options.engine,
           this.options.policy,
+          (entry, next) => {
+            if (!firstResult && next.log.state.result !== null)
+              firstResult = { seq: entry.entry.seq, hash: entryHash(entry.entry) };
+            return success(undefined);
+          },
         );
     if (!replayed.ok)
       return hold ? this.failClosed(replayed.error.code, replayed.error.message) : replayed;
@@ -565,7 +605,7 @@ export class ReplicatedLog {
       entryHash(fresh.log.head) !== (hold?.anchor.hash ?? entryHash(this.context.log.head))
     )
       return this.failClosed('replica-journal', 'Certified parent changed during repair');
-    if (hold && !hold.stopped.opensOn(fresh))
+    if (!originalController.opensOn(fresh))
       return this.failClosed(
         'replica-authority',
         'Durable replay differs from the controller opening context',
@@ -576,6 +616,7 @@ export class ReplicatedLog {
         entries: replayed.value.entries,
         snapshotHash: toHex(hashValue(snapshotFromContext(fresh))),
         prefixHash,
+        firstResult,
       };
     if (hold && snapshot === undefined)
       return failure('replica-repairing', 'Derived repair requires a replay-verified snapshot');
@@ -595,6 +636,10 @@ export class ReplicatedLog {
       if (!local.ok) return this.failClosed(local.error.code, local.error.message);
       for (const key of local.value.keys.values()) key.fill(0);
       const opened = await this.restoreController(fresh, true);
+      if (!current()) {
+        if (opened.ok) opened.value.dispose();
+        return failure('replica-disposed', 'Repair was invalidated');
+      }
       if (!opened.ok) return this.failClosed(opened.error.code, opened.error.message);
       restored = opened.value;
       let stillStored: Awaited<ReturnType<ProtocolJournal['loadSafety']>>;
@@ -603,6 +648,10 @@ export class ReplicatedLog {
       } catch {
         restored.dispose();
         return failure('replica-storage', 'Could not recheck durable safety during repair');
+      }
+      if (!current()) {
+        restored.dispose();
+        return failure('replica-disposed', 'Repair was invalidated');
       }
       if (!stillStored || !hold.stopped.matchesPersistedRecord(stillStored)) {
         restored.dispose();
@@ -615,6 +664,7 @@ export class ReplicatedLog {
     if (!hold) this.activeController().dispose();
     this.controller = null;
     this.context = fresh;
+    this.firstResult = firstResult;
     this.timerObserver.advance(fresh.log.timers ?? []);
     this.clearTimedVoteRetry();
     this.clearRecoveryCandidate();
@@ -633,12 +683,19 @@ export class ReplicatedLog {
     if (!restored) {
       const opened = await this.openController();
       if (!opened.ok) return this.failClosed(opened.error.code, opened.error.message);
-      return this.activeController().dispatch({ kind: 'resume-after-replay' });
+      const resumed = await this.activeController().dispatch({ kind: 'resume-after-replay' });
+      if (resumed.ok) this.mintTerminalCheckpoint();
+      return resumed;
     }
     this.installController(restored, fresh);
     this.derivedRepair = null;
     const resumed = await restored.resume();
+    if (this.disposed || this.controller !== restored) {
+      restored.dispose();
+      return failure('replica-disposed', 'Repair was invalidated');
+    }
     if (!resumed.ok) return resumed;
+    this.mintTerminalCheckpoint();
     for (const certified of hold?.heldCommits.values() ?? []) {
       // oxlint-disable-next-line no-await-in-loop -- Retained untrusted hints are fully validated on the freshly restored parent.
       const accepted = await this.acceptCertified(certified);
@@ -966,6 +1023,7 @@ export class ReplicatedLog {
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
+    this.terminalCheckpoint = null;
     this.derivedRepair?.stopped.dispose();
     this.derivedRepair = null;
     this.pendingTradeProofs.clear();
@@ -1239,13 +1297,20 @@ export class ReplicatedLog {
   }
 
   private async openController(): Promise<Result<void>> {
-    const opened = await this.restoreController(this.context);
+    const context = this.context;
+    const hold = this.derivedRepair;
+    const opened = await this.restoreController(context);
+    if (this.disposed || this.context !== context || this.derivedRepair !== hold) {
+      if (opened.ok) opened.value.dispose();
+      return failure('replica-disposed', 'Controller opening was invalidated');
+    }
     if (!opened.ok) return opened;
-    this.installController(opened.value, this.context);
+    this.installController(opened.value, context);
     return success(undefined);
   }
 
   private enterDerivedRepair(): boolean {
+    this.terminalCheckpoint = null;
     if (this.derivedRepair) return true;
     if (!this.controller || !this.controllerAnchor) return false;
     const stopped = this.controller;
@@ -1805,15 +1870,88 @@ export class ReplicatedLog {
 
   private revealCoordinator(): MasterRevealCoordinator | null {
     if (!this.options.masterReveal || this.context.log.state.result === null) return null;
-    this.masterRevealCoordinator ??= new MasterRevealCoordinator({
-      ...this.options.masterReveal,
-      journal: this.options.journal,
-      engine: this.options.engine,
-      policy: this.options.policy,
-      localSeat: this.options.seat,
-      signingKey: this.secretKey,
-    });
+    this.masterRevealCoordinator ??= createLiveMasterRevealCoordinator(
+      {
+        ...this.options.masterReveal,
+        journal: this.options.journal,
+        engine: this.options.engine,
+        policy: this.options.policy,
+        localSeat: this.options.seat,
+        signingKey: this.secretKey,
+      },
+      () => this.readTerminalCheckpoint(),
+    );
     return this.masterRevealCoordinator;
+  }
+
+  /** Called only after certified commit, or full replay and controller restoration. */
+  private mintTerminalCheckpoint(): void {
+    this.terminalCheckpoint =
+      !this.disposed && !this.derivedRepair && this.firstResult && this.context.log.state.result
+        ? Object.freeze({
+            context: this.context,
+            result: Object.freeze({ ...this.firstResult }),
+            head: Object.freeze({
+              seq: this.context.log.head.seq,
+              hash: entryHash(this.context.log.head),
+            }),
+            genesisHash: this.genesisHash,
+          })
+        : null;
+  }
+
+  /** Reuse prior validation only while its controller and durable branch still agree. */
+  private async readTerminalCheckpoint(): Promise<Result<Terminal>> {
+    const checkpoint = this.terminalCheckpoint;
+    const controller = this.controller;
+    const current = (): boolean => {
+      if (
+        !checkpoint ||
+        !controller ||
+        this.disposed ||
+        this.derivedRepair ||
+        this.terminalCheckpoint !== checkpoint ||
+        this.controller !== controller ||
+        this.context !== checkpoint.context
+      )
+        return false;
+      try {
+        const state = controller.snapshot();
+        if (
+          this.matchesReplayPolicy() &&
+          state.ok &&
+          !state.value.halted &&
+          controller.opensOn(checkpoint.context)
+        )
+          return true;
+      } catch {
+        // A mutated policy getter is not a new authority to disclose a master.
+      }
+      if (this.terminalCheckpoint === checkpoint) this.terminalCheckpoint = null;
+      return false;
+    };
+    if (!checkpoint || !controller || !current())
+      return failure('master-reveal-context', 'Verified terminal context is unavailable');
+    try {
+      const record = await this.options.journal.load();
+      if (!current())
+        return failure('master-reveal-stale', 'Verified terminal context changed during read');
+      const head = record?.entries.at(-1)?.entry ?? record?.genesis;
+      if (
+        !record ||
+        !head ||
+        record.height !== head.seq + 1 ||
+        record.entries.length !== head.seq ||
+        head.seq !== checkpoint.head.seq ||
+        entryHash(head) !== checkpoint.head.hash ||
+        entryHash(record.genesis) !== checkpoint.genesisHash ||
+        !controller.matchesPersistedRecord(record.safety)
+      )
+        return failure('master-reveal-journal', 'Durable journal differs from verified checkpoint');
+      return success(checkpoint);
+    } catch {
+      return failure('master-reveal-journal', 'Could not read verified terminal journal');
+    }
   }
 
   private rememberMasterReveal(reveal: {
@@ -3873,7 +4011,7 @@ export class ReplicatedLog {
 
   private async handleEffects(effects: readonly ConsensusEffect[], index = 0): Promise<void> {
     const effect = effects[index];
-    if (!effect || this.derivedRepair) return;
+    if (!effect || this.disposed || this.derivedRepair) return;
     switch (effect.kind) {
       case 'broadcast-proposal':
         this.requireSend(this.broadcast({ t: 'PROPOSAL', proposal: effect.proposal }));
@@ -3932,6 +4070,7 @@ export class ReplicatedLog {
     const advanced = advanceContext(previous, checked.value);
     if (!advanced.ok) throw new Error(`Certified context failed: ${advanced.error.code}`);
     const next = advanced.value;
+    this.terminalCheckpoint = null;
     const controlProof =
       checked.value.entry.payload.kind === 'control'
         ? objectiveProofParentHash(checked.value.entry.payload, previous)
@@ -3973,6 +4112,8 @@ export class ReplicatedLog {
       throw new Error('Certified journal commit lost its safety CAS');
     this.activeController().dispose();
     this.context = next;
+    if (!this.firstResult && previous.log.state.result === null && next.log.state.result !== null)
+      this.firstResult = { seq: checked.value.entry.seq, hash: entryHash(checked.value.entry) };
     this.observeAllRecoveryPresence();
     if (checked.value.entry.payload.kind === 'membership') this.pruneRetiredBotOwnership();
     this.timerObserver.advance(next.log.timers ?? []);
@@ -4010,6 +4151,7 @@ export class ReplicatedLog {
     if (!retired) {
       const opened = await this.openController();
       if (!opened.ok) throw new Error(`Next voting controller failed: ${opened.error.code}`);
+      this.mintTerminalCheckpoint();
     }
     try {
       this.options.onCommit?.(

@@ -68,11 +68,23 @@ export interface MasterRevealOptions {
   /** Previously certified private recovery record for a recovered original seat. */
   readonly recoveryPrivateStore?: RecoveryPrivateStore;
 }
-interface Terminal {
+/** Package-internal checkpoint. Only the replica's validated paths may supply it. */
+export interface Terminal {
   readonly context: ProposalContext;
   readonly result: { readonly seq: number; readonly hash: string };
   readonly head: { readonly seq: number; readonly hash: string };
   readonly genesisHash: string;
+}
+const liveTerminalSources = new WeakMap<MasterRevealCoordinator, () => Promise<Result<Terminal>>>();
+
+/** Internal replica adapter; deliberately absent from the package exports. */
+export function createLiveMasterRevealCoordinator(
+  options: MasterRevealOptions,
+  readVerifiedTerminal: () => Promise<Result<Terminal>>,
+): MasterRevealCoordinator {
+  const coordinator = new MasterRevealCoordinator(options);
+  liveTerminalSources.set(coordinator, readVerifiedTerminal);
+  return coordinator;
 }
 function sameRef(a: { seq: number; hash: string }, b: { seq: number; hash: string }): boolean {
   return a.seq === b.seq && a.hash === b.hash;
@@ -262,7 +274,8 @@ export class MasterRevealCoordinator {
   constructor(private readonly options: MasterRevealOptions) {}
   private async terminal(): Promise<Result<Terminal>> {
     if (this.disposed) return failure('master-reveal-disposed', 'Reveal coordinator is closed');
-    const loaded = await terminal(this.options, this.terminalCache);
+    const live = liveTerminalSources.get(this);
+    const loaded = live ? await live() : await terminal(this.options, this.terminalCache);
     if (this.disposed) return failure('master-reveal-disposed', 'Reveal coordinator is closed');
     if (loaded.ok) this.terminalCache = loaded.value;
     else this.terminalCache = undefined;
