@@ -20,6 +20,25 @@ import {
   loadSeafaringTextures,
 } from './assets/terrainTextures.js';
 import { assignTerrainVariants } from './assets/terrainVariants.js';
+import { loadKnightsTextures } from './assets/knightsTextures.js';
+import type { KnightsTextures } from './assets/knightsTextures.js';
+import {
+  BARBARIAN_SHIP_ANCHOR,
+  BARBARIAN_SHIP_ART,
+  BARBARIAN_SHIP_KEY,
+  KNIGHT_ANCHOR,
+  KNIGHT_ART,
+  MERCHANT_ANCHOR,
+  MERCHANT_ART,
+  TRACK_ART,
+  barbarianStepPoint,
+  decoratedCity,
+  knightArtKey,
+  merchantArtKey,
+  metropolisArtKey,
+  sailPosition,
+  walledCityArtKey,
+} from './knightsLayout.js';
 import { hexExtents, isLandTerrain, islandBoundarySegments } from './boardShape.js';
 import { fogRevealShape } from './fogReveal.js';
 import { roadVariantForEdge } from './roadVariant.js';
@@ -44,6 +63,8 @@ import type {
   BoardHit,
   BoardRenderer,
   BoardRendererOptions,
+  KnightsRender,
+  KnightsTrack,
   RenderFixture,
   RenderLayerContext,
   RenderLayerPlugin,
@@ -92,6 +113,14 @@ const SEA_FIT_MARGIN = 0.1;
 /** The smallest zoom a fit may pick, below the pinch floor, so a large board still fits whole. */
 const FIT_FLOOR_ZOOM = 0.1;
 const SHIP_MOVE_MS = 700;
+/** The barbarian ship sailing one step, and a whole attack: landing, the blow and the return. */
+const BARBARIAN_SAIL_MS = 900;
+const BARBARIAN_ATTACK_MS = 3200;
+const KNIGHT_MOVE_MS = 520;
+/** Knights draw a quarter larger than their art box, so they read beside a city. */
+const KNIGHT_SCALE = 1.25;
+const MERCHANT_OFFSET = { x: 0.36, y: 0.4 } as const;
+const SIDEWAYS_OFFSET = { x: 0.36, y: 0.06 } as const;
 /** One fog tile turning over, and the wait between the tiles of a batch. */
 const FOG_REVEAL_MS = 1000;
 const FOG_STAGGER_MS = 450;
@@ -109,6 +138,7 @@ const LAYER_NAMES = [
   'edgeTargets',
   'edgeFocus',
   'buildings',
+  'knights',
   'bonus',
   'robber',
   'modulePieces',
@@ -170,6 +200,14 @@ function needsSeafaringArt(model: RenderModel): boolean {
   );
 }
 
+/** True when a model draws knights, walls, metropolises, the merchant or the barbarian ship. */
+function needsKnightsArt(model: RenderModel): boolean {
+  return (
+    model.knights !== undefined ||
+    model.buildings.some((building) => building.wall === true || building.metropolis !== undefined)
+  );
+}
+
 /** A rules-neutral Pixi renderer. Coordinates passed to public methods are CSS client coordinates. */
 export class PixiBoardRenderer implements BoardRenderer {
   private readonly app: Application;
@@ -202,6 +240,13 @@ export class PixiBoardRenderer implements BoardRenderer {
   private readonly hiddenShips = new Set<EdgeId>();
   private seafaring: SeafaringTextures | null = null;
   private seafaringLoading: Promise<void> | null = null;
+  private knightsArt: KnightsTextures | null = null;
+  private knightsLoading: Promise<void> | null = null;
+  private readonly loadKnights: () => Promise<KnightsTextures>;
+  private readonly knightNodes = new Map<VertexId, Sprite>();
+  private readonly hiddenKnights = new Set<VertexId>();
+  private barbarianSprite: Sprite | null = null;
+  private barbarianHidden = false;
   private debugIslands: boolean;
   private readonly loadSeafaring: () => Promise<SeafaringTextures>;
   private readonly signatures = new Map<LayerName, string>();
@@ -252,11 +297,15 @@ export class PixiBoardRenderer implements BoardRenderer {
     private readonly textures: BoardTextures,
     seafaring: SeafaringTextures | null,
     loadSeafaring: () => Promise<SeafaringTextures>,
+    knightsArt: KnightsTextures | null,
+    loadKnights: () => Promise<KnightsTextures>,
   ) {
     this.app = app;
     this.host = host;
     this.seafaring = seafaring;
     this.loadSeafaring = loadSeafaring;
+    this.knightsArt = knightsArt;
+    this.loadKnights = loadKnights;
     this.debugIslands = options.debugIslands ?? false;
     this.hexSize = options.hexSize ?? HEX_SIZE;
     this.onSelect = options.onSelect;
@@ -281,6 +330,7 @@ export class PixiBoardRenderer implements BoardRenderer {
       edgeTargets: new Container(),
       edgeFocus: new Container(),
       buildings: new Container(),
+      knights: new Container(),
       bonus: new Container(),
       robber: new Container(),
       modulePieces: new Container(),
@@ -339,7 +389,19 @@ export class PixiBoardRenderer implements BoardRenderer {
       const loadSeafaring = () =>
         loadSeafaringTextures(devicePixelRatio, options.maxPixelRatio ?? 2, MAX_ZOOM, hexSize);
       const seafaring = options.seafaring ? await loadSeafaring() : null;
-      return new PixiBoardRenderer(host, app, options, textures, seafaring, loadSeafaring);
+      const loadKnights = () =>
+        loadKnightsTextures(devicePixelRatio, options.maxPixelRatio ?? 2, MAX_ZOOM, hexSize);
+      const knights = options.knights ? await loadKnights() : null;
+      return new PixiBoardRenderer(
+        host,
+        app,
+        options,
+        textures,
+        seafaring,
+        loadSeafaring,
+        knights,
+        loadKnights,
+      );
     } catch (error) {
       try {
         if (app.renderer)
@@ -389,6 +451,7 @@ export class PixiBoardRenderer implements BoardRenderer {
       this.terrainGraph = graphIdentity;
     }
     this.ensureSeafaring(model);
+    this.ensureKnights(model);
     this.drawChanged('background', [
       this.appearance.theme,
       model.hexes.map(({ q, r, terrain }) => ({ q, r, terrain })),
@@ -405,7 +468,18 @@ export class PixiBoardRenderer implements BoardRenderer {
       this.appearance.players,
       this.seafaring !== null,
     ]);
-    this.drawChanged('buildings', [model.buildings, this.appearance.players]);
+    this.drawChanged('buildings', [
+      model.buildings,
+      this.appearance.players,
+      this.knightsArt !== null,
+    ]);
+    this.drawChanged('knights', [
+      model.knights ?? null,
+      model.fixtures ?? [],
+      this.appearance.players,
+      this.knightsArt !== null,
+      this.seafaring !== null,
+    ]);
     this.drawChanged('bonus', [model.islandBonuses ?? [], this.seafaring !== null]);
     this.drawChanged('robber', [model.robberHex, model.pirateHex, this.seafaring !== null]);
     this.drawChanged('debug', [
@@ -479,6 +553,9 @@ export class PixiBoardRenderer implements BoardRenderer {
     const wake = style.edgeTarget === 'wake';
     for (const id of highlights.selectedEdges ?? [])
       if (this.edgeEndpoints(id)) layer.addChild(this.edgeRing(id, 1.05, 0.62, 0xf0b64a));
+    for (const id of highlights.selectedVertices ?? [])
+      if (this.graph?.vertexIndex[id] !== undefined)
+        layer.addChild(this.pieceRing(id, 0.5, 0xf0b64a));
     const vertices = (highlights.vertices ?? []).filter(
       (id) => this.graph?.vertexIndex[id] !== undefined,
     );
@@ -493,6 +570,8 @@ export class PixiBoardRenderer implements BoardRenderer {
       halos.fill({ color: EDGE_INK, alpha: 0.34 });
       rings.stroke({ color: EDGE_PAPER, width: this.hexSize * SITE_RING_WIDTH });
       layer.addChild(halos, rings);
+    } else if (style.vertexTarget === 'piece' && vertices.length > 0) {
+      for (const id of vertices) layer.addChild(this.pieceRing(id, 0.4, EDGE_PAPER));
     } else if (style.vertexTarget === 'upgrade' && vertices.length > 0) {
       const ink = new Graphics();
       const paper = new Graphics();
@@ -641,9 +720,16 @@ export class PixiBoardRenderer implements BoardRenderer {
           ? DICE_ROLL_DURATION_MS + PRODUCTION_TOKEN_PULSE_MS
           : effect.kind === 'ship-move'
             ? SHIP_MOVE_MS
-            : effect.kind === 'fog-reveal'
-              ? FOG_REVEAL_MS + Math.min(effect.order ?? 0, FOG_MAX_STAGGERED) * FOG_STAGGER_MS
-              : 420;
+            : effect.kind === 'barbarian-sail'
+              ? BARBARIAN_SAIL_MS
+              : effect.kind === 'barbarian-attack'
+                ? BARBARIAN_ATTACK_MS
+                : effect.kind === 'knight-move'
+                  ? KNIGHT_MOVE_MS
+                  : effect.kind === 'fog-reveal'
+                    ? FOG_REVEAL_MS +
+                      Math.min(effect.order ?? 0, FOG_MAX_STAGGERED) * FOG_STAGGER_MS
+                    : 420;
     if (effect.kind === 'dice-roll') {
       if (effect.dice.some((face) => !Number.isInteger(face) || face < 1 || face > 6)) return null;
       const faceSize = Math.min(64, Math.max(56, this.app.screen.width * 0.07));
@@ -799,6 +885,87 @@ export class PixiBoardRenderer implements BoardRenderer {
         },
       };
     }
+    if (effect.kind === 'piece-pop' && (effect.piece === 'knight' || effect.piece === 'wall')) {
+      if (effect.at.kind !== 'vertex') return null;
+      const color = this.playerStyleMap().get(effect.seat)?.color ?? DEFAULT_PLAYER_STYLE.color;
+      const point = vertexToPixel(effect.at.id, this.hexSize);
+      let piece: Container | null;
+      if (effect.piece === 'knight') {
+        piece = this.knightSprite(effect.at.id, color, effect.level ?? 1, false);
+        // Sprites carry their own board position; centre the pop on the vertex instead.
+        piece?.position.set(0, 0);
+      } else {
+        const existing = this.model?.buildings.find(
+          (building) => building.vertex === (effect.at.kind === 'vertex' ? effect.at.id : ''),
+        );
+        piece = this.buildingNode(
+          'city',
+          { color },
+          { x: 0, y: 0 },
+          {
+            wall: true,
+            ...(existing?.metropolis ? { metropolis: existing.metropolis } : {}),
+          },
+        );
+      }
+      if (!piece) return null;
+      node.position.set(point.x, point.y);
+      node.addChild(piece);
+      this.layers.effects.addChild(node);
+      return {
+        node,
+        duration,
+        update: (progress) => {
+          node.alpha = Math.min(1, progress * 4) * Math.max(0, 1 - progress * 0.25);
+          node.scale.set(0.65 + 0.45 * Math.sin(Math.PI * progress));
+          return progress >= 1;
+        },
+      };
+    }
+    if (effect.kind === 'knight-move') {
+      const color = this.playerStyleMap().get(effect.seat)?.color ?? DEFAULT_PLAYER_STYLE.color;
+      const sprite = this.knightSprite(effect.toVertex, color, effect.level, false);
+      if (!sprite) return null;
+      const start = vertexToPixel(effect.fromVertex, this.hexSize);
+      const end = vertexToPixel(effect.toVertex, this.hexSize);
+      node.addChild(sprite);
+      this.layers.effects.addChild(node);
+      this.hiddenKnights.add(effect.toVertex);
+      this.applyHiddenKnights();
+      return {
+        node,
+        duration,
+        cleanup: () => {
+          this.hiddenKnights.delete(effect.toVertex);
+          this.applyHiddenKnights();
+        },
+        update: (progress) => {
+          const position = robberPosition(start, end, progress, this.hexSize * 0.14);
+          sprite.position.set(position.x, position.y);
+          return progress >= 1;
+        },
+      };
+    }
+    if (effect.kind === 'barbarian-sail') {
+      const fixture = this.model?.fixtures?.find((candidate) => candidate.id === effect.fixture);
+      const sprite = this.barbarianShipSprite();
+      if (!fixture || !sprite) return null;
+      node.addChild(sprite);
+      this.layers.effects.addChild(node);
+      this.setBarbarianHidden(true);
+      return {
+        node,
+        duration,
+        cleanup: () => this.setBarbarianHidden(false),
+        update: (progress) => {
+          const at = sailPosition(fixture, this.hexSize, effect.fromStep, effect.toStep, progress);
+          if (at) sprite.position.set(at.x, at.y);
+          return progress >= 1;
+        },
+      };
+    }
+    if (effect.kind === 'barbarian-attack')
+      return this.createBarbarianAttack(effect, node, duration);
     if (effect.kind === 'piece-pop') {
       const point = this.pointForHit(effect.at);
       if (!point) return null;
@@ -865,6 +1032,84 @@ export class PixiBoardRenderer implements BoardRenderer {
         const position = robberPosition(start, end, progress, this.hexSize * 0.18);
         sprite.position.set(position.x, position.y);
         node.alpha = Math.min(1, progress * 5);
+        return progress >= 1;
+      },
+    };
+  }
+
+  /**
+   * The barbarians land: the ship sails to the island, the blow is shown as a gold ring on the
+   * knights that held or embers on the cities that fell, and the ship sails home.
+   */
+  private createBarbarianAttack(
+    effect: Extract<BoardEffect, { kind: 'barbarian-attack' }>,
+    node: Container,
+    duration: number,
+  ): {
+    readonly node: Container;
+    readonly update: (progress: number) => boolean;
+    readonly duration: number;
+    readonly cleanup?: () => void;
+  } | null {
+    const fixture = this.model?.fixtures?.find((candidate) => candidate.id === effect.fixture);
+    const sprite = this.barbarianShipSprite();
+    if (!fixture || !sprite) return null;
+    const landing = TRACK_ART.points.length - 1;
+    const hexSize = this.hexSize;
+    const impact = barbarianStepPoint(fixture, hexSize, landing);
+    if (!impact) return null;
+    const pillaged = effect.outcome === 'pillaged';
+    const blast = new Graphics();
+    const targets = (pillaged ? effect.pillaged : effect.defenders).map((vertex) => ({
+      vertex,
+      point: vertexToPixel(vertex, hexSize),
+    }));
+    node.addChild(blast, sprite);
+    this.layers.effects.addChild(node);
+    this.setBarbarianHidden(true);
+    const SAIL_END = 0.28;
+    const BLOW_END = 0.72;
+    const ring = (at: Point, radius: number, alpha: number, color: number, width: number): void => {
+      if (alpha <= 0.01) return;
+      blast.circle(at.x, at.y, radius).stroke({ color, alpha, width });
+    };
+    return {
+      node,
+      duration,
+      cleanup: () => this.setBarbarianHidden(false),
+      update: (progress) => {
+        blast.clear();
+        if (progress < SAIL_END) {
+          const at = sailPosition(fixture, hexSize, effect.fromStep, landing, progress / SAIL_END);
+          if (at) sprite.position.set(at.x, at.y);
+        } else if (progress < BLOW_END) {
+          const local = (progress - SAIL_END) / (BLOW_END - SAIL_END);
+          sprite.position.set(impact.x, impact.y + Math.sin(local * 18) * hexSize * 0.02);
+          const color = pillaged ? 0xd6402f : 0xf0b64a;
+          ring(impact, hexSize * (0.25 + local * 0.9), 1 - local, color, hexSize * 0.09);
+          for (const [index, target] of targets.entries()) {
+            const wait = Math.min(0.5, index * 0.12);
+            const t = Math.min(1, Math.max(0, (local - wait) / (1 - wait)));
+            if (pillaged) {
+              ring(target.point, hexSize * (0.15 + t * 0.55), 1 - t, 0xff8a3c, hexSize * 0.08);
+              ring(
+                target.point,
+                hexSize * (0.08 + t * 0.35),
+                1 - t * 0.8,
+                0xd6402f,
+                hexSize * 0.05,
+              );
+            } else {
+              ring(target.point, hexSize * (0.3 + t * 0.35), 1 - t, 0xfff6d6, hexSize * 0.07);
+              ring(target.point, hexSize * (0.26 + t * 0.2), 1 - t, 0xf0b64a, hexSize * 0.04);
+            }
+          }
+        } else {
+          const local = (progress - BLOW_END) / (1 - BLOW_END);
+          const at = sailPosition(fixture, hexSize, landing, 0, local);
+          if (at) sprite.position.set(at.x, at.y);
+          sprite.alpha = 1;
+        }
         return progress >= 1;
       },
     };
@@ -1021,6 +1266,18 @@ export class PixiBoardRenderer implements BoardRenderer {
     return sprite;
   }
 
+  /** An outlined ring around a piece on a vertex, radius in hex sizes. */
+  private pieceRing(id: VertexId, radius: number, inner: number): Graphics {
+    const point = vertexToPixel(id, this.hexSize);
+    return new Graphics()
+      .circle(point.x, point.y, this.hexSize * radius)
+      .fill({ color: EDGE_INK, alpha: 0.16 })
+      .circle(point.x, point.y, this.hexSize * radius)
+      .stroke({ color: EDGE_INK, width: this.hexSize * 0.065 })
+      .circle(point.x, point.y, this.hexSize * radius)
+      .stroke({ color: inner, width: this.hexSize * 0.032 });
+  }
+
   /** An outlined capsule around an edge, in board units of the hex size. */
   private edgeRing(id: EdgeId, length: number, height: number, inner: number): Graphics {
     const edge = edgeToPixel(id, this.hexSize);
@@ -1040,10 +1297,29 @@ export class PixiBoardRenderer implements BoardRenderer {
     kind: 'settlement' | 'city',
     style: Pick<BoardAppearance['players'][number], 'color'>,
     point: Point,
+    decoration?: { readonly wall?: boolean; readonly metropolis?: KnightsTrack },
   ): Container {
     const node = new Container();
     node.position.set(point.x, point.y);
     const color = artColorFromNumber(style.color);
+    const decorated =
+      kind === 'city' ? decoratedCity(decoration?.wall === true, decoration?.metropolis) : null;
+    if (decorated) {
+      const key = decoration?.metropolis
+        ? metropolisArtKey(decoration.metropolis, decoration.wall === true, color)
+        : walledCityArtKey(color);
+      const texture = this.knightsArt?.get(key);
+      if (texture) {
+        const art = decorated.art;
+        const unit = this.hexSize / 80;
+        const piece = new Sprite(texture);
+        piece.anchor.set(art.originX / art.width, art.originY / art.height);
+        piece.width = art.width * unit;
+        piece.height = art.height * unit;
+        node.addChild(piece);
+        return node;
+      }
+    }
     const sprite = new Sprite(
       kind === 'city' ? this.textures.cities[color] : this.textures.settlements[color],
     );
@@ -1052,6 +1328,30 @@ export class PixiBoardRenderer implements BoardRenderer {
     sprite.height = this.hexSize * (kind === 'city' ? 50 / 80 : 40 / 80);
     node.addChild(sprite);
     return node;
+  }
+
+  /** The uncommitted piece shown at a focused vertex. */
+  private previewNode(
+    piece: 'settlement' | 'city' | 'knight' | 'wall' | 'mark',
+    preview: BoardFocusPreview,
+    vertex: VertexId,
+    point: Point,
+  ): Container {
+    if (piece === 'mark') return new Container();
+    if (piece === 'knight') {
+      const knight = preview.knight ?? { level: 1, active: false };
+      return (
+        this.knightSprite(vertex, preview.color, knight.level, knight.active) ?? new Container()
+      );
+    }
+    if (piece === 'wall') {
+      const existing = this.model?.buildings.find((building) => building.vertex === vertex);
+      return this.buildingNode('city', { color: preview.color }, point, {
+        wall: true,
+        ...(existing?.metropolis ? { metropolis: existing.metropolis } : {}),
+      });
+    }
+    return this.buildingNode(piece, { color: preview.color }, point);
   }
 
   private traceBrackets(graphics: Graphics, x: number, y: number): void {
@@ -1128,10 +1428,22 @@ export class PixiBoardRenderer implements BoardRenderer {
     this.signatures.delete('background');
     this.signatures.delete('roads');
     this.signatures.delete('buildings');
+    this.signatures.delete('knights');
     if (!this.model) return;
     this.drawChanged('background', [appearance.theme]);
     this.drawChanged('roads', [this.model.roads, this.appearance.players]);
-    this.drawChanged('buildings', [this.model.buildings, this.appearance.players]);
+    this.drawChanged('buildings', [
+      this.model.buildings,
+      this.appearance.players,
+      this.knightsArt !== null,
+    ]);
+    this.drawChanged('knights', [
+      this.model.knights ?? null,
+      this.model.fixtures ?? [],
+      this.appearance.players,
+      this.knightsArt !== null,
+      this.seafaring !== null,
+    ]);
     this.renderFrame();
   }
 
@@ -1159,6 +1471,21 @@ export class PixiBoardRenderer implements BoardRenderer {
       })
       .catch(() => {
         this.seafaringLoading = null;
+      });
+  }
+
+  /** Load the Cities & Knights art the first time a model needs it, then redraw its pieces. */
+  private ensureKnights(model: RenderModel): void {
+    if (this.knightsArt || this.knightsLoading || !needsKnightsArt(model)) return;
+    this.knightsLoading = this.loadKnights()
+      .then((art) => {
+        if (this.destroyed) return undefined;
+        this.knightsArt = art;
+        if (this.model) this.render(this.model);
+        return undefined;
+      })
+      .catch(() => {
+        this.knightsLoading = null;
       });
   }
 
@@ -1258,6 +1585,23 @@ export class PixiBoardRenderer implements BoardRenderer {
     this.clampCamera();
     this.updateCamera();
     this.renderFrame();
+  }
+
+  isFixtureInView(fixtureId: string): boolean {
+    const fixture = this.model?.fixtures?.find((candidate) => candidate.id === fixtureId);
+    if (!fixture || this.destroyed) return false;
+    const width = this.app.screen.width;
+    const height = this.app.screen.height;
+    const centers = fixtureCenters(fixture, this.hexSize);
+    const middle = {
+      x: centers.reduce((sum, point) => sum + point.x, 0) / Math.max(1, centers.length),
+      y: centers.reduce((sum, point) => sum + point.y, 0) / Math.max(1, centers.length),
+    };
+    return [...centers, middle].every((point) => {
+      const x = this.cameraX + point.x * this.zoom;
+      const y = this.cameraY + point.y * this.zoom;
+      return x >= 0 && x <= width && y >= 0 && y <= height;
+    });
   }
 
   destroy(): void {
@@ -1437,16 +1781,10 @@ export class PixiBoardRenderer implements BoardRenderer {
         if (this.graph?.vertexIndex[hit.id] === undefined) return;
         const existing = model.buildings.find((building) => building.vertex === hit.id);
         if (this.focusPreview && previewPiece) {
-          if (existing?.kind === this.focusPreview.piece) return;
+          if (existing?.kind === previewPiece) return;
           const half = this.hexSize * BRACKET_HALF;
           const corner = this.hexSize * PREVIEW_CORNER;
-          const preview = this.buildingNode(
-            previewPiece,
-            {
-              color: this.focusPreview.color,
-            },
-            point,
-          );
+          const preview = this.previewNode(previewPiece, this.focusPreview, hit.id, point);
           const outline = new Graphics()
             .roundRect(point.x - half, point.y - half, 2 * half, 2 * half, corner)
             .stroke({ color: EDGE_INK, width: this.hexSize * 0.065 })
@@ -1482,11 +1820,13 @@ export class PixiBoardRenderer implements BoardRenderer {
       for (const building of model.buildings) {
         const point = vertexToPixel(building.vertex, this.hexSize);
         const style = styles.get(building.seat) ?? DEFAULT_PLAYER_STYLE;
-        const node = this.buildingNode(building.kind, style, point);
+        const node = this.buildingNode(building.kind, style, point, building);
         node.visible = building.vertex !== this.hiddenBuilding;
         this.buildingNodes.set(building.vertex, node);
         layer.addChild(node);
       }
+    } else if (name === 'knights') {
+      this.drawKnightsLayer(layer, model);
     } else if (name === 'ships') {
       this.shipNodes.clear();
       const styles = this.playerStyleMap();
@@ -1560,6 +1900,118 @@ export class PixiBoardRenderer implements BoardRenderer {
     }
   }
 
+  /** A knight disc at a vertex: strength in its pips, an active one with a gold rim. */
+  private knightSprite(
+    vertex: VertexId,
+    color: number,
+    level: number,
+    active: boolean,
+  ): Sprite | null {
+    const texture = this.knightsArt?.get(knightArtKey(artColorFromNumber(color), level, active));
+    if (!texture) return null;
+    const point = vertexToPixel(vertex, this.hexSize);
+    const unit = this.hexSize / 80;
+    const sprite = new Sprite(texture);
+    sprite.anchor.set(KNIGHT_ANCHOR.x, KNIGHT_ANCHOR.y);
+    sprite.position.set(point.x, point.y);
+    sprite.width = KNIGHT_ART.width * unit * KNIGHT_SCALE;
+    sprite.height = KNIGHT_ART.height * unit * KNIGHT_SCALE;
+    return sprite;
+  }
+
+  private barbarianShipSprite(): Sprite | null {
+    const texture = this.knightsArt?.get(BARBARIAN_SHIP_KEY);
+    if (!texture) return null;
+    const unit = (this.hexSize / 80) * 0.8;
+    const sprite = new Sprite(texture);
+    sprite.anchor.set(BARBARIAN_SHIP_ANCHOR.x, BARBARIAN_SHIP_ANCHOR.y);
+    sprite.width = BARBARIAN_SHIP_ART.width * unit;
+    sprite.height = BARBARIAN_SHIP_ART.height * unit;
+    return sprite;
+  }
+
+  /** Knights, the merchant, sideways city pieces and the barbarian ship on its track. */
+  private drawKnightsLayer(layer: Container, model: RenderModel): void {
+    this.knightNodes.clear();
+    this.barbarianSprite = null;
+    const knights: KnightsRender | undefined = model.knights;
+    if (!knights) return;
+    const styles = this.playerStyleMap();
+    const colorOf = (seat: number): number => styles.get(seat)?.color ?? DEFAULT_PLAYER_STYLE.color;
+    const unit = this.hexSize / 80;
+    for (const sideways of knights.sideways) {
+      const point = vertexToPixel(sideways.vertex, this.hexSize);
+      const color = artColorFromNumber(colorOf(sideways.seat));
+      const badge = new Sprite(this.textures.cities[color]);
+      badge.anchor.set(0.5);
+      badge.rotation = Math.PI / 2;
+      badge.position.set(
+        point.x + this.hexSize * SIDEWAYS_OFFSET.x,
+        point.y + this.hexSize * SIDEWAYS_OFFSET.y,
+      );
+      badge.width = this.hexSize * 0.42;
+      badge.height = this.hexSize * 0.44;
+      layer.addChild(badge);
+    }
+    const pieces = [...knights.pieces].toSorted(
+      (a, b) => vertexToPixel(a.vertex, this.hexSize).y - vertexToPixel(b.vertex, this.hexSize).y,
+    );
+    for (const piece of pieces) {
+      const sprite = this.knightSprite(
+        piece.vertex,
+        colorOf(piece.seat),
+        piece.level,
+        piece.active,
+      );
+      if (!sprite) continue;
+      sprite.visible = !this.hiddenKnights.has(piece.vertex);
+      this.knightNodes.set(piece.vertex, sprite);
+      layer.addChild(sprite);
+    }
+    if (knights.merchant) {
+      const hex = model.hexes.find((candidate) => candidate.id === knights.merchant?.hex);
+      const texture = this.knightsArt?.get(
+        merchantArtKey(artColorFromNumber(colorOf(knights.merchant.seat))),
+      );
+      if (hex && texture) {
+        const center = hexToPixel(hex.q, hex.r, this.hexSize);
+        const sprite = new Sprite(texture);
+        sprite.anchor.set(MERCHANT_ANCHOR.x, MERCHANT_ANCHOR.y);
+        sprite.position.set(
+          center.x + this.hexSize * MERCHANT_OFFSET.x,
+          center.y + this.hexSize * MERCHANT_OFFSET.y,
+        );
+        sprite.width = MERCHANT_ART.width * unit * 1.1;
+        sprite.height = MERCHANT_ART.height * unit * 1.1;
+        layer.addChild(sprite);
+      }
+    }
+    const track = knights.barbarians;
+    const fixture = track
+      ? model.fixtures?.find((candidate) => candidate.id === track.fixture)
+      : null;
+    if (track && fixture) {
+      const at = barbarianStepPoint(fixture, this.hexSize, track.step);
+      const sprite = this.barbarianShipSprite();
+      if (at && sprite) {
+        sprite.position.set(at.x, at.y);
+        sprite.visible = !this.barbarianHidden;
+        this.barbarianSprite = sprite;
+        layer.addChild(sprite);
+      }
+    }
+  }
+
+  private setBarbarianHidden(hidden: boolean): void {
+    this.barbarianHidden = hidden;
+    if (this.barbarianSprite) this.barbarianSprite.visible = !hidden;
+  }
+
+  private applyHiddenKnights(): void {
+    for (const [vertex, sprite] of this.knightNodes)
+      sprite.visible = !this.hiddenKnights.has(vertex);
+  }
+
   private drawHarbor(layer: Container, edgeId: EdgeId, kind: string): void {
     const model = this.model;
     const graph = this.graph;
@@ -1600,7 +2052,8 @@ export class PixiBoardRenderer implements BoardRenderer {
     const [anchor, outer] = fixtureCenters(fixture, this.hexSize);
     const sprite = new Sprite(texture);
     sprite.anchor.set(0.5);
-    sprite.width = this.hexSize * 2 * Math.sqrt(3);
+    // The art's hexes have radius 80 like every tile, so its width is 289 units of hex/80.
+    sprite.width = (FIXTURE_ART_SIZE.width * this.hexSize) / 80;
     sprite.height = (sprite.width * FIXTURE_ART_SIZE.height) / FIXTURE_ART_SIZE.width;
     if (anchor && outer) {
       sprite.position.set((anchor.x + outer.x) / 2, (anchor.y + outer.y) / 2);

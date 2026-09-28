@@ -17,6 +17,31 @@ export {
   getSeafaringIconUrl,
   getShipIconUrl,
 } from './assets/terrainTextures.js';
+export {
+  getBarbarianShipUrl,
+  getCommodityCardUrl,
+  getCommodityIconUrl,
+  getDefenderCardUrl,
+  getDefenderIconUrl,
+  getEventDieUrl,
+  getImprovementBannerUrl,
+  getKnightIconUrl,
+  getMerchantIconUrl,
+  getMetropolisIconUrl,
+  getProgressBackUrl,
+  getRedDieUrl,
+  getTrackIconUrl,
+  getWallIconUrl,
+  getWalledCityIconUrl,
+} from './assets/knightsIcons.js';
+export type { CommodityName, EventDieFace } from './assets/knightsIcons.js';
+export {
+  TRACK_ART,
+  barbarianStepPoint,
+  fixtureFrame,
+  fixturePoint,
+  sailPosition,
+} from './knightsLayout.js';
 export { hexExtents, isLandTerrain, islandBoundarySegments, landIslands } from './boardShape.js';
 export { shipVariantForEdge } from './shipVariant.js';
 export type { ShipVariant } from './shipVariant.js';
@@ -31,6 +56,8 @@ export type {
   BoardRendererOptions,
   DevelopmentCard,
   FixtureArt,
+  KnightsRender,
+  KnightsTrack,
   RenderFixture,
   RenderLayerContext,
   RenderLayerPlugin,

@@ -16,7 +16,7 @@ import type {
   Seat,
 } from '@cp2p/engine';
 import { browserEntropy, createBrowserRandomSource, randomIndex, randomSeed } from './random.js';
-import type { BrowserRandomSource, Entropy } from './random.js';
+import type { BrowserRandomSource, Entropy, TakePreference } from './random.js';
 import { chooseBotPending, timerKey } from './scheduling.js';
 import { owned, parseSave, ReplayRandomSource, sameCanonical, stateHash } from './save.js';
 import type {
@@ -270,7 +270,10 @@ export class LocalSession implements GameSession<LocalSessionSave> {
   }
 
   /** Development-only one-shot dice control; balanced mode remains untouched. */
-  forceDice(dice: readonly [number, number]): Result<void> {
+  forceDice(
+    dice: readonly [number, number],
+    extra?: Readonly<Record<string, string>>,
+  ): Result<void> {
     if (!import.meta.env.DEV) return failure('unavailable', 'Dice control is development-only');
     if (this.status.kind !== 'running')
       return failure('session-inactive', 'Local session is not running');
@@ -278,11 +281,44 @@ export class LocalSession implements GameSession<LocalSessionSave> {
     if (typeof base === 'object' && base !== null && Reflect.get(base, 'diceMode') === 'balanced')
       return failure('balanced-dice', 'Balanced dice cannot be forced');
     try {
-      this.source.forceNextDice(dice);
+      this.source.forceNextDice(dice, extra);
       return success(undefined);
     } catch (error) {
       return failure('invalid-dice', String(error));
     }
+  }
+
+  /**
+   * Local play only: the choice a human makes when Master Merchant or the Spy takes cards. The
+   * take resolves in the same step as the play, so the choice is stated before it.
+   */
+  preferTake(preference: TakePreference | null): void {
+    this.source.preferTake(preference);
+  }
+
+  /**
+   * Local play only: what a seat shows a human actor when a card lets them look (Master Merchant
+   * shows the hand, the Spy the progress cards). `null` for a seat that is not a human's opponent.
+   */
+  peekHand(
+    actor: Seat,
+    target: Seat,
+    what: 'hand' | 'progress',
+  ): { hand: Record<string, number> } | { progress: Record<string, string> } | null {
+    if (this.status.kind !== 'running' || !this.humans.has(actor) || actor === target) return null;
+    const priv = this.game.privateState(target);
+    if (!priv) return null;
+    if (what === 'hand') return { hand: { ...priv.hand } };
+    const visible = new Set(
+      (this.game.state.seats.find((seat) => seat.seat === target)?.cardSlots ?? [])
+        .filter((slot) => slot.revealed === undefined && slot.deck.startsWith('progress-'))
+        .map((slot) => slot.slotId),
+    );
+    return {
+      progress: Object.fromEntries(
+        Object.entries(priv.slots).filter(([slotId]) => visible.has(slotId)),
+      ),
+    };
   }
 
   subscribe(listener: (update: SessionUpdate) => void): Unsubscribe {

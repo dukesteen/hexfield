@@ -163,8 +163,10 @@ import sfChit1Url from './redesign/sf-chit-1.svg?no-inline';
 import sfChit2Url from './redesign/sf-chit-2.svg?no-inline';
 import sfIconGoldUrl from './redesign/sf-icon-gold.svg?no-inline';
 import sfIconShipUrl from './redesign/sf-icon-ship.svg?no-inline';
+import { KNIGHTS_ART } from './knightsArt.js';
 
 const ART: Readonly<Record<string, string>> = {
+  ...KNIGHTS_ART,
   'board-background': boardBackgroundUrl,
   'board-frame': boardFrameUrl,
   'board-preview': boardPreviewUrl,
@@ -426,7 +428,7 @@ export function getIslandChitUrl(vp: number): string {
 export function getGameArtUrl(art: GameArt): string {
   return artUrl(GAME_ART[art]);
 }
-function artUrl(key: string): string {
+export function artUrl(key: string): string {
   const url = ART[key];
   if (!url) throw new Error(`Missing art asset: ${key}`);
   return url;
@@ -713,7 +715,7 @@ export async function loadSeafaringTextures(
   };
 }
 
-function loadTexture(
+export function loadTexture(
   key: string,
   width: number,
   height: number,

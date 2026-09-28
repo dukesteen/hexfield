@@ -68,6 +68,18 @@ function resourceFrom(value: unknown): Resource {
   return resource;
 }
 
+/** A card kind of any deck of cards: a resource, or a commodity in a knights game. */
+function kindFrom(value: unknown): string {
+  if (typeof value !== 'string' || value === '') throw new Error('Random request has no card kind');
+  return value;
+}
+
+function countOf(value: unknown, label: string): number {
+  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0)
+    throw new Error(`Invalid ${label} in a random request`);
+  return value;
+}
+
 function diceDeck(state: GameState): number[] {
   const base = state.ext.base;
   const deck = typeof base === 'object' && base !== null ? Reflect.get(base, 'diceDeck') : null;
@@ -98,11 +110,14 @@ export function remainingDevPool(
   const deck = state.decks[deckId];
   if (!deck) throw new Error('Development deck is missing');
   for (const ref of deck.drawn) {
-    const slot = state.seats
-      .find((holder) => holder.seat === ref.seat)
-      ?.cardSlots.find((item) => item.slotId === ref.slotId);
-    if (!slot) throw new Error(`Drawn slot ${ref.slotId} is missing`);
-    const identity = slot.revealed ?? privateFor(privates, ref.seat).slots[ref.slotId];
+    // A slot may have changed hands since it was drawn (the Spy takes progress cards).
+    const holder = state.seats.find((candidate) =>
+      candidate.cardSlots.some((item) => item.slotId === ref.slotId),
+    );
+    const slot = holder?.cardSlots.find((item) => item.slotId === ref.slotId);
+    if (!holder || !slot) throw new Error(`Drawn slot ${ref.slotId} is missing`);
+    const identity =
+      slot.revealed ?? slot.known ?? privateFor(privates, holder.seat).slots[ref.slotId];
     if (identity === undefined) throw new Error(`Drawn slot ${ref.slotId} has no identity`);
     const count = remaining.get(identity);
     if (count === undefined || count < 1)
@@ -115,9 +130,27 @@ export function remainingDevPool(
   return pool;
 }
 
+/**
+ * What a human chose when a card lets them look at a hand and take from it (Master Merchant, Spy).
+ * Local play resolves the take in the same step as the card, so the choice is stated first. Without
+ * one, or when it does not fit what is on the table, the take is random.
+ */
+export interface TakePreference {
+  /** Cards to take from the shown hand: kind to count. */
+  readonly cards?: Readonly<Record<string, number>>;
+  /** The progress card slot to take, or `null` to take none. */
+  readonly progress?: { readonly slotId: string | null };
+}
+
 export interface BrowserRandomSource extends LocalRandomSource {
-  forceNextDice(dice: readonly [number, number]): void;
+  /**
+   * Force the production dice of the next roll, and the faces of extra dice such as the event die
+   * (`{ event: 'ship' }`). Extra dice not named here are still rolled at random.
+   */
+  forceNextDice(dice: readonly [number, number], extra?: Readonly<Record<string, string>>): void;
   clearForcedDice(): void;
+  /** State the human's choice for the next Master Merchant or Spy take; `null` clears it. */
+  preferTake(preference: TakePreference | null): void;
   /**
    * Rebuild the public-deck bookkeeping of a resumed game from its replayed input log. Public
    * cards leave no identity in state, so the log is the record of what was already shown. Throws
@@ -132,6 +165,8 @@ export interface BrowserRandomSource extends LocalRandomSource {
  */
 export function createBrowserRandomSource(entropy: Entropy = browserEntropy): BrowserRandomSource {
   let forcedDice: readonly [number, number] | null = null;
+  let forcedExtra: Readonly<Record<string, string>> | null = null;
+  let takePreference: TakePreference | null = null;
   // Public-deck cards already shown, from the replayed log and this session; the rest of the
   // deck is picked uniformly.
   const shown = new Map<string, Map<string, number>>();
@@ -152,19 +187,28 @@ export function createBrowserRandomSource(entropy: Entropy = browserEntropy): Br
   // The faces of the extra dice (an event die) a dice request adds; nothing in a base game.
   const extraDice = (pending: SystemPending): { extra?: Record<string, string> } => {
     const extra = rollExtraDice(pending.request, (bound) => randomIndex(entropy, bound));
+    const forced = forcedExtra;
+    forcedExtra = null;
+    if (forced)
+      for (const [die, face] of Object.entries(forced)) if (die in extra) extra[die] = face;
     return Object.keys(extra).length ? { extra } : {};
   };
   return {
-    forceNextDice(dice) {
+    forceNextDice(dice, extra) {
       if (
         dice.length !== 2 ||
         dice.some((face) => !Number.isSafeInteger(face) || face < 1 || face > 6)
       )
         throw new RangeError('Forced dice must be two faces from 1 to 6');
       forcedDice = [dice[0], dice[1]];
+      forcedExtra = extra ?? null;
     },
     clearForcedDice() {
       forcedDice = null;
+      forcedExtra = null;
+    },
+    preferTake(preference) {
+      takePreference = preference;
     },
     resume(log, state) {
       const decks = decksFor(state.config);
@@ -207,6 +251,20 @@ export function createBrowserRandomSource(entropy: Entropy = browserEntropy): Br
           return { input: { kind: 'system', type: 'START_SEAT', seat } };
         }
         case 'DICE_RESULT': {
+          if (pending.request.mode === 'fixed') {
+            // The Alchemist named both production dice; only the extra dice are rolled.
+            const fixed = pending.request.dice;
+            if (!Array.isArray(fixed) || fixed.length !== 2)
+              throw new Error('Malformed fixed dice request');
+            return {
+              input: {
+                kind: 'system',
+                type: 'DICE_RESULT',
+                dice: [...fixed],
+                ...extraDice(pending),
+              },
+            };
+          }
           if (pending.request.mode === 'balanced') {
             if (forcedDice) throw new Error('Cannot force a balanced dice result');
             const deck = diceDeck(state);
@@ -255,7 +313,7 @@ export function createBrowserRandomSource(entropy: Entropy = browserEntropy): Br
         }
         case 'REVEAL_COUNT': {
           if (pending.kind !== 'reveal') throw new Error('Reveal request has no owner');
-          const resource = resourceFrom(pending.request.resource);
+          const resource = kindFrom(pending.request.resource);
           return {
             input: {
               kind: 'system',
@@ -263,6 +321,119 @@ export function createBrowserRandomSource(entropy: Entropy = browserEntropy): Br
               seat: pending.seat,
               resource,
               count: privateFor(privates, pending.seat).hand[resource] ?? 0,
+            },
+          };
+        }
+        case 'REVEAL_PROGRESS': {
+          // A drawer shows a victory card it drew, or says none.
+          if (pending.kind !== 'reveal' || typeof pending.request.slotId !== 'string')
+            throw new Error('Malformed victory check');
+          const held = privateFor(privates, pending.seat).slots[pending.request.slotId];
+          const victory = held === 'printer' || held === 'constitution';
+          return {
+            input: {
+              kind: 'system',
+              type: 'REVEAL_PROGRESS',
+              seat: pending.seat,
+              slotId: pending.request.slotId,
+              card: victory ? held : 'none',
+            },
+          };
+        }
+        case 'DEAL_KNOWN': {
+          // A returned card dealt again: everything is already public in the request.
+          const { type: _type, ...echoed } = pending.request;
+          return { input: { ...echoed, kind: 'system', type: 'DEAL_KNOWN', seat: pending.seat } };
+        }
+        case 'SHOW_HAND': {
+          if (pending.kind !== 'reveal') throw new Error('Malformed hand reveal');
+          const actor = seatFrom(state, pending.request.to);
+          const target = privateFor(privates, pending.seat);
+          const shown =
+            pending.request.what === 'progress'
+              ? { progress: { ...target.slots } }
+              : { hand: { ...target.hand } };
+          return {
+            input: {
+              kind: 'system',
+              type: 'SHOW_HAND',
+              seat: pending.seat,
+              to: actor,
+              what: pending.request.what,
+            },
+            privateData: { [actor]: shown },
+          };
+        }
+        case 'TAKE_CARDS': {
+          // The actor takes `count` cards of the shown hand: its own choice, else random.
+          if (pending.kind !== 'reveal') throw new Error('Malformed take');
+          const from = seatFrom(state, pending.request.from);
+          const count = countOf(pending.request.count, 'take count');
+          const hand = privateFor(privates, from).hand;
+          const chosen = takePreference?.cards;
+          takePreference = null;
+          const fits =
+            chosen !== undefined &&
+            Object.values(chosen).reduce((sum, taken) => sum + taken, 0) === count &&
+            Object.entries(chosen).every(
+              ([kind, taken]) => taken >= 0 && taken <= (hand[kind] ?? 0),
+            );
+          const taken: Record<string, number> = {};
+          if (fits && chosen) {
+            for (const [kind, amount] of Object.entries(chosen))
+              if (amount > 0) taken[kind] = amount;
+          } else {
+            const pool = kindsOfCounts(hand).flatMap((kind) =>
+              Array<string>(hand[kind] ?? 0).fill(kind),
+            );
+            for (let n = 0; n < count; n++) {
+              const picked = pool.splice(randomIndex(entropy, pool.length), 1)[0];
+              if (picked === undefined) throw new Error('Take exceeds the shown hand');
+              taken[picked] = (taken[picked] ?? 0) + 1;
+            }
+          }
+          // Local logs name the kinds, like a local steal, so a recorded game replays from its
+          // public inputs alone.
+          return {
+            input: { kind: 'system', type: 'TAKE_CARDS', seat: pending.seat, from, cards: taken },
+          };
+        }
+        case 'TAKE_PROGRESS': {
+          // The Spy takes one shown progress card, or none.
+          if (pending.kind !== 'reveal') throw new Error('Malformed take');
+          const from = seatFrom(state, pending.request.from);
+          const held = (state.seats.find((seat) => seat.seat === from)?.cardSlots ?? []).filter(
+            (slot) => slot.revealed === undefined && slot.deck.startsWith('progress-'),
+          );
+          const chosen = takePreference?.progress;
+          takePreference = null;
+          const preferred =
+            chosen === undefined
+              ? undefined
+              : chosen.slotId === null
+                ? null
+                : held.find((slot) => slot.slotId === chosen.slotId);
+          const slot =
+            preferred === undefined ? held[randomIndex(entropy, held.length + 1)] : preferred;
+          if (slot === undefined || slot === null)
+            return {
+              input: {
+                kind: 'system',
+                type: 'TAKE_PROGRESS',
+                seat: pending.seat,
+                from,
+                slotId: null,
+              },
+            };
+          const card = slot.known ?? privateFor(privates, from).slots[slot.slotId];
+          return {
+            input: {
+              kind: 'system',
+              type: 'TAKE_PROGRESS',
+              seat: pending.seat,
+              from,
+              slotId: slot.slotId,
+              ...(slot.known === undefined ? { card } : {}),
             },
           };
         }
