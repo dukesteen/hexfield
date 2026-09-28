@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'vitest';
+import { baseExt } from '../../base/types.js';
 import { knightsExt } from '../types.js';
 import {
   handOf,
@@ -102,6 +103,32 @@ describe('Alchemist', () => {
       extra: { event: 'science' },
     });
     expect(draws.ok && top(draws.value.state)?.id).toBe('drawDev');
+  });
+
+  test('with balanced dice the chosen dice take no card from the dice deck', () => {
+    const base = newGame(engine, { seats: 3, base: { diceMode: 'balanced' } });
+    const state = inPreRoll(withCards(base, 0, 'alchemist'));
+    const played = play(state, 0, 'alchemist', { dice: [2, 6] });
+    const rolling = submit(engine, played, 0, { type: 'ROLL_DICE' });
+    expect(dicePending(rolling)).toMatchObject({ request: { mode: 'fixed', dice: [2, 6] } });
+    const done = engine.apply(rolling, {
+      kind: 'system',
+      type: 'DICE_RESULT',
+      dice: [2, 6],
+      extra: { event: 'ship' },
+    });
+    expect(done.ok).toBe(true);
+    if (!done.ok) return;
+    expect(baseExt(done.value.state.ext.base).diceDeck).toHaveLength(36);
+    // A balanced index is not part of a fixed roll.
+    const withIndex = engine.validate(rolling, {
+      kind: 'system',
+      type: 'DICE_RESULT',
+      dice: [2, 6],
+      index: 0,
+      extra: { event: 'ship' },
+    });
+    expect(withIndex.ok).toBe(false);
   });
 
   test('only one Alchemist per roll, only before the roll, only faces 1 to 6', () => {

@@ -266,7 +266,7 @@ export function createLocalRandomSource(
           };
         }
         case 'TAKE_CARDS': {
-          // The actor takes `count` cards of the shown hand; only the two parties learn the kinds.
+          // The actor takes `count` cards of the shown hand.
           if (pending.kind !== 'reveal') throw new Error('Malformed take');
           const from = state.config.seats.find((seat) => seat === pending.request.from);
           const count = requiredInteger(pending.request.count, 'take count');
@@ -281,15 +281,10 @@ export function createLocalRandomSource(
             if (picked === undefined) throw new Error('Take exceeds the shown hand');
             taken[picked] = (taken[picked] ?? 0) + 1;
           }
+          // Local logs name the kinds, like a local steal, so a recorded game replays from its
+          // public inputs alone.
           return {
-            input: {
-              kind: 'system',
-              type: 'TAKE_CARDS',
-              seat: pending.seat,
-              from,
-              cards: 'hidden',
-            },
-            privateData: { [pending.seat]: { cards: taken }, [from]: { cards: taken } },
+            input: { kind: 'system', type: 'TAKE_CARDS', seat: pending.seat, from, cards: taken },
           };
         }
         case 'TAKE_PROGRESS': {
@@ -320,8 +315,8 @@ export function createLocalRandomSource(
               seat: pending.seat,
               from,
               slotId: slot.slotId,
+              ...(slot.known === undefined ? { card } : {}),
             },
-            privateData: { [pending.seat]: { card } },
           };
         }
         default:

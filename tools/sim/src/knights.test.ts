@@ -65,6 +65,71 @@ describe('knights simulation', () => {
       expect({ type, count: totals[type] ?? 0 }).not.toEqual({ type, count: 0 });
   }, 240_000);
 
+  test('bots draw, play and answer every progress card, and the victory cards are shown', () => {
+    const played: Record<string, number> = {};
+    const shown = new Set<string>();
+    const totals: Record<string, number> = {};
+    for (const seats of [3, 4])
+      for (let gameIndex = 0; gameIndex < 30; gameIndex++) {
+        const result = runGame({
+          seed: 52,
+          gameIndex,
+          config: knightsConfig({ seats }),
+        });
+        expect(result.state.result).not.toBeNull();
+        for (const input of result.inputs) {
+          if (input.kind === 'command' && input.command.type === 'PLAY_PROGRESS_CARD') {
+            const card = String(input.command.card);
+            played[card] = (played[card] ?? 0) + 1;
+          }
+          if (input.kind === 'system' && input.type === 'REVEAL_PROGRESS' && input.card !== 'none')
+            shown.add(String(input.card));
+        }
+        for (const [type, count] of Object.entries(result.stats.commands))
+          totals[type] = (totals[type] ?? 0) + count;
+      }
+    const cards = [
+      'alchemist',
+      'crane',
+      'engineer',
+      'inventor',
+      'irrigation',
+      'medicine',
+      'mining',
+      'roadBuilding',
+      'smith',
+      'commercialHarbor',
+      'masterMerchant',
+      'merchant',
+      'merchantFleet',
+      'resourceMonopoly',
+      'tradeMonopoly',
+      'bishop',
+      'deserter',
+      'diplomat',
+      'intrigue',
+      'saboteur',
+      'spy',
+      'warlord',
+      'wedding',
+    ];
+    for (const card of cards)
+      expect({ card, count: played[card] ?? 0 }).not.toEqual({ card, count: 0 });
+    expect([...shown].toSorted()).toEqual(['constitution', 'printer']);
+    for (const type of [
+      'CHOOSE_PROGRESS_DECK',
+      'DISCARD_PROGRESS',
+      'HARBOR_OFFER',
+      'HARBOR_REPLY',
+      'WEDDING_GIVE',
+      'SABOTEUR_DISCARD',
+      'DESERTER_REMOVE',
+      'DESERTER_PLACE',
+      'DESERTER_SKIP',
+    ])
+      expect({ type, count: totals[type] ?? 0 }).not.toEqual({ type, count: 0 });
+  }, 240_000);
+
   test('the same seed replays the same game', () => {
     const options = { seed: 4, gameIndex: 1, players: 3, knights: true };
     expect(runGame(options).inputs).toEqual(runGame(options).inputs);

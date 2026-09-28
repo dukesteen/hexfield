@@ -3,10 +3,9 @@ import type { GameState } from '../../../core/state/index.js';
 import { failure, success } from '../../../core/types/index.js';
 import type { Seat } from '../../../core/types/index.js';
 import { claimCommands } from '../../base/legal.js';
-import { cardKindsOf, updateSeat, withClaim } from '../../base/shared.js';
+import { updateSeat, withClaim } from '../../base/shared.js';
 import { frameData, popPhase, replaceKnights } from './frames.js';
 import { findSlot } from './hand.js';
-import { privateCards } from './mirror.js';
 import { movable, moveCards, movePrivate, parseCards } from './transfer.js';
 import { trackOfDeck } from './catalogue.js';
 
@@ -81,18 +80,9 @@ export const showHand: SystemInputHandler = {
       effects: [],
     };
   },
-  applyPrivate: (priv, before, input, data) => {
-    const look = lookData(before);
-    if (look === undefined || priv.seat !== look.actor) return success(priv);
-    // The actor must receive what the target shows; the shown cards are not kept in the state.
-    if (look.what === 'cards') {
-      const hand = privateCards(data?.hand, cardKindsOf(before));
-      return hand.ok ? success(priv) : hand;
-    }
-    return typeof data?.progress === 'object' && data.progress !== null
-      ? success(priv)
-      : failure('missing-private-cards', 'The actor must be shown the progress cards');
-  },
+  // The shown cards are not kept anywhere: the actor uses them to choose and names its choice in
+  // the next input. Delivering them is the transport's job (private input data `{ hand }` or
+  // `{ progress }`), so nothing here depends on them.
 };
 
 /** The actor takes cards from the shown hand (Master Merchant). */

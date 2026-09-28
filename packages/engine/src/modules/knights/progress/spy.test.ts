@@ -126,7 +126,8 @@ describe('Spy', () => {
     const played = play(start, 0, 'spy', { target: 1 });
     const actor = privateOf(engine, played, 0, {});
     expect(engine.applyPrivate(actor, played, show, { progress: { x: 'merchant' } }).ok).toBe(true);
-    expect(engine.applyPrivate(actor, played, show).ok).toBe(false);
+    // Nothing of the shown cards is stored, so the show itself needs no data to replay.
+    expect(engine.applyPrivate(actor, played, show).ok).toBe(true);
     const state = system(played, show);
     const slotId = hidden.slotId;
     const take = { kind: 'system' as const, type: 'TAKE_PROGRESS', seat: 0, from: 1, slotId };

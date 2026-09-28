@@ -63,7 +63,8 @@ describe('Master Merchant', () => {
     const actor = privateOf(engine, played, 0, { wool: 1 });
     const seen = engine.applyPrivate(actor, played, show, { hand: { ore: 2, cloth: 1, coin: 1 } });
     expect(seen.ok).toBe(true);
-    expect(engine.applyPrivate(actor, played, show).ok).toBe(false);
+    // Nothing of the shown hand is stored, so the show itself needs no data to replay.
+    expect(engine.applyPrivate(actor, played, show).ok).toBe(true);
     // A bystander needs nothing.
     expect(engine.applyPrivate(privateOf(engine, played, 2, { brick: 1 }), played, show).ok).toBe(
       true,

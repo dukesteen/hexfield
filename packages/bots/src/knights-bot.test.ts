@@ -1,5 +1,12 @@
 import { describe, expect, test } from 'vitest';
-import { knightsConfig, knightsEngine, knightsExt } from '@cp2p/engine';
+import {
+  createResourceBounds,
+  kindsOfCounts,
+  knightsConfig,
+  knightsEngine,
+  knightsExt,
+  zeroCounts,
+} from '@cp2p/engine';
 import type { GameState, PhaseFrame } from '@cp2p/engine';
 import { buildBoardGraph } from '@cp2p/engine/geometry';
 import { RandomBot, createBotRng } from './random-bot.js';
@@ -20,6 +27,52 @@ function pair(state: GameState): { a: string; b: string; edge: string } {
   const edge = graph.edgeIds[0] ?? '';
   const [a, b] = graph.edgeVertices[graph.edgeIndex[edge] ?? 0] ?? ['', ''];
   return { a, b, edge };
+}
+
+/** Give seat 0 an exact hand, in the public bounds and the private state. */
+function withHand(state: GameState, hand: Record<string, number>) {
+  const kinds = kindsOfCounts(state.bank);
+  const counts = { ...zeroCounts(kinds), ...hand };
+  const total = kinds.reduce((sum, kind) => sum + (counts[kind] ?? 0), 0);
+  const bounds = createResourceBounds(total, counts, counts, kinds);
+  if (!bounds.ok) throw new Error(bounds.error.message);
+  const next = {
+    ...state,
+    seats: state.seats.map((item) =>
+      item.seat === 0 ? { ...item, resources: bounds.value } : item,
+    ),
+  };
+  return { state: next, priv: { ...engine.createPrivateState(0, state.config), hand: counts } };
+}
+
+function decide(state: GameState, priv: ReturnType<typeof engine.createPrivateState>) {
+  const pending = engine
+    .getPending(state)
+    .find(
+      (item) =>
+        item.kind === 'player' &&
+        item.seat === 0 &&
+        item.allowed.some((type) => type !== 'CLAIM_VICTORY'),
+    );
+  if (pending?.kind !== 'player') throw new Error('No pending for seat 0');
+  const bot = new RandomBot(engine);
+  const rng = createBotRng(new Uint8Array(32).fill(3));
+  const command = bot.decide({ state, priv, seat: 0 }, pending, rng);
+  expect(engine.validate(state, { kind: 'command', seat: 0, command }).ok).toBe(true);
+  return command;
+}
+
+const frames = (state: GameState, id: string, data: unknown): GameState =>
+  inFrame(state, [{ module: 'knights', id, data }]);
+
+/** The number of cards a command names. */
+function cardCount(cards: unknown): number {
+  return typeof cards === 'object' && cards !== null
+    ? Object.values(cards).reduce(
+        (sum: number, count: unknown) => sum + (typeof count === 'number' ? count : 0),
+        0,
+      )
+    : 0;
 }
 
 describe('RandomBot in a knights game', () => {
@@ -91,5 +144,81 @@ describe('RandomBot in a knights game', () => {
       createBotRng(new Uint8Array(32).fill(2)),
     );
     expect(command).toEqual({ type: 'RELOCATE_KNIGHT', to: b });
+  });
+
+  describe('progress cards', () => {
+    test('discards down to the limit when it cannot end its turn', () => {
+      const base = genesis();
+      const cards = ['engineer', 'irrigation', 'mining', 'medicine', 'crane'];
+      const slots = cards.map((card, index) => ({
+        slotId: `progress:${index}`,
+        deck: 'progress-science',
+        acquiredTurn: 1,
+        known: card,
+      }));
+      const state = inFrame(
+        {
+          ...base,
+          seats: base.seats.map((item) => (item.seat === 0 ? { ...item, cardSlots: slots } : item)),
+        },
+        [{ module: 'base', id: 'main', data: null }],
+      );
+      const command = decide(state, engine.createPrivateState(0, state.config));
+      expect(command.type).toBe('DISCARD_PROGRESS');
+    });
+
+    test('answers a wedding with two of its own cards and a sabotage with half its hand', () => {
+      const { state, priv } = withHand(genesis(), { ore: 3, cloth: 2, wool: 1 });
+      const wedding = frames(state, 'wedding', { actor: 1, remaining: [0] });
+      const gift = decide(wedding, priv);
+      expect(gift.type).toBe('WEDDING_GIVE');
+      expect(cardCount(gift.cards)).toBe(2);
+      const sabotage = frames(state, 'saboteur', { actor: 1, remaining: [0] });
+      const discard = decide(sabotage, priv);
+      expect(discard.type).toBe('SABOTEUR_DISCARD');
+      expect(cardCount(discard.cards)).toBe(3);
+    });
+
+    test('answers a commercial harbor offer with a commodity it holds, or none', () => {
+      const own = withHand(genesis(), { cloth: 1, wool: 2 });
+      const frame = { actor: 1, seat: 0, offered: 'wool' };
+      expect(decide(frames(own.state, 'harborReply', frame), own.priv)).toEqual({
+        type: 'HARBOR_REPLY',
+        commodity: 'cloth',
+      });
+      const none = withHand(genesis(), { wool: 2 });
+      expect(decide(frames(none.state, 'harborReply', frame), none.priv)).toEqual({
+        type: 'HARBOR_REPLY',
+        commodity: 'none',
+      });
+    });
+
+    test('names a deck for a defender tie draw', () => {
+      const { state, priv } = withHand(genesis(), {});
+      const command = decide(
+        frames(state, 'progress', {
+          roll: 6,
+          queue: [{ seat: 0, deck: null }],
+          checks: [],
+          discards: null,
+        }),
+        priv,
+      );
+      expect(command.type).toBe('CHOOSE_PROGRESS_DECK');
+      expect(['trade', 'politics', 'science']).toContain(command.deck);
+    });
+
+    test('skips or places a deserting knight', () => {
+      const { state, priv } = withHand(genesis(), {});
+      const place = frames(state, 'deserter', {
+        actor: 0,
+        target: 1,
+        stage: 'place',
+        level: 1,
+        active: false,
+      });
+      // With no road of its own the seat has no site, so it leaves the place empty.
+      expect(decide(place, priv)).toEqual({ type: 'DESERTER_SKIP' });
+    });
   });
 });

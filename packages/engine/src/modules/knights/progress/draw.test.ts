@@ -415,6 +415,13 @@ describe('the progress card limit', () => {
     expect(engine.checkInvariants(done)).toEqual([]);
   });
 
+  test('a timeout cannot choose which hidden card to discard', () => {
+    const drawn = checked(deal(deal(roll(crowded(), [1, 5], 'science'), 0, 'crane'), 1, 'mining'));
+    expect(
+      systemRefusal(drawn, { kind: 'system', type: 'TIMEOUT', seat: 1, phase: 'progress' }),
+    ).toBe('unsupported-timeout');
+  });
+
   test('the newly drawn card may be the one discarded, and a hidden hand lists its own discards', () => {
     const drawn = checked(deal(deal(roll(crowded(), [1, 5], 'science'), 0, 'crane'), 1, 'mining'));
     const newest = drawn.seats[1]?.cardSlots.at(-1)?.slotId ?? '';

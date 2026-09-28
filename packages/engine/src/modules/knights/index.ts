@@ -110,6 +110,16 @@ export {
 export { knightsExt, levelOf } from './types.js';
 export { awardTieDraws, barbarianStrength, contributions } from './barbarians.js';
 export { knightAt, knightReach, knightsOf, recruitSites, supplyOf } from './pieces.js';
+export {
+  HAND_LIMIT,
+  PROGRESS_CARDS,
+  VICTORY_CARDS,
+  deckOfTrack,
+  isVictoryCard,
+  trackOfCard,
+  trackOfDeck,
+} from './progress/catalogue.js';
+export type { CheckEntry, DealFrameData, DrawEntry, ProgressFrameData } from './progress/draw.js';
 export type {
   AqueductFrameData,
   AttackReport,
