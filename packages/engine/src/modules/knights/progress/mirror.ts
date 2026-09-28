@@ -1,7 +1,7 @@
 import type { EngineEffect } from '../../../core/effects/index.js';
 import type { PrivateState } from '../../../core/state/index.js';
 import { failure, success } from '../../../core/types/index.js';
-import type { CardCounts, Result, Seat } from '../../../core/types/index.js';
+import type { CardCounts, Result } from '../../../core/types/index.js';
 import { privateExchange } from '../../base/shared.js';
 
 /**
@@ -42,9 +42,4 @@ export function privateCards(value: unknown, kinds: readonly string[]): Result<C
     counts[kind] = count;
   }
   return success(counts);
-}
-
-/** Whether a seat is one of the given parties of a transfer. */
-export function isParty(seat: Seat, ...parties: readonly Seat[]): boolean {
-  return parties.includes(seat);
 }

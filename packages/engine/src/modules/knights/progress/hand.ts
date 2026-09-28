@@ -1,7 +1,7 @@
 import type { CardSlot, GameState, PrivateState } from '../../../core/state/index.js';
 import type { Seat } from '../../../core/types/index.js';
 import { ownSeat } from '../../base/shared.js';
-import { deckOfTrack, HAND_LIMIT, trackOfDeck } from './catalogue.js';
+import { HAND_LIMIT, trackOfDeck } from './catalogue.js';
 
 /** Seats in turn order starting with `start` (the active seat by default). */
 export function seatsFrom(state: GameState, start: Seat = state.turn.activeSeat): Seat[] {
@@ -42,6 +42,3 @@ export function findSlot(state: GameState, seat: Seat, slotId: unknown): CardSlo
 export function identityOf(slot: CardSlot, priv: PrivateState | undefined): string | undefined {
   return slot.known ?? priv?.slots[slot.slotId];
 }
-
-/** The deck id of a track, for callers that only hold the slot. */
-export { deckOfTrack };
