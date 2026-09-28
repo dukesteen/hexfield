@@ -1,5 +1,5 @@
 import { fromBase64Url, hashValue, toBase64Url, toHex } from '@cp2p/codec';
-import { createHashChain, pedersenCommit } from '@cp2p/crypto';
+import { createHashChain, encodeScalar, pedersenCommit, signObject } from '@cp2p/crypto';
 import { RESOURCES, createResourceBounds, success } from '@cp2p/engine';
 import type { CommandShape, Result, Seat, SystemInput } from '@cp2p/engine';
 import { beforeAll, describe, expect, test, vi } from 'vitest';
@@ -15,7 +15,13 @@ import { BeaconInbox } from './beacon-inbox.js';
 import { DECK_DRAW_PROTOCOL, DECK_REVEAL_PROTOCOL } from './deck-ledger.js';
 import { COMMAND_PROOFS_PROTOCOL } from './command-proofs.js';
 import { planHandTransition } from './hand-transition.js';
-import { decodeDeckCard, proveDeckReveal, signDeckUnlock } from './deck-draw.js';
+import {
+  decodeDeckCard,
+  proveDeckReveal,
+  signDeckUnlock,
+  verifyDeckUnlockPrefix,
+} from './deck-draw.js';
+import { verifyCheatProof } from './cheat-proof.js';
 import {
   GENESIS_PREVIOUS_HASH,
   entryBody,
@@ -744,6 +750,54 @@ describe('certified deck log', () => {
         source.dispose();
       }
     }
+    expect(verifyDeckUnlockPrefix(active, prefix).ok).toBe(true);
+    const maliciousIndex = prefix.findIndex((unlock) => unlock.body.seat !== 0);
+    if (maliciousIndex < 0) throw new Error('No distinct unlock contributor in certified draw');
+    const honestUnlock = need(prefix[maliciousIndex]);
+    const dealProposer = proposerFor(
+      beforeDraw.context.log.head.seq + 1,
+      1,
+      beforeDraw.context.membership,
+      beforeDraw.context.excludedProposers,
+    );
+    expect(dealProposer.seat).not.toBe(honestUnlock.body.seat);
+    const falseBody = {
+      ...honestUnlock.body,
+      proof: { ...honestUnlock.body.proof, response: encodeScalar(0n) },
+    };
+    const falseUnlock = {
+      body: falseBody,
+      sig: signObject(
+        'deck-unlock',
+        falseBody,
+        need(data.source.identities.get(honestUnlock.body.seat)).secretKey,
+      ),
+    };
+    const falsePrefix = prefix.with(maliciousIndex, falseUnlock);
+    expect(verifyDeckUnlockPrefix(active, falsePrefix)).toMatchObject({
+      ok: false,
+      error: { code: 'deck-unlock-proof' },
+    });
+    expect(
+      verifyCheatProof(
+        {
+          seat: honestUnlock.body.seat,
+          evidence: {
+            kind: 'deck-unlock',
+            at: {
+              seq: beforeDraw.context.log.head.seq,
+              hash: entryHash(beforeDraw.context.log.head),
+            },
+            prefix: prefix.slice(0, maliciousIndex),
+            artifact: falseUnlock,
+          },
+        },
+        beforeDraw.context.log,
+      ),
+    ).toMatchObject({
+      ok: true,
+      value: { seat: honestUnlock.body.seat, kind: 'deck-unlock' },
+    });
     const input: SystemInput = {
       kind: 'system',
       type: 'CARD_DEALT',
@@ -762,6 +816,19 @@ describe('certified deck log', () => {
       },
       toHex(hashValue(applied.state)),
     );
+    const falseDeal = signAt(
+      data,
+      beforeDraw.context,
+      {
+        kind: 'system',
+        input,
+        evidence: { kind: 'proof', protocol: DECK_DRAW_PROTOCOL, data: falsePrefix },
+      },
+      toHex(hashValue(applied.state)),
+    );
+    expect(
+      validateCertifiedEntry(certify(data, beforeDraw.context, falseDeal), beforeDraw.context),
+    ).toMatchObject({ ok: false, error: { code: 'deck-unlock-proof' } });
     const result = advance(data, beforeDraw.context, deal);
     const ledger = need(result.context.log.crypto).decks;
     const hands = need(result.context.log.crypto).hands;
@@ -846,6 +913,14 @@ describe('certified deck log', () => {
     expect(
       validateCertifiedEntry(certify(data, playable.context, omitted), playable.context).ok,
     ).toBe(false);
+    const validPlay = commandEntry(data, playable.context, active.seat, playCommand, {
+      protocol: DECK_REVEAL_PROTOCOL,
+      data: [{ slotId: active.slotId, identity: checked(decoded).identity, proof: reveal.proof }],
+    });
+    expect(
+      validateCommandForEntry(signedCommandFrom(validPlay), playable.context.log, data.policy.entry)
+        .ok,
+    ).toBe(true);
     const wrongIdentity = commandEntry(data, playable.context, active.seat, playCommand, {
       protocol: DECK_REVEAL_PROTOCOL,
       data: [{ slotId: active.slotId, identity: 'victoryPoint#1', proof: reveal.proof }],
@@ -932,6 +1007,19 @@ describe('certified deck log', () => {
       ok: false,
       error: { code: 'deck-reveal-kind' },
     });
+    expect(
+      verifyCheatProof(
+        {
+          seat: active.seat,
+          evidence: {
+            kind: 'command-proof',
+            at: { seq: synthetic.log.head.seq, hash: entryHash(synthetic.log.head) },
+            artifact: signedCommandFrom(wrongClaim),
+          },
+        },
+        synthetic.log,
+      ),
+    ).toMatchObject({ ok: true, value: { seat: active.seat, kind: 'command-proof' } });
     const historyBeforePlay = [
       ...sharedReady.history,
       started.proof,

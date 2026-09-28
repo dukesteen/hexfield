@@ -1,5 +1,5 @@
 import { canonicalEncode, toBase64Url } from '@cp2p/codec';
-import { scalarToBytes } from '@cp2p/crypto';
+import { scalarToBytes, signObject } from '@cp2p/crypto';
 import { RESOURCES } from '@cp2p/engine';
 import type { CommandShape, GameState, Result, Seat } from '@cp2p/engine';
 import { describe, expect, test } from 'vitest';
@@ -8,9 +8,12 @@ import { MemoryCheatCandidateStore } from './cheat-candidates.js';
 import { MemoryCountContributionStore } from './count-contributions.js';
 import { MemoryStealDeliveryStore } from './steal-contributions.js';
 import type { SignedCountContribution } from './count-reveal.js';
+import { COUNT_EVIDENCE_PROTOCOL, verifyCountInput } from './count-reveal.js';
 import type { DeckContributionStore } from './deck-outbox.js';
 import { createHandSecretSource } from './hand-source.js';
-import { genesisDigest } from './genesis.js';
+import { entryHash, genesisDigest, signEntry } from './genesis.js';
+import { verifyCheatProof } from './cheat-proof.js';
+import { validateNextEntry } from './log.js';
 import { MemoryProtocolJournal } from './journal.js';
 import { decodeProtocolMessage } from './messages.js';
 import { P2PSession } from './p2p-session.js';
@@ -22,6 +25,8 @@ import type { VirtualClock } from './testing/virtual-clock.js';
 import type { PeerId, Transport } from './transport.js';
 import { VerifiedSessionDriver } from './verified-session-driver.js';
 import { initialSeatAuthorities } from './authority.js';
+import { proposerFor } from './proposal.js';
+import { replayCertifiedPrefix } from './replay.js';
 
 function value<T>(result: Result<T>): T {
   if (!result.ok) throw new Error(`${result.error.code}: ${result.error.message}`);
@@ -333,6 +338,98 @@ describe('live verified Monopoly count replication', () => {
       expect(revealSeats(live)).toEqual(expectedVictims.slice(0, -1));
       expect(gate.dropped.length).toBeGreaterThan(0);
       const original = required(gate.dropped[0]);
+      const certified = value(
+        replayCertifiedPrefix(
+          fixture.entry,
+          required(live[0]).exportSave().entries,
+          fixture.simulation.engine,
+          fixture.policy,
+        ),
+      ).context;
+      const pendingCount = required(required(certified.log.crypto).counts);
+      expect(pendingCount.remaining).toContain(target);
+      const countInput = {
+        kind: 'system' as const,
+        type: 'REVEAL_COUNT' as const,
+        seat: target,
+        resource: pendingCount.operation.resource,
+        count: original.body.count,
+      };
+      const honestEvidence = {
+        kind: 'proof' as const,
+        protocol: COUNT_EVIDENCE_PROTOCOL,
+        data: original,
+      };
+      expect(verifyCountInput(pendingCount, countInput, honestEvidence).ok).toBe(true);
+      const falseBody = { ...original.body, count: original.body.count === 0 ? 1 : 0 };
+      const falseContribution = {
+        body: falseBody,
+        sig: signObject(
+          'monopoly-count',
+          falseBody,
+          required(fixture.simulation.identities.get(target)).secretKey,
+        ),
+      };
+      const falseEvidence = { ...honestEvidence, data: falseContribution };
+      expect(
+        verifyCountInput(pendingCount, { ...countInput, count: falseBody.count }, falseEvidence),
+      ).toMatchObject({ ok: false, error: { code: 'count-proof' } });
+      const proposer = proposerFor(
+        certified.log.head.seq + 1,
+        1,
+        certified.membership,
+        certified.excludedProposers,
+      );
+      expect(proposer.seat).not.toBe(target);
+      const falseEntry = signEntry(
+        {
+          seq: certified.log.head.seq + 1,
+          term: 1,
+          prevHash: entryHash(certified.log.head),
+          payload: {
+            kind: 'system',
+            input: { ...countInput, count: falseBody.count },
+            evidence: falseEvidence,
+          },
+          stateHash: certified.log.head.stateHash,
+          sequencer: proposer.publicKey,
+        },
+        required(fixture.simulation.identities.get(proposer.seat)).secretKey,
+      );
+      expect(
+        validateNextEntry(falseEntry, certified.log, {
+          ...fixture.policy.entry,
+          term: 1,
+          sequencer: proposer.publicKey,
+        }),
+      ).toMatchObject({ ok: false, error: { code: 'count-proof' } });
+      expect(
+        verifyCheatProof(
+          {
+            seat: target,
+            evidence: {
+              kind: 'count-proof',
+              at: { seq: certified.log.head.seq, hash: entryHash(certified.log.head) },
+              artifact: falseContribution,
+            },
+          },
+          certified.log,
+        ),
+      ).toMatchObject({ ok: true, value: { seat: target, kind: 'count-proof' } });
+      expect(
+        verifyCheatProof(
+          {
+            seat: target,
+            evidence: {
+              kind: 'count-proof',
+              at: { seq: certified.log.head.seq, hash: entryHash(certified.log.head) },
+              artifact: original,
+            },
+          },
+          certified.log,
+        ).ok,
+      ).toBe(false);
+      expect(certified.log.head.seq).toBeLessThan(falseEntry.seq);
       const generation = required(
         value(initialSeatAuthorities(fixture.genesis)).controllers.find(
           (owner) => owner.seat === target,
