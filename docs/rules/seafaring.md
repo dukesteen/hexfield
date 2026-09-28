@@ -154,7 +154,7 @@ Scenario option `newIslandBonus: { vp: 1 | 2 }`, or absent.
 
 ## Scenarios
 
-Original layouts only. The exact geometry is defined later in `packages/maps`. Each scenario is data with an `about` text. The rule knobs:
+Original layouts only. Each scenario is data in `packages/maps/src/scenarios/seafaring/` with a title and an `about` text (`lobby` namespace). The rule knobs:
 
 | Scenario        | Seats | VP target | Island bonus                                               | Fog | Setup areas                                            | Notes                                                                                                               |
 | --------------- | ----- | --------- | ---------------------------------------------------------- | --- | ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------- |
@@ -166,6 +166,24 @@ Original layouts only. The exact geometry is defined later in `packages/maps`. E
 | Open Sea        | 3–6   | 12        | +1 per foreign island                                      | no  | any island(s), one or two per seat, chosen by the seat | Seeded procedural archipelago. Precedent: the publisher's free-play "New World" (+1 per foreign island, 12 points). |
 
 Every scenario uses both the robber and the pirate. The start hexes of both are scenario data.
+
+### Layouts as implemented
+
+Boards are drawn on an offset grid (odd rows sit half a hex right) and list every hex, sea included. Terrains, tokens and harbor kinds are fixed, not shuffled. Token numbers were solved once per board with no adjacent 6/8 and no adjacent equal numbers, and each terrain's average pips are kept close. Every board has one harbor per resource and the rest generic (four generic on the nine-harbor boards, five on the ten-harbor ones), all on coastal edges and none sharing a vertex. Setup areas, pirate starts and regions are hex ids in the scenario's `seafaring` option object. The bonus counts the first settlement per region, as in Islands and the new-island bonus.
+
+**New Horizons (3–4 players, 9×7, 63 hexes).** A 21-hex home island fills the middle: four hexes of each resource and a desert at its heart, where the robber starts. Around it lie six small islands of one to three hexes (14 hexes in all, three of them gold). Setup is on the home island only, and each small island is a region worth 2 points. The pirate starts in open water off the north-west corner. Nine harbors: 8 on the home coast and 1 generic on the north-east islet. Target 14.
+
+**New Horizons (5–6 players, 11×9, 99 hexes).** A 32-hex home island with an even mix of resources and a desert at its heart, and eight outer islands of one to three hexes (17 hexes, four gold), spread round the corners and sides. Setup on the home island only, 2 points per outer island, pirate off the north-west corner. Ten harbors: 8 on the home coast plus a generic on each of the west and east islands. Target 16.
+
+**Four Isles (3–4 players, 9×7, 63 hexes).** Four seven-hex flowers, one in each quarter of the frame, one sea hex apart, so ships cross a one-hex channel. Two islands carry a desert on the rim (the robber starts on the north-west one) and two carry a gold field; resources are 5 forest, 5 pasture, 5 fields, 5 hills, 4 mountains. Every land hex is a setup area, so a seat may start on one island or two. The four islands are the regions, worth 2 points each for a seat's first settlement there (home islands excepted). The pirate starts at the crossing of the channels. Nine harbors, two or three per island. Target 13.
+
+**Four Isles (5–6 players, 11×7, 77 hexes).** The same quarters with ten-hex islands (rows of 3, 4 and 3), two deserts and four gold fields. Ten harbors. Target 13.
+
+**Fogbound (3–4 players, 9×7, 63 hexes).** Two 11-hex islands (west and east) stand either side of a vertical band of 13 fog hexes. A hex of open water separates each coast from the fog, so nothing is revealed until a ship goes out. West holds the desert and the robber. Each island has 2 or 3 of each resource. The stack holds 13 tiles: forest 2, hills 2, pasture 1, fields 2, mountains 1, gold 2 and sea 3, with ten tokens (3, 4, 5, 5, 6, 8, 9, 9, 10, 11; sea takes none). There is no island bonus (see Islands). The pirate starts on the south rim beside the fog. Both islands are setup areas. Nine harbors, split between the coasts. Target 12.
+
+**Desert Crossing (3–4 players, 9×7, 63 hexes).** A 31-hex island whose middle is a zigzag strip of five desert hexes (robber start at its centre). West is home (13 hexes, 4 forest, 2 pasture, 3 fields, 2 hills, 2 mountains) and the setup area. East (13 hexes) has two gold fields. Four two-hex islets sit in the corners, one of them with a gold field. The desert strip joins the two sides into one connected island, so the scenario declares six explicit regions: west (home), east, and each corner islet. The strip hexes belong to no region, and the two sides never touch, so every vertex maps to at most one region. Each region other than home is worth 2 points. The pirate starts on the south rim. Nine harbors, three on the west coast, four on the east, one on each of the north-west and south-east islets. Target 13.
+
+**Open Sea (3–4 players and 5–6 players, generated).** The board comes from `generateArchipelago` at genesis, so it is a pure function of the genesis seed. 3–4 players get a 9×7 frame: a home island of 14 to 18 hexes kept off the frame's rim, four or five islands of two to four hexes that never touch each other or the home island, three gold fields (never on the home island, at most half of an island) and nine harbors. 5–6 players get 11×9: a home island of 24 to 30 hexes, five to seven islands of two to five hexes, four gold fields and ten harbors. Every board has one desert on the home island (robber start), one body of connected sea so every island is reachable, no adjacent 6/8 or equal tokens, and resource pips within one pip of each other on average. The pirate starts on the sea hex furthest from land. Any island may host setup (no setup areas). 1 point per foreign island, target 12.
 
 ## Options
 
