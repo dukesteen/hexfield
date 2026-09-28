@@ -31,7 +31,8 @@ reaches the production coordinator before the startup controller halts the
 rendered UI. Consent remains durable across restore; game opening, retry and a
 new-room action remain unavailable. The deliberately false complaint still
 constitutes authenticated secret disclosure under the ceremony policy. This
-check preserves its unresolved disposition; it does not claim gameplay resumes.
+check establishes the restored halted/waiting state required by the acceptance
+criterion. It does not claim that normal gameplay resumes after disclosure.
 
 Shared test typecheck, scoped type-aware lint, formatting and diff checks pass.
 No concurrent crypto workload ran during either focused test command.
@@ -41,6 +42,8 @@ acceptance evidence: the [owner-private discard expiry](private-discard-timer-20
 the [guest-hosted bot command](guest-bot-consent-races-2026-09-28.md), and both
 winners of the [cross-coordinator abort-versus-consent race](guest-bot-consent-races-2026-09-28.md).
 Early signed timeout refusal remains covered for `preRoll` and trade at verified
-replicas. The post-consent disclosure path in this report preserves the promise
-and halts the UI durably; gameplay recovery after disclosure is not established,
-and the Stage 09 recoverable-waiting wording remains open for reconciliation.
+replicas. The [retained-evidence opening fence](disclosure-opening-fence-2026-09-28.md)
+adds real-coordinator evidence that an authenticated disclosure remains durable
+and blocks activation after restore. Together these checks satisfy the Stage 09
+promise-plus-recoverable-waiting criterion; they do not require normal gameplay
+to resume after disclosure.

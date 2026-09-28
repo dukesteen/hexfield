@@ -41,3 +41,15 @@ The log records the RPC error at 11:58:01Z, 3 min 38 s after that test's
 log does not establish causality. The recorded failure is a worker-to-runner
 RPC timeout, not a test assertion, and does not justify changing a runner
 timeout or worker schedule by itself.
+
+## Focused drain-yield follow-up
+
+After this run, the owner-private discard test's drain loop added one
+`setImmediate` yield after each session flush. The yield lets the Node event
+loop process test-runner RPCs without advancing the fake network clock. The
+focused test passed in 28.218 s (29.19 s runner duration). The raw output is
+retained at `/private/tmp/hexfield-private-discard-yield-2026-09-28.log`,
+SHA-256 `e3a51b4b0a1b4466e5c955052d753bfb79da78d1290b800b502940585b883250`.
+This checks the modified drain loop only. It does not establish that the yield
+caused the earlier `onTaskUpdate` timeout or that it prevents one in the full
+shard.
