@@ -54,5 +54,27 @@ an empty marker carrying `sdpMid: data`. All five manual-bootstrap tests passed.
 
 The combined focused run passed all 72 tests: 40 peer-link, 27 WebRTC transport
 and five manual-bootstrap tests. Test TypeScript compilation and scoped
-type-aware lint also passed. The mixed-engine rerun remains pending. No native
-Firefox or WebKit process was launched locally.
+type-aware lint also passed. No native Firefox or WebKit process was launched
+locally.
+
+## Four-engine rerun
+
+[Run 36402581103](https://github.com/dukesteen/hexfield/actions/runs/36402581103)
+used `86acf16`. Both signaling and manual relay passed the four-context full-mesh
+assertion, readiness and startup into the same game route. The Firefox manual
+offer/answer sequence completed, and neither mode reported the malformed
+signaling envelope from the previous run.
+
+Both tests then timed out in `certifyPostSetupMove`, before terminal play. That
+driver waited for all sessions to enter `main` while submitting only `setup`
+commands. The engine ends setup in `preRoll`; reaching `main` requires the first
+roll, which the driver only submitted after its wait. The corrected driver waits
+for `preRoll`, then submits and certifies that roll. It also uses the production
+pending selector so optional out-of-turn trades cannot displace required game
+actions. Its total, setup and finish limits are unchanged.
+
+Failure diagnostics now look up game rooms on game routes and report only public
+phase, head, active seat, controlled seats and pending action kinds. The former
+diagnostic used a lobby-only lookup after navigation, producing misleading
+`roomOpen: false` reports. The corrected driver still needs a full rerun; this
+result proves the mesh/startup assertions, not finished mixed-browser games.

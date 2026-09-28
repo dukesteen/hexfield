@@ -6,7 +6,7 @@
   "handMemoCommit": "b11751a",
   "command": "node --cpu-prof --cpu-prof-dir=/private/tmp/hexfield-scenario6-cpu-profile-hand-memo --cpu-prof-name=scenario6-60s.cpuprofile tools/sim/dist/index.js net --scenario 6 --security verified --seed 42 --start-index 0 --seeds 1 --parallel 1 --max-elapsed-ms 60000",
   "artifacts": {
-    "comparison.json": "c041645cba61f2b7890a4e04225c87c66fa8ee31d2faff3baaa525a2afa9617f",
+    "comparison.json": "56c2d1e1ccaf8f44420c90a3ed745b7cfe1792172920efb9f5cb35f9f8bb0ac9",
     "compiled-after.json": "d43e1f48b10576537e96be74d23a5c8a45e35d2195af3f821593a1529be16974",
     "compiled-before.json": "d43e1f48b10576537e96be74d23a5c8a45e35d2195af3f821593a1529be16974",
     "node-version.txt": "9b8856ee50cf06a9ce94d984812927448e9be59b03931bc1478b1d1d49a0d7b5"

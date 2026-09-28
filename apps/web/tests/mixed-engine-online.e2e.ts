@@ -2,6 +2,7 @@
 import { expect, test } from '@playwright/test';
 import type { Browser, BrowserContext, Page, PlaywrightWorkerArgs } from '@playwright/test';
 import { RandomBot, createBotRng } from '@cp2p/bots';
+import { chooseBotPending } from '@cp2p/protocol';
 import type { CommandShape, Seat } from '@cp2p/engine';
 
 test.skip(
@@ -452,7 +453,7 @@ async function readRoom(page: Page, includePeerStats = false) {
   return page.evaluate(
     async ({ modulePath, includePeerStats: readPeerStats }) => {
       // oxlint-disable typescript/no-unsafe-type-assertion -- Import the registry module actually loaded by this browser context.
-      const { getOnlineRoom } = (await import(
+      const { getOnlineRoom, getOnlineGameRoom } = (await import(
         /* @vite-ignore */ modulePath
       )) as typeof import('../src/features/online/room-registry.js');
       // oxlint-enable typescript/no-unsafe-type-assertion
@@ -466,9 +467,12 @@ async function readRoom(page: Page, includePeerStats = false) {
           .slice(0, 4),
         diagnosticEvents: Array.isArray(diagnosticEvents) ? diagnosticEvents : [],
       };
-      const room = getOnlineRoom(new URL(location.href).hash.match(/\/lobby\/([^/?]+)/)?.[1] ?? '');
+      const lobbyId = route.match(/\/lobby\/([^/]+)/)?.[1];
+      const gameId = route.match(/\/game\/([^/]+)/)?.[1];
+      const room = gameId ? getOnlineGameRoom(gameId) : getOnlineRoom(lobbyId ?? '');
       if (!room) return { ...pageEvidence, roomOpen: false, humanCount: 0, peerCount: 0 };
       const snapshot = room.getSnapshot();
+      const session = room.getGame()?.session;
       const peerStats = readPeerStats ? await room.getPeerStats?.().catch(() => []) : [];
       return {
         ...pageEvidence,
@@ -488,6 +492,23 @@ async function readRoom(page: Page, includePeerStats = false) {
           hasCode: snapshot.manual.code !== null,
         },
         closed: snapshot.closed,
+        game: session
+          ? {
+              head: session.getFairness?.()?.head ?? null,
+              phase: session.getState().turn.phase.at(-1)?.id ?? null,
+              turn: session.getState().turn.number,
+              activeSeat: session.getState().turn.activeSeat,
+              controlledSeats: session.controllableSeats(),
+              pending: session
+                .getPending()
+                .map((item) =>
+                  item.kind === 'player'
+                    ? { kind: item.kind, seat: item.seat, allowed: item.allowed }
+                    : { kind: item.kind },
+                ),
+              audit: session.getAudit?.().kind ?? null,
+            }
+          : null,
       };
     },
     { modulePath: path, includePeerStats },
@@ -656,7 +677,7 @@ async function startFourPlayerRoom(pages: readonly Page[], mode: 'signaling' | '
 
 async function inspectGame(page: Page, gameId: string) {
   const modulePath = await roomModulePath(page);
-  return page.evaluate(
+  const view = await page.evaluate(
     async ({ path, id }) => {
       // oxlint-disable typescript/no-unsafe-type-assertion -- Read the session from the app-loaded production registry.
       const { getOnlineGameRoom } = (await import(
@@ -667,17 +688,13 @@ async function inspectGame(page: Page, gameId: string) {
       const session = room?.getGame()?.session;
       if (!room || !session) return null;
       const seat = session.controllableSeats()[0];
-      const pending =
-        seat === undefined
-          ? undefined
-          : session.getPending().find((item) => item.kind === 'player' && item.seat === seat);
       const legal = seat === undefined ? undefined : session.getLegalCommands(seat);
       return {
         head: session.getFairness?.()?.head ?? null,
         phase: session.getState().turn.phase.at(-1)?.id ?? null,
         result: session.getState().result ?? null,
         seat,
-        pending,
+        pending: session.getPending(),
         state: session.getState(),
         privateState: seat === undefined ? null : session.getPrivate(seat),
         legal,
@@ -687,6 +704,16 @@ async function inspectGame(page: Page, gameId: string) {
     },
     { path: modulePath, id: gameId },
   );
+  return view
+    ? {
+        ...view,
+        pending: chooseBotPending(
+          view.state,
+          view.pending,
+          new Set(view.seat === undefined ? [] : [view.seat]),
+        ),
+      }
+    : null;
 }
 
 async function submit(page: Page, gameId: string, seat: Seat, command: CommandShape, seq: number) {
@@ -717,7 +744,9 @@ async function certifyPostSetupMove(pages: readonly Page[], gameId: string): Pro
     .poll(
       async () => {
         const views = await ready();
-        if (views.every((item) => item?.phase === 'main')) return true;
+        // Setup ends in preRoll. This driver submits the first roll below;
+        // waiting for main here would wait for a command it never sends.
+        if (views.every((item) => item?.phase === 'preRoll')) return true;
         const index = views.findIndex(
           (item) => item?.phase === 'setup' && item.pending?.kind === 'player' && item.legal,
         );
