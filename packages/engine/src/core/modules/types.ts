@@ -79,7 +79,7 @@ export interface BoardShapeSpec {
   /**
    * Set by a seafaring module. `hexes` then lists every board hex including sea, and a fixed board
    * may use `sea`, `gold` and `fog` terrains. Sea and fog hexes carry no token, harbors need only be
-   * coastal, and the robber may start on any land hex. Only fixed boards are accepted.
+   * coastal, and the robber may start on any land hex or off the board. Only fixed boards are accepted.
    */
   seafaring?: boolean;
 }
@@ -192,6 +192,8 @@ export interface Hooks {
     seat: Seat,
     priv: PrivateState | undefined,
     acc: LegalCommandSet,
+    /** Supplied by the engine, so a hook can price builds through the cost hooks. */
+    ctx?: HandlerContext,
   ): LegalCommandSet;
   timeoutAction(
     state: GameState,

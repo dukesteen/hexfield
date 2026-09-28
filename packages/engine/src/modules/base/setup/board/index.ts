@@ -150,12 +150,12 @@ export function validateFixedBoard(board: BoardState, spec: BoardShapeSpec): voi
   }
   const robber = board.hexes.find((hex) => hex.id === board.robberHex);
   const robberOk = seafaring
-    ? robber && isLandTerrain(robber.terrain)
+    ? board.robberHex === null || (robber && isLandTerrain(robber.terrain))
     : robber?.terrain === 'desert';
   if (!robberOk || board.roads.length !== 0 || board.buildings.length !== 0) {
     throw new BoardGenerationError(
       seafaring
-        ? 'Fixed board must start empty with robber on land'
+        ? 'Fixed board must start empty with robber on land or off the board'
         : 'Fixed board must start empty with robber on desert',
     );
   }

@@ -10,6 +10,38 @@ export {
   fiveSixModule,
 } from './modules/five-six/index.js';
 export { FIVE_SIX_BOARD, FIVE_SIX_HEXES } from './modules/five-six/board.js';
+export {
+  SEAFARING_ID,
+  SEAFARING_VERSION,
+  SHIPS_PER_SEAT,
+  SHIP_COST,
+  canPlaceShip,
+  legalPirateHexes,
+  legalShipEdges,
+  legalShipMoves,
+  movableShips,
+  regionMap,
+  regionOfVertex,
+  seafaringExt,
+  seafaringModule,
+  seafaringOptions,
+  shipEdges,
+} from './modules/seafaring/index.js';
+export {
+  ARCHIPELAGO_MAIN,
+  explicitBoard,
+  seafaringConfig,
+  seafaringEngine,
+  testArchipelago,
+} from './modules/seafaring/testing.js';
+export type { HexSpec, SeafaringConfigOptions } from './modules/seafaring/testing.js';
+export type {
+  FogOption,
+  GoldFrameData,
+  IslandBonusToken,
+  SeafaringExt,
+  SeafaringOptions,
+} from './modules/seafaring/index.js';
 export { STANDARD_BOARD, STANDARD_HEXES } from './modules/base/board/shapes.js';
 export {
   MODULE_CATALOGUE,

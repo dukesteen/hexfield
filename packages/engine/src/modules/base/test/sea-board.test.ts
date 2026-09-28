@@ -73,6 +73,12 @@ function state(overrides: Partial<BoardState> = {}): GameState {
   };
 }
 
+const retoken = (index: number, token: number | null) => {
+  const changed = board();
+  changed.hexes = changed.hexes.map((hex, at) => (at === index ? { ...hex, token } : hex));
+  return changed;
+};
+
 describe('sea-aware placement', () => {
   const seaOnly = vertexId({ q: 3, r: 0 }, 'N');
   const fogOnly = vertexId({ q: 5, r: 0 }, 'NE');
@@ -205,15 +211,11 @@ describe('fixed seafaring boards', () => {
       ).toThrow(BoardGenerationError);
   });
   test('tokens follow terrain: sea and fog have none, gold has one', () => {
-    const withToken = board();
-    withToken.hexes[2] = { ...hexes[2], token: 3 };
-    expect(() => validateFixedBoard(withToken, SPEC)).toThrow(BoardGenerationError);
-    const bare = board();
-    bare.hexes[1] = { ...hexes[1], token: null };
-    expect(() => validateFixedBoard(bare, SPEC)).toThrow(BoardGenerationError);
+    expect(() => validateFixedBoard(retoken(2, 3), SPEC)).toThrow(BoardGenerationError);
+    expect(() => validateFixedBoard(retoken(1, null), SPEC)).toThrow(BoardGenerationError);
   });
   test('base stays strict: the same board fails without the flag, and random layouts need a fixed board', () => {
-    const strict: BoardShapeSpec = { ...SPEC, seafaring: undefined };
+    const { seafaring: _seafaring, ...strict } = SPEC;
     expect(() => validateFixedBoard(board(), strict)).toThrow(BoardGenerationError);
     for (const mapLayout of ['random', 'balanced-random'] as const)
       expect(() =>

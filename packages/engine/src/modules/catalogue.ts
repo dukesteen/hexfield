@@ -9,6 +9,7 @@ import { baseModule } from './base/index.js';
 import { BASE_VERSION, DEV_CARD_COUNTS, devCardCatalogue } from './base/constants.js';
 import { checkModuleCombination } from './compat.js';
 import { FIVE_SIX_VERSION, fiveSixModule } from './five-six/index.js';
+import { SEAFARING_VERSION, seafaringModule } from './seafaring/index.js';
 
 /** Every rules module a game can select, with the version genesis must name. */
 export const MODULE_CATALOGUE: Readonly<
@@ -16,6 +17,7 @@ export const MODULE_CATALOGUE: Readonly<
 > = Object.freeze({
   base: { version: BASE_VERSION, create: baseModule },
   'five-six': { version: FIVE_SIX_VERSION, create: fiveSixModule },
+  seafaring: { version: SEAFARING_VERSION, create: seafaringModule },
 });
 
 /** The selection for a module list, with catalogue versions. */

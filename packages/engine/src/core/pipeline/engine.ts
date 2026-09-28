@@ -388,7 +388,7 @@ export function createEngine(modules: readonly GameModule[]): Engine {
         .flatMap((item) => (item.kind === 'player' ? item.allowed : []));
       own = { commands: [], templates: [...new Set(allowed)].toSorted().map((type) => ({ type })) };
     }
-    const listed = registry.hooks.legalCommands(state, seat, priv, own);
+    const listed = registry.hooks.legalCommands(state, seat, priv, own, ctx);
     return {
       commands: listed.commands.filter(
         (command) =>

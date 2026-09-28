@@ -19,6 +19,8 @@ export interface RunGameOptions extends LocalRandomOptions {
   gameIndex: number;
   players?: number;
   baseOptions?: Record<string, unknown>;
+  /** A complete genesis config (for example a seafaring board), replacing `players` and `baseOptions`. */
+  config?: GameConfig;
   verify?: boolean;
   maxTurns?: number;
   maxInputsWithoutTurn?: number;
@@ -162,7 +164,7 @@ function choosePending(
 export function runGame(options: RunGameOptions): RunGameResult {
   const gameStarted = process.hrtime.bigint();
   const players = options.players ?? 4;
-  const config = gameConfig(players, options.baseOptions ?? {});
+  const config = options.config ?? gameConfig(players, options.baseOptions ?? {});
   const genesisSeed = deriveSeed(options.seed, options.gameIndex, 'genesis');
   const deck = devCardCountsFor(config);
   const randomSource = createLocalRandomSource(

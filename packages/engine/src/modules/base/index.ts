@@ -2,9 +2,7 @@ import { createEngine } from '../../core/pipeline/index.js';
 import type {
   CommandHandler,
   GameModule,
-  HandlerContext,
   SystemInputHandler,
-  Transition,
   InputKeys,
 } from '../../core/modules/index.js';
 import type { GameState } from '../../core/state/index.js';
@@ -62,7 +60,7 @@ import {
 import { claimVictory, hiddenVictoryPoints, automaticVictoryClaim } from './victory.js';
 import { timeout } from './timeouts.js';
 import { baseInvariants, basePrivateInvariants } from './invariants.js';
-import { afterInput, frame } from './shared.js';
+import { finalize, frame } from './shared.js';
 import { baseOptions } from './types.js';
 
 const COMMAND_KEYS: Record<string, InputKeys> = {
@@ -97,21 +95,6 @@ const SYSTEM_KEYS: Record<string, InputKeys> = {
   REVEAL_COUNT: { allowed: ['seat', 'resource', 'count'] },
   TIMEOUT: { allowed: ['seat', 'phase'] },
 };
-
-function finalize(transition: Transition, ctx: HandlerContext): Transition {
-  const state = afterInput(transition.state, ctx);
-  if (!transition.state.result && state.result) {
-    return {
-      state,
-      events: [
-        ...transition.events,
-        { type: 'gameEnded', winner: state.result.winner, reason: state.result.reason },
-      ],
-      effects: transition.effects,
-    };
-  }
-  return { ...transition, state };
-}
 
 function finalizedCommands(
   entries: Record<string, CommandHandler>,

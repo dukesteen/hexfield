@@ -1,4 +1,4 @@
-import type { CommandShape, LegalCommandSet, Pending } from '../pipeline/types.js';
+import type { CommandShape, Pending } from '../pipeline/types.js';
 import type {
   BoardState,
   GameConfig,
@@ -262,9 +262,8 @@ function composeHooks(modules: readonly GameModule[]): HookPipeline {
     readonly VpContribution[]
   >(modules, (hooks) => hooks.victoryPoints);
   const vpTarget = foldAcc<[GameConfig], number>(modules, (hooks) => hooks.vpTarget);
-  const legalCommands = foldAcc<[GameState, Seat, PrivateState | undefined], LegalCommandSet>(
-    modules,
-    (hooks) => hooks.legalCommands,
+  const legalChain = modules.flatMap((module) =>
+    module.hooks?.legalCommands ? [module.hooks.legalCommands] : [],
   );
   const timeoutAction = foldAcc<[GameState, TimeoutRequest], CommandShape | null>(
     modules,
@@ -311,7 +310,8 @@ function composeHooks(modules: readonly GameModule[]): HookPipeline {
     pending: (state, acc) => pending([state], acc),
     victoryPoints: (state, seat, priv, acc) => victoryPoints([state, seat, priv], acc),
     vpTarget: (config, acc) => vpTarget([config], acc),
-    legalCommands: (state, seat, priv, acc) => legalCommands([state, seat, priv], acc),
+    legalCommands: (state, seat, priv, acc, ctx) =>
+      legalChain.reduce((next, hook) => hook(state, seat, priv, next, ctx), acc),
     timeoutAction: (state, request, acc) => timeoutAction([state, request], acc),
     renderHints: (state, acc) => renderHints([state], acc),
   } satisfies HookPipeline);

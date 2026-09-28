@@ -2,7 +2,7 @@ import { canAfford, gainKnown, loseKnown } from '../../core/resources/index.js';
 import type { ResourceBounds } from '../../core/resources/index.js';
 import type { GameState, PhaseFrame, PrivateState, SeatState } from '../../core/state/index.js';
 import type { Pending, TimerSpec } from '../../core/pipeline/index.js';
-import type { HandlerContext } from '../../core/modules/index.js';
+import type { HandlerContext, Transition } from '../../core/modules/index.js';
 import type { EngineEffect, ResourceEndpoint } from '../../core/effects/index.js';
 import { RESOURCES, failure, success } from '../../core/types/index.js';
 import type { Resource, ResourceCounts, Result, Seat } from '../../core/types/index.js';
@@ -234,6 +234,22 @@ export function withClaim(state: GameState, pending: Pending[]): Pending[] {
     );
   }
   return [...pending, { kind: 'player', seat, allowed: ['CLAIM_VICTORY'] }];
+}
+
+/** Run the post-input checks (offers, public points, victory) and report a game end. */
+export function finalize(transition: Transition, ctx: HandlerContext): Transition {
+  const state = afterInput(transition.state, ctx);
+  if (!transition.state.result && state.result) {
+    return {
+      state,
+      events: [
+        ...transition.events,
+        { type: 'gameEnded', winner: state.result.winner, reason: state.result.reason },
+      ],
+      effects: transition.effects,
+    };
+  }
+  return { ...transition, state };
 }
 
 export function afterInput(state: GameState, ctx: HandlerContext): GameState {
