@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { Resource, ResourceCounts, Seat } from '@cp2p/engine';
+import type { Seat } from '@cp2p/engine';
+import { cardKinds } from '../knights/state.js';
 import { DialogFrame } from '../dialogs/DialogFrame.js';
 import { emptyCounts } from '../dialogs/resources.js';
 import type { CommandFormProps } from '../dialogs/types.js';
@@ -26,8 +27,9 @@ function hasOpenOffer(value: unknown, seat: Seat): boolean {
 export function TradeComposer(props: CommandFormProps) {
   const { legal, state, seat, privateState, onSubmit, onCancel, playerLabel } = props;
   const { t } = useTranslation('rules');
-  const [give, setGive] = useState<ResourceCounts>(emptyCounts);
-  const [want, setWant] = useState<ResourceCounts>(emptyCounts);
+  const kinds = cardKinds(state);
+  const [give, setGive] = useState<Record<string, number>>(() => emptyCounts(kinds));
+  const [want, setWant] = useState<Record<string, number>>(() => emptyCounts(kinds));
   const [touched, setTouched] = useState(false);
   const [to, setTo] = useState<Seat[]>(() =>
     state.config.seats.filter((candidate) => candidate !== seat),
@@ -42,7 +44,7 @@ export function TradeComposer(props: CommandFormProps) {
       : { type: template.type, give, want };
   const [validation] = useCommandValidations(command ? [command] : [], props);
   if (!template) return null;
-  const change = (field: 'give' | 'want', resource: Resource, value: number) => {
+  const change = (field: 'give' | 'want', resource: string, value: number) => {
     setTouched(true);
     if (field === 'give') {
       if (value <= (privateState.hand[resource] ?? 0))
@@ -82,20 +84,22 @@ export function TradeComposer(props: CommandFormProps) {
         <ResourceCardPicker
           label={t('rules:trade.give')}
           values={give}
+          kinds={kinds}
           stock={{ source: 'hand', counts: privateState.hand }}
           onChange={(resource, value) => change('give', resource, value)}
           onClear={() => {
             setTouched(true);
-            setGive(emptyCounts());
+            setGive(emptyCounts(kinds));
           }}
         />
         <ResourceCardPicker
           label={t('rules:trade.want')}
           values={want}
+          kinds={kinds}
           onChange={(resource, value) => change('want', resource, value)}
           onClear={() => {
             setTouched(true);
-            setWant(emptyCounts());
+            setWant(emptyCounts(kinds));
           }}
         />
       </div>

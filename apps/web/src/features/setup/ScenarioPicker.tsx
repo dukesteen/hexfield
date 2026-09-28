@@ -28,10 +28,20 @@ interface ScenarioPickerProps {
   readonly disabled?: boolean;
   /** Offer only the classic scenarios, for screens that cannot carry a seafaring board yet. */
   readonly classicOnly?: boolean;
+  /** An online game: scenarios whose private flows do not run over the network yet are left out. */
+  readonly online?: boolean;
 }
 
-/** Modules whose play screens are not built yet; their scenarios stay out of the picker. */
-const UNPLAYABLE_IN_UI = new Set(['knights']);
+/**
+ * Modules a local game plays but an online game cannot yet: their private hand-to-hand flows
+ * (looks, takes and sealed gifts) are not built for the peer-to-peer protocol.
+ */
+const NOT_ONLINE = new Set(['knights']);
+
+/** True when a scenario needs a module that online play does not carry yet. */
+export function isLocalOnlyScenario(scenario: Scenario): boolean {
+  return scenario.modules.some((id) => NOT_ONLINE.has(id));
+}
 
 /** Seafaring is only ever chosen through its scenarios, never as a bare module. */
 export function isSeafaringScenario(scenario: Scenario): boolean {
@@ -46,12 +56,13 @@ export function ScenarioPicker({
   onSeatCount,
   disabled = false,
   classicOnly = false,
+  online = false,
 }: ScenarioPickerProps) {
   const { t } = useTranslation('lobby');
   const choices = scenariosForSeats(seatCount).filter(
     (scenario) =>
       (!classicOnly || !isSeafaringScenario(scenario)) &&
-      !scenario.modules.some((id) => UNPLAYABLE_IN_UI.has(id)),
+      !(online && isLocalOnlyScenario(scenario)),
   );
   const classic = choices.filter((scenario) => !isSeafaringScenario(scenario));
   const seafaring = choices.filter(isSeafaringScenario);
@@ -107,7 +118,7 @@ export function ScenarioPicker({
                 ? t('lobby:expansionFiveSixSeats')
                 : state.kind === 'available'
                   ? t(
-                      classicOnly || UNPLAYABLE_IN_UI.has(id)
+                      classicOnly || (online && NOT_ONLINE.has(id))
                         ? 'lobby:expansionLater'
                         : 'lobby:expansionViaScenario',
                     )

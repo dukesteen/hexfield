@@ -51,9 +51,23 @@ export function merchantArtKey(color: ArtColor): string {
 
 export const BARBARIAN_SHIP_KEY = 'ck-barbarian-ship-piece';
 
+/** The dice of a knights roll: the red production die and the event die. */
+export const DIE_ART = { width: 60, height: 60 } as const;
+export const EVENT_FACES = ['ship', 'trade', 'politics', 'science'] as const;
+export function redDieKey(face: number): string {
+  return `ck-red-die-${Math.min(6, Math.max(1, Math.trunc(face) || 1))}`;
+}
+export function eventDieKey(face: string): string {
+  return `ck-event-die-${face}`;
+}
+
 /** Every art key the board draws for the six player colours, for one preload. */
 export function knightsBoardArtKeys(): string[] {
-  const keys = [BARBARIAN_SHIP_KEY];
+  const keys = [
+    BARBARIAN_SHIP_KEY,
+    ...[1, 2, 3, 4, 5, 6].map(redDieKey),
+    ...EVENT_FACES.map(eventDieKey),
+  ];
   for (const color of ART_COLOR_NAMES) {
     keys.push(walledCityArtKey(color), merchantArtKey(color));
     for (const level of KNIGHT_LEVELS)

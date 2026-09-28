@@ -43,6 +43,35 @@ const harness = vi.hoisted(() => {
     pirate: [] as unknown[],
     moveShip: [] as unknown[],
   };
+  // The knights module's board choices exist in every real availability, empty here.
+  Object.assign(
+    placements,
+    Object.fromEntries(
+      [
+        'knight',
+        'wall',
+        'activate',
+        'promote',
+        'moveKnight',
+        'displaceKnight',
+        'chase',
+        'sideways',
+        'relocate',
+        'pillage',
+        'metropolis',
+        'deserterRemove',
+        'deserterPlace',
+        'cardWall',
+        'cardCity',
+        'cardIntrigue',
+        'cardMerchant',
+        'cardBishop',
+        'cardInventor',
+        'cardDiplomat',
+        'cardSmith',
+      ].map((kind) => [kind, [] as unknown[]]),
+    ),
+  );
   const availability = {
     placements,
     primary: [] as unknown[],

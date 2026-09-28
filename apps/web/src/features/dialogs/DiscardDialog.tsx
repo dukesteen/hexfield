@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { RESOURCES } from '@cp2p/engine';
-import type { Resource, ResourceCounts } from '@cp2p/engine';
+import { cardKinds } from '../knights/state.js';
 import { ResourceCardPicker } from '../trade/ResourceCard.js';
 import { DialogFrame } from './DialogFrame.js';
 import { emptyCounts } from './resources.js';
@@ -11,17 +10,18 @@ import { ValidationChecking } from './ValidationChecking.js';
 
 /** The exact count comes from the engine's discard template. */
 export function DiscardDialog(props: CommandFormProps) {
-  const { legal, privateState, onSubmit, onCancel } = props;
+  const { legal, privateState, state, onSubmit, onCancel } = props;
   const { t } = useTranslation('rules');
-  const [cards, setCards] = useState<ResourceCounts>(emptyCounts);
+  const kinds = cardKinds(state);
+  const [cards, setCards] = useState<Record<string, number>>(() => emptyCounts(kinds));
   const template = legal.templates.find((item) => item.type === 'DISCARD');
   const count = typeof template?.count === 'number' ? template.count : 0;
-  const selected = RESOURCES.reduce((sum, resource) => sum + cards[resource], 0);
+  const selected = kinds.reduce((sum, resource) => sum + (cards[resource] ?? 0), 0);
   const command = { type: 'DISCARD', cards };
   const [validation] = useCommandValidations([command], props);
   if (typeof template?.count !== 'number') return null;
   const valid = selected === count && validation === 'valid';
-  const change = (resource: Resource, value: number) => {
+  const change = (resource: string, value: number) => {
     if (value < 0 || value > (privateState.hand[resource] ?? 0)) return;
     setCards((current) => ({ ...current, [resource]: value }));
   };
@@ -58,9 +58,10 @@ export function DiscardDialog(props: CommandFormProps) {
       <ResourceCardPicker
         label={t('rules:discard.cards')}
         values={cards}
+        kinds={kinds}
         stock={{ source: 'hand', counts: privateState.hand }}
         onChange={change}
-        onClear={() => setCards(emptyCounts)}
+        onClear={() => setCards(emptyCounts(kinds))}
       />
     </DialogFrame>
   );

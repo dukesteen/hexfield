@@ -3,11 +3,16 @@ import type { Resource, ResourceCounts } from '@cp2p/engine';
 import type { TFunction } from 'i18next';
 import { useTranslation } from 'react-i18next';
 
-export function emptyCounts(): ResourceCounts {
-  return { brick: 0, lumber: 0, wool: 0, grain: 0, ore: 0 };
+export function emptyCounts(): ResourceCounts;
+export function emptyCounts(kinds: readonly string[]): Record<string, number>;
+export function emptyCounts(kinds?: readonly string[]): Record<string, number> {
+  return Object.fromEntries((kinds ?? RESOURCES).map((kind) => [kind, 0]));
 }
 
-export function resourceLabel(t: TFunction, resource: Resource): string {
+/** Every card kind any game can hold: the five resources, then the three commodities. */
+export const ALL_CARD_KINDS: readonly string[] = [...RESOURCES, 'cloth', 'coin', 'paper'];
+
+export function resourceLabel(t: TFunction, resource: string): string {
   switch (resource) {
     case 'brick':
       return t('rules:resource.brick');
@@ -19,6 +24,12 @@ export function resourceLabel(t: TFunction, resource: Resource): string {
       return t('rules:resource.grain');
     case 'ore':
       return t('rules:resource.ore');
+    case 'cloth':
+      return t('rules:resource.cloth');
+    case 'coin':
+      return t('rules:resource.coin');
+    case 'paper':
+      return t('rules:resource.paper');
   }
   throw new Error('Unknown resource');
 }

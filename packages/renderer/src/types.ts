@@ -133,6 +133,8 @@ export interface BoardHighlights {
   readonly selectedEdges?: readonly EdgeId[];
   /** Vertices of pieces marked as the chosen one, such as the knight about to move. */
   readonly selectedVertices?: readonly VertexId[];
+  /** Hexes marked as the chosen one, such as the first of two number tokens to swap. */
+  readonly selectedHexes?: readonly HexId[];
 }
 
 export interface BoardAppearance {
@@ -194,7 +196,13 @@ export interface ScreenPoint {
 
 /** A rules-neutral visual cue. IDs are stable per public event and deduplicated briefly. */
 export type BoardEffect =
-  | { readonly id: string; readonly kind: 'dice-roll'; readonly dice: readonly [number, number] }
+  | {
+      readonly id: string;
+      readonly kind: 'dice-roll';
+      readonly dice: readonly [number, number];
+      /** A knights roll: the first die is red and the event die's face is shown beside them. */
+      readonly event?: 'ship' | 'trade' | 'politics' | 'science';
+    }
   | { readonly id: string; readonly kind: 'production-pulse'; readonly hexes: readonly HexId[] }
   | {
       readonly id: string;
@@ -239,6 +247,8 @@ export type BoardEffect =
       readonly fixture: string;
       readonly fromStep: number;
       readonly toStep: number;
+      /** Wait this long before sailing, so the dice roll can finish first. */
+      readonly delayMs?: number;
     }
   | {
       readonly id: string;
@@ -251,6 +261,15 @@ export type BoardEffect =
       readonly defenders: readonly VertexId[];
       /** Vertices of the cities that were pillaged. */
       readonly pillaged: readonly VertexId[];
+      /** Wait this long before sailing, so the dice roll can finish first. */
+      readonly delayMs?: number;
+    }
+  | {
+      readonly id: string;
+      /** Embers over a pillaged city, or a shield ring over a knight that held. */
+      readonly kind: 'burst';
+      readonly at: VertexId;
+      readonly tone: 'fire' | 'shield';
     }
   | {
       readonly id: string;

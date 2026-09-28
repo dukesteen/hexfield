@@ -28,6 +28,8 @@ import {
   BARBARIAN_SHIP_KEY,
   KNIGHT_ANCHOR,
   KNIGHT_ART,
+  eventDieKey,
+  redDieKey,
   MERCHANT_ANCHOR,
   MERCHANT_ART,
   TRACK_ART,
@@ -117,6 +119,7 @@ const SHIP_MOVE_MS = 700;
 const BARBARIAN_SAIL_MS = 900;
 const BARBARIAN_ATTACK_MS = 3200;
 const KNIGHT_MOVE_MS = 520;
+const BURST_MS = 1100;
 /** Knights draw a quarter larger than their art box, so they read beside a city. */
 const KNIGHT_SCALE = 1.25;
 const MERCHANT_OFFSET = { x: 0.36, y: 0.4 } as const;
@@ -553,6 +556,17 @@ export class PixiBoardRenderer implements BoardRenderer {
     const wake = style.edgeTarget === 'wake';
     for (const id of highlights.selectedEdges ?? [])
       if (this.edgeEndpoints(id)) layer.addChild(this.edgeRing(id, 1.05, 0.62, 0xf0b64a));
+    for (const id of highlights.selectedHexes ?? []) {
+      const hex = this.model?.hexes.find((candidate) => candidate.id === id);
+      if (hex)
+        layer.addChild(
+          new Graphics()
+            .poly(hexCorners(hexToPixel(hex.q, hex.r, this.hexSize), this.hexSize * 0.94), true)
+            .fill({ color: 0xf0b64a, alpha: 0.22 })
+            .stroke({ color: EDGE_INK, width: this.hexSize * 0.09 })
+            .stroke({ color: 0xf0b64a, width: this.hexSize * 0.05 }),
+        );
+    }
     for (const id of highlights.selectedVertices ?? [])
       if (this.graph?.vertexIndex[id] !== undefined)
         layer.addChild(this.pieceRing(id, 0.5, 0xf0b64a));
@@ -721,25 +735,34 @@ export class PixiBoardRenderer implements BoardRenderer {
           : effect.kind === 'ship-move'
             ? SHIP_MOVE_MS
             : effect.kind === 'barbarian-sail'
-              ? BARBARIAN_SAIL_MS
+              ? BARBARIAN_SAIL_MS + (effect.delayMs ?? 0)
               : effect.kind === 'barbarian-attack'
-                ? BARBARIAN_ATTACK_MS
-                : effect.kind === 'knight-move'
-                  ? KNIGHT_MOVE_MS
-                  : effect.kind === 'fog-reveal'
-                    ? FOG_REVEAL_MS +
-                      Math.min(effect.order ?? 0, FOG_MAX_STAGGERED) * FOG_STAGGER_MS
-                    : 420;
+                ? BARBARIAN_ATTACK_MS + (effect.delayMs ?? 0)
+                : effect.kind === 'burst'
+                  ? BURST_MS
+                  : effect.kind === 'knight-move'
+                    ? KNIGHT_MOVE_MS
+                    : effect.kind === 'fog-reveal'
+                      ? FOG_REVEAL_MS +
+                        Math.min(effect.order ?? 0, FOG_MAX_STAGGERED) * FOG_STAGGER_MS
+                      : 420;
     if (effect.kind === 'dice-roll') {
       if (effect.dice.some((face) => !Number.isInteger(face) || face < 1 || face > 6)) return null;
       const faceSize = Math.min(64, Math.max(56, this.app.screen.width * 0.07));
       const gap = Math.max(10, faceSize * 0.2);
       node.position.set(this.app.screen.width / 2, this.app.screen.height / 2);
-      for (const [index, face] of effect.dice.entries()) {
+      const faces: (Texture | undefined)[] = effect.dice.map((face, index) =>
+        effect.event !== undefined && index === 0
+          ? (this.knightsArt?.get(redDieKey(face)) ?? this.textures.dice[face - 1])
+          : this.textures.dice[face - 1],
+      );
+      if (effect.event !== undefined)
+        faces.push(this.knightsArt?.get(eventDieKey(effect.event)));
+      const shown = faces.filter((texture): texture is Texture => texture !== undefined);
+      if (shown.length !== faces.length) return null;
+      for (const [index, faceTexture] of shown.entries()) {
         const die = new Container();
-        die.position.set(index === 0 ? -(faceSize + gap) / 2 : (faceSize + gap) / 2, 0);
-        const faceTexture = this.textures.dice[face - 1];
-        if (!faceTexture) return null;
+        die.position.set((index - (shown.length - 1) / 2) * (faceSize + gap), 0);
         const sprite = new Sprite(faceTexture);
         sprite.anchor.set(0.5);
         sprite.width = faceSize;
@@ -958,7 +981,13 @@ export class PixiBoardRenderer implements BoardRenderer {
         duration,
         cleanup: () => this.setBarbarianHidden(false),
         update: (progress) => {
-          const at = sailPosition(fixture, this.hexSize, effect.fromStep, effect.toStep, progress);
+          const at = sailPosition(
+            fixture,
+            this.hexSize,
+            effect.fromStep,
+            effect.toStep,
+            (progress * duration - (effect.delayMs ?? 0)) / BARBARIAN_SAIL_MS,
+          );
           if (at) sprite.position.set(at.x, at.y);
           return progress >= 1;
         },
@@ -966,6 +995,7 @@ export class PixiBoardRenderer implements BoardRenderer {
     }
     if (effect.kind === 'barbarian-attack')
       return this.createBarbarianAttack(effect, node, duration);
+    if (effect.kind === 'burst') return this.createBurst(effect, node, duration);
     if (effect.kind === 'piece-pop') {
       const point = this.pointForHit(effect.at);
       if (!point) return null;
@@ -1077,8 +1107,12 @@ export class PixiBoardRenderer implements BoardRenderer {
       node,
       duration,
       cleanup: () => this.setBarbarianHidden(false),
-      update: (progress) => {
+      update: (overall) => {
         blast.clear();
+        const progress = Math.min(
+          1,
+          Math.max(0, (overall * duration - (effect.delayMs ?? 0)) / BARBARIAN_ATTACK_MS),
+        );
         if (progress < SAIL_END) {
           const at = sailPosition(fixture, hexSize, effect.fromStep, landing, progress / SAIL_END);
           if (at) sprite.position.set(at.x, at.y);
@@ -1109,6 +1143,49 @@ export class PixiBoardRenderer implements BoardRenderer {
           const at = sailPosition(fixture, hexSize, landing, 0, local);
           if (at) sprite.position.set(at.x, at.y);
           sprite.alpha = 1;
+        }
+        return overall >= 1;
+      },
+    };
+  }
+
+  /** Embers over a pillaged city, or a ring of light over a knight that held the line. */
+  private createBurst(
+    effect: Extract<BoardEffect, { kind: 'burst' }>,
+    node: Container,
+    duration: number,
+  ): {
+    readonly node: Container;
+    readonly update: (progress: number) => boolean;
+    readonly duration: number;
+  } {
+    const at = vertexToPixel(effect.at, this.hexSize);
+    const glow = new Graphics();
+    node.addChild(glow);
+    this.layers.effects.addChild(node);
+    const fire = effect.tone === 'fire';
+    return {
+      node,
+      duration,
+      update: (progress) => {
+        glow.clear();
+        const fade = 1 - progress;
+        if (fire) {
+          glow
+            .circle(at.x, at.y, this.hexSize * (0.15 + progress * 0.6))
+            .stroke({ color: 0xff8a3c, alpha: fade, width: this.hexSize * 0.09 })
+            .circle(
+              at.x,
+              at.y - progress * this.hexSize * 0.3,
+              this.hexSize * (0.1 + progress * 0.3),
+            )
+            .fill({ color: 0xd6402f, alpha: fade * 0.5 });
+        } else {
+          glow
+            .circle(at.x, at.y, this.hexSize * (0.3 + progress * 0.4))
+            .stroke({ color: 0xfff6d6, alpha: fade, width: this.hexSize * 0.07 })
+            .circle(at.x, at.y, this.hexSize * (0.24 + progress * 0.25))
+            .stroke({ color: 0xf0b64a, alpha: fade, width: this.hexSize * 0.04 });
         }
         return progress >= 1;
       },

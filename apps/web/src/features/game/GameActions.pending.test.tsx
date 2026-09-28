@@ -50,6 +50,35 @@ const harness = vi.hoisted(() => {
     availableTypes: ['ROLL_DICE'],
     cardPlays: [],
   };
+  // The knights module's board choices exist in every real availability, empty here.
+  Object.assign(
+    availability.placements,
+    Object.fromEntries(
+      [
+        'knight',
+        'wall',
+        'activate',
+        'promote',
+        'moveKnight',
+        'displaceKnight',
+        'chase',
+        'sideways',
+        'relocate',
+        'pillage',
+        'metropolis',
+        'deserterRemove',
+        'deserterPlace',
+        'cardWall',
+        'cardCity',
+        'cardIntrigue',
+        'cardMerchant',
+        'cardBishop',
+        'cardInventor',
+        'cardDiplomat',
+        'cardSmith',
+      ].map((kind) => [kind, []]),
+    ),
+  );
   const choosePlacement = vi.fn<(kind: string) => void>();
   const openActionDialog = vi.fn<(dialog: string) => void>();
   Object.assign(state, { choosePlacement, openActionDialog });

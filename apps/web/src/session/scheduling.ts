@@ -1,3 +1,4 @@
+import type { Seat } from '@cp2p/engine';
 import { chooseBotPending as chooseProtocolBotPending } from '@cp2p/protocol';
 
 export { phaseIdentity, timerKey } from '@cp2p/protocol';
@@ -30,7 +31,7 @@ const PARALLEL_REQUESTS: ReadonlySet<string> = new Set([
 export function chooseBotPending(
   state: Parameters<typeof chooseProtocolBotPending>[0],
   pending: Parameters<typeof chooseProtocolBotPending>[1],
-  botSeats: ReadonlySet<number>,
+  botSeats: ReadonlySet<Seat>,
 ): PlayerPending | null {
   const chosen = chooseProtocolBotPending(state, pending, botSeats);
   if (chosen) return chosen;

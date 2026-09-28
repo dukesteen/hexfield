@@ -80,3 +80,29 @@ export function getDefenderIconUrl(): string {
 export function getDefenderCardUrl(): string {
   return artUrl('ck-card-defender');
 }
+
+export type GlyphName =
+  | 'knight'
+  | 'roads'
+  | 'monopoly'
+  | 'plenty'
+  | 'longest'
+  | 'victory'
+  | 'bankTrade'
+  | 'playerTrade';
+
+const GLYPHS: Readonly<Record<GlyphName, string>> = {
+  knight: 'icon-knight',
+  roads: 'icon-roads',
+  monopoly: 'icon-monopoly',
+  plenty: 'icon-plenty',
+  longest: 'icon-longest',
+  victory: 'icon-victory',
+  bankTrade: 'icon-bank-trade',
+  playerTrade: 'icon-player-trade',
+};
+
+/** A base-game emblem (a helmet, a road, a crown, a coin exchange) reused on progress cards. */
+export function getGlyphUrl(glyph: GlyphName): string {
+  return artUrl(GLYPHS[glyph]);
+}

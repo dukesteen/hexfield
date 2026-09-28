@@ -2,6 +2,8 @@ import type { Texture } from 'pixi.js';
 import {
   BARBARIAN_SHIP_ART,
   BARBARIAN_SHIP_KEY,
+  DIE_ART,
+  EVENT_FACES,
   KNIGHT_ART,
   KNIGHT_LEVELS,
   KNIGHTS_TRACKS,
@@ -11,8 +13,10 @@ import {
   WALLED_CITY_ART,
   WALLED_METROPOLIS_ART,
   knightArtKey,
+  eventDieKey,
   merchantArtKey,
   metropolisArtKey,
+  redDieKey,
   walledCityArtKey,
 } from '../knightsLayout.js';
 import { loadTexture, rasterResolution } from './terrainTextures.js';
@@ -49,6 +53,17 @@ export async function loadKnightsTextures(
     );
   };
   add(BARBARIAN_SHIP_KEY, BARBARIAN_SHIP_ART, 0.8);
+  // The dice pop up at screen size, not board size.
+  for (const face of [1, 2, 3, 4, 5, 6]) {
+    const key = redDieKey(face);
+    const resolution = rasterResolution(devicePixelRatio, maxPixelRatio, 1, 64, 64, 60, 60);
+    requests.push(loadTexture(key, DIE_ART.width, DIE_ART.height, resolution).then((t) => [key, t]));
+  }
+  for (const face of EVENT_FACES) {
+    const key = eventDieKey(face);
+    const resolution = rasterResolution(devicePixelRatio, maxPixelRatio, 1, 64, 64, 60, 60);
+    requests.push(loadTexture(key, DIE_ART.width, DIE_ART.height, resolution).then((t) => [key, t]));
+  }
   for (const color of ART_COLOR_NAMES) {
     add(walledCityArtKey(color), WALLED_CITY_ART);
     add(merchantArtKey(color), MERCHANT_ART);

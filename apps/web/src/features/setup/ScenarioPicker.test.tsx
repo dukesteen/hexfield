@@ -3,10 +3,10 @@ import { afterEach, beforeAll, expect, test, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { createInstance } from 'i18next';
 import { I18nextProvider } from 'react-i18next';
-import { SCENARIOS, scenarioConfig, type Scenario } from '@cp2p/maps';
+import { SCENARIOS, scenarioById, scenarioConfig, type Scenario } from '@cp2p/maps';
 import { engineForConfig } from '@cp2p/engine';
 import lobby from '../../i18n/locales/en/lobby.json';
-import { ScenarioPicker, isSeafaringScenario } from './ScenarioPicker';
+import { ScenarioPicker, isLocalOnlyScenario, isSeafaringScenario } from './ScenarioPicker';
 
 const i18n = createInstance();
 beforeAll(async () => {
@@ -14,7 +14,12 @@ beforeAll(async () => {
 });
 afterEach(cleanup);
 
-function mount(props: { seatCount?: number; scenarioId?: string; classicOnly?: boolean }) {
+function mount(props: {
+  seatCount?: number;
+  scenarioId?: string;
+  classicOnly?: boolean;
+  online?: boolean;
+}) {
   const onScenario = vi.fn<(scenario: Scenario) => void>();
   render(
     <I18nextProvider i18n={i18n}>
@@ -24,6 +29,7 @@ function mount(props: { seatCount?: number; scenarioId?: string; classicOnly?: b
         onScenario={onScenario}
         onSeatCount={vi.fn<(count: number) => void>()}
         {...(props.classicOnly ? { classicOnly: true } : {})}
+        {...(props.online ? { online: true } : {})}
       />
     </I18nextProvider>,
   );
@@ -48,6 +54,7 @@ test('seafaring scenarios are their own group and start the scenario they name',
   expect(optionNames(screen.getByRole('group', { name: 'Classic' }))).toEqual([
     'Standard island',
     'Fixed island',
+    'Cities & Knights',
   ]);
   fireEvent.change(screen.getByRole('combobox'), { target: { value: 'new-horizons' } });
   expect(onScenario).toHaveBeenCalledWith(expect.objectContaining({ id: 'new-horizons' }));
@@ -72,7 +79,7 @@ test('the seafaring switch is an indicator: it is never a way to add the bare mo
   const off = screen.getByRole('checkbox', { name: /^Seafaring/ });
   expect(off).toHaveProperty('checked', false);
   expect(off).toHaveProperty('disabled', true);
-  expect(screen.getByText(/choose a seafaring scenario above/)).toBeTruthy();
+  expect(screen.getAllByText(/choose a scenario above/)).toHaveLength(2);
   fireEvent.click(off);
   expect(onScenario).not.toHaveBeenCalled();
 });
@@ -84,9 +91,41 @@ test('screens that cannot carry a seafaring board offer the classic scenarios on
     within(screen.getByRole('combobox'))
       .getAllByRole('option')
       .map((option) => option.textContent),
-  ).toEqual(['Standard island', 'Fixed island']);
+  ).toEqual(['Standard island', 'Fixed island', 'Cities & Knights']);
   const row = screen.getByRole('checkbox', { name: /^Seafaring/ }).closest('label');
   expect(row?.textContent).toContain('not available yet');
+});
+
+test('a local game offers Cities & Knights, and an online game does not yet', () => {
+  mount({ seatCount: 4 });
+  expect(
+    within(screen.getByRole('combobox')).getByRole('option', { name: 'Cities & Knights' }),
+  ).toBeTruthy();
+  cleanup();
+  mount({ seatCount: 6, scenarioId: 'five-six' });
+  expect(
+    within(screen.getByRole('combobox')).getByRole('option', {
+      name: 'Cities & Knights (5–6 players)',
+    }),
+  ).toBeTruthy();
+  cleanup();
+  mount({ online: true });
+  const names = within(screen.getByRole('combobox'))
+    .getAllByRole('option')
+    .map((option) => option.textContent);
+  expect(names).not.toContain('Cities & Knights');
+  expect(names).toContain('Standard island');
+  const row = screen.getByRole('checkbox', { name: /^Knights and commerce/ }).closest('label');
+  expect(row?.textContent).toContain('not available yet');
+  cleanup();
+  mount({ online: true, seatCount: 6, scenarioId: 'five-six' });
+  expect(
+    within(screen.getByRole('combobox'))
+      .getAllByRole('option')
+      .map((option) => option.textContent),
+  ).not.toContain('Cities & Knights (5–6 players)');
+  expect(isLocalOnlyScenario(scenarioById('knights') ?? SCENARIOS[0]!)).toBe(true);
+  expect(isLocalOnlyScenario(scenarioById('standard') ?? SCENARIOS[0]!)).toBe(false);
 });
 
 test('every offered seafaring scenario starts with its own victory target', () => {

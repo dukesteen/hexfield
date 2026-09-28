@@ -9,18 +9,22 @@ import type {
 } from '@cp2p/engine';
 import type { GameSession, SessionStatus, SessionTimer } from '../session';
 import type { RecoveryApprovalCandidate, SessionAuditState, SessionFairness } from '@cp2p/protocol';
-import type { EdgeId, VertexId } from '@cp2p/engine/geometry';
 import type { PlacementKind } from '../features/actions/availability';
+import { derivedKnightsEvents } from '../features/knights/log';
 import { requiredHumanSeat } from './pending-actors';
 
-export type PlacementCandidate =
-  | { readonly kind: 'road' | 'freeRoad' | 'ship' | 'freeShip' | 'moveShip'; readonly id: EdgeId }
-  | { readonly kind: 'settlement' | 'city'; readonly id: VertexId };
+/** A board target picked and awaiting its confirmation: the id is an edge, vertex or hex id. */
+export interface PlacementCandidate {
+  readonly kind: PlacementKind;
+  readonly id: string;
+}
 
 interface SessionView {
   gameId: string | null;
   state: GameState | null;
   events: readonly GameEvent[];
+  /** Log lines derived from state changes, with the number of events before each. */
+  derivedLog: readonly { readonly at: number; readonly event: GameEvent }[];
   pending: readonly Pending[];
   timers: readonly SessionTimer[];
   status: SessionStatus | null;
@@ -35,9 +39,24 @@ interface SessionView {
   placementMode: PlacementKind | null;
   placementCancelled: boolean;
   previewPlacement: PlacementCandidate | null;
-  /** The ship chosen to sail, while its destination is still to be picked. */
-  shipMoveFrom: EdgeId | null;
-  openDialog: 'discard' | 'steal' | 'trade' | 'bank' | 'plenty' | 'monopoly' | 'knight' | null;
+  /**
+   * The first pick of a two-pick move while the second is still to be made: the ship that will
+   * sail, the knight that will move, the first hex of a swap. An edge, vertex or hex id.
+   */
+  shipMoveFrom: string | null;
+  openDialog:
+    | 'discard'
+    | 'steal'
+    | 'trade'
+    | 'bank'
+    | 'plenty'
+    | 'monopoly'
+    | 'knight'
+    | 'progress'
+    | 'improve'
+    | 'harbor'
+    | 'discardProgress'
+    | null;
   selectedCardSlot: string | null;
   optionalChoices: readonly Seat[];
   optionalViewingSeat: Seat | null;
@@ -54,7 +73,7 @@ interface SessionActions {
   selectPlacementCandidate(candidate: PlacementCandidate): void;
   clearPlacementCandidate(): void;
   /** Choose the ship to move, or `null` to go back to choosing one. */
-  selectShipToMove(edge: EdgeId | null): void;
+  selectShipToMove(edge: string | null): void;
   openActionDialog(dialog: SessionView['openDialog'], slotId?: string): void;
   closeActionDialog(): void;
   viewOptionalSeat(seat: Seat): void;
@@ -67,6 +86,7 @@ const emptyView: SessionView = {
   gameId: null,
   state: null,
   events: [],
+  derivedLog: [],
   pending: [],
   timers: [],
   status: null,
@@ -308,10 +328,21 @@ export function attachSession(gameId: string, session: GameSession): () => void 
               : null;
       }
     }
+    const allEvents = session.getEvents();
+    const derivedLog = current.state
+      ? [
+          ...current.derivedLog,
+          ...derivedKnightsEvents(current.state, update.state, update.events).map((item) => ({
+            at: allEvents.length - update.events.length + item.after,
+            event: item.event,
+          })),
+        ]
+      : current.derivedLog;
     useSessionStore.setState({
       gameId,
       state: update.state,
-      events: session.getEvents(),
+      events: allEvents,
+      derivedLog,
       pending: update.pending,
       timers: update.timers,
       status: update.status,

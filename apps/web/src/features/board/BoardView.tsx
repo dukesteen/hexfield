@@ -151,6 +151,7 @@ export function BoardView({
           ...(propsRef.current.appearance ? { appearance: propsRef.current.appearance } : {}),
           reducedMotion: propsRef.current.reducedMotion,
           seafaring: propsRef.current.model.ships !== undefined,
+          knights: propsRef.current.model.knights !== undefined,
           debugIslands: propsRef.current.debugIslands,
           accessibleLabel: propsRef.current.label,
           formatHarborLabel: (kind) => propsRef.current.formatHarborLabel(kind),

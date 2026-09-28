@@ -1,5 +1,6 @@
 import type { TFunction } from 'i18next';
 import { RESOURCES, type GameEvent, type Resource } from '@cp2p/engine';
+import { formatKnightsEvent } from '../knights/log';
 
 function record(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -52,8 +53,12 @@ export function formatGameEvent(
       });
     return t('log:fogRevealedOpen', { player: actor, terrain });
   }
-  if (event.type === 'diceRolled' && typeof event.roll === 'number')
-    return t('log:diceRolled', { count: event.roll });
+  if (event.type === 'diceRolled' && typeof event.roll === 'number') {
+    const face = record(event.extra) ? event.extra.event : undefined;
+    return typeof face === 'string'
+      ? t('log:diceRolledEvent', { count: event.roll, face: t(`log:eventFace.${face}`) })
+      : t('log:diceRolled', { count: event.roll });
+  }
   if (event.type === 'resourcesProduced' && record(event.bySeat)) {
     const gains = Object.entries(event.bySeat).flatMap(([seat, counts]) => {
       if (!record(counts)) return [];
@@ -100,5 +105,7 @@ export function formatGameEvent(
   if (event.type === 'phaseChanged') return t('log:phaseChanged');
   if (event.type === 'gameEnded' && typeof event.winner === 'number')
     return t('log:gameEnded', { player: playerLabel(event.winner) });
+  const knights = formatKnightsEvent(event, t, playerLabel);
+  if (knights !== null) return knights;
   return t('log:gameUpdated');
 }

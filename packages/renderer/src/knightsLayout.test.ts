@@ -39,8 +39,8 @@ const distance = (a: { x: number; y: number }, b: { x: number; y: number }) =>
 describe('knights art keys', () => {
   test('every key the board preloads is a shipped art file', () => {
     const keys = knightsBoardArtKeys();
-    // one ship, and per colour: a walled city, a merchant, six knights and six metropolises
-    expect(keys).toHaveLength(1 + 6 * 14);
+    // one ship, ten dice faces, and per colour: a walled city, a merchant, six knights and six metropolises
+    expect(keys).toHaveLength(1 + 6 + 4 + 6 * 14);
     expect(new Set(keys).size).toBe(keys.length);
     for (const key of keys) expect(Object.keys(KNIGHTS_ART)).toContain(key);
   });

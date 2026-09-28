@@ -76,7 +76,7 @@ export function MonopolyDialog(props: Props) {
         label={t('rules:monopoly.cards')}
         values={values}
         selectable={selectable}
-        onChange={(resource, count) => setSelected(count > 0 ? resource : null)}
+        onChange={(resource: Resource, count) => setSelected(count > 0 ? resource : null)}
         onClear={() => setSelected(null)}
       />
     </DialogFrame>

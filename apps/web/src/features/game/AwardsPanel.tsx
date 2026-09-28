@@ -2,6 +2,7 @@ import type { GameState } from '@cp2p/engine';
 import { getAwardCardUrl } from '@cp2p/renderer';
 import { useTranslation } from 'react-i18next';
 import type { GamePresentation } from '../../queries/repositories/saved-games';
+import { isKnights } from '../knights/state';
 import { isSeafaring } from './seafaring';
 
 export function AwardsPanel({
@@ -13,11 +14,15 @@ export function AwardsPanel({
 }) {
   const { t } = useTranslation('game');
   const seafaring = isSeafaring(state);
+  // Cities & Knights has no development cards, so there is no Largest Army to hold.
+  const awards = isKnights(state)
+    ? (['longestRoad'] as const)
+    : (['longestRoad', 'largestArmy'] as const);
   return (
     <section className="awards-panel" aria-label={t('game:cockpit.awards')}>
       <h2>{t('game:cockpit.awards')}</h2>
       <div className="award-list">
-        {(['longestRoad', 'largestArmy'] as const).map((award) => {
+        {awards.map((award) => {
           const holder = presentation.players.find((player) => player.seat === state.awards[award]);
           return (
             <div className="award-item" key={award} data-claimed={Boolean(holder)}>

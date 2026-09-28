@@ -223,7 +223,8 @@
     "CLAIM_VICTORY": "Claim victory",
     "trade": "Offer a trade",
     "bank": "Trade with bank",
-    "END_SBP": "Done building"
+    "END_SBP": "Done building",
+    "DESERTER_SKIP": "Place no knight"
   },
   "fairnessTitle": "Game fairness",
   "fairnessOpen": "Game fairness: {{status}}",

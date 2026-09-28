@@ -271,6 +271,7 @@ export function OnlineConfiguration({
             </select>
           </label>
           <ScenarioPicker
+            online
             seatCount={seatCount}
             scenarioId={scenarioId}
             disabled={!editable}

@@ -1,11 +1,25 @@
 import { engineForConfig } from '@cp2p/engine';
-import type { GameState, Seat } from '@cp2p/engine';
+import type { GameState, KnightsExt, Seat } from '@cp2p/engine';
 import { buildBoardGraph } from '@cp2p/engine/geometry';
 import type { HexId, VertexId } from '@cp2p/engine/geometry';
 import type { RenderModel } from '@cp2p/renderer';
+import { BARBARIAN_FIXTURE, BARBARIAN_STEPS, TRACKS } from '@cp2p/engine';
+import { knightsState } from '../knights/state';
 import { uiModulesFor } from '../modules';
 
 export type BoardViewer = Seat | 'spectator';
+
+/** A city's wall and metropolis, when it has them. */
+function cityDecoration(
+  ext: KnightsExt,
+  vertex: string,
+): { wall?: true; metropolis?: 'trade' | 'politics' | 'science' } {
+  const metropolis = TRACKS.find((track) => ext.metropolises[track]?.vertex === vertex);
+  return {
+    ...(ext.walls.some((wall) => wall.vertex === vertex) ? { wall: true as const } : {}),
+    ...(metropolis ? { metropolis } : {}),
+  };
+}
 
 function required<T>(value: T | undefined, label: string): T {
   if (value === undefined) throw new Error(`Invalid board ${label}`);
@@ -59,8 +73,49 @@ function seafaringSlices(
   };
 }
 
+/** Knights, the merchant, sideways pieces and the barbarian ship, from the module's public state. */
+function knightsSlice(
+  state: Readonly<GameState>,
+  hexIds: readonly HexId[],
+  vertexIds: readonly VertexId[],
+): Pick<RenderModel, 'knights'> {
+  const ext = knightsState(state);
+  if (!ext) return {};
+  const vertex = (id: string): VertexId | undefined => vertexIds.find((item) => item === id);
+  const level = (value: number): 1 | 2 | 3 => (value >= 3 ? 3 : value === 2 ? 2 : 1);
+  const merchantHex = ext.merchant ? hexIds.find((id) => id === ext.merchant?.hex) : undefined;
+  const track = state.board.fixtures?.find((fixture) => fixture.id === BARBARIAN_FIXTURE);
+  return {
+    knights: {
+      pieces: ext.knights.flatMap((knight) => {
+        const at = vertex(knight.vertex);
+        return at
+          ? [
+              {
+                vertex: at,
+                seat: knight.seat,
+                level: level(knight.level),
+                active: knight.active,
+                ready: knight.ready,
+              },
+            ]
+          : [];
+      }),
+      merchant: ext.merchant && merchantHex ? { hex: merchantHex, seat: ext.merchant.seat } : null,
+      sideways: ext.sideways.flatMap((piece) => {
+        const at = vertex(piece.vertex);
+        return at ? [{ vertex: at, seat: piece.seat }] : [];
+      }),
+      barbarians: track
+        ? { fixture: track.id, step: ext.barbarians.step, steps: BARBARIAN_STEPS }
+        : null,
+    },
+  };
+}
+
 export function toRenderModel(state: Readonly<GameState>, _viewer: BoardViewer): RenderModel {
   const graph = buildBoardGraph(state.board.hexes);
+  const ext = knightsState(state);
   return {
     hexes: state.board.hexes.map((hex) => ({
       id: required(
@@ -93,6 +148,7 @@ export function toRenderModel(state: Readonly<GameState>, _viewer: BoardViewer):
       ),
       seat: building.seat,
       kind: building.kind === 'city' ? 'city' : 'settlement',
+      ...(ext && building.kind === 'city' ? cityDecoration(ext, building.vertex) : {}),
     })),
     ...(state.board.ships
       ? {
@@ -106,6 +162,7 @@ export function toRenderModel(state: Readonly<GameState>, _viewer: BoardViewer):
           ...seafaringSlices(state, graph.hexIds, graph.vertexIds),
         }
       : {}),
+    ...knightsSlice(state, graph.hexIds, graph.vertexIds),
     ...(state.board.fixtures?.length
       ? {
           fixtures: state.board.fixtures.map((fixture) => ({

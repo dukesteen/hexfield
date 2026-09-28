@@ -24,6 +24,7 @@ export {
   getDefenderCardUrl,
   getDefenderIconUrl,
   getEventDieUrl,
+  getGlyphUrl,
   getImprovementBannerUrl,
   getKnightIconUrl,
   getMerchantIconUrl,
@@ -34,7 +35,7 @@ export {
   getWallIconUrl,
   getWalledCityIconUrl,
 } from './assets/knightsIcons.js';
-export type { CommodityName, EventDieFace } from './assets/knightsIcons.js';
+export type { CommodityName, EventDieFace, GlyphName } from './assets/knightsIcons.js';
 export {
   TRACK_ART,
   barbarianStepPoint,
