@@ -35,8 +35,10 @@ export interface SetupCtx {
 
 export interface OptionSpec {
   key: string;
-  type: 'boolean' | 'integer' | 'string' | 'enum' | 'object';
+  type: 'boolean' | 'integer' | 'string' | 'enum' | 'object' | 'array';
   default: unknown;
+  /** Also accept `null`, whatever the type. */
+  nullable?: boolean;
   values?: readonly string[];
   min?: number;
   max?: number;
@@ -152,6 +154,8 @@ export interface Hooks {
   diceSpec(state: GameState, acc: DiceSpec): DiceSpec;
   onDiceResult(state: GameState, dice: readonly [number, number]): GameState;
   production(state: GameState, roll: number, acc: Production): Production;
+  /** After production is paid on a non-7 roll and the `main` phase is set. May push a frame. */
+  afterProduction(state: GameState, roll: number): GameState;
   onNoProduction(state: GameState, seat: Seat): GameState;
   placement: {
     settlement(state: GameState, seat: Seat, loc: string, verdict: boolean): boolean;
@@ -159,6 +163,8 @@ export interface Hooks {
     city(state: GameState, seat: Seat, loc: string, verdict: boolean): boolean;
   };
   connectivity(state: GameState, seat: Seat, acc: readonly string[]): readonly string[];
+  /** Free placements (Road Building) that are legal now. Base starts with the free-road commands. */
+  freePieces(state: GameState, seat: Seat, acc: readonly CommandShape[]): readonly CommandShape[];
   routeGraph(state: GameState, seat: Seat, acc: RouteGraph): RouteGraph;
   robberLike(state: GameState, acc: readonly Blocker[]): readonly Blocker[];
   stealTargets(
@@ -274,6 +280,11 @@ export interface VpContribution {
   source: string;
   points: number;
   public: boolean;
+  /**
+   * A public contribution that base folds into `seat.publicVp` after every input, so the
+   * victory checks, claims and scoreboards see it. `computeVictoryPoints` does not add it again.
+   */
+  stored?: boolean;
 }
 
 /** A module owns its extension state, phase handlers and unique input types. */

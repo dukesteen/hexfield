@@ -40,6 +40,8 @@ const CATALOGUE: Record<HookName, true> = {
   diceSpec: true,
   onDiceResult: true,
   production: true,
+  afterProduction: true,
+  freePieces: true,
   onNoProduction: true,
   placement: true,
   connectivity: true,
@@ -83,6 +85,8 @@ function recordingHooks(id: string, calls: string[]): ModuleHooks {
     diceSpec: (_state, acc) => keep('diceSpec', acc),
     onDiceResult: (state) => keep('onDiceResult', state),
     production: (_state, _roll, acc) => keep('production', acc),
+    afterProduction: (state) => keep('afterProduction', state),
+    freePieces: (_state, _seat, acc) => keep('freePieces', acc),
     onNoProduction: (state) => keep('onNoProduction', state),
     placement: {
       settlement: (_state, _seat, _loc, verdict) => keep('placement.settlement', verdict),
@@ -393,6 +397,8 @@ describe('kitchen-sink module', () => {
     const game = drive(engine, config, 3_000, 3);
     const state = game.snapshot();
     engine.hooks.renderHints(state, []);
+    // Only settlement checks read the connectivity hook, and a random game rarely affords one.
+    engine.hooks.connectivity(state, 0, []);
     engine.computeVictoryPoints(state, 0);
     expect(engine.checkInvariants(state)).toEqual([]);
 

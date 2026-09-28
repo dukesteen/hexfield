@@ -2,6 +2,7 @@ import {
   classifyEdge,
   detectIslands,
   isLandTerrain,
+  isSeaTerrain,
   vertexTouchesLand,
 } from '../../../core/board/index.js';
 import type { EdgeKind, Island } from '../../../core/board/index.js';
@@ -50,6 +51,7 @@ export function boardGraph(state: GameState): BoardGraph {
 
 interface Terrain {
   land: ReadonlySet<string>;
+  seaEdges: ReadonlySet<string>;
   waterVertices: ReadonlySet<string>;
   edgeKinds: ReadonlyMap<string, EdgeKind>;
   islands: readonly Island[];
@@ -63,8 +65,15 @@ function terrain(state: GameState): Terrain {
   if (!cached) {
     const graph = boardGraph(state);
     const land = new Set(hexes.filter((hex) => isLandTerrain(hex.terrain)).map((hex) => hex.id));
+    const sea = new Set(hexes.filter((hex) => isSeaTerrain(hex.terrain)).map((hex) => hex.id));
     cached = {
       land,
+      seaEdges: new Set(
+        graph.edgeIds.filter((id) => {
+          const owners = graph.edgeHexes[graph.edgeIndex[id] ?? -1] ?? [];
+          return owners.length === 1 || owners.some((owner) => sea.has(owner));
+        }),
+      ),
       waterVertices: new Set(graph.vertexIds.filter((id) => !vertexTouchesLand(graph, id, land))),
       edgeKinds: new Map(
         graph.edgeIds.flatMap((id) => {
@@ -94,6 +103,22 @@ export function vertexOnLand(state: GameState, vertex: string): boolean {
 /** An edge's position relative to land, or null off board. Base roads need `land` or `coastal`. */
 export function edgeKindOf(state: GameState, edge: string): EdgeKind | null {
   return terrain(state).edgeKinds.get(edge) ?? null;
+}
+
+/**
+ * True when an edge has a revealed sea side: a sea hex or the off-board side of a perimeter edge.
+ * Fog is never counted, so a ship never sits where a reveal could make both sides land.
+ */
+export function edgeHasSeaSide(state: GameState, edge: string): boolean {
+  return terrain(state).seaEdges.has(edge);
+}
+
+/** True when a road or a ship already sits on the edge. */
+export function edgeOccupied(state: GameState, edge: string): boolean {
+  return (
+    state.board.roads.some((road) => road.edge === edge) ||
+    (state.board.ships?.some((ship) => ship.edge === edge) ?? false)
+  );
 }
 
 /** The board's islands, cached per hex list. Recomputed automatically when a reveal replaces hexes. */

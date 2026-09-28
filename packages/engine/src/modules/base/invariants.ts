@@ -3,6 +3,10 @@ import type { GameState, PrivateState } from '../../core/state/index.js';
 import { RESOURCES } from '../../core/types/index.js';
 import type { Seat } from '../../core/types/index.js';
 import { boardGraph, edgeKindOf, isLandHex } from './board/index.js';
+
+function edgeOccupiedByRoad(state: GameState, edge: string): boolean {
+  return state.board.roads.some((road) => road.edge === edge);
+}
 import { longestRoadLength } from './awards/index.js';
 import { BANK_START, DEV_CARD_COUNTS, PIECES_START } from './constants.js';
 import { baseExt } from './types.js';
@@ -44,9 +48,18 @@ export function baseInvariants(state: GameState, ctx: HandlerContext): string[] 
     })
   )
     errors.push('harbor must be on a coastal edge');
-  if (!state.board.robberHex || graph.hexIndex[state.board.robberHex] === undefined)
-    errors.push('robber must occupy one board hex');
-  else if (!isLandHex(state, state.board.robberHex)) errors.push('robber must occupy a land hex');
+  // A seafaring board without a desert starts the robber off the board until its first move.
+  const robberOffBoard =
+    state.board.robberHex === null && state.config.modules.some((item) => item.id === 'seafaring');
+  if (!robberOffBoard) {
+    if (!state.board.robberHex || graph.hexIndex[state.board.robberHex] === undefined)
+      errors.push('robber must occupy one board hex');
+    else if (!isLandHex(state, state.board.robberHex)) errors.push('robber must occupy a land hex');
+  }
+  if (state.board.roads.some((road) => edgeKindOf(state, road.edge) === 'sea'))
+    errors.push('road must touch land');
+  if (state.board.ships?.some((ship) => edgeOccupiedByRoad(state, ship.edge)))
+    errors.push('an edge holds both a road and a ship');
   for (const seat of state.seats) {
     const ownedRoads = state.board.roads.filter((road) => road.seat === seat.seat).length;
     const settlements = state.board.buildings.filter(

@@ -90,7 +90,13 @@ function autoEndSbp(
 ): Input | null {
   const seat = sbpSeat(state.turn.phase.at(-1));
   const priv = seat === null ? undefined : privates.get(seat);
-  if (seat === null || !priv || buildCommands(state, seat, priv, ctx).length > 0) return null;
+  if (seat === null || !priv) return null;
+  // The legalCommands hook lets a module add builds, such as ships, to the base list.
+  const builds = ctx.hooks.legalCommands(state, seat, priv, {
+    commands: buildCommands(state, seat, priv, ctx),
+    templates: [],
+  });
+  if (builds.commands.length > 0) return null;
   return { kind: 'command', seat, command: { type: 'END_SBP' } };
 }
 

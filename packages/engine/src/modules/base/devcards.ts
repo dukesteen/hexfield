@@ -1,4 +1,10 @@
-import type { CommandHandler, PhaseHandler, SystemInputHandler } from '../../core/modules/index.js';
+import type {
+  CommandHandler,
+  HandlerContext,
+  PhaseHandler,
+  SystemInputHandler,
+} from '../../core/modules/index.js';
+import type { CommandShape } from '../../core/pipeline/index.js';
 import type { EngineEffect } from '../../core/effects/index.js';
 import { gainKnown, loseKnown, revealExact } from '../../core/resources/index.js';
 import type { CardSlot, GameState, PrivateState } from '../../core/state/index.js';
@@ -251,11 +257,7 @@ export const playDevCard: CommandHandler = {
       next = pushPhase(next, frame('moveRobber', { returnTo: 'pop' }));
     } else if (card === 'roadBuilding') {
       next = pushPhase(next, frame('roadBuilding', { remaining: 2 }));
-      if (
-        (ownSeat(next, input.seat).piecesLeft.road ?? 0) === 0 ||
-        legalRoadEdges(next, input.seat, {}, ctx).length === 0
-      )
-        next = popPhase(next);
+      if (freePlacements(next, input.seat, ctx).length === 0) next = popPhase(next);
     } else if (card === 'yearOfPlenty') {
       const params = playParams(state, card, input.command.params);
       if (!params.ok || !params.value.requested)
@@ -305,6 +307,19 @@ export const playDevCard: CommandHandler = {
   },
 };
 
+/** Free placements the seat may make now: road commands, extended by the freePieces hook. */
+export function freePlacements(
+  state: GameState,
+  seat: Seat,
+  ctx: HandlerContext,
+): readonly CommandShape[] {
+  const roads =
+    (ownSeat(state, seat).piecesLeft.road ?? 0) > 0
+      ? legalRoadEdges(state, seat, {}, ctx).map((edge) => ({ type: 'PLACE_FREE_ROAD', edge }))
+      : [];
+  return ctx.hooks.freePieces(state, seat, roads);
+}
+
 export const roadBuildingPhase: PhaseHandler = {
   pending: (state) =>
     withClaim(state, [
@@ -314,14 +329,7 @@ export const roadBuildingPhase: PhaseHandler = {
     const claim = claimCommands(state, seat, priv, ctx);
     return seat === state.turn.activeSeat
       ? {
-          commands: [
-            { type: 'SKIP' },
-            ...legalRoadEdges(state, seat, {}, ctx).map((edge) => ({
-              type: 'PLACE_FREE_ROAD',
-              edge,
-            })),
-            ...claim.commands,
-          ],
+          commands: [{ type: 'SKIP' }, ...freePlacements(state, seat, ctx), ...claim.commands],
           templates: claim.templates,
         }
       : { commands: [], templates: [] };
@@ -360,9 +368,7 @@ export const placeFreeRoad: CommandHandler = {
     next = recomputeLongestRoadAward(next, ctx);
     const remaining = roadBuildingData(state).remaining - 1;
     next =
-      remaining <= 0 ||
-      (ownSeat(next, input.seat).piecesLeft.road ?? 0) <= 0 ||
-      legalRoadEdges(next, input.seat, {}, ctx).length === 0
+      remaining <= 0 || freePlacements(next, input.seat, ctx).length === 0
         ? popPhase(next)
         : replaceTop(next, frame('roadBuilding', { remaining }));
     return {

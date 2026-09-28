@@ -1,5 +1,6 @@
 import type {
   CommandHandler,
+  HandlerContext,
   PhaseHandler,
   SystemInputHandler,
 } from '../../../core/modules/index.js';
@@ -25,7 +26,8 @@ export const initialSetup: SetupData = {
   lastVertex: null,
 };
 
-function setup(state: GameState): SetupData {
+/** The setup frame's data. */
+export function setup(state: GameState): SetupData {
   const data = top(state).data;
   if (typeof data !== 'object' || data === null) throw new Error('Missing setup state');
   // Setup handlers exclusively construct this phase data.
@@ -180,6 +182,26 @@ export const placeSettlement: CommandHandler = {
   },
 };
 
+/** Move setup to the next placement, or into the first turn after the last road or ship. */
+export function advanceSetup(state: GameState, data: SetupData, ctx: HandlerContext): GameState {
+  let next = state;
+  const index = data.index + 1;
+  const upcoming = data.order[index];
+  if (upcoming === undefined) {
+    if (data.startSeat === null) throw new Error('Setup has no start seat');
+    next = replaceTop(next, frame('preRoll'));
+    next = { ...next, turn: { ...next.turn, activeSeat: data.startSeat, number: 1 } };
+    next = ctx.hooks.onTurnStart(next, data.startSeat);
+  } else {
+    next = replaceTop(
+      next,
+      frame('setup', { ...data, index, step: 'settlement', lastVertex: null }),
+    );
+    next = { ...next, turn: { ...next.turn, activeSeat: upcoming } };
+  }
+  return next;
+}
+
 export const placeRoad: CommandHandler = {
   validate: (state, input, ctx) => {
     const data = setup(state);
@@ -214,20 +236,7 @@ export const placeRoad: CommandHandler = {
       piecesLeft: { ...old.piecesLeft, road: (old.piecesLeft.road ?? 0) - 1 },
     }));
     next = ctx.hooks.afterBuild(next, input.seat, 'road', edge);
-    const index = data.index + 1;
-    const upcoming = data.order[index];
-    if (upcoming === undefined) {
-      if (data.startSeat === null) throw new Error('Setup has no start seat');
-      next = replaceTop(next, frame('preRoll'));
-      next = { ...next, turn: { ...next.turn, activeSeat: data.startSeat, number: 1 } };
-      next = ctx.hooks.onTurnStart(next, data.startSeat);
-    } else {
-      next = replaceTop(
-        next,
-        frame('setup', { ...data, index, step: 'settlement', lastVertex: null }),
-      );
-      next = { ...next, turn: { ...next.turn, activeSeat: upcoming } };
-    }
+    next = advanceSetup(next, data, ctx);
     return { state: next, events: [{ type: 'roadBuilt', seat: input.seat, edge }], effects: [] };
   },
 };

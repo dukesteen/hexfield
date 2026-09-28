@@ -240,6 +240,10 @@ function composeHooks(modules: readonly GameModule[]): HookPipeline {
     modules,
     (hooks) => hooks.placement?.city,
   );
+  const freePieces = foldAcc<[GameState, Seat], readonly CommandShape[]>(
+    modules,
+    (hooks) => hooks.freePieces,
+  );
   const connectivity = foldAcc<[GameState, Seat], readonly string[]>(
     modules,
     (hooks) => hooks.connectivity,
@@ -283,6 +287,7 @@ function composeHooks(modules: readonly GameModule[]): HookPipeline {
     diceSpec: (state, acc) => diceSpec([state], acc),
     onDiceResult: foldState<[readonly [number, number]]>(modules, (hooks) => hooks.onDiceResult),
     production: (state, roll, acc) => production([state, roll], acc),
+    afterProduction: foldState<[number]>(modules, (hooks) => hooks.afterProduction),
     onNoProduction: foldState<[Seat]>(modules, (hooks) => hooks.onNoProduction),
     placement: Object.freeze({
       settlement: (state: GameState, seat: Seat, loc: string, verdict: boolean) =>
@@ -293,6 +298,7 @@ function composeHooks(modules: readonly GameModule[]): HookPipeline {
         city([state, seat, loc], verdict),
     }),
     connectivity: (state, seat, acc) => connectivity([state, seat], acc),
+    freePieces: (state, seat, acc) => freePieces([state, seat], acc),
     routeGraph: (state, seat, acc) => routeGraph([state, seat], acc),
     robberLike: (state, acc) => robberLike([state], acc),
     stealTargets: (state, seat, blocker, hex, targets) =>

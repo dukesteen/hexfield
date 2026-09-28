@@ -2,7 +2,13 @@ import type { BoardGraph } from '../../../core/geometry/index.js';
 import type { HandlerContext } from '../../../core/modules/types.js';
 import type { GameState } from '../../../core/state/types.js';
 import type { Seat } from '../../../core/types/index.js';
-import { boardGraph, edgeEndpoints, edgeKindOf, vertexOnLand } from '../board/index.js';
+import {
+  boardGraph,
+  edgeEndpoints,
+  edgeKindOf,
+  edgeOccupied,
+  vertexOnLand,
+} from '../board/index.js';
 
 /** A settlement's setup rule omits the ordinary road connection. */
 export interface SettlementOptions {
@@ -13,7 +19,15 @@ export interface RoadOptions {
   setupVertex?: string;
 }
 
-/** Edges that connect a seat's network: its roads, extended by the connectivity hook. */
+/** Edges a new road can connect through: the seat's own roads. Ships never connect a road. */
+export function roadEdges(state: GameState, seat: Seat): Set<string> {
+  return new Set(state.board.roads.filter((road) => road.seat === seat).map((road) => road.edge));
+}
+
+/**
+ * Edges a new settlement can connect through: the seat's roads, extended by the connectivity
+ * hook (a seafaring module adds its ships).
+ */
 export function connectorEdges(state: GameState, seat: Seat, ctx?: HandlerContext): Set<string> {
   const roads = state.board.roads.filter((road) => road.seat === seat).map((road) => road.edge);
   return new Set(ctx ? ctx.hooks.connectivity(state, seat, roads) : roads);
@@ -64,12 +78,7 @@ function canRoad(
   connectors: ReadonlySet<string>,
 ): boolean {
   const endpoints = edgeEndpoints(graph, edge);
-  if (
-    !endpoints ||
-    edgeKindOf(state, edge) === 'sea' ||
-    state.board.roads.some((road) => road.edge === edge)
-  )
-    return false;
+  if (!endpoints || edgeKindOf(state, edge) === 'sea' || edgeOccupied(state, edge)) return false;
   if (options.setupVertex !== undefined)
     return (
       endpoints.some((vertex) => vertex === options.setupVertex) &&
@@ -92,9 +101,9 @@ export function canPlaceRoad(
   seat: Seat,
   edge: string,
   options: RoadOptions = {},
-  ctx?: HandlerContext,
+  _ctx?: HandlerContext,
 ): boolean {
-  return canRoad(state, seat, edge, options, boardGraph(state), connectorEdges(state, seat, ctx));
+  return canRoad(state, seat, edge, options, boardGraph(state), roadEdges(state, seat));
 }
 
 /** Test that the chosen vertex holds the seat's own settlement. */
@@ -143,13 +152,16 @@ export function legalRoadEdges(
   state: GameState,
   seat: Seat,
   options: RoadOptions = {},
-  ctx?: HandlerContext,
+  _ctx?: HandlerContext,
 ): string[] {
   const graph = boardGraph(state);
-  const connectors = connectorEdges(state, seat, ctx);
+  const connectors = roadEdges(state, seat);
   if (options.setupVertex !== undefined)
     return graph.edgeIds.filter((edge) => canRoad(state, seat, edge, options, graph, connectors));
-  const occupied = new Set(state.board.roads.map((road) => road.edge));
+  const occupied = new Set([
+    ...state.board.roads.map((road) => road.edge),
+    ...(state.board.ships ?? []).map((ship) => ship.edge),
+  ]);
   const buildings = new Map<string, Seat>();
   for (const building of state.board.buildings)
     if (!buildings.has(building.vertex)) buildings.set(building.vertex, building.seat);

@@ -409,8 +409,9 @@ export function createEngine(modules: readonly GameModule[]): Engine {
     let publicPoints = ownSeat.publicVp;
     let hiddenPoints = 0;
     for (const contribution of registry.hooks.victoryPoints(state, seat, priv, [])) {
-      if (contribution.public) publicPoints += contribution.points;
-      else if (priv) hiddenPoints += contribution.points;
+      if (contribution.public) {
+        if (contribution.stored !== true) publicPoints += contribution.points;
+      } else if (priv) hiddenPoints += contribution.points;
     }
     return priv
       ? { public: publicPoints, total: publicPoints + hiddenPoints }

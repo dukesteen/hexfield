@@ -66,7 +66,11 @@ function validOption(value: unknown, spec: OptionSpec): boolean {
     case 'object':
       valid = value === null || (typeof value === 'object' && !Array.isArray(value));
       break;
+    case 'array':
+      valid = Array.isArray(value);
+      break;
   }
+  if (spec.nullable === true && value === null) return true;
   return valid && (spec.validate?.(value) ?? true);
 }
 

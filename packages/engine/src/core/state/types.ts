@@ -65,6 +65,8 @@ export interface BoardState {
   roads: RoadPiece[];
   buildings: BuildingPiece[];
   robberHex: string | null;
+  /** Ships sit on edges beside roads. Present only when a seafaring module is selected. */
+  ships?: RoadPiece[];
   /** Present only when a module declares fixtures, so fixture-free boards hash unchanged. */
   fixtures?: BoardFixture[];
 }

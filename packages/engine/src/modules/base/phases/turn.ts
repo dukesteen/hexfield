@@ -197,6 +197,7 @@ export const diceResult: SystemInputHandler = {
       for (const seat of next.config.seats)
         if (!Object.hasOwn(production.bySeat, seat)) next = ctx.hooks.onNoProduction(next, seat);
       next = replaceTop(next, frame('main'));
+      next = ctx.hooks.afterProduction(next, roll);
     } else {
       const limit = baseOptions(next.config.options.base).discardLimit;
       const remaining = next.config.seats.filter((seat) => {

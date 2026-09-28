@@ -59,7 +59,8 @@ function resultData(state: GameState): StealResultData {
   return value as StealResultData;
 }
 
-function resume(state: GameState, returnTo: 'main' | 'pop'): GameState {
+/** Return to the phase that opened the robber move. */
+export function resume(state: GameState, returnTo: 'main' | 'pop'): GameState {
   return returnTo === 'main' ? replaceTop(state, frame('main')) : popPhase(state);
 }
 

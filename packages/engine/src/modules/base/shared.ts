@@ -263,7 +263,10 @@ export function afterInput(state: GameState, ctx: HandlerContext): GameState {
       (next.awards.largestArmy === seat.seat ? 2 : 0);
     let revealed = 0;
     for (const slot of seat.cardSlots) if (slot.revealed === 'victoryPoint') revealed++;
-    const publicVp = (buildingVp.get(seat.seat) ?? 0) + awards + revealed;
+    const folded = ctx.hooks
+      .victoryPoints(next, seat.seat, undefined, [])
+      .reduce((sum, item) => (item.public && item.stored === true ? sum + item.points : sum), 0);
+    const publicVp = (buildingVp.get(seat.seat) ?? 0) + awards + revealed + folded;
     if (publicVp === seat.publicVp) return seat;
     seatsChanged = true;
     return { ...seat, publicVp };
