@@ -395,3 +395,15 @@ Hooks from [hooks.md](hooks.md) the module uses:
 ## Recorded for the seafaring combination
 
 From 2025 p.12 and 2020 p.13, for the later combo task, not implemented here: rules for roads also apply to ships. The pirate sits on the final space of the barbarian track and enters play only after the first attack. Knights move over routes of roads and ships, may end on a sea vertex, and must stay connected, so a ship that would break that connection cannot move. A knight on a sea vertex can chase away the pirate. Taxation moves only the robber. Diplomacy on a ship places a ship. Gold fields give resources only and the merchant cannot stand on one. The barbarians attack every island at once. The winning score of a Seafarers scenario rises by 2 points.
+
+## As implemented in K1 and K2
+
+Only the choices the module made beyond the rules above:
+
+- **State.** `ext.knights` holds `robberLocked`, `barbarians.step`, per-seat `improvements`, the three `metropolises` (`{ seat, vertex }` or null), `walls`, the last `eventDie` and a transient `noProduction` list. See the decisions log for the command names (`BUILD_IMPROVEMENT`, `PLACE_METROPOLIS`, `CHOOSE_AQUEDUCT`).
+- **Event die.** It rides in `DICE_RESULT.extra.event` (`ship`, `trade`, `politics` or `science`). Until K4 and K5 it is only recorded and logged.
+- **Setup city.** Round two uses `PLACE_SETTLEMENT`, and the placed piece becomes a city.
+- **Metropolis choice.** A metropolis is placed at once when the seat has one available city, otherwise the seat answers a `metropolis` frame. The old holder loses a stolen metropolis when the new city is chosen.
+- **Target.** `vpTarget` is at least 13; a larger base target is kept.
+- **Special build phase.** `BUILD_IMPROVEMENT` is allowed there (five-six), as the rules list improvements among the builds.
+- **Lobby.** The `knights` and `knights-56` scenarios exist before the UI (K6) does.
