@@ -1627,6 +1627,8 @@ export class P2PSession implements GameSession<CertifiedHistory> {
     this.automaticRetryDelay = 250;
     if (this.protocolStatus?.kind === 'halted' || this.protocolStatus?.kind === 'rejected')
       this.protocolStatus = null;
+    if (this.protocolStatus?.kind === 'sync' && next.log.head.seq >= this.protocolStatus.fromSeq)
+      this.protocolStatus = null;
     this.events.push(...entry.events);
     this.status = next.log.recovery?.void
       ? { kind: 'void' }

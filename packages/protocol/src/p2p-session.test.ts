@@ -448,6 +448,47 @@ function voteEquivocationControl(fixture: SessionFixture, seq: number): ExcludeP
 }
 
 describe('P2PSession', () => {
+  test.each([1, 2])(
+    'clears sync diagnostics only after the requested height is committed, offset %i',
+    async (offset) => {
+      const create = vi.spyOn(ReplicatedLog, 'create');
+      const opened = await openTwoHumanSessions(twoHumanFixture());
+      try {
+        const first = opened.sessions[0];
+        if (!first) throw new Error('Missing first session');
+        const seat = first.getState().turn.activeSeat;
+        const owner = opened.sessions[seat];
+        const observerSeat: Seat = seat === 0 ? 1 : 0;
+        const observer = opened.sessions[observerSeat];
+        if (!owner || !observer) throw new Error('Missing live sessions');
+        const notify = create.mock.calls.find(([options]) => options.seat === observerSeat)?.[0]
+          .onStatus;
+        if (!notify) throw new Error('Missing replica status callback');
+        const before = observer.getCommittedHead().seq;
+        const diagnostic = { kind: 'sync' as const, fromSeq: before + offset };
+        const notifications: ReturnType<P2PSession['getProtocolStatus']>[] = [];
+        const unsubscribe = observer.subscribe(() =>
+          notifications.push(observer.getProtocolStatus()),
+        );
+        notify(diagnostic);
+        expect(observer.getProtocolStatus()).toEqual(diagnostic);
+        notifications.length = 0;
+        const submitted = owner.submit(seat, placementCommand(owner, seat));
+        await settleNetwork(opened.sessions, opened.clock);
+        expect(await submitted).toEqual(success(undefined));
+        expect(observer.getCommittedHead().seq).toBe(before + 1);
+        const expected = offset === 1 ? null : diagnostic;
+        expect(observer.getProtocolStatus()).toEqual(expected);
+        expect(notifications.at(-1)).toEqual(expected);
+        unsubscribe();
+      } finally {
+        create.mockRestore();
+        opened.sessions.forEach((session) => session.dispose());
+        opened.net.dispose();
+      }
+    },
+  );
+
   test('a certified replica retirement clears private ownership and disables actions', async () => {
     const create = vi.spyOn(ReplicatedLog, 'create');
     const fixture = twoHumanFixture();
