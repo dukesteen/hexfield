@@ -1,4 +1,6 @@
 import type { CommandHandler, GameModule, RenderHint } from '../../core/modules/index.js';
+import type { GameState } from '../../core/state/index.js';
+import type { Seat } from '../../core/types/index.js';
 import { finalize } from '../base/shared.js';
 import { incompatibleModules } from '../compat.js';
 import {
@@ -9,6 +11,16 @@ import {
   noteNoProduction,
   openAqueductChoices,
 } from './aqueduct.js';
+import {
+  DISPLACED_FRAME,
+  automaticRelocation,
+  chaseRobber,
+  displaceKnight,
+  displacedPhase,
+  moveKnight,
+  relocateKnight,
+} from './actions.js';
+import { PILLAGE_FRAME, automaticPillage, choosePillage, pillagePhase } from './barbarians.js';
 import { COMMODITIES, KNIGHTS_ID, KNIGHTS_OPTIONS, KNIGHTS_VERSION } from './config.js';
 import { addKnightsCommands, addKnightsPending } from './flow.js';
 import {
@@ -21,8 +33,22 @@ import {
 } from './improvements.js';
 import { knightsInvariants } from './invariants.js';
 import {
+  knightRoutes,
+  readyForTurn,
+  roadNotThroughKnight,
+  settlementNotOnKnight,
+} from './pieces.js';
+import {
+  activateKnight,
+  buildCityWall,
+  buildKnight,
+  promoteKnight,
+  upgradeSidewaysCity,
+} from './recruit.js';
+import {
   cityProduction,
   commodityBank,
+  knightCosts,
   knightsTarget,
   limitWithWalls,
   lockRobber,
@@ -61,19 +87,46 @@ export {
   metropolisAward,
 } from './improvements.js';
 export { knightsExt, levelOf } from './types.js';
+export { awardTieDraws, barbarianStrength, contributions } from './barbarians.js';
+export { knightAt, knightReach, knightsOf, recruitSites, supplyOf } from './pieces.js';
 export type {
   AqueductFrameData,
+  AttackReport,
+  DisplacedFrameData,
+  KnightPiece,
   KnightsExt,
+  PillageFrameData,
+  SidewaysPiece,
   MetropolisFrameData,
   MetropolisHolder,
   TrackLevels,
   WallPiece,
 } from './types.js';
 
+/** While a pillaged city lies on its side, no other settlement may be upgraded first. */
+function cityAfterSideways(
+  state: GameState,
+  seat: Seat,
+  _vertex: string,
+  verdict: boolean,
+): boolean {
+  return verdict && !knightsExt(state).sideways.some((piece) => piece.seat === seat);
+}
+
 const COMMAND_HANDLERS: Record<string, CommandHandler> = {
   BUILD_IMPROVEMENT: buildImprovement,
   PLACE_METROPOLIS: placeMetropolisCommand,
   CHOOSE_AQUEDUCT: chooseAqueduct,
+  BUILD_KNIGHT: buildKnight,
+  ACTIVATE_KNIGHT: activateKnight,
+  PROMOTE_KNIGHT: promoteKnight,
+  MOVE_KNIGHT: moveKnight,
+  DISPLACE_KNIGHT: displaceKnight,
+  RELOCATE_KNIGHT: relocateKnight,
+  CHASE_ROBBER: chaseRobber,
+  BUILD_CITY_WALL: buildCityWall,
+  UPGRADE_SIDEWAYS_CITY: upgradeSidewaysCity,
+  CHOOSE_PILLAGE: choosePillage,
 };
 
 function finalized(entries: Record<string, CommandHandler>): Record<string, CommandHandler> {
@@ -86,8 +139,9 @@ function finalized(entries: Record<string, CommandHandler>): Record<string, Comm
 }
 
 /**
- * Cities and Knights, sub-milestones K1 and K2: commodities, the event die, the robber lock, and
- * city improvements with metropolises. Knights, barbarians and progress cards come later.
+ * Cities and Knights, sub-milestones K1 to K4: commodities, the event die, the robber lock, city
+ * improvements with metropolises, knights with city walls, and the barbarians. Progress cards come
+ * later.
  */
 export function knightsModule(): GameModule {
   return {
@@ -102,6 +156,10 @@ export function knightsModule(): GameModule {
       improvements: ctx.config.seats.map(() => ({ trade: 0, politics: 0, science: 0 })),
       metropolises: { trade: null, politics: null, science: null },
       walls: [],
+      knights: [],
+      sideways: [],
+      defenders: ctx.config.seats.map(() => 0),
+      lastAttack: null,
       eventDie: null,
       noProduction: [],
     }),
@@ -110,12 +168,20 @@ export function knightsModule(): GameModule {
       bankInit: commodityBank,
       // No development deck: it is empty, so BUY_DEV_CARD and PLAY_DEV_CARD are never legal.
       devDeck: () => ({}),
+      costs: knightCosts,
       diceSpec: withEventDie,
       onDiceResult: recordEventDie,
       production: cityProduction,
       onNoProduction: noteNoProduction,
       afterProduction: openAqueductChoices,
       afterBuild: setupCity,
+      onTurnStart: readyForTurn,
+      routeGraph: knightRoutes,
+      placement: {
+        settlement: settlementNotOnKnight,
+        road: roadNotThroughKnight,
+        city: cityAfterSideways,
+      },
       handLimit: limitWithWalls,
       robberLike: lockRobber,
       stealTargets: (state, _seat, _blocker, _hex, targets) => lockSteals(state, targets),
@@ -124,11 +190,14 @@ export function knightsModule(): GameModule {
       vpTarget: (_config, acc) => knightsTarget(acc),
       victoryPoints: (state, seat, _priv, acc) => metropolisPoints(state, seat, acc),
       pending: addKnightsPending,
-      legalCommands: (state, seat, priv, acc) => addKnightsCommands(state, seat, priv, acc),
+      legalCommands: (state, seat, priv, acc, ctx) =>
+        addKnightsCommands(state, seat, priv, acc, ctx),
       timeoutAction: (state, request, acc) => {
         if (acc) return acc;
         if (request.phase === AQUEDUCT_FRAME) return automaticAqueduct(state, request.seat);
         if (request.phase === METROPOLIS_FRAME) return automaticMetropolis(state, request.seat);
+        if (request.phase === DISPLACED_FRAME) return automaticRelocation(state, request.seat);
+        if (request.phase === PILLAGE_FRAME) return automaticPillage(state, request.seat);
         return null;
       },
       renderHints: (state, acc) => {
@@ -140,13 +209,21 @@ export function knightsModule(): GameModule {
           ...Object.entries(ext.metropolises).flatMap(([track, holder]) =>
             holder ? [{ module: KNIGHTS_ID, kind: 'metropolis', track, ...holder }] : [],
           ),
+          ...ext.knights.map((knight) => ({ module: KNIGHTS_ID, kind: 'knight', ...knight })),
+          ...ext.walls.map((wall) => ({ module: KNIGHTS_ID, kind: 'city-wall', ...wall })),
+          ...ext.sideways.map((piece) => ({ module: KNIGHTS_ID, kind: 'sideways-city', ...piece })),
         ];
         return [...acc, ...hints];
       },
     },
     commands: finalized(COMMAND_HANDLERS),
     systemInputs: {},
-    phases: { [AQUEDUCT_FRAME]: aqueductPhase, [METROPOLIS_FRAME]: metropolisPhase },
+    phases: {
+      [AQUEDUCT_FRAME]: aqueductPhase,
+      [METROPOLIS_FRAME]: metropolisPhase,
+      [DISPLACED_FRAME]: displacedPhase,
+      [PILLAGE_FRAME]: pillagePhase,
+    },
     invariants: knightsInvariants,
   };
 }

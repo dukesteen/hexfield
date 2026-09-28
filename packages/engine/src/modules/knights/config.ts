@@ -39,6 +39,21 @@ export const METROPOLIS_VP = 2;
 /** Barbarian ship faces before an attack. */
 export const BARBARIAN_STEPS = 7;
 
+/** Knight levels: basic, strong and mighty. Each seat owns two pieces of each level. */
+export const KNIGHT_LEVELS = [1, 2, 3] as const;
+export const KNIGHTS_PER_LEVEL = 2;
+/** The highest level, which needs the Fortress (politics level 3). */
+export const MIGHTY = 3;
+
+/** Build types the knights module adds to the `costs` hook. */
+export const KNIGHT_COSTS: Readonly<Record<string, Readonly<Record<string, number>>>> =
+  Object.freeze({
+    knight: Object.freeze({ wool: 1, ore: 1 }),
+    promote: Object.freeze({ wool: 1, ore: 1 }),
+    activate: Object.freeze({ grain: 1 }),
+    cityWall: Object.freeze({ brick: 2 }),
+  });
+
 /** The event die: three ships and one gate for each track. */
 export const EVENT_DIE = Object.freeze({
   id: 'event',

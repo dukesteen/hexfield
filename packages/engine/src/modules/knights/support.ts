@@ -15,6 +15,7 @@ import type { Track } from './config.js';
 import { knightsConfig } from './testing.js';
 import type { KnightsConfigOptions } from './testing.js';
 import { updateKnights } from './types.js';
+import type { KnightPiece } from './types.js';
 
 /** Test helpers for hand-built Cities and Knights positions. */
 export function newGame(
@@ -181,5 +182,114 @@ export function rejection(
 }
 
 export const top = (state: GameState) => state.turn.phase.at(-1);
+
+/** A simple path of `length` distinct adjacent vertices, starting at `start` or the first vertex. */
+export function pathVertices(
+  state: GameState,
+  length: number,
+  start?: string,
+  avoid: readonly string[] = [],
+): string[] {
+  const graph = boardGraph(state);
+  const banned = new Set(avoid);
+  function extend(path: string[]): string[] | null {
+    if (path.length === length) return path;
+    const last = path.at(-1);
+    const index = last === undefined ? undefined : graph.vertexIndex[last];
+    if (index === undefined) return null;
+    for (const next of [...(graph.vertexNeighbors[index] ?? [])].toSorted()) {
+      if (path.includes(next) || banned.has(next)) continue;
+      const found = extend([...path, next]);
+      if (found) return found;
+    }
+    return null;
+  }
+  const found = extend([start ?? graph.vertexIds[0] ?? '']);
+  if (!found) throw new Error('No path of that length');
+  return found;
+}
+
+/** The edge between two adjacent vertices. */
+export function edgeBetween(state: GameState, a: string, b: string): string {
+  const graph = boardGraph(state);
+  const vertices: readonly (readonly string[])[] = graph.edgeVertices;
+  const edge = graph.edgeIds.find((id) => {
+    const ends = vertices[graph.edgeIndex[id] ?? -1];
+    return ends !== undefined && ends.includes(a) && ends.includes(b);
+  });
+  if (edge === undefined) throw new Error(`No edge between ${a} and ${b}`);
+  return edge;
+}
+
+/** Give a seat roads along a path of adjacent vertices, without paying. */
+export function withRoads(state: GameState, seat: Seat, path: readonly string[]): GameState {
+  const edges = path.slice(1).map((vertex, index) => edgeBetween(state, path[index] ?? '', vertex));
+  return {
+    ...state,
+    board: {
+      ...state.board,
+      roads: [...state.board.roads, ...edges.map((edge) => ({ edge, seat }))],
+    },
+    seats: state.seats.map((item) =>
+      item.seat === seat
+        ? {
+            ...item,
+            piecesLeft: { ...item.piecesLeft, road: (item.piecesLeft.road ?? 0) - edges.length },
+          }
+        : item,
+    ),
+  };
+}
+
+/** Put knights on the board; unstated fields are an active, ready basic knight. */
+export function withKnights(
+  state: GameState,
+  pieces: readonly (Pick<KnightPiece, 'seat' | 'vertex'> & Partial<KnightPiece>)[],
+): GameState {
+  return updateKnights(state, (old) => ({
+    ...old,
+    knights: [
+      ...old.knights,
+      ...pieces.map((piece) => ({
+        level: 1,
+        active: true,
+        ready: true,
+        promotedTurn: null,
+        ...piece,
+      })),
+    ].toSorted((a, b) => (a.vertex < b.vertex ? -1 : a.vertex > b.vertex ? 1 : 0)),
+  }));
+}
+
+/**
+ * A hex whose six corners each have a neighbor outside the hex: a closed ring `ring[0..5]` (each
+ * corner is adjacent to the next) and the outward neighbor `out[i]` of each corner.
+ */
+export function ringLayout(state: GameState): { hex: string; ring: string[]; out: string[] } {
+  const graph = boardGraph(state);
+  const around: readonly (readonly string[])[] = graph.vertexNeighbors;
+  for (const hex of graph.hexIds) {
+    const ring: string[] = [...(graph.hexVertices[graph.hexIndex[hex] ?? -1] ?? [])];
+    if (ring.length !== 6) continue;
+    const out = ring.map((vertex, index) => {
+      const neighbors = around[graph.vertexIndex[vertex] ?? -1] ?? [];
+      const before = ring[(index + 5) % 6];
+      const after = ring[(index + 1) % 6];
+      return neighbors.find((item) => item !== before && item !== after && !ring.includes(item));
+    });
+    const outward = out.filter((item): item is string => item !== undefined);
+    const adjacent = ring.every((vertex, index) =>
+      (around[graph.vertexIndex[vertex] ?? -1] ?? []).includes(ring[(index + 1) % 6] ?? ''),
+    );
+    if (outward.length === 6 && adjacent && new Set([...ring, ...outward]).size === 12)
+      return { hex, ring, out: outward };
+  }
+  throw new Error('No ring hex');
+}
+
+/** Set the barbarian ship's step. */
+export function withStep(state: GameState, step: number): GameState {
+  return updateKnights(state, (old) => ({ ...old, barbarians: { step } }));
+}
 
 export { KNIGHTS_ID };
