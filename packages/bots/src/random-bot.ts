@@ -1,7 +1,7 @@
 import { engineForConfig, enumerateCommands } from '@cp2p/engine';
 import type { CommandShape, Engine, Pending, TradeOffer } from '@cp2p/engine';
 import type { Resource, ResourceCounts } from '@cp2p/engine';
-import { RESOURCES } from '@cp2p/engine';
+import { RESOURCES, knightsExt } from '@cp2p/engine';
 import { createRng } from '@cp2p/engine/rng';
 import { buildBoardGraph } from '@cp2p/engine/geometry';
 import type { BoardGraph } from '@cp2p/engine/geometry';
@@ -16,6 +16,17 @@ const CITY_COST = { brick: 0, lumber: 0, wool: 0, grain: 2, ore: 3 };
 const SETTLEMENT_COST = { brick: 1, lumber: 1, wool: 1, grain: 1, ore: 0 };
 const ROAD_COST = { brick: 1, lumber: 1, wool: 0, grain: 0, ore: 0 };
 const DEV_COST = { brick: 0, lumber: 0, wool: 1, grain: 1, ore: 1 };
+/** A city wall (the knights module). Knights themselves are cheap and always worth their price. */
+const WALL_COST = { brick: 2, lumber: 0, wool: 0, grain: 0, ore: 0 };
+const KNIGHT_ACTIONS = new Set(['MOVE_KNIGHT', 'DISPLACE_KNIGHT', 'CHASE_ROBBER']);
+const KNIGHT_ACTION_STEP_LIMIT = 3;
+
+/** The barbarian ship's step, or null in a game without the knights module. */
+function barbarianStep(state: BotView['state']): number | null {
+  return state.config.modules.some((module) => module.id === 'knights')
+    ? knightsExt(state).barbarians.step
+    : null;
+}
 const graphs = new WeakMap<BotView['state']['board']['hexes'], BoardGraph>();
 
 function boardGraph(view: BotView): BoardGraph {
@@ -169,6 +180,11 @@ function commandWeight(type: string, offersThisTurn: number, totalOffers: number
   if (type === 'BUILD_ROAD') return 12;
   if (type === 'BUILD_SHIP') return 8;
   if (type === 'BUILD_IMPROVEMENT') return 10;
+  if (type === 'UPGRADE_SIDEWAYS_CITY') return 30;
+  if (type === 'BUILD_KNIGHT' || type === 'ACTIVATE_KNIGHT') return 14;
+  if (type === 'PROMOTE_KNIGHT') return 10;
+  if (type === 'BUILD_CITY_WALL') return 4;
+  if (type === 'MOVE_KNIGHT' || type === 'DISPLACE_KNIGHT' || type === 'CHASE_ROBBER') return 3;
   if (type === 'MOVE_SHIP' || type === 'PLACE_SETUP_SHIP') return 2;
   if (type === 'BUY_DEV_CARD' || type === 'PLAY_DEV_CARD') return 8;
   if (type === 'OFFER_TRADE' || type === 'PROPOSE_TRADE')
@@ -272,6 +288,18 @@ export class RandomBot implements Bot {
         if (commandWeight(command.type, this.offersThisTurn, this.totalOffers) === 0) return false;
         return usefulTrade(command, view, cost, goal);
       }
+      // A knight that acts is inactive afterwards, so a bot keeps its knights for the barbarians
+      // once the ship is past halfway.
+      if (
+        KNIGHT_ACTIONS.has(command.type) &&
+        (barbarianStep(view.state) ?? 0) >= KNIGHT_ACTION_STEP_LIMIT
+      )
+        return false;
+      if (
+        command.type === 'BUILD_CITY_WALL' &&
+        !canSpendWithoutBreakingGoal(view.priv.hand, WALL_COST, cost)
+      )
+        return false;
       if (
         command.type === 'BUY_DEV_CARD' &&
         !canSpendWithoutBreakingGoal(view.priv.hand, DEV_COST, cost)
