@@ -1,3 +1,4 @@
+import { genesisContextText } from './genesis-identity.js';
 import { canonicalDecode, canonicalEncode, hashValue, toHex } from '@cp2p/codec';
 import { canonicalText } from '@cp2p/codec/internal';
 import { parsePeerId } from '@cp2p/crypto';
@@ -190,6 +191,7 @@ const stateSchema = v.strictObject({
 });
 
 interface ContextStamp {
+  genesisText: string;
   contextText: string;
   functions: readonly (readonly [string, unknown])[];
 }
@@ -229,11 +231,12 @@ function contextStamp(context: ProposalContext): ContextStamp {
       ? runtimeReferences(context.policy.randomDerivations, 'randomDerivations')
       : [['randomDerivations', null] as const]),
   ];
-  const { engine, ...log } = context.log;
+  const { engine, genesis, ...log } = context.log;
   const other = nonfunctions(context);
   delete other.log;
   delete other.policy;
   return {
+    genesisText: genesisContextText(genesis),
     contextText: canonicalText({
       ...other,
       log: {
@@ -252,6 +255,7 @@ function contextStamp(context: ProposalContext): ContextStamp {
 
 function sameContextStamp(left: ContextStamp, right: ContextStamp): boolean {
   return (
+    left.genesisText === right.genesisText &&
     left.contextText === right.contextText &&
     left.functions.length === right.functions.length &&
     left.functions.every(
@@ -1669,6 +1673,7 @@ class OwnedConsensusStateImpl implements OwnedConsensusState {
       const openedFunctions = this.stamp.functions.filter(([name]) => !rebuilt.has(name));
       const replayedFunctions = replayed.functions.filter(([name]) => !rebuilt.has(name));
       return (
+        this.stamp.genesisText === replayed.genesisText &&
         this.stamp.contextText === replayed.contextText &&
         openedFunctions.length === replayedFunctions.length &&
         openedFunctions.every(

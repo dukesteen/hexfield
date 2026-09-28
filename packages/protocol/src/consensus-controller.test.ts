@@ -597,6 +597,44 @@ describe('durable consensus controller', () => {
     expect((await store.load())?.revision).toBe(1);
   });
 
+  test.each(['gameId', 'signature', 'nested'] as const)(
+    'detects full mutable genesis %s changes during persistence',
+    async (field) => {
+      const store = new PausableStore();
+      const { options, candidate, emissions } = setup(store);
+      const original = options.context.log.genesis;
+      options.context.log.genesis = structuredClone(original);
+      const controller = await create(options);
+      expect(
+        controller.opensOn({
+          ...options.context,
+          log: { ...options.context.log, genesis: original },
+        }),
+      ).toBe(true);
+      store.pauseUpdates = true;
+      const pending = controller.dispatch({ kind: 'propose', candidate });
+      await store.entered.promise;
+      const changed = options.context.log.genesis;
+      if (field === 'gameId') changed.gameId += 'x';
+      else if (field === 'signature') {
+        const signature = changed.signatures[0];
+        if (!signature) throw new Error('Missing genesis signature');
+        signature.sig += 'x';
+      } else {
+        const seat = changed.seats[0];
+        if (!seat) throw new Error('Missing genesis seat');
+        seat.name += 'x';
+      }
+      store.resume.release();
+      expect(errorCode(await pending)).toBe('consensus-context');
+      expect(controller.hasContextFault()).toBe(true);
+      expect(controller.opensOn(options.context)).toBe(false);
+      expect(emissions).toHaveLength(0);
+      expect((await store.load())?.revision).toBe(1);
+      controller.dispose();
+    },
+  );
+
   test('rejects a local callback that changes the certified context during reduction', async () => {
     const { options, candidate, store, emissions } = setup();
     const controller = await create({

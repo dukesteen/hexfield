@@ -1,6 +1,8 @@
 import { canonicalDecode, canonicalEncode, hashValue, toBase64Url } from '@cp2p/codec';
+import { canonicalText } from '@cp2p/codec/internal';
 import type { Genesis, GenesisBody } from './types.js';
 
+const immutableTexts = new WeakMap<Genesis, string>();
 const immutableDigests = new WeakMap<GenesisBody, string>();
 
 /** Internal ownership boundary; callers never supply a trusted digest or cache entry. */
@@ -19,6 +21,7 @@ export function ownImmutableGenesis(input: Genesis): Genesis {
   const digest = genesisDigest(owned);
   for (const object of objects) Object.freeze(object);
   immutableDigests.set(owned, digest);
+  immutableTexts.set(owned, canonicalText(owned));
   return owned;
 }
 
@@ -48,4 +51,9 @@ export function genesisDigest(body: GenesisBody): string {
     immutableDigests.get(body) ??
     toBase64Url(hashValue({ domain: 'cp2p/v1/genesis-body', body: genesisBody(body) }))
   );
+}
+
+/** Exact signed-genesis content; only this module's immutable owned copies are memoized. */
+export function genesisContextText(genesis: Genesis): string {
+  return immutableTexts.get(genesis) ?? canonicalText(genesis);
 }

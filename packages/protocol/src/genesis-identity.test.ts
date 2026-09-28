@@ -1,7 +1,13 @@
 // oxlint-disable typescript/no-unsafe-type-assertion -- Tests inspect known canonical fixture shapes and detached round-trips.
 import { canonicalDecode, canonicalEncode, hashValue, toBase64Url } from '@cp2p/codec';
 import { expect, test } from 'vitest';
-import { genesisBody, genesisDigest, ownImmutableGenesis } from './genesis-identity.js';
+import { canonicalText } from '@cp2p/codec/internal';
+import {
+  genesisBody,
+  genesisDigest,
+  genesisContextText,
+  ownImmutableGenesis,
+} from './genesis-identity.js';
 import { fixtureAt, protocolFixture } from './testing/fixtures.js';
 
 function baseline(body: Parameters<typeof genesisDigest>[0]): string {
@@ -13,6 +19,8 @@ test('owned genesis keeps canonical identity and isolates all nested mutable fie
   input.commitments = { nested: { values: [1, 2] } };
   const owned = ownImmutableGenesis(input);
   const digest = baseline(input);
+  const text = canonicalText(input);
+  expect(genesisContextText(owned)).toBe(text);
   expect(canonicalEncode(owned)).toEqual(canonicalEncode(input));
   expect(genesisDigest(owned)).toBe(digest);
   for (const mutate of [
@@ -33,6 +41,7 @@ test('owned genesis keeps canonical identity and isolates all nested mutable fie
   fixtureAt(input.seats, 0).name = 'caller changed';
   expect(genesisDigest(input)).not.toBe(digest);
   expect(genesisDigest(owned)).toBe(digest);
+  expect(genesisContextText(owned)).toBe(text);
   const detached = canonicalDecode(canonicalEncode(owned)) as typeof owned;
   fixtureAt(detached.seats, 0).name = 'export changed';
   expect(genesisDigest(detached)).not.toBe(digest);
@@ -54,11 +63,14 @@ test('canonical bytes use an uncached detached fallback without partial freezing
   input.commitments = { before: { value: 1 }, bytes: new Uint8Array([1, 2]) };
   const owned = ownImmutableGenesis(input);
   const before = genesisDigest(owned);
+  const beforeText = genesisContextText(owned);
   expect(Object.isFrozen(owned)).toBe(false);
   expect(Object.isFrozen(owned.config)).toBe(false);
   expect(Object.isFrozen(owned.commitments.before)).toBe(false);
   (owned.commitments.bytes as Uint8Array)[0] = 9;
   expect(genesisDigest(owned)).not.toBe(before);
+  expect(genesisContextText(owned)).not.toBe(beforeText);
+  expect(genesisContextText(owned)).toBe(canonicalText(owned));
   expect(genesisDigest(owned)).toBe(baseline(owned));
   expect((input.commitments.bytes as Uint8Array)[0]).toBe(1);
 });
@@ -112,4 +124,18 @@ test('bounded repeated genesis digest benchmark', () => {
   expect(genesisDigest(owned)).toBe(baseline(input));
   // oxlint-disable-next-line no-console -- Opt-in bounded benchmark emits its measured evidence.
   console.log(JSON.stringify({ rounds, bytes: canonicalEncode(input).byteLength, measurements }));
+});
+
+test('full genesis text binds gameId and signatures while mutable inputs never gain a cached identity', () => {
+  const input = protocolFixture().genesis;
+  const digest = genesisDigest(input);
+  const first = genesisContextText(input);
+  input.gameId += 'x';
+  expect(genesisDigest(input)).toBe(digest);
+  expect(genesisContextText(input)).not.toBe(first);
+  const second = genesisContextText(input);
+  fixtureAt(input.signatures, 0).sig += 'x';
+  expect(genesisDigest(input)).toBe(digest);
+  expect(genesisContextText(input)).not.toBe(second);
+  expect(genesisContextText(input)).toBe(canonicalText(input));
 });
