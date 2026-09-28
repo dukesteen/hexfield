@@ -2,7 +2,8 @@
 /* oxlint-disable typescript/no-unsafe-type-assertion -- The test imports the exact browser-loaded Vite registry module to inspect certified public state. */
 import { expect, test } from '@playwright/test';
 import { RandomBot, createBotRng } from '@cp2p/bots';
-import type { CommandShape, Seat } from '@cp2p/engine';
+import { chooseBotPending } from '@cp2p/protocol';
+import type { CommandShape, GameState, Pending, PrivateState, Seat } from '@cp2p/engine';
 import type { Page } from '@playwright/test';
 
 test.use(
@@ -16,6 +17,57 @@ test.use(
 test.skip(process.env.CP2P_ONLINE_TAKEOVER_E2E !== '1', 'Requires native Chrome and signaling');
 
 const SIGNALING_URL = 'ws://127.0.0.1:8909';
+
+const optionalActions = new Set([
+  'CLAIM_VICTORY',
+  'PROPOSE_TRADE',
+  'CANCEL_TRADE',
+  'RESPOND_TRADE',
+]);
+const seatBots = new Map<
+  string,
+  {
+    bot: RandomBot;
+    rng: ReturnType<typeof createBotRng>;
+    config: GameState['config'];
+  }
+>();
+
+function chooseCommand(
+  gameId: string,
+  own: { state: GameState; priv: PrivateState; seat: Seat },
+  pending: Pending,
+): CommandShape | null {
+  const key = `${gameId}/${own.seat}`;
+  let actor = seatBots.get(key);
+  if (!actor) {
+    actor = {
+      bot: new RandomBot(),
+      rng: createBotRng(new Uint8Array(32).fill(59 + own.seat)),
+      config: own.state.config,
+    };
+    seatBots.set(key, actor);
+  }
+  // Serialized browser snapshots clone config on each read. Retain its exact
+  // per-game value so RandomBot's per-seat trade budget survives those copies.
+  expect(own.state.config).toEqual(actor.config);
+  try {
+    return actor.bot.decide(
+      { ...own, state: { ...own.state, config: actor.config } },
+      pending,
+      actor.rng,
+    );
+  } catch (error) {
+    if (
+      pending.kind === 'player' &&
+      pending.allowed.every((type) => optionalActions.has(type)) &&
+      error instanceof Error &&
+      error.message === `No legal command for seat ${own.seat}`
+    )
+      return null;
+    throw error;
+  }
+}
 
 async function registryPath(page: Page): Promise<string> {
   const resource = await page.evaluate(() =>
@@ -93,25 +145,51 @@ async function driveCertifiedStep(
 
 async function submitOne(page: Page, gameId: string): Promise<boolean> {
   const path = await registryPath(page);
-  return page.evaluate(
+  const current = await page.evaluate(
     async ({ id, modulePath }) => {
-      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Browser imports its already-loaded local Vite module.
       const { getOnlineGameRoom } = (await import(
         /* @vite-ignore */ modulePath
       )) as typeof import('../src/features/online/room-registry.js');
       const session = getOnlineGameRoom(id)?.getGame()?.session;
-      if (!session) return false;
-      for (const seat of session.controllableSeats()) {
-        const command = session.getLegalCommands(seat).commands[0];
-        if (!command) continue;
-        const result = await session.submit(seat, command);
-        if (!result.ok) throw new Error(`Legal command rejected: ${result.error.code}`);
-        return true;
-      }
-      return false;
+      if (!session) return null;
+      return {
+        state: session.getState(),
+        head: session.getFairness?.()?.head,
+        pending: session.getPending(),
+        seats: session.controllableSeats().map((seat) => ({
+          seat,
+          priv: session.getPrivate(seat),
+        })),
+      };
     },
     { id: gameId, modulePath: path },
   );
+  if (!current?.head) return false;
+  for (const own of current.seats) {
+    const pending = chooseBotPending(current.state, current.pending, new Set([own.seat]));
+    if (!own.priv || !pending) continue;
+    const command = chooseCommand(
+      gameId,
+      { state: current.state, priv: own.priv, seat: own.seat },
+      pending,
+    );
+    if (!command) continue;
+    return page.evaluate(
+      async ({ id, modulePath, seat, move, revision }) => {
+        const { getOnlineGameRoom } = (await import(
+          /* @vite-ignore */ modulePath
+        )) as typeof import('../src/features/online/room-registry.js');
+        const session = getOnlineGameRoom(id)?.getGame()?.session;
+        if (!session) return false;
+        const result = await session.submit(seat, move, { expectedRevision: revision });
+        if (!result.ok && !['stale-revision', 'stale-head'].includes(result.error.code))
+          throw new Error(`Own-view bot command rejected: ${result.error.code}`);
+        return result.ok;
+      },
+      { id: gameId, modulePath: path, seat: own.seat, move: command, revision: current.head.seq },
+    );
+  }
+  return false;
 }
 
 async function certifiedKinds(page: Page, gameId: string): Promise<readonly string[]> {
@@ -149,7 +227,7 @@ async function certifiedKinds(page: Page, gameId: string): Promise<readonly stri
 async function certifiedCommands(
   page: Page,
   gameId: string,
-): Promise<readonly { seq: number; seat: number }[]> {
+): Promise<readonly { seq: number; seat: number; type: string }[]> {
   const path = await registryPath(page);
   return page.evaluate(
     async ({ id, modulePath }) => {
@@ -187,7 +265,20 @@ async function certifiedCommands(
           typeof payload.signed.body.seat !== 'number'
         )
           return [];
-        return [{ seq: entry.seq, seat: payload.signed.body.seat }];
+        const command = Reflect.get(payload.signed.body, 'command');
+        if (
+          !command ||
+          typeof command !== 'object' ||
+          typeof Reflect.get(command, 'type') !== 'string'
+        )
+          return [];
+        return [
+          {
+            seq: entry.seq,
+            seat: payload.signed.body.seat,
+            type: String(Reflect.get(command, 'type')),
+          },
+        ];
       });
     },
     { id: gameId, modulePath: path },
@@ -223,9 +314,15 @@ test('four humans certify takeover, recovered bot continues, and original device
     await expect(host.getByRole('heading', { name: 'Four human return' })).toBeVisible();
     await host.getByLabel('Replace a disconnected player after').selectOption('30');
     const invitation = await host.getByRole('textbox', { name: /^Invitation link/ }).inputValue();
-    for (const guest of survivors) {
+    for (const [index, guest] of survivors.entries()) {
       await guest.goto(invitation);
       await guest.getByRole('button', { name: 'Take seat' }).first().click();
+      await expect(guest.getByRole('button', { name: 'Ready up' })).toBeVisible({
+        timeout: 45_000,
+      });
+      await expect(host.getByText(`${index + 2} of ${index + 2} players connected`)).toBeVisible({
+        timeout: 45_000,
+      });
     }
     await host.getByRole('button', { name: 'Ready up' }).click();
     for (const guest of survivors) await guest.getByRole('button', { name: 'Ready up' }).click();
@@ -327,7 +424,37 @@ test('four humans certify takeover, recovered bot continues, and original device
       );
     }
     expect(returnedCommand).toBe(true);
-    const terminal = await finishGame([returnedPage, ...survivors], gameId);
+    await returnedPage.close();
+    const secondRequest = initiator.getByRole('button', { name: /Request takeover of Original/ });
+    // The original four-seat quorum still has all three surviving human voters.
+    await expect(secondRequest).toBeVisible({ timeout: 100_000 });
+    await secondRequest.click();
+    for (const voter of survivors.slice(1)) {
+      const approve = voter.getByRole('button', { name: 'Approve takeover' });
+      await expect(approve).toBeVisible({ timeout: 30_000 });
+      await approve.click();
+    }
+    await expect
+      .poll(
+        async () =>
+          (await view(initiator, gameId))?.stateSeats.find((seat) => seat.seat === 0)?.status,
+        { timeout: 60_000 },
+      )
+      .toBe('bot');
+    expect(
+      (await certifiedKinds(initiator, gameId)).filter((kind) => kind === 'recovery-activate'),
+    ).toHaveLength(2);
+    const secondRecoveredHead = (await view(initiator, gameId))?.head;
+    if (!secondRecoveredHead) throw new Error('Second recovery has no certified head');
+    let secondBotCommand = false;
+    for (let step = 0; step < 36 && !secondBotCommand; step += 1) {
+      await driveCertifiedStep(survivors, initiator, gameId);
+      secondBotCommand = (await certifiedCommands(initiator, gameId)).some(
+        (command) => command.seat === 0 && command.seq > secondRecoveredHead.seq,
+      );
+    }
+    expect(secondBotCommand).toBe(true);
+    const terminal = await finishGame(survivors, gameId);
     await testInfo.attach('native-lifecycle-terminal', {
       body: JSON.stringify(terminal, null, 2),
       contentType: 'application/json',
@@ -374,6 +501,17 @@ test('four humans certify takeover, recovered bot continues, and original device
                 )
                 .catch(() => null);
             })(),
+        certifiedActionCounts: page.isClosed()
+          ? null
+          : await (async () => {
+              const id = page.url().match(/#\/game\/([^/?]+)/)?.[1];
+              if (!id) return null;
+              const commands = await certifiedCommands(page, id).catch(() => null);
+              return commands?.reduce<Record<string, number>>((counts, command) => {
+                counts[command.type] = (counts[command.type] ?? 0) + 1;
+                return counts;
+              }, {});
+            })(),
         gameStartup: page.isClosed()
           ? null
           : await (async () => {
@@ -387,9 +525,24 @@ test('four humans certify takeover, recovered bot continues, and original device
                     const { getOnlineGameRoom } = (await import(
                       /* @vite-ignore */ path
                     )) as typeof import('../src/features/online/room-registry.js');
-                    const snapshot = getOnlineGameRoom(id)?.getSnapshot();
+                    const room = getOnlineGameRoom(id);
+                    const snapshot = room?.getSnapshot();
+                    const session = room?.getGame()?.session;
+                    let status: { kind: string; message?: string } | null = null;
+                    if (session) {
+                      const off = session.subscribe((update) => {
+                        status = update.status;
+                      });
+                      off();
+                    }
                     return snapshot
-                      ? { phase: snapshot.startup?.phase, error: snapshot.startup?.error }
+                      ? {
+                          phase: snapshot.startup?.phase,
+                          error: snapshot.startup?.error,
+                          sessionStatus: status,
+                          fairness: session?.getFairness?.(),
+                          pending: session?.getPending(),
+                        }
                       : null;
                   },
                   { id: gameId, path: modulePath },
@@ -403,6 +556,7 @@ test('four humans certify takeover, recovered bot continues, and original device
       { cause: error },
     );
   } finally {
+    seatBots.clear();
     await Promise.all(contexts.map((context) => context.close()));
   }
 });
@@ -440,9 +594,7 @@ async function finishGame(pages: readonly Page[], gameId: string) {
           head: session.getFairness?.()?.head,
           state: session.getState(),
           audit: session.getAudit?.(),
-          pending: session
-            .getPending()
-            .find((item) => item.kind === 'player' && item.seat === seat),
+          pending: session.getPending(),
           seat,
           priv: seat === undefined ? null : session.getPrivate(seat),
           legal: seat === undefined ? null : session.getLegalCommands(seat),
@@ -452,8 +604,6 @@ async function finishGame(pages: readonly Page[], gameId: string) {
       { id: gameId, move: requestedMove },
     );
   let moves = 0;
-  const bot = new RandomBot();
-  const rng = createBotRng(new Uint8Array(32).fill(59));
   await expect
     .poll(
       async () => {
@@ -463,19 +613,20 @@ async function finishGame(pages: readonly Page[], gameId: string) {
           if (
             current.state.result ||
             current.seat === undefined ||
-            current.pending?.kind !== 'player' ||
             !current.priv ||
             !current.head ||
             !current.legal ||
             !(current.legal.commands.length || current.legal.templates.length)
           )
             continue;
-          let command: CommandShape;
+          const pending = chooseBotPending(current.state, current.pending, new Set([current.seat]));
+          if (!pending) continue;
+          let command: CommandShape | null;
           try {
-            command = bot.decide(
+            command = chooseCommand(
+              gameId,
               { state: current.state, priv: current.priv, seat: current.seat },
-              current.pending,
-              rng,
+              pending,
             );
           } catch (error) {
             throw new Error(
@@ -483,6 +634,7 @@ async function finishGame(pages: readonly Page[], gameId: string) {
               { cause: error },
             );
           }
+          if (!command) continue;
           // oxlint-disable-next-line no-await-in-loop -- Submit against the captured revision and retry stale snapshots.
           const next = await snapshots(page, {
             seat: current.seat,
@@ -516,8 +668,16 @@ async function finishGame(pages: readonly Page[], gameId: string) {
       },
     });
   }
+  const observer = pages[0];
+  if (!observer) throw new Error('Terminal observer is missing');
+  const commands = await certifiedCommands(observer, gameId);
+  const certifiedActionCounts = commands.reduce<Record<string, number>>((counts, command) => {
+    counts[command.type] = (counts[command.type] ?? 0) + 1;
+    return counts;
+  }, {});
   return {
     moves,
+    certifiedActionCounts,
     peers: final.map(({ head, state, audit, seat }) => ({
       seat,
       head,

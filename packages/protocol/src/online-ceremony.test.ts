@@ -15,6 +15,8 @@ import { BASE_VERSION, createBaseEngine } from '@cp2p/engine';
 import type { GameConfig, Result } from '@cp2p/engine';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import * as deckSetup from './deck-setup.js';
+import * as escrowDistribution from './escrow-distribution.js';
+import * as ceremonyWire from './online-ceremony-wire.js';
 import type { DeckSetupState } from './deck-setup.js';
 import { MemoryEscrowLifecycleStore } from './escrow-lifecycle.js';
 import { LOBBY_COLOURS } from './lobby-types.js';
@@ -1128,6 +1130,163 @@ describe('online genesis ceremony', () => {
     await settle(room, [host, guest]);
     expect(host.snapshot().phase).toBe('ready');
     expect(guest.snapshot().phase).toBe('ready');
+  }, 60_000);
+
+  test('already accepted escrow retries do not repeat proof verification', async () => {
+    const room = setup({ kind: 'joint' }, 4);
+    const hostPeer = identityFromSecret(required(room.deviceKeys[0])).peerId;
+    const acknowledgement: { bytes: Uint8Array | null } = { bytes: null };
+    let heldDeck = false;
+    const commitment: { packet: OnlineCeremonyPacket | null } = { packet: null };
+    const guestTransport = interceptTransport(room, 1, (to, bytes, packet) => {
+      if (to === hostPeer && packet.body.kind === 'seed-commit') commitment.packet = packet;
+      if (to === hostPeer && packet.body.kind === 'escrow-accepted')
+        acknowledgement.bytes = bytes.slice();
+      if (to === hostPeer && packet.body.kind === 'deck-pass' && packet.body.step === 1) {
+        heldDeck = true;
+        return true;
+      }
+      return false;
+    });
+    const host = room.create(0);
+    const guest = room.create(1, required(room.stores[1]), guestTransport);
+    const others = [room.create(2), room.create(3)];
+    active.push(host, guest, ...others, room.network);
+    expect((await host.start()).ok).toBe(true);
+    expect((await guest.start()).ok).toBe(true);
+    for (const peer of others) {
+      // oxlint-disable-next-line no-await-in-loop -- Start each frozen participant.
+      expect((await peer.start()).ok).toBe(true);
+    }
+    await until(room, () => heldDeck);
+    await host.flush();
+    expect(host.snapshot().phase).toBe('deck');
+    const proof = vi.spyOn(escrowDistribution, 'verifyEscrowShareAck');
+    const persisted = vi.spyOn(required(room.stores[0]), 'load');
+    const retry = required(acknowledgement.bytes);
+    const sender = room.network.transport(identityFromSecret(required(room.deviceKeys[1])).peerId);
+    for (let index = 0; index < 8; index += 1) sender.send(hostPeer, retry);
+    room.network.clock.advanceBy(0);
+    await host.flush();
+    expect(proof).not.toHaveBeenCalled();
+    expect(persisted).not.toHaveBeenCalled();
+    const packet = value(
+      verifyOnlineCeremonyPacket(
+        retry,
+        sender.self,
+        toHex(hashValue(room.agreement.state)),
+        required(room.agreement.state.ceremonyNonce),
+      ),
+    );
+    const payload = packet.body.payload;
+    if (
+      !payload ||
+      typeof payload !== 'object' ||
+      !('ack' in payload) ||
+      !payload.ack ||
+      typeof payload.ack !== 'object'
+    )
+      throw new Error('Missing escrow acknowledgement');
+    const invalid = value(
+      signOnlineCeremonyPacket(
+        {
+          ...packet.body,
+          payload: { ...payload, ack: { ...payload.ack, sig: toBase64Url(new Uint8Array(64)) } },
+        },
+        required(room.deviceKeys[1]),
+      ),
+    ).bytes;
+    sender.send(hostPeer, invalid);
+    room.network.clock.advanceBy(0);
+    await host.flush();
+    sender.send(hostPeer, invalid);
+    room.network.clock.advanceBy(0);
+    await host.flush();
+    expect(proof).toHaveBeenCalledTimes(2);
+    proof.mockClear();
+    const outer = vi.spyOn(ceremonyWire, 'verifyOnlineCeremonyPacket');
+    const wrongSender = identityFromSecret(required(room.deviceKeys[2])).peerId;
+    room.network
+      .transport(identityFromSecret(required(room.deviceKeys[2])).peerId)
+      .send(hostPeer, retry);
+    sender.send(hostPeer, retry);
+    room.network.clock.advanceBy(0);
+    await host.flush();
+    expect(proof).not.toHaveBeenCalled();
+    expect(outer).toHaveBeenCalledTimes(1);
+    expect(outer.mock.calls[0]?.[1]).toBe(wrongSender);
+    expect(outer.mock.results[0]?.value.ok).toBe(false);
+    expect(host.snapshot().phase).toBe('deck');
+    const committed = required(commitment.packet);
+    const original = value(
+      signOnlineCeremonyPacket(committed.body, required(room.deviceKeys[1])),
+    ).bytes;
+    const attemptId = ceremonyWire.onlineCeremonyAttemptId(
+      committed.body.freezeHash,
+      committed.body.ceremonyNonce,
+    );
+    expect(
+      await required(room.stores[0]).load(`online-ceremony/${attemptId}/seed-commit/1/0`),
+    ).toEqual(original);
+    const conflicting = value(
+      signOnlineCeremonyPacket({ ...committed.body, payload: null }, required(room.deviceKeys[1])),
+    ).bytes;
+    sender.send(hostPeer, original);
+    sender.send(hostPeer, original);
+    sender.send(hostPeer, conflicting);
+    room.network.clock.advanceBy(0);
+    await host.flush();
+    expect(host.snapshot().phase).toBe('retired');
+    expect(host.snapshot().error).toBe('online-ceremony-conflict:deck');
+  }, 60_000);
+
+  test('failed escrow persistence remains retryable after ingress coalescing', async () => {
+    const room = setup({ kind: 'joint' }, 4);
+    const hostPeer = identityFromSecret(required(room.deviceKeys[0])).peerId;
+    const held: { bytes: Uint8Array | null } = { bytes: null };
+    const guestTransport = interceptTransport(room, 1, (to, bytes, packet) => {
+      if (to !== hostPeer || packet.body.kind !== 'escrow-accepted' || packet.body.step !== 0)
+        return false;
+      held.bytes = bytes.slice();
+      return true;
+    });
+    const peers = [
+      room.create(0),
+      room.create(1, required(room.stores[1]), guestTransport),
+      room.create(2),
+      room.create(3),
+    ];
+    active.push(...peers, room.network);
+    for (const peer of peers) {
+      // oxlint-disable-next-line no-await-in-loop -- Start each frozen participant.
+      expect((await peer.start()).ok).toBe(true);
+    }
+    await until(room, () => held.bytes !== null);
+    await required(peers[0]).flush();
+    const store = required(room.stores[0]);
+    const actualPut = store.putIfAbsent.bind(store);
+    let failures = 0;
+    let key = '';
+    vi.spyOn(store, 'putIfAbsent').mockImplementation(async (id, bytes) => {
+      if (id.endsWith('/escrow-accepted/1/0')) {
+        key = id;
+        if (failures++ === 0) throw new Error('Transient durable write failure');
+      }
+      return actualPut(id, bytes);
+    });
+    const sender = room.network.transport(identityFromSecret(required(room.deviceKeys[1])).peerId);
+    const retry = required(held.bytes);
+    for (let index = 0; index < 8; index += 1) sender.send(hostPeer, retry);
+    room.network.clock.advanceBy(0);
+    await required(peers[0]).flush();
+    expect(failures).toBe(1);
+    expect(await store.load(key)).toBeNull();
+    sender.send(hostPeer, retry);
+    room.network.clock.advanceBy(0);
+    await required(peers[0]).flush();
+    expect(failures).toBe(2);
+    expect(await store.load(key)).toEqual(retry);
+    expect(required(peers[0]).snapshot().phase).not.toBe('retired');
   }, 60_000);
 
   /* oxlint-disable vitest/no-conditional-expect -- Each parameter exercises a distinct delivery outcome. */

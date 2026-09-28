@@ -1,3 +1,303 @@
+# Read-only correctness/security review: exact escrow retry coalescing
+
+Review only supplied task-scoped source. No tools, no secrets. Check security, liveness, cache ownership, disposal/restart/retirement, conflicts and durable failures. Reply APPROVE or REQUEST_CHANGES with concrete blockers and nonblocking notes.
+
+Native startup boundary trace: all four visible contexts passed the same 20s phase deadline; RTC delivery took milliseconds but worker delivery to serialized coordinator handler waited 1.1–2.47 seconds with 41–75 pending messages. Instrumented event/digest pairs suppress duplicates, so native trace alone cannot count retries. Deterministic four-peer test confirmed eight exact already durable escrow acknowledgement retries caused eight extra verifyEscrowShareAck calls and phase advances before this fix.
+
+Correction: ingress coalesces exact wire bytes only while queued/running, bound by transport sender + full wire digest + byte equality. Queue copies are private and dropped in finally. An accepted escrow wire may bypass repeated verification only after outer authentication, inner proof validation, durable slot acceptance, and successful advance. Cache identity includes authenticated sender/full bytes; new bytes follow original code, failures never promote, overflow falls back to verification. Accepted escrow cache max32 (two kinds × four dealers × four holders); ingress max128; each map max2MiB; packet max256KiB. Dispose/retirement clear both. Existing future deck queue, private prefix cache, retry timer and 20s durable phase deadline remain unchanged. New dependency packets and retry timer still advance; exact duplicate no-op is only promoted after successful prior advance. Restored coordinators start with empty caches.
+
+Focused regressions: exact accepted retry burst does no new proof/durable reads; signed invalid bytes remain rejected/reverified on sequential retries; wrong sender cannot reuse cache; different bytes for an occupied ordinary slot still retire conflict; transient durable put exception coalesces one attempt but later retry verifies and persists. Two tests passed before final conflict assertion was added; current full suite running and final targeted rerun pending. Source/test checks: scoped protocol tsc and type-aware lint passed; shared tsc has unrelated current mixed-engine E2E errors.
+
+## Diff
+```diff
+diff --git a/packages/protocol/src/online-ceremony.test.ts b/packages/protocol/src/online-ceremony.test.ts
+index 14e69eb..1033608 100644
+--- a/packages/protocol/src/online-ceremony.test.ts
++++ b/packages/protocol/src/online-ceremony.test.ts
+@@ -15,6 +15,7 @@ import { BASE_VERSION, createBaseEngine } from '@cp2p/engine';
+ import type { GameConfig, Result } from '@cp2p/engine';
+ import { afterEach, describe, expect, test, vi } from 'vitest';
+ import * as deckSetup from './deck-setup.js';
++import * as escrowDistribution from './escrow-distribution.js';
+ import type { DeckSetupState } from './deck-setup.js';
+ import { MemoryEscrowLifecycleStore } from './escrow-lifecycle.js';
+ import { LOBBY_COLOURS } from './lobby-types.js';
+@@ -1130,6 +1131,151 @@ describe('online genesis ceremony', () => {
+     expect(guest.snapshot().phase).toBe('ready');
+   }, 60_000);
+ 
++  test('already accepted escrow retries do not repeat proof verification', async () => {
++    const room = setup({ kind: 'joint' }, 4);
++    const hostPeer = identityFromSecret(required(room.deviceKeys[0])).peerId;
++    const acknowledgement: { bytes: Uint8Array | null } = { bytes: null };
++    let heldDeck = false;
++    const commitment: { packet: OnlineCeremonyPacket | null } = { packet: null };
++    const guestTransport = interceptTransport(room, 1, (to, bytes, packet) => {
++      if (to === hostPeer && packet.body.kind === 'seed-commit') commitment.packet = packet;
++      if (to === hostPeer && packet.body.kind === 'escrow-accepted')
++        acknowledgement.bytes = bytes.slice();
++      if (to === hostPeer && packet.body.kind === 'deck-pass' && packet.body.step === 1) {
++        heldDeck = true;
++        return true;
++      }
++      return false;
++    });
++    const host = room.create(0);
++    const guest = room.create(1, required(room.stores[1]), guestTransport);
++    const others = [room.create(2), room.create(3)];
++    active.push(host, guest, ...others, room.network);
++    expect((await host.start()).ok).toBe(true);
++    expect((await guest.start()).ok).toBe(true);
++    for (const peer of others) {
++      // oxlint-disable-next-line no-await-in-loop -- Start each frozen participant.
++      expect((await peer.start()).ok).toBe(true);
++    }
++    await until(room, () => heldDeck);
++    await host.flush();
++    expect(host.snapshot().phase).toBe('deck');
++    const proof = vi.spyOn(escrowDistribution, 'verifyEscrowShareAck');
++    const persisted = vi.spyOn(required(room.stores[0]), 'load');
++    const retry = required(acknowledgement.bytes);
++    const sender = room.network.transport(identityFromSecret(required(room.deviceKeys[1])).peerId);
++    for (let index = 0; index < 8; index += 1) sender.send(hostPeer, retry);
++    room.network.clock.advanceBy(0);
++    await host.flush();
++    expect(proof).not.toHaveBeenCalled();
++    expect(persisted).not.toHaveBeenCalled();
++    const packet = value(
++      verifyOnlineCeremonyPacket(
++        retry,
++        sender.self,
++        toHex(hashValue(room.agreement.state)),
++        required(room.agreement.state.ceremonyNonce),
++      ),
++    );
++    const payload = packet.body.payload;
++    if (
++      !payload ||
++      typeof payload !== 'object' ||
++      !('ack' in payload) ||
++      !payload.ack ||
++      typeof payload.ack !== 'object'
++    )
++      throw new Error('Missing escrow acknowledgement');
++    const invalid = value(
++      signOnlineCeremonyPacket(
++        {
++          ...packet.body,
++          payload: { ...payload, ack: { ...payload.ack, sig: toBase64Url(new Uint8Array(64)) } },
++        },
++        required(room.deviceKeys[1]),
++      ),
++    ).bytes;
++    sender.send(hostPeer, invalid);
++    room.network.clock.advanceBy(0);
++    await host.flush();
++    sender.send(hostPeer, invalid);
++    room.network.clock.advanceBy(0);
++    await host.flush();
++    expect(proof).toHaveBeenCalledTimes(2);
++    proof.mockClear();
++    room.network
++      .transport(identityFromSecret(required(room.deviceKeys[2])).peerId)
++      .send(hostPeer, retry);
++    sender.send(hostPeer, retry);
++    room.network.clock.advanceBy(0);
++    await host.flush();
++    expect(proof).not.toHaveBeenCalled();
++    expect(host.snapshot().phase).toBe('deck');
++    const committed = required(commitment.packet);
++    const original = value(
++      signOnlineCeremonyPacket(committed.body, required(room.deviceKeys[1])),
++    ).bytes;
++    const conflicting = value(
++      signOnlineCeremonyPacket({ ...committed.body, payload: null }, required(room.deviceKeys[1])),
++    ).bytes;
++    sender.send(hostPeer, original);
++    sender.send(hostPeer, original);
++    sender.send(hostPeer, conflicting);
++    room.network.clock.advanceBy(0);
++    await host.flush();
++    expect(host.snapshot().phase).toBe('retired');
++    expect(host.snapshot().error).toBe('online-ceremony-conflict');
++  }, 60_000);
++
++  test('failed escrow persistence remains retryable after ingress coalescing', async () => {
++    const room = setup({ kind: 'joint' }, 4);
++    const hostPeer = identityFromSecret(required(room.deviceKeys[0])).peerId;
++    const held: { bytes: Uint8Array | null } = { bytes: null };
++    const guestTransport = interceptTransport(room, 1, (to, bytes, packet) => {
++      if (to !== hostPeer || packet.body.kind !== 'escrow-accepted' || packet.body.step !== 0)
++        return false;
++      held.bytes = bytes.slice();
++      return true;
++    });
++    const peers = [
++      room.create(0),
++      room.create(1, required(room.stores[1]), guestTransport),
++      room.create(2),
++      room.create(3),
++    ];
++    active.push(...peers, room.network);
++    for (const peer of peers) {
++      // oxlint-disable-next-line no-await-in-loop -- Start each frozen participant.
++      expect((await peer.start()).ok).toBe(true);
++    }
++    await until(room, () => held.bytes !== null);
++    await required(peers[0]).flush();
++    const store = required(room.stores[0]);
++    const actualPut = store.putIfAbsent.bind(store);
++    let failures = 0;
++    let key = '';
++    vi.spyOn(store, 'putIfAbsent').mockImplementation(async (id, bytes) => {
++      if (id.endsWith('/escrow-accepted/1/0')) {
++        key = id;
++        if (failures++ === 0) throw new Error('Transient durable write failure');
++      }
++      return actualPut(id, bytes);
++    });
++    const sender = room.network.transport(identityFromSecret(required(room.deviceKeys[1])).peerId);
++    const retry = required(held.bytes);
++    for (let index = 0; index < 8; index += 1) sender.send(hostPeer, retry);
++    room.network.clock.advanceBy(0);
++    await required(peers[0]).flush();
++    expect(failures).toBe(1);
++    expect(await store.load(key)).toBeNull();
++    sender.send(hostPeer, retry);
++    room.network.clock.advanceBy(0);
++    await required(peers[0]).flush();
++    expect(failures).toBe(2);
++    expect(await store.load(key)).toEqual(retry);
++    expect(required(peers[0]).snapshot().phase).not.toBe('retired');
++  }, 60_000);
++
+   /* oxlint-disable vitest/no-conditional-expect -- Each parameter exercises a distinct delivery outcome. */
+   test.each(['valid', 'invalid', 'restart'] as const)(
+     'future deck delivery %s waits privately for its exact predecessor',
+diff --git a/packages/protocol/src/online-ceremony.ts b/packages/protocol/src/online-ceremony.ts
+index 874375a..7ce37ba 100644
+--- a/packages/protocol/src/online-ceremony.ts
++++ b/packages/protocol/src/online-ceremony.ts
+@@ -327,6 +327,8 @@ export class OnlineCeremony {
+   #result: OnlineCeremonyResult | null = null;
+   #escrow: EscrowCeremony | null = null;
+   #started = false;
++  #queuedWire = new Map<string, Uint8Array>();
++  #acceptedEscrowWire = new Map<string, Uint8Array>();
+   #disposed = false;
+   #locallyConsented = false;
+   #offMessage: Unsubscribe | null = null;
+@@ -464,12 +466,18 @@ export class OnlineCeremony {
+     this.#owned.clear();
+     this.#deckPrefixes.clear();
+     this.#futureDeckPackets.clear();
++    this.#queuedWire.clear();
++    this.#acceptedEscrowWire.clear();
+     this.#listeners.clear();
+   }
+ 
+   #emit(progress: OnlineCeremonyProgress): void {
+     this.#progress = progress;
+-    if (progress.phase === 'retired') this.#futureDeckPackets.clear();
++    if (progress.phase === 'retired') {
++      this.#futureDeckPackets.clear();
++      this.#queuedWire.clear();
++      this.#acceptedEscrowWire.clear();
++    }
+     for (const listener of this.#listeners) {
+       try {
+         listener(this.snapshot());
+@@ -479,6 +487,41 @@ export class OnlineCeremony {
+     }
+   }
+ 
++  #wireKey(from: PeerId, bytes: Uint8Array): string {
++    return `${from}/${toHex(hashValue(bytes))}`;
++  }
++
++  #rememberWire(
++    cache: Map<string, Uint8Array>,
++    key: string,
++    bytes: Uint8Array,
++    maxEntries = 128,
++  ): boolean {
++    // Overflow changes only performance: every uncached packet follows normal verification.
++    if (bytes.length > MAX_MESSAGE_BYTES || cache.size >= maxEntries) return false;
++    let size = bytes.length;
++    for (const prior of cache.values()) size += prior.length;
++    if (size > 2 * 1024 * 1024) return false;
++    cache.set(key, bytes.slice());
++    return true;
++  }
++
++  #queuePacket(from: PeerId, bytes: Uint8Array): void {
++    if (this.#disposed || bytes.length > MAX_MESSAGE_BYTES) return;
++    const key = this.#wireKey(from, bytes);
++    const queued = this.#queuedWire.get(key);
++    if (queued && sameBytes(queued, bytes)) return;
++    const owned = bytes.slice();
++    const remembered = this.#rememberWire(this.#queuedWire, key, owned);
++    void this.#enqueue(async () => {
++      try {
++        return await this.#receive(from, owned);
++      } finally {
++        if (remembered) this.#queuedWire.delete(key);
++      }
++    });
++  }
++
+   #enqueue<T>(task: () => Promise<Result<T>>): Promise<Result<T>> {
+     const run = this.#queue.then(task, task);
+     this.#queue = run.then(
+@@ -504,7 +547,7 @@ export class OnlineCeremony {
+         this.#locallyConsented = true;
+         this.#started = true;
+         this.#offMessage = this.#options.transport.onMessage((from, bytes) => {
+-          void this.#enqueue(() => this.#receive(from, bytes.slice()));
++          this.#queuePacket(from, bytes);
+         });
+         const restored = await this.#advance();
+         if (!restored.ok || (!this.#result && this.#disclosureBytes.size === 0)) {
+@@ -550,7 +593,7 @@ export class OnlineCeremony {
+         );
+       this.#started = true;
+       this.#offMessage = this.#options.transport.onMessage((from, bytes) => {
+-        void this.#enqueue(() => this.#receive(from, bytes.slice()));
++        this.#queuePacket(from, bytes);
+       });
+       if (this.#disclosureBytes.size > 0) {
+         this.#scheduleRetry();
+@@ -1091,6 +1134,8 @@ export class OnlineCeremony {
+   async #receive(from: PeerId, bytes: Uint8Array): Promise<Result<void>> {
+     if (this.#disposed || !this.#started || this.#progress.phase === 'retired')
+       return success(undefined);
++    const acceptedWire = this.#acceptedEscrowWire.get(this.#wireKey(from, bytes));
++    if (acceptedWire && sameBytes(acceptedWire, bytes)) return success(undefined);
+     const packet = verifyOnlineCeremonyPacket(bytes, from, this.#freezeHash, this.#nonce);
+     if (!packet.ok) return packet;
+     const body = packet.value.body;
+@@ -1220,7 +1265,16 @@ export class OnlineCeremony {
+       return saved;
+     }
+     this.#accepted.set(key, checked.value);
+-    return this.#advance();
++    // Only an authenticated, inner-validated packet that won its durable slot can be reused.
++    const advanced = await this.#advance();
++    if (advanced.ok && !this.#disposed && this.snapshot().phase !== 'retired')
++      this.#rememberWire(
++        this.#acceptedEscrowWire,
++        this.#wireKey(packet.body.senderDevice, bytes),
++        bytes,
++        32, // Two packet kinds across at most four dealers and four holders.
++      );
++    return advanced;
+   }
+ 
+   async #publishInvalidEnvelope(
+
+```
+## Full production coordinator source
+```typescript
 import {
   canonicalDecode,
   canonicalEncode,
@@ -510,7 +810,6 @@ export class OnlineCeremony {
     if (this.#disposed || bytes.length > MAX_MESSAGE_BYTES) return;
     const key = this.#wireKey(from, bytes);
     const queued = this.#queuedWire.get(key);
-    // If the first copy arrives before its phase is ready, the sender's existing retry resends it.
     if (queued && sameBytes(queued, bytes)) return;
     const owned = bytes.slice();
     const remembered = this.#rememberWire(this.#queuedWire, key, owned);
@@ -2669,3 +2968,5 @@ export class OnlineCeremony {
     return success(undefined);
   }
 }
+
+```

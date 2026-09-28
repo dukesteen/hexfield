@@ -30,3 +30,10 @@ test('ignores claim-only player pendings when selecting a normal bot action', ()
 test('returns no action when no eligible hosted bot has a player pending', () => {
   expect(chooseBotPending(state(0), [player(0, 'ROLL_DICE')], new Set())).toBeNull();
 });
+
+test('an out-of-turn optional trade cannot starve the active player', () => {
+  const optional = player(1, 'PROPOSE_TRADE', 'CANCEL_TRADE');
+  const active = player(2, 'BUILD_CITY', 'END_TURN');
+  expect(chooseBotPending(state(2), [optional, active], new Set([1]))).toBeNull();
+  expect(chooseBotPending(state(2), [optional, active], new Set([2]))).toBe(active);
+});

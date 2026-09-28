@@ -1,0 +1,65 @@
+{
+  "log": "/private/tmp/hexfield-takeover-v6-ready-window-terminal.log",
+  "result": "failed at bot-continuation driver gate before return",
+  "verifiedPlayerMovesAtFailure": 50,
+  "turnNumberAtFailure": 2,
+  "failureHeadCaptured": false,
+  "milestones": [
+    {
+      "event": "game-route",
+      "gameId": "klheOjak0da7bfWN-x_ije"
+    },
+    {
+      "event": "midgame-departure",
+      "head": {
+        "hash": "05894e81c2c2fff3b12bdf2332af9164c672633ca3692cfe15e7c2f978d7ed0d",
+        "seq": 25
+      }
+    },
+    {
+      "event": "recovery-activated",
+      "head": {
+        "hash": "af4940fa0effa9c9c5207f758fe60b6494821468e25898151d8a38812ce858e6",
+        "seq": 28
+      }
+    }
+  ],
+  "startup": [
+    {
+      "peerIndex": 0,
+      "deckToConsentMs": 6382.0,
+      "acceptedPassCount": 8,
+      "validationMs": 852.7,
+      "maxDeckEventLoopLagMs": 165.9,
+      "queuedFuturePasses": 0,
+      "consumedFuturePasses": 0
+    },
+    {
+      "peerIndex": 1,
+      "deckToConsentMs": 6229.5,
+      "acceptedPassCount": 8,
+      "validationMs": 849.0,
+      "maxDeckEventLoopLagMs": 178.4,
+      "queuedFuturePasses": 0,
+      "consumedFuturePasses": 0
+    },
+    {
+      "peerIndex": 2,
+      "deckToConsentMs": 6173.7,
+      "acceptedPassCount": 8,
+      "validationMs": 859.3,
+      "maxDeckEventLoopLagMs": 156,
+      "queuedFuturePasses": 0,
+      "consumedFuturePasses": 0
+    },
+    {
+      "peerIndex": 3,
+      "deckToConsentMs": 5578.9,
+      "acceptedPassCount": 8,
+      "validationMs": 856.2,
+      "maxDeckEventLoopLagMs": 180.8,
+      "queuedFuturePasses": 0,
+      "consumedFuturePasses": 0
+    }
+  ]
+}

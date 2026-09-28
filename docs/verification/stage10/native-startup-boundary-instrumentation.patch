@@ -1,0 +1,477 @@
+--- a/packages/protocol/src/online-ceremony.ts
++++ b/packages/protocol/src/online-ceremony.ts
+@@ -3,6 +3,7 @@
+   canonicalEncode,
+   fromBase64Url,
+   hashValue,
++  sha256,
+   toBase64Url,
+   toHex,
+ } from '@cp2p/codec';
+@@ -340,7 +341,32 @@
+   #failedAcceptance: { dealerSeat: Seat; holderSeat: Seat } | null = null;
+   #disclosureBytes = new Map<string, Uint8Array>();
+   #restoreValidated = false;
++  #diagnosticCount = 0;
++  #diagnosticTimer: ReturnType<typeof setInterval> | null = null;
++  #diagnosticPhase = '';
++  #diagnosticProgress = '';
++  #diagnosticPackets = new Set<string>();
++  #diagnosticPendingMessages = 0;
++  #diagnosticPrefixHits = new Map<number, number>();
+ 
++  #diagnostic(detail: Record<string, unknown>): void {
++    if (this.#diagnosticCount >= 200) return;
++    this.#diagnosticCount += 1;
++    console.log('NATIVE_CEREMONY_TIMING', JSON.stringify({ device: this.#self, now: performance.now(), epochMs: performance.timeOrigin + performance.now(), ...detail, ...((detail.phase === 'consent' || detail.phase === 'retired') ? { prefixHits: Object.fromEntries(this.#diagnosticPrefixHits) } : {}) }));
++  }
++
++  #packetBoundary(event: string, bytes: Uint8Array, detail: Record<string, unknown> = {}): void {
++    if (this.#diagnosticPackets.size >= 256) return;
++    const digest = toHex(sha256(bytes));
++    const key = `${event}/${digest}/${String(detail.peer ?? detail.from ?? '')}`;
++    if (this.#diagnosticPackets.has(key)) return;
++    this.#diagnosticPackets.add(key);
++    console.log('NATIVE_PACKET_BOUNDARY', JSON.stringify({
++      device: this.#self, epochMs: performance.timeOrigin + performance.now(),
++      event, digest, bytes: bytes.byteLength, ...detail,
++    }));
++  }
++
+   private constructor(
+     options: OnlineCeremonyOptions,
+     agreement: LobbyFreezeAgreement,
+@@ -360,6 +386,13 @@
+     this.#self = self;
+     this.#restoreExpected = options.restoreResult ? copy(options.restoreResult) : null;
+     this.#deviceKey = options.deviceSigningKey.slice();
++    let lastPulse = performance.now();
++    this.#diagnosticTimer = setInterval(() => {
++      const now = performance.now();
++      const lagMs = now - lastPulse - 100;
++      lastPulse = now;
++      if (lagMs > 50) this.#diagnostic({ event: 'event-loop-lag', lagMs });
++    }, 100);
+     try {
+       for (const material of options.ownedSeats) {
+         const key = material.signingKey.slice();
+@@ -453,6 +486,7 @@
+   dispose(): void {
+     if (this.#disposed) return;
+     this.#disposed = true;
++    if (this.#diagnosticTimer !== null) clearInterval(this.#diagnosticTimer);
+     this.#offMessage?.();
+     if (this.#timeoutHandle !== null) this.#options.clock.clearTimeout(this.#timeoutHandle);
+     if (this.#retryHandle !== null) this.#options.clock.clearTimeout(this.#retryHandle);
+@@ -468,6 +502,11 @@
+   }
+ 
+   #emit(progress: OnlineCeremonyProgress): void {
++    const diagnosticProgress = JSON.stringify({ phase: progress.phase, awaitingSeats: progress.awaitingSeats, error: progress.error });
++    if (diagnosticProgress !== this.#diagnosticProgress) {
++      this.#diagnosticProgress = diagnosticProgress;
++      this.#diagnostic({ event: 'progress', phase: progress.phase, awaitingSeats: progress.awaitingSeats, error: progress.error });
++    }
+     this.#progress = progress;
+     if (progress.phase === 'retired') this.#futureDeckPackets.clear();
+     for (const listener of this.#listeners) {
+@@ -504,7 +543,13 @@
+         this.#locallyConsented = true;
+         this.#started = true;
+         this.#offMessage = this.#options.transport.onMessage((from, bytes) => {
+-          void this.#enqueue(() => this.#receive(from, bytes.slice()));
++          this.#diagnosticPendingMessages += 1;
++          this.#packetBoundary('coordinator-enqueue', bytes, { from, pending: this.#diagnosticPendingMessages });
++          void this.#enqueue(() => {
++            this.#diagnosticPendingMessages -= 1;
++            this.#packetBoundary('coordinator-handler-entry', bytes, { from, pending: this.#diagnosticPendingMessages });
++            return this.#receive(from, bytes.slice());
++          });
+         });
+         const restored = await this.#advance();
+         if (!restored.ok || (!this.#result && this.#disclosureBytes.size === 0)) {
+@@ -550,7 +595,13 @@
+         );
+       this.#started = true;
+       this.#offMessage = this.#options.transport.onMessage((from, bytes) => {
+-        void this.#enqueue(() => this.#receive(from, bytes.slice()));
++        this.#diagnosticPendingMessages += 1;
++        this.#packetBoundary('coordinator-enqueue', bytes, { from, pending: this.#diagnosticPendingMessages });
++        void this.#enqueue(() => {
++          this.#diagnosticPendingMessages -= 1;
++          this.#packetBoundary('coordinator-handler-entry', bytes, { from, pending: this.#diagnosticPendingMessages });
++          return this.#receive(from, bytes.slice());
++        });
+       });
+       if (this.#disclosureBytes.size > 0) {
+         this.#scheduleRetry();
+@@ -818,6 +869,11 @@
+       const retired = await this.#abortUnsafe('online-ceremony-timeout', entered.value);
+       return retired.ok ? success(false) : retired;
+     }
++    const diagnosticPhase = `${entered.value.phase}/${entered.value.startedAt}`;
++    if (diagnosticPhase !== this.#diagnosticPhase) {
++      this.#diagnosticPhase = diagnosticPhase;
++      this.#diagnostic({ event: 'deadline-phase', phase: entered.value.phase, startedAt: entered.value.startedAt, clockNow: this.#options.clock.now() });
++    }
+     this.#schedulePhaseTimeout(entered.value.phase, entered.value.startedAt);
+     return success(true);
+   }
+@@ -873,6 +929,7 @@
+       if (this.#disposed) break;
+       if (peer === this.#self) continue;
+       try {
++        this.#packetBoundary('coordinator-send', bytes, { peer, slot });
+         this.#options.transport.send(peer, bytes.slice());
+       } catch {
+         /* Durable packet remains available for the next retry. */
+@@ -955,6 +1012,7 @@
+       if (!slot.produce)
+         return failure('online-ceremony-owner', 'Only the local owner may produce this slot');
+       const produced = await slot.produce();
++      const producedAtEpochMs = performance.timeOrigin + performance.now();
+       if (!produced.ok) return produced;
+       if (!this.#locallyConsented && this.#phaseExpired(record.startedAt))
+         return failure('online-ceremony-timeout', 'Ceremony phase expired before signing');
+@@ -968,18 +1026,23 @@
+         step: slot.step,
+         payload: produced.value,
+       };
++      const signingEnteredAt = performance.timeOrigin + performance.now();
+       const signed = signOnlineCeremonyPacket(body, this.#deviceKey);
+       if (!signed.ok) return signed;
++      if (slot.kind === 'deck-pass') this.#packetBoundary('signed-encoded', signed.value.bytes, { step: slot.step, seat: slot.seat, producedAtEpochMs, signingEnteredAt });
+       const checked = this.#checkedPayload(signed.value.packet, slot);
++      if (slot.kind === 'deck-pass') this.#packetBoundary('local-validated', signed.value.bytes, { step: slot.step, seat: slot.seat });
+       if (!checked.ok) return checked;
+       if (!this.#locallyConsented && this.#phaseExpired(record.startedAt))
+         return failure('online-ceremony-timeout', 'Ceremony phase expired before persistence');
+       if (this.#disposed) return failure('online-ceremony-disposed', 'Ceremony is disposed');
++      const durablePutEnteredAt = performance.timeOrigin + performance.now();
+       if (!(await this.#options.store.putIfAbsent(key, signed.value.bytes))) {
+         const winner = await this.#options.store.load(key);
+         if (!winner || !sameBytes(winner, signed.value.bytes))
+           return failure('online-ceremony-conflict', 'Another packet already owns this phase slot');
+       }
++      if (slot.kind === 'deck-pass') this.#packetBoundary('durable-put-complete', signed.value.bytes, { step: slot.step, seat: slot.seat, durablePutEnteredAt });
+       if (slot.kind === 'consent') this.#locallyConsented = true;
+       if (this.#disposed) return failure('online-ceremony-disposed', 'Ceremony is disposed');
+       const sent = await this.#sendSlotWithinAttempt(slot, key, signed.value.bytes, record);
+@@ -1049,6 +1112,7 @@
+         const queued = this.#futureDeckPackets.get(key);
+         if (!queued) return failure('online-ceremony-deck', 'Queued deck packet is missing');
+         this.#futureDeckPackets.delete(key);
++        this.#diagnostic({ event: 'deck-consume-buffer', step: slot.step, seat: slot.seat });
+         const packet = verifyOnlineCeremonyPacket(
+           queued,
+           slot.ownerDevice,
+@@ -1094,6 +1158,7 @@
+     const packet = verifyOnlineCeremonyPacket(bytes, from, this.#freezeHash, this.#nonce);
+     if (!packet.ok) return packet;
+     const body = packet.value.body;
++    if (body.kind === 'deck-pass') this.#packetBoundary('outer-verified', bytes, { from, step: body.step, seat: body.seat });
+     if (!this.#agreement.state.seats.some((seat) => seat.kind === 'human' && seat.peer === from))
+       return failure('online-ceremony-sender', 'Sender is outside the frozen human roster');
+     if (this.#ownerDevice(body.seat) !== from)
+@@ -1104,6 +1169,7 @@
+       return this.#receiveEscrowPacket(packet.value, bytes);
+     const key = this.#packetKey(body.kind, body.seat, body.step);
+     const slot = this.#waiting.get(key);
++    if (body.kind === 'deck-pass') this.#diagnostic({ event: 'deck-arrival', step: body.step, seat: body.seat, expected: Boolean(slot), buffered: this.#futureDeckPackets.has(key) });
+     if (slot && slot.ownerDevice !== from)
+       return failure('online-ceremony-sender', 'Sender does not own this phase slot');
+     if (!slot) {
+@@ -1131,6 +1197,7 @@
+         if (!queued && this.#futureDeckPackets.size >= seats.length * 2)
+           return failure('online-ceremony-deck', 'Future deck packet buffer is full');
+         this.#futureDeckPackets.set(key, bytes.slice());
++        if (!queued) this.#diagnostic({ event: 'deck-buffered', step: body.step, count: this.#futureDeckPackets.size });
+       }
+       return success(undefined);
+     }
+@@ -1168,6 +1235,7 @@
+       return saved;
+     }
+     this.#accepted.set(key, checked.value);
++    if (slot.kind === 'deck-pass') this.#packetBoundary('validated-durable-accepted', bytes, { step: slot.step, seat: slot.seat });
+     return checked;
+   }
+ 
+@@ -2217,7 +2285,9 @@
+           step,
+           ownerDevice,
+           validate: (payload) => {
++            const validationStarted = performance.now();
+             const applied = applyDeckPass(before, payload);
++            this.#diagnostic({ event: 'validate-pass', deckId: definition.deckId, step, seat: actor.seat, durationMs: performance.now() - validationStarted, ok: applied.ok });
+             if (!applied.ok) return applied;
+             deckPrefix.next = {
+               step,
+@@ -2236,6 +2306,7 @@
+                     return failure('online-ceremony-material', 'Local deck master is missing');
+                   const source = createDeckSecretSource(owned.master, definition, actor.seat);
+                   try {
++                    const productionStarted = performance.now();
+                     const produced = await prepareDeckPass(
+                       before,
+                       actor.seat,
+@@ -2243,6 +2314,7 @@
+                       source,
+                       this.#options.store,
+                     );
++                    this.#diagnostic({ event: 'produce-pass', deckId: definition.deckId, step, seat: actor.seat, durationMs: performance.now() - productionStarted, ok: produced.ok });
+                     return produced.ok
+                       ? produced.value
+                         ? success(produced.value)
+@@ -2264,6 +2336,7 @@
+         const passHash = toHex(hashValue(pass));
+         const cachedHash = deckPrefix.passHashes[step];
+         if (cachedHash !== undefined) {
++          this.#diagnosticPrefixHits.set(step, (this.#diagnosticPrefixHits.get(step) ?? 0) + 1);
+           if (cachedHash !== passHash)
+             return failure('online-ceremony-deck', 'Accepted pass differs from validated prefix');
+           state = requiredDeckState(deckPrefix.states[step + 1]);
+@@ -2277,6 +2350,7 @@
+             next.predecessorHash !== predecessorHash
+           )
+             return failure('online-ceremony-deck', 'Validated deck prefix is incomplete');
++          this.#diagnostic({ event: 'accepted-prefix', deckId: definition.deckId, step, seat: actor.seat, passCount: step + 1 });
+           deckPrefix.passHashes.push(passHash);
+           deckPrefix.states.push(next.state);
+           state = next.state;
+--- a/packages/p2p/src/peer-link.ts
++++ b/packages/p2p/src/peer-link.ts
+@@ -1,4 +1,4 @@
+-import { fromBase64Url, hashValue, toBase64Url, toHex } from '@cp2p/codec';
++import { fromBase64Url, hashValue, sha256, toBase64Url, toHex } from '@cp2p/codec';
+ import { parsePeerId, signObject, verifyObject } from '@cp2p/crypto';
+ import type { PeerId, ProtocolClock } from '@cp2p/protocol';
+ import { MAX_MESSAGE_BYTES, MessageFramer } from './framing.js';
+@@ -90,7 +90,23 @@
+   private missedPongs = 0;
+   private awaitingPong = false;
+   private readonly queues = new Map<RTCDataChannel, Outgoing>();
++  private readonly diagnosticPackets = new Set<string>();
++  private readonly diagnosticLastFrames = new WeakMap<Uint8Array, { digest: string; bytes: number }>();
+ 
++  private packetBoundary(event: string, digest: string, bytes: number, detail: Record<string, unknown> = {}): void {
++    if (this.diagnosticPackets.size >= 192) return;
++    const key = `${event}/${digest}`;
++    if (this.diagnosticPackets.has(key)) return;
++    this.diagnosticPackets.add(key);
++    console.log('NATIVE_PACKET_BOUNDARY', JSON.stringify({
++      device: this.options.self, peer: this.options.peer,
++      epochMs: performance.timeOrigin + performance.now(), event, digest, bytes,
++      visibility: typeof document === 'undefined' ? 'worker' : document.visibilityState,
++      ...detail,
++    }));
++  }
++
++
+   constructor(private readonly options: PeerLinkOptions) {
+     if (
+       options.self === options.peer ||
+@@ -310,7 +326,11 @@
+     const target = channel === 'game' ? this.game : this.bulk;
+     const queue = this.queues.get(target);
+     if (!queue || target.readyState !== 'open') throw new Error('Peer channel is unavailable');
++    const digest = toHex(sha256(message));
++    this.packetBoundary('peerlink-enqueue', digest, message.byteLength, { channel, bufferedAmount: target.bufferedAmount, queuedFrames: queue.frames.length });
+     const frames = this.framer.split(message);
++    const lastFrame = frames.at(-1);
++    if (lastFrame) this.diagnosticLastFrames.set(lastFrame, { digest, bytes: message.byteLength });
+     const bytes = frames.reduce((total, frame) => total + frame.byteLength, 0);
+     if (queue.bytes + bytes > MAX_QUEUED_BYTES) throw new Error('Peer send queue is full');
+     queue.frames.push(...frames);
+@@ -419,6 +439,7 @@
+   }
+ 
+   private receive(channel: RTCDataChannel, data: unknown): void {
++    const rtcHandlerEnteredAt = performance.timeOrigin + performance.now();
+     if (this.closed) return;
+     if (typeof data === 'string') {
+       if (channel !== this.game || data.length > MAX_CONTROL_BYTES) {
+@@ -455,6 +476,7 @@
+       const message = this.incoming.accept(frame, this.options.clock.now());
+       this.seenInbound();
+       if (message) {
++        this.packetBoundary('rtc-message-complete', toHex(sha256(message)), message.byteLength, { channel: channel.label, rtcHandlerEnteredAt });
+         try {
+           this.options.onMessage(message);
+         } catch {
+@@ -654,7 +676,10 @@
+       try {
+         const packet = new ArrayBuffer(frame.byteLength);
+         new Uint8Array(packet).set(frame);
++        const rtcSendEnteredAt = performance.timeOrigin + performance.now();
+         channel.send(packet);
++        const diagnostic = this.diagnosticLastFrames.get(frame);
++        if (diagnostic) this.packetBoundary('rtc-last-frame-send', diagnostic.digest, diagnostic.bytes, { channel: channel.label, bufferedAmount: channel.bufferedAmount, rtcSendEnteredAt });
+       } catch {
+         this.fail('channel-send');
+         return;
+--- a/apps/web/src/session/online-worker-transport.ts
++++ b/apps/web/src/session/online-worker-transport.ts
+@@ -1,5 +1,19 @@
++import { sha256, toHex } from '@cp2p/codec';
+ import type { PeerId, Transport, Unsubscribe } from '@cp2p/protocol';
+ 
++const diagnosticPackets = new Set<string>();
++function packetBoundary(event: string, device: string, peer: string, bytes: Uint8Array): void {
++  if (diagnosticPackets.size >= 256 || !(bytes instanceof Uint8Array)) return;
++  const digest = toHex(sha256(bytes));
++  const key = `${event}/${digest}/${peer}`;
++  if (diagnosticPackets.has(key)) return;
++  diagnosticPackets.add(key);
++  console.log('NATIVE_PACKET_BOUNDARY', JSON.stringify({
++    device, peer, epochMs: performance.timeOrigin + performance.now(), event, digest,
++    bytes: bytes.byteLength, visibility: typeof document === 'undefined' ? 'worker' : document.visibilityState,
++  }));
++}
++
+ export const ONLINE_WORKER_MAX_FRAME_BYTES = 1024 * 1024;
+ export const ONLINE_WORKER_MAX_FRAMES_PER_PEER = 8;
+ export const ONLINE_WORKER_MAX_FRAMES_TOTAL = 32;
+@@ -242,6 +256,7 @@
+   };
+   const onDeviceMessage = options.transport.onMessage((peer, bytes) => {
+     if (!validPeer(peer) || !peers.has(peer)) return;
++    packetBoundary('main-bridge-rtc-delivery', options.transport.self, peer, bytes);
+     enqueue(peer, bytes);
+   });
+   const onDevicePeer = options.transport.onPeerChange((peer, online) => {
+@@ -281,6 +296,7 @@
+         return;
+       }
+       try {
++        packetBoundary('main-bridge-send', options.transport.self, message.peer, new Uint8Array(message.bytes));
+         options.transport.send(message.peer, new Uint8Array(message.bytes));
+         sendAck(message.id, true);
+       } catch {
+@@ -443,6 +459,7 @@
+         return;
+       }
+       let failed = false;
++      packetBoundary('worker-port-delivery', options.self, message.peer, new Uint8Array(message.bytes));
+       const listenerCount = messageListeners.size;
+       for (const listener of messageListeners) {
+         try {
+--- a/apps/web/tests/online-takeover.e2e.ts
++++ b/apps/web/tests/online-takeover.e2e.ts
+@@ -288,7 +288,7 @@
+ test('four humans certify takeover, recovered bot continues, and original device returns with a fresh key', async ({
+   browser,
+ }, testInfo) => {
+-  test.setTimeout(600_000);
++  test.setTimeout(120_000);
+   const contexts = await Promise.all(Array.from({ length: 4 }, () => browser.newContext()));
+   await Promise.all(
+     contexts.map((context) =>
+@@ -300,7 +300,12 @@
+   const survivors = pages.slice(1);
+   if (!host || survivors.length !== 3) throw new Error('Four native pages are required');
+   const errors: string[] = [];
+-  for (const page of pages) page.on('pageerror', (error) => errors.push(error.message));
++  for (const [index, page] of pages.entries()) {
++    page.on('pageerror', (error) => errors.push(error.message));
++    page.on('console', (message) => {
++      if ((message.text().startsWith('NATIVE_CEREMONY_TIMING') || message.text().startsWith('NATIVE_PACKET_BOUNDARY'))) console.log(`TIMING page=${index} ${message.text()}`);
++    });
++  }
+   let returning: Page | null = null;
+   try {
+     await host.goto('/#/online/create');
+@@ -317,18 +322,15 @@
+     for (const [index, guest] of survivors.entries()) {
+       await guest.goto(invitation);
+       await guest.getByRole('button', { name: 'Take seat' }).first().click();
+-      await expect(guest.getByRole('button', { name: 'Ready up' })).toBeVisible({
+-        timeout: 45_000,
+-      });
+-      await expect(host.getByText(`${index + 2} of ${index + 2} players connected`)).toBeVisible({
+-        timeout: 45_000,
+-      });
++      await expect(guest.getByRole('button', { name: 'Ready up' })).toBeVisible({ timeout: 45_000 });
++      await expect(host.getByText(`${index + 2} of ${index + 2} players connected`)).toBeVisible({ timeout: 45_000 });
+     }
+     await host.getByRole('button', { name: 'Ready up' }).click();
+     for (const guest of survivors) await guest.getByRole('button', { name: 'Ready up' }).click();
+     for (const page of pages)
+       await expect(page.getByText('4 of 4 players connected')).toBeVisible({ timeout: 45_000 });
+     await expect(host.getByRole('button', { name: 'Start game' })).toBeEnabled();
++    console.log('NATIVE_CONTEXT_VISIBILITY', JSON.stringify(await Promise.all(pages.map((page) => page.evaluate(() => ({ visibility: document.visibilityState, hidden: document.hidden, focused: document.hasFocus(), epochMs: performance.timeOrigin + performance.now() }))))));
+     await host.getByRole('button', { name: 'Start game' }).click();
+     for (const page of pages) {
+       const startupState = async () => {
+@@ -341,6 +343,11 @@
+     }
+     const gameId = new URL(host.url()).hash.match(/\/game\/([^/?]+)/)?.[1];
+     if (!gameId) throw new Error('Game route has no identifier');
++    console.log('NATIVE_LIFECYCLE', JSON.stringify({ event: 'game-route', gameId }));
++    if (process.env.CP2P_NATIVE_STARTUP_ONLY === '1') {
++      console.log('NATIVE_STARTUP_BOUNDARY_CHECK', JSON.stringify({ gameId }));
++      return; // Isolated startup boundary diagnostic only; no lifecycle acceptance.
++    }
+     const passes = (await view(host, gameId))?.deckPasses;
+     if (!passes) throw new Error('Verified genesis has no signed deck passes');
+     await expect
+@@ -351,6 +358,7 @@
+     expect((await view(host, gameId))?.turnNumber).toBeGreaterThan(0);
+     const beforeDeparture = (await view(host, gameId))?.head;
+     if (!beforeDeparture) throw new Error('No certified head before departure');
++    console.log('NATIVE_LIFECYCLE', JSON.stringify({ event: 'midgame-departure', head: beforeDeparture }));
+     await host.close();
+     const initiator = survivors[0];
+     if (!initiator) throw new Error('Canonical survivor is missing');
+@@ -374,6 +382,7 @@
+     expect(await certifiedKinds(initiator, gameId)).toContain('recovery-activate');
+     const recoveredHead = (await view(initiator, gameId))?.head;
+     if (!recoveredHead) throw new Error('Recovery has no certified head');
++    console.log('NATIVE_LIFECYCLE', JSON.stringify({ event: 'recovery-activated', head: recoveredHead }));
+     let botCommand = false;
+     for (let step = 0; step < 36 && !botCommand; step += 1) {
+       await driveCertifiedStep(survivors, initiator, gameId);
+@@ -382,6 +391,7 @@
+       );
+     }
+     expect(botCommand).toBe(true);
++    console.log('NATIVE_LIFECYCLE', JSON.stringify({ event: 'bot-command' }));
+     await initiator.locator('summary[aria-label="Open game menu"]').click();
+     await initiator.getByRole('button', { name: 'Return player 1 to a device' }).click();
+     const dialog = initiator.getByRole('dialog', { name: 'Return this player to their device' });
+@@ -404,6 +414,7 @@
+       timeout: 90_000,
+     });
+     await returning.getByRole('button', { name: 'Open game on this device' }).click();
++    console.log('NATIVE_LIFECYCLE', JSON.stringify({ event: 'return-activated' }));
+     await expect(returning).toHaveURL(new RegExp(`/game/${gameId}$`), { timeout: 30_000 });
+     await expect(returning.locator('summary[aria-label="Open game menu"]')).toBeVisible({
+       timeout: 45_000,
+@@ -424,6 +435,7 @@
+       );
+     }
+     expect(returnedCommand).toBe(true);
++    console.log('NATIVE_LIFECYCLE', JSON.stringify({ event: 'returned-command' }));
+     await returnedPage.close();
+     const secondRequest = initiator.getByRole('button', { name: /Request takeover of Original/ });
+     // The original four-seat quorum still has all three surviving human voters.
+@@ -454,6 +466,7 @@
+       );
+     }
+     expect(secondBotCommand).toBe(true);
++    console.log('NATIVE_LIFECYCLE', JSON.stringify({ event: 'second-recovered-bot-command', head: secondRecoveredHead }));
+     const terminal = await finishGame(survivors, gameId);
+     await testInfo.attach('native-lifecycle-terminal', {
+       body: JSON.stringify(terminal, null, 2),
+@@ -641,7 +654,10 @@
+             command,
+             revision: current.head.seq,
+           });
+-          if (next.submitted) moves += 1;
++          if (next.submitted) {
++            moves += 1;
++            if (moves % 25 === 0) console.log('NATIVE_LIFECYCLE', JSON.stringify({ event: 'finish-progress', moves, head: next.head, turn: next.state.turn.number, publicVp: next.state.seats.map(({ seat, publicVp }) => ({ seat, publicVp })) }));
++          }
+           if (moves > 1500) throw new Error('Bounded game exceeded 1500 player commands');
+         }
+         const all = await Promise.all(pages.map((page) => snapshots(page)));

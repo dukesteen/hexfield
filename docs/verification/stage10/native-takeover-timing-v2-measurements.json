@@ -1,0 +1,186 @@
+{
+  "status": "lifecycle-commands-certified-terminal-open",
+  "protocol": 6,
+  "nativeRunLog": "/private/tmp/hexfield-takeover-v6-timing-v2-terminal.log",
+  "sourceManifest": "native-takeover-timing-v2-source-manifest.sha256",
+  "workerTiming": [
+    {
+      "page": 0,
+      "deckToConsentMs": 9095.2,
+      "acceptedPassCount": 8,
+      "passValidationMs": 871.5,
+      "passProductionMs": 292.9,
+      "passes": [
+        {
+          "step": 0,
+          "acceptedAfterDeckMs": 474.7
+        },
+        {
+          "step": 1,
+          "acceptedAfterDeckMs": 2316.2
+        },
+        {
+          "step": 2,
+          "acceptedAfterDeckMs": 3236.8
+        },
+        {
+          "step": 3,
+          "acceptedAfterDeckMs": 4389.1
+        },
+        {
+          "step": 4,
+          "acceptedAfterDeckMs": 4461.0
+        },
+        {
+          "step": 5,
+          "acceptedAfterDeckMs": 6905.2
+        },
+        {
+          "step": 6,
+          "acceptedAfterDeckMs": 7987.8
+        },
+        {
+          "step": 7,
+          "acceptedAfterDeckMs": 9061.9
+        }
+      ],
+      "maxDeckEventLoopLagMs": 197.1
+    },
+    {
+      "page": 1,
+      "deckToConsentMs": 9040.6,
+      "acceptedPassCount": 8,
+      "passValidationMs": 896.9,
+      "passProductionMs": 257.7,
+      "passes": [
+        {
+          "step": 0,
+          "acceptedAfterDeckMs": 1167.4
+        },
+        {
+          "step": 1,
+          "acceptedAfterDeckMs": 1581.5
+        },
+        {
+          "step": 2,
+          "acceptedAfterDeckMs": 3238.6
+        },
+        {
+          "step": 3,
+          "acceptedAfterDeckMs": 4367.5
+        },
+        {
+          "step": 4,
+          "acceptedAfterDeckMs": 5699.8
+        },
+        {
+          "step": 5,
+          "acceptedAfterDeckMs": 5778.4
+        },
+        {
+          "step": 6,
+          "acceptedAfterDeckMs": 7920.4
+        },
+        {
+          "step": 7,
+          "acceptedAfterDeckMs": 9006.5
+        }
+      ],
+      "maxDeckEventLoopLagMs": 176.4
+    },
+    {
+      "page": 2,
+      "deckToConsentMs": 8908.3,
+      "acceptedPassCount": 8,
+      "passValidationMs": 887.3,
+      "passProductionMs": 256.7,
+      "passes": [
+        {
+          "step": 0,
+          "acceptedAfterDeckMs": 1181.2
+        },
+        {
+          "step": 1,
+          "acceptedAfterDeckMs": 2154.2
+        },
+        {
+          "step": 2,
+          "acceptedAfterDeckMs": 2572.2
+        },
+        {
+          "step": 3,
+          "acceptedAfterDeckMs": 4456.9
+        },
+        {
+          "step": 4,
+          "acceptedAfterDeckMs": 5797.8
+        },
+        {
+          "step": 5,
+          "acceptedAfterDeckMs": 6830.3
+        },
+        {
+          "step": 6,
+          "acceptedAfterDeckMs": 6900.3
+        },
+        {
+          "step": 7,
+          "acceptedAfterDeckMs": 8875.0
+        }
+      ],
+      "maxDeckEventLoopLagMs": 174.5
+    },
+    {
+      "page": 3,
+      "deckToConsentMs": 7974.1,
+      "acceptedPassCount": 8,
+      "passValidationMs": 886.4,
+      "passProductionMs": 255.6,
+      "passes": [
+        {
+          "step": 0,
+          "acceptedAfterDeckMs": 1165.4
+        },
+        {
+          "step": 1,
+          "acceptedAfterDeckMs": 2144.4
+        },
+        {
+          "step": 2,
+          "acceptedAfterDeckMs": 3056.3
+        },
+        {
+          "step": 3,
+          "acceptedAfterDeckMs": 3480.6
+        },
+        {
+          "step": 4,
+          "acceptedAfterDeckMs": 5889.7
+        },
+        {
+          "step": 5,
+          "acceptedAfterDeckMs": 6903.6
+        },
+        {
+          "step": 6,
+          "acceptedAfterDeckMs": 7872.4
+        },
+        {
+          "step": 7,
+          "acceptedAfterDeckMs": 7941.7
+        }
+      ],
+      "maxDeckEventLoopLagMs": 172.5
+    }
+  ],
+  "failure": {
+    "kind": "test-driver-optional-action",
+    "head": {
+      "seq": 268,
+      "hash": "69508df319fe5589e82679da22c4c9b8500d490a20294af652f48f841c614a5f"
+    },
+    "turn": 17,
+    "pending": "PROPOSE_TRADE",
+    "terminalAudits": false
+  }
+}

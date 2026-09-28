@@ -1,0 +1,222 @@
+--- a/packages/protocol/src/online-ceremony.ts
++++ b/packages/protocol/src/online-ceremony.ts
+@@ -340,6 +340,16 @@
+   #failedAcceptance: { dealerSeat: Seat; holderSeat: Seat } | null = null;
+   #disclosureBytes = new Map<string, Uint8Array>();
+   #restoreValidated = false;
++  #diagnosticCount = 0;
++  #diagnosticTimer: ReturnType<typeof setInterval> | null = null;
++  #diagnosticPhase = '';
++  #diagnosticProgress = '';
++
++  #diagnostic(detail: Record<string, unknown>): void {
++    if (this.#diagnosticCount >= 200) return;
++    this.#diagnosticCount += 1;
++    console.log('NATIVE_CEREMONY_TIMING', JSON.stringify({ device: this.#self, now: performance.now(), ...detail }));
++  }
+ 
+   private constructor(
+     options: OnlineCeremonyOptions,
+@@ -360,6 +370,13 @@
+     this.#self = self;
+     this.#restoreExpected = options.restoreResult ? copy(options.restoreResult) : null;
+     this.#deviceKey = options.deviceSigningKey.slice();
++    let lastPulse = performance.now();
++    this.#diagnosticTimer = setInterval(() => {
++      const now = performance.now();
++      const lagMs = now - lastPulse - 100;
++      lastPulse = now;
++      if (lagMs > 50) this.#diagnostic({ event: 'event-loop-lag', lagMs });
++    }, 100);
+     try {
+       for (const material of options.ownedSeats) {
+         const key = material.signingKey.slice();
+@@ -453,6 +470,7 @@
+   dispose(): void {
+     if (this.#disposed) return;
+     this.#disposed = true;
++    if (this.#diagnosticTimer !== null) clearInterval(this.#diagnosticTimer);
+     this.#offMessage?.();
+     if (this.#timeoutHandle !== null) this.#options.clock.clearTimeout(this.#timeoutHandle);
+     if (this.#retryHandle !== null) this.#options.clock.clearTimeout(this.#retryHandle);
+@@ -468,6 +486,11 @@
+   }
+ 
+   #emit(progress: OnlineCeremonyProgress): void {
++    const diagnosticProgress = JSON.stringify({ phase: progress.phase, awaitingSeats: progress.awaitingSeats, error: progress.error });
++    if (diagnosticProgress !== this.#diagnosticProgress) {
++      this.#diagnosticProgress = diagnosticProgress;
++      this.#diagnostic({ event: 'progress', phase: progress.phase, awaitingSeats: progress.awaitingSeats, error: progress.error });
++    }
+     this.#progress = progress;
+     if (progress.phase === 'retired') this.#futureDeckPackets.clear();
+     for (const listener of this.#listeners) {
+@@ -817,6 +840,11 @@
+     if (entered.value.expired) {
+       const retired = await this.#abortUnsafe('online-ceremony-timeout', entered.value);
+       return retired.ok ? success(false) : retired;
++    }
++    const diagnosticPhase = `${entered.value.phase}/${entered.value.startedAt}`;
++    if (diagnosticPhase !== this.#diagnosticPhase) {
++      this.#diagnosticPhase = diagnosticPhase;
++      this.#diagnostic({ event: 'deadline-phase', phase: entered.value.phase, startedAt: entered.value.startedAt, clockNow: this.#options.clock.now() });
+     }
+     this.#schedulePhaseTimeout(entered.value.phase, entered.value.startedAt);
+     return success(true);
+@@ -1049,6 +1077,7 @@
+         const queued = this.#futureDeckPackets.get(key);
+         if (!queued) return failure('online-ceremony-deck', 'Queued deck packet is missing');
+         this.#futureDeckPackets.delete(key);
++        this.#diagnostic({ event: 'deck-consume-buffer', step: slot.step, seat: slot.seat });
+         const packet = verifyOnlineCeremonyPacket(
+           queued,
+           slot.ownerDevice,
+@@ -1104,6 +1133,7 @@
+       return this.#receiveEscrowPacket(packet.value, bytes);
+     const key = this.#packetKey(body.kind, body.seat, body.step);
+     const slot = this.#waiting.get(key);
++    if (body.kind === 'deck-pass') this.#diagnostic({ event: 'deck-arrival', step: body.step, seat: body.seat, expected: Boolean(slot), buffered: this.#futureDeckPackets.has(key) });
+     if (slot && slot.ownerDevice !== from)
+       return failure('online-ceremony-sender', 'Sender does not own this phase slot');
+     if (!slot) {
+@@ -1131,6 +1161,7 @@
+         if (!queued && this.#futureDeckPackets.size >= seats.length * 2)
+           return failure('online-ceremony-deck', 'Future deck packet buffer is full');
+         this.#futureDeckPackets.set(key, bytes.slice());
++        if (!queued) this.#diagnostic({ event: 'deck-buffered', step: body.step, count: this.#futureDeckPackets.size });
+       }
+       return success(undefined);
+     }
+@@ -2217,7 +2248,9 @@
+           step,
+           ownerDevice,
+           validate: (payload) => {
++            const validationStarted = performance.now();
+             const applied = applyDeckPass(before, payload);
++            this.#diagnostic({ event: 'validate-pass', deckId: definition.deckId, step, seat: actor.seat, durationMs: performance.now() - validationStarted, ok: applied.ok });
+             if (!applied.ok) return applied;
+             deckPrefix.next = {
+               step,
+@@ -2236,6 +2269,7 @@
+                     return failure('online-ceremony-material', 'Local deck master is missing');
+                   const source = createDeckSecretSource(owned.master, definition, actor.seat);
+                   try {
++                    const productionStarted = performance.now();
+                     const produced = await prepareDeckPass(
+                       before,
+                       actor.seat,
+@@ -2243,6 +2277,7 @@
+                       source,
+                       this.#options.store,
+                     );
++                    this.#diagnostic({ event: 'produce-pass', deckId: definition.deckId, step, seat: actor.seat, durationMs: performance.now() - productionStarted, ok: produced.ok });
+                     return produced.ok
+                       ? produced.value
+                         ? success(produced.value)
+@@ -2277,6 +2312,7 @@
+             next.predecessorHash !== predecessorHash
+           )
+             return failure('online-ceremony-deck', 'Validated deck prefix is incomplete');
++          this.#diagnostic({ event: 'accepted-prefix', deckId: definition.deckId, step, seat: actor.seat, passCount: step + 1 });
+           deckPrefix.passHashes.push(passHash);
+           deckPrefix.states.push(next.state);
+           state = next.state;
+--- a/apps/web/tests/online-takeover.e2e.ts
++++ b/apps/web/tests/online-takeover.e2e.ts
+@@ -300,7 +300,12 @@
+   const survivors = pages.slice(1);
+   if (!host || survivors.length !== 3) throw new Error('Four native pages are required');
+   const errors: string[] = [];
+-  for (const page of pages) page.on('pageerror', (error) => errors.push(error.message));
++  for (const [index, page] of pages.entries()) {
++    page.on('pageerror', (error) => errors.push(error.message));
++    page.on('console', (message) => {
++      if (message.text().startsWith('NATIVE_CEREMONY_TIMING')) console.log(`TIMING page=${index} ${message.text()}`);
++    });
++  }
+   let returning: Page | null = null;
+   try {
+     await host.goto('/#/online/create');
+@@ -317,12 +322,8 @@
+     for (const [index, guest] of survivors.entries()) {
+       await guest.goto(invitation);
+       await guest.getByRole('button', { name: 'Take seat' }).first().click();
+-      await expect(guest.getByRole('button', { name: 'Ready up' })).toBeVisible({
+-        timeout: 45_000,
+-      });
+-      await expect(host.getByText(`${index + 2} of ${index + 2} players connected`)).toBeVisible({
+-        timeout: 45_000,
+-      });
++      await expect(guest.getByRole('button', { name: 'Ready up' })).toBeVisible({ timeout: 45_000 });
++      await expect(host.getByText(`${index + 2} of ${index + 2} players connected`)).toBeVisible({ timeout: 45_000 });
+     }
+     await host.getByRole('button', { name: 'Ready up' }).click();
+     for (const guest of survivors) await guest.getByRole('button', { name: 'Ready up' }).click();
+@@ -341,6 +342,7 @@
+     }
+     const gameId = new URL(host.url()).hash.match(/\/game\/([^/?]+)/)?.[1];
+     if (!gameId) throw new Error('Game route has no identifier');
++    console.log('NATIVE_LIFECYCLE', JSON.stringify({ event: 'game-route', gameId }));
+     const passes = (await view(host, gameId))?.deckPasses;
+     if (!passes) throw new Error('Verified genesis has no signed deck passes');
+     await expect
+@@ -351,6 +353,7 @@
+     expect((await view(host, gameId))?.turnNumber).toBeGreaterThan(0);
+     const beforeDeparture = (await view(host, gameId))?.head;
+     if (!beforeDeparture) throw new Error('No certified head before departure');
++    console.log('NATIVE_LIFECYCLE', JSON.stringify({ event: 'midgame-departure', head: beforeDeparture }));
+     await host.close();
+     const initiator = survivors[0];
+     if (!initiator) throw new Error('Canonical survivor is missing');
+@@ -374,6 +377,7 @@
+     expect(await certifiedKinds(initiator, gameId)).toContain('recovery-activate');
+     const recoveredHead = (await view(initiator, gameId))?.head;
+     if (!recoveredHead) throw new Error('Recovery has no certified head');
++    console.log('NATIVE_LIFECYCLE', JSON.stringify({ event: 'recovery-activated', head: recoveredHead }));
+     let botCommand = false;
+     for (let step = 0; step < 36 && !botCommand; step += 1) {
+       await driveCertifiedStep(survivors, initiator, gameId);
+@@ -382,6 +386,7 @@
+       );
+     }
+     expect(botCommand).toBe(true);
++    console.log('NATIVE_LIFECYCLE', JSON.stringify({ event: 'bot-command' }));
+     await initiator.locator('summary[aria-label="Open game menu"]').click();
+     await initiator.getByRole('button', { name: 'Return player 1 to a device' }).click();
+     const dialog = initiator.getByRole('dialog', { name: 'Return this player to their device' });
+@@ -404,6 +409,7 @@
+       timeout: 90_000,
+     });
+     await returning.getByRole('button', { name: 'Open game on this device' }).click();
++    console.log('NATIVE_LIFECYCLE', JSON.stringify({ event: 'return-activated' }));
+     await expect(returning).toHaveURL(new RegExp(`/game/${gameId}$`), { timeout: 30_000 });
+     await expect(returning.locator('summary[aria-label="Open game menu"]')).toBeVisible({
+       timeout: 45_000,
+@@ -424,6 +430,7 @@
+       );
+     }
+     expect(returnedCommand).toBe(true);
++    console.log('NATIVE_LIFECYCLE', JSON.stringify({ event: 'returned-command' }));
+     await returnedPage.close();
+     const secondRequest = initiator.getByRole('button', { name: /Request takeover of Original/ });
+     // The original four-seat quorum still has all three surviving human voters.
+@@ -454,6 +461,7 @@
+       );
+     }
+     expect(secondBotCommand).toBe(true);
++    console.log('NATIVE_LIFECYCLE', JSON.stringify({ event: 'second-recovered-bot-command', head: secondRecoveredHead }));
+     const terminal = await finishGame(survivors, gameId);
+     await testInfo.attach('native-lifecycle-terminal', {
+       body: JSON.stringify(terminal, null, 2),
+@@ -627,7 +635,10 @@
+             command,
+             revision: current.head.seq,
+           });
+-          if (next.submitted) moves += 1;
++          if (next.submitted) {
++            moves += 1;
++            if (moves % 25 === 0) console.log('NATIVE_LIFECYCLE', JSON.stringify({ event: 'finish-progress', moves, head: next.head, turn: next.state.turn.number, publicVp: next.state.seats.map(({ seat, publicVp }) => ({ seat, publicVp })) }));
++          }
+           if (moves > 1500) throw new Error('Bounded game exceeded 1500 player commands');
+         }
+         const all = await Promise.all(pages.map((page) => snapshots(page)));

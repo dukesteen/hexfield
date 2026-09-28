@@ -1,0 +1,5 @@
+{
+  "packages/protocol/src/online-ceremony.ts": "e5f68511daa00b2ded4856b141cda41b90145670e0971e7b84fe894f0c1a4281",
+  "packages/protocol/src/online-ceremony.test.ts": "d54c8dd4c55981d18784a1a25ff496736547b2736f23c85a2c16cc7a661048f6",
+  "review_input_sha256": "c706c2e6c3c8b196259bf2263a45191f445757117fedc9f04a8b91c09dace650"
+}
