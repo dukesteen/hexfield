@@ -36,6 +36,9 @@ Bounded checks pass:
   runner also records aggregate flush, delivery, bot and non-voter work timings
   to distinguish slow progress from a stalled protocol.
 
-The bounded worker test uses an unfinished certified prefix. It is not evidence
-of a completed game or of passing the persistence lifecycle. Full-game reruns
-remain required.
+The bounded worker test uses an unfinished certified prefix, so that test alone
+is not evidence of a completed game. The later [current-v6 persistence CI
+trace](../stage07/verified-ci-checkpoint-2026-09-28.md) completed the full
+four-human persistence profile and its worker-backed terminal audits within the
+original deadline. Separate verified network scenarios and the mixed-browser
+matrix remain open as recorded in that report.

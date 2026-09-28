@@ -1,7 +1,7 @@
 # Private-state audit at every certified sequence
 
 Updated 2026-09-28 for protocol v6. This closes the implementation gap in exact
-private-state comparison; it does not complete M-D lifecycle acceptance.
+private-state comparison; it does not complete all M-D acceptance.
 
 `auditCertifiedGame` now records an internal hash of each seat's full private
 state from the independent `LocalGame` replay at genesis and after every
@@ -54,9 +54,17 @@ conservative failure ordering is retained.
 
 Node 22, focused `audit.test.ts` and `private-replay.test.ts`: **15/15 pass**,
 25.76 seconds wall time. Scoped type-aware lint passes. The opt-in [full ten-point hosted-bot game](../stage09/hosted-bot-v6-acceptance.md)
-now passes both human audits, covering every private state through sequence 764.
-The final source hashes are in [the post-review manifest](private-oracle-final.sha256).
+passes both human audits, covering every private state through sequence 764.
+The current-v6 [four-human persistence profile](persistence-lifecycle-acceptance.md)
+also completed with 642 captured and checked sequences per seat across twelve
+rotating periodic restarts and one everyone-left restart. Its terminal audits
+compare deterministic reconstruction with the omniscient replay at every
+sequence; the [CI result archive](../stage07/verified-ci-checkpoint-2026-09-28.md)
+retains the public result and source provenance. The final source hashes are in
+[the post-review manifest](private-oracle-final.sha256).
 
-Remaining M-D work includes the representative departure/recovery/return
-lifecycle game and its terminal audit. Focused private-state checks cannot
-substitute for that trace, storage interruption cases or browser coverage.
+M-D lifecycle evidence now includes both the hosted-bot audit and the
+representative persistence lifecycle. The matrix remains open for the other
+named signing/storage interruption cases, native power-loss behavior and the
+separate mixed-browser/device gates. Focused private-state checks cannot
+substitute for those remaining traces.

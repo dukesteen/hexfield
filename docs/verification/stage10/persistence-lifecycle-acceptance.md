@@ -1,9 +1,11 @@
 # Four-human persistence acceptance
 
 This profile implements the periodic-restart and everyone-left cases in the
-[bounded acceptance policy](../p2p-acceptance-policy.md). A complete acceptance
-result is still pending. The profile uses the normal ten-point victory target,
-four human protocol participants and real cryptographic contributions.
+[bounded acceptance policy](../p2p-acceptance-policy.md). The current-v6 CI run
+completed the full profile; see the [run disposition and retained public
+artifacts](../stage07/verified-ci-checkpoint-2026-09-28.md). The profile uses the
+normal ten-point victory target, four human protocol participants and real
+cryptographic contributions.
 
 Run one deterministic game after building the simulation:
 
@@ -51,10 +53,16 @@ and no false misconduct findings. Before terminal disclosure, this profile
 never reads another seat's private state or the fixture's master-secret
 accessor.
 
-Retain the JSON result and the source revision/fingerprint before claiming this
-gate passed. A passing CLI or scheduling test does not establish full-game
-acceptance. `faultInjected` remains false because this profile schedules no
-adversarial fault; use `lifecycle.restarts` for its restart evidence. No full
-persistence-profile game has passed yet. The [review disposition](persistence-lifecycle-review-disposition.md)
+The successful CI result is retained in the linked artifact archive with source
+revision and fingerprint. It records rotating periodic restarts at the reached
+50-entry boundaries through the terminal prefix, one two-second everyone-closed
+interval with staggered reopen, matching post-restore precommit participation,
+642 captured and checked sequences per seat, four complete independent audits,
+and the exact reconstruction comparison against the audited omniscient engine.
+`faultInjected` remains false because this profile schedules no adversarial
+fault; use `lifecycle.restarts` for its restart evidence. This passes the named
+four-human persistence lifecycle profile, but does not close separate signing
+and storage interruption cases, native power-loss durability, or cross-browser
+and device acceptance. The [review disposition](persistence-lifecycle-review-disposition.md)
 and [frozen source manifest](persistence-lifecycle-final-source-manifest.sha256)
-record the current implementation and remaining limits.
+record the implementation and remaining limits.
