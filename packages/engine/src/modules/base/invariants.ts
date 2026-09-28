@@ -84,13 +84,20 @@ export function baseInvariants(state: GameState, ctx: HandlerContext): string[] 
       settlement: pieceLimits.settlement ?? 0,
       city: pieceLimits.city ?? 0,
     };
-    if (ownedRoads > limits.road || settlements > limits.settlement || cities > limits.city)
+    // A module may lay city pieces on their side (knights: a pillaged city with no settlement
+    // piece left). They stand on the board as settlements but still use a city piece.
+    const sideways = seat.piecesLeft.sideways ?? 0;
+    if (
+      ownedRoads > limits.road ||
+      settlements - sideways > limits.settlement ||
+      cities + sideways > limits.city
+    )
       errors.push(`seat ${seat.seat} placed too many pieces`);
     if (ownedRoads + (seat.piecesLeft.road ?? -1) !== limits.road)
       errors.push(`seat ${seat.seat} road supply mismatch`);
-    if (settlements + (seat.piecesLeft.settlement ?? -1) !== limits.settlement)
+    if (settlements - sideways + (seat.piecesLeft.settlement ?? -1) !== limits.settlement)
       errors.push(`seat ${seat.seat} settlement supply mismatch`);
-    if (cities + (seat.piecesLeft.city ?? -1) !== limits.city)
+    if (cities + sideways + (seat.piecesLeft.city ?? -1) !== limits.city)
       errors.push(`seat ${seat.seat} city supply mismatch`);
   }
   const lengths = state.config.seats.map((seat) => longestRoadLength(state, seat, ctx));

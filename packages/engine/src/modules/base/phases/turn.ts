@@ -6,6 +6,7 @@ import type {
   SystemInputHandler,
   Transition,
 } from '../../../core/modules/index.js';
+import type { EngineEffect } from '../../../core/effects/index.js';
 import type { RandomRequest, SystemInput } from '../../../core/pipeline/index.js';
 import type { GameEvent } from '../../../core/events/index.js';
 import type { GameState, PrivateState } from '../../../core/state/index.js';
@@ -206,6 +207,52 @@ export const rollDice: CommandHandler = {
   },
 };
 
+/** True when a module pushed a frame over the dice frame while resolving the roll. */
+function interrupted(before: GameState, prepared: GameState): boolean {
+  return prepared.turn.phase.length > before.turn.phase.length;
+}
+
+/**
+ * Resolve a roll whose dice frame is on top: pay production and open the `main` phase, or start
+ * the 7's discards and robber step. `DICE_RESULT` calls it at once; a module that held the roll
+ * back with its own frame calls it after popping that frame. The `diceRolled` event is not part
+ * of it.
+ */
+export function resolveRoll(
+  state: GameState,
+  roll: number,
+  ctx: HandlerContext,
+): { state: GameState; events: GameEvent[]; effects: EngineEffect[] } {
+  let next = state;
+  let events: GameEvent[] = [];
+  let effects: EngineEffect[] = [];
+  if (roll !== 7) {
+    const production = applyProduction(next, roll, ctx);
+    next = production.state;
+    effects = production.effects;
+    events = [{ type: 'resourcesProduced', bySeat: production.bySeat }];
+    for (const seat of next.config.seats)
+      if (!Object.hasOwn(production.bySeat, seat)) next = ctx.hooks.onNoProduction(next, seat);
+    next = replaceTop(next, frame('main'));
+    next = ctx.hooks.afterProduction(next, roll);
+  } else {
+    const limit = baseOptions(next.config.options.base).discardLimit;
+    const remaining = next.config.seats.filter((seat) => {
+      const holder = next.seats.find((item) => item.seat === seat);
+      return (
+        holder &&
+        holder.resources.total > ctx.hooks.handLimit(next, seat, limit) &&
+        Math.floor(holder.resources.total / 2) > 0
+      );
+    });
+    next = replaceTop(
+      next,
+      remaining.length ? frame('discard', { remaining }) : robberStepFrame(next, ctx),
+    );
+  }
+  return { state: next, events, effects };
+}
+
 export const diceResult: SystemInputHandler = {
   validate: (state, input, ctx) => {
     if (!validDice(input.dice))
@@ -229,54 +276,32 @@ export const diceResult: SystemInputHandler = {
   apply: (state, input, ctx) => {
     if (!validDice(input.dice)) throw new Error('Validated dice missing');
     const roll = input.dice[0] + input.dice[1];
-    let next = preparedDiceState(state, input, ctx);
-    let productionEvent: GameEvent | null = null;
-    let effects: ReturnType<typeof applyProduction>['effects'] = [];
-    if (roll !== 7) {
-      const production = applyProduction(next, roll, ctx);
-      next = production.state;
-      effects = production.effects;
-      productionEvent = { type: 'resourcesProduced', bySeat: production.bySeat };
-      for (const seat of next.config.seats)
-        if (!Object.hasOwn(production.bySeat, seat)) next = ctx.hooks.onNoProduction(next, seat);
-      next = replaceTop(next, frame('main'));
-      next = ctx.hooks.afterProduction(next, roll);
-    } else {
-      const limit = baseOptions(next.config.options.base).discardLimit;
-      const remaining = next.config.seats.filter((seat) => {
-        const holder = next.seats.find((item) => item.seat === seat);
-        return (
-          holder &&
-          holder.resources.total > ctx.hooks.handLimit(next, seat, limit) &&
-          Math.floor(holder.resources.total / 2) > 0
-        );
-      });
-      next = replaceTop(
-        next,
-        remaining.length ? frame('discard', { remaining }) : robberStepFrame(next, ctx),
-      );
-    }
+    const prepared = preparedDiceState(state, input, ctx);
     const extra = extraFaces(input);
+    const rolled: GameEvent = {
+      type: 'diceRolled',
+      dice: input.dice,
+      roll,
+      ...(Object.keys(extra).length ? { extra } : {}),
+    };
+    // A module that opened a choice from `onDiceResult` (a barbarian attack that needs a seat's
+    // decision) holds the roll back: it calls `resolveRoll` when its frame closes.
+    if (interrupted(state, prepared)) return { state: prepared, events: [rolled], effects: [] };
+    const resolved = resolveRoll(prepared, roll, ctx);
     return {
-      state: next,
-      events: [
-        {
-          type: 'diceRolled',
-          dice: input.dice,
-          roll,
-          ...(Object.keys(extra).length ? { extra } : {}),
-        },
-        ...(productionEvent ? [productionEvent] : []),
-      ],
-      effects,
+      state: resolved.state,
+      events: [rolled, ...resolved.events],
+      effects: resolved.effects,
     };
   },
   applyPrivate: (priv, before, input, _data, ctx): Result<PrivateState> => {
     if (!validDice(input.dice)) return failure('invalid-dice', 'Dice missing');
     const roll = input.dice[0] + input.dice[1];
-    return roll === 7
+    if (roll === 7) return success(priv);
+    const prepared = preparedDiceState(before, input, ctx);
+    return interrupted(before, prepared)
       ? success(priv)
-      : applyPrivateProduction(priv, preparedDiceState(before, input, ctx), roll, ctx);
+      : applyPrivateProduction(priv, prepared, roll, ctx);
   },
 };
 
