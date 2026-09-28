@@ -46,6 +46,9 @@ test('verified hidden-hand timer signs only the owner discard after local expiry
       network.clock.advanceBy(0);
       // oxlint-disable-next-line no-await-in-loop -- Drain genuinely signed consensus without advancing local expiry.
       await Promise.all(sessions.map((session) => session.flush()));
+      // Let the test runner process RPCs while the simulated clock stays fixed.
+      // oxlint-disable-next-line no-await-in-loop
+      await new Promise<void>((resolve) => setImmediate(resolve));
       if (until()) return;
     }
     throw new Error(
