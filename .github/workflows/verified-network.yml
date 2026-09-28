@@ -1,0 +1,71 @@
+name: Verified network acceptance
+
+on:
+  workflow_dispatch:
+    inputs:
+      scenario:
+        description: Run every fault case or repeat one selected scenario
+        type: choice
+        required: true
+        default: all
+        options:
+          - all
+          - '1'
+          - '2'
+          - '3'
+          - '4'
+          - '5'
+          - '6'
+          - '7'
+          - '8'
+          - '9'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verified-network-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  full-game:
+    name: Real crypto scenario ${{ matrix.scenario }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        scenario: ${{ fromJSON(inputs.scenario == 'all' && '[1,2,3,4,5,6,7,8,9]' || format('[{0}]', inputs.scenario)) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.7.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec tsc -b tools/sim
+      - name: Record source revision
+        run: git rev-parse HEAD > verified-source-revision.txt
+      - name: Run one complete game with independent peer audits
+        run: >-
+          node tools/sim/dist/index.js net
+          --security verified
+          --scenario ${{ matrix.scenario }}
+          --seeds 1
+          --seed 42
+          --start-index 0
+          --parallel 1
+          --max-elapsed-ms 900000
+          > verified-network-${{ matrix.scenario }}.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: verified-network-${{ matrix.scenario }}
+          path: |
+            verified-network-${{ matrix.scenario }}.json
+            verified-source-revision.txt
+          if-no-files-found: warn
+          retention-days: 14

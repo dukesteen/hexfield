@@ -47,6 +47,18 @@ describe('network simulation CLI options', () => {
     );
   });
 
+  test('selects real cryptography with an explicit per-game time budget', () => {
+    expect(parseNetBatchOptions(['--security', 'verified', '--max-elapsed-ms', '180000'])).toEqual({
+      seeds: 1,
+      startIndex: 0,
+      scenario: 1,
+      seed: 42,
+      parallel: 1,
+      security: 'verified',
+      maxElapsedMs: 180000,
+    });
+  });
+
   test.each([
     [['--scenario'], /--scenario needs an integer value/],
     [['--scenario', '1.5'], /--scenario needs an integer value/],
@@ -57,6 +69,8 @@ describe('network simulation CLI options', () => {
     [['--start-index', '9007199254740991', '--seeds', '2'], /safe game-index range/],
     [['--seed', '-1'], /--seed must be non-negative/],
     [['--parallel', '17'], /--parallel must be between 1 and 16/],
+    [['--security', 'unverified'], /--security must be stub or verified/],
+    [['--max-elapsed-ms', '0'], /--max-elapsed-ms must be positive/],
     [['--unknown', '1'], /Unknown network option --unknown/],
     [['--seed', '1', '--seed', '2'], /Duplicate network option --seed/],
   ] as const)('rejects malformed arguments %j', (args, message) => {

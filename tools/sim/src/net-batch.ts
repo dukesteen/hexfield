@@ -10,6 +10,8 @@ export interface NetBatchOptions {
   seed: number;
   scenario: number;
   parallel: number;
+  security?: 'stub' | 'verified';
+  maxElapsedMs?: number;
 }
 
 export interface NetBatchFailure {
@@ -34,7 +36,15 @@ export interface NetBatchResult extends NetBatchPart {
 
 export function parseNetBatchOptions(args: readonly string[]): NetBatchOptions {
   const values = new Map<string, string>();
-  const accepted = new Set(['scenario', 'seeds', 'start-index', 'seed', 'parallel']);
+  const accepted = new Set([
+    'scenario',
+    'seeds',
+    'start-index',
+    'seed',
+    'parallel',
+    'security',
+    'max-elapsed-ms',
+  ]);
   for (let index = 0; index < args.length; index++) {
     const flag = args[index];
     if (!flag?.startsWith('--')) throw new Error(`Unexpected network argument ${String(flag)}`);
@@ -44,7 +54,10 @@ export function parseNetBatchOptions(args: readonly string[]): NetBatchOptions {
     const value = args[index + 1];
     if (value === undefined || value.startsWith('--'))
       throw new Error(`--${name} needs an integer value`);
-    if (!/^-?\d+$/.test(value)) throw new Error(`--${name} needs an integer value`);
+    if (name === 'security') {
+      if (value !== 'stub' && value !== 'verified')
+        throw new Error('--security must be stub or verified');
+    } else if (!/^-?\d+$/.test(value)) throw new Error(`--${name} needs an integer value`);
     values.set(name, value);
     index++;
   }
@@ -55,12 +68,16 @@ export function parseNetBatchOptions(args: readonly string[]): NetBatchOptions {
     if (!Number.isSafeInteger(value)) throw new Error(`--${name} needs a safe integer`);
     return value;
   };
-  const options = {
+  const security = values.get('security') === 'verified' ? 'verified' : 'stub';
+  const maxElapsedMs = values.has('max-elapsed-ms') ? parse('max-elapsed-ms', 0) : undefined;
+  const options: NetBatchOptions = {
     scenario: parse('scenario', 1),
     seeds: parse('seeds', 1),
     startIndex: parse('start-index', 0),
     seed: parse('seed', 42),
     parallel: parse('parallel', 1),
+    ...(values.has('security') ? { security } : {}),
+    ...(maxElapsedMs === undefined ? {} : { maxElapsedMs }),
   };
   if (options.scenario < 1 || options.scenario > 9)
     throw new Error('--scenario must be between 1 and 9');
@@ -71,6 +88,8 @@ export function parseNetBatchOptions(args: readonly string[]): NetBatchOptions {
   if (options.seed < 0) throw new Error('--seed must be non-negative');
   if (options.parallel < 1 || options.parallel > MAX_WORKERS)
     throw new Error(`--parallel must be between 1 and ${MAX_WORKERS}`);
+  if (maxElapsedMs !== undefined && maxElapsedMs <= 0)
+    throw new Error('--max-elapsed-ms must be positive');
   return options;
 }
 
@@ -88,7 +107,13 @@ export function partitionGameIndices(options: NetBatchOptions): number[][] {
 async function runWorker(indices: number[], options: NetBatchOptions): Promise<NetBatchPart> {
   return new Promise((resolve, reject) => {
     const worker = new Worker(new URL('./net-worker.js', import.meta.url), {
-      workerData: { seed: options.seed, scenario: options.scenario, gameIndices: indices },
+      workerData: {
+        seed: options.seed,
+        scenario: options.scenario,
+        gameIndices: indices,
+        ...(options.security === undefined ? {} : { security: options.security }),
+        ...(options.maxElapsedMs === undefined ? {} : { maxElapsedMs: options.maxElapsedMs }),
+      },
     });
     let settled = false;
     worker.once('message', (message: NetBatchPart) => {
@@ -115,6 +140,8 @@ async function runIndices(
         seed: options.seed,
         gameIndex,
         scenario: options.scenario,
+        ...(options.security === undefined ? {} : { security: options.security }),
+        ...(options.maxElapsedMs === undefined ? {} : { maxElapsedMs: options.maxElapsedMs }),
       });
       results.push(result);
     } catch (error) {

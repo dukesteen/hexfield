@@ -1,10 +1,10 @@
 import { RandomBot, createBotRng } from '@cp2p/bots';
 import { canonicalDecode, hashValue, toHex } from '@cp2p/codec';
-import { success } from '@cp2p/engine';
-import type { GameState, Pending, PrivateState, Result, Seat } from '@cp2p/engine';
+import type { CommandShape, GameState, Pending, PrivateState, Result, Seat } from '@cp2p/engine';
 import {
   MemoryProtocolJournal,
   P2PSession,
+  advanceContext,
   decodeProtocolMessage,
   encodeProtocolMessage,
   entryHash,
@@ -12,25 +12,39 @@ import {
   initialProposalContext,
   proposerFor,
   quorumSize,
-  replayCertifiedPrefix,
   signCommand,
+  validateCertifiedEntry,
 } from '@cp2p/protocol';
 import type {
+  AuditReport,
   CertifiedEntry,
   ProposalContext,
   ProtocolClock,
+  P2PSessionOptions,
   SessionUpdate,
   Transport,
 } from '@cp2p/protocol';
-import { SimulationDriver, createMemnet, createSimulationGenesis } from '@cp2p/protocol/testing';
+import {
+  SimulationDriver,
+  createMemnet,
+  createSimulationGenesis,
+  createVerifiedNetworkFixture,
+  createVerifiedNonVoterActor,
+} from '@cp2p/protocol/testing';
+import type { VerifiedNonVoterActor } from '@cp2p/protocol/testing';
 import { deriveSeed } from './random-source.js';
 import { invalidCommandProposal } from './net-adversary.js';
+import { NonVoterCommand } from './non-voter-command.js';
+import { observeOutgoingTransport } from './observed-transport.js';
 
 export interface NetworkGameOptions {
   seed: number;
   gameIndex: number;
   scenario: number;
   maxSteps?: number;
+  /** Stage 07 acceptance uses genuine private sources and proofs on the same fault schedules. */
+  security?: 'stub' | 'verified';
+  maxElapsedMs?: number;
   onProgress?: (progress: {
     revision: number;
     turn: number;
@@ -40,6 +54,8 @@ export interface NetworkGameOptions {
 }
 
 export interface NetworkGameResult {
+  security: 'stub' | 'verified';
+  protocolVersion: number;
   seed: number;
   gameIndex: number;
   scenario: number;
@@ -49,6 +65,13 @@ export interface NetworkGameResult {
   elapsedMilliseconds: number;
   finalStateHash: string;
   finalLogHash: string;
+  audits: {
+    seat: Seat;
+    ok: true;
+    complete: true;
+    finalHead: { seq: number; hash: string };
+    cheatFindings: AuditReport['cheatFindings'];
+  }[];
   faultInjected: boolean;
   faultRecovered: boolean;
   faultEvidence: {
@@ -63,6 +86,9 @@ export interface NetworkGameResult {
     duplicateDeliveries: number;
     certifiedExclusionPeers: number;
     byzantineCommandCommits: number;
+    rejectedProposalHash: string | null;
+    nonVoterMessageTypes: string[];
+    nonVoterPublishedMaster: boolean;
   };
 }
 
@@ -76,7 +102,12 @@ export async function runNetworkGame(options: NetworkGameOptions): Promise<Netwo
   if (!Number.isInteger(options.scenario) || options.scenario < 1 || options.scenario > 9)
     throw new Error('This network scenario is not implemented yet');
   const started = performance.now();
-  const game = createSimulationGenesis({ seed: options.seed, gameIndex: options.gameIndex });
+  const verified =
+    options.security === 'verified'
+      ? createVerifiedNetworkFixture({ seed: options.seed, gameIndex: options.gameIndex })
+      : null;
+  const game =
+    verified ?? createSimulationGenesis({ seed: options.seed, gameIndex: options.gameIndex });
   const keys = [...game.identities.values()];
   const network = createMemnet({
     peers: keys.map((identity) => identity.peerId),
@@ -113,6 +144,8 @@ export async function runNetworkGame(options: NetworkGameOptions): Promise<Netwo
   let crashedProposerSeat: Seat | null = null;
   const intentionallyInterruptedSubmissions = new WeakSet<object>();
   let maliciousHeight: number | null = null;
+  let maliciousEntryHash: string | null = null;
+  let maliciousCommandHash: string | null = null;
   let censoredCommandHash: string | null = null;
   let corruptedHeight: number | null = null;
   let desyncObserved = false;
@@ -123,10 +156,17 @@ export async function runNetworkGame(options: NetworkGameOptions): Promise<Netwo
   let byzantineSubmissionRevision: number | null = null;
   let byzantineSubmissionHash: string | null = null;
   let byzantineCommandCommits = 0;
+  let verifiedNonVoter: VerifiedNonVoterActor | null = null;
+  let nonVoterCommand: NonVoterCommand | null = null;
+  let nonVoterContributionRetryAt = 0;
+  let nonVoterWake: unknown = null;
+  let nonVoterPublishedMaster = false;
+  const nonVoterMessageTypes = new Set<string>();
   let byzantinePrivateCache: {
     revision: number;
     privateState: PrivateState;
     context: ProposalContext;
+    driver: SimulationDriver;
   } | null = null;
   const bots = new Map(
     game.genesis.config.seats.map((seat) => [
@@ -235,6 +275,7 @@ export async function runNetworkGame(options: NetworkGameOptions): Promise<Netwo
         result: updates.get(seat)?.state.result,
         pending: session.getPending(),
         protocol: session.getProtocolStatus(),
+        audit: session.getAudit().kind,
         automaticParent: Reflect.get(session, 'automaticParent'),
       })),
     });
@@ -298,17 +339,17 @@ export async function runNetworkGame(options: NetworkGameOptions): Promise<Netwo
       }
       if (entry.seq !== maliciousHeight || entry.term !== 1) return bytes;
       if (options.scenario === 7) return null;
-      return unwrap(
-        encodeProtocolMessage({
-          t: 'PROPOSAL',
-          proposal: invalidCommandProposal(
-            decoded.proposal,
-            game.genesis,
-            seat,
-            identity.secretKey,
-          ),
-        }),
+      const proposal = invalidCommandProposal(
+        decoded.proposal,
+        game.genesis,
+        seat,
+        identity.secretKey,
       );
+      maliciousEntryHash = entryHash(proposal.body.entry);
+      if (proposal.body.entry.payload.kind !== 'command')
+        throw new Error('Invalid command injection lacks its signed command');
+      maliciousCommandHash = toHex(hashValue(proposal.body.entry.payload.signed));
+      return unwrap(encodeProtocolMessage({ t: 'PROPOSAL', proposal }));
     };
     return {
       self: transport.self,
@@ -373,11 +414,34 @@ export async function runNetworkGame(options: NetworkGameOptions): Promise<Netwo
     };
   }
 
+  function observeNonVoterMessage(bytes: Uint8Array): void {
+    const message = unwrap(decodeProtocolMessage(bytes));
+    nonVoterMessageTypes.add(message.t);
+    if (['PROPOSAL', 'VOTE', 'COMMIT'].includes(message.t)) {
+      failures.push(`Excluded non-voter emitted ${message.t}`);
+      throw new Error(`Excluded non-voter emitted ${message.t}`);
+    }
+    if (message.t === 'MASTER_REVEAL') {
+      if (message.reveal.body.publisherSeat !== 0 || message.reveal.body.originalSeat !== 0)
+        throw new Error('Excluded actor published a foreign master');
+      nonVoterPublishedMaster = true;
+    }
+  }
+
+  function nonVoterTransport(peerId: string): Transport {
+    return observeOutgoingTransport(network.transport(peerId), observeNonVoterMessage);
+  }
+
+  function wakeNonVoter(): void {
+    // Keep retries alive even when no peer has scheduled another delivery or timeout.
+    nonVoterWake = network.clock.setTimeout(wakeNonVoter, 250);
+  }
+
   async function open(seat: Seat, restoring: boolean): Promise<void> {
     const identity = game.identities.get(seat);
     const journal = journals.get(seat);
     if (!identity || !journal) throw new Error('Missing simulation identity or journal');
-    const sessionOptions = {
+    const sessionOptions: P2PSessionOptions = {
       genesisEntry: game.entry,
       engine: game.engine,
       policy: { genesis: { allowStub: true }, entry: { allowStub: true } },
@@ -391,6 +455,7 @@ export async function runNetworkGame(options: NetworkGameOptions): Promise<Netwo
         genesis: typeof game.genesis,
         clock: ProtocolClock,
       ) => new SimulationDriver(engine, genesis, clock),
+      ...verified?.sessionOptions(seat),
     };
     const session = unwrap(
       await (restoring ? P2PSession.restore(sessionOptions) : P2PSession.create(sessionOptions)),
@@ -412,35 +477,41 @@ export async function runNetworkGame(options: NetworkGameOptions): Promise<Netwo
 
   /** After self-evidence halts the faulty session, this actor sends commands but never votes. */
   function byzantinePrivate(history: readonly CertifiedEntry[]) {
-    if (byzantinePrivateCache?.revision === history.length) return byzantinePrivateCache;
-    const driver = new SimulationDriver(game.engine, game.genesis, network.clock);
-    let before = unwrap(
-      initialProposalContext(game.entry, game.engine, {
-        genesis: { allowStub: true },
-        entry: { allowStub: true },
-      }),
-    );
-    const replayed = unwrap(
-      replayCertifiedPrefix(
-        game.entry,
-        history,
-        game.engine,
-        { genesis: { allowStub: true }, entry: { allowStub: true } },
-        (entry, next) => {
-          const applied = entry.input
-            ? driver.committed(before.log, entry.input, next.log.state)
-            : success(undefined);
-          if (applied.ok) before = next;
-          return applied;
-        },
-      ),
-    );
-    if (replayed.context.log.head.seq !== history.length)
-      throw new Error('Byzantine actor replay did not reach the certified head');
-    const privateState = driver.privateState(0);
+    if (!byzantinePrivateCache) {
+      const driver = new SimulationDriver(game.engine, game.genesis, network.clock);
+      const privateState = driver.privateState(0);
+      if (!privateState) throw new Error('Stub actor has no initial private state');
+      byzantinePrivateCache = {
+        revision: 0,
+        privateState,
+        driver,
+        context: unwrap(
+          initialProposalContext(game.entry, game.engine, {
+            genesis: { allowStub: true },
+            entry: { allowStub: true },
+          }),
+        ),
+      };
+    }
+    const cached = byzantinePrivateCache;
+    const accepted = history[cached.revision - 1]?.entry ?? game.entry;
+    if (
+      history.length < cached.revision ||
+      entryHash(accepted) !== entryHash(cached.context.log.head)
+    )
+      throw new Error('Stub actor prefix changed an accepted head');
+    for (const certified of history.slice(cached.revision)) {
+      const validated = unwrap(validateCertifiedEntry(certified, cached.context));
+      const next = unwrap(advanceContext(cached.context, validated));
+      if (validated.input)
+        unwrap(cached.driver.committed(cached.context.log, validated.input, next.log.state));
+      cached.context = next;
+      cached.revision = next.log.head.seq;
+    }
+    const privateState = cached.driver.privateState(0);
     if (!privateState) throw new Error('Byzantine actor lost its own private hand');
-    byzantinePrivateCache = { revision: history.length, privateState, context: replayed.context };
-    return byzantinePrivateCache;
+    cached.privateState = privateState;
+    return cached;
   }
 
   async function survivorsReadyForCrash(proposer: Seat, seq: number): Promise<boolean> {
@@ -609,6 +680,8 @@ export async function runNetworkGame(options: NetworkGameOptions): Promise<Netwo
     await Promise.all(game.genesis.config.seats.map((seat) => open(seat, false)));
     const maxSteps = options.maxSteps ?? 1_000_000;
     for (let step = 0; step < maxSteps; step++) {
+      if (options.maxElapsedMs !== undefined && performance.now() - started > options.maxElapsedMs)
+        throw new Error(`Peer game exceeded ${options.maxElapsedMs} ms: ${progressDiagnostic()}`);
       // oxlint-disable-next-line no-await-in-loop -- Virtual network delivery and peer queues alternate causally.
       await flush();
       if (options.scenario === 6 && byzantineHalted && sessions.has(0)) {
@@ -619,14 +692,63 @@ export async function runNetworkGame(options: NetworkGameOptions): Promise<Netwo
         updates.delete(0);
       }
       if (failures.length) throw new Error(failures[0]);
+      if (verified)
+        for (const [seat, session] of sessions) {
+          const audit = session.getAudit();
+          if (audit.kind === 'error')
+            throw new Error(`Peer ${seat} terminal audit failed: ${audit.code}`);
+        }
       const latest = [...updates.values()].toSorted((a, b) => b.revision - a.revision)[0];
       if (!latest) throw new Error('No peer state available');
       // oxlint-disable-next-line no-await-in-loop -- Crash recovery must restore durable journals before the next delivery.
       await advanceFault(latest);
+      if (verified && options.scenario === 6 && byzantineHalted && faultRecovered) {
+        const honest = [...sessions].find(
+          ([seat]) => updates.get(seat)?.revision === latest.revision,
+        )?.[1];
+        const identity = game.identities.get(0);
+        if (!honest || !identity)
+          throw new Error('Excluded actor lacks an honest certified prefix');
+        verifiedNonVoter ??= unwrap(
+          createVerifiedNonVoterActor({
+            seat: 0,
+            identity,
+            sessionOptions: verified.sessionOptions(0),
+            transport: nonVoterTransport(identity.peerId),
+            clock: network.clock,
+          }),
+        );
+        if (nonVoterWake === null) wakeNonVoter();
+        const actorHead = verifiedNonVoter.head();
+        const honestHead = honest.getCommittedHead();
+        // New prefixes authorize new artifacts; same-parent retries follow virtual time.
+        const sameHead = actorHead.seq === honestHead.seq && actorHead.hash === honestHead.hash;
+        if (!sameHead || network.clock.now() >= nonVoterContributionRetryAt) {
+          nonVoterContributionRetryAt = network.clock.now() + 250;
+          unwrap(
+            // oxlint-disable-next-line no-await-in-loop -- Each certified prefix authorizes the next private contribution.
+            await (sameHead
+              ? verifiedNonVoter.publishContributions()
+              : verifiedNonVoter.advance(honest.exportSave().entries)),
+          );
+        }
+        // A peer may finish queued async work during private proof preparation.
+        if ([...updates.values()].some((update) => update.revision > latest.revision)) continue;
+        if (nonVoterCommand && submission?.seat === 0) {
+          nonVoterCommand.pump(network.clock.now(), honest.getCommittedHead());
+          const result = nonVoterCommand.result();
+          if (result?.ok) {
+            byzantineSubmissionRevision = result.value.body.headSeq;
+            byzantineSubmissionHash = toHex(hashValue(result.value));
+          } else if (result) submission.result = result;
+        }
+      }
       if (
         [...updates.values()].every(
           (update) => update.state.result && update.revision === latest.revision,
-        )
+        ) &&
+        (!verified ||
+          [...sessions.values()].every((session) => session.getAudit().kind === 'complete'))
       ) {
         if (options.scenario > 2 && (!faultInjected || !faultRecovered))
           throw new Error('Game completed without exercising fault recovery');
@@ -645,7 +767,8 @@ export async function runNetworkGame(options: NetworkGameOptions): Promise<Netwo
         if (options.scenario === 4 && pausedPeersDuringPartition !== 4)
           throw new Error('The 2|2 partition was not observed long enough to prove a pause');
         if (options.scenario === 6) {
-          if (maliciousHeight === null) throw new Error('No invalid proposer height was recorded');
+          if (maliciousHeight === null || !maliciousEntryHash || !maliciousCommandHash)
+            throw new Error('No signed invalid proposal was recorded');
           if (!byzantineHalted || sessions.size !== 3)
             throw new Error('The Byzantine signer did not halt while three honest peers completed');
           certifiedExclusionPeers = 0;
@@ -656,10 +779,30 @@ export async function runNetworkGame(options: NetworkGameOptions): Promise<Netwo
               control?.entry.payload.kind !== 'control' ||
               control.entry.payload.action !== 'exclude-proposer' ||
               control.entry.payload.offender !== 0 ||
-              control.certificate.length < 3
+              control.entry.payload.evidence.kind !== 'invalid-command' ||
+              entryHash(control.entry.payload.evidence.proposal.body.entry) !== maliciousEntryHash
             )
               throw new Error(`Peer ${seat} lacks the certified offender-0 exclusion`);
             certifiedExclusionPeers++;
+            if (
+              history.some(
+                ({ entry }) =>
+                  entryHash(entry) === maliciousEntryHash ||
+                  (entry.payload.kind === 'command' &&
+                    toHex(hashValue(entry.payload.signed)) === maliciousCommandHash),
+              )
+            )
+              throw new Error(`Peer ${seat} committed the rejected command`);
+            for (const certified of history.slice(maliciousHeight - 1)) {
+              const voters = new Set(certified.certificate.map((vote) => vote.body.seat));
+              if (
+                voters.size !== 3 ||
+                !([1, 2, 3] as const).every((voter) => voters.has(voter)) ||
+                certified.certificate.some((vote) => vote.body.epoch !== 0) ||
+                certified.entry.payload.kind === 'membership'
+              )
+                throw new Error(`Peer ${seat} changed the original three-of-four quorum`);
+            }
             if (
               history
                 .slice(maliciousHeight)
@@ -671,6 +814,13 @@ export async function runNetworkGame(options: NetworkGameOptions): Promise<Netwo
             throw new Error('The three honest peers did not converge after exclusion');
           if (byzantineCommandCommits < 1)
             throw new Error('The faulty actor supplied no later certified player command');
+          if (
+            verified &&
+            (!nonVoterPublishedMaster ||
+              !nonVoterMessageTypes.has('SUBMIT') ||
+              ['PROPOSAL', 'VOTE', 'COMMIT'].some((type) => nonVoterMessageTypes.has(type)))
+          )
+            throw new Error('Non-voter traffic did not prove command and owned-master publication');
         }
         if (options.scenario === 2 && network.diagnostics().duplicateDeliveries === 0)
           throw new Error('The latency scenario completed without delivering a duplicate packet');
@@ -700,7 +850,34 @@ export async function runNetworkGame(options: NetworkGameOptions): Promise<Netwo
           throw new Error('Committed log values diverged');
         const finalLogHash = first.at(-1);
         if (!finalLogHash) throw new Error('Completed game has no certified history');
+        const audits: NetworkGameResult['audits'] = [];
+        if (verified) {
+          for (const [seat, session] of sessions) {
+            const audit = session.getAudit();
+            if (
+              audit.kind !== 'complete' ||
+              !audit.report.ok ||
+              !audit.report.complete ||
+              audit.report.finalHead?.hash !== finalLogHash ||
+              audit.report.finalHead.seq !== latest.revision
+            )
+              throw new Error(`Verified peer ${seat} did not pass its terminal audit`);
+            // Scenario 6's bad-signature proposal is certified as control evidence.
+            // It excuses no bad private proof from the otherwise honest player endpoint.
+            if (audit.report.cheatFindings.length !== 0)
+              throw new Error(`Verified peer ${seat} reported unexpected private-proof misconduct`);
+            audits.push({
+              seat,
+              ok: true,
+              complete: true,
+              finalHead: audit.report.finalHead,
+              cheatFindings: audit.report.cheatFindings,
+            });
+          }
+        }
         return {
+          security: game.genesis.security,
+          protocolVersion: game.genesis.protocolVersion,
           seed: options.seed,
           gameIndex: options.gameIndex,
           scenario: options.scenario,
@@ -710,6 +887,7 @@ export async function runNetworkGame(options: NetworkGameOptions): Promise<Netwo
           elapsedMilliseconds: performance.now() - started,
           finalStateHash: toHex(hashValue(latest.state)),
           finalLogHash,
+          audits,
           faultInjected,
           faultRecovered,
           faultEvidence: {
@@ -724,6 +902,9 @@ export async function runNetworkGame(options: NetworkGameOptions): Promise<Netwo
             duplicateDeliveries: network.diagnostics().duplicateDeliveries,
             certifiedExclusionPeers,
             byzantineCommandCommits,
+            rejectedProposalHash: maliciousEntryHash,
+            nonVoterMessageTypes: [...nonVoterMessageTypes].toSorted(),
+            nonVoterPublishedMaster,
           },
         };
       }
@@ -732,13 +913,21 @@ export async function runNetworkGame(options: NetworkGameOptions): Promise<Netwo
           intentionallyInterruptedSubmissions.has(submission) &&
           !submission.result.ok &&
           ['replica-outcome-unknown', 'replica-disposed'].includes(submission.result.error.code);
+        const staleActorPreparation =
+          verifiedNonVoter !== null &&
+          submission.seat === 0 &&
+          !submission.result.ok &&
+          ['non-voter-stale-head', 'non-voter-trade-stale'].includes(submission.result.error.code);
         if (
           !submission.result.ok &&
           !['renewed-intent', 'command-pending'].includes(submission.result.error.code) &&
-          !disposedByIntentionalCrash
+          !disposedByIntentionalCrash &&
+          !staleActorPreparation
         )
           throw new Error(`Submission rejected: ${submission.result.error.code}`);
         submission = null;
+        nonVoterCommand?.cancel();
+        nonVoterCommand = null;
       }
       if (byzantineSubmissionRevision !== null && latest.revision > byzantineSubmissionRevision) {
         const history = [...sessions]
@@ -755,11 +944,39 @@ export async function runNetworkGame(options: NetworkGameOptions): Promise<Netwo
         )
           byzantineCommandCommits++;
         submission = null;
+        nonVoterCommand?.cancel();
+        nonVoterCommand = null;
         byzantineSubmissionRevision = null;
         byzantineSubmissionHash = null;
       }
       if (!submission && !latest.state.result) {
-        const pending = choosePending(latest.state, game.engine.getPending(latest.state));
+        const pendingActions = game.engine.getPending(latest.state);
+        let nonVoterAutomatic: CommandShape | null = null;
+        if (
+          options.scenario === 6 &&
+          byzantineHalted &&
+          faultRecovered &&
+          pendingActions.some(
+            (item) =>
+              item.kind === 'player' && item.seat === 0 && item.allowed.includes('CLAIM_VICTORY'),
+          )
+        ) {
+          const honest = [...sessions].find(
+            ([seat]) => updates.get(seat)?.revision === latest.revision,
+          )?.[1];
+          if (!honest) throw new Error('Missing honest prefix for non-voter automatic input');
+          const priv = verifiedNonVoter
+            ? verifiedNonVoter.privateState()
+            : byzantinePrivate(honest.exportSave().entries).privateState;
+          if (!priv) throw new Error('Non-voter has no owned private state for automatic input');
+          const automatic = game.engine.getAutomaticInput(
+            latest.state,
+            new Map([[0 as Seat, priv]]),
+          );
+          if (automatic?.kind === 'command' && automatic.seat === 0)
+            nonVoterAutomatic = automatic.command;
+        }
+        const pending = choosePending(latest.state, pendingActions, nonVoterAutomatic ? 0 : null);
         const session = pending ? sessions.get(pending.seat) : undefined;
         const owned = pending ? updates.get(pending.seat) : undefined;
         if (options.scenario === 6 && byzantineHalted && faultRecovered && pending?.seat === 0) {
@@ -771,33 +988,55 @@ export async function runNetworkGame(options: NetworkGameOptions): Promise<Netwo
           if (!honest || !identity || !actor)
             throw new Error('Byzantine command actor lacks certified history or identity');
           const history = honest.exportSave().entries;
-          const rebuilt = byzantinePrivate(history);
-          if (rebuilt.context.log.head.seq !== latest.revision)
-            throw new Error('Byzantine command actor is behind the honest certified head');
-          const chosen = actor.bot.decide(
-            { state: latest.state, seat: 0, priv: rebuilt.privateState },
-            pending,
-            actor.rng,
-          );
-          const { log } = rebuilt.context;
-          const signed = signCommand(
-            {
-              gameId: log.genesis.gameId,
-              genesisDigest: rebuilt.context.membership.genesisDigest,
-              seat: 0,
-              nonce: (log.lastNonces.get(0) ?? 0) + 1,
-              headSeq: log.head.seq,
-              headHash: entryHash(log.head),
-              command: chosen,
-            },
-            identity.secretKey,
-          );
-          network
-            .transport(identity.peerId)
-            .broadcast(unwrap(encodeProtocolMessage({ t: 'SUBMIT', cmd: signed })));
-          submission = { seat: 0, result: null };
-          byzantineSubmissionRevision = latest.revision;
-          byzantineSubmissionHash = toHex(hashValue(signed));
+          const rebuilt = verified ? null : byzantinePrivate(history);
+          const privateState = verifiedNonVoter?.privateState() ?? rebuilt?.privateState;
+          const actorHead =
+            verifiedNonVoter?.head() ??
+            (rebuilt && {
+              seq: rebuilt.context.log.head.seq,
+              hash: entryHash(rebuilt.context.log.head),
+            });
+          if (
+            !privateState ||
+            actorHead?.seq !== latest.revision ||
+            actorHead.hash !== honest.getCommittedHead().hash
+          )
+            throw new Error(
+              'Byzantine command actor lacks its private state at the certified head',
+            );
+          const chosen =
+            nonVoterAutomatic ??
+            actor.bot.decide(
+              { state: latest.state, seat: 0, priv: privateState },
+              pending,
+              actor.rng,
+            );
+          if (verifiedNonVoter) {
+            submission = { seat: 0, result: null };
+            nonVoterCommand = new NonVoterCommand(verifiedNonVoter, chosen, actorHead);
+            nonVoterCommand.pump(network.clock.now(), actorHead);
+          } else {
+            if (!rebuilt) throw new Error('Stub actor has no reconstructed state');
+            const { log } = rebuilt.context;
+            const signed = signCommand(
+              {
+                gameId: log.genesis.gameId,
+                genesisDigest: rebuilt.context.membership.genesisDigest,
+                seat: 0,
+                nonce: (log.lastNonces.get(0) ?? 0) + 1,
+                headSeq: log.head.seq,
+                headHash: entryHash(log.head),
+                command: chosen,
+              },
+              identity.secretKey,
+            );
+            network
+              .transport(identity.peerId)
+              .broadcast(unwrap(encodeProtocolMessage({ t: 'SUBMIT', cmd: signed })));
+            submission = { seat: 0, result: null };
+            byzantineSubmissionRevision = latest.revision;
+            byzantineSubmissionHash = toHex(hashValue(signed));
+          }
         }
         if (pending && session && owned?.revision === latest.revision) {
           const actor = bots.get(pending.seat);
@@ -827,15 +1066,20 @@ export async function runNetworkGame(options: NetworkGameOptions): Promise<Netwo
     }
     throw new Error(`Peer game exceeded ${maxSteps} network steps: ${progressDiagnostic()}`);
   } finally {
+    if (nonVoterWake !== null) network.clock.clearTimeout(nonVoterWake);
+    nonVoterCommand?.cancel();
+    verifiedNonVoter?.dispose();
     for (const session of sessions.values()) session.dispose();
     network.dispose();
+    verified?.dispose();
   }
 }
 
-function choosePending(state: GameState, pending: readonly Pending[]) {
+function choosePending(state: GameState, pending: readonly Pending[], nonVoterSeat: Seat | null) {
   const players = pending.filter(
     (item): item is Extract<Pending, { kind: 'player' }> =>
-      item.kind === 'player' && item.allowed.some((type) => type !== 'CLAIM_VICTORY'),
+      item.kind === 'player' &&
+      (item.seat === nonVoterSeat || item.allowed.some((type) => type !== 'CLAIM_VICTORY')),
   );
   return (
     players.find((item) => item.allowed.includes('DISCARD')) ??
