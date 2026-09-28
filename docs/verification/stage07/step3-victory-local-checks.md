@@ -24,6 +24,21 @@ and two hosted bots. The median is 974.3 ms; the worst sample has only 8.5 ms ma
 against the unchanged one-second target. This is local evidence, not a browser
 latency guarantee or a measurement of larger rosters.
 
+On 2026-09-28, the unchanged opt-in test was rerun on the current working tree
+with one Vitest worker and no concurrent local crypto workload. Its three
+samples were 631.7, 1,002.8 and 600.5 ms (median 631.7 ms). The second sample
+exceeded the unchanged 1,000 ms worst-sample assertion by 2.8 ms, so this run
+failed the acceptance target; the other two samples passed. The measured
+interval remained `BUY_DEV_CARD` submission through both peers' certified
+`CARD_DEALT` entries over real 50 ms links. Pre/post SHA-256 values matched for
+`deck-replica.test.ts` (`3c72d494cda86276ba571d8a8529093868a4823dd0bc5e35da602ccde4bc11b2`),
+`replicated-log.ts` (`8be8a5b4bf1ea7e3e226058823ae882d4d8365583434161cfca9e69298e3c18a`),
+`verified-deck-session.ts` (`a08e8d18790ff1620dc9d4a6686a3f4920e8f1f403732df47a3d826be87bf8e7`),
+`fixtures.ts` (`733ae95e20dfd0376fd6aa37167ee9d46090d9110f6594bc7e1ae317efd96bd9`)
+and `deck-fixture.ts` (`5e045fd4005cac391faeb05e34b8d84021277be312fb933b94d58be67c2f48f1`).
+This is a current-source timing observation, not a passing benchmark or
+browser-latency claim.
+
 Run the opt-in benchmark separately from CPU-intensive work:
 
 ```sh
