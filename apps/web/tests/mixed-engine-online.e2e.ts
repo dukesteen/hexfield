@@ -15,6 +15,7 @@ const engineNames = ['chromium-a', 'chromium-b', 'firefox', 'webkit'] as const;
 type EngineName = (typeof engineNames)[number];
 type Playwright = PlaywrightWorkerArgs['playwright'];
 const registryPaths = new WeakMap<Page, string>();
+const diagnosticKey = '__cp2pMixedEngineDiagnostics';
 
 interface OpenedBrowserSet {
   readonly browsers: readonly Browser[];
@@ -79,6 +80,134 @@ async function roomModulePath(page: Page): Promise<string> {
   return loadedPath;
 }
 
+async function installFailureDiagnostics(page: Page): Promise<void> {
+  const paths = await page.evaluate(() => {
+    const resources = performance
+      .getEntriesByType('resource')
+      .map((entry) => entry.name)
+      .map((name) => ({ name, path: new URL(name).pathname }));
+    return {
+      room: resources.find(({ path }) => path.endsWith('/online-room.ts'))?.name ?? null,
+      peerLink: resources.find(({ path }) => path.endsWith('/peer-link.ts'))?.name ?? null,
+    };
+  });
+  if (!paths.room || !paths.peerLink)
+    throw new Error('Mixed-engine diagnostics could not find the loaded room and peer modules');
+  await page.evaluate(
+    async ({ roomPath, peerLinkPath, key }) => {
+      const record = (event: Record<string, unknown>) => {
+        const current = Reflect.get(window, key);
+        const events: Record<string, unknown>[] = Array.isArray(current) ? current : [];
+        if (events.length >= 32) events.shift();
+        events.push(event);
+        Reflect.set(window, key, events);
+      };
+      // oxlint-disable-next-line unicorn/consistent-function-scoping -- The browser-evaluated callback must be self-contained.
+      const safeError = (error: unknown) => {
+        const name = error instanceof Error ? error.name : typeof error;
+        const message = error instanceof Error ? error.message : '';
+        return {
+          name: ['Error', 'TypeError', 'RangeError', 'DOMException'].includes(name)
+            ? name
+            : 'OtherError',
+          message: message
+            .replace(/HX1\.[A-Za-z0-9_.-]+/g, '[redacted-code]')
+            .replace(/(?:v=0|candidate:)[^\r\n]*/gi, '[redacted-sdp]')
+            .replace(/\b[A-Za-z0-9_-]{32,}\b/g, '[redacted-token]')
+            .replace(/\s+/g, ' ')
+            .slice(0, 180),
+        };
+      };
+      // oxlint-disable-next-line unicorn/consistent-function-scoping -- Keep module URL resolution in the browser-evaluated callback.
+      const moduleSpecifier = (path: string) => {
+        const url = new URL(path);
+        return url.pathname + url.search;
+      };
+      // oxlint-disable typescript/no-unsafe-type-assertion -- These imports resolve the app modules already loaded by this page.
+      const { OnlineRoom } = (await import(
+        /* @vite-ignore */ moduleSpecifier(roomPath)
+      )) as typeof import('../src/session/online-room.js');
+      const { PeerLink } = (await import(
+        /* @vite-ignore */ moduleSpecifier(peerLinkPath)
+      )) as typeof import('@cp2p/p2p');
+      // oxlint-enable typescript/no-unsafe-type-assertion
+
+      const originalOpen = Reflect.get(OnlineRoom, 'open');
+      if (typeof originalOpen !== 'function')
+        throw new Error('OnlineRoom open method is unavailable to the test observer');
+      OnlineRoom.open = async function (...args) {
+        try {
+          return await Reflect.apply(originalOpen, this, args);
+        } catch (error) {
+          record({ source: 'room-open', error: safeError(error) });
+          throw error;
+        }
+      };
+
+      const prototype = Reflect.get(PeerLink, 'prototype');
+      const originalSendSignal = Reflect.get(prototype, 'sendSignal');
+      if (typeof originalSendSignal !== 'function')
+        throw new Error('PeerLink signal method is unavailable to the test observer');
+      Reflect.set(prototype, 'sendSignal', function (this: unknown, blob: unknown) {
+        const options =
+          typeof this === 'object' && this !== null ? Reflect.get(this, 'options') : null;
+        if (typeof options !== 'object' || options === null)
+          return Reflect.apply(originalSendSignal, this, [blob]);
+        const originalSignal = Reflect.get(options, 'signal');
+        if (typeof originalSignal !== 'function')
+          return Reflect.apply(originalSendSignal, this, [blob]);
+        const wrappedSignal = function (this: unknown, ...signalArgs: unknown[]) {
+          // oxlint-disable-next-line unicorn/consistent-function-scoping -- The nested callback is serialized into the browser realm.
+          const get = (value: unknown, property: string): unknown =>
+            typeof value === 'object' && value !== null ? Reflect.get(value, property) : undefined;
+          const description = get(blob, 'description');
+          const candidate = get(blob, 'candidate');
+          const sdp = get(description, 'sdp');
+          const candidateText = get(candidate, 'candidate');
+          const metadata = {
+            kind: get(blob, 'kind') ?? null,
+            descriptionType: get(description, 'type') ?? null,
+            sdpLength: typeof sdp === 'string' ? sdp.length : null,
+            candidateLength: typeof candidateText === 'string' ? candidateText.length : null,
+            candidateKeys:
+              typeof candidate === 'object' && candidate !== null
+                ? Object.keys(candidate).toSorted()
+                : [],
+          };
+          try {
+            const sent = Reflect.apply(originalSignal, this, signalArgs);
+            return Promise.resolve(sent).catch((error: unknown) => {
+              record({
+                source: 'signal-callback',
+                stage: 'rejected',
+                ...metadata,
+                error: safeError(error),
+              });
+              throw error;
+            });
+          } catch (error) {
+            record({
+              source: 'signal-callback',
+              stage: 'threw',
+              ...metadata,
+              error: safeError(error),
+            });
+            throw error;
+          }
+        };
+        Reflect.set(options, 'signal', wrappedSignal);
+        try {
+          return Reflect.apply(originalSendSignal, this, [blob]);
+        } finally {
+          if (Reflect.get(options, 'signal') === wrappedSignal)
+            Reflect.set(options, 'signal', originalSignal);
+        }
+      });
+    },
+    { roomPath: paths.room, peerLinkPath: paths.peerLink, key: diagnosticKey },
+  );
+}
+
 async function readRoom(page: Page, includePeerStats = false) {
   const path = await roomModulePath(page);
   return page.evaluate(
@@ -88,11 +217,22 @@ async function readRoom(page: Page, includePeerStats = false) {
         /* @vite-ignore */ modulePath
       )) as typeof import('../src/features/online/room-registry.js');
       // oxlint-enable typescript/no-unsafe-type-assertion
+      const diagnosticEvents = Reflect.get(window, '__cp2pMixedEngineDiagnostics');
+      const pageEvidence = {
+        url: location.href,
+        alerts: [...document.querySelectorAll('[role="alert"]')]
+          .map((element) => element.textContent?.trim() ?? '')
+          .filter(Boolean)
+          .slice(0, 4),
+        diagnosticEvents: Array.isArray(diagnosticEvents) ? diagnosticEvents : [],
+      };
       const room = getOnlineRoom(new URL(location.href).hash.match(/\/lobby\/([^/?]+)/)?.[1] ?? '');
-      if (!room) return null;
+      if (!room) return { ...pageEvidence, roomOpen: false, humanCount: 0, peerCount: 0 };
       const snapshot = room.getSnapshot();
       const peerStats = readPeerStats ? await room.getPeerStats?.().catch(() => []) : [];
       return {
+        ...pageEvidence,
+        roomOpen: true,
         peerCount: snapshot.peers.length,
         connectionError: snapshot.connectionError,
         diagnostic: snapshot.diagnostic,
@@ -183,6 +323,7 @@ async function startFourPlayerRoom(pages: readonly Page[], mode: 'signaling' | '
   if (!host || guests.length !== 3) throw new Error('Expected four isolated browser pages');
   const gameName = mode === 'signaling' ? 'Mixed signaling acceptance' : 'Mixed manual acceptance';
   await host.goto('/#/online/create');
+  await installFailureDiagnostics(host);
   await host.getByLabel('Room name', { exact: true }).fill(gameName);
   await host.getByLabel('Your player name', { exact: true }).fill('Player 1');
   await host.getByText('Advanced connection options', { exact: true }).click();
@@ -199,14 +340,17 @@ async function startFourPlayerRoom(pages: readonly Page[], mode: 'signaling' | '
   if (mode === 'signaling') {
     const invite = await host.getByRole('textbox', { name: /^Invitation link/ }).inputValue();
     for (const guest of guests) {
+      await guest.goto('/#/join');
+      await installFailureDiagnostics(guest);
       await guest.goto(invite);
       await expect(guest.getByRole('heading', { name: gameName })).toBeVisible({ timeout: 45_000 });
       await guest.getByRole('button', { name: 'Take seat', exact: true }).first().click();
     }
   } else {
     for (const guest of guests) {
-      const invite = await getManualInvitation(host);
       await guest.goto('/#/join');
+      await installFailureDiagnostics(guest);
+      const invite = await getManualInvitation(host);
       await guest.getByLabel('Invitation link or code', { exact: true }).fill(invite);
       await guest.getByRole('button', { name: 'Join room', exact: true }).click();
       await expect(guest).toHaveURL(/\/lobby\/[^/]+$/, { timeout: 45_000 });
@@ -221,12 +365,24 @@ async function startFourPlayerRoom(pages: readonly Page[], mode: 'signaling' | '
       await acceptManualAnswer(host, answer);
       await expect(guest.getByRole('heading', { name: gameName })).toBeVisible({ timeout: 45_000 });
       await guest.getByRole('button', { name: 'Take seat', exact: true }).first().click();
-      await expect.poll(async () => (await readRoom(host))?.humanCount).toBeGreaterThan(1);
+      await expect
+        .poll(async () => {
+          const state = await readRoom(host);
+          return state.roomOpen ? state.humanCount : 0;
+        })
+        .toBeGreaterThan(1);
     }
   }
 
   await expect
-    .poll(async () => Promise.all(pages.map(async (page) => (await readRoom(page))?.peerCount)))
+    .poll(async () =>
+      Promise.all(
+        pages.map(async (page) => {
+          const state = await readRoom(page);
+          return state.roomOpen ? state.peerCount : 0;
+        }),
+      ),
+    )
     .toEqual([3, 3, 3, 3]);
   await Promise.all(pages.map((page) => page.getByRole('button', { name: 'Ready up' }).click()));
   await expect(host.getByRole('button', { name: 'Start game', exact: true })).toBeEnabled({
