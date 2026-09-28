@@ -90,6 +90,9 @@ async function installFailureDiagnostics(page: Page): Promise<void> {
       return {
         room: resources.find(({ path }) => /\/online-room\.(?:ts|js)$/.test(path))?.name ?? null,
         peerLink: resources.find(({ path }) => /\/peer-link\.(?:ts|js)$/.test(path))?.name ?? null,
+        codec: resources.find(({ path }) => /\/canonical\.(?:ts|js)$/.test(path))?.name ?? null,
+        envelope:
+          resources.find(({ path }) => /\/signaling-envelope\.(?:ts|js)$/.test(path))?.name ?? null,
       };
     });
   try {
@@ -119,7 +122,7 @@ async function installFailureDiagnostics(page: Page): Promise<void> {
   if (!paths.room || !paths.peerLink)
     throw new Error('Mixed-engine diagnostic modules disappeared after they were loaded');
   await page.evaluate(
-    async ({ roomPath, peerLinkPath, key }) => {
+    async ({ roomPath, peerLinkPath, codecPath, envelopePath, key }) => {
       const record = (event: Record<string, unknown>) => {
         const current = Reflect.get(window, key);
         const events: Record<string, unknown>[] = Array.isArray(current) ? current : [];
@@ -127,9 +130,41 @@ async function installFailureDiagnostics(page: Page): Promise<void> {
         events.push(event);
         Reflect.set(window, key, events);
       };
+      let manualOpenStage: string | null = null;
+      // oxlint-disable-next-line unicorn/consistent-function-scoping -- This helper is serialized into the browser realm.
+      const errorName = (error: unknown): string => {
+        const name = error instanceof Error ? error.name : '';
+        return [
+          'Error',
+          'TypeError',
+          'RangeError',
+          'ReferenceError',
+          'SyntaxError',
+          'AbortError',
+          'DataError',
+          'EncodingError',
+          'InvalidAccessError',
+          'InvalidStateError',
+          'NetworkError',
+          'NotReadableError',
+          'NotSupportedError',
+          'OperationError',
+          'SecurityError',
+          'TimeoutError',
+        ].includes(name)
+          ? name
+          : 'OtherError';
+      };
+      // oxlint-disable-next-line unicorn/consistent-function-scoping -- This helper is serialized into the browser realm.
+      const errorCode = (error: unknown) => {
+        const code =
+          typeof error === 'object' && error !== null ? Reflect.get(error, 'code') : undefined;
+        return typeof code === 'number' && Number.isSafeInteger(code) ? code : null;
+      };
       // oxlint-disable-next-line unicorn/consistent-function-scoping -- The browser-evaluated callback must be self-contained.
       const safeError = async (error: unknown) => {
-        const name = error instanceof Error ? error.name : typeof error;
+        const name = errorName(error);
+        const domCode = errorCode(error);
         const message = error instanceof Error ? error.message : '';
         const knownReasons: readonly [RegExp, string][] = [
           [/Invalid signaling envelope body/i, 'invalid-signaling-envelope'],
@@ -144,20 +179,26 @@ async function installFailureDiagnostics(page: Page): Promise<void> {
           [/Manual invitation was already used/i, 'manual-invitation-already-used'],
           [/Failed to set remote (?:offer|answer) sdp/i, 'remote-description-rejected'],
           [/setRemoteDescription/i, 'remote-description-rejected'],
+          [/Canonical encoding accepts integers only/i, 'canonical-non-integer'],
+          [/Canonical objects must contain enumerable data properties/i, 'canonical-accessor'],
+          [/Canonical objects must be plain records/i, 'canonical-non-record'],
+          [/Canonical arrays cannot have holes/i, 'canonical-sparse-array'],
+          [/Canonical objects cannot contain symbol keys/i, 'canonical-symbol-key'],
+          [/Canonical encoding does not accept cyclic values/i, 'canonical-cycle'],
+          [/Unsupported canonical value/i, 'canonical-unsupported-value'],
+          [/Canonical arrays must contain plain data elements/i, 'canonical-array-accessor'],
         ];
         const known = knownReasons.find(([pattern]) => pattern.test(message));
         if (known)
           return {
-            name: ['Error', 'TypeError', 'RangeError', 'DOMException'].includes(name)
-              ? name
-              : 'OtherError',
+            name,
+            ...(domCode === null ? {} : { domCode }),
             message: known[1],
           };
         const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(message));
         return {
-          name: ['Error', 'TypeError', 'RangeError', 'DOMException'].includes(name)
-            ? name
-            : 'OtherError',
+          name,
+          ...(domCode === null ? {} : { domCode }),
           message: 'unclassified',
           fingerprint: [...new Uint8Array(digest)]
             .map((byte) => byte.toString(16).padStart(2, '0'))
@@ -177,19 +218,90 @@ async function installFailureDiagnostics(page: Page): Promise<void> {
       const { PeerLink } = (await import(
         /* @vite-ignore */ moduleSpecifier(peerLinkPath)
       )) as typeof import('@cp2p/p2p');
-      // oxlint-enable typescript/no-unsafe-type-assertion
+      const codec = codecPath
+        ? ((await import(
+            /* @vite-ignore */ moduleSpecifier(codecPath)
+          )) as typeof import('@cp2p/codec'))
+        : null;
+      const envelope = envelopePath
+        ? ((await import(
+            /* @vite-ignore */ moduleSpecifier(envelopePath)
+          )) as typeof import('../../../packages/p2p/src/signaling-envelope.js'))
+        : null;
+      const canonicalEncode = codec?.canonicalEncode ?? null;
+      const validSignalEnvelopeBody = envelope?.validSignalEnvelopeBody ?? null;
 
       const originalOpen = Reflect.get(OnlineRoom, 'open');
       if (typeof originalOpen !== 'function')
         throw new Error('OnlineRoom open method is unavailable to the test observer');
       OnlineRoom.open = async function (...args) {
+        const request = args[0];
+        const manualJoin =
+          typeof request === 'object' &&
+          request !== null &&
+          Reflect.get(request, 'kind') === 'manual-join';
+        if (manualJoin) manualOpenStage = 'decode-offer';
         try {
-          return await Reflect.apply(originalOpen, this, args);
+          const result = await Reflect.apply(originalOpen, this, args);
+          if (manualJoin) record({ source: 'manual-open', stage: 'complete' });
+          return result;
         } catch (error) {
-          record({ source: 'room-open', error: await safeError(error) });
+          record({
+            source: manualJoin ? 'manual-open' : 'room-open',
+            ...(manualJoin ? { stage: manualOpenStage } : {}),
+            error: await safeError(error),
+          });
           throw error;
+        } finally {
+          if (manualJoin) manualOpenStage = null;
         }
       };
+
+      const rtcPrototype = Reflect.get(RTCPeerConnection, 'prototype');
+      for (const method of ['setRemoteDescription', 'setLocalDescription'] as const) {
+        const original = Reflect.get(rtcPrototype, method);
+        if (typeof original !== 'function') continue;
+        Reflect.set(rtcPrototype, method, function (this: unknown, ...args: unknown[]) {
+          if (manualOpenStage === null) return Reflect.apply(original, this, args);
+          manualOpenStage =
+            method === 'setRemoteDescription' ? 'set-remote-description' : 'set-local-description';
+          try {
+            return Promise.resolve(Reflect.apply(original, this, args)).then(
+              (value: unknown) => {
+                manualOpenStage =
+                  method === 'setRemoteDescription'
+                    ? 'remote-description-set'
+                    : 'local-description-set';
+                record({ source: 'manual-rtc', stage: method, outcome: 'fulfilled' });
+                return value;
+              },
+              async (error: unknown) => {
+                record({
+                  source: 'manual-rtc',
+                  stage: method,
+                  outcome: 'rejected',
+                  error: await safeError(error),
+                });
+                throw error;
+              },
+            );
+          } catch (error) {
+            void safeError(error)
+              .then((safe) =>
+                record({ source: 'manual-rtc', stage: method, outcome: 'threw', error: safe }),
+              )
+              .catch(() =>
+                record({
+                  source: 'manual-rtc',
+                  stage: method,
+                  outcome: 'threw',
+                  error: { name: 'OtherError', message: 'diagnostic-capture-failed' },
+                }),
+              );
+            throw error;
+          }
+        });
+      }
 
       const prototype = Reflect.get(PeerLink, 'prototype');
       const originalSendSignal = Reflect.get(prototype, 'sendSignal');
@@ -211,15 +323,81 @@ async function installFailureDiagnostics(page: Page): Promise<void> {
           const candidate = get(blob, 'candidate');
           const sdp = get(description, 'sdp');
           const candidateText = get(candidate, 'candidate');
+          // oxlint-disable-next-line unicorn/consistent-function-scoping -- This helper runs in the browser callback.
+          const safeKeys = (value: unknown, allowed: readonly string[]) =>
+            typeof value === 'object' && value !== null
+              ? Object.keys(value)
+                  .map((property) => (allowed.includes(property) ? property : 'other'))
+                  .toSorted()
+              : [];
+          // oxlint-disable-next-line unicorn/consistent-function-scoping -- This helper runs in the browser callback.
+          const safeInteger = (value: unknown) =>
+            typeof value === 'number' && Number.isSafeInteger(value) ? value : null;
+          let canonicalFailure: string | null = null;
+          if (typeof canonicalEncode === 'function') {
+            try {
+              canonicalEncode(blob);
+            } catch (error) {
+              const message = error instanceof Error ? error.message : '';
+              const reasons: readonly [RegExp, string][] = [
+                [/integers only/i, 'canonical-non-integer'],
+                [/plain records/i, 'canonical-non-record'],
+                [/symbol keys/i, 'canonical-symbol-key'],
+                [/cyclic values/i, 'canonical-cycle'],
+                [/unsupported canonical value/i, 'canonical-unsupported-value'],
+                [/enumerable data properties/i, 'canonical-accessor'],
+                [/plain data elements/i, 'canonical-array-accessor'],
+                [/holes/i, 'canonical-sparse-array'],
+              ];
+              canonicalFailure =
+                reasons.find(([pattern]) => pattern.test(message))?.[1] ?? 'canonical-other';
+            }
+          }
+          const scope = get(options, 'scope');
+          const from = get(options, 'self');
+          const to = get(options, 'peer');
+          let blobValidWithSyntheticEnvelope: boolean | null = null;
+          if (typeof validSignalEnvelopeBody === 'function') {
+            try {
+              blobValidWithSyntheticEnvelope = validSignalEnvelopeBody({
+                version: 2,
+                scope,
+                from,
+                to,
+                attemptId: 'AQEBAQEBAQEBAQEBAQEBAQ',
+                sessionId: 'AwMDAwMDAwMDAwMDAwMDAw',
+                attemptSeq: 1,
+                blob,
+              });
+            } catch {
+              blobValidWithSyntheticEnvelope = false;
+            }
+          }
           const metadata = {
             kind: get(blob, 'kind') ?? null,
+            blobKeys: safeKeys(blob, [
+              'kind',
+              'generation',
+              'revision',
+              'description',
+              'candidate',
+              'inReplyTo',
+            ]),
+            generation: safeInteger(get(blob, 'generation')),
+            revision: safeInteger(get(blob, 'revision')),
+            inReplyTo: safeInteger(get(blob, 'inReplyTo')),
             descriptionType: get(description, 'type') ?? null,
+            descriptionKeys: safeKeys(description, ['type', 'sdp']),
             sdpLength: typeof sdp === 'string' ? sdp.length : null,
             candidateLength: typeof candidateText === 'string' ? candidateText.length : null,
-            candidateKeys:
-              typeof candidate === 'object' && candidate !== null
-                ? Object.keys(candidate).toSorted()
-                : [],
+            candidateKeys: safeKeys(candidate, [
+              'candidate',
+              'sdpMid',
+              'sdpMLineIndex',
+              'usernameFragment',
+            ]),
+            canonicalFailure,
+            blobValidWithSyntheticEnvelope,
           };
           try {
             const sent = Reflect.apply(originalSignal, this, signalArgs);
@@ -259,7 +437,13 @@ async function installFailureDiagnostics(page: Page): Promise<void> {
         }
       });
     },
-    { roomPath: paths.room, peerLinkPath: paths.peerLink, key: diagnosticKey },
+    {
+      roomPath: paths.room,
+      peerLinkPath: paths.peerLink,
+      codecPath: paths.codec,
+      envelopePath: paths.envelope,
+      key: diagnosticKey,
+    },
   );
 }
 
