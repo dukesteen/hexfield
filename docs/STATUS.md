@@ -58,21 +58,24 @@ session proxy, with both peers passing their audits. A separate native Chrome
 check passes the nested audit-worker path for the same 53-entry history.
 Proof/heartbeat performance acceptance for the new boundary remains open.
 
-The [latest real-crypto CI report](verification/stage07/verified-ci-hand-cache-2026-09-28.md)
+The [earlier real-crypto CI report](verification/stage07/verified-ci-hand-cache-2026-09-28.md)
 records six completed scenarios, each with four successful audits: clean play,
 sequencer restart, two-against-two partition, censorship, derived-state repair
-and simultaneous restarts. Latency/duplicates, three-against-one partition and
-invalid-proposer scenarios still exceed the unchanged runtime bound.
+and simultaneous restarts. The [latest checkpoint run](verification/stage07/verified-ci-checkpoint-2026-09-28.md)
+still exceeds the unchanged runtime bound for latency/duplicates, three-against-one
+partition and invalid-proposer scenarios. Its persistence lifecycle passes.
 The [current M-C matrix](verification/stage09/mc-remaining-acceptance.md) and
 [M-D matrix](verification/stage10/remaining-acceptance.md) distinguish current-v6
 evidence from older traces. Reviewed lobby readiness and ceremony delivery fixes
 are committed locally and on `acceptance/mc-md-v6`; they are not deployed.
 The [persistence profile](verification/stage10/persistence-lifecycle-acceptance.md)
-now checks exact restoration, restored-voter participation and private state at
-every sequence. The latest run timed out before victory. The
+now completes a default ten-point game with twelve rotating restarts, an
+everyone-left interval, four clean independent audits and exact private-state
+comparisons at every certified sequence. It also verifies that safety records
+are restored before voting. The
 [worker correction](verification/stage10/worker-audit-scheduling.md)
 preserves independent audits and private comparisons while allowing reveal
-delivery to continue; complete lifecycle acceptance remains open. The
+delivery to continue. The
 [derived-state repair review](verification/stage10/derived-context-repair-review-disposition.md)
 now covers locked safety records, pending writes and the commit boundary.
 Focused tests and the complete corruption scenario now pass.

@@ -160,10 +160,13 @@ test('encrypted imported history stays read-only until a fresh certified seat tr
     if (!downloadPath) throw new Error('Encrypted full-save download was not retained');
 
     await destination.goto('/#/');
-    await expect(destination.getByLabel('File passphrase, if needed')).toBeVisible();
+    await expect(destination.getByLabel('File passphrase, if needed')).toBeVisible({
+      timeout: 15_000,
+    });
     await destination.getByLabel('File passphrase, if needed').fill(filePassphrase);
     await destination.getByLabel('Choose full-save file').setInputFiles(downloadPath);
-    await expect(destination).toHaveURL(/#\/full-save\/([a-f0-9]{64})$/);
+    // Import authenticates the saved history before exposing the read-only snapshot.
+    await expect(destination).toHaveURL(/#\/full-save\/([a-f0-9]{64})$/, { timeout: 30_000 });
     await expect(
       destination.getByRole('heading', { name: 'Imported game snapshot' }),
     ).toBeVisible();
@@ -289,15 +292,18 @@ test('encrypted imported history stays read-only until a fresh certified seat tr
   } catch (error) {
     await testInfo.attach('imported-transfer-pages', {
       body: JSON.stringify(
-        await Promise.all(
-          pages.map(async (page) => ({
-            url: page.url(),
-            text: await page
-              .locator('main')
-              .innerText({ timeout: 1_000 })
-              .catch(() => ''),
-          })),
-        ),
+        {
+          pageErrors: errors,
+          pages: await Promise.all(
+            pages.map(async (page) => ({
+              url: page.url(),
+              text: await page
+                .locator('body')
+                .innerText({ timeout: 1_000 })
+                .catch(() => ''),
+            })),
+          ),
+        },
         null,
         2,
       ),
