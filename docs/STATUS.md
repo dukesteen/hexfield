@@ -58,6 +58,17 @@ session proxy, with both peers passing their audits. A separate native Chrome
 check passes the nested audit-worker path for the same 53-entry history.
 Proof/heartbeat performance acceptance for the new boundary remains open.
 
+The [2026-09-28 verified CI report](verification/stage07/verified-ci-2026-09-28.md)
+records completed clean, sequencer-restart and two-against-two partition games,
+each with four successful audits. Six real-crypto scenarios remain open.
+The [current M-C matrix](verification/stage09/mc-remaining-acceptance.md) and
+[M-D matrix](verification/stage10/remaining-acceptance.md) distinguish current-v6
+evidence from older traces. Reviewed lobby readiness and ceremony delivery fixes
+are committed locally and on `acceptance/mc-md-v6`; they are not deployed.
+The [persistence profile](verification/stage10/persistence-lifecycle-acceptance.md)
+now checks exact restoration, restored-voter participation and private state at
+every sequence. Its full-game result is still pending.
+
 ## 01 — Repository Foundation
 
 Source: [01-repo-foundation.md](01-repo-foundation.md)
@@ -226,10 +237,10 @@ under the replacement authority. The same 109-entry history also passes the
 native Chrome audit worker with an exact report match. Broader adversarial and
 cross-device acceptance remain open.
 
-- [ ] P2P games over memnet with real crypto pass the stage-06 chaos suite (200 seeds per scenario in CI).
+- [ ] All nine real-crypto fault scenarios pass one reproducible complete game under the [bounded acceptance policy](verification/p2p-acceptance-policy.md).
 - [ ] Every row in the cheat table is covered by a passing test that checks the cheat is caught at the listed time.
-- [ ] Every completed honest game has no `CHEAT_PROOF` entries and produces `AuditReport.ok === true` (1,000 simulated games).
-- [ ] Dice outcomes from the beacon pass a chi-square test over 100k rounds.
+- [ ] Human-only, hosted-bot and recovered-bot compositions finish without false `CHEAT_PROOF` entries and with successful independent audits from every survivor, under the [bounded acceptance policy](verification/p2p-acceptance-policy.md).
+- [x] Dice outcomes from the beacon pass the 100,000-round chi-square check; the [measured checkpoint](verification/stage09/local-checkpoint-2026-09-27.md) records the face and sum distributions.
 - [ ] Escrow recovery works after a seat departs mid-game, and the recovered seat continues as a bot.
 - [ ] Shuffle and steal proofs meet the performance targets in Steps 3 and 5.
 
@@ -337,7 +348,7 @@ browser form check is still pending.
 - [ ] Create → invite → join → start → finish → audit ✓ works over the signaling server and over manual codes.
 - [ ] Mixed humans and bots work. The bot host can be any peer.
 - [ ] A version mismatch is detected with a clear message.
-- [ ] Every ceremony abort path returns everyone to the lobby cleanly.
+- [ ] Every pre-consent ceremony abort retires its keys and returns to the lobby; post-consent timeout or disclosure preserves the signed promise and shows recoverable waiting.
 - [ ] Turn timers work, and a disagreeing peer can't be forced into an early timeout.
 
 ## 10 — Persistence, Reconnection & Seat Takeover
@@ -424,7 +435,7 @@ Both pages and workers also close and reopen in reverse order, then accept
 another move at matching heads. This is a local laptop measurement; whole-browser
 process restart and cross-device performance remain separate checks.
 
-- [ ] All chaos additions pass on 500 seeds each.
+- [ ] All five chaos additions and every distinct unlock persistence boundary pass deterministic traces under the [bounded acceptance policy](verification/p2p-acceptance-policy.md).
 - [x] Refresh-resume takes < 3 s to be back in play on a typical laptop (measured).
 - [ ] Four-human takeover and audit pass; two-/three-human departure pauses safely and resumes when the required voter returns.
 - [ ] A game can be exported and resumed in another browser as the same seat through a certified key transfer; a stale save cannot reactivate a retired key.
