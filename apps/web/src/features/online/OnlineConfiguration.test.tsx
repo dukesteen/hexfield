@@ -352,7 +352,7 @@ test('five or six seats select the five-six module and drop a fixed island', () 
     page.container.querySelector<HTMLInputElement>('[data-expansion="five-six"] input')?.checked,
   ).toBe(true);
   expect(
-    page.container.querySelector<HTMLInputElement>('[data-expansion="knights"] input')?.disabled,
+    page.container.querySelector<HTMLInputElement>('[data-expansion="explorers"] input')?.disabled,
   ).toBe(true);
   fireEvent.click(
     page.container.querySelector('[data-expansion="five-six"] input') ?? page.container,

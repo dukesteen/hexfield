@@ -452,7 +452,7 @@ describe('signed lobby controller', () => {
     // Unknown, later and repeated modules are refused before signing.
     expect(
       attempt({
-        modules: [base, fiveSix, { id: 'knights', version: '1.0.0' }],
+        modules: [base, fiveSix, { id: 'frontier', version: '1.0.0' }],
         seats: [...seats(6)],
         options: {},
       }).ok,
