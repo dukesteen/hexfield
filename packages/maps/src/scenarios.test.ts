@@ -15,7 +15,7 @@ import {
 /** Ids of the scenarios that use only the base and five-six modules, for a seat count. */
 const plain = (count: number): string[] =>
   scenariosForSeats(count)
-    .filter((scenario) => !scenario.modules.includes('seafaring'))
+    .filter((scenario) => !scenario.modules.some((id) => id === 'seafaring' || id === 'knights'))
     .map((scenario) => scenario.id);
 
 describe('scenarios', () => {
