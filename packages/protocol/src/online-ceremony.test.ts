@@ -1098,6 +1098,11 @@ describe('online genesis ceremony', () => {
       ok: false,
       error: { code: 'online-ceremony-timeout' },
     });
+    expect(restored.snapshot()).toMatchObject({
+      phase: 'retired',
+      error: 'online-ceremony-timeout:bindings',
+      locallyConsented: false,
+    });
   });
 
   test('later signed phases get their own 20-second window without renewing earlier phases', async () => {

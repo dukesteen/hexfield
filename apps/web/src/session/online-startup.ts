@@ -437,12 +437,28 @@ export class OnlineStartup {
           }
           if (this.revoked) return;
           if (this.activeGame || this.activationAttempted) return;
-          this.update({ ...progress, gameId: this.resume?.gameId ?? null });
+          this.update({
+            ...progress,
+            phase:
+              progress.locallyConsented && progress.phase === 'consent'
+                ? 'waiting'
+                : progress.phase,
+            gameId: this.resume?.gameId ?? null,
+          });
           this.observe();
         }),
       );
       const started = await this.ceremony.start();
-      if (!started.ok) throw new Error(started.error.message);
+      if (!started.ok) {
+        // The coordinator emits this only after reading or persisting retirement.
+        // Preserve that durable disposition instead of offering a generic retry.
+        const progress = this.ceremony.snapshot();
+        if (progress.phase === 'retired') {
+          this.update({ ...progress, gameId: this.resume?.gameId ?? null });
+          return;
+        }
+        throw new Error(started.error.message);
+      }
       await this.ceremony.flush();
     }
     const result = this.ceremony.result();

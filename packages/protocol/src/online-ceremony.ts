@@ -587,11 +587,22 @@ export class OnlineCeremony {
           if (!disclosures.ok) return disclosures;
         }
       }
-      if (initialized.value.status === 'retired' && this.#disclosureBytes.size === 0)
+      if (initialized.value.status === 'retired' && this.#disclosureBytes.size === 0) {
+        const reason = initialized.value.retiredReason ?? 'online-ceremony-retired';
+        this.#emit({
+          phase: 'retired',
+          awaitingSeats: [],
+          error:
+            reason !== 'online-ceremony-retired' && initialized.value.retiredPhase
+              ? `${reason}:${initialized.value.retiredPhase}`
+              : reason,
+          locallyConsented: false,
+        });
         return failure(
-          initialized.value.retiredReason ?? 'online-ceremony-retired',
+          reason,
           `Ceremony attempt was durably retired${initialized.value.retiredPhase ? ` during ${initialized.value.retiredPhase}` : ''}`,
         );
+      }
       this.#started = true;
       this.#offMessage = this.#options.transport.onMessage((from, bytes) => {
         this.#queuePacket(from, bytes);
