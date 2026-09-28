@@ -1,0 +1,21 @@
+{
+  "head": "7a9cbaf5b53edd7e783b56e8fb178c3007457257",
+  "command": "CP2P_DRAW_BENCH=1 pnpm exec vitest run packages/protocol/src/deck-replica.test.ts -t 'certifies a full draw within one second' --maxWorkers=1 --minWorkers=1",
+  "result": "pass",
+  "samplesMilliseconds": [687.0, 889.0, 586.3],
+  "medianMilliseconds": 687.0,
+  "worstMilliseconds": 889.0,
+  "limitMilliseconds": 1000,
+  "latencyMilliseconds": 50,
+  "testDurationMilliseconds": 46367,
+  "runnerDurationSeconds": 48.71,
+  "sourcePaths": 213,
+  "sourceUnchanged": true,
+  "dirtyBefore": " M docs/11-module-framework-5-6-players.md\n M docs/12-seafaring.md\n M docs/13-knights-and-commerce.md\n M docs/14-frontier-scenarios.md\n M docs/15-explorers.md\n M docs/README.md\n M docs/verification/stage07/terminal-checkpoint-design-review.md\n M packages/protocol/src/master-reveal.ts\n M packages/protocol/src/replicated-log.ts\n?? .DS_Store\n?? .redesign/\n?? apps/web/.tanstack/\n?? packages/protocol/src/master-reveal-live.test.ts\n",
+  "scope": "Three independent peer-module samples; setup and prefix restoration outside measured interval. Current root checkpoint draft included; no terminal reached. One rerun, no profiling flag or deadline increase.",
+  "artifacts": {
+    "benchmark.log": "6c1510f325e380fbcc898c5d1175ae4e92bc6a55440ba1161092312f9a4951db",
+    "source-after.json": "e661acbd1cc41aa46c8645ddf7ba81fa31f04f86b219fffa6e1a6747e3542f7f",
+    "source-before.json": "e661acbd1cc41aa46c8645ddf7ba81fa31f04f86b219fffa6e1a6747e3542f7f"
+  }
+}

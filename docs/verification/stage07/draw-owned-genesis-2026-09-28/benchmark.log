@@ -1,0 +1,133 @@
+ DEPRECATED  The workspace file is deprecated and will be removed in the next major. Please, use the `test.projects` field in /Users/duke/Dev/Personal/colonist-p2p/vitest.config.ts instead.
+
+ RUN  v3.2.7 /Users/duke/Dev/Personal/colonist-p2p
+
+verified draw sample 1 with 50 ms links: 687.0 ms, peers 685.6/644.1 ms
+draw timeline sample 1:
+12.5 p0 send SUBMIT BUY_DEV_CARD
+42.3 p0 send PROPOSAL seq=41
+42.4 p0 send VOTE prevote seq=41
+61.7 p1 receive SUBMIT BUY_DEV_CARD
+91.8 p1 receive PROPOSAL seq=41
+107.3 p1 send VOTE prevote seq=41
+107.4 p1 receive VOTE prevote seq=41
+113.9 p1 send VOTE precommit seq=41
+155.9 p0 receive VOTE prevote seq=41
+164.0 p0 send VOTE precommit seq=41
+164.1 p0 receive VOTE precommit seq=41
+227.0 p0 certified command seq=41
+227.4 p0 send COMMIT seq=41
+264.7 p0 send DECK_CONTRIB prefix=1
+266.0 p1 receive VOTE precommit seq=41
+303.7 p1 certified command seq=41
+304.5 p1 send COMMIT seq=41
+365.9 p1 receive COMMIT seq=41
+366.0 p1 receive DECK_CONTRIB prefix=1
+416.2 p1 send DECK_CONTRIB prefix=3
+455.5 p1 send PROPOSAL seq=42
+455.5 p1 send VOTE prevote seq=42
+456.4 p0 receive COMMIT seq=41
+464.9 p0 receive DECK_CONTRIB prefix=3
+497.4 p0 send DECK_CONTRIB prefix=3
+504.4 p0 receive PROPOSAL seq=42
+523.8 p0 send VOTE prevote seq=42
+523.9 p0 receive VOTE prevote seq=42
+530.5 p0 send VOTE precommit seq=42
+546.8 p1 receive DECK_CONTRIB prefix=3
+573.7 p1 receive VOTE prevote seq=42
+595.5 p1 send VOTE precommit seq=42
+596.3 p1 receive VOTE precommit seq=42
+644.1 p1 certified system seq=42
+644.4 p1 send COMMIT seq=42
+645.6 p0 receive VOTE precommit seq=42
+685.6 p0 certified system seq=42
+685.8 p0 send COMMIT seq=42
+verified draw sample 2 with 50 ms links: 889.0 ms, peers 887.3/828.0 ms
+draw timeline sample 2:
+13.2 p0 send SUBMIT BUY_DEV_CARD
+50.0 p0 send PROPOSAL seq=41
+50.0 p0 send VOTE prevote seq=41
+62.0 p1 receive SUBMIT BUY_DEV_CARD
+100.0 p1 receive PROPOSAL seq=41
+125.2 p1 send VOTE prevote seq=41
+125.5 p1 receive VOTE prevote seq=41
+152.1 p1 send VOTE precommit seq=41
+174.0 p0 receive VOTE prevote seq=41
+202.7 p0 send VOTE precommit seq=41
+202.9 p0 receive VOTE precommit seq=41
+331.7 p0 certified command seq=41
+332.1 p0 send COMMIT seq=41
+375.9 p0 send DECK_CONTRIB prefix=1
+377.4 p1 receive VOTE precommit seq=41
+417.2 p1 certified command seq=41
+417.4 p1 send COMMIT seq=41
+444.9 p1 receive COMMIT seq=41
+445.2 p1 receive DECK_CONTRIB prefix=1
+563.2 p1 send DECK_CONTRIB prefix=3
+637.0 p1 send PROPOSAL seq=42
+637.1 p1 send VOTE prevote seq=42
+639.4 p0 receive COMMIT seq=41
+639.8 p0 receive DECK_CONTRIB prefix=3
+685.2 p0 send DECK_CONTRIB prefix=3
+690.2 p0 receive PROPOSAL seq=42
+713.1 p0 send VOTE prevote seq=42
+713.1 p0 receive VOTE prevote seq=42
+720.1 p0 send VOTE precommit seq=42
+734.8 p1 receive DECK_CONTRIB prefix=3
+762.9 p1 receive VOTE prevote seq=42
+771.1 p1 send VOTE precommit seq=42
+772.8 p1 receive VOTE precommit seq=42
+828.0 p1 certified system seq=42
+828.6 p1 send COMMIT seq=42
+830.9 p0 receive VOTE precommit seq=42
+887.3 p0 certified system seq=42
+887.5 p0 send COMMIT seq=42
+verified draw sample 3 with 50 ms links: 586.3 ms, peers 585.3/538.6 ms
+draw timeline sample 3:
+10.8 p0 send SUBMIT BUY_DEV_CARD
+37.6 p0 send PROPOSAL seq=41
+37.7 p0 send VOTE prevote seq=41
+60.5 p1 receive SUBMIT BUY_DEV_CARD
+86.0 p1 receive PROPOSAL seq=41
+98.9 p1 send VOTE prevote seq=41
+99.0 p1 receive VOTE prevote seq=41
+104.8 p1 send VOTE precommit seq=41
+148.2 p0 receive VOTE prevote seq=41
+154.3 p0 send VOTE precommit seq=41
+154.8 p0 receive VOTE precommit seq=41
+182.0 p0 certified command seq=41
+182.2 p0 send COMMIT seq=41
+213.7 p0 send DECK_CONTRIB prefix=1
+214.9 p1 receive VOTE precommit seq=41
+248.6 p1 certified command seq=41
+248.8 p1 send COMMIT seq=41
+275.9 p1 receive COMMIT seq=41
+276.1 p1 receive DECK_CONTRIB prefix=1
+330.9 p1 send DECK_CONTRIB prefix=3
+369.6 p1 send PROPOSAL seq=42
+369.7 p1 send VOTE prevote seq=42
+370.6 p0 receive COMMIT seq=41
+380.3 p0 receive DECK_CONTRIB prefix=3
+414.3 p0 send DECK_CONTRIB prefix=3
+420.8 p0 receive PROPOSAL seq=42
+440.6 p0 send VOTE prevote seq=42
+440.7 p0 receive VOTE prevote seq=42
+447.6 p0 send VOTE precommit seq=42
+463.1 p1 receive DECK_CONTRIB prefix=3
+489.4 p1 receive VOTE prevote seq=42
+496.3 p1 send VOTE precommit seq=42
+497.5 p1 receive VOTE precommit seq=42
+538.6 p1 certified system seq=42
+538.8 p1 send COMMIT seq=42
+545.7 p0 receive VOTE precommit seq=42
+585.3 p0 certified system seq=42
+585.5 p0 send COMMIT seq=42
+verified draw median 687.0 ms, worst 889.0 ms
+ ✓ |@cp2p/protocol| src/deck-replica.test.ts (9 tests | 8 skipped) 46368ms
+   ✓ live verified deck replication > certifies a full draw within one second across real 50 ms links  46367ms
+
+ Test Files  1 passed (1)
+      Tests  1 passed | 8 skipped (9)
+   Start at  12:30:19
+   Duration  48.71s (transform 1.10s, setup 0ms, collect 1.80s, tests 46.37s, environment 0ms, prepare 62ms)
+
