@@ -59,11 +59,16 @@ check passes the nested audit-worker path for the same 53-entry history.
 Proof/heartbeat performance acceptance for the new boundary remains open.
 
 The [earlier real-crypto CI report](verification/stage07/verified-ci-hand-cache-2026-09-28.md)
-records six completed scenarios, each with four successful audits: clean play,
-sequencer restart, two-against-two partition, censorship, derived-state repair
-and simultaneous restarts. The [latest checkpoint run](verification/stage07/verified-ci-checkpoint-2026-09-28.md)
-still exceeds the unchanged runtime bound for latency/duplicates, three-against-one
-partition and invalid-proposer scenarios. Its persistence lifecycle passes.
+records six passing scenarios on its pinned source. Run 36411956997 later timed
+out on scenarios 2, 5 and 6, while its persistence profile passed. In run
+36416940673, scenario 5 completed in 798.29 seconds with four clean audits at
+head 869; scenarios 2 and 6 again hit the unchanged 900-second limit. Scenario
+2 was still nonterminal at seq 494 near cutoff. Scenario 6 had a shared terminal
+result at seq 1064, but its three audits had not completed. Unit shard 3 reported
+462 passing tests followed by a Vitest `onTaskUpdate` worker RPC timeout, with
+no failed assertion. The [run report](verification/stage07/verified-ci-followup-36416940673.md)
+and [M-C matrix](verification/stage09/mc-remaining-acceptance.md) retain these
+outcomes without treating the incomplete cases as passes.
 The [current M-C matrix](verification/stage09/mc-remaining-acceptance.md) and
 [M-D matrix](verification/stage10/remaining-acceptance.md) distinguish current-v6
 evidence from older traces. Reviewed lobby readiness and ceremony delivery fixes
