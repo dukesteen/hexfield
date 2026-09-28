@@ -429,13 +429,18 @@ now has public replay export/opening, confirmed local removal and a display-only
 from reviving its old voting identity. The [full-save UI](verification/stage10/full-save-ui-checkpoint.md) adds optional
 passphrase-encrypted private export and read-only imports. Public file export,
 import, reload and a mobile view pass in native Chrome. Imported history and
-safety do not authorize play; certified fresh-key resume remains unfinished.
+safety do not authorize play. The current-v6 [cross-engine transfer acceptance]
+(verification/stage10/cross-engine-transfer-ci-2026-09-28.md) passes in Firefox
+and WebKit, including stale pre-transfer archive import after activation and
+refusal of the retired source.
 
 The [native v5 handoff](verification/stage10/native-transfer-acceptance.md) certifies
 activation, accepts a move from the new device at matching peer heads and refuses
 retired-source reload. Certified cancellation also passes receipt, continued source
-play and durable destination reload in 46.7 seconds. Post-takeover return browser
-acceptance remains open. The [recovered v5 run](verification/stage10/recovered-v5-acceptance.md)
+play and durable destination reload in 46.7 seconds. The current-v6 [native
+takeover lifecycle](verification/stage10/native-takeover-acceptance.md) also
+passes returned-human play, a second takeover, default-target completion and
+three clean audits. The [recovered v5 run](verification/stage10/recovered-v5-acceptance.md)
 finishes a three-point game and all three surviving peers complete clean audits
 in 95.42 seconds. Its crash occurs before survivor startup, so it does not satisfy
 the separate mid-game browser takeover requirement.
@@ -451,7 +456,7 @@ process restart and cross-device performance remain separate checks.
 - [x] All five chaos additions and every distinct unlock persistence boundary pass deterministic traces under the [bounded acceptance policy](verification/p2p-acceptance-policy.md): periodic/everyone-left restarts and per-sequence private oracle ([persistence profile](verification/stage10/persistence-lifecycle-acceptance.md)), departure/return and second takeover ([native lifecycle](verification/stage10/native-takeover-acceptance.md)), and all three unlock interruption boundaries ([unlock trace](verification/stage10/unlock-interruption-checks.md)). Other Stage 10 transfer and browser gates remain separate.
 - [x] Refresh-resume takes < 3 s to be back in play on a typical laptop (measured).
 - [x] Four-human takeover and audit pass; two-/three-human departure pauses safely and resumes when the required voter returns. See the [current-v6 native lifecycle](verification/stage10/native-takeover-acceptance.md) and [signed departure tests](verification/stage10/product-acceptance-checkpoint.md#departure-safety).
-- [ ] A game can be exported and resumed in another browser as the same seat through a certified key transfer; a stale save cannot reactivate a retired key.
+- [x] A game can be exported and resumed in another browser as the same seat through a certified key transfer; a stale save cannot reactivate a retired key. The [current-v6 Firefox/WebKit trace](verification/stage10/cross-engine-transfer-ci-2026-09-28.md) verifies fresh-key activation, a peer-accepted command, stale-archive read-only behavior and retired-source refusal.
 
 ## 11 — Module Framework Hardening & 5–6 Players (`five-six`)
 
