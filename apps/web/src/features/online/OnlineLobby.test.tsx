@@ -1,6 +1,11 @@
 // @vitest-environment happy-dom
 import { cleanup, fireEvent, render } from '@testing-library/react';
-import { success } from '@cp2p/engine';
+import { canonicalEncode } from '@cp2p/codec';
+import { identityFromSecret, signObject } from '@cp2p/crypto';
+import { BASE_VERSION, ENGINE_VERSION, success } from '@cp2p/engine';
+import { LobbyController, PROTOCOL_VERSION } from '@cp2p/protocol';
+import { createMemnet } from '@cp2p/protocol/testing';
+import englishLobby from '../../i18n/locales/en/lobby.json';
 import { afterEach, expect, test, vi } from 'vitest';
 import type { ReactNode } from 'react';
 import type { OnlineRoomSnapshot } from '../../session/online-room.js';
@@ -13,7 +18,17 @@ vi.mock('@tanstack/react-router', () => ({
   useBlocker: () => ({ status: 'idle' }),
   useNavigate: () => vi.fn<() => Promise<void>>(async () => undefined),
 }));
-vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
+vi.mock('react-i18next', () => ({
+  useTranslation: () => ({
+    t: (key: string, options?: { version?: number }) => {
+      if (key === 'lobby:onlineProtocolMismatch')
+        return englishLobby.onlineProtocolMismatch.replace('{{version}}', String(options?.version));
+      if (key === 'lobby:onlineEngineMismatch')
+        return englishLobby.onlineEngineMismatch.replace('{{version}}', String(options?.version));
+      return key;
+    },
+  }),
+}));
 vi.mock('./room-registry.js', () => ({
   getOnlineRoom: vi.fn<() => OnlineRoomHandleValue | null>(),
   closeOnlineRoom: vi.fn<() => Promise<void>>(async () => undefined),
@@ -115,3 +130,97 @@ test('setup failures expose diagnostics while consented waiting cannot start a n
   expect(page.queryByRole('button', { name: 'lobby:onlineNewRoom' })).toBeNull();
   expect(page.queryByRole('button', { name: 'lobby:onlineJoinNewRoom' })).toBeNull();
 });
+
+test.each(['protocol-version', 'engine-version'] as const)(
+  'a signed %s mismatch shows the host version in a localized alert and cannot start',
+  (kind) => {
+    const hostKey = new Uint8Array(32).fill(21);
+    const guestKey = new Uint8Array(32).fill(22);
+    const hostPeer = identityFromSecret(hostKey).peerId;
+    const guestPeer = identityFromSecret(guestKey).peerId;
+    const network = createMemnet({ peers: [hostPeer, guestPeer] });
+    const hostResult = LobbyController.createHost({
+      lobbyId: 'version_mismatch',
+      name: 'Version check',
+      hostName: 'Host',
+      config: {
+        modules: [{ id: 'base', version: BASE_VERSION }],
+        seats: [0, 1],
+        options: { base: { mapLayout: 'random', vpTarget: 10 } },
+      },
+      transport: network.transport(hostPeer),
+      clock: network.clock,
+      secretKey: hostKey,
+    });
+    if (!hostResult.ok) throw new Error(hostResult.error.code);
+    const host = hostResult.value;
+    const state = host.state();
+    if (!state) throw new Error('Host did not create a lobby');
+    // Keep the genuine signed-state shape without delivering a compatible state first.
+    host.dispose();
+    const guestResult = LobbyController.join({
+      lobbyId: 'version_mismatch',
+      hostPeer,
+      transport: network.transport(guestPeer),
+      clock: network.clock,
+      secretKey: guestKey,
+    });
+    if (!guestResult.ok) throw new Error(guestResult.error.code);
+    const guest = guestResult.value;
+    try {
+      const hostVersion = kind === 'protocol-version' ? PROTOCOL_VERSION + 1 : ENGINE_VERSION + 1;
+      const body = {
+        protocolVersion: kind === 'protocol-version' ? hostVersion : PROTOCOL_VERSION,
+        engineVersion: kind === 'engine-version' ? hostVersion : ENGINE_VERSION,
+        state,
+      };
+      network.transport(hostPeer).send(
+        guestPeer,
+        canonicalEncode({
+          t: 'LOBBY_STATE',
+          snapshot: { body, sig: signObject('lobby-state', body, hostKey) },
+        }),
+      );
+      network.clock.advanceBy(0);
+      expect(guest.getDiagnostic()).toEqual({ kind, hostVersion });
+      expect(guest.state()).toBeNull();
+      const snapshot: OnlineRoomSnapshot = {
+        invite: { roomId: 'version_mismatch', hostPeer, serverUrl: '' },
+        self: guestPeer,
+        signaling: { state: 'ready' },
+        manual: { phase: 'idle', code: null, peer: null, gatheringComplete: null, error: null },
+        peers: [],
+        lobby: guest.state(),
+        agreement: null,
+        diagnostic: guest.getDiagnostic(),
+        connectionError: null,
+        startup: null,
+        closed: false,
+      };
+      const startGame = vi.fn<OnlineRoomHandleValue['startGame']>(() => success(undefined));
+      vi.mocked(getOnlineRoom).mockReturnValue({
+        invite: snapshot.invite,
+        lobby: guest,
+        startGame,
+        retryStart: async () => success(undefined),
+        getGame: () => null,
+        getSnapshot: () => snapshot,
+        subscribe: () => () => undefined,
+        close: async () => undefined,
+      });
+      const page = render(<OnlineLobby lobbyId="version_mismatch" />);
+      const message =
+        kind === 'protocol-version'
+          ? englishLobby.onlineProtocolMismatch
+          : englishLobby.onlineEngineMismatch;
+      expect(page.getByRole('alert').textContent).toBe(
+        message.replace('{{version}}', String(hostVersion)),
+      );
+      expect(page.queryByRole('button', { name: 'lobby:onlineStartAction' })).toBeNull();
+      expect(startGame).not.toHaveBeenCalled();
+    } finally {
+      guest.dispose();
+      network.dispose();
+    }
+  },
+);
