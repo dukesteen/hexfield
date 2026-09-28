@@ -1325,7 +1325,22 @@ export async function runNetworkGame(options: NetworkGameOptions): Promise<Netwo
               audit.report.finalHead?.hash !== finalLogHash ||
               audit.report.finalHead.seq !== latest.revision
             )
-              throw new Error(`Verified peer ${seat} did not pass its terminal audit`);
+              throw new Error(
+                `Verified peer ${seat} did not pass its terminal audit: ${JSON.stringify(
+                  audit.kind === 'complete'
+                    ? {
+                        ok: audit.report.ok,
+                        complete: audit.report.complete,
+                        missingSeats: audit.report.missingSeats,
+                        violations: audit.report.violations,
+                        inputErrors: audit.report.inputErrors,
+                        historyError: audit.report.historyError,
+                        auditError: audit.report.auditError,
+                        finalHead: audit.report.finalHead,
+                      }
+                    : audit,
+                ).slice(0, 2000)}`,
+              );
             // Scenario 6's bad-signature proposal is certified as control evidence.
             // It excuses no bad private proof from the otherwise honest player endpoint.
             if (audit.report.cheatFindings.length !== 0)
