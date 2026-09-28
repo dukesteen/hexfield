@@ -123,6 +123,8 @@ export async function createTerminalAuditFixture(
     onProgress?: (step: number, state: GameState) => void;
     sessionOptions?: (options: P2PSessionOptions) => P2PSessionOptions;
     onSessionsReady?: (sessions: readonly P2PSession[], clock: VirtualClock) => Promise<void>;
+    /** Called with the live sessions and the certified state before each step's command. */
+    onStep?: (sessions: readonly P2PSession[], state: GameState, step: number) => void;
     /** Runs with the live sessions at the result, or at `stopAfterSteps` for a partial game. */
     onTerminal?: (sessions: readonly P2PSession[], clock: VirtualClock) => Promise<void>;
     /** Let the test runner process I/O without advancing the protocol clock. */
@@ -313,6 +315,7 @@ export async function createTerminalAuditFixture(
       const current = required(sessions[0]);
       const state = required(current.getState());
       if (step % 25 === 0) options.onProgress?.(step, state);
+      options.onStep?.(sessions, state, step);
       if (
         state.result ||
         (options.stopAfterSteps !== undefined && step >= options.stopAfterSteps)

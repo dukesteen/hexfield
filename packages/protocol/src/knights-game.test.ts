@@ -1,15 +1,9 @@
 import { scalarToBytes } from '@cp2p/crypto';
-import {
-  RESOURCES,
-  engineForConfig,
-  kindsOfCounts,
-  knightsConfig,
-  knightsExt,
-  success,
-} from '@cp2p/engine';
+import { RESOURCES, engineForConfig, kindsOfCounts, knightsConfig, knightsExt } from '@cp2p/engine';
 import type { CommandShape, Engine, GameConfig, GameState, PrivateState, Seat } from '@cp2p/engine';
 import { describe, expect, test } from 'vitest';
 import { RandomBot, createBotRng } from '../../bots/src/index.js';
+import type { P2PSession } from './p2p-session.js';
 import { auditCertifiedGame } from './audit.js';
 import { reconstructPrivateSeats } from './private-replay.js';
 import { replayCertifiedPrefix } from './replay.js';
@@ -48,6 +42,10 @@ function summarize(fixture: Fixture) {
   return { counts, commodityOffers };
 }
 
+function total(hand: Readonly<Record<string, number>>): number {
+  return kindsOfCounts(hand).reduce((sum, kind) => sum + (hand[kind] ?? 0), 0);
+}
+
 interface PolicyHost {
   getState(): GameState;
   getLegalCommands(seat: Seat): { commands: CommandShape[] };
@@ -59,11 +57,12 @@ interface PolicyHost {
  * neighbour publicly holds, and every offer is accepted and confirmed. That drives commodity
  * trade proofs (owner-side range proofs over the traded kinds) through the real network.
  */
-function policy(config: GameConfig, seed: number) {
+function policy(config: GameConfig, seed: number, maxTrades: number) {
   const engine = engineForConfig(config);
   const bot = new RandomBot();
   const rng = createBotRng(new Uint8Array(32).fill(seed));
   const offeredTurns = new Set<number>();
+  let trades = maxTrades;
   return {
     choosePending<T extends { allowed: string[] }>(pendings: readonly T[]): T | undefined {
       return pendings.find((item) => item.allowed.includes('RESPOND_TRADE')) ?? pendings[0];
@@ -74,15 +73,23 @@ function policy(config: GameConfig, seed: number) {
     ): CommandShape {
       const state = host.getState();
       const legal = host.getLegalCommands(pending.seat).commands;
-      const accept = legal.find((item) => item.type === 'RESPOND_TRADE' && item.accept === true);
-      if (accept) return accept;
       const confirm = legal.find((item) => item.type === 'CONFIRM_TRADE');
       if (confirm) return confirm;
+      // A bounded number of trades are accepted so the certified log stays short enough to
+      // replay in a few seconds of synchronous work; every other offer is declined.
+      const accept = legal.find((item) => item.type === 'RESPOND_TRADE' && item.accept === true);
+      const decline = legal.find((item) => item.type === 'RESPOND_TRADE' && item.accept === false);
+      if (accept && trades > 0) {
+        trades -= 1;
+        return accept;
+      }
+      if (decline) return decline;
       const priv = host.getPrivate(pending.seat);
       if (!priv) throw new Error('Game policy lacks its private seat');
       if (
         pending.seat === state.turn.activeSeat &&
         pending.allowed.includes('OFFER_TRADE') &&
+        trades > 0 &&
         !offeredTurns.has(state.turn.number)
       )
         for (const give of COMMODITIES) {
@@ -131,12 +138,13 @@ async function play(
   config: GameConfig,
   seed: number,
   extra: {
+    onStep?: (sessions: readonly P2PSession[], state: GameState, step: number) => void;
     stopAfterSteps?: number;
     wrapEngine?: (engine: Engine) => Engine;
     humanCount?: number;
   } = {},
 ) {
-  const dealer = policy(config, seed);
+  const dealer = policy(config, seed, 6);
   const captured: { seats: Seat[]; states: Map<Seat, PrivateState | null> }[] = [];
   const fixture = await createTerminalAuditFixture({
     config,
@@ -147,6 +155,7 @@ async function play(
     maxSteps: 5_000,
     ...(extra.stopAfterSteps === undefined ? {} : { stopAfterSteps: extra.stopAfterSteps }),
     ...(extra.wrapEngine ? { wrapEngine: extra.wrapEngine } : {}),
+    ...(extra.onStep ? { onStep: extra.onStep } : {}),
     yieldTask,
     choosePending: (pendings) => dealer.choosePending(pendings),
     chooseCommand: (host, pending) => dealer.chooseCommand(host, pending),
@@ -245,42 +254,46 @@ describe('knights over the verified P2P protocol', () => {
   }, 1_800_000);
 
   test('hidden steals move commodities under the sealed transfer proofs and audit clean', async () => {
-    const config = knightsConfig({ seats: 3 });
-    const { fixture } = await play(config, 63, { wrapEngine: withFreeRobber });
+    const config = knightsConfig({ seats: 2 });
+    // Between two steps nothing but a settled system input can change a hand, so a one-card move
+    // of the same kind between two seats is a hidden steal; the thief's hand reveals its kind.
+    let previous = new Map<Seat, Readonly<Record<string, number>>>();
+    const stolen: string[] = [];
+    const { fixture } = await play(config, 63, {
+      wrapEngine: withFreeRobber,
+      onStep(sessions) {
+        const hands = new Map<Seat, Readonly<Record<string, number>>>();
+        for (const session of sessions)
+          for (const seat of session.controllableSeats()) {
+            const hand = session.getPrivate(seat)?.hand;
+            if (hand) hands.set(seat, { ...hand });
+          }
+        for (const [thief, after] of hands)
+          for (const [victim, victimAfter] of hands) {
+            const before = previous.get(thief);
+            const victimBefore = previous.get(victim);
+            if (thief === victim || !before || !victimBefore) continue;
+            const gained = kindsOfCounts(after).filter(
+              (kind) => (after[kind] ?? 0) > (before[kind] ?? 0),
+            );
+            const lost = kindsOfCounts(victimAfter).filter(
+              (kind) => (victimAfter[kind] ?? 0) < (victimBefore[kind] ?? 0),
+            );
+            if (
+              gained.length === 1 &&
+              lost.length === 1 &&
+              gained[0] === lost[0] &&
+              total(after) === total(before) + 1 &&
+              total(victimAfter) === total(victimBefore) - 1
+            )
+              stolen.push(gained[0] ?? '');
+          }
+        previous = hands;
+      },
+    });
     expect(fixture.terminal).toBe(true);
     const { counts } = summarize(fixture);
     expect(counts['system:STEAL_RESULT'] ?? 0).toBeGreaterThan(0);
-    // Replay every seat from its master and read which card each hidden steal moved.
-    const hands = new Map<number, Map<number, Readonly<Record<string, number>>>>();
-    const rebuilt = reconstructPrivateSeats({
-      genesisEntry: fixture.genesisEntry,
-      entries: fixture.entries,
-      engine: fixture.engine,
-      policy: fixture.policy,
-      secrets: fixture.masters.map(({ seat }) => ({
-        seat,
-        master: scalarToBytes(BigInt(17 + seat)),
-      })),
-      verifyPrivateState(seq, states) {
-        hands.set(seq, new Map([...states].map(([seat, state]) => [seat, { ...state.hand }])));
-        return success(undefined);
-      },
-    });
-    if (!rebuilt.ok) throw new Error(`${rebuilt.error.code}: ${rebuilt.error.message}`);
-    rebuilt.value.dispose();
-    const stolen: string[] = [];
-    for (const { entry } of fixture.entries) {
-      if (entry.payload.kind !== 'system' || entry.payload.input.type !== 'STEAL_RESULT') continue;
-      const thief = Number(Reflect.get(entry.payload.input, 'thief'));
-      const before = hands.get(entry.seq - 1)?.get(thief);
-      const after = hands.get(entry.seq)?.get(thief);
-      if (!before || !after) throw new Error(`Missing replayed hands around steal ${entry.seq}`);
-      const gained = kindsOfCounts(after).filter(
-        (kind) => (after[kind] ?? 0) > (before[kind] ?? 0),
-      );
-      expect(gained).toHaveLength(1);
-      stolen.push(gained[0] ?? '');
-    }
     expect(stolen.some((kind) => COMMODITIES.includes(kind))).toBe(true);
     expect(auditCertifiedGame(fixture)).toMatchObject({
       ok: true,

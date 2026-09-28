@@ -126,6 +126,8 @@ export class VerifiedSessionDriver implements SessionDriver {
   private readonly owned = new Set<Seat>();
   private privates = new Map<Seat, PrivateState>();
   private blindings = new Map<Seat, Record<string, string>>();
+  /** The last (ledger row, hand, blindings) triple whose opening verified, per owned seat. */
+  private readonly openedHands = new Map<Seat, string>();
   private readonly kinds: readonly string[];
   private appliedHead: string | null = null;
   private disposed = false;
@@ -181,15 +183,22 @@ export class VerifiedSessionDriver implements SessionDriver {
         return failure('verified-private-missing', 'Owned hand opening is missing');
       const valid = validOwnedState(context.state, priv);
       if (!valid.ok) return valid;
+      // The opening is a pure function of the ledger row, the counts and the blindings, and it
+      // costs one Pedersen commitment per kind, so an unchanged triple is not opened again.
+      const kinds = kindsOfCounts(context.state.bank);
+      const row = context.crypto.hands.find((item) => item.seat === seat);
+      const openedKey = toHex(hashValue({ kinds, row, hand: priv.hand, blindings }));
+      if (this.openedHands.get(seat) === openedKey) continue;
       const opened = verifyHandOpening(
         context.crypto.hands,
         this.genesis.config.seats,
         seat,
         priv.hand,
         blindings,
-        kindsOfCounts(context.state.bank),
+        kinds,
       );
       if (!opened.ok) return opened;
+      this.openedHands.set(seat, openedKey);
     }
     return success(undefined);
   }
