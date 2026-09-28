@@ -36,7 +36,7 @@ export const onlineCeremonyPacketSchema = v.strictObject({
     senderDevice: key32Schema,
     kind: onlineCeremonyKindSchema,
     seat: seatSchema,
-    step: v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(64)),
+    step: v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(255)),
     payload: v.unknown(),
   }),
   sig: signature64Schema,

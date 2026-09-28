@@ -252,6 +252,34 @@ describe('engine resource accounting consistency', () => {
     expect(verifyResourceAccounting(revealed, revealed, [reveal]).ok).toBe(false);
   });
 
+  test('a public draw advances its deck once, names a new slot and creates no owned slot', () => {
+    const before = fixture().state;
+    const deck = before.decks.dev;
+    if (!deck) throw new Error('Missing base deck');
+    const shown: GameState = {
+      ...before,
+      decks: {
+        ...before.decks,
+        dev: { remaining: deck.remaining - 1, drawn: [{ slotId: 'public:0', seat: 2 }] },
+      },
+    };
+    const effect: EngineEffect = {
+      type: 'deck-card-shown',
+      seat: 2,
+      deck: 'dev',
+      slotId: 'public:0',
+      card: 'knight',
+    };
+    expect(verifyResourceAccounting(before, shown, [effect]).ok).toBe(true);
+    expect(verifyResourceAccounting(before, shown, []).ok).toBe(false);
+    expect(verifyResourceAccounting(before, shown, [effect, effect]).ok).toBe(false);
+    expect(verifyResourceAccounting(before, shown, [{ ...effect, seat: 3 }]).ok).toBe(false);
+    expect(verifyResourceAccounting(before, shown, [{ ...effect, deck: 'missing' }]).ok).toBe(
+      false,
+    );
+    expect(verifyResourceAccounting(before, shown, [{ ...effect, card: '' }]).ok).toBe(false);
+  });
+
   test('projects real steal and monopoly handlers from synthetic uncertain bounds', () => {
     const { engine, state } = fixture();
     const uncertain = withHands(

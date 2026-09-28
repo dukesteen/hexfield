@@ -4,6 +4,7 @@ import { failure, success } from '@cp2p/engine';
 import type { Result, Seat } from '@cp2p/engine';
 import {
   deckDrawOperationId,
+  deckUnlockers,
   freezeDeckDraw,
   signDeckUnlock,
   verifyDeckUnlock,
@@ -60,7 +61,7 @@ export async function prepareDeckUnlock(
   const participant = op.participants.find((item) => item.seat === seat);
   if (!participant)
     return failure('deck-outbox-seat', 'Only a frozen participant can reserve this position');
-  const unlockers = op.participants.filter((item) => item.seat !== op.seat);
+  const unlockers = deckUnlockers(op);
   const signer = frozenLocalSigner;
   if (signer && signer.seat !== seat)
     return failure('deck-outbox-authority', 'Local signer belongs to another seat');
@@ -101,7 +102,7 @@ export async function prepareDeckUnlock(
     return failure('deck-outbox-key', 'The local signer key does not match this seat');
   }
   const step = checked.value.unlocks.length;
-  const actor = op.participants.filter((entry) => entry.seat !== op.seat)[step];
+  const actor = deckUnlockers(op)[step];
   const positionId = `${setupId}/${op.position}/${seat}`;
   const reservationId = `deck-position/${positionId}`;
   const operationId = deckDrawOperationId(op);

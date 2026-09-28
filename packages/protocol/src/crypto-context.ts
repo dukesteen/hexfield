@@ -1,5 +1,5 @@
 import { hashValue, toHex } from '@cp2p/codec';
-import { RESOURCES, failure, success } from '@cp2p/engine';
+import { RESOURCES, failure, isPublicDraw, success } from '@cp2p/engine';
 import type { Engine, GameState, Input, Result } from '@cp2p/engine';
 import {
   completeBeaconState,
@@ -37,7 +37,7 @@ import type { StealState } from './steal-state.js';
 import type { CheatFinding } from './cheat-types.js';
 import { permitsFrozenOperation, resolveArtifactSigner } from './authority.js';
 import type { SeatAuthorities } from './authority-types.js';
-import { deckDrawOperationId } from './deck-draw.js';
+import { deckDrawOperationId, deckUnlockers } from './deck-draw.js';
 import { beaconOperationId } from './beacon.js';
 import { beaconExtensionOperationId } from './beacon-extension.js';
 
@@ -259,16 +259,24 @@ export function validateCryptoTransition(
   if (!decksReady(crypto.decks))
     return failure('deck-setup-pending', 'Every committed deck pass must be replayed before play');
   if (payload.kind === 'membership') return success({ crypto, handled: false, input: null });
-  if (payload.kind === 'system' && payload.input.type === 'CARD_DEALT') {
+  const randomPending =
+    payload.kind === 'system'
+      ? engine.getPending(state).filter((item) => item.kind === 'random')
+      : [];
+  // A public draw is answered under its module's system type; a private one is always CARD_DEALT.
+  const publicDeal =
+    payload.kind === 'system' &&
+    randomPending.length === 1 &&
+    randomPending[0] !== undefined &&
+    isPublicDraw(randomPending[0]) &&
+    randomPending[0].systemType === payload.input.type;
+  if (payload.kind === 'system' && (payload.input.type === 'CARD_DEALT' || publicDeal)) {
     if (crypto.beacon.active || crypto.beacon.fixed)
       return failure('beacon-pending', 'A deck deal cannot answer a beacon request');
-    const pending = engine.getPending(state).filter((item) => item.kind === 'random');
+    const pending = randomPending;
     if (pending.length !== 1)
       return failure('deck-pending', 'A deal requires exactly one certified random pending');
-    const unlockers =
-      crypto.decks.active?.participants.filter(
-        (participant) => participant.seat !== crypto.decks.active?.seat,
-      ) ?? [];
+    const unlockers = crypto.decks.active ? deckUnlockers(crypto.decks.active) : [];
     const signers = [];
     for (const participant of unlockers) {
       const signer = resolveArtifactSigner(authority, genesis, crypto.epoch, participant.seat);

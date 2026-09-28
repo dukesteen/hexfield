@@ -91,9 +91,11 @@ function masterFor(seat: Seat): Uint8Array {
   return scalarToBytes(BigInt(17 + seat));
 }
 
-function createPasses(
+/** Every signed pass of one deck ceremony; `master` picks each seat's deck master. */
+export function createDeckPasses(
   definition: DeckDefinition,
   identities: ReadonlyMap<Seat, Identity>,
+  master: (seat: Seat) => Uint8Array = masterFor,
 ): readonly SignedDeckPass[] {
   let stateResult = initDeckSetup(definition);
   if (!stateResult.ok) throw new Error(stateResult.error.message);
@@ -104,7 +106,7 @@ function createPasses(
   for (const seat of seats) {
     const identity = identities.get(seat);
     if (!identity) throw new Error(`Missing deck signer identity for seat ${seat}`);
-    const source = createDeckSecretSource(masterFor(seat), definition, seat);
+    const source = createDeckSecretSource(master(seat), definition, seat);
     try {
       const proofSeed = source.proofSeed('fixture-shuffle', {
         operationId: deckPassOperationId(state),
@@ -132,7 +134,7 @@ function createPasses(
   for (const seat of seats) {
     const identity = identities.get(seat);
     if (!identity) throw new Error(`Missing deck signer identity for seat ${seat}`);
-    const source = createDeckSecretSource(masterFor(seat), definition, seat);
+    const source = createDeckSecretSource(master(seat), definition, seat);
     try {
       const proofSeed = source.proofSeed('fixture-lock', {
         operationId: deckPassOperationId(state),
@@ -171,7 +173,7 @@ function cachedFixture(
     return cached;
   }
 
-  const passes = definitions.map((definition) => createPasses(definition, identities));
+  const passes = definitions.map((definition) => createDeckPasses(definition, identities));
   const commitments = definitions.map((definition, index) => {
     const transcript = passes[index];
     if (!transcript) throw new Error('Generated deck fixture is missing a transcript');

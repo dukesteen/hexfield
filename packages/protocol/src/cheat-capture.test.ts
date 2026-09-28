@@ -94,7 +94,7 @@ describe('raw rejected proof capture', () => {
     expect(oversized.byteLength).toBeGreaterThan(MAX_MESSAGE_BYTES);
     expect(rejectedWireProofCandidates(oversized, context)).toEqual([]);
 
-    const unlocks = Array.from({ length: 6 }, (_, seat) => signed('deck-unlock', { seat }));
+    const unlocks = Array.from({ length: 7 }, (_, seat) => signed('deck-unlock', { seat }));
     expect(
       rejectedProofCandidates(
         {

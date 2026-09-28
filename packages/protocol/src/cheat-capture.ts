@@ -15,7 +15,7 @@ import { decodeMessage } from './wire.js';
 
 const signed = v.strictObject({ body: v.unknown(), sig: signature64Schema });
 const signedList = v.pipe(v.array(signed), v.maxLength(6));
-const unlocks = v.pipe(v.array(signed), v.minLength(1), v.maxLength(5));
+const unlocks = v.pipe(v.array(signed), v.minLength(1), v.maxLength(6));
 const payloadSchema = v.variant('kind', [
   v.strictObject({ kind: v.literal('command'), signed }),
   v.strictObject({
