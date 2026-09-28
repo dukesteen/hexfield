@@ -1,6 +1,6 @@
 import { canonicalDecode, fromBase64Url, toBase64Url } from '@cp2p/codec';
 import { BASE_DEV_CARD_CATALOGUE, RESOURCES, failure } from '@cp2p/engine';
-import { scalarToBytes } from '@cp2p/crypto';
+import { encodeScalar, scalarToBytes, signObject } from '@cp2p/crypto';
 import type { CommandShape, GameState, PrivateState, Result, Seat } from '@cp2p/engine';
 import { writeFile } from 'node:fs/promises';
 import { Session as InspectorSession } from 'node:inspector';
@@ -13,7 +13,12 @@ import { MemoryCountContributionStore } from './count-contributions.js';
 import { MemoryStealDeliveryStore } from './steal-contributions.js';
 import { createStealSecretSource } from './steal-source.js';
 import type { DeckContributionStore } from './deck-outbox.js';
-import { decodeDeckCard } from './deck-draw.js';
+import {
+  deckDrawOperationId,
+  decodeDeckCard,
+  signDeckUnlock,
+  verifyDeckUnlockPrefix,
+} from './deck-draw.js';
 import { genesisDeckDefinitions } from './deck-genesis.js';
 import { COMMAND_PROOFS_PROTOCOL } from './command-proofs.js';
 import { entryHash } from './genesis.js';
@@ -1434,6 +1439,208 @@ describe('live verified deck replication', () => {
     ]);
     sessions.forEach((session) => session.dispose());
     network.dispose();
+  }, 120_000);
+
+  test('captures and certifies a real signed false partial unlock at an active draw', async () => {
+    const fixture = createVerifiedDeckSession(3, 2, 128, {
+      boardSeed: new Uint8Array(32).fill(50),
+      ceremonyNonce: toBase64Url(new Uint8Array(32).fill(4)),
+    });
+    const peers = fixture.humans.map(
+      (seat) => required(fixture.simulation.identities.get(seat.seat)).peerId,
+    );
+    const network = createMemnet({ peers });
+    const journals = peers.map(() => new MemoryProtocolJournal());
+    const stores = peers.map(() => new MemoryDeckContributionStore());
+    const transports = peers.map((peer) => observe(network.transport(peer), [], () => true));
+    const opened = await Promise.all(
+      peers.map((_, position) =>
+        ReplicatedLog.create(
+          optionsFor(
+            fixture,
+            position,
+            required(transports[position]),
+            network.clock,
+            required(journals[position]),
+            required(stores[position]),
+          ),
+        ),
+      ),
+    );
+    const replicas = opened.map(value);
+    try {
+      await settle(replicas, network.clock);
+      const drawContext = await driveToDraw(fixture, replicas, network.clock, {
+        settlementOrder: BOARD_50_SETTLEMENT_ORDER,
+      });
+      const operation = required(drawContext.log.crypto?.decks.active);
+      const unlockers = operation.participants.filter((item) => item.seat !== operation.seat);
+      const target = required(unlockers.at(-1));
+      const humanHostFor = (seat: Seat) => {
+        const owner = required(fixture.genesis.seats.find((item) => item.seat === seat));
+        const peer = owner.kind === 'bot' ? owner.botHost : owner.publicKey;
+        return required(
+          fixture.humans.find(
+            (human) => fixture.simulation.identities.get(human.seat)?.peerId === peer,
+          ),
+        );
+      };
+      const targetHost = humanHostFor(target.seat);
+      const senderIndex = fixture.humans.indexOf(targetHost);
+      if (senderIndex < 0) throw new Error('Missing voter for final unlocker');
+      const parent = required(replicas[0]).getContext().log.head;
+      const prefix: ReturnType<typeof signDeckUnlock>[] = [];
+      for (const participant of unlockers.slice(0, -1)) {
+        const host = humanHostFor(participant.seat);
+        const source = fixture.createDeckSourceFor(host.seat)(operation.deckId, participant.seat);
+        try {
+          prefix.push(
+            signDeckUnlock(
+              operation,
+              prefix,
+              source.lock(operation.position),
+              new Uint8Array(32).fill(70 + participant.seat),
+              required(fixture.simulation.identities.get(participant.seat)).secretKey,
+            ),
+          );
+        } finally {
+          source.dispose();
+        }
+      }
+      const targetSource = fixture.createDeckSourceFor(targetHost.seat)(
+        operation.deckId,
+        target.seat,
+      );
+      let honestArtifact: ReturnType<typeof signDeckUnlock>;
+      try {
+        honestArtifact = signDeckUnlock(
+          operation,
+          prefix,
+          targetSource.lock(operation.position),
+          new Uint8Array(32).fill(70 + target.seat),
+          required(fixture.simulation.identities.get(target.seat)).secretKey,
+        );
+      } finally {
+        targetSource.dispose();
+      }
+      expect(verifyDeckUnlockPrefix(operation, prefix).ok).toBe(true);
+      expect(verifyDeckUnlockPrefix(operation, [...prefix, honestArtifact]).ok).toBe(true);
+      const falseCommitments: [string, string] = [
+        honestArtifact.body.proof.commitments[0],
+        honestArtifact.body.proof.commitments[1],
+      ];
+      const falseBody = {
+        ...honestArtifact.body,
+        proof: {
+          ...honestArtifact.body.proof,
+          commitments: falseCommitments,
+          response: encodeScalar(0n),
+        },
+      };
+      const falseArtifact = {
+        body: falseBody,
+        sig: signObject(
+          'deck-unlock',
+          falseBody,
+          required(fixture.simulation.identities.get(target.seat)).secretKey,
+        ),
+      };
+      expect(verifyDeckUnlockPrefix(operation, [...prefix, falseArtifact])).toMatchObject({
+        ok: false,
+        error: { code: 'deck-unlock-proof' },
+      });
+      const wireUnlocks: Extract<
+        ProtocolMessage,
+        { t: 'DECK_CONTRIB' }
+      >['contribution']['unlocks'] = [];
+      for (const unlock of [...prefix, falseArtifact])
+        wireUnlocks.push({
+          body: {
+            ...unlock.body,
+            proof: {
+              ...unlock.body.proof,
+              commitments: [unlock.body.proof.commitments[0], unlock.body.proof.commitments[1]],
+            },
+          },
+          sig: unlock.sig,
+        });
+      const badContribution: ProtocolMessage = {
+        t: 'DECK_CONTRIB',
+        genesisDigest: required(replicas[0]).getContext().membership.genesisDigest,
+        contribution: {
+          kind: 'deck-unlock',
+          operationId: deckDrawOperationId(operation),
+          unlocks: wireUnlocks,
+        },
+      };
+      network
+        .transport(required(peers[senderIndex]))
+        .broadcast(value(encodeProtocolMessage(badContribution)));
+      const certified = await settleUntil(
+        replicas,
+        network.clock,
+        () =>
+          replicas.every((replica) =>
+            replica
+              .getEntries()
+              .some(
+                ({ entry }) =>
+                  entry.payload.kind === 'cheat-proof' &&
+                  entry.payload.claim.evidence.kind === 'deck-unlock',
+              ),
+          ),
+        64,
+      );
+      expect(certified).toBe(true);
+      const findingEntries = replicas.map((replica) =>
+        replica
+          .getEntries()
+          .filter(
+            ({ entry }) =>
+              entry.payload.kind === 'cheat-proof' &&
+              entry.payload.claim.evidence.kind === 'deck-unlock',
+          ),
+      );
+      for (const findings of findingEntries) {
+        expect(findings).toHaveLength(1);
+        const finding = required(findings[0]);
+        expect(finding.certificate).toHaveLength(peers.length);
+        expect(finding.entry.payload).toMatchObject({
+          kind: 'cheat-proof',
+          claim: {
+            seat: target.seat,
+            evidence: {
+              kind: 'deck-unlock',
+              at: { seq: parent.seq, hash: entryHash(parent) },
+              prefix,
+              artifact: falseArtifact,
+            },
+          },
+        });
+      }
+      expect(matchingReplicaHeads(replicas)).toBe(true);
+      for (const replica of replicas) {
+        expect(
+          replica
+            .getEntries()
+            .some(
+              ({ entry }) =>
+                entry.payload.kind === 'system' && entry.payload.input.type === 'CARD_DEALT',
+            ),
+        ).toBe(false);
+        expect(replica.getContext().log.crypto?.decks.active).toEqual(operation);
+        expect(replica.getContext().log.crypto?.cheats).toContainEqual(
+          expect.objectContaining({
+            seat: target.seat,
+            kind: 'deck-unlock',
+            at: { seq: parent.seq, hash: entryHash(parent) },
+          }),
+        );
+      }
+    } finally {
+      replicas.forEach((replica) => replica.dispose());
+      network.dispose();
+    }
   }, 120_000);
 
   test.skipIf(process.env.CP2P_DRAW_BENCH !== '1')(
