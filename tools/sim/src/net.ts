@@ -3,6 +3,7 @@ import { setImmediate as yieldEventLoop } from 'node:timers/promises';
 import { canonicalDecode, hashValue, toHex } from '@cp2p/codec';
 import type { CommandShape, GameState, Pending, PrivateState, Result, Seat } from '@cp2p/engine';
 import { moduleSelection } from '@cp2p/engine';
+import { scenarioById, scenarioConfig } from '@cp2p/maps';
 import {
   MemoryProtocolJournal,
   P2PSession,
@@ -36,6 +37,7 @@ import {
   createVerifiedNonVoterActor,
 } from '@cp2p/protocol/testing';
 import type { VerifiedNetworkAuditTiming, VerifiedNonVoterActor } from '@cp2p/protocol/testing';
+import { ExplorerBot } from './explorer-bot.js';
 import { deriveSeed } from './random-source.js';
 import { invalidCommandProposal } from './net-adversary.js';
 import { NonVoterCommand } from './non-voter-command.js';
@@ -54,6 +56,8 @@ export interface NetworkGameOptions {
   scenario: number;
   /** Four seats by default; six uses the five-six module (stub security only). */
   players?: 4 | 6;
+  /** A catalogue scenario id (for example a seafaring board) played at `players` seats. */
+  map?: string;
   maxSteps?: number;
   /** Stage 07 acceptance uses genuine private sources and proofs on the same fault schedules. */
   security?: 'stub' | 'verified';
@@ -104,6 +108,8 @@ export interface NetworkGameResult {
       snapshotDigest: string;
     };
   };
+  /** Present for a `map` game: the scenario id and how often each command and system input ran. */
+  map?: { id: string; inputCounts: Record<string, number> };
   faultInjected: boolean;
   faultRecovered: boolean;
   faultEvidence: {
@@ -157,6 +163,9 @@ export async function runNetworkGame(options: NetworkGameOptions): Promise<Netwo
   const players = options.players ?? 4;
   if (players === 6 && options.security === 'verified')
     throw new Error('Six-peer network games use stub security');
+  const mapScenario = options.map === undefined ? undefined : scenarioById(options.map);
+  if (options.map !== undefined && !mapScenario) throw new Error(`Unknown map ${options.map}`);
+  const mapGenesisConfig = mapScenario ? scenarioConfig(mapScenario, players) : undefined;
   const lifecycle = options.lifecycle ? new PersistenceLifecycle() : null;
   let lifecycleObservedRevision = -1;
   const started = performance.now();
@@ -165,6 +174,7 @@ export async function runNetworkGame(options: NetworkGameOptions): Promise<Netwo
       ? createVerifiedNetworkFixture({
           seed: options.seed,
           gameIndex: options.gameIndex,
+          ...(mapGenesisConfig ? { config: mapGenesisConfig } : {}),
           verifyLivePrivateStates: lifecycle !== null,
           auditExecutor: createVerifiedNetworkAuditJob,
         })
@@ -174,15 +184,17 @@ export async function runNetworkGame(options: NetworkGameOptions): Promise<Netwo
     createSimulationGenesis({
       seed: options.seed,
       gameIndex: options.gameIndex,
-      ...(players === 6
-        ? {
-            config: {
-              modules: moduleSelection(['base', 'five-six']),
-              seats: [0, 1, 2, 3, 4, 5],
-              options: { base: { mapLayout: 'random' } },
-            },
-          }
-        : {}),
+      ...(mapGenesisConfig
+        ? { config: mapGenesisConfig }
+        : players === 6
+          ? {
+              config: {
+                modules: moduleSelection(['base', 'five-six']),
+                seats: [0, 1, 2, 3, 4, 5],
+                options: { base: { mapLayout: 'random' } },
+              },
+            }
+          : {}),
     });
   const keys = [...game.identities.values()];
   const network = createMemnet({
@@ -253,7 +265,7 @@ export async function runNetworkGame(options: NetworkGameOptions): Promise<Netwo
     game.genesis.config.seats.map((seat) => [
       seat,
       {
-        bot: new RandomBot(game.engine),
+        bot: options.map === undefined ? new RandomBot(game.engine) : new ExplorerBot(game.engine),
         rng: createBotRng(deriveSeed(options.seed, options.gameIndex, 'net-bot', seat)),
       },
     ]),
@@ -1365,9 +1377,23 @@ export async function runNetworkGame(options: NetworkGameOptions): Promise<Netwo
             privateStates,
           };
         }
+        let mapEvidence: NetworkGameResult['map'];
+        if (options.map !== undefined) {
+          const inputCounts: Record<string, number> = {};
+          const history = sessions.values().next().value?.exportSave().entries;
+          if (!history) throw new Error('Missing terminal history');
+          for (const { entry } of history) {
+            let type: string | null = null;
+            if (entry.payload.kind === 'command') type = entry.payload.signed.body.command.type;
+            else if (entry.payload.kind === 'system') type = entry.payload.input.type;
+            if (type) inputCounts[type] = (inputCounts[type] ?? 0) + 1;
+          }
+          mapEvidence = { id: options.map, inputCounts };
+        }
         checkDeadline();
         return {
           ...(lifecycleEvidence ? { lifecycle: lifecycleEvidence } : {}),
+          ...(mapEvidence ? { map: mapEvidence } : {}),
           security: game.genesis.security,
           protocolVersion: game.genesis.protocolVersion,
           seed: options.seed,

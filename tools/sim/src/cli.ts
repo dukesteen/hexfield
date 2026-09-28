@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { Worker } from 'node:worker_threads';
 import { fromBase64Url, hashValue, toHex } from '@cp2p/codec';
 import { engineForConfig, kindBounds, kindsOfCounts } from '@cp2p/engine';
+import { scenarioById, scenarioConfig } from '@cp2p/maps';
 import type { Engine } from '@cp2p/engine';
 import type { GameState, Input, PrivateState, Seat } from '@cp2p/engine';
 import { runBatch } from './batch.js';
@@ -9,6 +10,7 @@ import type { BatchOptions, BatchResult } from './batch.js';
 import { runGame, SimulationFailure } from './run-game.js';
 import { fuzz } from './fuzz.js';
 import { updateGoldens } from './golden.js';
+import { updateSeafaringGoldens } from './seafaring-golden.js';
 import { readReplay, verifyReplay } from './replay.js';
 import type { ReplayFile } from './replay.js';
 import { sourceFingerprint } from './provenance.js';
@@ -70,7 +72,24 @@ function parseModules(value: string | boolean | undefined): {
   return { fiveSix: listed.includes('five-six'), knights: listed.includes('knights') };
 }
 
+/** `--scenario <id>` plays a catalogue scenario (its fixed board and options) at `--players` seats. */
+function scenarioOptions(
+  value: string | boolean | undefined,
+  players: number,
+): Pick<BatchOptions, 'config' | 'scenario'> {
+  if (value === undefined) return {};
+  if (typeof value !== 'string') throw new Error('--scenario needs a scenario id');
+  const scenario = scenarioById(value);
+  if (!scenario) throw new Error(`Unknown scenario ${value}`);
+  return { scenario: value, config: scenarioConfig(scenario, players) };
+}
+
 function runOptions(args: ParsedArgs, verify: boolean): BatchOptions & { parallel: number } {
+  if (
+    args.scenario !== undefined &&
+    (args.modules !== undefined || args.options !== undefined || args.knights !== undefined)
+  )
+    throw new Error('--scenario replaces --modules and --options');
   const modules = parseModules(args.modules);
   if (modules.fiveSix !== undefined && modules.fiveSix !== integer(args.players, 4, 'players') > 4)
     throw new Error('--modules must list five-six exactly when --players is 5 or 6');
@@ -84,7 +103,11 @@ function runOptions(args: ParsedArgs, verify: boolean): BatchOptions & { paralle
     players: integer(args.players, 4, 'players'),
     seed: integer(args.seed, 42, 'seed'),
     parallel: integer(args.parallel, 1, 'parallel'),
+    ...(args['max-turns'] === undefined
+      ? {}
+      : { maxTurns: integer(args['max-turns'], 500, 'max-turns') }),
     baseOptions: parseBaseOptions(args.options),
+    ...scenarioOptions(args.scenario, integer(args.players, 4, 'players')),
     ...(modules.knights ? { knights: true } : {}),
     verify,
   };
@@ -157,8 +180,10 @@ async function runCommand(args: ParsedArgs, bench: boolean): Promise<void> {
     mode: bench ? 'bench' : 'run',
     seed: batch.seed,
     players: batch.players,
+    ...(batch.scenario === undefined ? {} : { scenario: batch.scenario }),
     baseOptions: batch.baseOptions,
     knights: batch.knights === true,
+    maxTurns: batch.maxTurns ?? 500,
     requestedGames: batch.games,
     parallel,
     warmupGames,
@@ -376,6 +401,9 @@ export function replayCommand(path: string): Record<string, unknown> {
         // oxlint-disable-next-line typescript/no-unsafe-type-assertion
         baseOptions: failure.baseOptions as Record<string, unknown>,
         knights: failure.knights === true,
+        ...(typeof failure.scenario === 'string'
+          ? scenarioOptions(failure.scenario, failure.players)
+          : {}),
       });
       observed = 'completed';
     } catch (error) {
@@ -434,9 +462,19 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     return;
   }
   if (command === 'golden') {
-    if (rest.length !== 1 || rest[0] !== '--update')
-      throw new Error('Golden fixtures can only be regenerated with --update');
-    console.log(JSON.stringify(updateGoldens({ update: true })));
+    if (
+      rest[0] !== '--update' ||
+      rest.length > 2 ||
+      (rest.length === 2 && rest[1] !== '--seafaring')
+    )
+      throw new Error('Golden fixtures can only be regenerated with --update [--seafaring]');
+    console.log(
+      JSON.stringify(
+        rest[1] === '--seafaring'
+          ? updateSeafaringGoldens({ update: true })
+          : updateGoldens({ update: true }),
+      ),
+    );
     return;
   }
   if (command === 'fuzz') {

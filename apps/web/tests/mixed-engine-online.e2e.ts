@@ -5,6 +5,7 @@ import { RandomBot, createBotRng } from '@cp2p/bots';
 import { chooseBotPending } from '@cp2p/protocol';
 import type { CommandShape, Seat } from '@cp2p/engine';
 import { progressCommand } from './helpers/progress-policy.js';
+import { seafaringCommand } from './helpers/seafaring-policy.js';
 import { stableBotConfig } from './helpers/stable-bot-config.js';
 
 test.skip(
@@ -13,17 +14,26 @@ test.skip(
 );
 
 const signalingUrl = 'ws://127.0.0.1:8909';
+/**
+ * `CP2P_MIXED_ENGINE_SCENARIO=<id>` hosts a catalogue scenario (for example `fogbound`) instead of
+ * the base game. Its scenario's seat range must include `CP2P_MIXED_ENGINE_SEATS`.
+ */
+const scenarioId = process.env.CP2P_MIXED_ENGINE_SCENARIO || undefined;
+/** Victory target: 3 keeps a base game short; a seafaring game needs more turns to sail and explore. */
+const victoryPoints = process.env.CP2P_MIXED_ENGINE_VP ?? (scenarioId ? '8' : '3');
+/** A seafaring game is longer than the race to three points. */
+const gameLength = scenarioId ? 10 : 1;
 const appBaseUrl = `http://127.0.0.1:${process.env.PLAYWRIGHT_TEST_PORT ?? '5187'}`;
 /** Whole-test budget. Six seats add peers, deck passes and special build phases. */
 function modeTimeout(mode: 'signaling' | 'manual'): number {
   const base = mode === 'manual' ? 300_000 : 240_000;
-  return seatCount === 6 ? base * 4 : base;
+  return (seatCount === 6 ? base * 4 : base) * gameLength;
 }
 
 /** Four seats by default; `CP2P_MIXED_ENGINE_SEATS=6` runs the five-six acceptance game. */
 const seatCount = process.env.CP2P_MIXED_ENGINE_SEATS === '6' ? 6 : 4;
 /** Play-and-audit budget; six seats add five special build phases to every turn. */
-const PLAY_BUDGET_MS = seatCount === 6 ? 480_000 : 150_000;
+const PLAY_BUDGET_MS = (seatCount === 6 ? 480_000 : 150_000) * gameLength;
 
 /** `CP2P_MIXED_ENGINE_NO_WEBKIT=1` swaps WebKit for Chromium/Firefox where WebKit lacks WebRTC. */
 const noWebkit = process.env.CP2P_MIXED_ENGINE_NO_WEBKIT === '1';
@@ -680,7 +690,8 @@ async function startRoom(pages: readonly Page[], mode: 'signaling' | 'manual', d
   await host.getByLabel('Your player name', { exact: true }).fill('Player 1');
   await host.getByText('Advanced connection options', { exact: true }).click();
   await host.getByLabel('Player count').selectOption(String(seatCount));
-  await host.getByLabel('Victory points to win', { exact: true }).fill('3');
+  if (scenarioId) await host.locator('.scenario-picker select').selectOption(scenarioId);
+  await host.getByLabel('Victory points to win', { exact: true }).fill(victoryPoints);
   await host
     .getByLabel('Invite friends with')
     .selectOption(mode === 'signaling' ? 'server' : 'manual');
@@ -821,6 +832,8 @@ async function inspectPublicGame(page: Page, gameId: string) {
         head: session.getFairness?.()?.head ?? null,
         result: state.result ?? null,
         pending: session.getPending(),
+        fogHexes: state.board.hexes.filter((hex) => hex.terrain === 'fog').length,
+        fogAtGenesis: state.config.board?.hexes.filter((hex) => hex.terrain === 'fog').length ?? 0,
         turn: { activeSeat: state.turn.activeSeat },
         seats,
         audit: audit?.kind ?? null,
@@ -1031,12 +1044,18 @@ async function finishAndAudit(
             !view.head
           )
             return false;
-          const command = progressCommand(
+          const policy = scenarioId ? seafaringCommand : progressCommand;
+          const command = policy(
             { state: actor.state(view.state), priv: view.privateState, seat: view.seat },
             view.pending,
             actor.rng,
             actor.bot,
           );
+          // Non-base games name each move, so a stalled game shows what was in flight.
+          if (scenarioId)
+            process.stdout.write(
+              `${JSON.stringify({ move: command, seat: view.seat, seq: view.head.seq })}\n`,
+            );
           const refused = await withinDeadline(
             submit(page, gameId, view.seat, command, view.head.seq),
             finishDeadline,
@@ -1056,7 +1075,8 @@ async function finishAndAudit(
             refused !== 'command-pending'
           )
             throw new Error(`A legal browser move was rejected: ${refused}`);
-          if (commands > 300) throw new Error('The bounded mixed-engine game exceeded 300 moves');
+          if (commands > 300 * gameLength)
+            throw new Error(`The bounded mixed-engine game exceeded ${300 * gameLength} moves`);
           return false;
         },
         { timeout: remaining(finishDeadline, PLAY_BUDGET_MS), intervals: [100] },
@@ -1095,6 +1115,10 @@ async function finishAndAudit(
   process.stdout.write(
     `${JSON.stringify({ auditProblems: final.map((view) => view?.auditProblems ?? null) })}\n`,
   );
+  // Each fog hex that is no longer fog was drawn through the certified public deck protocol.
+  const fogRevealed = (final[0]?.fogAtGenesis ?? 0) - (final[0]?.fogHexes ?? 0);
+  process.stdout.write(`${JSON.stringify({ scenario: scenarioId ?? null, fogRevealed })}\n`);
+  if (scenarioId === 'fogbound') expect(fogRevealed).toBeGreaterThan(0);
   for (const view of final) {
     expect(view?.head).toEqual(head);
     expect(view?.result).toEqual(result);
@@ -1103,7 +1127,13 @@ async function finishAndAudit(
     expect(view?.auditComplete).toBe(true);
     expect(view?.peerCount).toBe(seatCount - 1);
   }
-  return { ...diagnostic(), terminalSeq: head.seq, modeAuditCount: final.length };
+  return {
+    ...diagnostic(),
+    terminalSeq: head.seq,
+    modeAuditCount: final.length,
+    scenario: scenarioId ?? null,
+    fogRevealed,
+  };
 }
 
 async function runMode(playwright: Playwright, mode: 'signaling' | 'manual') {

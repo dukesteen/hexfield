@@ -1,0 +1,160 @@
+{
+  "format": "cp2p-golden-manifest",
+  "version": 1,
+  "fixtures": [
+    {
+      "name": "new-horizons",
+      "file": "new-horizons.replay.json",
+      "scenario": "new-horizons",
+      "seats": 4,
+      "seed": 1200,
+      "gameIndex": 3,
+      "features": [
+        "gold-choice",
+        "island-bonus",
+        "normal-completion",
+        "pirate-move",
+        "ship-build",
+        "ship-move"
+      ],
+      "inputs": 1115,
+      "winner": 3,
+      "engineVersion": "0.1.0"
+    },
+    {
+      "name": "new-horizons-56",
+      "file": "new-horizons-56.replay.json",
+      "scenario": "new-horizons-56",
+      "seats": 6,
+      "seed": 1200,
+      "gameIndex": 0,
+      "features": [
+        "island-bonus",
+        "normal-completion",
+        "pirate-move",
+        "setup-ship",
+        "ship-build",
+        "ship-move"
+      ],
+      "inputs": 1899,
+      "winner": 1,
+      "engineVersion": "0.1.0"
+    },
+    {
+      "name": "four-isles",
+      "file": "four-isles.replay.json",
+      "scenario": "four-isles",
+      "seats": 4,
+      "seed": 1200,
+      "gameIndex": 3,
+      "features": [
+        "gold-choice",
+        "island-bonus",
+        "normal-completion",
+        "pirate-move",
+        "ship-build",
+        "ship-move"
+      ],
+      "inputs": 827,
+      "winner": 0,
+      "engineVersion": "0.1.0"
+    },
+    {
+      "name": "four-isles-56",
+      "file": "four-isles-56.replay.json",
+      "scenario": "four-isles-56",
+      "seats": 6,
+      "seed": 1200,
+      "gameIndex": 3,
+      "features": [
+        "gold-choice",
+        "island-bonus",
+        "normal-completion",
+        "pirate-move",
+        "ship-build",
+        "ship-move"
+      ],
+      "inputs": 1190,
+      "winner": 1,
+      "engineVersion": "0.1.0"
+    },
+    {
+      "name": "fogbound",
+      "file": "fogbound.replay.json",
+      "scenario": "fogbound",
+      "seats": 4,
+      "seed": 1200,
+      "gameIndex": 5,
+      "features": [
+        "fog-reveal",
+        "gold-choice",
+        "normal-completion",
+        "pirate-move",
+        "ship-build",
+        "ship-move"
+      ],
+      "inputs": 1191,
+      "winner": 0,
+      "engineVersion": "0.1.0"
+    },
+    {
+      "name": "desert-crossing",
+      "file": "desert-crossing.replay.json",
+      "scenario": "desert-crossing",
+      "seats": 4,
+      "seed": 1200,
+      "gameIndex": 1,
+      "features": [
+        "gold-choice",
+        "island-bonus",
+        "normal-completion",
+        "pirate-move",
+        "ship-build",
+        "ship-move"
+      ],
+      "inputs": 1049,
+      "winner": 2,
+      "engineVersion": "0.1.0"
+    },
+    {
+      "name": "open-sea",
+      "file": "open-sea.replay.json",
+      "scenario": "open-sea",
+      "seats": 4,
+      "seed": 1200,
+      "gameIndex": 4,
+      "features": [
+        "gold-choice",
+        "island-bonus",
+        "normal-completion",
+        "pirate-move",
+        "setup-ship",
+        "ship-build",
+        "ship-move"
+      ],
+      "inputs": 697,
+      "winner": 2,
+      "engineVersion": "0.1.0"
+    },
+    {
+      "name": "open-sea-56",
+      "file": "open-sea-56.replay.json",
+      "scenario": "open-sea-56",
+      "seats": 6,
+      "seed": 1200,
+      "gameIndex": 0,
+      "features": [
+        "gold-choice",
+        "island-bonus",
+        "normal-completion",
+        "pirate-move",
+        "setup-ship",
+        "ship-build",
+        "ship-move"
+      ],
+      "inputs": 1969,
+      "winner": 5,
+      "engineVersion": "0.1.0"
+    }
+  ]
+}
