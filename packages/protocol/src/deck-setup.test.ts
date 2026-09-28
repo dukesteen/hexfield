@@ -184,6 +184,31 @@ describe('signed deck setup', () => {
     });
   });
 
+  test('rejects actor-signed duplicate outputs before advancing either deck phase', () => {
+    const { passes, state: completedState } = completed();
+    let state = value(initDeckSetup(definition));
+    for (const pass of passes) {
+      const before = structuredClone(state);
+      const firstPoint = pass.body.output[0];
+      if (!firstPoint) throw new Error('Missing deck output');
+      const duplicated = {
+        ...pass.body,
+        output: pass.body.output.map((point, index) => (index === 1 ? firstPoint : point)),
+      };
+      const key = keys.at(pass.body.seat);
+      if (!key) throw new Error('Missing deck actor key');
+      const signed = { body: duplicated, sig: signObject('deck-pass', duplicated, key) };
+      expect(applyDeckPass(state, signed)).toMatchObject({
+        ok: false,
+        error: { code: 'deck-points' },
+      });
+      expect(state).toEqual(before);
+      // The rejected bytes never consume the actor's turn or change its input deck.
+      state = value(applyDeckPass(state, pass));
+    }
+    expect(state).toEqual(completedState);
+  });
+
   test('rejects substituted points, re-keyed shuffles and altered lock proofs even when re-signed', () => {
     const initial = value(initDeckSetup(definition));
     const first = signDeckShuffle(initial, 13n, [2, 0, 1], proofSeed, keys[0]);

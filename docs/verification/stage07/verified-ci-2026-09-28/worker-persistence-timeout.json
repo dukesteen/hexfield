@@ -1,0 +1,29 @@
+{
+  "mode": "net",
+  "options": {
+    "scenario": 1,
+    "seeds": 1,
+    "startIndex": 0,
+    "seed": 42,
+    "parallel": 1,
+    "security": "verified",
+    "lifecycle": "persistence",
+    "maxElapsedMs": 900000
+  },
+  "requestedSeeds": 1,
+  "completedGames": 0,
+  "averageTurns": null,
+  "averageInputs": null,
+  "averageVirtualMilliseconds": null,
+  "averageElapsedMilliseconds": null,
+  "results": [],
+  "failures": [
+    {
+      "gameIndex": 0,
+      "message": "Peer game exceeded 900000 ms: {\"elapsedMilliseconds\":900005.496441,\"lastProgressMilliseconds\":899273.128888,\"terminalReachedMilliseconds\":null,\"virtualMilliseconds\":5011,\"public\":{\"revision\":598,\"turn\":98,\"phase\":[{\"data\":null,\"id\":\"preRoll\",\"module\":\"base\"}],\"result\":null,\"publicVp\":[{\"seat\":0,\"publicVp\":9},{\"seat\":1,\"publicVp\":4},{\"seat\":2,\"publicVp\":7},{\"seat\":3,\"publicVp\":3}]},\"auditTimings\":[],\"operationTimings\":{\"sessionFlush\":{\"calls\":27154,\"totalMilliseconds\":559303.2981670019,\"maximumMilliseconds\":758.0522869999986},\"networkDelivery\":{\"calls\":26688,\"totalMilliseconds\":2280.2087429970506,\"maximumMilliseconds\":2.61087000000407},\"botDecide\":{\"calls\":450,\"totalMilliseconds\":222.21617500021603,\"maximumMilliseconds\":2.706425999997009}},\"submission\":{\"seat\":2,\"result\":null},\"peers\":[{\"seat\":3,\"head\":{\"seq\":598,\"hash\":\"b1250eee4b8de8a80b408fef9e08ecf9e0221b7c294b469463698d1c22b639e7\"},\"revision\":598,\"turn\":{\"activeSeat\":2,\"number\":98,\"phase\":[{\"data\":null,\"id\":\"preRoll\",\"module\":\"base\"}]},\"phase\":[{\"data\":null,\"id\":\"preRoll\",\"module\":\"base\"}],\"publicVp\":[{\"seat\":0,\"publicVp\":9},{\"seat\":1,\"publicVp\":4},{\"seat\":2,\"publicVp\":7},{\"seat\":3,\"publicVp\":3}],\"result\":null,\"pending\":[{\"kind\":\"player\",\"seat\":2,\"allowed\":[\"ROLL_DICE\",\"PLAY_DEV_CARD\",\"CLAIM_VICTORY\"]}],\"protocol\":null,\"beacon\":{\"round\":112,\"chains\":[{\"seat\":0,\"chainEpoch\":0,\"index\":112,\"length\":128},{\"seat\":1,\"chainEpoch\":0,\"index\":112,\"length\":128},{\"seat\":2,\"chainEpoch\":0,\"index\":112,\"length\":128},{\"seat\":3,\"chainEpoch\":0,\"index\":112,\"length\":128}],\"active\":null},\"packets\":{\"sent\":{\"SYS_CONTRIB/beacon-reveal\":123},\"received\":{\"SYS_CONTRIB/beacon-reveal\":357}},\"audit\":{\"kind\":\"not-started\"},\"automaticParent\":null},{\"seat\":0,\"head\":{\"seq\":598,\"hash\":\"b1250eee4b8de8a80b408fef9e08ecf9e0221b7c294b469463698d1c22b639e7\"},\"revision\":598,\"turn\":{\"activeSeat\":2,\"number\":98,\"phase\":[{\"data\":null,\"id\":\"preRoll\",\"module\":\"base\"}]},\"phase\":[{\"data\":null,\"id\":\"preRoll\",\"module\":\"base\"}],\"publicVp\":[{\"seat\":0,\"publicVp\":9},{\"seat\":1,\"publicVp\":4},{\"seat\":2,\"publicVp\":7},{\"seat\":3,\"publicVp\":3}],\"result\":null,\"pending\":[{\"kind\":\"player\",\"seat\":2,\"allowed\":[\"ROLL_DICE\",\"PLAY_DEV_CARD\",\"CLAIM_VICTORY\"]}],\"protocol\":null,\"beacon\":{\"round\":112,\"chains\":[{\"seat\":0,\"chainEpoch\":0,\"index\":112,\"length\":128},{\"seat\":1,\"chainEpoch\":0,\"index\":112,\"length\":128},{\"seat\":2,\"chainEpoch\":0,\"index\":112,\"length\":128},{\"seat\":3,\"chainEpoch\":0,\"index\":112,\"length\":128}],\"active\":null},\"packets\":{\"sent\":{\"SYS_CONTRIB/beacon-reveal\":123},\"received\":{\"SYS_CONTRIB/beacon-reveal\":357}},\"audit\":{\"kind\":\"not-started\"},\"automaticParent\":null},{\"seat\":1,\"head\":{\"seq\":598,\"hash\":\"b1250eee4b8de8a80b408fef9e08ecf9e0221b7c294b469463698d1c22b639e7\"},\"revision\":598,\"turn\":{\"activeSeat\":2,\"number\":98,\"phase\":[{\"data\":null,\"id\":\"preRoll\",\"module\":\"base\"}]},\"phase\":[{\"data\":null,\"id\":\"preRoll\",\"module\":\"base\"}],\"publicVp\":[{\"seat\":0,\"publicVp\":9},{\"seat\":1,\"publicVp\":4},{\"seat\":2,\"publicVp\":7},{\"seat\":3,\"publicVp\":3}],\"result\":null,\"pending\":[{\"kind\":\"player\",\"seat\":2,\"allowed\":[\"ROLL_DICE\",\"PLAY_DEV_CARD\",\"CLAIM_VICTORY\"]}],\"protocol\":null,\"beacon\":{\"round\":112,\"chains\":[{\"seat\":0,\"chainEpoch\":0,\"index\":112,\"length\":128},{\"seat\":1,\"chainEpoch\":0,\"index\":112,\"length\":128},{\"seat\":2,\"chainEpoch\":0,\"index\":112,\"length\":128},{\"seat\":3,\"chainEpoch\":0,\"index\":112,\"length\":128}],\"active\":null},\"packets\":{\"sent\":{\"SYS_CONTRIB/beacon-reveal\":122},\"received\":{\"SYS_CONTRIB/beacon-reveal\":355}},\"audit\":{\"kind\":\"not-started\"},\"automaticParent\":null},{\"seat\":2,\"head\":{\"seq\":598,\"hash\":\"b1250eee4b8de8a80b408fef9e08ecf9e0221b7c294b469463698d1c22b639e7\"},\"revision\":598,\"turn\":{\"activeSeat\":2,\"number\":98,\"phase\":[{\"data\":null,\"id\":\"preRoll\",\"module\":\"base\"}]},\"phase\":[{\"data\":null,\"id\":\"preRoll\",\"module\":\"base\"}],\"publicVp\":[{\"seat\":0,\"publicVp\":9},{\"seat\":1,\"publicVp\":4},{\"seat\":2,\"publicVp\":7},{\"seat\":3,\"publicVp\":3}],\"result\":null,\"pending\":[{\"kind\":\"player\",\"seat\":2,\"allowed\":[\"ROLL_DICE\",\"PLAY_DEV_CARD\",\"CLAIM_VICTORY\"]}],\"protocol\":null,\"beacon\":{\"round\":112,\"chains\":[{\"seat\":0,\"chainEpoch\":0,\"index\":112,\"length\":128},{\"seat\":1,\"chainEpoch\":0,\"index\":112,\"length\":128},{\"seat\":2,\"chainEpoch\":0,\"index\":112,\"length\":128},{\"seat\":3,\"chainEpoch\":0,\"index\":112,\"length\":128}],\"active\":null},\"packets\":{\"sent\":{\"SYS_CONTRIB/beacon-reveal\":125},\"received\":{\"SYS_CONTRIB/beacon-reveal\":358}},\"audit\":{\"kind\":\"not-started\"},\"automaticParent\":null}]}"
+    }
+  ],
+  "parallel": 1,
+  "sourceFingerprint": "68474550f7f22dc436f2ed3035e690b56e8143562519c764f7bb75d1fc947ce0",
+  "sourceUnchanged": true
+}

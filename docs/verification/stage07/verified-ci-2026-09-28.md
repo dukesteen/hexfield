@@ -23,7 +23,7 @@ inside a long iteration before its next elapsed-time check. Their completed
 histories and audits are valid evidence, but they do not establish a hard
 900-second runtime bound. No deadline was raised to obtain these results.
 
-## Remaining failures
+## Initial-run failures
 
 | Scenario                       | Observation                                                                               | Next check or correction                                                                                                                                                           |
 | ------------------------------ | ----------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -74,3 +74,38 @@ queued reveal is delivered. Browser sessions instead run audits in workers. The
 fixture will use the same scheduling separation, while retaining an independent
 audit for each peer, exact private-state comparisons at every sequence and the
 existing deadline. This failed run is not full lifecycle acceptance.
+
+## Verified repair and worker audits at `488cbae`
+
+The real-crypto corruption job in
+[run 36398472499](https://github.com/dukesteen/hexfield/actions/runs/36398472499)
+passed at `488cbae80eeb2bd8638836bd64dc6343a4795331`. The
+[public report](verified-ci-2026-09-28/repaired-corruption.json) records unchanged
+source fingerprint
+`68474550f7f22dc436f2ed3035e690b56e8143562519c764f7bb75d1fc947ce0`,
+seed 42, index 0, protocol v6 and the original default-ten-point/900-second bounds.
+
+Corruption at revision 21 triggered `consensus-context`, one snapshot request and
+three responses. The repaired peer adopted the verified parent at sequence 21,
+resumed and certified a later command. All four peers finished at sequence 641,
+turn 104, hash `d8034528af0b004772dabb88481ba6c79641f3b722cc2e844af943cf05e512ab`.
+Every peer independently completed a successful audit with no cheating findings.
+The full run took 568.48 seconds, including the four worker audits (about
+131.5–132.5 seconds each, overlapping). This closes scenario 8's full-game repair
+check for this source; it does not replace the other fault scenarios.
+
+All nine separate stub-network jobs also passed. The ordinary check passed
+production/test typechecking and lint, then stopped on six formatting issues;
+those are fixed in `52722f2`, with a passing tracked-file format check. Its later
+build and dependency checks were skipped, not passed. The remaining unit shard was still running when this section was recorded.
+
+The [persistence repeat](verified-ci-2026-09-28/worker-persistence-timeout.json)
+failed its unchanged 900-second limit before victory, at head 598/turn 98. All
+four peers agreed on that head, had no protocol error and had progressed within
+the previous second. No audit had started, so this timeout does not test the
+worker-audit correction. Session flushes consumed 559.30 seconds; other lifecycle
+work is not yet separated in the timing report. The previous persistence run
+reached victory sooner on another runner, so these measurements do not establish
+a performance regression from worker audits. Exact per-sequence private-state
+comparison and terminal lifecycle acceptance remain open. A bounded CPU profile
+is the next step; no deadline or winning score has been changed.

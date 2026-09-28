@@ -15,7 +15,7 @@ import { entryHash, genesisDigest, signEntry } from './genesis.js';
 import { verifyCheatProof } from './cheat-proof.js';
 import { validateNextEntry } from './log.js';
 import { MemoryProtocolJournal } from './journal.js';
-import { decodeProtocolMessage } from './messages.js';
+import { decodeProtocolMessage, encodeProtocolMessage } from './messages.js';
 import { P2PSession } from './p2p-session.js';
 import type { P2PSessionOptions } from './p2p-session.js';
 import { createMemnet } from './testing/memnet.js';
@@ -142,7 +142,7 @@ function quietRobber(
 }
 
 describe('live verified Monopoly count replication', () => {
-  test('certifies owner count contributions and folds private hands after a legal Monopoly', async () => {
+  test('certifies a live victim-signed false-count finding before genuine Monopoly completion and restore', async () => {
     // This legal setup supplies a development-card cost without waiting for random production.
     const settlementOrder = [
       'v:-1,-1,N',
@@ -430,6 +430,65 @@ describe('live verified Monopoly count replication', () => {
         ).ok,
       ).toBe(false);
       expect(certified.log.head.seq).toBeLessThan(falseEntry.seq);
+      // Deliver the victim-authenticated lie through the real receive path while
+      // its genuine durable contribution and count-result proposals remain gated.
+      // The contributor finding is not an accusation against the outer proposer.
+      const frozenCounts = canonicalEncode(pendingCount);
+      const frozenHands = new Map(
+        fixture.genesis.config.seats.map((seat) => [
+          seat,
+          canonicalEncode(required(required(live[hostIndex(fixture, seat)]).getPrivate(seat)).hand),
+        ]),
+      );
+      const revealsBeforeLie = revealSeats(live);
+      const ownerPeer = required(peers[hostIndex(fixture, target)]);
+      network.transport(ownerPeer).broadcast(
+        value(
+          encodeProtocolMessage({
+            t: 'COUNT_CONTRIB',
+            genesisDigest: certified.membership.genesisDigest,
+            contribution: falseContribution,
+          }),
+        ),
+      );
+      await settle(live, network.clock, 32);
+      for (const session of live) {
+        const saved = session.exportSave();
+        const afterLie = value(
+          replayCertifiedPrefix(
+            fixture.entry,
+            saved.entries,
+            fixture.simulation.engine,
+            fixture.policy,
+          ),
+        ).context;
+        const findings = saved.entries
+          .slice(certified.log.head.seq)
+          .filter(({ entry }) => entry.payload.kind === 'cheat-proof');
+        expect(findings).toHaveLength(1);
+        expect(required(findings[0]).certificate).toHaveLength(fixture.humans.length);
+        const finding = required(findings[0]).entry;
+        expect(finding.payload).toMatchObject({
+          kind: 'cheat-proof',
+          claim: { seat: target, evidence: { kind: 'count-proof', artifact: falseContribution } },
+        });
+        expect(afterLie.log.crypto?.cheats).toContainEqual(
+          expect.objectContaining({
+            seat: target,
+            kind: 'count-proof',
+            at: { seq: certified.log.head.seq, hash: entryHash(certified.log.head) },
+          }),
+        );
+        expect(canonicalEncode(required(afterLie.log.crypto).counts)).toEqual(frozenCounts);
+        expect(afterLie.excludedProposers).toEqual(certified.excludedProposers);
+        expect(afterLie.log.state).toEqual(certified.log.state);
+      }
+      expect(revealSeats(live)).toEqual(revealsBeforeLie);
+      for (const seat of fixture.genesis.config.seats)
+        expect(
+          canonicalEncode(required(required(live[hostIndex(fixture, seat)]).getPrivate(seat)).hand),
+        ).toEqual(frozenHands.get(seat));
+      expect(live[0]?.getCommittedHead()).toEqual(live[1]?.getCommittedHead());
       const generation = required(
         value(initialSeatAuthorities(fixture.genesis)).controllers.find(
           (owner) => owner.seat === target,
@@ -478,6 +537,21 @@ describe('live verified Monopoly count replication', () => {
         await settle(restored, network.clock, 16);
       }
       expect(revealSeats(restored)).toEqual(expectedVictims);
+      const targetResults = required(restored[0])
+        .exportSave()
+        .entries.filter(
+          ({ entry }) =>
+            entry.payload.kind === 'system' &&
+            entry.payload.input.type === 'REVEAL_COUNT' &&
+            entry.payload.input.seat === target,
+        );
+      expect(targetResults).toHaveLength(1);
+      expect(required(targetResults[0]).entry.payload).toMatchObject({
+        kind: 'system',
+        input: countInput,
+        evidence: honestEvidence,
+      });
+
       let paid = 0;
       for (const seat of fixture.genesis.config.seats) {
         const privateState = required(
@@ -492,6 +566,21 @@ describe('live verified Monopoly count replication', () => {
         required(restored[hostIndex(fixture, buyer)]).getPrivate(buyer)?.hand[chosenResource],
       ).toBe(required(beforeCounts.get(buyer)) + paid);
       expect(restored[0]?.getCommittedHead()).toEqual(restored[1]?.getCommittedHead());
+      const finalReplays = restored.map(
+        (session) =>
+          value(
+            replayCertifiedPrefix(
+              fixture.entry,
+              session.exportSave().entries,
+              fixture.simulation.engine,
+              fixture.policy,
+            ),
+          ).context,
+      );
+      expect(finalReplays[0]?.log.state).toEqual(restored[0]?.getState());
+      expect(finalReplays[1]?.log.state).toEqual(restored[1]?.getState());
+      expect(finalReplays[0]?.log.crypto).toEqual(finalReplays[1]?.log.crypto);
+      expect(finalReplays[0]?.log.head).toEqual(finalReplays[1]?.log.head);
     } finally {
       for (const session of live) session.dispose();
       for (const session of restored) session.dispose();
