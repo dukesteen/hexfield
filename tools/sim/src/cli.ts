@@ -199,7 +199,7 @@ export function failureMatches(category: string, observed: string): boolean {
 function replayPrivates(engine: Engine, replay: ReplayFile): Map<Seat, PrivateState> {
   let before = engine.createGame(replay.config, fromBase64Url(replay.genesisSeed));
   let privates = new Map(
-    before.config.seats.map((seat) => [seat, engine.createPrivateState(seat)]),
+    before.config.seats.map((seat) => [seat, engine.createPrivateState(seat, before.config)]),
   );
   for (const input of replay.inputs) {
     const applied = engine.apply(before, input);

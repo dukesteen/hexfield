@@ -58,7 +58,9 @@ export async function prepareDeckPass(
         if (!(bytes instanceof Uint8Array) || bytes.byteLength > MAX_MESSAGE_BYTES)
           return failure('deck-outbox-record', 'Stored pass exceeds its byte limit');
         const pass = canonicalDecode(bytes);
-        const applied = applyDeckPass(state, pass);
+        // Our own stored pass: structural still binds actor, order and operation id, which
+        // keeps each seat to one pass per setup (the single-use record).
+        const applied = applyDeckPass(state, pass, { proofs: 'structural' });
         return applied.ok
           ? // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- applyDeckPass parses the complete signed-pass schema and verifies this exact decoded value.
             success(pass as SignedDeckPass)

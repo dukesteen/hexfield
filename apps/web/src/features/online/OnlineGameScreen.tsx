@@ -27,9 +27,10 @@ import { queryKeys } from '../../queries/keys';
 import { encodePublicReplay } from '../../session/online-public-archive-client.js';
 import { FullSaveExportDialog } from './FullSaveExportDialog.js';
 import { RecoveryVoidDialog } from './RecoveryVoidDialog.js';
+import { PLAYER_SHAPES } from '../players/identity';
 import './online.css';
 
-const SHAPES = ['circle', 'triangle', 'square', 'diamond'] as const;
+const SHAPES = PLAYER_SHAPES;
 
 export function OnlineGameScreen({ gameId }: { gameId: string }) {
   const { t } = useTranslation('lobby');
@@ -285,10 +286,7 @@ function OnlineGameInstance({
   const presentation = useMemo<GamePresentation>(
     () => ({
       players: agreement.state.seats.map((seat) => {
-        if (
-          seat.kind === 'open' ||
-          (seat.seat !== 0 && seat.seat !== 1 && seat.seat !== 2 && seat.seat !== 3)
-        )
+        if (seat.kind === 'open')
           throw new Error('Online presentation has an unfilled or unsupported seat');
         const index = seat.seat;
         return { seat: index, name: seat.name, color: seat.colour, shape: SHAPES[index] };

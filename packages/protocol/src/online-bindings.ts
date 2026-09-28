@@ -41,7 +41,8 @@ const bodySchema = v.strictObject({
   encryptionKey: key32Schema,
 });
 const signedSchema = v.strictObject({ body: bodySchema, sig: signature64Schema });
-const bindingsSchema = v.pipe(v.array(signedSchema), v.minLength(2), v.maxLength(4));
+// One binding per seat: two to six seats.
+const bindingsSchema = v.pipe(v.array(signedSchema), v.minLength(2), v.maxLength(6));
 
 export type GameSeatBindingBody = v.InferOutput<typeof bodySchema>;
 export type SignedGameSeatBinding = v.InferOutput<typeof signedSchema>;

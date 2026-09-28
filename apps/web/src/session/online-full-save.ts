@@ -158,7 +158,9 @@ function contextFor(archive: VerifiedPublicOnlineArchive): Result<ProposalContex
   const replay = replayCertifiedPrefix(archive.start.result.entry, archive.entries, engine, {
     genesis: {
       verifyCommitments(genesis) {
-        const checked = validateDeckCeremony(genesis, archive.start.result.transcripts);
+        const checked = validateDeckCeremony(genesis, archive.start.result.transcripts, {
+          proofs: 'structural',
+        });
         return checked.ok ? success(undefined) : checked;
       },
     },

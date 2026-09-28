@@ -16,7 +16,7 @@ import {
   signObject,
   verifyObject,
 } from '@cp2p/crypto';
-import { ENGINE_VERSION, failure, success } from '@cp2p/engine';
+import { ENGINE_VERSION, devCardCatalogueFor, failure, success } from '@cp2p/engine';
 import type { Engine, Result, Seat } from '@cp2p/engine';
 import * as v from 'valibot';
 import { createBeaconSecretSource } from './beacon-source.js';
@@ -91,6 +91,18 @@ import type { Genesis, GenesisBody, LogEntry, SeatSignature } from './types.js';
 import { parseCanonical, MAX_MESSAGE_BYTES } from './validation.js';
 
 const TIMEOUT_MS = 20_000;
+/** Seats × deck cards that fit the base deck-phase budget (four seats, 25 cards). */
+const BASE_DECK_WORK = 100;
+
+/**
+ * Per-phase budget. The deck phase runs one verified shuffle and one lock pass per seat over
+ * every card, sequentially, so larger tables get a proportionally longer (never shorter) window.
+ */
+export function ceremonyPhaseTimeoutMs(phase: string, seats: number, deckCards: number): number {
+  const work = seats * deckCards;
+  if (phase !== 'deck' || work <= BASE_DECK_WORK) return TIMEOUT_MS;
+  return Math.ceil((TIMEOUT_MS * 1.5 * work) / BASE_DECK_WORK);
+}
 const RETRY_MS = 1_000;
 const ATTEMPT_PROTOCOL = 'online-attempt-v2';
 const ceremonySteps = [
@@ -577,7 +589,8 @@ export class OnlineCeremony {
         return success(undefined);
       }
       const elapsed = this.#options.clock.now() - initialized.value.startedAt;
-      if (initialized.value.status === 'retired' || elapsed < 0 || elapsed >= TIMEOUT_MS) {
+      const limit = this.#timeoutFor(initialized.value.phase);
+      if (initialized.value.status === 'retired' || elapsed < 0 || elapsed >= limit) {
         const saved = await this.#hasSavedDisclosure();
         if (!saved.ok) return saved;
         if (saved.value) {
@@ -614,8 +627,7 @@ export class OnlineCeremony {
       const consented = await this.#restoreConsentBarrier();
       if (!consented.ok) return consented;
       if (consented.value) this.#locallyConsented = true;
-      else if (elapsed < 0 || elapsed >= TIMEOUT_MS)
-        return this.#abortUnsafe('online-ceremony-timeout');
+      else if (elapsed < 0 || elapsed >= limit) return this.#abortUnsafe('online-ceremony-timeout');
       this.#scheduleRetry();
       return this.#advance();
     });
@@ -827,9 +839,20 @@ export class OnlineCeremony {
     return retired;
   }
 
-  #phaseExpired(startedAt: number): boolean {
+  #timeoutFor(phase: string): number {
+    const config = this.#agreement.state.config;
+    let deckCards = 0;
+    try {
+      deckCards = devCardCatalogueFor(config).length;
+    } catch {
+      deckCards = 0;
+    }
+    return ceremonyPhaseTimeoutMs(phase, config.seats.length, deckCards);
+  }
+
+  #phaseExpired(startedAt: number, phase: string): boolean {
     const elapsed = this.#options.clock.now() - startedAt;
-    return elapsed < 0 || elapsed >= TIMEOUT_MS;
+    return elapsed < 0 || elapsed >= this.#timeoutFor(phase);
   }
 
   #schedulePhaseTimeout(phase: CeremonyStep, startedAt: number): void {
@@ -837,7 +860,7 @@ export class OnlineCeremony {
     this.#timeoutHandle = null;
     if (this.#disposed || this.#result || this.#locallyConsented) return;
     const elapsed = this.#options.clock.now() - startedAt;
-    const remaining = elapsed < 0 ? 0 : Math.max(0, TIMEOUT_MS - elapsed);
+    const remaining = elapsed < 0 ? 0 : Math.max(0, this.#timeoutFor(phase) - elapsed);
     const handle = this.#options.clock.setTimeout(() => {
       void this.#enqueue(() => this.#onTimeout({ phase, startedAt }, handle));
     }, remaining);
@@ -849,7 +872,7 @@ export class OnlineCeremony {
       if (record.status === 'retired')
         return failure('online-ceremony-retired', 'Ceremony attempt was durably retired');
       const prior = { phase: record.phase, startedAt: record.startedAt };
-      if (!this.#locallyConsented && this.#phaseExpired(record.startedAt))
+      if (!this.#locallyConsented && this.#phaseExpired(record.startedAt, record.phase))
         return success({ ...prior, expired: true });
       if (ceremonySteps.indexOf(phase) <= ceremonySteps.indexOf(record.phase))
         return success({ ...prior, expired: false });
@@ -899,7 +922,7 @@ export class OnlineCeremony {
     if (current.value.status === 'retired') return success(undefined);
     if (current.value.phase !== expected.phase || current.value.startedAt !== expected.startedAt)
       return success(undefined);
-    if (!this.#phaseExpired(expected.startedAt)) {
+    if (!this.#phaseExpired(expected.startedAt, expected.phase)) {
       this.#schedulePhaseTimeout(expected.phase, expected.startedAt);
       return success(undefined);
     }
@@ -946,7 +969,7 @@ export class OnlineCeremony {
     if (this.#restoreExpected && !this.#restoreValidated) return success(undefined);
     const manifest = slot.escrowManifest;
     if (!manifest) {
-      if (!this.#locallyConsented && this.#phaseExpired(record.startedAt))
+      if (!this.#locallyConsented && this.#phaseExpired(record.startedAt, record.phase))
         return failure('online-ceremony-timeout', 'Ceremony phase expired before send');
       this.#broadcast(key, bytes, slot.escrowRecipients);
       return success(undefined);
@@ -965,7 +988,7 @@ export class OnlineCeremony {
             return success(undefined);
           return active;
         }
-        if (!this.#locallyConsented && this.#phaseExpired(record.startedAt))
+        if (!this.#locallyConsented && this.#phaseExpired(record.startedAt, record.phase))
           return failure('online-ceremony-timeout', 'Ceremony phase expired before send');
         this.#broadcast(key, bytes, slot.escrowRecipients);
         return success(undefined);
@@ -998,12 +1021,12 @@ export class OnlineCeremony {
         const checked = this.#checkedPayload(packet.value, slot);
         if (!checked.ok) return checked;
         if (slot.kind === 'consent') this.#locallyConsented = true;
-        if (!this.#locallyConsented && this.#phaseExpired(record.startedAt))
+        if (!this.#locallyConsented && this.#phaseExpired(record.startedAt, record.phase))
           return failure('online-ceremony-timeout', 'Ceremony phase expired before output');
         const sent = await this.#sendSlotWithinAttempt(slot, key, prior, record);
         return sent.ok ? checked : sent;
       }
-      if (!this.#locallyConsented && this.#phaseExpired(record.startedAt))
+      if (!this.#locallyConsented && this.#phaseExpired(record.startedAt, record.phase))
         return failure('online-ceremony-timeout', 'Ceremony phase expired before output');
       if (this.#restoreExpected)
         return failure('online-ceremony-restore', 'Completed phase packet is missing');
@@ -1011,7 +1034,7 @@ export class OnlineCeremony {
         return failure('online-ceremony-owner', 'Only the local owner may produce this slot');
       const produced = await slot.produce();
       if (!produced.ok) return produced;
-      if (!this.#locallyConsented && this.#phaseExpired(record.startedAt))
+      if (!this.#locallyConsented && this.#phaseExpired(record.startedAt, record.phase))
         return failure('online-ceremony-timeout', 'Ceremony phase expired before signing');
       const body: OnlineCeremonyPacket['body'] = {
         protocol: 'online-ceremony-v1',
@@ -1027,7 +1050,7 @@ export class OnlineCeremony {
       if (!signed.ok) return signed;
       const checked = this.#checkedPayload(signed.value.packet, slot);
       if (!checked.ok) return checked;
-      if (!this.#locallyConsented && this.#phaseExpired(record.startedAt))
+      if (!this.#locallyConsented && this.#phaseExpired(record.startedAt, record.phase))
         return failure('online-ceremony-timeout', 'Ceremony phase expired before persistence');
       if (this.#disposed) return failure('online-ceremony-disposed', 'Ceremony is disposed');
       if (!(await this.#options.store.putIfAbsent(key, signed.value.bytes))) {
@@ -2283,7 +2306,9 @@ export class OnlineCeremony {
           step,
           ownerDevice,
           validate: (payload) => {
-            const applied = applyDeckPass(before, payload);
+            // Structural only: proofs are verified by the certified in-game deck-pass entries
+            // before any card is dealt (a user-approved speed trade-off; see DECISIONS.md).
+            const applied = applyDeckPass(before, payload, { proofs: 'structural' });
             if (!applied.ok) return applied;
             deckPrefix.next = {
               step,
@@ -2470,7 +2495,7 @@ export class OnlineCeremony {
           verifyCommitments: (candidate) => {
             if (genesisDigest(candidate) !== digest)
               return failure('online-ceremony-genesis', 'Entry differs from final signed body');
-            return validateDeckCeremony(candidate, transcripts);
+            return validateDeckCeremony(candidate, transcripts, { proofs: 'structural' });
           },
         });
         return checkedEntry.ok ? success(checkedEntry.value.entry) : checkedEntry;

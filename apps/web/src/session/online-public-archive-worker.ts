@@ -38,7 +38,7 @@ export interface PublicArchiveDisplay {
   readonly state: Readonly<GameState>;
   readonly events: readonly GameEvent[];
   readonly players: readonly {
-    seat: 0 | 1 | 2 | 3;
+    seat: 0 | 1 | 2 | 3 | 4 | 5;
     name: string;
     color: 'blue' | 'orange' | 'green' | 'magenta' | 'yellow' | 'red';
   }[];
@@ -81,8 +81,8 @@ function validRequest(value: unknown): value is PublicArchiveWorkerRequest {
   );
 }
 
-function displaySeat(seat: number): seat is 0 | 1 | 2 | 3 {
-  return seat === 0 || seat === 1 || seat === 2 || seat === 3;
+function displaySeat(seat: number): seat is 0 | 1 | 2 | 3 | 4 | 5 {
+  return seat === 0 || seat === 1 || seat === 2 || seat === 3 || seat === 4 || seat === 5;
 }
 
 /** One isolated, bounded replay job. It has no journal, identity, or voting key access. */

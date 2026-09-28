@@ -524,7 +524,7 @@ export class EscrowCeremony {
       const checked = validateGenesisEntry(entry, engine, {
         verifyCommitments: (genesis) => {
           // The mandatory escrow verifier already runs in validateGenesisEntry.
-          return validateDeckCeremony(genesis, transcripts);
+          return validateDeckCeremony(genesis, transcripts, { proofs: 'structural' });
         },
       });
       if (!checked.ok) return checked;

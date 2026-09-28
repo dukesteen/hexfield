@@ -7,12 +7,7 @@ import { completeBeaconState, getBeaconOperation } from './beacon-state.js';
 import { signBeaconReveal } from './beacon.js';
 import { BEACON_EVIDENCE_PROTOCOL, validateCryptoTransition } from './crypto-context.js';
 import { validateObjectiveAccusation } from './control.js';
-import {
-  MemoryBeaconContributionStore,
-  prepareBeaconContribution,
-} from './beacon-contributions.js';
-import { BeaconInbox } from './beacon-inbox.js';
-import { DECK_DRAW_PROTOCOL, DECK_REVEAL_PROTOCOL } from './deck-ledger.js';
+import { DECK_DRAW_PROTOCOL, DECK_REVEAL_PROTOCOL, captureDeckPending } from './deck-ledger.js';
 import { COMMAND_PROOFS_PROTOCOL } from './command-proofs.js';
 import { planHandTransition } from './hand-transition.js';
 import {
@@ -398,53 +393,21 @@ beforeAll(() => {
 }, 120_000);
 
 describe('certified deck log', () => {
-  test('genesis commitments gate START_SEAT; only exact ordered signed setup passes advance', async () => {
+  test('the beacon may run before deck setup completes; only exact ordered signed setup passes advance', () => {
     const data = shared;
     const first = need(need(data.deck.transcripts[0]).passes[0]);
     const second = need(need(data.deck.transcripts[0]).passes[1]);
     const before = snapshotFromContext(data.initial);
-    const source = {
-      link: vi.fn<() => Uint8Array>(() => new Uint8Array(32)),
-      extension: vi.fn<() => { length: number; tip: Uint8Array }>(() => ({
-        length: 128,
-        tip: new Uint8Array(32),
-      })),
-    };
-    const store = new MemoryBeaconContributionStore();
-    const load = vi.spyOn(store, 'load');
-    const prepared = await prepareBeaconContribution(
-      need(data.initial.log.crypto),
-      0,
-      need(data.source.identities.get(0)).secretKey,
-      source,
-      store,
-    );
-    expect(prepared).toEqual({ ok: true, value: null });
-    expect(source.link).not.toHaveBeenCalled();
-    expect(source.extension).not.toHaveBeenCalled();
-    expect(load).not.toHaveBeenCalled();
-    const inbox = new BeaconInbox();
-    expect(inbox.refresh(data.initial.log.crypto).ok).toBe(true);
-    const earlyOperation = checked(getBeaconOperation(need(data.initial.log.crypto).beacon));
-    const earlyReveal = signBeaconReveal(
-      earlyOperation,
-      0,
-      need(need(data.chains[0])[1]),
-      need(data.source.identities.get(0)).secretKey,
-    );
-    expect(inbox.remember({ kind: 'beacon-reveal', signed: earlyReveal })).toEqual({
-      ok: true,
-      value: false,
-    });
+    // Deck passes certify in the background during setup. A START_SEAT answer is judged on
+    // its beacon evidence alone (empty here, so still rejected), never on deck readiness.
     const start = signAt(data, data.initial, {
       kind: 'system',
       input: { kind: 'system', type: 'START_SEAT', seat: 0 },
       evidence: { kind: 'proof', protocol: BEACON_EVIDENCE_PROTOCOL, data: [] },
     });
-    expect(validateCertifiedEntry(certify(data, data.initial, start), data.initial)).toMatchObject({
-      ok: false,
-      error: { code: 'deck-setup-pending' },
-    });
+    const early = validateCertifiedEntry(certify(data, data.initial, start), data.initial);
+    expect(early.ok).toBe(false);
+    expect(early.ok ? null : early.error.code).not.toBe('deck-setup-pending');
     const wrongOrder = signAt(data, data.initial, {
       kind: 'crypto',
       action: 'deck-pass',
@@ -502,6 +465,43 @@ describe('certified deck log', () => {
     );
     expect(data.verifySystem).not.toHaveBeenCalled();
   }, 120_000);
+
+  test('before every setup pass is certified, a draw waits unfrozen and a deal is refused', () => {
+    const data = shared;
+    const crypto = need(data.initial.log.crypto);
+    expect(crypto.decks.decks[0]?.nextPass).toBe(0);
+    const pending = {
+      kind: 'random' as const,
+      request: { type: 'draw', deck: 'dev', seat: 0, slotId: 'dev:0', remaining: 25 },
+      systemType: 'CARD_DEALT',
+    };
+    // The request is not frozen, so no unlock can be requested over unverified proofs.
+    const waiting = checked(
+      captureDeckPending(
+        crypto.decks,
+        data.initial.log.state,
+        pending,
+        { seq: data.initial.log.head.seq, hash: entryHash(data.initial.log.head) },
+        crypto.epoch,
+      ),
+    );
+    expect(waiting.active).toBeNull();
+    expect(waiting).toEqual(crypto.decks);
+    const deal = signAt(data, data.initial, {
+      kind: 'system',
+      input: { kind: 'system', type: 'CARD_DEALT', deck: 'dev', seat: 0, slotId: 'dev:0' },
+      evidence: { kind: 'proof', protocol: DECK_DRAW_PROTOCOL, data: [] },
+    });
+    expect(
+      validateCryptoTransition(
+        data.genesis,
+        crypto,
+        data.source.engine,
+        data.initial.log.state,
+        deal,
+      ),
+    ).toMatchObject({ ok: false, error: { code: 'deck-setup-pending' } });
+  });
 
   test('a missing CARD_DEALT proof cannot be approved by permissive callbacks and rejection preserves the cursor', () => {
     const data = shared;

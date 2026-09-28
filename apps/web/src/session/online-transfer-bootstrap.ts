@@ -263,7 +263,9 @@ export function validateOnlineTransferBootstrap(
     const policy = {
       genesis: {
         verifyCommitments(genesis: Parameters<typeof validateDeckCeremony>[0]) {
-          const checked = validateDeckCeremony(genesis, validatedStart.value.result.transcripts);
+          const checked = validateDeckCeremony(genesis, validatedStart.value.result.transcripts, {
+            proofs: 'structural',
+          });
           return checked.ok ? success(undefined) : checked;
         },
       },

@@ -97,8 +97,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function displaySeat(seat: Seat): seat is 0 | 1 | 2 | 3 {
-  return seat === 0 || seat === 1 || seat === 2 || seat === 3;
+function displaySeat(seat: Seat): seat is 0 | 1 | 2 | 3 | 4 | 5 {
+  return seat >= 0 && seat <= 5;
 }
 
 function validRequest(value: unknown): value is OnlineFullSaveWorkerRequest {

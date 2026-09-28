@@ -171,7 +171,9 @@ function policyFor(bootstrap: VerifiedOnlineTransferBootstrap): ReplayPolicy {
   return {
     genesis: {
       verifyCommitments(genesis) {
-        return validateDeckCeremony(genesis, bootstrap.record.result.transcripts);
+        return validateDeckCeremony(genesis, bootstrap.record.result.transcripts, {
+          proofs: 'structural',
+        });
       },
     },
     entry: {},

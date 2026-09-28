@@ -17,11 +17,14 @@ const appBaseUrl = `http://127.0.0.1:${process.env.PLAYWRIGHT_TEST_PORT ?? '5187
 /** Whole-test budget. Six seats add peers, deck passes and special build phases. */
 function modeTimeout(mode: 'signaling' | 'manual'): number {
   const base = mode === 'manual' ? 300_000 : 240_000;
-  return seatCount === 6 ? base * 3 : base;
+  return seatCount === 6 ? base * 4 : base;
 }
 
 /** Four seats by default; `CP2P_MIXED_ENGINE_SEATS=6` runs the five-six acceptance game. */
 const seatCount = process.env.CP2P_MIXED_ENGINE_SEATS === '6' ? 6 : 4;
+/** Play-and-audit budget; six seats add five special build phases to every turn. */
+const PLAY_BUDGET_MS = seatCount === 6 ? 480_000 : 150_000;
+
 /** `CP2P_MIXED_ENGINE_NO_WEBKIT=1` swaps WebKit for Chromium/Firefox where WebKit lacks WebRTC. */
 const noWebkit = process.env.CP2P_MIXED_ENGINE_NO_WEBKIT === '1';
 const engineNames =
@@ -530,6 +533,8 @@ async function readRoom(page: Page, includePeerStats = false) {
           peerStats?.map(({ state, route: peerRoute }) => ({ state, route: peerRoute })) ?? [],
         unfinishedLinks,
         startup: snapshot.startup?.phase ?? null,
+        startupError:
+          snapshot.startup && 'error' in snapshot.startup ? (snapshot.startup.error ?? null) : null,
         lobbyStatus: snapshot.lobby?.status ?? null,
         humanCount: snapshot.lobby?.seats.filter((seat) => seat.kind === 'human').length ?? 0,
         manual: {
@@ -821,6 +826,22 @@ async function inspectPublicGame(page: Page, gameId: string) {
         audit: audit?.kind ?? null,
         auditOk: audit?.kind === 'complete' && audit.report.ok,
         auditComplete: audit?.kind === 'complete' && audit.report.complete,
+        // Public, sanitized failure codes only: no hands, keys or secrets.
+        auditProblems:
+          audit?.kind === 'complete' && !audit.report.ok
+            ? {
+                missingSeats: audit.report.missingSeats,
+                violations: audit.report.violations.map((item) =>
+                  JSON.stringify(item).slice(0, 200),
+                ),
+                inputErrors: audit.report.inputErrors.map((item) =>
+                  JSON.stringify(item).slice(0, 200),
+                ),
+                cheatFindings: audit.report.cheatFindings.length,
+                historyError: audit.report.historyError,
+                auditError: audit.report.auditError,
+              }
+            : null,
         peerCount: room.getSnapshot().peers.length,
       };
     },
@@ -931,7 +952,7 @@ async function certifyPostSetupMove(
   const afterHead = after[0]?.head;
   if (!afterHead || afterHead.seq <= before.seq)
     throw new Error('Post-setup action did not advance the head');
-  expect(after.map((item) => item?.head)).toEqual([afterHead, afterHead, afterHead, afterHead]);
+  expect(after.map((item) => item?.head)).toEqual(pages.map(() => afterHead));
 }
 
 interface FinishProgress {
@@ -960,7 +981,7 @@ async function finishAndAudit(
   }));
   let commands = 0;
   const started = Date.now();
-  const finishDeadline = Math.min(deadline, started + 150_000);
+  const finishDeadline = Math.min(deadline, started + PLAY_BUDGET_MS);
   let terminalAt: number | undefined;
   const accepted: Record<string, number> = {};
   const refusedCommands: Record<string, number> = {};
@@ -1031,7 +1052,7 @@ async function finishAndAudit(
           if (commands > 300) throw new Error('The bounded mixed-engine game exceeded 300 moves');
           return false;
         },
-        { timeout: remaining(finishDeadline, 150_000), intervals: [100] },
+        { timeout: remaining(finishDeadline, PLAY_BUDGET_MS), intervals: [100] },
       )
       .toBe(true);
     await expect
@@ -1049,7 +1070,7 @@ async function finishAndAudit(
           onProgress(diagnostic());
           return views.every((view) => view?.result && view.audit === 'complete');
         },
-        { timeout: remaining(finishDeadline, 150_000), intervals: [100] },
+        { timeout: remaining(finishDeadline, PLAY_BUDGET_MS), intervals: [100] },
       )
       .toBe(true);
   } catch (error) {
@@ -1064,6 +1085,9 @@ async function finishAndAudit(
   const head = final[0]?.head;
   const result = final[0]?.result;
   if (!head || !result) throw new Error('Missing audited terminal state');
+  process.stdout.write(
+    `${JSON.stringify({ auditProblems: final.map((view) => view?.auditProblems ?? null) })}\n`,
+  );
   for (const view of final) {
     expect(view?.head).toEqual(head);
     expect(view?.result).toEqual(result);

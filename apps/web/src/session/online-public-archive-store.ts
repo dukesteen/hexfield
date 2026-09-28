@@ -20,7 +20,7 @@ const summarySchema = v.strictObject({
   names: v.pipe(
     v.array(v.pipe(v.string(), v.minLength(1), v.maxLength(40))),
     v.minLength(2),
-    v.maxLength(4),
+    v.maxLength(6),
   ),
   createdAt: v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(Number.MAX_SAFE_INTEGER)),
   headSeq: v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(8192)),

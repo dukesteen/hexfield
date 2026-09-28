@@ -41,7 +41,9 @@ export async function loadStoredOnlineMasterInventory(input: {
   const policy: ReplayPolicy = {
     genesis: {
       verifyCommitments(genesis) {
-        const checked = validateDeckCeremony(genesis, input.start.result.transcripts);
+        const checked = validateDeckCeremony(genesis, input.start.result.transcripts, {
+          proofs: 'structural',
+        });
         return checked.ok ? success(undefined) : checked;
       },
     },

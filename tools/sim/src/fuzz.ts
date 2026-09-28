@@ -569,7 +569,7 @@ export function fuzz(options: FuzzOptions): FuzzResult {
     const log = trace.inputs;
     let state = engine.createGame(trace.config, trace.genesisSeed);
     let privates = new Map(
-      trace.config.seats.map((seat) => [seat, engine.createPrivateState(seat)]),
+      trace.config.seats.map((seat) => [seat, engine.createPrivateState(seat, trace.config)]),
     );
     const prefix: Input[] = [];
     for (const original of log) {

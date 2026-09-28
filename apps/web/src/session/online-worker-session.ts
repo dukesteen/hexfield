@@ -5,6 +5,11 @@ import { OnlineWorkerClient } from './online-worker-client.js';
 import type { OnlineWorkerHead, OnlineWorkerSessionSnapshot } from './online-worker-messages.js';
 
 const emptyLegal = { commands: [], templates: [] };
+/** Automatic re-confirmations when a background entry certifies before a player's command. */
+// Each retry moves past at least one certified entry; a six-seat deck setup has 12 passes.
+const RENEWED_INTENT_RETRIES = 16;
+const HEAD_WAIT_STEPS = 120;
+const HEAD_WAIT_MS = 25;
 
 function sameHead(left: OnlineWorkerHead, right: OnlineWorkerHead): boolean {
   return left.seq === right.seq && left.hash === right.hash;
@@ -110,7 +115,40 @@ export class OnlineWorkerSession implements GameSession {
     const head = this.getCommittedHead();
     if (options.expectedRevision !== undefined && options.expectedRevision !== head.seq)
       return failure('stale-revision', 'Board changed; choose the action again');
-    return this.client.request({ kind: 'submit', seat, command, head });
+    return this.submitAt(seat, command, head, RENEWED_INTENT_RETRIES);
+  }
+
+  /**
+   * Background entries (deck-setup passes during setup) can certify before a player's command.
+   * The signed command is bound to its parent, so confirm the same command against the new head
+   * and send it again while it is still legal; otherwise report the change to the player.
+   */
+  private async submitAt(
+    seat: Seat,
+    command: CommandShape,
+    head: OnlineWorkerHead,
+    retries: number,
+  ): Promise<Result<void>> {
+    const result = await this.client.request({ kind: 'submit', seat, command, head });
+    if (result.ok || result.error.code !== 'renewed-intent' || retries === 0 || this.disposed)
+      return result;
+    const next = await this.nextHead(head, HEAD_WAIT_STEPS);
+    if (!next) return result;
+    const checked = await this.validate(seat, command);
+    if (!checked.ok) return failure('stale-revision', 'Board changed; choose the action again');
+    return this.submitAt(seat, command, next, retries - 1);
+  }
+
+  /** The worker publishes the newly certified head shortly after rejecting an intent. */
+  private async nextHead(
+    previous: OnlineWorkerHead,
+    steps: number,
+  ): Promise<OnlineWorkerHead | null> {
+    const current = this.getCommittedHead();
+    if (!sameHead(current, previous)) return current;
+    if (steps === 0 || this.disposed) return null;
+    await new Promise((resolve) => setTimeout(resolve, HEAD_WAIT_MS));
+    return this.nextHead(previous, steps - 1);
   }
 
   setPrivateVisible(visible: boolean): void {

@@ -207,7 +207,7 @@ export async function openOnlineGame(
     const policy: ReplayPolicy = {
       genesis: {
         verifyCommitments(genesis) {
-          const decks = validateDeckCeremony(genesis, input.transcripts);
+          const decks = validateDeckCeremony(genesis, input.transcripts, { proofs: 'structural' });
           return decks.ok ? success(undefined) : decks;
         },
       },

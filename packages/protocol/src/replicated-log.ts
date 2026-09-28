@@ -32,7 +32,6 @@ import type {
 } from './trade-proof-delivery.js';
 import { deckPassHash } from './deck-genesis.js';
 import { DeckInbox } from './deck-inbox.js';
-import { decksReady } from './deck-ledger.js';
 import { prepareDeckUnlock } from './deck-outbox.js';
 import type { DeckContributionStore } from './deck-outbox.js';
 import type { DeckSourceFactory } from './deck-source.js';
@@ -2813,15 +2812,18 @@ export class ReplicatedLog {
     const presence = this.presenceCandidate();
     if (presence) return this.entryCandidate(state, { kind: 'membership', change: presence });
     if (this.context.log.recovery?.pending) return null;
-    const crypto =
-      this.deckSetupCandidate() ??
-      this.deckDrawCandidate() ??
-      this.stealCandidate() ??
-      this.beaconCandidate();
+    const crypto = this.deckDrawCandidate() ?? this.stealCandidate() ?? this.beaconCandidate();
     if (crypto) return this.entryCandidate(state, crypto);
     const count = this.countCandidate();
     if (count) {
       const candidate = this.entryCandidate(state, count);
+      if (candidate) return candidate;
+    }
+    // Deck setup passes certify in otherwise idle time: while other crypto work waits on
+    // peers, and whenever no player command is queued. Deals wait until they are all certified.
+    const deckSetup = this.deckSetupCandidate();
+    if (deckSetup && (this.cryptoPending() || this.commands.length === 0)) {
+      const candidate = this.entryCandidate(state, deckSetup);
       if (candidate) return candidate;
     }
     if (this.cryptoPending()) return null;
@@ -2833,6 +2835,10 @@ export class ReplicatedLog {
       this.commands.shift();
       // The caller may have broadcast this signed intent elsewhere. Keep its pending
       // promise until commitment or a new parent, but never let it block this queue.
+    }
+    if (deckSetup) {
+      const candidate = this.entryCandidate(state, deckSetup);
+      if (candidate) return candidate;
     }
     const system = this.systemCandidate();
     return system ? this.entryCandidate(state, system) : null;
@@ -3630,13 +3636,8 @@ export class ReplicatedLog {
 
   private cryptoPending(): boolean {
     const crypto = this.context.log.crypto;
-    return !!(
-      crypto &&
-      (!decksReady(crypto.decks) ||
-        crypto.decks.active ||
-        crypto.beacon.active ||
-        crypto.beacon.fixed)
-    );
+    // An unfinished deck setup no longer blocks commands; only deals wait for it.
+    return !!(crypto && (crypto.decks.active || crypto.beacon.active || crypto.beacon.fixed));
   }
 
   private seatFrozen(seat: Seat): boolean {
@@ -3685,7 +3686,7 @@ export class ReplicatedLog {
       this.context.log.authority,
     );
     if (!refreshed.ok) return this.failClosed(refreshed.error.code, refreshed.error.message);
-    if (!crypto?.beacon.active || !decksReady(crypto.decks)) return success(undefined);
+    if (!crypto?.beacon.active) return success(undefined);
     const { beaconContributions } = this.options;
     if (!beaconContributions)
       return this.failClosed(

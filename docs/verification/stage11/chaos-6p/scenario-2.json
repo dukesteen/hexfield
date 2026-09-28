@@ -1,0 +1,77 @@
+{
+  "mode": "net",
+  "options": {
+    "scenario": 2,
+    "seeds": 1,
+    "startIndex": 0,
+    "seed": 42,
+    "parallel": 1,
+    "players": 6
+  },
+  "requestedSeeds": 1,
+  "completedGames": 1,
+  "averageTurns": 99,
+  "averageInputs": 1127,
+  "averageVirtualMilliseconds": 1034157,
+  "averageElapsedMilliseconds": 1531169.4727500002,
+  "results": [
+    {
+      "security": "stub",
+      "protocolVersion": 6,
+      "seed": 42,
+      "gameIndex": 0,
+      "scenario": 2,
+      "turns": 99,
+      "inputs": 1127,
+      "virtualMilliseconds": 1034157,
+      "elapsedMilliseconds": 1531169.4727500002,
+      "operationTimings": {
+        "sessionFlush": {
+          "calls": 188006,
+          "totalMilliseconds": 1523113.9691899812,
+          "maximumMilliseconds": 14407.543874999974
+        },
+        "networkDelivery": {
+          "calls": 187012,
+          "totalMilliseconds": 6452.23238999167,
+          "maximumMilliseconds": 11.3791249999922
+        },
+        "botDecide": {
+          "calls": 993,
+          "totalMilliseconds": 375.33799899971825,
+          "maximumMilliseconds": 6.720583999995142
+        }
+      },
+      "finalStateHash": "6171e0d7ab70653f402ccdede021f4058d2c2aa841d129ae68cc68955e692775",
+      "finalLogHash": "f226e0ad0aff8ac89cd1e1b4801728dbcb136e7c73b4b44092a4cf5319f3cb95",
+      "audits": [],
+      "faultInjected": false,
+      "faultRecovered": false,
+      "faultEvidence": {
+        "injectedAtRevision": 0,
+        "majorityCommitsDuringPartition": null,
+        "isolatedCommitsDuringPartition": null,
+        "pausedPeersDuringPartition": 0,
+        "replacementTerm": null,
+        "censoredCommandCommitted": false,
+        "snapshotRequests": 0,
+        "snapshotResponses": 0,
+        "derivedContextDiagnostic": null,
+        "snapshotRepairAdopted": false,
+        "repairSnapshotParentSeq": null,
+        "repairSnapshotHash": null,
+        "continuationCommandHash": null,
+        "duplicateDeliveries": 16631,
+        "certifiedExclusionPeers": 0,
+        "byzantineCommandCommits": 0,
+        "rejectedProposalHash": null,
+        "nonVoterMessageTypes": [],
+        "nonVoterPublishedMaster": false
+      }
+    }
+  ],
+  "failures": [],
+  "parallel": 1,
+  "sourceFingerprint": "c8de712177a1acd18ba27eb7d1b76fea75dd01f7081a535e6bf88304bf22c436",
+  "sourceUnchanged": false
+}

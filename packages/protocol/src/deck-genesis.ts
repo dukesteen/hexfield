@@ -3,6 +3,7 @@ import { checkModuleSelection, devCardCatalogueFor, failure, success } from '@cp
 import type { Result } from '@cp2p/engine';
 import * as v from 'valibot';
 import { applyDeckPass, initDeckSetup, replayDeckSetup } from './deck-setup.js';
+import type { DeckPassCheck } from './deck-setup.js';
 import type { DeckDefinition, SignedDeckPass } from './deck-setup.js';
 import { hashSchema, key32Schema } from './schema-values.js';
 import type { GenesisBody } from './types.js';
@@ -163,10 +164,15 @@ function exactArray(value: unknown, size: number): unknown[] | null {
   }
 }
 
-/** Mandatory ceremony check before human signers sign the final genesis draft. */
+/**
+ * Check deck transcripts against genesis. `verify` (the default) also checks every proof.
+ * `structural` binds the exact signed passes and final locked deck to genesis without the
+ * proofs; certified in-game deck-pass entries verify them before any card can be dealt.
+ */
 export function validateDeckCeremony(
   genesis: GenesisBody,
   transcripts: readonly { deckId: string; passes: readonly SignedDeckPass[] }[],
+  check: DeckPassCheck = { proofs: 'verify' },
 ): Result<void> {
   const commitments = validateDeckGenesisCommitments(genesis);
   if (!commitments.ok) return commitments;
@@ -210,7 +216,7 @@ export function validateDeckCeremony(
       } catch {
         return failure('deck-ceremony-hash', 'Signed deck pass is not canonical');
       }
-      state = applyDeckPass(state.value, copied.value);
+      state = applyDeckPass(state.value, copied.value, check);
       if (!state.ok) return state;
     }
     if (lockedStateHash(state.value) !== commitment.finalStateHash)

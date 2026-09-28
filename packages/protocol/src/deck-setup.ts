@@ -265,7 +265,22 @@ function proofContext(
     : { operationId, phase, seat, position };
 }
 
-export function applyDeckPass(value: DeckSetupState, signed: unknown): Result<DeckSetupState> {
+/**
+ * `structural` checks everything except the zero-knowledge proofs: actor, order, operation,
+ * dimensions, signature and distinct points. It is only for ceremony progress and consent
+ * (a user-approved speed trade-off); certified in-game deck-pass entries always verify every
+ * proof, and no card can be dealt or unlocked before all of them have been certified.
+ */
+export interface DeckPassCheck {
+  readonly proofs: 'verify' | 'structural';
+}
+
+export function applyDeckPass(
+  value: DeckSetupState,
+  signed: unknown,
+  check: DeckPassCheck = { proofs: 'verify' },
+): Result<DeckSetupState> {
+  const verifyProofs = check.proofs === 'verify';
   const current = validateDeckSetupState(value);
   if (!current.ok) return current;
   const parsed = parseCanonical(signed, signedPassSchema);
@@ -296,6 +311,7 @@ export function applyDeckPass(value: DeckSetupState, signed: unknown): Result<De
     }
     const memoKey = proofMemoKey(state, parsed.value);
     if (
+      verifyProofs &&
       !hasVerifiedProof(memoKey) &&
       !verifyShuffle(
         { input: state.points, output: body.output, publicKey: body.publicKey },
@@ -309,7 +325,7 @@ export function applyDeckPass(value: DeckSetupState, signed: unknown): Result<De
       points: body.output,
       shuffleKeys: [...state.shuffleKeys, body.publicKey],
     });
-    if (result.ok) rememberVerifiedProof(memoKey);
+    if (result.ok && verifyProofs) rememberVerifiedProof(memoKey);
     return result;
   }
   if (!checkedPoints(body.lockKeys, state.points.length))
@@ -317,7 +333,7 @@ export function applyDeckPass(value: DeckSetupState, signed: unknown): Result<De
   const shuffleKey = state.shuffleKeys[state.lockKeys.length];
   if (!shuffleKey) return failure('deck-state', 'Lock pass has no matching shuffle key');
   const memoKey = proofMemoKey(state, parsed.value);
-  if (!hasVerifiedProof(memoKey)) {
+  if (verifyProofs && !hasVerifiedProof(memoKey)) {
     for (let position = 0; position < state.points.length; position += 1) {
       const input = state.points[position];
       const output = body.output[position];
@@ -340,7 +356,7 @@ export function applyDeckPass(value: DeckSetupState, signed: unknown): Result<De
     points: body.output,
     lockKeys: [...state.lockKeys, body.lockKeys],
   });
-  if (result.ok) rememberVerifiedProof(memoKey);
+  if (result.ok && verifyProofs) rememberVerifiedProof(memoKey);
   return result;
 }
 

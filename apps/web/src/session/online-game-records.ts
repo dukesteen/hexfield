@@ -194,7 +194,7 @@ function validateStoredRecord(value: unknown, expectedGameId?: string): SavedOnl
   const transcripts = parseTranscripts(parsed.result.transcripts);
   const verifiedEntry = validateGenesisEntry(entry, createCatalogueEngine(), {
     verifyCommitments(candidate) {
-      return validateDeckCeremony(candidate, transcripts);
+      return validateDeckCeremony(candidate, transcripts, { proofs: 'structural' });
     },
   });
   if (!verifiedEntry.ok) throw new Error('Stored genesis entry or deck transcripts do not verify');

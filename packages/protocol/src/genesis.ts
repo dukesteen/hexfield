@@ -78,7 +78,9 @@ export function signVerifiedGenesis(
   if (!masters.ok) return masters;
   const escrow = validateGenesisEscrow(parsed.value);
   if (!escrow.ok) return escrow;
-  const decks = validateDeckCeremony(parsed.value, transcripts);
+  // Consent binds the exact signed passes and final deck; the certified in-game deck-pass
+  // entries verify their proofs before any card can be dealt.
+  const decks = validateDeckCeremony(parsed.value, transcripts, { proofs: 'structural' });
   if (!decks.ok) return decks;
   const onlineStart = validateGenesisOnlineStart(parsed.value);
   if (!onlineStart.ok) return onlineStart;

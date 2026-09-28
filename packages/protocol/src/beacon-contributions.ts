@@ -16,7 +16,7 @@ import {
   validateBeaconState,
 } from './beacon-state.js';
 import type { CryptoContext } from './crypto-context.js';
-import { decksReady, validateDeckLedger } from './deck-ledger.js';
+import { validateDeckLedger } from './deck-ledger.js';
 import {
   hashSchema,
   key32Schema,
@@ -103,9 +103,9 @@ export async function prepareBeaconContribution(
   signer?: ArtifactSigner,
 ): Promise<Result<BeaconContribution | null>> {
   const currentSigner = signer ? { ...signer, generation: { ...signer.generation } } : undefined;
+  // The beacon never reads deck state, so it runs while deck passes are still certifying.
   const decks = validateDeckLedger(crypto.decks);
   if (!decks.ok) return decks;
-  if (!decksReady(decks.value)) return success(null);
   const state = validateBeaconState(crypto.beacon);
   if (!state.ok) return state;
   if (!state.value.active) return success(null);

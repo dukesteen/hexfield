@@ -11,8 +11,9 @@ import type { OnlineFullSaveDisplay } from '../../session/online-full-save-clien
 import type { GamePresentation } from '../../queries/repositories/saved-games.js';
 import '../replay/replay.css';
 import './full-save.css';
+import { PLAYER_SHAPES } from '../../features/players/identity';
 
-const SHAPES = ['circle', 'triangle', 'square', 'diamond'] as const;
+const SHAPES = PLAYER_SHAPES;
 
 export const Route = createFileRoute('/full-save/$saveId')({ component: ImportedFullSavePage });
 

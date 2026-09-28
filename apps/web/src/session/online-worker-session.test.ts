@@ -193,6 +193,58 @@ describe('OnlineWorkerSession', () => {
     client.fail(new Error('test complete'));
   });
 
+  test('re-confirms a still-legal command after a background entry certifies first', async () => {
+    const { worker, client, session } = setup(snapshot(5));
+    const submitting = session.submit(0, { type: 'endTurn' });
+    const first = latestRequest(worker, 'submit');
+    expect(first.body.kind === 'submit' ? first.body.head : null).toEqual({
+      seq: 5,
+      hash: 'head-5',
+    });
+    // A deck-setup pass certified at seq 6 before this command.
+    session.accept(snapshot(6));
+    worker.reply(first, {
+      ok: false,
+      error: { code: 'renewed-intent', message: 'A different value committed' },
+    });
+    await vi.waitFor(() => expect(latestRequest(worker, 'validate')).toBeDefined());
+    const validate = latestRequest(worker, 'validate');
+    expect(validate.body.kind === 'validate' ? validate.body.head.seq : null).toBe(6);
+    worker.reply(validate, { ok: true, value: undefined });
+    await vi.waitFor(() =>
+      expect(worker.requests.filter((item) => item.body.kind === 'submit')).toHaveLength(2),
+    );
+    const second = latestRequest(worker, 'submit');
+    expect(second.body.kind === 'submit' ? second.body.head : null).toEqual({
+      seq: 6,
+      hash: 'head-6',
+    });
+    worker.reply(second, { ok: true, value: undefined });
+    await expect(submitting).resolves.toEqual({ ok: true, value: undefined });
+    client.fail(new Error('test complete'));
+  });
+
+  test('a command that became illegal after the background entry is reported as stale', async () => {
+    const { worker, client, session } = setup(snapshot(5));
+    const submitting = session.submit(0, { type: 'endTurn' });
+    session.accept(snapshot(6));
+    worker.reply(latestRequest(worker, 'submit'), {
+      ok: false,
+      error: { code: 'renewed-intent', message: 'A different value committed' },
+    });
+    await vi.waitFor(() => expect(latestRequest(worker, 'validate')).toBeDefined());
+    worker.reply(latestRequest(worker, 'validate'), {
+      ok: false,
+      error: { code: 'not-pending', message: 'No longer legal' },
+    });
+    await expect(submitting).resolves.toMatchObject({
+      ok: false,
+      error: { code: 'stale-revision' },
+    });
+    expect(worker.requests.filter((item) => item.body.kind === 'submit')).toHaveLength(1);
+    client.fail(new Error('test complete'));
+  });
+
   test('forwards local takeover eligibility without exposing recovery keys', async () => {
     const { worker, client, session } = setup();
     const checking = session.canRequestTakeover(1);

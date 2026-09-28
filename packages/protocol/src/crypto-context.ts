@@ -256,8 +256,14 @@ export function validateCryptoTransition(
       ? success({ crypto: { ...crypto, decks: applied.value }, handled: true, input: null })
       : applied;
   }
-  if (!decksReady(crypto.decks))
-    return failure('deck-setup-pending', 'Every committed deck pass must be replayed before play');
+  // Deck passes certify in the background during setup; each certified pass verifies its
+  // proofs. Until every pass is certified, only deals and membership changes must wait.
+  if (
+    !decksReady(crypto.decks) &&
+    (payload.kind === 'membership' ||
+      (payload.kind === 'system' && payload.input.type === 'CARD_DEALT'))
+  )
+    return failure('deck-setup-pending', 'Every committed deck pass must be certified first');
   if (payload.kind === 'membership') return success({ crypto, handled: false, input: null });
   if (payload.kind === 'system' && payload.input.type === 'CARD_DEALT') {
     if (crypto.beacon.active || crypto.beacon.fixed)

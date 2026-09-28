@@ -110,18 +110,22 @@ export function verifyRevealedMaster(
     )
       return failure('master-deck-context', 'Locked decks differ from the certified genesis');
     for (const deck of checked.value.decks) {
-      if (deck.nextPass !== deck.commitment.passHashes.length)
-        return failure('master-deck-pending', 'Master checks require completed deck setup');
       const index = deck.setup.definition.participants.findIndex((item) => item.seat === seat);
       if (index < 0)
         return failure('master-deck-context', 'Original seat is missing from a genesis deck');
+      // Deck passes certify during setup, so a game can end (for example on certified cheat
+      // evidence) before every pass is in. Check the keys the certified passes established.
       const source = createDeckSecretSource(master, deck.setup.definition, seat);
       try {
-        if (encodePoint(scalePoint(G, source.shuffle())) !== deck.setup.shuffleKeys[index])
+        if (
+          index < deck.setup.shuffleKeys.length &&
+          encodePoint(scalePoint(G, source.shuffle())) !== deck.setup.shuffleKeys[index]
+        )
           return failure('master-shuffle-key', 'Master does not reproduce a deck shuffle key');
         const keys = deck.setup.lockKeys[index];
         if (
-          !keys ||
+          index < deck.setup.lockKeys.length &&
+          keys &&
           deck.setup.definition.cards.some(
             (_, position) => encodePoint(scalePoint(G, source.lock(position))) !== keys[position],
           )

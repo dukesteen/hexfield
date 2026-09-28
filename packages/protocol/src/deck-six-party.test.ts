@@ -60,6 +60,8 @@ test('six-party deck ceremony and five-hop unlock chain', () => {
   );
   const shuffleMs: number[] = [];
   const lockMs: number[] = [];
+  const shuffleProveMs: number[] = [];
+  const lockProveMs: number[] = [];
   for (let seat = 0; seat < SEATS; seat++) {
     const key = keys[seat];
     const secret = shuffleSecrets[seat];
@@ -69,11 +71,11 @@ test('six-party deck ceremony and five-hop unlock chain', () => {
       (_, index) => (index * (2 * seat + 3) + seat) % cards.length,
     );
     expect(new Set(permutation).size).toBe(cards.length);
+    const signed = timed(shuffleProveMs, () =>
+      signDeckShuffle(setup, secret, permutation, bytes(31 + seat), key),
+    );
     setup = timed(shuffleMs, () => {
-      const next = applyDeckPass(
-        setup,
-        signDeckShuffle(setup, secret, permutation, bytes(31 + seat), key),
-      );
+      const next = applyDeckPass(setup, signed);
       if (!next.ok) throw new Error(next.error.message);
       return next.value;
     });
@@ -83,8 +85,11 @@ test('six-party deck ceremony and five-hop unlock chain', () => {
     const secret = shuffleSecrets[seat];
     const locks = lockRows[seat];
     if (!key || secret === undefined || !locks) throw new Error('missing lock signer');
+    const signed = timed(lockProveMs, () =>
+      signDeckLock(setup, secret, locks, bytes(41 + seat), key),
+    );
     setup = timed(lockMs, () => {
-      const next = applyDeckPass(setup, signDeckLock(setup, secret, locks, bytes(41 + seat), key));
+      const next = applyDeckPass(setup, signed);
       if (!next.ok) throw new Error(next.error.message);
       return next.value;
     });
@@ -122,7 +127,12 @@ test('six-party deck ceremony and five-hop unlock chain', () => {
   const report = {
     participants: SEATS,
     deckCards: cards.length,
-    ceremony: { shuffle: summary(shuffleMs), lock: summary(lockMs) },
+    ceremony: {
+      shuffleProve: summary(shuffleProveMs),
+      shuffleVerify: summary(shuffleMs),
+      lockProve: summary(lockProveMs),
+      lockVerify: summary(lockMs),
+    },
     unlockChain: {
       hops: unlocks.length,
       sign: summary(signMs),

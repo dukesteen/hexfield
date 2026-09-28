@@ -9,8 +9,9 @@ import { usePublicReplay } from '../../queries/online-public-replays.js';
 import type { PublicArchiveDisplay } from '../../session/online-public-archive-worker.js';
 import type { GamePresentation } from '../../queries/repositories/saved-games.js';
 import './replay.css';
+import { PLAYER_SHAPES } from '../../features/players/identity';
 
-const SHAPES = ['circle', 'triangle', 'square', 'diamond'] as const;
+const SHAPES = PLAYER_SHAPES;
 
 export const Route = createFileRoute('/replay/$archiveId')({ component: PublicReplayPage });
 

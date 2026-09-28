@@ -130,7 +130,9 @@ export async function loadActiveOnlineResume(input: {
   const policy: ReplayPolicy = {
     genesis: {
       verifyCommitments(genesis) {
-        const decks = validateDeckCeremony(genesis, record.result.transcripts);
+        const decks = validateDeckCeremony(genesis, record.result.transcripts, {
+          proofs: 'structural',
+        });
         return decks.ok ? success(undefined) : decks;
       },
     },

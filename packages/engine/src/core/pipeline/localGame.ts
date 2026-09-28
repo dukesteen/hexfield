@@ -93,7 +93,10 @@ export class LocalGame {
     this.verifyInvariants = options.verifyInvariants !== false;
     this.current = freezeTree(engine.createGame(config, genesisSeed));
     this.privateBySeat = new Map(
-      this.current.config.seats.map((seat) => [seat, freezeTree(engine.createPrivateState(seat))]),
+      this.current.config.seats.map((seat) => [
+        seat,
+        freezeTree(engine.createPrivateState(seat, this.current.config)),
+      ]),
     );
   }
 
