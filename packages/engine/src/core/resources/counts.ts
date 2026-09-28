@@ -134,3 +134,17 @@ export function subtractCounts<K extends string>(
   }
   return success(result);
 }
+
+/**
+ * The card kinds of a game in canonical order: the base resources first, then module kinds by
+ * name. Base games return the `RESOURCES` constant itself, which keeps its validation fast path.
+ */
+export function canonicalKinds(kinds: readonly string[]): readonly string[] {
+  const extra = kinds.filter((kind) => !resourceKinds.has(kind)).toSorted();
+  return extra.length === 0 ? RESOURCES : [...RESOURCES, ...extra];
+}
+
+/** The card kinds present as keys of a count map (a bank or a hand), in canonical order. */
+export function kindsOfCounts(counts: Readonly<Record<string, unknown>>): readonly string[] {
+  return canonicalKinds(Object.keys(counts));
+}

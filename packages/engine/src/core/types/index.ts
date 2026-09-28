@@ -1,5 +1,5 @@
-export { RESOURCES } from './resources.js';
-export type { CardKind, CountMap, Resource, ResourceCounts } from './resources.js';
+export { RESOURCES, isBaseResource } from './resources.js';
+export type { CardCounts, CardKind, CountMap, Resource, ResourceCounts } from './resources.js';
 export { failure, ruleError, success } from './result.js';
 export type { Result, RuleError } from './result.js';
 

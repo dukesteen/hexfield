@@ -16,10 +16,11 @@ import { baseExt, baseOptions } from '../types.js';
 import type { DiscardData } from '../types.js';
 import {
   affordable,
+  cardKindsOf,
   countTotal,
   exchangeBank,
   frame,
-  parseCounts,
+  parseCardCounts,
   playerPending,
   privateExchange,
   replaceTop,
@@ -27,6 +28,7 @@ import {
   updateBase,
   withClaim,
 } from '../shared.js';
+import { robberStepFrame } from '../robber.js';
 import { tradePendings } from '../trade.js';
 import { claimCommands, discardLegal, mainLegal, preRollLegal } from '../legal.js';
 
@@ -64,6 +66,36 @@ function nextSeat(state: GameState): Seat {
   return seat;
 }
 
+/** The extra dice's faces of a `DICE_RESULT`, or an empty record without any. */
+function extraFaces(input: SystemInput): Record<string, string> {
+  const value = input.extra;
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return {};
+  return Object.fromEntries(
+    Object.entries(value).filter(
+      (entry): entry is [string, string] => typeof entry[1] === 'string',
+    ),
+  );
+}
+
+/** The extra dice of a `DICE_RESULT` must be exactly the ones `diceSpec` declared. */
+function checkExtraDice(state: GameState, input: SystemInput, ctx: HandlerContext): Result<void> {
+  const declared = ctx.hooks.diceSpec(state, BASE_DICE).extra;
+  if (declared.length === 0)
+    return Object.hasOwn(input, 'extra')
+      ? failure('unknown-field', 'This game has no extra dice')
+      : success(undefined);
+  const value = input.extra;
+  if (typeof value !== 'object' || value === null || Array.isArray(value))
+    return failure('invalid-dice', 'Extra dice faces are required');
+  const keys = Object.keys(value);
+  if (keys.length !== declared.length || !declared.every((die) => keys.includes(die.id)))
+    return failure('invalid-dice', 'Extra dice do not match the game’s dice');
+  const faces = extraFaces(input);
+  return declared.every((die) => die.faces.includes(faces[die.id] ?? ''))
+    ? success(undefined)
+    : failure('invalid-dice', 'An extra die shows a face it does not have');
+}
+
 function validDice(value: unknown): value is [number, number] {
   return (
     Array.isArray(value) &&
@@ -80,7 +112,7 @@ function diceForIndex(index: number): readonly [number, number] {
 
 function preparedDiceState(state: GameState, input: SystemInput, ctx: HandlerContext): GameState {
   if (!validDice(input.dice)) throw new Error('Validated dice missing');
-  let next = ctx.hooks.onDiceResult(state, input.dice);
+  let next = ctx.hooks.onDiceResult(state, input.dice, extraFaces(input));
   if (baseOptions(next.config.options.base).diceMode === 'balanced') {
     const index = input.index;
     if (typeof index !== 'number') throw new Error('Validated index missing');
@@ -103,18 +135,27 @@ export const preRollPhase: PhaseHandler = {
 /** The standard pair of six-sided dice; modules add extra dice through the diceSpec hook. */
 export const BASE_DICE: DiceSpec = Object.freeze({ count: 2, sides: 6, extra: [] });
 
+function extraRequest(spec: DiceSpec): { extra?: { id: string; faces: string[] }[] } {
+  return spec.extra.length
+    ? { extra: spec.extra.map((die) => ({ id: die.id, faces: [...die.faces] })) }
+    : {};
+}
+
 function diceRequest(state: GameState, ctx: HandlerContext): RandomRequest {
   if (baseOptions(state.config.options.base).diceMode === 'balanced')
-    return { type: 'dice', mode: 'balanced', remaining: baseExt(state.ext.base).diceDeck.length };
+    return {
+      type: 'dice',
+      mode: 'balanced',
+      remaining: baseExt(state.ext.base).diceDeck.length,
+      ...extraRequest(ctx.hooks.diceSpec(state, BASE_DICE)),
+    };
   const spec = ctx.hooks.diceSpec(state, BASE_DICE);
   return {
     type: 'dice',
     mode: 'random',
     sides: spec.sides,
     count: spec.count,
-    ...(spec.extra.length
-      ? { extra: spec.extra.map((die) => ({ ...die, faces: [...die.faces] })) }
-      : {}),
+    ...extraRequest(spec),
   };
 }
 
@@ -166,9 +207,11 @@ export const rollDice: CommandHandler = {
 };
 
 export const diceResult: SystemInputHandler = {
-  validate: (state, input) => {
+  validate: (state, input, ctx) => {
     if (!validDice(input.dice))
       return failure('invalid-dice', 'Dice must contain two faces from 1 to 6');
+    const extra = checkExtraDice(state, input, ctx);
+    if (!extra.ok) return extra;
     if (baseOptions(state.config.options.base).diceMode !== 'balanced')
       return Object.hasOwn(input, 'index')
         ? failure('unknown-field', 'Random dice results cannot include an index')
@@ -210,15 +253,19 @@ export const diceResult: SystemInputHandler = {
       });
       next = replaceTop(
         next,
-        remaining.length
-          ? frame('discard', { remaining })
-          : frame('moveRobber', { returnTo: 'main' }),
+        remaining.length ? frame('discard', { remaining }) : robberStepFrame(next, ctx),
       );
     }
+    const extra = extraFaces(input);
     return {
       state: next,
       events: [
-        { type: 'diceRolled', dice: input.dice, roll },
+        {
+          type: 'diceRolled',
+          dice: input.dice,
+          roll,
+          ...(Object.keys(extra).length ? { extra } : {}),
+        },
         ...(productionEvent ? [productionEvent] : []),
       ],
       effects,
@@ -237,7 +284,7 @@ export const discard: CommandHandler = {
   validate: (state, input) => {
     if (!discardData(state).remaining.includes(input.seat))
       return failure('not-discarding', 'Seat has no discard pending');
-    const parsed = parseCounts(input.command.cards);
+    const parsed = parseCardCounts(input.command.cards, cardKindsOf(state));
     if (!parsed.ok) return parsed;
     const holder = state.seats.find((seat) => seat.seat === input.seat);
     if (!holder) return failure('invalid-seat', 'Unknown seat');
@@ -246,17 +293,15 @@ export const discard: CommandHandler = {
       return failure('wrong-discard-count', `Seat must discard ${expected} cards`);
     return affordable(state, input.seat, parsed.value);
   },
-  apply: (state, input) => {
-    const parsed = parseCounts(input.command.cards);
+  apply: (state, input, ctx) => {
+    const parsed = parseCardCounts(input.command.cards, cardKindsOf(state));
     if (!parsed.ok) throw new Error('Validated discard missing');
     const spent = exchangeBank(state, input.seat, parsed.value, false);
     let next = spent.state;
     const remaining = discardData(state).remaining.filter((seat) => seat !== input.seat);
     next = replaceTop(
       next,
-      remaining.length
-        ? frame('discard', { remaining })
-        : frame('moveRobber', { returnTo: 'main' }),
+      remaining.length ? frame('discard', { remaining }) : robberStepFrame(next, ctx),
     );
     return {
       state: next,
@@ -264,9 +309,9 @@ export const discard: CommandHandler = {
       effects: spent.effects,
     };
   },
-  applyPrivate: (priv, _before, input) => {
+  applyPrivate: (priv, before, input) => {
     if (priv.seat !== input.seat) return success(priv);
-    const parsed = parseCounts(input.command.cards);
+    const parsed = parseCardCounts(input.command.cards, cardKindsOf(before));
     return parsed.ok ? privateExchange(priv, parsed.value, false) : parsed;
   },
 };

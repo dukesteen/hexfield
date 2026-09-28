@@ -1,20 +1,22 @@
 import type { CommandHandler } from '../../core/modules/index.js';
 import type { EngineEffect } from '../../core/effects/index.js';
 import type { Pending } from '../../core/pipeline/index.js';
-import { gainKnown, loseKnown } from '../../core/resources/index.js';
+import { gainKnown, kindBounds, loseKnown, seatBounds } from '../../core/resources/index.js';
 import type { GameState, PrivateState } from '../../core/state/index.js';
-import { RESOURCES, failure, success } from '../../core/types/index.js';
-import type { ResourceCounts, Result, Seat } from '../../core/types/index.js';
+import { failure, success } from '../../core/types/index.js';
+import type { CardCounts, Result, Seat } from '../../core/types/index.js';
 import { harborRate } from './board/index.js';
 import { baseExt, baseOptions } from './types.js';
 import type { TradeOffer } from './types.js';
 import {
   affordable,
   bankHas,
+  cardKindsOf,
   countTotal,
   exchangeBank,
+  fillCounts,
   ownSeat,
-  parseCounts,
+  parseCardCounts,
   privateExchange,
   resourceTransfers,
   timer,
@@ -33,16 +35,18 @@ function seatFrom(state: GameState, value: unknown): Seat | undefined {
 }
 
 function validatedSides(
+  state: GameState,
   give: unknown,
   want: unknown,
-): Result<{ give: ResourceCounts; want: ResourceCounts }> {
-  const parsedGive = parseCounts(give);
+): Result<{ give: CardCounts; want: CardCounts }> {
+  const kinds = cardKindsOf(state);
+  const parsedGive = parseCardCounts(give, kinds);
   if (!parsedGive.ok) return parsedGive;
-  const parsedWant = parseCounts(want);
+  const parsedWant = parseCardCounts(want, kinds);
   if (!parsedWant.ok) return parsedWant;
   if (countTotal(parsedGive.value) === 0 || countTotal(parsedWant.value) === 0)
     return failure('empty-trade-side', 'Both sides must offer resources');
-  if (RESOURCES.some((kind) => parsedGive.value[kind] > 0 && parsedWant.value[kind] > 0))
+  if (kinds.some((kind) => (parsedGive.value[kind] ?? 0) > 0 && (parsedWant.value[kind] ?? 0) > 0))
     return failure('overlapping-trade', 'Cannot give and receive the same resource');
   return success({ give: parsedGive.value, want: parsedWant.value });
 }
@@ -102,14 +106,19 @@ export function tradePendings(state: GameState): Pending[] {
 }
 
 export const maritimeTrade: CommandHandler = {
-  validate: (state, input) => {
-    const sides = validatedSides(input.command.give, input.command.get);
+  validate: (state, input, ctx) => {
+    const sides = validatedSides(state, input.command.give, input.command.get);
     if (!sides.ok) return sides;
     let due = 0;
-    for (const resource of RESOURCES) {
-      const given = sides.value.give[resource];
+    for (const resource of cardKindsOf(state)) {
+      const given = sides.value.give[resource] ?? 0;
       if (given === 0) continue;
-      const rate = harborRate(state, input.seat, resource);
+      const rate = ctx.hooks.bankRate(
+        state,
+        input.seat,
+        resource,
+        harborRate(state, input.seat, resource),
+      );
       if (given % rate !== 0)
         return failure('invalid-maritime-rate', `${resource} requires a ${rate}:1 rate`);
       due += given / rate;
@@ -121,7 +130,7 @@ export const maritimeTrade: CommandHandler = {
     return affordable(state, input.seat, sides.value.give);
   },
   apply: (state, input) => {
-    const sides = validatedSides(input.command.give, input.command.get);
+    const sides = validatedSides(state, input.command.give, input.command.get);
     if (!sides.ok) throw new Error('Validated maritime trade missing');
     const afterGive = exchangeBank(state, input.seat, sides.value.give, false);
     const afterGet = exchangeBank(afterGive.state, input.seat, sides.value.want, true);
@@ -131,9 +140,9 @@ export const maritimeTrade: CommandHandler = {
       effects: [...afterGive.effects, ...afterGet.effects],
     };
   },
-  applyPrivate: (priv, _before, input) => {
+  applyPrivate: (priv, before, input) => {
     if (priv.seat !== input.seat) return success(priv);
-    const sides = validatedSides(input.command.give, input.command.get);
+    const sides = validatedSides(before, input.command.give, input.command.get);
     if (!sides.ok) return sides;
     const afterGive = privateExchange(priv, sides.value.give, false);
     return afterGive.ok ? privateExchange(afterGive.value, sides.value.want, true) : afterGive;
@@ -144,14 +153,14 @@ export const offerTrade: CommandHandler = {
   validate: (state, input) => {
     const allowed = enabled(state);
     if (!allowed.ok) return allowed;
-    const sides = validatedSides(input.command.give, input.command.want);
+    const sides = validatedSides(state, input.command.give, input.command.want);
     if (!sides.ok) return sides;
     const to = recipients(state, input.command.to);
     if (!to.ok) return to;
     return affordable(state, input.seat, sides.value.give);
   },
   apply: (state, input) => {
-    const sides = validatedSides(input.command.give, input.command.want);
+    const sides = validatedSides(state, input.command.give, input.command.want);
     const to = recipients(state, input.command.to);
     if (!sides.ok || !to.ok) throw new Error('Validated trade offer missing');
     const id = state.counters.nextOfferId;
@@ -182,11 +191,11 @@ export const proposeTrade: CommandHandler = {
     if (!allowed.ok) return allowed;
     if (input.seat === state.turn.activeSeat)
       return failure('wrong-proposer', 'Only another seat may propose a counter-offer');
-    const sides = validatedSides(input.command.give, input.command.want);
+    const sides = validatedSides(state, input.command.give, input.command.want);
     return sides.ok ? affordable(state, input.seat, sides.value.give) : sides;
   },
   apply: (state, input) => {
-    const sides = validatedSides(input.command.give, input.command.want);
+    const sides = validatedSides(state, input.command.give, input.command.want);
     if (!sides.ok) throw new Error('Validated counter-offer missing');
     const id = state.counters.nextOfferId;
     const offer: TradeOffer = {
@@ -266,15 +275,20 @@ function movedBounds(
   state: GameState,
   from: Seat,
   to: Seat,
-  counts: ResourceCounts,
+  counts: CardCounts,
 ): { state: GameState; effects: EngineEffect[] } {
-  const outgoing = loseKnown(ownSeat(state, from).resources, counts);
+  const kinds = cardKindsOf(state);
+  const filled = fillCounts(counts, kinds);
+  const outgoing = loseKnown(kindBounds(ownSeat(state, from).resources), filled, kinds);
   if (!outgoing.ok) throw new Error(`Validated trade debit failed: ${outgoing.error.code}`);
-  const debited = updateSeat(state, from, (old) => ({ ...old, resources: outgoing.value }));
-  const incoming = gainKnown(ownSeat(debited, to).resources, counts);
+  const debited = updateSeat(state, from, (old) => ({
+    ...old,
+    resources: seatBounds(outgoing.value),
+  }));
+  const incoming = gainKnown(kindBounds(ownSeat(debited, to).resources), filled, kinds);
   if (!incoming.ok) throw new Error(`Validated trade credit failed: ${incoming.error.code}`);
   return {
-    state: updateSeat(debited, to, (old) => ({ ...old, resources: incoming.value })),
+    state: updateSeat(debited, to, (old) => ({ ...old, resources: seatBounds(incoming.value) })),
     effects: resourceTransfers({ kind: 'seat', seat: from }, { kind: 'seat', seat: to }, counts),
   };
 }

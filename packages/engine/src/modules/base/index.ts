@@ -89,7 +89,7 @@ const COMMAND_KEYS: Record<string, InputKeys> = {
 
 const SYSTEM_KEYS: Record<string, InputKeys> = {
   START_SEAT: { allowed: ['seat'] },
-  DICE_RESULT: { allowed: ['dice', 'index'], optional: ['index'] },
+  DICE_RESULT: { allowed: ['dice', 'index', 'extra'], optional: ['index', 'extra'] },
   CARD_DEALT: { allowed: ['seat', 'deck', 'slotId', 'card'], optional: ['card'] },
   STEAL_RESULT: { allowed: ['thief', 'victim', 'resource'] },
   REVEAL_COUNT: { allowed: ['seat', 'resource', 'count'] },

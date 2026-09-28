@@ -260,6 +260,7 @@ function composeHooks(modules: readonly GameModule[]): HookPipeline {
     (hooks) => hooks.stealTargets,
   );
   const handLimit = foldAcc<[GameState, Seat], number>(modules, (hooks) => hooks.handLimit);
+  const bankRate = foldAcc<[GameState, Seat, string], number>(modules, (hooks) => hooks.bankRate);
   const turnFlow = foldAcc<[GameState], readonly PhaseFrame[]>(modules, (hooks) => hooks.turnFlow);
   const pending = foldAcc<[GameState], readonly Pending[]>(modules, (hooks) => hooks.pending);
   const victoryPoints = foldAcc<
@@ -297,7 +298,10 @@ function composeHooks(modules: readonly GameModule[]): HookPipeline {
     costs: (config, acc) => ({ ...costs([config], acc) }),
     costOf: (state, buildType, cost) => costOf([state, buildType], cost),
     diceSpec: (state, acc) => diceSpec([state], acc),
-    onDiceResult: foldState<[readonly [number, number]]>(modules, (hooks) => hooks.onDiceResult),
+    onDiceResult: foldState<[readonly [number, number], Readonly<Record<string, string>>]>(
+      modules,
+      (hooks) => hooks.onDiceResult,
+    ),
     production: (state, roll, acc) => production([state, roll], acc),
     afterProduction: foldState<[number]>(modules, (hooks) => hooks.afterProduction),
     onNoProduction: foldState<[Seat]>(modules, (hooks) => hooks.onNoProduction),
@@ -316,6 +320,7 @@ function composeHooks(modules: readonly GameModule[]): HookPipeline {
     stealTargets: (state, seat, blocker, hex, targets) =>
       stealTargets([state, seat, blocker, hex], targets),
     handLimit: (state, seat, limit) => handLimit([state, seat], limit),
+    bankRate: (state, seat, kind, rate) => bankRate([state, seat, kind], rate),
     afterBuild: foldState<[Seat, string, string]>(modules, (hooks) => hooks.afterBuild),
     onTurnStart: foldState<[Seat]>(modules, (hooks) => hooks.onTurnStart),
     onTurnEnd: foldState<[Seat]>(modules, (hooks) => hooks.onTurnEnd),

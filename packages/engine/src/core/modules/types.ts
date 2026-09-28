@@ -165,7 +165,15 @@ export interface Hooks {
   costs(config: GameConfig, acc: Readonly<Record<string, Cost>>): Record<string, Cost>;
   costOf(state: GameState, buildType: string, cost: Cost): Cost;
   diceSpec(state: GameState, acc: DiceSpec): DiceSpec;
-  onDiceResult(state: GameState, dice: readonly [number, number]): GameState;
+  /**
+   * The rolled faces: the two production dice and, keyed by die id, the faces of the extra dice
+   * that `diceSpec` declared (empty without any).
+   */
+  onDiceResult(
+    state: GameState,
+    dice: readonly [number, number],
+    extra: Readonly<Record<string, string>>,
+  ): GameState;
   production(state: GameState, roll: number, acc: Production): Production;
   /** After production is paid on a non-7 roll and the `main` phase is set. May push a frame. */
   afterProduction(state: GameState, roll: number): GameState;
@@ -188,6 +196,8 @@ export interface Hooks {
     targets: readonly Seat[],
   ): readonly Seat[];
   handLimit(state: GameState, seat: Seat, limit: number): number;
+  /** The bank-trade rate (cards given per card received) for one kind; `rate` is the harbor rate. */
+  bankRate(state: GameState, seat: Seat, kind: string, rate: number): number;
   afterBuild(state: GameState, seat: Seat, buildType: string, loc: string): GameState;
   onTurnStart(state: GameState, seat: Seat): GameState;
   onTurnEnd(state: GameState, seat: Seat): GameState;

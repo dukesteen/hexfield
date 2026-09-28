@@ -6,7 +6,7 @@ import type {
   ModuleRegistry,
   Transition,
 } from '../modules/types.js';
-import { checkBounds } from '../resources/index.js';
+import { checkBounds, kindBounds, kindsOfCounts } from '../resources/index.js';
 import { createGame as createGenesis, createPrivateState } from '../state/createGame.js';
 import { cloneJson, validateJson } from '../state/json.js';
 import type { GameConfig, GameState, PrivateState, PublicView } from '../state/types.js';
@@ -432,7 +432,7 @@ export function createEngine(modules: readonly GameModule[]): Engine {
       }
     }
     for (const seat of state.seats) {
-      const bounds = checkBounds(seat.resources);
+      const bounds = checkBounds(kindBounds(seat.resources), kindsOfCounts(seat.resources.min));
       if (!bounds.ok) violations.push(`seat ${seat.seat}: ${bounds.error.code}`);
     }
     for (const module of registry.modules) {

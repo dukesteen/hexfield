@@ -7,6 +7,7 @@ import {
   createResourceBounds,
   exactResourceBounds,
   gainKnown,
+  isBaseResource,
   loseKnown,
   revealExact,
   zeroCounts,
@@ -131,10 +132,15 @@ function transition(before: GameState, effects: EngineEffect[]): Transition {
     );
   };
   for (const effect of effects) {
-    if (effect.type === 'resource-transfer') {
+    if (
+      (effect.type === 'resource-transfer' || effect.type === 'resource-count-revealed') &&
+      !isBaseResource(effect.resource)
+    )
+      throw new Error('Base resources only');
+    if (effect.type === 'resource-transfer' && isBaseResource(effect.resource)) {
       move(effect.from, effect.resource, effect.count, false);
       move(effect.to, effect.resource, effect.count, true);
-    } else if (effect.type === 'resource-count-revealed') {
+    } else if (effect.type === 'resource-count-revealed' && isBaseResource(effect.resource)) {
       const hand = hands.get(effect.seat);
       if (!hand) throw new Error('Missing count hand');
       hands.set(effect.seat, value(revealExact(hand, effect.resource, effect.count)));

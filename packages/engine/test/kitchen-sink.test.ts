@@ -50,6 +50,7 @@ const CATALOGUE: Record<HookName, true> = {
   robberLike: true,
   stealTargets: true,
   handLimit: true,
+  bankRate: true,
   afterBuild: true,
   onTurnStart: true,
   onTurnEnd: true,
@@ -100,6 +101,7 @@ function recordingHooks(id: string, calls: string[]): ModuleHooks {
     robberLike: (_state, acc) => keep('robberLike', acc),
     stealTargets: (_state, _seat, _blocker, _hex, acc) => keep('stealTargets', acc),
     handLimit: (_state, _seat, acc) => keep('handLimit', acc),
+    bankRate: (_state, _seat, _kind, acc) => keep('bankRate', acc),
     afterBuild: (state) => keep('afterBuild', state),
     onTurnStart: (state) => keep('onTurnStart', state),
     onTurnEnd: (state) => keep('onTurnEnd', state),
@@ -401,6 +403,8 @@ describe('kitchen-sink module', () => {
     engine.hooks.renderHints(state, []);
     // Only settlement checks read the connectivity hook, and a random game rarely affords one.
     engine.hooks.connectivity(state, 0, []);
+    // Only bank trades read the rate hook, and a random game rarely makes one.
+    engine.hooks.bankRate(state, 0, 'brick', 4);
     engine.computeVictoryPoints(state, 0);
     expect(engine.checkInvariants(state)).toEqual([]);
 

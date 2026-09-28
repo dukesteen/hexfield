@@ -5,6 +5,7 @@ import {
   failure,
   gainHidden,
   gainKnown,
+  isBaseResource,
   loseHidden,
   loseKnown,
   revealExact,
@@ -35,6 +36,12 @@ function same(left: unknown, right: unknown): boolean {
   const a = canonicalEncode(left);
   const b = canonicalEncode(right);
   return a.length === b.length && a.every((byte, index) => byte === b[index]);
+}
+
+/** P2P hand accounting covers the base resources only; other card kinds are not supported yet. */
+function baseResource(kind: string): Resource {
+  if (!isBaseResource(kind)) throw new Error(`Card kind ${kind} has no P2P hand accounting`);
+  return kind;
 }
 
 function checkResourceCount(resource: Resource, count: number): void {
@@ -128,7 +135,7 @@ export function verifyResourceAccounting(
     for (const effect of effects) {
       switch (effect.type) {
         case 'resource-transfer':
-          checkResourceCount(effect.resource, effect.count);
+          checkResourceCount(baseResource(effect.resource), effect.count);
           requireAccounting(effect.count > 0, 'Public transfer effects must be nonzero');
           requireAccounting(
             effect.from.kind !== effect.to.kind ||
@@ -137,11 +144,11 @@ export function verifyResourceAccounting(
                 effect.from.seat !== effect.to.seat),
             'Transfer endpoints must differ',
           );
-          move(effect.from, effect.resource, effect.count, false);
-          move(effect.to, effect.resource, effect.count, true);
+          move(effect.from, baseResource(effect.resource), effect.count, false);
+          move(effect.to, baseResource(effect.resource), effect.count, true);
           break;
         case 'resource-count-revealed': {
-          checkResourceCount(effect.resource, effect.count);
+          checkResourceCount(baseResource(effect.resource), effect.count);
           const key = `${effect.seat}:${effect.resource}`;
           requireAccounting(
             !moved.has(key) && !revealed.has(key),
@@ -149,7 +156,7 @@ export function verifyResourceAccounting(
           );
           hands.set(
             effect.seat,
-            checked(revealExact(hand(effect.seat), effect.resource, effect.count)),
+            checked(revealExact(hand(effect.seat), baseResource(effect.resource), effect.count)),
           );
           revealed.add(key);
           break;

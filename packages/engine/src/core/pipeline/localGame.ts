@@ -1,7 +1,8 @@
 import type { GameEvent } from '../events/index.js';
 import { cloneJson } from '../state/json.js';
 import type { GameConfig, GameState, PrivateState } from '../state/types.js';
-import { RESOURCES, failure, success } from '../types/index.js';
+import { kindBounds, kindsOfCounts } from '../resources/index.js';
+import { failure, success } from '../types/index.js';
 import type { Result, Seat } from '../types/index.js';
 import type { Engine } from './engine.js';
 import type { Input, Pending, PrivateInputData, SystemInput } from './types.js';
@@ -51,10 +52,10 @@ function checkTrueHands(state: GameState, privates: ReadonlyMap<Seat, PrivateSta
     if (!privateState)
       return failure('missing-private-state', `Missing private state for seat ${seat.seat}`);
     let total = 0;
-    for (const resource of RESOURCES) {
+    for (const resource of kindsOfCounts(seat.resources.min)) {
       const count = privateState.hand[resource];
-      const min = seat.resources.min[resource];
-      const max = seat.resources.max[resource];
+      const min = kindBounds(seat.resources).min[resource] ?? 0;
+      const max = kindBounds(seat.resources).max[resource] ?? 0;
       if (typeof count !== 'number' || !Number.isSafeInteger(count) || count < min || count > max) {
         return failure(
           'private-hand-outside-bounds',

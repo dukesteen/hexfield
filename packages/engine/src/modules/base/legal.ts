@@ -1,8 +1,7 @@
 import type { HandlerContext } from '../../core/modules/index.js';
 import type { LegalCommandSet } from '../../core/pipeline/index.js';
 import type { GameState, PrivateState } from '../../core/state/index.js';
-import type { ResourceCounts, Seat } from '../../core/types/index.js';
-import { RESOURCES } from '../../core/types/index.js';
+import type { CardCounts, Seat } from '../../core/types/index.js';
 import { legalCityVertices, legalRoadEdges, legalSettlementVertices } from './placement/index.js';
 import { affordable, buildCost, inTurnFlow, ownSeat, top } from './shared.js';
 import { baseExt, baseOptions } from './types.js';
@@ -57,13 +56,12 @@ function canPay(
 ): boolean {
   const adjusted = buildCost(state, type, ctx);
   if (!adjusted.ok) return false;
-  if (priv)
-    return RESOURCES.every((resource) => (priv.hand[resource] ?? 0) >= adjusted.value[resource]);
+  if (priv) return privateCanPay(priv, adjusted.value);
   return affordable(state, seat, adjusted.value).ok;
 }
 
-function privateCanPay(priv: PrivateState | undefined, cost: ResourceCounts): boolean {
-  return !priv || RESOURCES.every((resource) => (priv.hand[resource] ?? 0) >= cost[resource]);
+function privateCanPay(priv: PrivateState | undefined, cost: CardCounts): boolean {
+  return !priv || Object.entries(cost).every(([kind, count]) => (priv.hand[kind] ?? 0) >= count);
 }
 
 /** Concrete pre-roll actions plus private card and victory choices. */

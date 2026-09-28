@@ -345,3 +345,17 @@ export function exactResourceBounds(counts: ResourceCounts): Result<ResourceBoun
   if (!total.ok) return total;
   return createResourceBounds(total.value, counts, counts, RESOURCES);
 }
+
+/**
+ * A seat's public bounds read over every card kind of its game. `SeatState.resources` is typed
+ * for the base resources; a module such as knights adds keys for its own kinds.
+ */
+export function kindBounds(bounds: ResourceBounds): ResourceBounds<string> {
+  return bounds;
+}
+
+/** Store bounds over any card kinds in `SeatState.resources` (extra kinds stay as keys). */
+export function seatBounds(bounds: ResourceBounds<string>): ResourceBounds {
+  // The seat state types its bounds for the base resources; module kinds ride along as extra keys.
+  return bounds;
+}

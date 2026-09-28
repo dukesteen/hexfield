@@ -67,7 +67,7 @@ function canPayShip(
   const cost = buildCost(state, 'ship', ctx);
   if (!cost.ok || (ownSeat(state, seat).piecesLeft.ship ?? 0) <= 0) return false;
   return priv
-    ? RESOURCES.every((kind) => (priv.hand[kind] ?? 0) >= cost.value[kind])
+    ? RESOURCES.every((kind) => (priv.hand[kind] ?? 0) >= (cost.value[kind] ?? 0))
     : affordable(state, seat, cost.value).ok;
 }
 

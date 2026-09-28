@@ -1,12 +1,12 @@
 import type { HandlerContext, SystemInputHandler } from '../../core/modules/index.js';
 import type { GameState } from '../../core/state/index.js';
-import { RESOURCES, failure, success } from '../../core/types/index.js';
-import type { ResourceCounts, Result, Seat } from '../../core/types/index.js';
+import { kindBounds, zeroCounts } from '../../core/resources/index.js';
+import { failure, success } from '../../core/types/index.js';
+import type { CardCounts, Result, Seat } from '../../core/types/index.js';
 import type { CommandInput } from '../../core/pipeline/index.js';
 import { verticesForHex } from './board/index.js';
-import { emptyResources } from './constants.js';
 import { moveRobber, robberHexes, steal, stealVictims } from './robber.js';
-import { ownSeat, top, topFrame, updateBase } from './shared.js';
+import { cardKindsOf, ownSeat, top, topFrame, updateBase } from './shared.js';
 import { discard, endTurn, rollDice } from './phases/turn.js';
 import { skipRoadBuilding } from './devcards.js';
 import { baseExt } from './types.js';
@@ -25,21 +25,23 @@ function hasUnansweredOffer(state: GameState, seat: Seat): boolean {
   );
 }
 
-function deterministicDiscard(state: GameState, seat: Seat): Result<ResourceCounts> {
-  const bounds = ownSeat(state, seat).resources;
-  if (RESOURCES.some((kind) => bounds.min[kind] !== bounds.max[kind]))
+function deterministicDiscard(state: GameState, seat: Seat): Result<CardCounts> {
+  const bounds = kindBounds(ownSeat(state, seat).resources);
+  const kinds = cardKindsOf(state);
+  if (kinds.some((kind) => (bounds.min[kind] ?? 0) !== (bounds.max[kind] ?? 0)))
     return failure(
       'private-discard-required',
       'Unknown hand requires owner or escrow to choose a timeout discard',
     );
   let remaining = Math.floor(bounds.total / 2);
-  const counts = emptyResources();
-  const ordered = [...RESOURCES].toSorted(
+  const counts: Record<string, number> = { ...zeroCounts(kinds) };
+  const ordered = [...kinds].toSorted(
     (left, right) =>
-      bounds.min[right] - bounds.min[left] || RESOURCES.indexOf(left) - RESOURCES.indexOf(right),
+      (bounds.min[right] ?? 0) - (bounds.min[left] ?? 0) ||
+      kinds.indexOf(left) - kinds.indexOf(right),
   );
   for (const kind of ordered) {
-    const amount = Math.min(bounds.min[kind], remaining);
+    const amount = Math.min(bounds.min[kind] ?? 0, remaining);
     counts[kind] = amount;
     remaining -= amount;
   }
