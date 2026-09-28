@@ -1,6 +1,12 @@
 import { canonicalEncode, hashValue, toHex } from '@cp2p/codec';
 import {
   DERIVATION_LABELS,
+  G,
+  decodePoint,
+  encodePoint,
+  proveDleq,
+  scalePoint,
+  verifyHiddenTransfer,
   deriveScalar,
   encodeScalar,
   pedersenCommit,
@@ -20,7 +26,9 @@ import { verifyHandOpening } from './hand-commitments.js';
 import { createHandSecretSource } from './hand-source.js';
 import { MemoryProtocolJournal } from './journal.js';
 import { validateNextEntry } from './log.js';
-import { decodeProtocolMessage } from './messages.js';
+import { decodeProtocolMessage, encodeProtocolMessage } from './messages.js';
+import { validateDeckCeremony } from './deck-genesis.js';
+import type { ReplayPolicy } from './replay.js';
 import { P2PSession } from './p2p-session.js';
 import { reconstructPrivateSeats } from './private-replay.js';
 import { proposerFor } from './proposal.js';
@@ -33,6 +41,7 @@ import {
   stealOperationId,
   stealReceiptBinding,
   verifyStealContribution,
+  verifyStealDispute,
   verifyStealReceipt,
 } from './steal-delivery.js';
 import type { SignedStealContribution, StealOperation } from './steal-delivery.js';
@@ -67,6 +76,7 @@ async function settle(sessions: readonly P2PSession[], clock: VirtualClock, pass
 
 interface Gate {
   held: boolean;
+  holdResponses?: boolean;
   sent: Uint8Array[];
 }
 
@@ -77,6 +87,14 @@ function gated(inner: Transport, gate: Gate): Transport {
       gate.sent.push(bytes.slice());
       return gate.held;
     }
+    if (gate.holdResponses && message.t === 'STEAL_RESPONSE') return true;
+    if (
+      gate.holdResponses &&
+      message.t === 'PROPOSAL' &&
+      message.proposal.body.entry.payload.kind === 'system' &&
+      message.proposal.body.entry.payload.input.type === 'STEAL_RESULT'
+    )
+      return true;
     return (
       gate.held &&
       message.t === 'PROPOSAL' &&
@@ -174,6 +192,7 @@ function mismatchedSealedContribution(
   hand: Readonly<Record<string, number>>,
   seed: Uint8Array,
   signingKey: Uint8Array,
+  attack: 'bad-opening' | 'wrong-index' = 'bad-opening',
 ): SignedStealContribution {
   const counts: Record<Resource, number> = {
     brick: hand.brick ?? -1,
@@ -198,17 +217,33 @@ function mismatchedSealedContribution(
     deriveScalar(seed, DERIVATION_LABELS.transferBlind, { operationId, resource }),
   );
   let prefix = 0;
-  const selected = RESOURCES.findIndex((resource) => {
+  let selected = RESOURCES.findIndex((resource) => {
     prefix += counts[resource];
     return operation.index < prefix;
   });
   if (selected < 0) throw new Error('Frozen index has no private resource');
+  let proofIndex = operation.index;
+  // Each attack has distinct prerequisites; both variants run as independent test cases.
+  /* eslint-disable vitest/no-conditional-expect */
+  if (attack === 'wrong-index') {
+    const alternative = RESOURCES.findIndex(
+      (resource, index) => index !== selected && counts[resource] > 0,
+    );
+    if (alternative < 0) throw new Error('First steal fixture needs two actual resource kinds');
+    proofIndex = RESOURCES.slice(0, alternative).reduce(
+      (sum, resource) => sum + counts[resource],
+      0,
+    );
+    expect(proofIndex).not.toBe(operation.index);
+    selected = alternative;
+  }
   const transfer = transferBlindings.map((blinding, index) =>
     pedersenCommit(index === selected ? 1n : 0n, blinding),
   );
-  // The public one-hot proof selects the correct card. The sealed opening lies about it.
+  // The default attack lies in the sealed opening. The wrong-index variant
+  // seals honestly but proves a different resource than the frozen index selects.
   const opening = canonicalEncode({
-    type: (selected + 1) % RESOURCES.length,
+    type: attack === 'wrong-index' ? selected : (selected + 1) % RESOURCES.length,
     blindings: transferBlindings.map(encodeScalar),
   });
   const { sealed, ephemeralProof } = sealWithEphemeralProof(
@@ -224,7 +259,7 @@ function mismatchedSealedContribution(
       commitments: RESOURCES.map((resource) => operation.commitments[resource]),
       transfer,
       handSize: operation.handSize,
-      index: operation.index,
+      index: proofIndex,
       payloadHash: toHex(hashValue(sealed)),
     },
     {
@@ -235,6 +270,21 @@ function mismatchedSealedContribution(
     seed,
     { protocol: 'steal-transfer-v1', operationId },
   );
+  if (attack === 'wrong-index')
+    expect(
+      verifyHiddenTransfer(
+        {
+          commitments: RESOURCES.map((resource) => operation.commitments[resource]),
+          transfer,
+          handSize: operation.handSize,
+          index: proofIndex,
+          payloadHash: toHex(hashValue(sealed)),
+        },
+        proof,
+        { protocol: 'steal-transfer-v1', operationId },
+      ),
+    ).toBe(true);
+  /* eslint-enable vitest/no-conditional-expect */
   const body = {
     operationId,
     seat: operation.victim.seat,
@@ -616,3 +666,238 @@ test('a certified bad sealed steal opening yields a victim finding without a ste
     for (const session of live) session.dispose();
   }
 }, 60_000);
+
+test.each(['wrong-index', 'false-dispute'] as const)(
+  'live malicious %s wire admission certifies the exact signer finding without a steal result',
+  async (attack) => {
+    const fixture = createVerifiedDeckSession(317, 2, 128);
+    const policy: ReplayPolicy = {
+      ...fixture.policy,
+      genesis: {
+        verifyCommitments: (candidate) => validateDeckCeremony(candidate, fixture.deck.transcripts),
+      },
+    };
+    const peers = fixture.humans.map((human) => human.publicKey);
+    const network = createMemnet({ peers });
+    const gate: Gate = {
+      held: attack === 'wrong-index',
+      holdResponses: attack === 'false-dispute',
+      sent: [],
+    };
+    const ownerIndex = (seat: Seat) => {
+      const owner = required(fixture.genesis.seats.find((item) => item.seat === seat));
+      const peer = owner.kind === 'bot' ? owner.botHost : owner.publicKey;
+      const index = peers.indexOf(peer);
+      if (index < 0) throw new Error('Missing private owner');
+      return index;
+    };
+    const live = (
+      await Promise.all(
+        fixture.humans.map((human) => {
+          const deckSource = fixture.createDeckSourceFor(human.seat);
+          return P2PSession.create({
+            genesisEntry: fixture.entry,
+            engine: fixture.simulation.engine,
+            policy,
+            seat: human.seat,
+            secretKey: required(fixture.simulation.identities.get(human.seat)).secretKey,
+            botKeys: fixture.botKeysFor(human.seat),
+            transport: gated(network.transport(human.publicKey), gate),
+            clock: network.clock,
+            journal: new MemoryProtocolJournal(),
+            cheatCandidateStore: new MemoryCheatCandidateStore(),
+            beaconSource: fixture.beaconSourceFor(human.seat),
+            beaconContributions: new MemoryBeaconContributionStore(),
+            deckSetupPasses: fixture.deckSetupPasses,
+            createDeckSource: deckSource,
+            deckContributions: new MemoryStealDeliveryStore(),
+            countContributionStore: new MemoryCountContributionStore(),
+            stealDeliveryStore: new MemoryStealDeliveryStore(),
+            createDriver: (engine, genesis, _clock, owned) =>
+              new VerifiedSessionDriver(
+                engine,
+                genesis,
+                owned,
+                deckSource,
+                (seat) =>
+                  createHandSecretSource(
+                    scalarToBytes(BigInt(71 + seat)),
+                    genesisDigest(fixture.genesis),
+                    seat,
+                  ),
+                fixture.createStealSourceFor(human.seat),
+              ),
+          });
+        }),
+      )
+    ).map(value);
+    try {
+      await settle(live, network.clock, 32);
+      await reachFirstSteal(
+        live,
+        network.clock,
+        ownerIndex,
+        fixture.simulation.engine,
+        fixture.genesis.config.seats,
+      );
+      await settle(live, network.clock, 32);
+      const saved = required(live[0]).exportSave();
+      const parent = value(
+        replayCertifiedPrefix(fixture.entry, saved.entries, fixture.simulation.engine, policy),
+      ).context;
+      const pending = required(parent.log.crypto?.steal);
+      const operation = pending.operation;
+      const beforePrivate = fixture.genesis.config.seats.map((seat) =>
+        canonicalEncode(required(required(live[ownerIndex(seat)]).getPrivate(seat))),
+      );
+      let offender: Seat;
+      let artifact: unknown;
+      let kind: 'steal-contribution' | 'false-steal-dispute';
+      // Each parameterized case checks its own authenticated admission failure.
+      /* eslint-disable vitest/no-conditional-expect */
+      if (attack === 'wrong-index') {
+        expect(pending.fixed).toBeNull();
+        offender = operation.victim.seat;
+        const hand = required(required(live[ownerIndex(offender)]).getPrivate(offender)).hand;
+        const seed = new Uint8Array(32).fill(47);
+        const contribution = mismatchedSealedContribution(
+          operation,
+          hand,
+          seed,
+          required(fixture.simulation.identities.get(offender)).secretKey,
+          'wrong-index',
+        );
+        seed.fill(0);
+        expect(verifyStealContribution(contribution, operation)).toMatchObject({
+          ok: false,
+          error: { code: 'steal-transfer-proof' },
+        });
+        artifact = contribution;
+        kind = 'steal-contribution';
+        network.transport(required(peers[ownerIndex(offender)])).broadcast(
+          value(
+            encodeProtocolMessage({
+              t: 'STEAL_CONTRIB',
+              genesisDigest: parent.membership.genesisDigest,
+              contribution,
+            }),
+          ),
+        );
+      } else {
+        const fixed = required(pending.fixed);
+        expect(verifyStealContribution(fixed.contribution, operation).ok).toBe(true);
+        expect(pending.dispute).toBeNull();
+        offender = operation.thief.seat;
+        const owner = required(fixture.humans[ownerIndex(offender)]);
+        const source = fixture.createStealSourceFor(owner.seat)(offender);
+        try {
+          const secret = source.encryptionSecret();
+          expect(openStealContribution(operation, fixed.contribution, secret).ok).toBe(true);
+          const binding = stealReceiptBinding(fixed);
+          const sharedPoint = encodePoint(
+            scalePoint(decodePoint(fixed.contribution.body.sealed.ephemeral), secret),
+          );
+          const body = {
+            binding,
+            sharedPoint,
+            proof: proveDleq(
+              {
+                base1: encodePoint(G),
+                point1: operation.thief.encryptionKey,
+                base2: fixed.contribution.body.sealed.ephemeral,
+                point2: sharedPoint,
+              },
+              secret,
+              new Uint8Array(32).fill(48),
+              { protocol: 'steal-dispute-v1', binding },
+            ),
+          };
+          const dispute = {
+            body,
+            sig: signObject(
+              'steal-dispute',
+              body,
+              required(fixture.simulation.identities.get(offender)).secretKey,
+            ),
+          };
+          expect(verifyStealDispute(dispute, fixed)).toMatchObject({
+            ok: false,
+            error: { code: 'steal-good-delivery' },
+          });
+          artifact = dispute;
+          kind = 'false-steal-dispute';
+          network.transport(required(peers[ownerIndex(offender)])).broadcast(
+            value(
+              encodeProtocolMessage({
+                t: 'STEAL_RESPONSE',
+                genesisDigest: parent.membership.genesisDigest,
+                response: { kind: 'dispute', value: dispute },
+              }),
+            ),
+          );
+        } finally {
+          source.dispose();
+        }
+      }
+      /* eslint-enable vitest/no-conditional-expect */
+      await settle(live, network.clock, 32);
+      // The gated genuine proposal may already occupy this view; let consensus
+      // rotate before requiring the independently captured finding to commit.
+      for (let tick = 0; tick < 8; tick++) {
+        if (required(live[0]).getCommittedHead().seq > parent.log.head.seq) break;
+        network.clock.advanceBy(1_000);
+        // oxlint-disable-next-line no-await-in-loop -- Bounded real consensus view changes.
+        await settle(live, network.clock, 16);
+      }
+      for (const session of live) {
+        const committed = session.exportSave().entries;
+        const added = committed.slice(saved.entries.length);
+        expect(added).toHaveLength(1);
+        expect(required(added[0]).certificate).toHaveLength(fixture.humans.length);
+        expect(required(added[0]).entry.payload).toMatchObject({
+          kind: 'cheat-proof',
+          claim: {
+            seat: offender,
+            evidence: {
+              kind,
+              artifact,
+              at: { seq: parent.log.head.seq, hash: entryHash(parent.log.head) },
+            },
+          },
+        });
+        const replayed = value(
+          replayCertifiedPrefix(fixture.entry, committed, fixture.simulation.engine, policy),
+        ).context;
+        expect(replayed.log.state).toEqual(parent.log.state);
+        expect(replayed.log.crypto?.hands).toEqual(parent.log.crypto?.hands);
+        expect(replayed.log.crypto?.steal).toEqual(parent.log.crypto?.steal);
+        expect(replayed.excludedProposers).toEqual(parent.excludedProposers);
+        expect(
+          committed.some(
+            ({ entry }) =>
+              entry.payload.kind === 'system' && entry.payload.input.type === 'STEAL_RESULT',
+          ),
+        ).toBe(false);
+        expect(
+          committed.some(
+            ({ entry }) =>
+              entry.payload.kind === 'crypto' && entry.payload.action === 'steal-dispute',
+          ),
+        ).toBe(false);
+      }
+      expect(live[0]?.getCommittedHead()).toEqual(live[1]?.getCommittedHead());
+      for (const [index, seat] of fixture.genesis.config.seats.entries())
+        expect(
+          canonicalEncode(required(required(live[ownerIndex(seat)]).getPrivate(seat))),
+        ).toEqual(beforePrivate[index]);
+      // Contributor and recipient evidence never supplies an invalid outer proposer proof.
+      expect(offender).toBe(
+        attack === 'wrong-index' ? operation.victim.seat : operation.thief.seat,
+      );
+    } finally {
+      for (const session of live) session.dispose();
+      network.dispose();
+    }
+  },
+  60_000,
+);
