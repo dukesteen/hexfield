@@ -1,0 +1,21 @@
+{
+  "scope": "Post-check source hashes; exact focused live snapshot equality, not every-sequence or full game.",
+  "results": {
+    "transfer": {
+      "handle": 62228,
+      "testMilliseconds": 11977,
+      "runnerSeconds": 13.11
+    },
+    "recoveryReturn": {
+      "handle": 66985,
+      "testMilliseconds": 23496,
+      "runnerSeconds": 24.49
+    },
+    "scopedStatic": "71898 PASS",
+    "sharedTypecheck": "84929: errors only concurrent imported-transfer.e2e.ts baseURL lines103-105"
+  },
+  "sourceSha256": {
+    "packages/protocol/src/transfer-session.test.ts": "7b5c85ebd636a3dbafc9b03d38b608061ee36a9a11861250eef86e3f73dd9127",
+    "packages/protocol/src/p2p-recovery.test.ts": "5b400f54bf50f6b44c50a5034f0ca59004dad0cf203bc832bfe2e9d8872ffe31"
+  }
+}

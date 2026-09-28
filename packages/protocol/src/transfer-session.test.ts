@@ -80,6 +80,15 @@ import type { CertifiedEntry, ProposalContext } from './proposal.js';
 import type { Genesis } from './types.js';
 import { signVote } from './votes.js';
 
+/** Test-only inspection: detached blinding records, never used as protocol input. */
+function ownedBlindings(driver: VerifiedSessionDriver, seat: Seat): unknown {
+  const records: unknown = Reflect.get(driver, 'blindings');
+  if (!(records instanceof Map)) throw new Error('Missing driver blinding map');
+  const record: unknown = records.get(seat);
+  if (!record) throw new Error(`Missing owned blindings for ${seat}`);
+  return canonicalDecode(canonicalEncode(record));
+}
+
 const humans = [0, 1, 2] as const;
 const master = (seat: Seat) => scalarToBytes(BigInt(17 + seat));
 
@@ -667,6 +676,7 @@ test('fresh host takes a recovered bot only with its current key and original be
     { ceremonyId: deckCeremonyId(fixture.genesis), seat: 0 },
     2,
   );
+  let currentDriver: VerifiedSessionDriver | undefined;
   let sourceSession: P2PSession | undefined;
   let destination: P2PSession | undefined;
   try {
@@ -698,8 +708,8 @@ test('fresh host takes a recovered bot only with its current key and original be
       deckContributions: new MemoryGenesisConsentStore(),
       countContributionStore: new MemoryCountContributionStore(),
       stealDeliveryStore: new MemoryStealDeliveryStore(),
-      createDriver: (engine, genesis, _clock, owned) =>
-        new VerifiedSessionDriver(
+      createDriver: (engine, genesis, _clock, owned) => {
+        currentDriver = new VerifiedSessionDriver(
           engine,
           genesis,
           owned,
@@ -712,7 +722,9 @@ test('fresh host takes a recovered bot only with its current key and original be
               seat,
               required(genesis.seats[seat]).publicKey,
             ),
-        ),
+        );
+        return currentDriver;
+      },
     };
     sourceSession = value(
       await P2PSession.restore({
@@ -764,6 +776,16 @@ test('fresh host takes a recovered bot only with its current key and original be
         recoveryStore,
       ),
     ).toEqual({ ok: true, value: undefined });
+    // Capture the actual current controller before custody crosses devices.
+    expect(sourceSession.getCommittedHead().seq).toBe(authorizationRef.seq);
+    const sourcePrivate = new Map([
+      [1, required(sourceSession.getPrivate(1))],
+      [0, required(sourceSession.getPrivate(0))],
+    ]);
+    const sourceBlindings = new Map([
+      [1, ownedBlindings(required(currentDriver), 1)],
+      [0, ownedBlindings(required(currentDriver), 0)],
+    ]);
     const packet = value(
       await sourceSession.prepareTransferPrivate(authorizationRef, entropy, nonce),
     );
@@ -797,8 +819,11 @@ test('fresh host takes a recovered bot only with its current key and original be
     );
     try {
       expect(imported.masters.map(({ seat }) => seat)).toEqual([1, 0]);
-      expect(imported.driver.privateState(1)).not.toBeNull();
-      expect(imported.driver.privateState(0)).not.toBeNull();
+      expect(imported.context.log.head.seq).toBe(authorizationRef.seq);
+      expect(imported.driver.privateState(1)).toEqual(sourcePrivate.get(1));
+      expect(imported.driver.privateState(0)).toEqual(sourcePrivate.get(0));
+      expect(ownedBlindings(imported.driver, 1)).toEqual(sourceBlindings.get(1));
+      expect(ownedBlindings(imported.driver, 0)).toEqual(sourceBlindings.get(0));
     } finally {
       imported.dispose();
     }
@@ -847,8 +872,11 @@ test('fresh host takes a recovered bot only with its current key and original be
       error: { code: 'replica-recovery-keys' },
     });
     destination = value(await P2PSession.restore(options));
-    expect(destination.getPrivate(1)).not.toBeNull();
-    expect(destination.getPrivate(0)).not.toBeNull();
+    // Activation changes authority, not either seat's private material.
+    expect(destination.getPrivate(1)).toEqual(sourcePrivate.get(1));
+    expect(destination.getPrivate(0)).toEqual(sourcePrivate.get(0));
+    expect(ownedBlindings(required(currentDriver), 1)).toEqual(sourceBlindings.get(1));
+    expect(ownedBlindings(required(currentDriver), 0)).toEqual(sourceBlindings.get(0));
     expect(destination.exportSave().entries).toEqual(entries);
   } finally {
     sourceSession?.dispose();

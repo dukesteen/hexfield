@@ -1,4 +1,4 @@
-import { canonicalEncode } from '@cp2p/codec';
+import { canonicalDecode, canonicalEncode } from '@cp2p/codec';
 import {
   G,
   encodePoint,
@@ -55,17 +55,29 @@ function required<T>(item: T | undefined | null): T {
   return item;
 }
 
+/** Test-only inspection: detached blinding records, never used as protocol input. */
+function ownedBlindings(driver: VerifiedSessionDriver, seat: Seat): unknown {
+  const records: unknown = Reflect.get(driver, 'blindings');
+  if (!(records instanceof Map)) throw new Error('Missing driver blinding map');
+  const record: unknown = records.get(seat);
+  if (!record) throw new Error(`Missing owned blindings for ${seat}`);
+  return canonicalDecode(canonicalEncode(record));
+}
+
 const master = (owner: Seat) => scalarToBytes(BigInt(17 + owner));
 
 test('a surviving session recovers a bot, finishes the frozen beacon and resumes it after restart', async () => {
   const fixture = createRecoveryFixture({ masterBackedBeacon: true, chainLength: 4 });
-  const seats = [1, 2, 3] as const;
+  const seats = [0, 1, 2, 3] as const;
   const network = createMemnet({
     peers: fixture.genesis.seats.map(({ publicKey }) => publicKey),
   });
+  const departingTransport = network.transport(required(fixture.genesis.seats[0]).publicKey);
+  // The departing owner is opened offline so its queued beacon cannot reach survivors.
   network.crash(required(fixture.genesis.seats[0]).publicKey);
   const sessions = new Map<Seat, P2PSession>();
   const options = new Map<Seat, P2PSessionOptions>();
+  const drivers = new Map<Seat, VerifiedSessionDriver>();
   const providers: ReturnType<typeof createBeaconSecretSource>[] = [];
   let botMayMove = true;
   const decisions: { seat: Seat; level: string }[] = [];
@@ -145,7 +157,10 @@ test('a surviving session recovers a bot, finishes the frozen beacon and resumes
         policy: fixture.policy,
         seat,
         secretKey: recoveryFixtureKey(fixture, seat),
-        transport: network.transport(required(fixture.source.identities.get(seat)).peerId),
+        transport:
+          seat === 0
+            ? departingTransport
+            : network.transport(required(fixture.source.identities.get(seat)).peerId),
         clock: network.clock,
         journal,
         cheatCandidateStore: new MemoryCheatCandidateStore(),
@@ -168,15 +183,18 @@ test('a surviving session recovers a bot, finishes the frozen beacon and resumes
             }
           },
         },
-        createDriver: (engine, genesis, _clock, owned) =>
-          new VerifiedSessionDriver(
+        createDriver: (engine, genesis, _clock, owned) => {
+          const driver = new VerifiedSessionDriver(
             engine,
             genesis,
             owned,
             deckSource,
             (owner) => createHandSecretSource(master(owner), genesisDigest(genesis), owner),
             stealSource,
-          ),
+          );
+          drivers.set(seat, driver);
+          return driver;
+        },
         botDelayMs: 100,
         decideBot: (view, _pending, level) => {
           expect(seat).toBe(1);
@@ -196,6 +214,15 @@ test('a surviving session recovers a bot, finishes the frozen beacon and resumes
       // oxlint-disable-next-line no-await-in-loop -- Each restored session keeps its own durable safety record.
       sessions.set(seat, value(await P2PSession.restore(current)));
     }
+
+    // Seat zero really owns this snapshot before departure; it is not oracle input.
+    const departing = required(sessions.get(0));
+    const departedPrivate = required(departing.getPrivate(0));
+    const departedSave = departing.exportSave();
+    const departedBlindings = ownedBlindings(required(drivers.get(0)), 0);
+    departing.dispose();
+    sessions.delete(0);
+    network.crash(required(fixture.genesis.seats[0]).publicKey);
 
     network.clock.advanceBy(120_000);
     await Promise.all([...sessions.values()].map((session) => session.flush()));
@@ -219,6 +246,21 @@ test('a surviving session recovers a bot, finishes the frozen beacon and resumes
       }),
     );
     expect(await submitted).toEqual({ ok: true, value: undefined });
+    const recoveredAtDeparture = value(
+      reconstructPrivateSeats({
+        genesisEntry: departedSave.genesis,
+        entries: departedSave.entries,
+        engine: fixture.source.engine,
+        policy: fixture.policy,
+        secrets: [{ seat: 0, master: master(0) }],
+      }),
+    );
+    try {
+      expect(recoveredAtDeparture.driver.privateState(0)).toEqual(departedPrivate);
+      expect(ownedBlindings(recoveredAtDeparture.driver, 0)).toEqual(departedBlindings);
+    } finally {
+      recoveredAtDeparture.dispose();
+    }
     expect(host.getPrivate(0)).not.toBeNull();
     expect(required(sessions.get(2)).getPrivate(0)).toBeNull();
     expect(required(sessions.get(3)).getPrivate(0)).toBeNull();
@@ -381,6 +423,25 @@ test('a surviving session recovers a bot, finishes the frozen beacon and resumes
       ),
     ).context;
     const returnAuthorization = transferEntryRef(returnParent.log.head);
+    expect(restored.getCommittedHead().seq).toBe(returnAuthorization.seq);
+    const botAtReturn = required(restored.getPrivate(0));
+    const botBlindingsAtReturn = ownedBlindings(required(drivers.get(1)), 0);
+    const returnSave = restored.exportSave();
+    const rebuiltAtReturn = value(
+      reconstructPrivateSeats({
+        genesisEntry: returnSave.genesis,
+        entries: returnSave.entries,
+        engine: fixture.source.engine,
+        policy: fixture.policy,
+        secrets: [{ seat: 0, master: master(0) }],
+      }),
+    );
+    try {
+      expect(rebuiltAtReturn.driver.privateState(0)).toEqual(botAtReturn);
+      expect(ownedBlindings(rebuiltAtReturn.driver, 0)).toEqual(botBlindingsAtReturn);
+    } finally {
+      rebuiltAtReturn.dispose();
+    }
     const activationStatement = {
       protocol: 'seat-transfer-activation-v1' as const,
       genesisDigest: returnParent.membership.genesisDigest,
@@ -424,7 +485,8 @@ test('a surviving session recovers a bot, finishes the frozen beacon and resumes
         secrets: [{ seat: 0, master: master(0) }],
       }),
     );
-    expect(historical.driver.privateState(0)).not.toBeNull();
+    expect(historical.driver.privateState(0)).toEqual(botAtReturn);
+    expect(ownedBlindings(historical.driver, 0)).toEqual(botBlindingsAtReturn);
     historical.dispose();
     returningDevice.secretKey.fill(0);
     returningGame.secretKey.fill(0);
