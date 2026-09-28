@@ -401,9 +401,17 @@ From 2025 p.12 and 2020 p.13, for the later combo task, not implemented here: ru
 Only the choices the module made beyond the rules above:
 
 - **State.** `ext.knights` holds `robberLocked`, `barbarians.step`, per-seat `improvements`, the three `metropolises` (`{ seat, vertex }` or null), `walls`, the last `eventDie` and a transient `noProduction` list. See the decisions log for the command names (`BUILD_IMPROVEMENT`, `PLACE_METROPOLIS`, `CHOOSE_AQUEDUCT`).
-- **Event die.** It rides in `DICE_RESULT.extra.event` (`ship`, `trade`, `politics` or `science`). Until K4 and K5 it is only recorded and logged.
+- **Event die.** It rides in `DICE_RESULT.extra.event` (`ship`, `trade`, `politics` or `science`). K4 moves the barbarians on a ship face, and K5 will resolve the gate faces.
 - **Setup city.** Round two uses `PLACE_SETTLEMENT`, and the placed piece becomes a city.
 - **Metropolis choice.** A metropolis is placed at once when the seat has one available city, otherwise the seat answers a `metropolis` frame. The old holder loses a stolen metropolis when the new city is chosen.
 - **Target.** `vpTarget` is at least 13; a larger base target is kept.
 - **Special build phase.** `BUILD_IMPROVEMENT` is allowed there (five-six), as the rules list improvements among the builds.
 - **Lobby.** The `knights` and `knights-56` scenarios exist before the UI (K6) does.
+
+## As implemented in K3 and K4
+
+- **State.** `ext.knights` adds `knights` (`seat`, `vertex`, `level`, `active`, `ready`, `promotedTurn`), `sideways`, `defenders` (per seat) and `lastAttack`. `ready` is a knight's readiness for this turn: it is set for the active seat's active knights when its turn starts, and cleared by acting.
+- **Commands.** `BUILD_KNIGHT`, `ACTIVATE_KNIGHT`, `PROMOTE_KNIGHT` and `BUILD_CITY_WALL` take a `vertex`. `MOVE_KNIGHT` and `DISPLACE_KNIGHT` take `from` and `to`, and `CHASE_ROBBER` takes the knight's `vertex`. `RELOCATE_KNIGHT { to }` answers the `displaced` frame, `CHOOSE_PILLAGE { vertex }` the `pillage` frame, and `UPGRADE_SIDEWAYS_CITY { vertex }` upgrades a sideways piece. In a five-six special build phase the buying and upgrading commands work and the three knight actions are not offered.
+- **Displaced knight.** The displacer lands first. The owner's `displaced` frame lists the empty vertices its roads reach from there, so the vertex the displacer left can be one. With none, the knight is removed at once.
+- **Pillage and the roll.** Barbarians resolve inside the roll, before production. When a seat has more than one non-metropolis city, the roll waits in a `pillage` frame and continues after the last choice, so the pillaged city produces as a settlement and a 7 still moves the robber. A sideways piece is a settlement building plus an entry in `sideways`, and base counts it against the city supply through `piecesLeft.sideways`.
+- **Defender ties.** A tie at the top is recorded in `lastAttack.tied` and handed to `awardTieDraws`, which does nothing until K5 adds progress cards.
