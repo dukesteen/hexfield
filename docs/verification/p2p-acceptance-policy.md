@@ -76,3 +76,11 @@ on CI to avoid the user's local browser crash popups.
 
 The existing Stage 06 CI policy is unchanged. The new real-crypto and lifecycle
 fixtures must be named and mapped to these rows before claiming acceptance.
+
+## Final device-check waiver
+
+On 2026-09-28, the user authorized closing the remaining physical phone QR and
+cross-network check with “you can just mark that one as done.” This waives that
+manual acceptance requirement. It does not establish that a physical scan or
+external-network game passed. The [M-C/M-D closeout](mc-md-closeout.md) records
+the completed work and the unchanged limits of its evidence.

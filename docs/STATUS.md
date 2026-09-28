@@ -1,6 +1,6 @@
 # Status
 
-Check each item only after its acceptance evidence is recorded. Stage 01 uses the user-authorized local CI equivalent.
+Check each item only after its acceptance evidence or explicit user waiver is recorded. Stage 01 uses the user-authorized local CI equivalent.
 
 Milestones A and B are complete. The [release and milestone audit](verification/stage05/pages-release.md) links the acceptance evidence and the published local-play app.
 
@@ -9,10 +9,10 @@ following the user's 2026-09-27 scope reduction. It prioritizes manual-code play
 with friends without operating a server, same-browser reconnect, and completed
 games with audits. Seat transfer, recovered-human return, takeover UI and other
 large features were deferred from that first beta. The app and signaling service
-are now deployed together on Cloudflare. M-D's explicit acceptance criteria now
-have evidence. M-C's automated checks also pass; physical phone-camera QR scanning
-and the real-device cross-network check remain open in its
-[current evidence map](verification/stage09/mc-remaining-acceptance.md).
+are now deployed together on Cloudflare. **Milestones M-C and M-D are complete**
+under the bounded acceptance policy and the user's 2026-09-28 waiver of the final
+physical phone QR/cross-network check. That device check was not performed. The
+[closeout](verification/mc-md-closeout.md) links the evidence and records the waiver.
 
 The [current beta browser check](verification/stage09/beta-browser-check.md)
 passes four-human manual-code startup, all setup placements, a shared roll, a
@@ -305,7 +305,7 @@ expiry, retry and disposal. App typechecking and scoped lint pass. Cross-browser
 phone-camera, cross-network and deployment acceptance remain open.
 
 - [x] 4 browsers (including Firefox and WebKit) form a full mesh via the signaling server and via manual codes plus mesh relay. Verified in [run 36408263093](verification/stage08/mixed-engine-manual-2026-09-28.md) at `95a1f63`; manual relay also finished with four audits, while signaling hit its unchanged 240-second game limit.
-- [ ] Offer codes fit a QR code and scan successfully on a phone camera (manual test, recorded in STATUS.md).
+- [x] Phone-camera QR acceptance closed by user waiver on 2026-09-28. The physical scan was not performed; compact-code sizing and browser checks remain the recorded evidence. See the [M-C/M-D closeout](verification/mc-md-closeout.md).
 - [x] The identity binding rejects a tampered signaling path (unit test with a MITM fake signaling adapter swapping fingerprints).
 - [x] A 1 MiB message transfers correctly with backpressure.
 - [x] The signaling server never logs or inspects blobs (code review checklist item plus a test asserting blobs are forwarded verbatim).
@@ -381,7 +381,7 @@ the signed settings before readying. Three configuration-form tests and five
 signed-lobby tests pass, including ready resets and seed binding. The actual
 browser form check is still pending.
 
-- [x] Create → invite → join → start → finish → audit ✓ works over the signaling server and over manual codes. The [signaling run](verification/stage08/mixed-engine-followup-36422582118.md) and [manual-code run](verification/stage08/mixed-engine-manual-pass-36430074221.md) each finish with all four independent audits successful. Physical-device and external-network checks remain separate.
+- [x] Create → invite → join → start → finish → audit ✓ works over the signaling server and over manual codes. The [signaling run](verification/stage08/mixed-engine-followup-36422582118.md) and [manual-code run](verification/stage08/mixed-engine-manual-pass-36430074221.md) each finish with all four independent audits successful. The final physical phone QR/cross-network check was user-waived on 2026-09-28; it was not performed.
 - [x] Mixed humans and bots work, and a guest can host a bot. The [hosted-bot terminal trace](verification/stage09/hosted-bot-v6-acceptance.md) finishes a two-human/two-bot game with both audits; the [guest-hosted command trace](verification/stage09/guest-bot-consent-races-2026-09-28.md) certifies and strictly replays a command from a bot hosted by the other human peer.
 - [x] A version mismatch is detected with a clear message. The [signed-version UI check](verification/stage09/lobby-ceremony-ui-bridge.md) covers incompatible protocol and engine versions, the host-version alert and unavailable start action.
 - [x] Pre-consent ceremony abort and timeout paths retire the attempt and return a retired state to the lobby. The [timeout/disclosure integration checks](verification/stage09/ceremony-timeout-disclosure-check-2026-09-28.md) and [cross-coordinator race traces](verification/stage09/guest-bot-consent-races-2026-09-28.md) cover the timeout phases and both durable race outcomes.

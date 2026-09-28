@@ -125,7 +125,7 @@ A "Connection" panel in lobby and game:
 ## Acceptance criteria
 
 - [x] 4 browsers (including Firefox and WebKit) form a full mesh via the signaling server and via manual codes plus mesh relay. Verified in [run 36408263093](verification/stage08/mixed-engine-manual-2026-09-28.md) at `95a1f63`; manual relay also finished with four audits, while signaling hit its unchanged 240-second game limit.
-- [ ] Offer codes fit a QR code and scan successfully on a phone camera (manual test, recorded in STATUS.md).
+- [x] Phone-camera QR acceptance closed by user waiver on 2026-09-28. The physical scan was not performed; compact-code sizing and browser checks remain the recorded evidence. See the [M-C/M-D closeout](verification/mc-md-closeout.md).
 - [x] The identity binding rejects a tampered signaling path (unit test with a MITM fake signaling adapter swapping fingerprints).
 - [x] A 1 MiB message transfers correctly with backpressure.
 - [x] The signaling server never logs or inspects blobs (code review checklist item plus a test asserting blobs are forwarded verbatim).
