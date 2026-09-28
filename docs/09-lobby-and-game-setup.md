@@ -114,7 +114,7 @@ Version compatibility: in `HELLO` and in step 1, peers compare `protocolVersion`
 
 ## Acceptance criteria
 
-- [ ] Create → invite → join → start → finish → audit ✓ works over the signaling server and over manual codes.
+- [x] Create → invite → join → start → finish → audit ✓ works over the signaling server and over manual codes. The [signaling run](verification/stage08/mixed-engine-followup-36422582118.md) and [manual-code run](verification/stage08/mixed-engine-manual-pass-36430074221.md) each finish with all four independent audits successful. Physical-device and external-network checks remain separate.
 - [x] Mixed humans and bots work, and a guest peer can host a bot. The [hosted-bot terminal trace](verification/stage09/hosted-bot-v6-acceptance.md) verifies the full two-human/two-bot game and both audits; the [guest-hosted command trace](verification/stage09/guest-bot-consent-races-2026-09-28.md) certifies a bot command signed by a bot hosted on the other human peer and strictly replays it on both peers.
 - [x] A version mismatch is detected with a clear message. The [signed-version UI check](verification/stage09/lobby-ceremony-ui-bridge.md) rejects incompatible protocol and engine versions and displays the host version without a start action.
 - [x] Pre-consent ceremony abort and timeout paths retire the attempt and return a retired state to the lobby. The [timeout/disclosure integration checks](verification/stage09/ceremony-timeout-disclosure-check-2026-09-28.md) cover missing phases and UI restoration; the [cross-coordinator consent races](verification/stage09/guest-bot-consent-races-2026-09-28.md) prove durable retirement-first and consent-first outcomes.

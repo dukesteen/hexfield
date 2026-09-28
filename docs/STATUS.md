@@ -10,7 +10,8 @@ with friends without operating a server, same-browser reconnect, and completed
 games with audits. Seat transfer, recovered-human return, takeover UI and other
 large features were deferred from that first beta. The app and signaling service
 are now deployed together on Cloudflare. M-D's explicit acceptance criteria now
-have evidence; M-C remains open for the browser and physical-device checks in its
+have evidence. M-C's automated checks also pass; physical phone-camera QR scanning
+and the real-device cross-network check remain open in its
 [current evidence map](verification/stage09/mc-remaining-acceptance.md).
 
 The [current beta browser check](verification/stage09/beta-browser-check.md)
@@ -77,11 +78,15 @@ reported source pins, not a single all-nine run on one commit. The latest main
 workflow also passed all four unit shards; the earlier shard-3 RPC error remains
 historical. See the [M-C matrix](verification/stage09/mc-remaining-acceptance.md)
 for the full evidence map.
-On the same source pin, mixed-engine CI passed the signaling-relay full game.
-The manual-relay run formed a connected, agreeing four-peer mesh but remained
-nonterminal at sequence 97 after its bounded finish-and-audit poll; it reported
-no connection error or divergence. The [run report](verification/stage08/mixed-engine-followup-36422582118.md)
-keeps manual-relay full-game acceptance open.
+On the same production source, mixed-engine CI passed the signaling-relay full
+game. The [manual-relay follow-up](verification/stage08/mixed-engine-manual-pass-36430074221.md)
+now also passes with Chromium ×2, Firefox and WebKit at `1fe220a`. All four peers
+finish with matching results and complete successful audits at sequence 54.
+The run took 192.15 seconds, including 32.58 seconds of play and 20.96 seconds of
+auditing. Earlier timeouts remain archived. The test-only policy now prioritizes legal scoring builds, and the status reader
+fetches full state only for the acting player. The rules, cryptography,
+three-point target and time limits are unchanged.
+The production app has not changed since the deployed `9652085`.
 The [current M-C matrix](verification/stage09/mc-remaining-acceptance.md) and
 [M-D matrix](verification/stage10/remaining-acceptance.md) distinguish current-v6
 evidence from older traces. Reviewed lobby readiness and ceremony delivery fixes
@@ -376,7 +381,7 @@ the signed settings before readying. Three configuration-form tests and five
 signed-lobby tests pass, including ready resets and seed binding. The actual
 browser form check is still pending.
 
-- [ ] Create → invite → join → start → finish → audit ✓ works over the signaling server and over manual codes.
+- [x] Create → invite → join → start → finish → audit ✓ works over the signaling server and over manual codes. The [signaling run](verification/stage08/mixed-engine-followup-36422582118.md) and [manual-code run](verification/stage08/mixed-engine-manual-pass-36430074221.md) each finish with all four independent audits successful. Physical-device and external-network checks remain separate.
 - [x] Mixed humans and bots work, and a guest can host a bot. The [hosted-bot terminal trace](verification/stage09/hosted-bot-v6-acceptance.md) finishes a two-human/two-bot game with both audits; the [guest-hosted command trace](verification/stage09/guest-bot-consent-races-2026-09-28.md) certifies and strictly replays a command from a bot hosted by the other human peer.
 - [x] A version mismatch is detected with a clear message. The [signed-version UI check](verification/stage09/lobby-ceremony-ui-bridge.md) covers incompatible protocol and engine versions, the host-version alert and unavailable start action.
 - [x] Pre-consent ceremony abort and timeout paths retire the attempt and return a retired state to the lobby. The [timeout/disclosure integration checks](verification/stage09/ceremony-timeout-disclosure-check-2026-09-28.md) and [cross-coordinator race traces](verification/stage09/guest-bot-consent-races-2026-09-28.md) cover the timeout phases and both durable race outcomes.

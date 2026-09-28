@@ -3,11 +3,11 @@
 [CI run 36430074221](https://github.com/dukesteen/hexfield/actions/runs/36430074221)
 passed the manual-relay full-game test on commit
 `1fe220adba4cc41e2117cb6abe6cacd60113a944`. Build, Playwright browser
-installation, local signaling and the four-engine startup completed. The
+installation and startup completed in Chromium ×2, Firefox and WebKit. The
 runMode finished in 192.149 seconds, including 32.584 seconds of play and
 20.964 seconds of audit.
 
-The driver accepted 19 legal commands without refusals: eight `END_TURN`,
+After setup and the first roll, the driver accepted 19 legal commands without refusals: eight `END_TURN`,
 eight `ROLL_DICE`, two `BUILD_ROAD` and one `BUILD_CITY`. All four browser
 views reported a terminal result and complete audit at the same final head:
 sequence 54, hash
