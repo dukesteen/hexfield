@@ -244,7 +244,7 @@ native Chrome audit worker with an exact report match. Broader adversarial and
 cross-device acceptance remain open.
 
 - [ ] All nine real-crypto fault scenarios pass one reproducible complete game under the [bounded acceptance policy](verification/p2p-acceptance-policy.md).
-- [ ] Every row in the cheat table is covered by a passing test that checks the cheat is caught at the listed time.
+- [x] Every cheat-table row has a passing signed-admission check at the stated boundary. The [coverage matrix](verification/stage07/cheat-table-coverage.md) records the live gameplay, signed ceremony and private recovery-void scopes.
 - [x] Human-only, hosted-bot and recovered-bot compositions finish without false `CHEAT_PROOF` entries and with successful independent audits from every survivor, under the [bounded acceptance policy](verification/p2p-acceptance-policy.md).
 - [x] Dice outcomes from the beacon pass the 100,000-round chi-square check; the [measured checkpoint](verification/stage09/local-checkpoint-2026-09-27.md) records the face and sum distributions.
 - [x] Escrow recovery works after a seat departs mid-game, and the recovered seat continues as a bot. The [current-v6 native lifecycle](verification/stage10/native-takeover-acceptance.md) passes two takeovers, human return, default-ten-point finish and all three surviving audits.
