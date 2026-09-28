@@ -4,6 +4,7 @@ import type { Browser, BrowserContext, Page, PlaywrightWorkerArgs } from '@playw
 import { RandomBot, createBotRng } from '@cp2p/bots';
 import { chooseBotPending } from '@cp2p/protocol';
 import type { CommandShape, Seat } from '@cp2p/engine';
+import { progressCommand } from './helpers/progress-policy.js';
 import { stableBotConfig } from './helpers/stable-bot-config.js';
 
 test.skip(
@@ -626,7 +627,34 @@ async function acceptManualAnswer(inviter: Page, code: string): Promise<void> {
   if (result) throw new Error(`Manual answer rejected: ${result}`);
 }
 
-async function startFourPlayerRoom(pages: readonly Page[], mode: 'signaling' | 'manual') {
+function remaining(deadline: number, cap: number): number {
+  const ms = deadline - Date.now();
+  if (ms <= 0) throw new Error('Mixed-engine absolute deadline exhausted');
+  return Math.min(cap, ms);
+}
+
+async function withinDeadline<T>(work: Promise<T>, deadline: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      work,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(
+          () => reject(new Error('Mixed-engine absolute deadline exhausted')),
+          remaining(deadline, Number.MAX_SAFE_INTEGER),
+        );
+      }),
+    ]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
+}
+
+async function startFourPlayerRoom(
+  pages: readonly Page[],
+  mode: 'signaling' | 'manual',
+  deadline: number,
+) {
   const [host, ...guests] = pages;
   if (!host || guests.length !== 3) throw new Error('Expected four isolated browser pages');
   const gameName = mode === 'signaling' ? 'Mixed signaling acceptance' : 'Mixed manual acceptance';
@@ -653,7 +681,9 @@ async function startFourPlayerRoom(pages: readonly Page[], mode: 'signaling' | '
       await expect(guest.getByLabel('Invitation link or code', { exact: true })).toBeVisible();
       await installFailureDiagnostics(guest);
       await navigateToInviteWithinDocument(guest, invite);
-      await expect(guest.getByRole('heading', { name: gameName })).toBeVisible({ timeout: 45_000 });
+      await expect(guest.getByRole('heading', { name: gameName })).toBeVisible({
+        timeout: remaining(deadline, 45_000),
+      });
       await guest.getByRole('button', { name: 'Take seat', exact: true }).first().click();
     }
   } else {
@@ -664,7 +694,7 @@ async function startFourPlayerRoom(pages: readonly Page[], mode: 'signaling' | '
       const invite = await getManualInvitation(host);
       await guest.getByLabel('Invitation link or code', { exact: true }).fill(invite);
       await guest.getByRole('button', { name: 'Join room', exact: true }).click();
-      await expect(guest).toHaveURL(/\/lobby\/[^/]+$/, { timeout: 45_000 });
+      await expect(guest).toHaveURL(/\/lobby\/[^/]+$/, { timeout: remaining(deadline, 45_000) });
       await expect
         .poll(async () => {
           const state = await manualOfferState(guest);
@@ -674,7 +704,9 @@ async function startFourPlayerRoom(pages: readonly Page[], mode: 'signaling' | '
       const answer = (await manualOfferState(guest))?.code;
       if (!answer) throw new Error('A joined guest did not produce its manual answer');
       await acceptManualAnswer(host, answer);
-      await expect(guest.getByRole('heading', { name: gameName })).toBeVisible({ timeout: 45_000 });
+      await expect(guest.getByRole('heading', { name: gameName })).toBeVisible({
+        timeout: remaining(deadline, 45_000),
+      });
       await guest.getByRole('button', { name: 'Take seat', exact: true }).first().click();
       await expect
         .poll(async () => {
@@ -696,16 +728,18 @@ async function startFourPlayerRoom(pages: readonly Page[], mode: 'signaling' | '
         ),
       // Allow the production 30s attempt, 250ms retry and 10s HELLO window.
       // The overall test and subsequent play/audit limits stay unchanged.
-      { timeout: 45_000, intervals: [100] },
+      { timeout: remaining(deadline, 45_000), intervals: [100] },
     )
     .toEqual([3, 3, 3, 3]);
   await Promise.all(pages.map((page) => page.getByRole('button', { name: 'Ready up' }).click()));
   await expect(host.getByRole('button', { name: 'Start game', exact: true })).toBeEnabled({
-    timeout: 45_000,
+    timeout: remaining(deadline, 45_000),
   });
   await host.getByRole('button', { name: 'Start game', exact: true }).click();
   await Promise.all(
-    pages.map((page) => expect(page).toHaveURL(/\/game\/[^/]+$/, { timeout: 90_000 })),
+    pages.map((page) =>
+      expect(page).toHaveURL(/\/game\/[^/]+$/, { timeout: remaining(deadline, 90_000) }),
+    ),
   );
   const gameId = new URL(host.url()).hash.match(/\/game\/([^/?]+)/)?.[1];
   if (!gameId) throw new Error('Game URL did not include an id');
@@ -715,10 +749,10 @@ async function startFourPlayerRoom(pages: readonly Page[], mode: 'signaling' | '
 async function inspectGame(page: Page, gameId: string) {
   const modulePath = await roomModulePath(page);
   const view = await page.evaluate(
-    async ({ path, id }) => {
+    async ({ path: registryPath, id }) => {
       // oxlint-disable typescript/no-unsafe-type-assertion -- Read the session from the app-loaded production registry.
       const { getOnlineGameRoom } = (await import(
-        /* @vite-ignore */ path
+        /* @vite-ignore */ registryPath
       )) as typeof import('../src/features/online/room-registry.js');
       // oxlint-enable typescript/no-unsafe-type-assertion
       const room = getOnlineGameRoom(id);
@@ -753,6 +787,40 @@ async function inspectGame(page: Page, gameId: string) {
     : null;
 }
 
+async function inspectPublicGame(page: Page, gameId: string) {
+  const path = await roomModulePath(page);
+  const view = await page.evaluate(
+    async ({ path: registryPath, id }) => {
+      // oxlint-disable typescript/no-unsafe-type-assertion -- Read public session data from the running registry.
+      const { getOnlineGameRoom } = (await import(
+        /* @vite-ignore */ registryPath
+      )) as typeof import('../src/features/online/room-registry.js');
+      // oxlint-enable typescript/no-unsafe-type-assertion
+      const room = getOnlineGameRoom(id);
+      const session = room?.getGame()?.session;
+      if (!room || !session) return null;
+      const state = session.getState();
+      const audit = session.getAudit?.();
+      const seats = session.controllableSeats();
+      return {
+        head: session.getFairness?.()?.head ?? null,
+        result: state.result ?? null,
+        pending: session.getPending(),
+        turn: { activeSeat: state.turn.activeSeat },
+        seats,
+        audit: audit?.kind ?? null,
+        auditOk: audit?.kind === 'complete' && audit.report.ok,
+        auditComplete: audit?.kind === 'complete' && audit.report.complete,
+        peerCount: room.getSnapshot().peers.length,
+      };
+    },
+    { path, id: gameId },
+  );
+  return view
+    ? { ...view, pending: chooseBotPending(view, view.pending, new Set(view.seats)) }
+    : null;
+}
+
 async function submit(page: Page, gameId: string, seat: Seat, command: CommandShape, seq: number) {
   const modulePath = await roomModulePath(page);
   return page.evaluate(
@@ -771,7 +839,11 @@ async function submit(page: Page, gameId: string, seat: Seat, command: CommandSh
   );
 }
 
-async function certifyPostSetupMove(pages: readonly Page[], gameId: string): Promise<void> {
+async function certifyPostSetupMove(
+  pages: readonly Page[],
+  gameId: string,
+  deadline: number,
+): Promise<void> {
   const ready = async () => Promise.all(pages.map((page) => inspectGame(page, gameId)));
   const setupBots = pages.map((_, index) => ({
     bot: new RandomBot(),
@@ -802,10 +874,11 @@ async function certifyPostSetupMove(pages: readonly Page[], gameId: string): Pro
           !page
         )
           return false;
-        const command = actor.bot.decide(
+        const command = progressCommand(
           { state: actor.state(view.state), priv: view.privateState, seat: view.seat },
           view.pending,
           actor.rng,
+          actor.bot,
         );
         const refused = await submit(page, gameId, view.seat, command, view.head.seq);
         if (refused && refused !== 'stale-head' && refused !== 'stale-revision')
@@ -813,7 +886,7 @@ async function certifyPostSetupMove(pages: readonly Page[], gameId: string): Pro
         return false;
       },
       {
-        timeout: 120_000,
+        timeout: remaining(deadline, 120_000),
         intervals: [100],
       },
     )
@@ -841,7 +914,7 @@ async function certifyPostSetupMove(pages: readonly Page[], gameId: string): Pro
         const seq = heads[0]?.seq;
         return seq !== undefined && seq > before.seq && heads.every((head) => head?.seq === seq);
       },
-      { timeout: 45_000 },
+      { timeout: remaining(deadline, 45_000) },
     )
     .toBe(true);
   const after = await ready();
@@ -868,6 +941,7 @@ async function finishAndAudit(
   pages: readonly Page[],
   gameId: string,
   onProgress: (progress: FinishProgress) => void,
+  deadline: number,
 ) {
   const bots = pages.map((_, index) => ({
     bot: new RandomBot(),
@@ -876,6 +950,7 @@ async function finishAndAudit(
   }));
   let commands = 0;
   const started = Date.now();
+  const finishDeadline = Math.min(deadline, started + 150_000);
   let terminalAt: number | undefined;
   const accepted: Record<string, number> = {};
   const refusedCommands: Record<string, number> = {};
@@ -893,47 +968,78 @@ async function finishAndAudit(
     await expect
       .poll(
         async () => {
-          for (const [index, page] of pages.entries()) {
-            const view = await inspectGame(page, gameId);
-            if (
-              !view ||
-              view.result ||
-              view.seat === undefined ||
-              view.pending?.kind !== 'player' ||
-              !view.privateState ||
-              !view.legal ||
-              !view.head
-            )
-              continue;
-            const actor = bots[index];
-            if (!actor) throw new Error('Missing deterministic browser bot');
-            const command = actor.bot.decide(
-              { state: actor.state(view.state), priv: view.privateState, seat: view.seat },
-              view.pending,
-              actor.rng,
-            );
-            const refused = await submit(page, gameId, view.seat, command, view.head.seq);
-            if (refused) refusedCommands[refused] = (refusedCommands[refused] ?? 0) + 1;
-            if (refused && refused !== 'stale-head' && refused !== 'stale-revision')
-              throw new Error(`A legal browser move was rejected: ${refused}`);
-            if (!refused) {
-              commands += 1;
-              accepted[command.type] = (accepted[command.type] ?? 0) + 1;
-            }
+          const publicViews = await withinDeadline(
+            Promise.all(pages.map((page) => inspectPublicGame(page, gameId))),
+            finishDeadline,
+          );
+          peers = publicViews.map((view) => ({
+            head: view?.head ?? null,
+            resultPresent: Boolean(view?.result),
+            audit: view?.audit ?? null,
+          }));
+          onProgress(diagnostic());
+          if (publicViews.every((view) => view?.result)) {
+            terminalAt = Date.now();
             onProgress(diagnostic());
-            if (commands > 300) throw new Error('The bounded mixed-engine game exceeded 300 moves');
+            return true;
           }
-          const views = await Promise.all(pages.map((page) => inspectGame(page, gameId)));
+          const index = publicViews.findIndex(
+            (view) => view?.pending?.kind === 'player' && !view.result,
+          );
+          if (index < 0) return false;
+          const page = pages[index];
+          const actor = bots[index];
+          if (!page || !actor) throw new Error('Missing deterministic browser actor');
+          const view = await withinDeadline(inspectGame(page, gameId), finishDeadline);
+          if (
+            !view ||
+            view.result ||
+            view.seat === undefined ||
+            !view.pending ||
+            !view.privateState ||
+            !view.head
+          )
+            return false;
+          const command = progressCommand(
+            { state: actor.state(view.state), priv: view.privateState, seat: view.seat },
+            view.pending,
+            actor.rng,
+            actor.bot,
+          );
+          const refused = await withinDeadline(
+            submit(page, gameId, view.seat, command, view.head.seq),
+            finishDeadline,
+          );
+          if (refused) refusedCommands[refused] = (refusedCommands[refused] ?? 0) + 1;
+          else {
+            commands++;
+            accepted[command.type] = (accepted[command.type] ?? 0) + 1;
+          }
+          onProgress(diagnostic());
+          if (refused && refused !== 'stale-head' && refused !== 'stale-revision')
+            throw new Error(`A legal browser move was rejected: ${refused}`);
+          if (commands > 300) throw new Error('The bounded mixed-engine game exceeded 300 moves');
+          return false;
+        },
+        { timeout: remaining(finishDeadline, 150_000), intervals: [100] },
+      )
+      .toBe(true);
+    await expect
+      .poll(
+        async () => {
+          const views = await withinDeadline(
+            Promise.all(pages.map((page) => inspectPublicGame(page, gameId))),
+            finishDeadline,
+          );
           peers = views.map((view) => ({
             head: view?.head ?? null,
             resultPresent: Boolean(view?.result),
-            audit: view?.audit?.kind ?? null,
+            audit: view?.audit ?? null,
           }));
-          if (views.every((view) => view?.result)) terminalAt ??= Date.now();
           onProgress(diagnostic());
-          return views.every((view) => view?.result && view.audit?.kind === 'complete');
+          return views.every((view) => view?.result && view.audit === 'complete');
         },
-        { timeout: 150_000, intervals: [100] },
+        { timeout: remaining(finishDeadline, 150_000), intervals: [100] },
       )
       .toBe(true);
   } catch (error) {
@@ -941,20 +1047,27 @@ async function finishAndAudit(
       cause: error,
     });
   }
-  const final = await Promise.all(pages.map((page) => inspectGame(page, gameId)));
+  const final = await withinDeadline(
+    Promise.all(pages.map((page) => inspectPublicGame(page, gameId))),
+    finishDeadline,
+  );
   const head = final[0]?.head;
   const result = final[0]?.result;
   if (!head || !result) throw new Error('Missing audited terminal state');
   for (const view of final) {
     expect(view?.head).toEqual(head);
     expect(view?.result).toEqual(result);
-    expect(view?.audit).toMatchObject({ kind: 'complete', report: { ok: true, complete: true } });
+    expect(view?.audit).toBe('complete');
+    expect(view?.auditOk).toBe(true);
+    expect(view?.auditComplete).toBe(true);
     expect(view?.peerCount).toBe(3);
   }
   return { ...diagnostic(), terminalSeq: head.seq, modeAuditCount: final.length };
 }
 
 async function runMode(playwright: Playwright, mode: 'signaling' | 'manual') {
+  const started = Date.now();
+  const deadline = started + (mode === 'manual' ? 300_000 : 240_000) - 10_000;
   const opened = await launchFourEngines(playwright);
   const [host, second, third, fourth] = opened.pages;
   if (!host || !second || !third || !fourth) throw new Error('Missing mixed-engine page');
@@ -964,7 +1077,6 @@ async function runMode(playwright: Playwright, mode: 'signaling' | 'manual') {
     if (!engine) throw new Error('Missing browser engine label');
     page.on('pageerror', () => errors.push(engine));
   }
-  const started = Date.now();
   let phase = 'lobby';
   let readingProgress = false;
   let finishProgress: FinishProgress | null = null;
@@ -998,22 +1110,27 @@ async function runMode(playwright: Playwright, mode: 'signaling' | 'manual') {
       });
   }, 10_000);
   try {
-    const fixture = await startFourPlayerRoom(opened.pages, mode);
+    const fixture = await startFourPlayerRoom(opened.pages, mode, deadline);
     const lobbyElapsedMs = Date.now() - started;
     setPhase('setup');
     const setupStarted = Date.now();
-    await certifyPostSetupMove(opened.pages, fixture.gameId);
+    await certifyPostSetupMove(opened.pages, fixture.gameId, deadline);
     const setupElapsedMs = Date.now() - setupStarted;
     setPhase('play-and-audit');
-    const completion = await finishAndAudit(opened.pages, fixture.gameId, (snapshot) => {
-      finishProgress = snapshot;
-      if (
-        snapshot.peers.length === opened.pages.length &&
-        snapshot.peers.every((peer) => peer.resultPresent) &&
-        phase !== 'audit'
-      )
-        setPhase('audit');
-    });
+    const completion = await finishAndAudit(
+      opened.pages,
+      fixture.gameId,
+      (snapshot) => {
+        finishProgress = snapshot;
+        if (
+          snapshot.peers.length === opened.pages.length &&
+          snapshot.peers.every((peer) => peer.resultPresent) &&
+          phase !== 'audit'
+        )
+          setPhase('audit');
+      },
+      deadline,
+    );
     setPhase('complete');
     expect(errors).toEqual([]);
     return { mode, browserSet: engineNames, lobbyElapsedMs, setupElapsedMs, ...completion };
@@ -1030,8 +1147,13 @@ async function runMode(playwright: Playwright, mode: 'signaling' | 'manual') {
     );
   } finally {
     clearInterval(progress);
-    await Promise.allSettled(opened.contexts.map((context) => context.close()));
-    await Promise.allSettled(opened.browsers.map((browser) => browser.close()));
+    await withinDeadline(
+      Promise.allSettled([
+        ...opened.contexts.map((context) => context.close()),
+        ...opened.browsers.map((browser) => browser.close()),
+      ]),
+      deadline + 10_000,
+    );
   }
 }
 
