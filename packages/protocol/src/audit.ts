@@ -6,8 +6,13 @@ import { decodeDeckCard } from './deck-draw.js';
 import { createDeckSecretSource } from './deck-source.js';
 import { entryHash } from './genesis.js';
 import { verifyRevealedMaster } from './genesis-secrets.js';
-import { reconstructPrivateSeats } from './private-replay.js';
-import { initialProposalContext, replayCertifiedPrefix } from './replay.js';
+import { createPrivateReplayObserver } from './private-replay-observer.js';
+import type { PrivateReplayObserver } from './private-replay-observer.js';
+import {
+  initialProposalContext,
+  replayCertifiedPrefix,
+  replayCertifiedPrefixObserved,
+} from './replay.js';
 import type { ReplayPolicy } from './replay.js';
 import { openStealContribution } from './steal-delivery.js';
 import { createStealSecretSource } from './steal-source.js';
@@ -137,6 +142,7 @@ export function auditCertifiedGame(input: AuditCertifiedGameInput): AuditReport 
   const violations: AuditViolation[] = [];
   const inputErrors: AuditInputError[] = [];
   const masters = new Map<Seat, Uint8Array>();
+  let privateObserver: PrivateReplayObserver | undefined;
   let terminal: AuditEntryRef | null = null;
   let finalHead: AuditEntryRef | null = null;
   let historyError: { code: string } | null = null;
@@ -169,234 +175,264 @@ export function auditCertifiedGame(input: AuditCertifiedGameInput): AuditReport 
     return report();
   };
   try {
-    const publicReplay = replayCertifiedPrefix(
-      input.genesisEntry,
-      input.entries,
-      input.engine,
-      input.policy,
-      (entry, next) => {
-        if (!terminal && next.log.state.result) terminal = ref(entry.entry);
-        return success(undefined);
-      },
-    );
-    if (!publicReplay.ok) {
-      historyError = { code: publicReplay.error.code };
-      return report();
-    }
-    const { context } = publicReplay.value;
-    const { genesis, crypto } = context.log;
-    finalHead = ref(context.log.head);
-    cheatFindings = crypto?.cheats.slice(0, MAX_DIAGNOSTICS) ?? [];
-    if (!terminal || !context.log.state.result) return report();
-    if (genesis.security !== 'verified' || !crypto) {
-      historyError = { code: 'audit-unverified-game' };
-      return report();
-    }
-    if (!Array.isArray(input.masters)) {
-      inputErrors.push({ seat: null, kind: 'master-list' });
-      return report();
-    }
-    const seats = new Set(genesis.seats.map((seat) => seat.seat));
-    const seen = new Set<Seat>();
-    for (const reveal of input.masters) {
-      if (!reveal || !seats.has(reveal.seat) || seen.has(reveal.seat)) {
-        if (inputErrors.length < MAX_DIAGNOSTICS)
-          inputErrors.push({ seat: null, kind: 'master-seat-or-duplicate' });
-        continue;
+    try {
+      const publicReplay = replayCertifiedPrefix(
+        input.genesisEntry,
+        input.entries,
+        input.engine,
+        input.policy,
+        (entry, next) => {
+          if (!terminal && next.log.state.result) terminal = ref(entry.entry);
+          return success(undefined);
+        },
+      );
+      if (!publicReplay.ok) {
+        historyError = { code: publicReplay.error.code };
+        return report();
       }
-      seen.add(reveal.seat);
-      if (!(reveal.master instanceof Uint8Array) || reveal.master.length !== 32) {
-        if (inputErrors.length < MAX_DIAGNOSTICS)
-          inputErrors.push({ seat: reveal.seat, kind: 'master-scalar' });
-        continue;
+      const { context } = publicReplay.value;
+      const { genesis, crypto } = context.log;
+      finalHead = ref(context.log.head);
+      cheatFindings = crypto?.cheats.slice(0, MAX_DIAGNOSTICS) ?? [];
+      if (!terminal || !context.log.state.result) return report();
+      if (genesis.security !== 'verified' || !crypto) {
+        historyError = { code: 'audit-unverified-game' };
+        return report();
       }
-      const copy = reveal.master.slice();
-      try {
-        scalarFromBytes(copy, { nonzero: true });
-      } catch {
-        copy.fill(0);
-        if (inputErrors.length < MAX_DIAGNOSTICS)
-          inputErrors.push({ seat: reveal.seat, kind: 'master-scalar' });
-        continue;
+      if (!Array.isArray(input.masters)) {
+        inputErrors.push({ seat: null, kind: 'master-list' });
+        return report();
       }
-      masters.set(reveal.seat, copy);
-    }
-    missingSeats = genesis.seats.map((seat) => seat.seat).filter((seat) => !masters.has(seat));
-    for (const [seat, master] of masters) {
-      const verified = verifyRevealedMaster(genesis, crypto.decks, seat, toBase64Url(master));
-      if (verified.ok) continue;
-      if (verified.error.code === 'master-public-key' || verified.error.code === 'master-reveal') {
-        if (inputErrors.length < MAX_DIAGNOSTICS)
-          inputErrors.push({ seat, kind: verified.error.code });
-      } else if (
-        [
-          'master-encryption-key',
-          'master-beacon-tip',
-          'master-shuffle-key',
-          'master-lock-key',
-        ].includes(verified.error.code)
-      ) {
-        violations.push(issue(0, seat, verified.error.code));
-      } else return processingFailure(0, verified.error.code);
-    }
-    complete = missingSeats.length === 0 && inputErrors.length === 0;
-    if (!complete || violations.length) return report();
-
-    const initial = initialProposalContext(input.genesisEntry, input.engine, input.policy);
-    if (!initial.ok) {
-      historyError = { code: initial.error.code };
-      return report();
-    }
-    const recorded = LocalGame.createRecorded(
-      input.engine,
-      genesis.config,
-      fromBase64Url(genesis.genesisSeed),
-    );
-    if (!recorded.ok) {
-      return processingFailure(0, recorded.error.code);
-    }
-    const game = recorded.value;
-    if (toHex(hashValue(game.state)) !== initial.value.log.head.stateHash) {
-      return processingFailure(0, 'audit-genesis-state');
-    }
-    const privateHashes = new Map<number, ReadonlyMap<Seat, string>>();
-    const rememberPrivateHashes = (seq: number): Result<void> => {
-      const hashes = new Map<Seat, string>();
-      for (const seat of genesis.config.seats) {
-        const privateState = game.privateView(seat);
-        if (!privateState)
-          return failure(
-            'audit-omniscient-private-missing',
-            'Omniscient private state is missing',
-            {
-              seq,
-            },
-          );
-        hashes.set(seat, toHex(hashValue(privateState)));
-      }
-      privateHashes.set(seq, hashes);
-      return success(undefined);
-    };
-    const initialPrivateHashes = rememberPrivateHashes(initial.value.log.head.seq);
-    if (!initialPrivateHashes.ok) return processingFailure(0, initialPrivateHashes.error.code);
-    let prior = initial.value;
-    let failureSeq = 0;
-    let failureSeat: Seat | null = null;
-    const privateReplay = replayCertifiedPrefix(
-      input.genesisEntry,
-      publicReplay.value.entries,
-      input.engine,
-      input.policy,
-      (entry, next) => {
-        failureSeq = entry.entry.seq;
-        const recordedInput = entry.input;
-        if (recordedInput) {
-          failureSeat = null;
-          try {
-            const data = privateDataFor(recordedInput, prior, next, game, masters, genesis);
-            if (!data.ok) {
-              // Only this mismatch identifies the signer of the fixed hidden transfer.
-              // A draw failure does not prove misconduct by the receiving player.
-              if (data.error.code === 'audit-steal-resource' && recordedInput.kind === 'system')
-                failureSeat = isSeat(recordedInput.victim) ? recordedInput.victim : null;
-              return data;
-            }
-            const applied = game.applyRecorded(recordedInput, data.value);
-            if (!applied.ok) return applied;
-          } catch {
-            return failure('audit-private-input', 'Could not reconstruct certified private input');
-          }
+      const seats = new Set(genesis.seats.map((seat) => seat.seat));
+      const seen = new Set<Seat>();
+      for (const reveal of input.masters) {
+        if (!reveal || !seats.has(reveal.seat) || seen.has(reveal.seat)) {
+          if (inputErrors.length < MAX_DIAGNOSTICS)
+            inputErrors.push({ seat: null, kind: 'master-seat-or-duplicate' });
+          continue;
         }
+        seen.add(reveal.seat);
+        if (!(reveal.master instanceof Uint8Array) || reveal.master.length !== 32) {
+          if (inputErrors.length < MAX_DIAGNOSTICS)
+            inputErrors.push({ seat: reveal.seat, kind: 'master-scalar' });
+          continue;
+        }
+        const copy = reveal.master.slice();
+        try {
+          scalarFromBytes(copy, { nonzero: true });
+        } catch {
+          copy.fill(0);
+          if (inputErrors.length < MAX_DIAGNOSTICS)
+            inputErrors.push({ seat: reveal.seat, kind: 'master-scalar' });
+          continue;
+        }
+        masters.set(reveal.seat, copy);
+      }
+      missingSeats = genesis.seats.map((seat) => seat.seat).filter((seat) => !masters.has(seat));
+      for (const [seat, master] of masters) {
+        const verified = verifyRevealedMaster(genesis, crypto.decks, seat, toBase64Url(master));
+        if (verified.ok) continue;
         if (
-          toHex(hashValue(game.state)) !== next.log.head.stateHash ||
-          toHex(hashValue(game.state)) !== toHex(hashValue(next.log.state))
+          verified.error.code === 'master-public-key' ||
+          verified.error.code === 'master-reveal'
+        ) {
+          if (inputErrors.length < MAX_DIAGNOSTICS)
+            inputErrors.push({ seat, kind: verified.error.code });
+        } else if (
+          [
+            'master-encryption-key',
+            'master-beacon-tip',
+            'master-shuffle-key',
+            'master-lock-key',
+          ].includes(verified.error.code)
+        ) {
+          violations.push(issue(0, seat, verified.error.code));
+        } else return processingFailure(0, verified.error.code);
+      }
+      complete = missingSeats.length === 0 && inputErrors.length === 0;
+      if (!complete || violations.length) return report();
+
+      const initial = initialProposalContext(input.genesisEntry, input.engine, input.policy);
+      if (!initial.ok) {
+        historyError = { code: initial.error.code };
+        return report();
+      }
+      const recorded = LocalGame.createRecorded(
+        input.engine,
+        genesis.config,
+        fromBase64Url(genesis.genesisSeed),
+      );
+      if (!recorded.ok) {
+        return processingFailure(0, recorded.error.code);
+      }
+      const game = recorded.value;
+      if (toHex(hashValue(game.state)) !== initial.value.log.head.stateHash) {
+        return processingFailure(0, 'audit-genesis-state');
+      }
+      let privateHashes: ReadonlyMap<Seat, string> = new Map();
+      let privateHashSeq = initial.value.log.head.seq;
+      const rememberPrivateHashes = (seq: number): Result<void> => {
+        const hashes = new Map<Seat, string>();
+        for (const seat of genesis.config.seats) {
+          const privateState = game.privateView(seat);
+          if (!privateState)
+            return failure(
+              'audit-omniscient-private-missing',
+              'Omniscient private state is missing',
+              {
+                seq,
+              },
+            );
+          hashes.set(seat, toHex(hashValue(privateState)));
+        }
+        privateHashes = hashes;
+        privateHashSeq = seq;
+        return success(undefined);
+      };
+      const initialPrivateHashes = rememberPrivateHashes(initial.value.log.head.seq);
+      if (!initialPrivateHashes.ok) return processingFailure(0, initialPrivateHashes.error.code);
+      let privateFailure: Result<void> | undefined;
+      const prepared = createPrivateReplayObserver({
+        engine: input.engine,
+        initial: () => success(initial.value),
+        terminal: context,
+        secrets: [...masters].map(([seat, master]) => ({ seat, master })),
+        verifyPrivateState(seq, states) {
+          if (
+            seq !== privateHashSeq ||
+            states.size !== privateHashes.size ||
+            [...states].some(([seat, state]) => toHex(hashValue(state)) !== privateHashes.get(seat))
+          )
+            return failure(
+              'audit-private-state',
+              'Reconstructed private state differs from the omniscient replay',
+              { seq },
+            );
+          return success(undefined);
+        },
+      });
+      if (prepared.ok) privateObserver = prepared.value;
+      else privateFailure = prepared;
+      let failureSeq = 0;
+      let failureSeat: Seat | null = null;
+      const privateReplay = replayCertifiedPrefixObserved(
+        input.genesisEntry,
+        publicReplay.value.entries,
+        input.engine,
+        input.policy,
+        (entry, prior, next) => {
+          failureSeq = entry.entry.seq;
+          const recordedInput = entry.input;
+          if (recordedInput) {
+            failureSeat = null;
+            try {
+              const data = privateDataFor(recordedInput, prior, next, game, masters, genesis);
+              if (!data.ok) {
+                // Only this mismatch identifies the signer of the fixed hidden transfer.
+                // A draw failure does not prove misconduct by the receiving player.
+                if (data.error.code === 'audit-steal-resource' && recordedInput.kind === 'system')
+                  failureSeat = isSeat(recordedInput.victim) ? recordedInput.victim : null;
+                return data;
+              }
+              const applied = game.applyRecorded(recordedInput, data.value);
+              if (!applied.ok) return applied;
+            } catch {
+              return failure(
+                'audit-private-input',
+                'Could not reconstruct certified private input',
+              );
+            }
+          }
+          if (
+            toHex(hashValue(game.state)) !== next.log.head.stateHash ||
+            toHex(hashValue(game.state)) !== toHex(hashValue(next.log.state))
+          )
+            return failure('audit-state-hash', 'Omniscient state differs from the certified state');
+          const remembered = rememberPrivateHashes(entry.entry.seq);
+          if (!remembered.ok) return remembered;
+          if (privateObserver && !privateFailure) {
+            try {
+              const checked = privateObserver.onEntry(entry, prior, next);
+              if (!checked.ok) privateFailure = checked;
+            } catch {
+              privateFailure = failure(
+                'private-replay-failed',
+                'Could not reconstruct the requested private seats',
+              );
+            }
+          }
+          return success(undefined);
+        },
+      );
+      if (!privateReplay.ok) {
+        if (
+          [
+            'driver-error',
+            'audit-private-input',
+            'audit-state-hash',
+            'audit-omniscient-private-missing',
+            'audit-draw-context',
+            'audit-draw-seat',
+            'audit-steal-context',
+            'audit-steal-master',
+            'steal-recipient-key',
+            'deck-owner-lock',
+            'missing-private-state',
+          ].includes(privateReplay.error.code)
         )
-          return failure('audit-state-hash', 'Omniscient state differs from the certified state');
-        prior = next;
-        return rememberPrivateHashes(entry.entry.seq);
-      },
-    );
-    if (!privateReplay.ok) {
-      if (
-        [
-          'driver-error',
-          'audit-private-input',
-          'audit-state-hash',
-          'audit-omniscient-private-missing',
-          'audit-draw-context',
-          'audit-draw-seat',
-          'audit-steal-context',
-          'audit-steal-master',
-          'steal-recipient-key',
-          'deck-owner-lock',
-          'missing-private-state',
-        ].includes(privateReplay.error.code)
-      )
-        return processingFailure(failureSeq, privateReplay.error.code);
-      violations.push(issue(failureSeq, failureSeat, privateReplay.error.code));
+          return processingFailure(failureSeq, privateReplay.error.code);
+        violations.push(issue(failureSeq, failureSeat, privateReplay.error.code));
+        complete = true;
+        return report();
+      }
+      if (toHex(hashValue(game.state.result)) !== toHex(hashValue(context.log.state.result))) {
+        return processingFailure((terminal as AuditEntryRef).seq, 'audit-terminal-result');
+      }
+      const crossCheck = privateFailure ?? success(undefined);
+      if (!crossCheck.ok) {
+        const details = crossCheck.error.details;
+        const seq =
+          details &&
+          typeof details === 'object' &&
+          'seq' in details &&
+          typeof details.seq === 'number'
+            ? details.seq
+            : context.log.head.seq;
+        if (
+          [
+            'private-replay-failed',
+            'private-replay-beacon',
+            'crypto-context-required',
+            'verified-private-missing',
+            'audit-private-state',
+          ].includes(crossCheck.error.code)
+        )
+          return processingFailure(seq, crossCheck.error.code);
+        violations.push(issue(seq, null, crossCheck.error.code));
+      } else {
+        privateObserver?.finishHistory();
+        const observer = privateObserver;
+        privateObserver = undefined;
+        observer?.dispose();
+        const counts: Partial<Record<Seat, number>> = {};
+        for (const seat of genesis.config.seats) {
+          const privateState = game.privateView(seat);
+          const publicSeat = game.state.seats.find((item) => item.seat === seat);
+          if (!privateState || !publicSeat)
+            return processingFailure(context.log.head.seq, 'audit-final-private-state');
+          counts[seat] = publicSeat.cardSlots.filter(
+            (slot) => !slot.revealed && privateState.slots[slot.slotId] === 'victoryPoint',
+          ).length;
+        }
+        finalHiddenVictoryPoints = counts;
+      }
       complete = true;
       return report();
+    } finally {
+      const observer = privateObserver;
+      privateObserver = undefined;
+      observer?.dispose();
     }
-    if (toHex(hashValue(game.state.result)) !== toHex(hashValue(context.log.state.result))) {
-      return processingFailure((terminal as AuditEntryRef).seq, 'audit-terminal-result');
-    }
-    const crossCheck = reconstructPrivateSeats({
-      genesisEntry: input.genesisEntry,
-      entries: publicReplay.value.entries,
-      engine: input.engine,
-      policy: input.policy,
-      secrets: [...masters].map(([seat, master]) => ({ seat, master })),
-      verifyPrivateState(seq, states) {
-        const expected = privateHashes.get(seq);
-        if (
-          !expected ||
-          states.size !== expected.size ||
-          [...states].some(([seat, state]) => toHex(hashValue(state)) !== expected.get(seat))
-        )
-          return failure(
-            'audit-private-state',
-            'Reconstructed private state differs from the omniscient replay',
-            { seq },
-          );
-        return success(undefined);
-      },
-    });
-    if (!crossCheck.ok) {
-      const details = crossCheck.error.details;
-      const seq =
-        details &&
-        typeof details === 'object' &&
-        'seq' in details &&
-        typeof details.seq === 'number'
-          ? details.seq
-          : context.log.head.seq;
-      if (
-        [
-          'private-replay-failed',
-          'private-replay-beacon',
-          'crypto-context-required',
-          'verified-private-missing',
-          'audit-private-state',
-        ].includes(crossCheck.error.code)
-      )
-        return processingFailure(seq, crossCheck.error.code);
-      violations.push(issue(seq, null, crossCheck.error.code));
-    } else {
-      crossCheck.value.dispose();
-      const counts: Partial<Record<Seat, number>> = {};
-      for (const seat of genesis.config.seats) {
-        const privateState = game.privateView(seat);
-        const publicSeat = game.state.seats.find((item) => item.seat === seat);
-        if (!privateState || !publicSeat)
-          return processingFailure(context.log.head.seq, 'audit-final-private-state');
-        counts[seat] = publicSeat.cardSlots.filter(
-          (slot) => !slot.revealed && privateState.slots[slot.slotId] === 'victoryPoint',
-        ).length;
-      }
-      finalHiddenVictoryPoints = counts;
-    }
-    complete = true;
-    return report();
   } catch {
     return processingFailure(finalHead?.seq ?? 0, 'audit-internal-failure');
   } finally {

@@ -2,8 +2,11 @@ import { SCALAR_ORDER, scalarToBytes } from '@cp2p/crypto';
 import { RandomBot, createBotRng } from '../../bots/src/index.js';
 import { success } from '@cp2p/engine';
 import type { Engine } from '@cp2p/engine';
-import { beforeAll, describe, expect, test } from 'vitest';
+import { beforeAll, describe, expect, test, vi } from 'vitest';
 import { auditCertifiedGame } from './audit.js';
+import * as proposal from './proposal.js';
+import { VerifiedSessionDriver } from './verified-session-driver.js';
+import { auditCertifiedGameReference } from './testing/audit-reference.js';
 import { createTerminalAuditFixture } from './testing/audit-fixture.js';
 
 type Fixture = Awaited<ReturnType<typeof createTerminalAuditFixture>>;
@@ -62,6 +65,7 @@ describe('certified end-game audit', () => {
       ),
     ).toBe(true);
     const report = auditCertifiedGame(fixture);
+    expect(report).toEqual(auditCertifiedGameReference(fixture));
     expect(report).toMatchObject({
       ok: true,
       complete: true,
@@ -82,6 +86,40 @@ describe('certified end-game audit', () => {
       true,
     );
     expect(fixture.entries[(report.terminal?.seq ?? 0) - 1]?.entry.payload.kind).toBe('command');
+  }, 30_000);
+
+  test('validates each certified entry twice while matching the four-pass reference', () => {
+    const validated = vi.spyOn(proposal, 'validateCertifiedEntry');
+    try {
+      const report = auditCertifiedGame(fixture);
+      expect(report.ok).toBe(true);
+      expect(validated).toHaveBeenCalledTimes(fixture.entries.length * 2);
+      validated.mockClear();
+      expect(auditCertifiedGameReference(fixture)).toEqual(report);
+      expect(validated).toHaveBeenCalledTimes(fixture.entries.length * 4);
+    } finally {
+      validated.mockRestore();
+    }
+  }, 30_000);
+
+  test('reports throwing disposal without escaping the audit or changing supplied masters', () => {
+    const snapshots = fixture.masters.map(({ master }) => new Uint8Array(master));
+    const relinquish = vi
+      .spyOn(VerifiedSessionDriver.prototype, 'relinquishSeats')
+      .mockImplementation(() => {
+        throw new Error('Bounded disposal failure probe');
+      });
+    try {
+      const report = auditCertifiedGame(fixture);
+      expect(report).toEqual(auditCertifiedGameReference(fixture));
+      expect(report.auditError).toEqual({
+        seq: fixture.entries.at(-1)?.entry.seq,
+        code: 'audit-internal-failure',
+      });
+      fixture.masters.forEach(({ master }, index) => expect(master).toEqual(snapshots[index]));
+    } finally {
+      relinquish.mockRestore();
+    }
   }, 30_000);
 
   test('requires a certified terminal result', () => {
@@ -209,6 +247,44 @@ describe('certified end-game audit', () => {
       auditError: { seq: firstInput?.entry.seq, code: 'audit-private-state' },
       finalHiddenVictoryPoints: null,
     });
+  }, 30_000);
+
+  test('retains later omniscient failure precedence over an earlier private disagreement', () => {
+    const makeEngine = (failDraw = true): Engine => {
+      const original = fixture.engine;
+      return {
+        ...original,
+        applyAllPrivates(privates, before, input, data) {
+          if (failDraw && input.kind === 'system' && input.type === 'CARD_DEALT')
+            throw new Error('Bounded omniscient failure probe');
+          const applied = original.applyAllPrivates(privates, before, input, data);
+          if (!applied.ok || input.kind !== 'system' || input.type !== 'START_SEAT') return applied;
+          const owner = applied.value.get(0);
+          if (!owner) throw new Error('Missing audit fixture owner');
+          return success(
+            new Map(applied.value).set(0, {
+              ...owner,
+              ext: { ...owner.ext, deferredAuditProbe: true },
+            }),
+          );
+        },
+      };
+    };
+    const draw = fixture.entries.find(
+      ({ entry }) => entry.payload.kind === 'system' && entry.payload.input.type === 'CARD_DEALT',
+    );
+    expect(draw).toBeDefined();
+    const first = fixture.entries.find(
+      ({ entry }) => entry.payload.kind === 'system' && entry.payload.input.type === 'START_SEAT',
+    );
+    expect(first).toBeDefined();
+    const control = auditCertifiedGame({ ...fixture, engine: makeEngine(false) });
+    expect(control.auditError).toEqual({ seq: first?.entry.seq, code: 'audit-private-state' });
+    expect(control).toEqual(auditCertifiedGameReference({ ...fixture, engine: makeEngine(false) }));
+    const report = auditCertifiedGame({ ...fixture, engine: makeEngine() });
+    expect(report).toEqual(auditCertifiedGameReference({ ...fixture, engine: makeEngine() }));
+    expect(report.auditError).toEqual({ seq: draw?.entry.seq, code: 'driver-error' });
+    expect(report.violations).toEqual([]);
   }, 30_000);
 
   test('rejects an alternate encoding of the same scalar as bad reveal input', () => {

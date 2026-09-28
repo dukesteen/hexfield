@@ -88,6 +88,27 @@ export function replayCertifiedPrefix(
   policy: ReplayPolicy,
   onEntry?: (entry: ValidatedEntry & CertifiedEntry, next: ProposalContext) => Result<void>,
 ): Result<ReplayedPrefix> {
+  return replayCertifiedPrefixObserved(
+    genesisEntry,
+    entries,
+    engine,
+    policy,
+    onEntry ? (entry, _prior, next) => onEntry(entry, next) : undefined,
+  );
+}
+
+/** Internal observation of contexts derived here; not a public package export. */
+export function replayCertifiedPrefixObserved(
+  genesisEntry: unknown,
+  entries: readonly unknown[],
+  engine: Engine,
+  policy: ReplayPolicy,
+  onEntry?: (
+    entry: ValidatedEntry & CertifiedEntry,
+    prior: ProposalContext,
+    next: ProposalContext,
+  ) => Result<void>,
+): Result<ReplayedPrefix> {
   return replayCertifiedPrefixWithCache(genesisEntry, entries, engine, policy, new Map(), onEntry);
 }
 
@@ -98,7 +119,11 @@ function replayCertifiedPrefixWithCache(
   engine: Engine,
   policy: ReplayPolicy,
   verifiedFindings: Map<string, CheatFinding>,
-  onEntry?: (entry: ValidatedEntry & CertifiedEntry, next: ProposalContext) => Result<void>,
+  onEntry?: (
+    entry: ValidatedEntry & CertifiedEntry,
+    prior: ProposalContext,
+    next: ProposalContext,
+  ) => Result<void>,
 ): Result<ReplayedPrefix> {
   const initial = initialProposalContext(genesisEntry, engine, policy);
   if (!initial.ok) return initial;
@@ -220,7 +245,7 @@ function replayCertifiedPrefixWithCache(
         epoch: advanced.value.log.crypto?.epoch ?? advanced.value.log.authority?.epoch ?? 0,
       });
     }
-    const visited = onEntry?.(next, advanced.value);
+    const visited = onEntry?.(next, context, advanced.value);
     if (visited && !visited.ok) return visited;
     context = advanced.value;
   }

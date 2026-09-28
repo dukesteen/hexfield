@@ -26,6 +26,7 @@ import {
 import { createHandSecretSource } from './hand-source.js';
 import { signCommand } from './log.js';
 import { reconstructPrivateSeats } from './private-replay.js';
+import { reconstructPrivateSeatsReference } from './testing/private-replay-reference.js';
 import { advanceContext, validateCertifiedEntry } from './proposal.js';
 import type { CertifiedEntry } from './proposal.js';
 import { initialProposalContext, replayCertifiedPrefix } from './replay.js';
@@ -252,10 +253,39 @@ describe('certified private history reconstruction', () => {
       secrets: seats.map((seat) => ({ seat, master: master(seat) })),
     });
 
+  const compareReference = (entries: readonly unknown[]) => {
+    const run = (rebuild: typeof reconstructPrivateSeats) => {
+      const visited: { seq: number; hash: string }[] = [];
+      const result = rebuild({
+        genesisEntry: base.entry,
+        entries,
+        engine: base.simulation.engine,
+        policy: base.policy,
+        secrets: ([0, 1] as const).map((seat) => ({ seat, master: master(seat) })),
+        verifyPrivateState(seq, states) {
+          visited.push({ seq, hash: toHex(hashValue([...states])) });
+          return success(undefined);
+        },
+      });
+      if (!result.ok) return { visited, error: result.error };
+      try {
+        return {
+          visited,
+          state: result.value.context.log.state,
+          privateStates: [result.value.driver.privateState(0), result.value.driver.privateState(1)],
+        };
+      } finally {
+        result.value.dispose();
+      }
+    };
+    expect(run(reconstructPrivateSeats)).toEqual(run(reconstructPrivateSeatsReference));
+  };
+
   test('rebuilds each exact hand from legal production and retains only requested seats', () => {
     const trace = history(base);
     try {
       expect(trace.context().log.state.seats.some((seat) => seat.resources.total > 0)).toBe(true);
+      compareReference(trace.entries);
       const callerMaster = Buffer.from(master(1));
       const visited: number[] = [];
       const observedSeats: Seat[][] = [];
@@ -355,6 +385,7 @@ describe('certified private history reconstruction', () => {
           signBeaconExtension(operation, 0, extension.length, extension.tip, base.signer.secretKey),
         ],
       });
+      compareReference(trace.entries);
       const recovered = checked(reconstruct(trace.entries));
       expect(recovered.context.log.crypto?.beacon.chains[0]?.length).toBe(3);
       recovered.dispose();
@@ -378,6 +409,7 @@ describe('certified private history reconstruction', () => {
       expect(
         replayCertifiedPrefix(base.entry, trace.entries, base.simulation.engine, base.policy).ok,
       ).toBe(true);
+      compareReference(trace.entries);
       expect(reconstruct(trace.entries)).toMatchObject({
         ok: false,
         error: { code: 'master-beacon-history' },
