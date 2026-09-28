@@ -1,0 +1,23 @@
+{
+  "commit": "6196fcf",
+  "command": "node --cpu-prof --cpu-prof-dir=/private/tmp/hexfield-scenario6-cpu-profile-genesis-owned --cpu-prof-name=scenario6-60s.cpuprofile tools/sim/dist/index.js net --scenario 6 --security verified --seed 42 --start-index 0 --seeds 1 --parallel 1 --max-elapsed-ms 60000",
+  "profileLocalPath": "/private/tmp/hexfield-scenario6-cpu-profile-genesis-owned/scenario6-60s.cpuprofile",
+  "profileSha256": "b3e93617c70bbdc7642879e85724da18afe4cfdf6195f2e9d250961671ed77bc",
+  "profileBytes": 13056931,
+  "compiledExactMatch": true,
+  "sourceExactMatch": true,
+  "compiledPaths": 263,
+  "sourcePaths": 389,
+  "dirtyScope": " M docs/11-module-framework-5-6-players.md\n M docs/12-seafaring.md\n M docs/13-knights-and-commerce.md\n M docs/14-frontier-scenarios.md\n M docs/15-explorers.md\n M docs/README.md\n M packages/protocol/src/master-reveal.ts\n M packages/protocol/src/replicated-log.ts\n?? .DS_Store\n?? .redesign/\n?? apps/web/.tanstack/\n",
+  "limitation": "Matched configuration, not a single-change pair; eleven compiled files changed since hand-memo profile. Diagnostic cap, not terminal acceptance.",
+  "artifacts": {
+    "comparison.json": "859bf1eb7f2c8b248446547beff546bf907200b301f52cc20956a0e361fd7ef5",
+    "compiled-after.json": "f42d1e39c508f7ac3241014429e7ba4440ca5ff6e299114d638a63f2f0a14095",
+    "compiled-before.json": "f42d1e39c508f7ac3241014429e7ba4440ca5ff6e299114d638a63f2f0a14095",
+    "diagnostic.json": "a4112fd223f23ca84efc11e5a15b99cf62787198173f143ec03640a4555ca0fd",
+    "node-version.txt": "9b8856ee50cf06a9ce94d984812927448e9be59b03931bc1478b1d1d49a0d7b5",
+    "scenario6-60s.cpuprofile.gz": "7cbdf22e060c64cc74883c4e5719c1335ef5385e6f8ab6231574fc28cc5091a1",
+    "source-after.json": "cba69551c4e4ccf0c82b21e60b27ed69d5a6ad342e6b478d745cf8d3d3594c86",
+    "source-before.json": "cba69551c4e4ccf0c82b21e60b27ed69d5a6ad342e6b478d745cf8d3d3594c86"
+  }
+}

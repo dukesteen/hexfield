@@ -1,0 +1,215 @@
+{
+  "handMemo": {
+    "cost": {
+      "validateHandCommitments": 257.955,
+      "decodePoint": 2112.503,
+      "canonicalEncode": 23501.514,
+      "genesisDigest": 9809.962,
+      "contextStamp": 5137.928,
+      "sameContextStamp": 2819.839,
+      "validateNextEntry": 12516.168,
+      "validateCertifiedEntry": 10260.282,
+      "persistCommit": 12289.548
+    },
+    "callers": {
+      "genesisDigest": {
+        "resolveArtifactSigner authority.js:106": 3826.24,
+        "validateCryptoTransition crypto-context.js:68": 1388.442,
+        "validateControllerContext proposal.js:111": 1024.465,
+        "validateSignedCommand command-validation.js:14": 904.373,
+        "validateEntry proposal.js:129": 603.382,
+        "validateCommandForEntry command-validation.js:104": 574.551,
+        "authenticateCertifiedEntry proposal.js:244": 461.51,
+        "committedEntry verified-session-driver.js:569": 314.955,
+        "bound consensus.js:148": 253.503,
+        "createConsensusState consensus.js:499": 122.592,
+        "validateNextEntry log.js:91": 102.555,
+        "entryHash genesis.js:185": 80.831
+      },
+      "canonicalEncode": {
+        "hashValue hash.js:9": 8412.281,
+        "contextStamp consensus.js:109": 5039.027,
+        "canonicalDecode canonical.js:160": 4569.086,
+        "parseCanonical validation.js:6": 1586.885,
+        "copyConsensusStateData consensus.js:145": 1237.87,
+        "copyCanonical replicated-log.js:3877": 684.616,
+        "copyCanonical p2p-session.js:1619": 418.114,
+        "snapshot consensus-controller.js:97": 290.727,
+        "objectMessage identity.js:44": 253.716,
+        "detachedContext replicated-log.js:3881": 243.849,
+        " consensus-controller.js:141": 201.552,
+        "transition consensus.js:474": 200.509
+      },
+      "decodePoint": {
+        "checkedPoints deck-setup.js:100": 1161.273,
+        "validateStealOperation steal-delivery.js:104": 237.384,
+        "parseAndCheckEnvelope escrow-distribution.js:118": 127.5,
+        "applyPublicResourceEffect hand-commitments.js:106": 91.264,
+        "schnorrStatement sigma.js:3": 59.692,
+        "dleqStatement sigma.js:14": 49.489,
+        "verifySchnorr sigma.js:55": 44.427,
+        "verifySealedEphemeralProof seal.js:93": 37.177,
+        "parsePoints shuffle.js:11": 33.66,
+        "validPoint online-bindings.js:36": 33.425,
+        "validateGenesisMasters genesis-masters.js:10": 32.421,
+        "inspectBitProof range.js:44": 26.633
+      },
+      "validateHandCommitments": {
+        "planHandTransition hand-transition.js:62": 82.24,
+        "validateCryptoTransition crypto-context.js:68": 76.066,
+        "verifyHandOpening hand-commitments.js:140": 56.005,
+        "applyPublicResourceEffect hand-commitments.js:106": 42.184,
+        "completeStealResult steal-state.js:190": 1.46
+      }
+    },
+    "revision": 116,
+    "turn": 22,
+    "elapsed": 60044.988916,
+    "operationTimings": {
+      "sessionFlush": {
+        "calls": 4373,
+        "totalMilliseconds": 45802.64018599994,
+        "maximumMilliseconds": 1422.1577499999985
+      },
+      "networkDelivery": {
+        "calls": 4307,
+        "totalMilliseconds": 908.3438070001321,
+        "maximumMilliseconds": 7.534166999997979
+      },
+      "botDecide": {
+        "calls": 65,
+        "totalMilliseconds": 24.460544000014124,
+        "maximumMilliseconds": 1.7255829999994603
+      },
+      "actorExport": {
+        "calls": 96,
+        "totalMilliseconds": 784.5516999999963,
+        "maximumMilliseconds": 15.717917000001762
+      },
+      "actorAdvance": {
+        "calls": 96,
+        "totalMilliseconds": 3350.5725370000146,
+        "maximumMilliseconds": 335.80208400000265
+      },
+      "actorDecide": {
+        "calls": 18,
+        "totalMilliseconds": 7.746793000023899,
+        "maximumMilliseconds": 0.8909590000039316
+      }
+    },
+    "sourceUnchanged": true
+  },
+  "ownedGenesis": {
+    "cost": {
+      "validateHandCommitments": 323.85,
+      "decodePoint": 2285.221,
+      "canonicalEncode": 21566.235,
+      "genesisDigest": 521.456,
+      "contextStamp": 6837.143,
+      "sameContextStamp": 3990.099,
+      "validateNextEntry": 9902.912,
+      "validateCertifiedEntry": 6766.723,
+      "persistCommit": 13427.25
+    },
+    "callers": {
+      "genesisDigest": {
+        "committedEntry verified-session-driver.js:569": 366.969,
+        "entryHash genesis.js:185": 76.144,
+        "prepareCommand verified-session-driver.js:431": 33.173,
+        "genesisId genesis-identity.js:40": 15.036,
+        "ownImmutableGenesis genesis-identity.js:4": 8.764,
+        "resolveArtifactSigner authority.js:106": 7.545,
+        "validateGenesis genesis.js:72": 5.021,
+        "initializeBeaconState beacon-state.js:125": 5.015,
+        "signGenesis genesis.js:25": 1.281,
+        "invalidCommandProposal net-adversary.js:4": 1.255,
+        "createVerifiedNetworkFixture verified-network-fixture.js:57": 1.253
+      },
+      "canonicalEncode": {
+        "contextStamp consensus.js:109": 6763.769,
+        "canonicalDecode canonical.js:160": 5243.272,
+        "hashValue hash.js:9": 3360.921,
+        "parseCanonical validation.js:6": 1956.108,
+        "copyConsensusStateData consensus.js:145": 1497.896,
+        "copyCanonical p2p-session.js:1619": 591.284,
+        "copyCanonical replicated-log.js:3958": 442.407,
+        "snapshot consensus-controller.js:97": 331.878,
+        "detachedContext replicated-log.js:3962": 301.109,
+        "transition consensus.js:474": 228.94,
+        "objectMessage identity.js:44": 221.151,
+        " consensus-controller.js:141": 212.62
+      },
+      "decodePoint": {
+        "checkedPoints deck-setup.js:100": 1129.836,
+        "validateStealOperation steal-delivery.js:104": 427.228,
+        "parseAndCheckEnvelope escrow-distribution.js:118": 114.058,
+        "applyPublicResourceEffect hand-commitments.js:106": 89.916,
+        "schnorrStatement sigma.js:3": 66.34,
+        "verifySealedEphemeralProof seal.js:93": 46.459,
+        "dleqStatement sigma.js:14": 42.67,
+        "validateGenesisMasters genesis-masters.js:10": 42.3,
+        " steal-state.js:213": 35.97,
+        "readPayload seal.js:20": 32.31,
+        "validPoint online-bindings.js:36": 32.013,
+        "inspectBitProof range.js:44": 31.244
+      },
+      "validateHandCommitments": {
+        "validateCryptoTransition crypto-context.js:68": 107.943,
+        "planHandTransition hand-transition.js:62": 86.435,
+        "verifyHandOpening hand-commitments.js:140": 63.286,
+        "applyPublicResourceEffect hand-commitments.js:106": 57.413,
+        "completeStealResult steal-state.js:190": 8.773
+      }
+    },
+    "revision": 174,
+    "turn": 34,
+    "elapsed": 60003.779834,
+    "operationTimings": {
+      "sessionFlush": {
+        "calls": 6444,
+        "totalMilliseconds": 46854.46187900022,
+        "maximumMilliseconds": 809.2985000000008
+      },
+      "networkDelivery": {
+        "calls": 6345,
+        "totalMilliseconds": 607.6345450003719,
+        "maximumMilliseconds": 8.15008300000045
+      },
+      "botDecide": {
+        "calls": 98,
+        "totalMilliseconds": 28.980125999960364,
+        "maximumMilliseconds": 1.4810840000009193
+      },
+      "actorExport": {
+        "calls": 154,
+        "totalMilliseconds": 343.1253819999947,
+        "maximumMilliseconds": 3.294500000003609
+      },
+      "actorAdvance": {
+        "calls": 154,
+        "totalMilliseconds": 3270.0308359999763,
+        "maximumMilliseconds": 261.81162499999846
+      },
+      "actorDecide": {
+        "calls": 28,
+        "totalMilliseconds": 8.693372999998246,
+        "maximumMilliseconds": 0.7771250000005239
+      }
+    },
+    "sourceUnchanged": true
+  },
+  "changedCompiledSinceBaseline": [
+    "packages/p2p/dist/manual-bootstrap.js",
+    "packages/p2p/dist/peer-link.js",
+    "packages/p2p/dist/signaling-envelope.js",
+    "packages/p2p/dist/web-rtc-transport.js",
+    "packages/protocol/dist/genesis-identity.js",
+    "packages/protocol/dist/master-reveal.js",
+    "packages/protocol/dist/online-ceremony.js",
+    "packages/protocol/dist/replay.js",
+    "packages/protocol/dist/replicated-log.js",
+    "packages/protocol/dist/testing/recovery-fixture.js",
+    "packages/storage/dist/indexed-db-protocol-journal.js"
+  ],
+  "postCompiledExactMatch": true
+}
