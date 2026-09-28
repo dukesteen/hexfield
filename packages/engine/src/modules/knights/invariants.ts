@@ -10,6 +10,7 @@ import {
   TRACKS,
   WALLS_PER_SEAT,
 } from './config.js';
+import { progressInvariants } from './progress/invariants.js';
 import { knightsExt } from './types.js';
 
 /** Public checks for improvements, metropolises, walls and the robber lock. */
@@ -74,6 +75,7 @@ export function knightsInvariants(state: GameState): string[] {
   )
     errors.push('invalid barbarian step');
   errors.push(...pieceErrors(state));
+  errors.push(...progressInvariants(state));
   for (const kind of COMMODITIES)
     if (!Object.hasOwn(state.bank, kind)) errors.push(`bank has no ${kind}`);
   return errors;

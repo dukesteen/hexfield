@@ -17,6 +17,7 @@ import {
 } from '../base/shared.js';
 import { BARBARIAN_STEPS, KNIGHTS_ID } from './config.js';
 import { availableCities } from './improvements.js';
+import { beginTieDraws } from './progress/draw.js';
 import { knightsExt, updateKnights } from './types.js';
 import type { AttackReport, PillageFrameData } from './types.js';
 
@@ -48,13 +49,12 @@ export function contributions(state: GameState): number[] {
 }
 
 /**
- * K5 seam: the seats that tied for the top contribution each draw one progress card from a deck
- * of their choice, in turn order from the active seat. Progress cards do not exist yet, so this
- * leaves the state alone. The tie itself is recorded in `lastAttack.tied`, which is what K5
- * reads (or replaces this function with a frame that asks each seat for a deck).
+ * The seats that tied for the top contribution each pick a deck and draw one progress card, in
+ * turn order from the active seat. The draws hold the roll back in a `progress` frame (like a
+ * pillage choice); the tie itself is recorded in `lastAttack.tied`.
  */
-export function awardTieDraws(state: GameState, _seats: readonly Seat[]): GameState {
-  return state;
+export function awardTieDraws(state: GameState, seats: readonly Seat[], roll: number): GameState {
+  return beginTieDraws(state, seats, roll);
 }
 
 /**
@@ -161,7 +161,7 @@ export function resolveAttack(state: GameState, roll: number): GameState {
         ...old,
         lastAttack: old.lastAttack ? { ...old.lastAttack, tied: leaders } : old.lastAttack,
       }));
-      next = awardTieDraws(next, leaders);
+      next = awardTieDraws(next, leaders, roll);
     }
   } else {
     const eligible = order.filter((seat) => availableCities(next, seat).length > 0);

@@ -1,3 +1,4 @@
+import type { EngineEffect } from '../../core/effects/index.js';
 import type { CommandHandler, PhaseHandler } from '../../core/modules/index.js';
 import type { GameState, PhaseFrame, PrivateState } from '../../core/state/index.js';
 import { failure, success } from '../../core/types/index.js';
@@ -139,6 +140,47 @@ function trackOf(value: unknown): Track | null {
   return isTrack(value) ? value : null;
 }
 
+/**
+ * Pay `cost` and raise the seat's level on a track, awarding or asking for a metropolis. The
+ * ordinary purchase and a Crane share it; the caller has checked `improvementProblem`.
+ */
+export function buyLevel(
+  state: GameState,
+  seat: Seat,
+  track: Track,
+  cost: CardCounts,
+): {
+  state: GameState;
+  events: { type: string; [key: string]: unknown }[];
+  effects: EngineEffect[];
+} {
+  const level = levelOf(state, seat, track) + 1;
+  const spent = exchangeBank(state, seat, cost, false);
+  let next = updateKnights(spent.state, (old) => ({
+    ...old,
+    improvements: old.improvements.map((levels, index) =>
+      index === seat ? { ...levels, [track]: level } : levels,
+    ),
+  }));
+  const events: { type: string; [key: string]: unknown }[] = [
+    { type: 'improvementBuilt', seat, track, level },
+  ];
+  // The award is decided on the position before the purchase: it only reads other seats' levels
+  // and the holder, which the purchase does not change.
+  if (metropolisAward(state, seat, track, level)) {
+    const spots = availableCities(next, seat);
+    const only = spots[0];
+    if (spots.length === 1 && only !== undefined) {
+      const placed = placeMetropolis(next, seat, track, only);
+      next = placed.state;
+      events.push({ type: 'metropolisPlaced', seat, track, vertex: only, from: placed.from });
+    } else {
+      next = pushPhase(next, metropolisFrame({ seat, track }));
+    }
+  }
+  return { state: next, events, effects: spent.effects };
+}
+
 /** Buy the next level of a track with the track's commodity. */
 export const buildImprovement: CommandHandler = {
   keys: { allowed: ['track'] },
@@ -151,37 +193,7 @@ export const buildImprovement: CommandHandler = {
   apply: (state, input) => {
     const track = trackOf(input.command.track);
     if (track === null) throw new Error('Validated track missing');
-    const level = levelOf(state, input.seat, track) + 1;
-    const spent = exchangeBank(state, input.seat, improvementCost(state, input.seat, track), false);
-    let next = updateKnights(spent.state, (old) => ({
-      ...old,
-      improvements: old.improvements.map((levels, seat) =>
-        seat === input.seat ? { ...levels, [track]: level } : levels,
-      ),
-    }));
-    const events: { type: string; [key: string]: unknown }[] = [
-      { type: 'improvementBuilt', seat: input.seat, track, level },
-    ];
-    // The award is decided on the position before the purchase: it only reads other seats' levels
-    // and the holder, which the purchase does not change.
-    if (metropolisAward(state, input.seat, track, level)) {
-      const spots = availableCities(next, input.seat);
-      const only = spots[0];
-      if (spots.length === 1 && only !== undefined) {
-        const placed = placeMetropolis(next, input.seat, track, only);
-        next = placed.state;
-        events.push({
-          type: 'metropolisPlaced',
-          seat: input.seat,
-          track,
-          vertex: only,
-          from: placed.from,
-        });
-      } else {
-        next = pushPhase(next, metropolisFrame({ seat: input.seat, track }));
-      }
-    }
-    return { state: next, events, effects: spent.effects };
+    return buyLevel(state, input.seat, track, improvementCost(state, input.seat, track));
   },
   applyPrivate: (priv, before, input) => {
     if (priv.seat !== input.seat) return success(priv);

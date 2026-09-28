@@ -84,6 +84,92 @@ function knightEvent(type: string, seat: Seat, vertex: string, more: object = {}
   return { type, seat, vertex, ...more };
 }
 
+interface Change {
+  state: GameState;
+  events: GameEvent[];
+}
+
+/** Promote the seat's knight one level and remember the turn (a knight is promoted once per turn). */
+export function promotePiece(state: GameState, seat: Seat, vertex: string): Change {
+  const level = (knightAt(state, vertex)?.level ?? 0) + 1;
+  return {
+    state: setKnights(state, (list) =>
+      list.map((knight) =>
+        knight.vertex === vertex ? { ...knight, level, promotedTurn: state.turn.number } : knight,
+      ),
+    ),
+    events: [knightEvent('knightPromoted', seat, vertex, { level })],
+  };
+}
+
+/** Put a city wall under the seat's city. */
+export function placeWall(state: GameState, seat: Seat, vertex: string): Change {
+  return {
+    state: updateKnights(state, (old) => ({ ...old, walls: [...old.walls, { seat, vertex }] })),
+    events: [knightEvent('cityWallBuilt', seat, vertex)],
+  };
+}
+
+/** Turn a sideways city piece upright. It was already a city piece, so no supply changes hands. */
+export function upgradeSideways(
+  state: GameState,
+  seat: Seat,
+  vertex: string,
+  ctx: HandlerContext,
+): Change {
+  let next: GameState = {
+    ...state,
+    board: {
+      ...state.board,
+      buildings: state.board.buildings.map((piece) =>
+        piece.vertex === vertex ? { ...piece, kind: 'city' } : piece,
+      ),
+    },
+  };
+  next = updateSeat(next, seat, (old) => ({
+    ...old,
+    piecesLeft: { ...old.piecesLeft, sideways: (old.piecesLeft.sideways ?? 1) - 1 },
+  }));
+  next = updateKnights(next, (old) => ({
+    ...old,
+    sideways: old.sideways.filter((piece) => piece.vertex !== vertex),
+  }));
+  return {
+    state: ctx.hooks.afterBuild(next, seat, 'city', vertex),
+    events: [{ type: 'cityBuilt', seat, vertex }],
+  };
+}
+
+/** Replace the seat's settlement with a city: a city piece is used and the settlement piece returns. */
+export function upgradeSettlement(
+  state: GameState,
+  seat: Seat,
+  vertex: string,
+  ctx: HandlerContext,
+): Change {
+  let next: GameState = {
+    ...state,
+    board: {
+      ...state.board,
+      buildings: state.board.buildings.map((piece) =>
+        piece.vertex === vertex ? { ...piece, kind: 'city' } : piece,
+      ),
+    },
+  };
+  next = updateSeat(next, seat, (old) => ({
+    ...old,
+    piecesLeft: {
+      ...old.piecesLeft,
+      city: (old.piecesLeft.city ?? 0) - 1,
+      settlement: (old.piecesLeft.settlement ?? 0) + 1,
+    },
+  }));
+  return {
+    state: ctx.hooks.afterBuild(next, seat, 'city', vertex),
+    events: [{ type: 'cityBuilt', seat, vertex }],
+  };
+}
+
 const PURCHASES: Record<string, Purchase> = {
   BUILD_KNIGHT: {
     cost: 'knight',
@@ -113,55 +199,18 @@ const PURCHASES: Record<string, Purchase> = {
   PROMOTE_KNIGHT: {
     cost: 'promote',
     problem: promoteProblem,
-    change: (state, seat, vertex) => {
-      const level = (knightAt(state, vertex)?.level ?? 0) + 1;
-      return {
-        state: setKnights(state, (list) =>
-          list.map((knight) =>
-            knight.vertex === vertex
-              ? { ...knight, level, promotedTurn: state.turn.number }
-              : knight,
-          ),
-        ),
-        events: [knightEvent('knightPromoted', seat, vertex, { level })],
-      };
-    },
+    change: (state, seat, vertex) => promotePiece(state, seat, vertex),
   },
   BUILD_CITY_WALL: {
     cost: 'cityWall',
     problem: wallProblem,
-    change: (state, seat, vertex) => ({
-      state: updateKnights(state, (old) => ({ ...old, walls: [...old.walls, { seat, vertex }] })),
-      events: [knightEvent('cityWallBuilt', seat, vertex)],
-    }),
+    change: (state, seat, vertex) => placeWall(state, seat, vertex),
   },
   // The piece is already paid for as a city piece: no supply changes hands.
   UPGRADE_SIDEWAYS_CITY: {
     cost: 'city',
     problem: restoreProblem,
-    change: (state, seat, vertex, ctx) => {
-      let next: GameState = {
-        ...state,
-        board: {
-          ...state.board,
-          buildings: state.board.buildings.map((piece) =>
-            piece.vertex === vertex ? { ...piece, kind: 'city' } : piece,
-          ),
-        },
-      };
-      next = updateSeat(next, seat, (old) => ({
-        ...old,
-        piecesLeft: { ...old.piecesLeft, sideways: (old.piecesLeft.sideways ?? 1) - 1 },
-      }));
-      next = updateKnights(next, (old) => ({
-        ...old,
-        sideways: old.sideways.filter((piece) => piece.vertex !== vertex),
-      }));
-      return {
-        state: ctx.hooks.afterBuild(next, seat, 'city', vertex),
-        events: [{ type: 'cityBuilt', seat, vertex }],
-      };
-    },
+    change: (state, seat, vertex, ctx) => upgradeSideways(state, seat, vertex, ctx),
   },
 };
 

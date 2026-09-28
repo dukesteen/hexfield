@@ -107,19 +107,28 @@ export function cardConservation(
     if (!priv) return [`Missing private cards for seat ${seat}`];
     const publicSeat = state.seats.find((holder) => holder.seat === seat);
     if (!publicSeat) return [`Missing public seat ${seat}`];
+    // Only the development deck is audited here; module decks (progress cards) have their own
+    // private invariants in their module.
     const unrevealed = new Set(
-      publicSeat.cardSlots.filter((slot) => !slot.revealed).map((slot) => slot.slotId),
+      publicSeat.cardSlots
+        .filter((slot) => !slot.revealed && slot.deck === 'dev')
+        .map((slot) => slot.slotId),
+    );
+    const otherDeck = new Set(
+      publicSeat.cardSlots.filter((slot) => slot.deck !== 'dev').map((slot) => slot.slotId),
     );
     for (const slotId of unrevealed)
       if (!Object.hasOwn(priv.slots, slotId))
         problems.push(`Seat ${seat} lacks private identity for slot ${slotId}`);
     for (const slotId of Object.keys(priv.slots))
-      if (!unrevealed.has(slotId))
+      if (!unrevealed.has(slotId) && !otherDeck.has(slotId))
         problems.push(`Seat ${seat} has private identity without unrevealed slot ${slotId}`);
-    for (const card of Object.values(priv.slots)) count(card);
+    for (const [slotId, card] of Object.entries(priv.slots))
+      if (!otherDeck.has(slotId)) count(card);
   }
   for (const seat of state.seats)
-    for (const slot of seat.cardSlots) if (slot.revealed) count(slot.revealed);
+    for (const slot of seat.cardSlots)
+      if (slot.revealed && slot.deck === 'dev') count(slot.revealed);
   for (const [card, expected] of Object.entries(deck))
     if (counts[card] !== expected)
       problems.push(`${card} count ${counts[card] ?? 0}, expected ${expected}`);

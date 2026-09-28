@@ -187,6 +187,11 @@ function commandWeight(type: string, offersThisTurn: number, totalOffers: number
   if (type === 'MOVE_KNIGHT' || type === 'DISPLACE_KNIGHT' || type === 'CHASE_ROBBER') return 3;
   if (type === 'MOVE_SHIP' || type === 'PLACE_SETUP_SHIP') return 2;
   if (type === 'BUY_DEV_CARD' || type === 'PLAY_DEV_CARD') return 8;
+  // Progress cards: a bot plays what it holds soon (it cannot keep more than four), and a seat over
+  // the limit cannot end its turn until it discards.
+  if (type === 'PLAY_PROGRESS_CARD') return 14;
+  if (type === 'DISCARD_PROGRESS') return 40;
+  if (type === 'HARBOR_OFFER') return 6;
   if (type === 'OFFER_TRADE' || type === 'PROPOSE_TRADE')
     return offersThisTurn >= 1 || totalOffers >= 8 ? 0 : 1;
   if (type === 'MARITIME_TRADE') return 2;

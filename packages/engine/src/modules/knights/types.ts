@@ -78,6 +78,19 @@ export interface KnightsExt {
   eventDie: string | null;
   /** Seats with an Aqueduct that received no card on the roll being resolved. Empty at rest. */
   noProduction: Seat[];
+  /**
+   * Progress cards returned under each deck, oldest first. A played or discarded card is shown, so
+   * the queue is public; it is dealt again, in order, once a deck's hidden positions are used up.
+   */
+  bottom: Record<Track, string[]>;
+  /** The merchant piece: the seat that controls it and the hex it stands on, or null before the first. */
+  merchant: { seat: Seat; hex: string } | null;
+  /** Production dice set by an Alchemist for the coming roll, or null. */
+  alchemist: [number, number] | null;
+  /** Card kinds a seat may trade 2:1 with the bank for the rest of its turn (Merchant Fleet). */
+  fleet: { seat: Seat; kinds: string[] } | null;
+  /** Commercial Harbor: the playing seat, the harbors it played this turn, and the offers made. */
+  harbor: { seat: Seat; cards: number; offered: Seat[] } | null;
 }
 
 /** Data of the `aqueduct` frame: the seats still to take a card, in order. */

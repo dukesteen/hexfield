@@ -23,6 +23,7 @@ import {
   WALL_HAND_BONUS,
 } from './config.js';
 import { advanceBarbarians } from './barbarians.js';
+import { beginGateDraws } from './progress/draw.js';
 import { knightsExt, updateKnights } from './types.js';
 
 /** The `bankInit` hook: 12 of each commodity, or 18 with five-six. */
@@ -64,15 +65,24 @@ export function cityProduction(state: GameState, roll: number, acc: Production):
   return next;
 }
 
-/** The `diceSpec` hook: the event die rides along with the two production dice. */
-export function withEventDie(_state: GameState, acc: DiceSpec): DiceSpec {
-  return { ...acc, extra: [...acc.extra, { id: EVENT_DIE.id, faces: [...EVENT_DIE.faces] }] };
+/**
+ * The `diceSpec` hook: the event die rides along with the two production dice, and an Alchemist
+ * sets the production dice so that only the event die is rolled.
+ */
+export function withEventDie(state: GameState, acc: DiceSpec): DiceSpec {
+  const alchemist = knightsExt(state).alchemist;
+  return {
+    ...acc,
+    extra: [...acc.extra, { id: EVENT_DIE.id, faces: [...EVENT_DIE.faces] }],
+    ...(alchemist ? { fixed: alchemist } : {}),
+  };
 }
 
 /**
- * The `onDiceResult` hook: record the event die, and move the barbarians on a ship. Progress card
- * draws for a gate face come with K5. This runs before production and before a 7, so an attack
- * lands first and its pillage takes effect on the same roll.
+ * The `onDiceResult` hook: record the event die, move the barbarians on a ship, and start the
+ * progress card draws on a gate face. This runs before production and before a 7, so an attack
+ * lands first and its pillage takes effect on the same roll. Draws and pillage choices hold the
+ * roll back in their own frames; whichever closes last calls `resolveRoll`.
  */
 export function recordEventDie(
   state: GameState,
@@ -80,8 +90,11 @@ export function recordEventDie(
   extra: Readonly<Record<string, string>>,
 ): GameState {
   const face = extra[EVENT_DIE.id] ?? null;
-  const recorded = updateKnights(state, (old) => ({ ...old, eventDie: face }));
-  return face === 'ship' ? advanceBarbarians(recorded, dice[0] + dice[1]) : recorded;
+  const recorded = updateKnights(state, (old) => ({ ...old, eventDie: face, alchemist: null }));
+  const roll = dice[0] + dice[1];
+  if (face === 'ship') return advanceBarbarians(recorded, roll);
+  const track = TRACKS.find((item) => item === face);
+  return track === undefined ? recorded : beginGateDraws(recorded, track, dice[0], roll);
 }
 
 /** The `costs` hook: knights, promotions, activations and city walls. */

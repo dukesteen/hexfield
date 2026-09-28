@@ -81,7 +81,7 @@ export function chaseProblem(
     : failure('no-robber-hex', 'The robber has nowhere to go');
 }
 
-function displacedFrame(data: DisplacedFrameData): PhaseFrame {
+export function displacedFrame(data: DisplacedFrameData): PhaseFrame {
   return { id: DISPLACED_FRAME, module: KNIGHTS_ID, data };
 }
 

@@ -1,4 +1,9 @@
-import type { CommandHandler, GameModule, RenderHint } from '../../core/modules/index.js';
+import type {
+  CommandHandler,
+  GameModule,
+  RenderHint,
+  SystemInputHandler,
+} from '../../core/modules/index.js';
 import type { GameState } from '../../core/state/index.js';
 import type { Seat } from '../../core/types/index.js';
 import { finalize } from '../base/shared.js';
@@ -27,11 +32,27 @@ import {
   METROPOLIS_FRAME,
   automaticMetropolis,
   buildImprovement,
-  hasAbility,
   metropolisPhase,
   placeMetropolisCommand,
 } from './improvements.js';
 import { knightsInvariants } from './invariants.js';
+import { progressPrivateInvariants } from './progress/invariants.js';
+import { FLOWS, FLOW_COMMANDS, FLOW_PHASES, FLOW_SYSTEM_INPUTS } from './progress/cards.js';
+import { progressDecks } from './progress/catalogue.js';
+import {
+  DEAL_FRAME,
+  PROGRESS_FRAME,
+  afterProgressDraw,
+  automaticProgress,
+  chooseProgressDeck,
+  dealKnown,
+  dealPhase,
+  discardProgress,
+  progressPhase,
+  revealProgress,
+} from './progress/draw.js';
+import { bankRates, clearTurnEffects, progressPoints } from './progress/effects.js';
+import { playProgressCard } from './progress/play.js';
 import {
   knightRoutes,
   readyForTurn,
@@ -127,6 +148,16 @@ const COMMAND_HANDLERS: Record<string, CommandHandler> = {
   BUILD_CITY_WALL: buildCityWall,
   UPGRADE_SIDEWAYS_CITY: upgradeSidewaysCity,
   CHOOSE_PILLAGE: choosePillage,
+  PLAY_PROGRESS_CARD: playProgressCard,
+  CHOOSE_PROGRESS_DECK: chooseProgressDeck,
+  DISCARD_PROGRESS: discardProgress,
+  ...FLOW_COMMANDS,
+};
+
+const SYSTEM_HANDLERS: Record<string, SystemInputHandler> = {
+  REVEAL_PROGRESS: revealProgress,
+  DEAL_KNOWN: dealKnown,
+  ...FLOW_SYSTEM_INPUTS,
 };
 
 function finalized(entries: Record<string, CommandHandler>): Record<string, CommandHandler> {
@@ -138,10 +169,20 @@ function finalized(entries: Record<string, CommandHandler>): Record<string, Comm
   );
 }
 
+function finalizedSystem(
+  entries: Record<string, SystemInputHandler>,
+): Record<string, SystemInputHandler> {
+  return Object.fromEntries(
+    Object.entries(entries).map(([name, handler]) => [
+      name,
+      { ...handler, apply: (state, input, ctx) => finalize(handler.apply(state, input, ctx), ctx) },
+    ]),
+  );
+}
+
 /**
- * Cities and Knights, sub-milestones K1 to K4: commodities, the event die, the robber lock, city
- * improvements with metropolises, knights with city walls, and the barbarians. Progress cards come
- * later.
+ * Cities and Knights, sub-milestones K1 to K5: commodities, the event die, the robber lock, city
+ * improvements with metropolises, knights with city walls, the barbarians and the progress cards.
  */
 export function knightsModule(): GameModule {
   return {
@@ -162,6 +203,11 @@ export function knightsModule(): GameModule {
       lastAttack: null,
       eventDie: null,
       noProduction: [],
+      bottom: { trade: [], politics: [], science: [] },
+      merchant: null,
+      alchemist: null,
+      fleet: null,
+      harbor: null,
     }),
     hooks: {
       cardKinds: (acc) => [...acc, ...COMMODITIES],
@@ -185,10 +231,13 @@ export function knightsModule(): GameModule {
       handLimit: limitWithWalls,
       robberLike: lockRobber,
       stealTargets: (state, _seat, _blocker, _hex, targets) => lockSteals(state, targets),
-      bankRate: (state, seat, kind, rate) =>
-        COMMODITIES.includes(kind) && hasAbility(state, seat, 'trade') ? Math.min(rate, 2) : rate,
+      decks: progressDecks,
+      afterDraw: afterProgressDraw,
+      onTurnEnd: clearTurnEffects,
+      bankRate: bankRates,
       vpTarget: (_config, acc) => knightsTarget(acc),
-      victoryPoints: (state, seat, _priv, acc) => metropolisPoints(state, seat, acc),
+      victoryPoints: (state, seat, _priv, acc) =>
+        progressPoints(state, seat, metropolisPoints(state, seat, acc)),
       pending: addKnightsPending,
       legalCommands: (state, seat, priv, acc, ctx) =>
         addKnightsCommands(state, seat, priv, acc, ctx),
@@ -198,6 +247,11 @@ export function knightsModule(): GameModule {
         if (request.phase === METROPOLIS_FRAME) return automaticMetropolis(state, request.seat);
         if (request.phase === DISPLACED_FRAME) return automaticRelocation(state, request.seat);
         if (request.phase === PILLAGE_FRAME) return automaticPillage(state, request.seat);
+        if (request.phase === PROGRESS_FRAME) return automaticProgress(state, request.seat);
+        for (const flow of FLOWS) {
+          const command = flow.timeout?.(state, request);
+          if (command) return command;
+        }
         return null;
       },
       renderHints: (state, acc) => {
@@ -217,13 +271,17 @@ export function knightsModule(): GameModule {
       },
     },
     commands: finalized(COMMAND_HANDLERS),
-    systemInputs: {},
+    systemInputs: finalizedSystem(SYSTEM_HANDLERS),
     phases: {
       [AQUEDUCT_FRAME]: aqueductPhase,
       [METROPOLIS_FRAME]: metropolisPhase,
       [DISPLACED_FRAME]: displacedPhase,
       [PILLAGE_FRAME]: pillagePhase,
+      [PROGRESS_FRAME]: progressPhase,
+      [DEAL_FRAME]: dealPhase,
+      ...FLOW_PHASES,
     },
     invariants: knightsInvariants,
+    privateInvariants: progressPrivateInvariants,
   };
 }

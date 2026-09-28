@@ -9,7 +9,6 @@ import type {
 } from '@cp2p/engine';
 import {
   DEV_CARD_COUNTS,
-  RESOURCES,
   decksFor,
   isPublicDraw,
   kindsOfCounts,
@@ -137,6 +136,14 @@ export function createLocalRandomSource(
             const extra = rollExtraDice(pending.request, (bound) => rng.int(bound));
             return Object.keys(extra).length ? { extra } : {};
           };
+          if (pending.request.mode === 'fixed') {
+            const fixed = pending.request.dice;
+            if (!Array.isArray(fixed) || fixed.length !== 2)
+              throw new Error('Malformed fixed dice request');
+            return {
+              input: { kind: 'system', type: 'DICE_RESULT', dice: [...fixed], ...extraDice() },
+            };
+          }
           if (pending.request.mode === 'balanced') {
             if (options.fixedDiceTotal !== undefined)
               throw new Error('Directed dice total cannot override balanced dice');
@@ -204,7 +211,8 @@ export function createLocalRandomSource(
         case 'REVEAL_COUNT': {
           if (pending.kind !== 'reveal' || typeof pending.request.resource !== 'string')
             throw new Error('Malformed monopoly reveal');
-          const resource = RESOURCES.find((item) => item === pending.request.resource);
+          const hand = requiredPrivate(privates, pending.seat).hand;
+          const resource = kindsOfCounts(hand).find((item) => item === pending.request.resource);
           if (!resource) throw new Error('Unknown reveal resource');
           return {
             input: {
@@ -212,8 +220,108 @@ export function createLocalRandomSource(
               type: 'REVEAL_COUNT',
               seat: pending.seat,
               resource,
-              count: requiredPrivate(privates, pending.seat).hand[resource] ?? 0,
+              count: hand[resource] ?? 0,
             },
+          };
+        }
+        case 'REVEAL_PROGRESS': {
+          // A drawer shows a victory card it drew, or says none.
+          if (pending.kind !== 'reveal' || typeof pending.request.slotId !== 'string')
+            throw new Error('Malformed victory check');
+          const held = requiredPrivate(privates, pending.seat).slots[pending.request.slotId];
+          const victory = held === 'printer' || held === 'constitution';
+          return {
+            input: {
+              kind: 'system',
+              type: 'REVEAL_PROGRESS',
+              seat: pending.seat,
+              slotId: pending.request.slotId,
+              card: victory ? held : 'none',
+            },
+          };
+        }
+        case 'DEAL_KNOWN': {
+          // A returned card dealt again: everything is already public in the request.
+          const { type: _type, ...echoed } = pending.request;
+          return { input: { ...echoed, kind: 'system', type: 'DEAL_KNOWN', seat: pending.seat } };
+        }
+        case 'SHOW_HAND': {
+          if (pending.kind !== 'reveal') throw new Error('Malformed hand reveal');
+          const actor = state.config.seats.find((seat) => seat === pending.request.to);
+          const target = requiredPrivate(privates, pending.seat);
+          if (actor === undefined) throw new Error('Unknown seat shown a hand');
+          const shown =
+            pending.request.what === 'progress'
+              ? { progress: { ...target.slots } }
+              : { hand: { ...target.hand } };
+          return {
+            input: {
+              kind: 'system',
+              type: 'SHOW_HAND',
+              seat: pending.seat,
+              to: actor,
+              what: pending.request.what,
+            },
+            privateData: { [actor]: shown },
+          };
+        }
+        case 'TAKE_CARDS': {
+          // The actor takes `count` cards of the shown hand; only the two parties learn the kinds.
+          if (pending.kind !== 'reveal') throw new Error('Malformed take');
+          const from = state.config.seats.find((seat) => seat === pending.request.from);
+          const count = requiredInteger(pending.request.count, 'take count');
+          if (from === undefined) throw new Error('Unknown seat to take from');
+          const hand = requiredPrivate(privates, from).hand;
+          const pool = kindsOfCounts(hand).flatMap((kind) =>
+            Array<string>(hand[kind] ?? 0).fill(kind),
+          );
+          const taken: Record<string, number> = {};
+          for (let n = 0; n < count; n++) {
+            const picked = pool.splice(rng.int(pool.length), 1)[0];
+            if (picked === undefined) throw new Error('Take exceeds the shown hand');
+            taken[picked] = (taken[picked] ?? 0) + 1;
+          }
+          return {
+            input: {
+              kind: 'system',
+              type: 'TAKE_CARDS',
+              seat: pending.seat,
+              from,
+              cards: 'hidden',
+            },
+            privateData: { [pending.seat]: { cards: taken }, [from]: { cards: taken } },
+          };
+        }
+        case 'TAKE_PROGRESS': {
+          // The Spy takes one shown progress card, or none.
+          if (pending.kind !== 'reveal') throw new Error('Malformed take');
+          const from = state.config.seats.find((seat) => seat === pending.request.from);
+          if (from === undefined) throw new Error('Unknown seat to take from');
+          const held = (state.seats.find((seat) => seat.seat === from)?.cardSlots ?? []).filter(
+            (slot) => slot.revealed === undefined && slot.deck.startsWith('progress-'),
+          );
+          const index = rng.int(held.length + 1);
+          const slot = held[index];
+          if (slot === undefined)
+            return {
+              input: {
+                kind: 'system',
+                type: 'TAKE_PROGRESS',
+                seat: pending.seat,
+                from,
+                slotId: null,
+              },
+            };
+          const card = slot.known ?? requiredPrivate(privates, from).slots[slot.slotId];
+          return {
+            input: {
+              kind: 'system',
+              type: 'TAKE_PROGRESS',
+              seat: pending.seat,
+              from,
+              slotId: slot.slotId,
+            },
+            privateData: { [pending.seat]: { card } },
           };
         }
         default:
