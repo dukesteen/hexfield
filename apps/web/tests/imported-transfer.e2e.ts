@@ -1,13 +1,17 @@
 /* eslint-disable no-await-in-loop -- Certified game actions depend on the previous head. */
 import { expect, test } from '@playwright/test';
-import type { Page } from '@playwright/test';
+import type { BrowserContext, Page } from '@playwright/test';
 
-test.use({ channel: 'chrome', actionTimeout: 15_000 });
+const destinationEngine = process.env.CP2P_TRANSFER_DESTINATION_ENGINE;
+if (destinationEngine && (!process.env.CI || !['firefox', 'webkit'].includes(destinationEngine)))
+  throw new Error('Cross-engine transfer checks require CI and a Firefox or WebKit destination');
+
+test.use({ channel: destinationEngine ? undefined : 'chrome', actionTimeout: 15_000 });
 test.skip(
   process.env.CP2P_IMPORTED_TRANSFER_E2E !== '1',
-  'Bounded native Chrome imported-save transfer acceptance',
+  'Opt-in imported-save transfer acceptance',
 );
-test.skip(({ browserName }) => browserName !== 'chromium', 'Runs only in native Chrome');
+test.skip(({ browserName }) => browserName !== 'chromium', 'The source uses Chromium');
 
 const signalingUrl = 'ws://127.0.0.1:8909';
 const filePassphrase = 'imported checkpoint acceptance phrase';
@@ -84,18 +88,29 @@ async function submitFirstLegal(page: Page, gameId: string): Promise<boolean> {
 
 test('encrypted imported history stays read-only until a fresh certified seat transfer', async ({
   browser,
+  playwright,
+  baseURL,
 }, testInfo) => {
   test.setTimeout(240_000);
-  const contexts = await Promise.all(Array.from({ length: 3 }, () => browser.newContext()));
-  const [source, survivor, destination] = await Promise.all(
-    contexts.map((context) => context.newPage()),
-  );
-  if (!source || !survivor || !destination) throw new Error('Missing Chromium page');
+  if (!baseURL) throw new Error('Transfer acceptance requires the configured app URL');
+  const destinationBrowser =
+    destinationEngine === 'firefox' || destinationEngine === 'webkit'
+      ? await playwright[destinationEngine].launch({ headless: true })
+      : null;
+  const contexts: BrowserContext[] = [];
+  const pages: Page[] = [];
   const errors: string[] = [];
-  for (const page of [source, survivor, destination])
-    page.on('pageerror', (error) => errors.push(error.message));
-
   try {
+    for (const engine of [browser, browser, destinationBrowser ?? browser]) {
+      const context = await engine.newContext({ baseURL });
+      contexts.push(context);
+      await context.addInitScript(() => performance.setResourceTimingBufferSize(5_000));
+      const page = await context.newPage();
+      page.on('pageerror', (error) => errors.push(error.message));
+      pages.push(page);
+    }
+    const [source, survivor, destination] = pages;
+    if (!source || !survivor || !destination) throw new Error('Missing transfer page');
     await source.goto('/#/online/create');
     await source.getByLabel('Room name').fill('Imported checkpoint transfer');
     await source.getByLabel('Your player name').fill('Original device');
@@ -257,11 +272,25 @@ test('encrypted imported history stays read-only until a fresh certified seat tr
       { timeout: 30_000 },
     );
     expect(errors).toEqual([]);
+    await testInfo.attach('imported-transfer-result', {
+      body: JSON.stringify({
+        sourceEngine: 'chromium',
+        destinationEngine: destinationEngine ?? 'chrome',
+        gameId,
+        freshDevice: sourceDevice !== destinationDevice,
+        importedReadOnlyBeforeTransfer: true,
+        retiredSourceRejectedAfterReload: true,
+        peerAcceptedDestinationMove: acceptedMove,
+        finalHead: (await gameView(destination, gameId))?.head,
+        pageErrors: errors,
+      }),
+      contentType: 'application/json',
+    });
   } catch (error) {
     await testInfo.attach('imported-transfer-pages', {
       body: JSON.stringify(
         await Promise.all(
-          [source, survivor, destination].map(async (page) => ({
+          pages.map(async (page) => ({
             url: page.url(),
             text: await page
               .locator('main')
@@ -276,6 +305,7 @@ test('encrypted imported history stays read-only until a fresh certified seat tr
     });
     throw error;
   } finally {
-    await Promise.all(contexts.map((context) => context.close()));
+    await Promise.allSettled(contexts.map((context) => context.close()));
+    await destinationBrowser?.close();
   }
 });
