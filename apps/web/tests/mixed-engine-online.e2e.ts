@@ -37,6 +37,7 @@ async function launchFourEngines(playwright: Playwright): Promise<OpenedBrowserS
     browsers.push(webkit);
     const contextOptions = {
       baseURL: appBaseUrl,
+      reducedMotion: 'reduce',
       viewport: { width: 1280, height: 900 },
     } as const;
     const first = await chromium.newContext(contextOptions);
@@ -537,6 +538,7 @@ async function readRoom(page: Page, includePeerStats = false) {
                     ? { kind: item.kind, seat: item.seat, allowed: item.allowed }
                     : { kind: item.kind },
                 ),
+              resultPresent: Boolean(session.getState().result),
               audit: session.getAudit?.().kind ?? null,
             }
           : null,
@@ -849,7 +851,24 @@ async function certifyPostSetupMove(pages: readonly Page[], gameId: string): Pro
   expect(after.map((item) => item?.head)).toEqual([afterHead, afterHead, afterHead, afterHead]);
 }
 
-async function finishAndAudit(pages: readonly Page[], gameId: string) {
+interface FinishProgress {
+  readonly commands: number;
+  readonly accepted: Readonly<Record<string, number>>;
+  readonly refusedCommands: Readonly<Record<string, number>>;
+  readonly playElapsedMs: number;
+  readonly auditElapsedMs: number;
+  readonly peers: readonly {
+    readonly head: { readonly seq: number; readonly hash: string } | null;
+    readonly resultPresent: boolean;
+    readonly audit: string | null;
+  }[];
+}
+
+async function finishAndAudit(
+  pages: readonly Page[],
+  gameId: string,
+  onProgress: (progress: FinishProgress) => void,
+) {
   const bots = pages.map((_, index) => ({
     bot: new RandomBot(),
     state: stableBotConfig(),
@@ -860,13 +879,16 @@ async function finishAndAudit(pages: readonly Page[], gameId: string) {
   let terminalAt: number | undefined;
   const accepted: Record<string, number> = {};
   const refusedCommands: Record<string, number> = {};
-  const diagnostic = () => ({
+  let peers: FinishProgress['peers'] = [];
+  const diagnostic = (): FinishProgress => ({
     commands,
-    accepted,
-    refusedCommands,
+    accepted: { ...accepted },
+    refusedCommands: { ...refusedCommands },
+    peers,
     playElapsedMs: (terminalAt ?? Date.now()) - started,
     auditElapsedMs: terminalAt === undefined ? 0 : Date.now() - terminalAt,
   });
+  onProgress(diagnostic());
   try {
     await expect
       .poll(
@@ -898,10 +920,17 @@ async function finishAndAudit(pages: readonly Page[], gameId: string) {
               commands += 1;
               accepted[command.type] = (accepted[command.type] ?? 0) + 1;
             }
+            onProgress(diagnostic());
             if (commands > 300) throw new Error('The bounded mixed-engine game exceeded 300 moves');
           }
           const views = await Promise.all(pages.map((page) => inspectGame(page, gameId)));
+          peers = views.map((view) => ({
+            head: view?.head ?? null,
+            resultPresent: Boolean(view?.result),
+            audit: view?.audit?.kind ?? null,
+          }));
           if (views.every((view) => view?.result)) terminalAt ??= Date.now();
+          onProgress(diagnostic());
           return views.every((view) => view?.result && view.audit?.kind === 'complete');
         },
         { timeout: 150_000, intervals: [100] },
@@ -938,6 +967,17 @@ async function runMode(playwright: Playwright, mode: 'signaling' | 'manual') {
   const started = Date.now();
   let phase = 'lobby';
   let readingProgress = false;
+  let finishProgress: FinishProgress | null = null;
+  const emitProgress = (peers?: unknown) => {
+    process.stdout.write(
+      `${JSON.stringify({ mode, phase, elapsedMs: Date.now() - started, finish: finishProgress, peers })}\n`,
+    );
+  };
+  const setPhase = (next: string) => {
+    phase = next;
+    emitProgress();
+  };
+  emitProgress();
   // A runner-level timeout can interrupt the catch block itself. Retain public
   // progress during the run, without private hands, SDP, candidates or keys.
   const progress = setInterval(() => {
@@ -950,9 +990,7 @@ async function runMode(playwright: Playwright, mode: 'signaling' | 'manual') {
       })),
     )
       .then((peers) => {
-        process.stdout.write(
-          `${JSON.stringify({ mode, phase, elapsedMs: Date.now() - started, peers })}\n`,
-        );
+        emitProgress(peers);
         return undefined;
       })
       .finally(() => {
@@ -962,12 +1000,21 @@ async function runMode(playwright: Playwright, mode: 'signaling' | 'manual') {
   try {
     const fixture = await startFourPlayerRoom(opened.pages, mode);
     const lobbyElapsedMs = Date.now() - started;
-    phase = 'setup';
+    setPhase('setup');
     const setupStarted = Date.now();
     await certifyPostSetupMove(opened.pages, fixture.gameId);
     const setupElapsedMs = Date.now() - setupStarted;
-    phase = 'play-and-audit';
-    const completion = await finishAndAudit(opened.pages, fixture.gameId);
+    setPhase('play-and-audit');
+    const completion = await finishAndAudit(opened.pages, fixture.gameId, (snapshot) => {
+      finishProgress = snapshot;
+      if (
+        snapshot.peers.length === opened.pages.length &&
+        snapshot.peers.every((peer) => peer.resultPresent) &&
+        phase !== 'audit'
+      )
+        setPhase('audit');
+    });
+    setPhase('complete');
     expect(errors).toEqual([]);
     return { mode, browserSet: engineNames, lobbyElapsedMs, setupElapsedMs, ...completion };
   } catch (error) {
