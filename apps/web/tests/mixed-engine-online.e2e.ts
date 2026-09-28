@@ -127,8 +127,8 @@ async function installFailureDiagnostics(page: Page): Promise<void> {
       const record = (event: Record<string, unknown>) => {
         const current = Reflect.get(window, key);
         const events: Record<string, unknown>[] = Array.isArray(current) ? current : [];
-        if (events.length >= 32) events.shift();
-        events.push(event);
+        if (events.length >= 64) events.shift();
+        events.push({ atMs: Math.round(performance.now()), ...event });
         Reflect.set(window, key, events);
       };
       let manualOpenStage: string | null = null;
@@ -401,6 +401,13 @@ async function installFailureDiagnostics(page: Page): Promise<void> {
             blobValidWithSyntheticEnvelope,
           };
           try {
+            if (get(blob, 'kind') === 'description')
+              record({
+                source: 'signal-description',
+                from: typeof from === 'string' ? from.slice(0, 12) : null,
+                to: typeof to === 'string' ? to.slice(0, 12) : null,
+                ...metadata,
+              });
             const sent = Reflect.apply(originalSignal, this, signalArgs);
             return Promise.resolve(sent).catch(async (error: unknown) => {
               record({
@@ -474,6 +481,28 @@ async function readRoom(page: Page, includePeerStats = false) {
       const snapshot = room.getSnapshot();
       const session = room.getGame()?.session;
       const peerStats = readPeerStats ? await room.getPeerStats?.().catch(() => []) : [];
+      // Address-free state for unfinished links is absent from authenticated
+      // peer stats. Read it only in diagnostics; never change transport state.
+      const transport = readPeerStats ? Reflect.get(room, 'transport') : null;
+      const unfinishedLinks = ['links', 'pendingLinks'].flatMap((slot) => {
+        const links = transport ? Reflect.get(transport, slot) : null;
+        if (!(links instanceof Map)) return [];
+        return [...links].map(([peer, item]) => {
+          const link = Reflect.get(item, 'link');
+          const pc = Reflect.get(link, 'pc');
+          return {
+            peer: typeof peer === 'string' ? peer.slice(0, 12) : null,
+            slot,
+            authenticated: Reflect.get(link, 'isAuthenticated'),
+            connection: Reflect.get(pc, 'connectionState'),
+            ice: Reflect.get(pc, 'iceConnectionState'),
+            signaling: Reflect.get(pc, 'signalingState'),
+            localRevision: Reflect.get(link, 'localRevision'),
+            remoteRevision: Reflect.get(link, 'remoteRevision'),
+            queuedDescriptions: Reflect.get(link, 'pendingDescriptions'),
+          };
+        });
+      });
       return {
         ...pageEvidence,
         roomOpen: true,
@@ -483,6 +512,7 @@ async function readRoom(page: Page, includePeerStats = false) {
         signalingState: snapshot.signaling.state,
         peerStates:
           peerStats?.map(({ state, route: peerRoute }) => ({ state, route: peerRoute })) ?? [],
+        unfinishedLinks,
         startup: snapshot.startup?.phase ?? null,
         lobbyStatus: snapshot.lobby?.status ?? null,
         humanCount: snapshot.lobby?.seats.filter((seat) => seat.kind === 'human').length ?? 0,
@@ -876,9 +906,35 @@ async function runMode(playwright: Playwright, mode: 'signaling' | 'manual') {
     if (!engine) throw new Error('Missing browser engine label');
     page.on('pageerror', () => errors.push(engine));
   }
+  const started = Date.now();
+  let phase = 'lobby';
+  let readingProgress = false;
+  // A runner-level timeout can interrupt the catch block itself. Retain public
+  // progress during the run, without private hands, SDP, candidates or keys.
+  const progress = setInterval(() => {
+    if (readingProgress) return;
+    readingProgress = true;
+    void Promise.all(
+      opened.pages.map(async (page, index) => ({
+        engine: engineNames[index],
+        ...(await readRoom(page, true).catch(() => ({ unavailable: true }))),
+      })),
+    )
+      .then((peers) => {
+        process.stdout.write(
+          `${JSON.stringify({ mode, phase, elapsedMs: Date.now() - started, peers })}\n`,
+        );
+        return undefined;
+      })
+      .finally(() => {
+        readingProgress = false;
+      });
+  }, 10_000);
   try {
     const fixture = await startFourPlayerRoom(opened.pages, mode);
+    phase = 'setup';
     await certifyPostSetupMove(opened.pages, fixture.gameId);
+    phase = 'play-and-audit';
     const completion = await finishAndAudit(opened.pages, fixture.gameId);
     expect(errors).toEqual([]);
     return { mode, browserSet: engineNames, ...completion };
@@ -894,6 +950,7 @@ async function runMode(playwright: Playwright, mode: 'signaling' | 'manual') {
       { cause: error },
     );
   } finally {
+    clearInterval(progress);
     await Promise.allSettled(opened.contexts.map((context) => context.close()));
     await Promise.allSettled(opened.browsers.map((browser) => browser.close()));
   }
