@@ -7,8 +7,16 @@ export {
   defaultScenario,
   scenarioById,
   scenarioConfig,
+  scenarioIsPlayable,
   scenarioOfConfig,
   scenariosForModules,
   scenariosForSeats,
 } from './scenarios.js';
 export type { Scenario, ScenarioBoard } from './scenarios.js';
+export {
+  FIXED_SEAFARING,
+  OPEN_SEA_OPTIONS,
+  harborProblems,
+  tokenProblems,
+} from './scenarios/seafaring/index.js';
+export type { FixedSeafaringData, FogSpec, SeafaringOptions } from './scenarios/seafaring/index.js';

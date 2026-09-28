@@ -1,0 +1,35 @@
+import { DESERT_CROSSING } from './desert-crossing.js';
+import { FOGBOUND } from './fogbound.js';
+import { FOUR_ISLES, FOUR_ISLES_56 } from './four-isles.js';
+import { NEW_HORIZONS, NEW_HORIZONS_56 } from './new-horizons.js';
+import type { FixedSeafaringData } from './types.js';
+
+export { DESERT_CROSSING } from './desert-crossing.js';
+export { FOGBOUND, FOGBOUND_FOG } from './fogbound.js';
+export { FOUR_ISLES, FOUR_ISLES_56 } from './four-isles.js';
+export {
+  adjacentLandPairs,
+  boardFromLayout,
+  cellId,
+  harborProblems,
+  islandHexes,
+  parseRows,
+  renderRows,
+  shapeFromBoard,
+  tokenProblems,
+} from './layout.js';
+export type { SeafaringLayout } from './layout.js';
+export { NEW_HORIZONS, NEW_HORIZONS_56 } from './new-horizons.js';
+export { OPEN_SEA_OPTIONS } from './open-sea.js';
+export { defineFixedSeafaring } from './types.js';
+export type { FixedSeafaringData, FogSpec, SeafaringOptions } from './types.js';
+
+/** Every fixed seafaring scenario, in lobby order. */
+export const FIXED_SEAFARING: readonly FixedSeafaringData[] = Object.freeze([
+  NEW_HORIZONS,
+  NEW_HORIZONS_56,
+  FOUR_ISLES,
+  FOUR_ISLES_56,
+  FOGBOUND,
+  DESERT_CROSSING,
+]);
