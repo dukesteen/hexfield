@@ -153,5 +153,5 @@ If the original human returns (with their device storage intact), `SEAT_RETURN` 
 
 - [ ] Every chaos addition passes a deterministic trace with the fault, safety and conditional-liveness assertions in the [bounded acceptance policy](verification/p2p-acceptance-policy.md), including each distinct unlock persistence boundary.
 - [ ] Refresh-resume takes < 3 s to be back in play on a typical laptop (measured).
-- [ ] Four-human takeover and audit pass; two-/three-human departure pauses safely and resumes when the required voter returns.
+- [x] Four-human takeover and audit pass; two-/three-human departure pauses safely and resumes when the required voter returns. The [current-v6 native lifecycle](verification/stage10/native-takeover-acceptance.md) covers two takeovers, return, default-ten-point completion and three independent clean audits; [signed departure tests](verification/stage10/product-acceptance-checkpoint.md#departure-safety) cover the two-/three-human pause and return. The separate mixed-engine matrix remains open.
 - [ ] A game can be exported and resumed in another browser as the same seat through a certified key transfer; a stale save cannot reactivate a retired key.

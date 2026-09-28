@@ -97,7 +97,8 @@ check for this source; it does not replace the other fault scenarios.
 All nine separate stub-network jobs also passed. The ordinary check passed
 production/test typechecking and lint, then stopped on six formatting issues;
 those are fixed in `52722f2`, with a passing tracked-file format check. Its later
-build and dependency checks were skipped, not passed. The remaining unit shard was still running when this section was recorded.
+build and dependency checks were skipped, not passed. All four unit-test shards subsequently passed. The overall run failed because
+of formatting and the persistence timeout below; deployment was skipped.
 
 The [persistence repeat](verified-ci-2026-09-28/worker-persistence-timeout.json)
 failed its unchanged 900-second limit before victory, at head 598/turn 98. All
