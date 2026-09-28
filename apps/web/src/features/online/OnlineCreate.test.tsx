@@ -9,7 +9,12 @@ import { OnlineCreate } from './OnlineCreate';
 const fixtures = vi.hoisted(() => ({
   network: null as null | NetworkSettings,
   loading: false,
-  begin: vi.fn<() => { promise: Promise<never>; cancel: () => void; keep: () => void }>(() => ({
+  begin: vi.fn<
+    (
+      id: string,
+      options: unknown,
+    ) => { promise: Promise<never>; cancel: () => void; keep: () => void }
+  >(() => ({
     promise: new Promise<never>(() => undefined),
     cancel: vi.fn<() => void>(),
     keep: vi.fn<() => void>(),
