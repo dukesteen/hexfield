@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import * as publicCodec from './index.js';
-import { canonicalText } from './internal.js';
+import { canonicalClone, canonicalText } from './internal.js';
+import * as fc from 'fast-check';
 import {
   canonicalDecode,
   canonicalEncode,
@@ -19,6 +20,24 @@ function mustThrow(action: () => unknown): void {
   expect(action).toThrow(/./);
 }
 
+function capture(action: () => unknown) {
+  try {
+    action();
+  } catch (error) {
+    if (!(error instanceof Error)) throw error;
+    return { constructor: error.constructor, message: error.message };
+  }
+  throw new Error('Rejected corpus was accepted');
+}
+
+function metadata(value: unknown) {
+  return value !== null && typeof value === 'object'
+    ? {
+        descriptors: Object.getOwnPropertyDescriptors(value),
+      }
+    : undefined;
+}
+
 describe('canonical codec', () => {
   test('internal canonical text preserves Unicode distinctions without a wire change', () => {
     expect(Object.hasOwn(publicCodec, 'canonicalText')).toBe(false);
@@ -33,6 +52,103 @@ describe('canonical codec', () => {
     // escapes them, so the guard must continue distinguishing the originals.
     expect(canonicalText('\ud800')).not.toBe(canonicalText('\ud801'));
     expect(canonicalText('é')).not.toBe(canonicalText('e\u0301'));
+  });
+
+  test('internal clone matches the complete roundtrip for bounded canonical values', () => {
+    expect(Object.hasOwn(publicCodec, 'canonicalClone')).toBe(false);
+    const scalar = fc.oneof(
+      fc.integer(),
+      fc.string({ maxLength: 32 }),
+      fc.boolean(),
+      fc.constant(null),
+      fc.uint8Array({ maxLength: 12 }),
+    );
+    fc.assert(
+      fc.property(
+        fc.record({
+          values: fc.array(scalar, { maxLength: 8 }),
+          nested: fc.record({ leaf: scalar }),
+        }),
+        (input) => {
+          const cloned = canonicalClone(input);
+          const reference = canonicalDecode(canonicalEncode(input));
+          expect(cloned).toEqual(reference);
+          expect(canonicalEncode(cloned)).toEqual(canonicalEncode(reference));
+        },
+      ),
+      { numRuns: 100, seed: 42 },
+    );
+    const special: Record<string, unknown> = {};
+    Object.setPrototypeOf(special, null);
+    Object.defineProperty(special, '__proto__', { value: { text: '\ud800🌲' }, enumerable: true });
+    for (const input of [
+      special,
+      -0,
+      1e21,
+      'é',
+      'e\u0301',
+      '\ud801',
+      new Uint8Array([1, 2, 3, 4]).subarray(1, 3),
+      { $b: 'ordinary', other: 1 },
+    ]) {
+      const cloned = canonicalClone(input);
+      const reference = canonicalDecode(canonicalEncode(input));
+      expect(cloned).toEqual(reference);
+      expect(Object.getPrototypeOf(Object(cloned))).toBe(Object.getPrototypeOf(Object(reference)));
+      expect(metadata(cloned)).toEqual(metadata(reference));
+    }
+  });
+
+  test('clone owns records and byte views and duplicates shared references', () => {
+    const bytes = new Uint8Array([1, 2, 3, 4]);
+    const shared = Object.freeze({ count: 1 });
+    const input = { bytes: bytes.subarray(1, 3), pair: [shared, shared] };
+    const cloned = canonicalClone(input);
+    if (
+      !cloned ||
+      typeof cloned !== 'object' ||
+      !('bytes' in cloned) ||
+      !(cloned.bytes instanceof Uint8Array) ||
+      !('pair' in cloned) ||
+      !Array.isArray(cloned.pair)
+    )
+      throw new Error('Clone shape differs');
+    expect(cloned.bytes.buffer).not.toBe(bytes.buffer);
+    expect(cloned.bytes.byteLength).toBe(2);
+    cloned.bytes[0] = 99;
+    expect(bytes[1]).toBe(2);
+    expect(cloned.pair[0]).not.toBe(cloned.pair[1]);
+    expect(Object.isFrozen(cloned.pair[0])).toBe(false);
+    expect(cloned.pair[0]).not.toBe(shared);
+  });
+
+  test('clone preserves encoder rejections and error messages', () => {
+    const sparse: unknown[] = [];
+    sparse.length = 2;
+    const extra = [1];
+    Object.defineProperty(extra, 'extra', { value: 2 });
+    const accessor = Object.defineProperty({}, 'value', { enumerable: true, get: () => 1 });
+    const cyclic: { self?: unknown } = {};
+    cyclic.self = cyclic;
+    for (const input of [
+      sparse,
+      extra,
+      accessor,
+      cyclic,
+      new Date(0),
+      new Map(),
+      { $b: 'AA' },
+      NaN,
+      Infinity,
+      1.5,
+      undefined,
+      1n,
+      () => 1,
+    ]) {
+      expect(capture(() => canonicalClone(input))).toEqual(
+        capture(() => canonicalDecode(canonicalEncode(input))),
+      );
+    }
   });
 
   test('sorts keys by UTF-16 code units and ignores insertion order', () => {

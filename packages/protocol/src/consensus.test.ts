@@ -1,8 +1,10 @@
-import { hashValue, toHex } from '@cp2p/codec';
+import { canonicalDecode, canonicalEncode, hashValue, toHex } from '@cp2p/codec';
 import type { Result, Seat, SystemInput } from '@cp2p/engine';
 import { describe, expect, test } from 'vitest';
 import {
   createConsensusState,
+  copyConsensusStateData,
+  openOwnedConsensusState,
   inputAvailable,
   propose,
   receiveCommit,
@@ -133,6 +135,37 @@ function setup() {
 }
 
 describe('one-height consensus core', () => {
+  test('canonical copies match the old roundtrip and cannot acquire owned validation authority', () => {
+    const f = setup();
+    const initial = value(createConsensusState(f.context, 3));
+    const owned = value(openOwnedConsensusState(initial, f.context, 3));
+    const next = value(owned.dispatch({ kind: 'proposal', proposal: f.proposal(1) }, f.key(3)));
+    for (const state of [initial, next.state]) {
+      expect(copyConsensusStateData(state)).toEqual(canonicalDecode(canonicalEncode(state)));
+    }
+    const copied = copyConsensusStateData(next.state);
+    const vote = copied.votes[0];
+    if (!vote) throw new Error('Missing genuine retained vote');
+    vote.sig = 'forged';
+    expect(
+      receiveVote(copied, f.context, f.key(3), f.vote(2, 1, 'prevote', entryHash(f.entry(1)))).ok,
+    ).toBe(false);
+    expect(next.state.votes[0]?.sig).not.toBe('forged');
+    expect(
+      errorCode(
+        receiveVote(
+          copyConsensusStateData(next.state),
+          { ...f.context, excludedProposers: [1] },
+          f.key(3),
+          f.vote(2, 1, 'prevote', entryHash(f.entry(1))),
+        ),
+      ),
+    ).toBe('consensus-context');
+    expect(() => copyConsensusStateData({ ...initial, round: 1.5 })).toThrow(TypeError);
+    expect(() => copyConsensusStateData({ ...initial, round: 0 })).toThrow(/./);
+    owned.discard();
+  });
+
   test('retains at most two authenticated proposals from one equivocating proposer per round', () => {
     const f = setup();
     let state = value(createConsensusState(f.context, 3));

@@ -179,6 +179,18 @@ function decodeTagged(value: unknown): unknown {
   return decoded;
 }
 
+/** Detached copy through our own canonical output, never caller-supplied text or bytes. */
+export function canonicalClone(value: unknown): unknown {
+  const text = canonicalText(value);
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text) as unknown;
+  } catch (error) {
+    throw new TypeError('Canonical clone invariant failed.', { cause: error });
+  }
+  return decodeTagged(parsed);
+}
+
 /** Decodes canonical UTF-8 bytes and byte tags, rejecting alternate JSON representations. */
 export function canonicalDecode(bytes: Uint8Array): unknown {
   if (!(bytes instanceof Uint8Array)) throw new TypeError('Canonical input must be a Uint8Array.');

@@ -1,1 +1,1 @@
-export { canonicalText } from './canonical.js';
+export { canonicalClone, canonicalText } from './canonical.js';

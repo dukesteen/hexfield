@@ -1,6 +1,6 @@
 import { genesisContextText } from './genesis-identity.js';
 import { canonicalDecode, canonicalEncode, hashValue, toHex } from '@cp2p/codec';
-import { canonicalText } from '@cp2p/codec/internal';
+import { canonicalClone, canonicalText } from '@cp2p/codec/internal';
 import { parsePeerId } from '@cp2p/crypto';
 import { failure, success } from '@cp2p/engine';
 import type { Result, Seat } from '@cp2p/engine';
@@ -267,7 +267,7 @@ function sameContextStamp(left: ContextStamp, right: ContextStamp): boolean {
 
 /** Detached schema-checked data for observer callbacks; it confers no validation authority. */
 export function copyConsensusStateData(state: ConsensusState): ConsensusState {
-  return v.parse(stateSchema, canonicalDecode(canonicalEncode(state)));
+  return v.parse(stateSchema, canonicalClone(state));
 }
 
 function bound(state: ConsensusState, context: ProposalContext, localSeat: Seat): boolean {
@@ -750,8 +750,7 @@ function transition(
   const applied = action(copy, effects);
   if (!applied.ok) return applied;
   try {
-    const bytes = canonicalEncode(copy);
-    const parsed = v.safeParse(stateSchema, canonicalDecode(bytes));
+    const parsed = v.safeParse(stateSchema, canonicalClone(copy));
     if (!parsed.success)
       return failure('consensus-restore', 'Transition produced malformed safety state');
     if (ownedStates.has(state)) ownedStates.add(copy);
