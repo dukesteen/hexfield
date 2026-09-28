@@ -1,0 +1,5 @@
+{
+  "packages/protocol/src/online-ceremony.ts": "b1e10eeba79040e7482ef9e1380f35b4ae736448177edeb0090ed8b675465b9c",
+  "packages/protocol/src/deck-setup.ts": "2b836901748302678c4e927a87d293d17be73e65223132a34a2e19cdfe7cd840",
+  "packages/protocol/src/online-ceremony.test.ts": "bfbb43540ec559077693a69f31942f8eb8427026f8891da3ebc560354921e0c1"
+}

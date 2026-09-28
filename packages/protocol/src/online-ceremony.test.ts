@@ -13,7 +13,9 @@ import {
 } from '@cp2p/crypto';
 import { BASE_VERSION, createBaseEngine } from '@cp2p/engine';
 import type { GameConfig, Result } from '@cp2p/engine';
-import { afterEach, describe, expect, test } from 'vitest';
+import { afterEach, describe, expect, test, vi } from 'vitest';
+import * as deckSetup from './deck-setup.js';
+import type { DeckSetupState } from './deck-setup.js';
 import { MemoryEscrowLifecycleStore } from './escrow-lifecycle.js';
 import { LOBBY_COLOURS } from './lobby-types.js';
 import type { LobbyFreezeAgreement, LobbyState } from './lobby-types.js';
@@ -178,6 +180,7 @@ function setup(mode: LobbyState['seedMode'] = { kind: 'joint' }, humanCount = 2)
 const active: { dispose(): void }[] = [];
 afterEach(() => {
   while (active.length) active.pop()?.dispose();
+  vi.restoreAllMocks();
 });
 
 async function settle(room: ReturnType<typeof setup>, peers: readonly OnlineCeremony[]) {
@@ -207,6 +210,7 @@ function interceptTransport(
   room: ReturnType<typeof setup>,
   seat: number,
   intercept: (to: string, bytes: Uint8Array, packet: OnlineCeremonyPacket) => boolean,
+  onListen?: () => void,
 ): Transport {
   const member = required(room.agreement.state.seats[seat]);
   if (member.kind !== 'human') throw new Error('Expected human transport owner');
@@ -225,7 +229,11 @@ function interceptTransport(
       actual.send(to, bytes);
     },
     broadcast: (bytes) => actual.broadcast(bytes),
-    onMessage: (listener) => actual.onMessage(listener),
+    onMessage: (listener) => {
+      const off = actual.onMessage(listener);
+      onListen?.();
+      return off;
+    },
     onPeerChange: (listener) => actual.onPeerChange(listener),
     disconnect: (other) => actual.disconnect(other),
   };
@@ -804,16 +812,25 @@ describe('online genesis ceremony', () => {
     const store = required(room.stores[0]);
     const originalLoad = store.load.bind(store);
     let injected = false;
+    let listening = false;
+    const replayTransport = interceptTransport(
+      room,
+      0,
+      () => false,
+      () => {
+        listening = true;
+      },
+    );
     store.load = async (id) => {
       const bytes = await originalLoad(id);
-      if (!injected && id.startsWith('online-manifest/')) {
+      if (listening && !injected && id.startsWith('online-manifest/')) {
         injected = true;
         room.network.transport(holder.peer).send(host.peer, packet.bytes);
         room.network.clock.advanceBy(0);
       }
       return bytes;
     };
-    const restored = room.create(0, store, undefined, result);
+    const restored = room.create(0, store, replayTransport, result);
     active.push(restored);
     const phases: string[] = [];
     restored.onChange((progress) => phases.push(progress.phase));
@@ -1111,6 +1128,118 @@ describe('online genesis ceremony', () => {
     await settle(room, [host, guest]);
     expect(host.snapshot().phase).toBe('ready');
     expect(guest.snapshot().phase).toBe('ready');
+  }, 60_000);
+
+  test('cached deck retries skip validated passes, restart revalidates and retains deadline', async () => {
+    const room = setup();
+    let held = false;
+    let retries = 0;
+    const guestTransport = interceptTransport(room, 1, (_to, _bytes, packet) => {
+      if (packet.body.kind !== 'deck-pass' || packet.body.step !== 5) return false;
+      held = true;
+      retries += 1;
+      return true;
+    });
+    const host = room.create(0);
+    const guest = room.create(1, required(room.stores[1]), guestTransport);
+    active.push(host, guest, room.network);
+    const applied = vi.spyOn(deckSetup, 'applyDeckPass');
+    expect((await host.start()).ok).toBe(true);
+    expect((await guest.start()).ok).toBe(true);
+    await until(room, () => held && host.snapshot().phase === 'deck');
+    await Promise.all([host.flush(), guest.flush()]);
+    applied.mockClear();
+    const previousRetries = retries;
+    room.network.clock.advanceBy(1_001);
+    await until(room, () => retries > previousRetries);
+    await Promise.all([host.flush(), guest.flush()]);
+    expect(applied).not.toHaveBeenCalled();
+    expect(host.snapshot().phase).toBe('deck');
+    host.dispose();
+    const restored = room.create(0);
+    active.push(restored);
+    expect((await restored.start()).ok).toBe(true);
+    await until(room, () => restored.snapshot().phase === 'deck');
+    expect(applied).toHaveBeenCalled();
+    room.network.clock.advanceBy(18_999);
+    await until(room, () => restored.snapshot().phase === 'retired');
+    expect(restored.snapshot().error).toBe('online-ceremony-timeout:deck');
+  }, 60_000);
+
+  test('mutating validator outputs cannot poison the coordinator-owned prefix', async () => {
+    const room = setup();
+    let hold = true;
+    let held = false;
+    const guestTransport = interceptTransport(room, 1, (_to, _bytes, packet) => {
+      if (!hold || packet.body.kind !== 'deck-pass' || packet.body.step !== 5) return false;
+      held = true;
+      return true;
+    });
+    const host = room.create(0);
+    const guest = room.create(1, required(room.stores[1]), guestTransport);
+    active.push(host, guest, room.network);
+    const originalApply = deckSetup.applyDeckPass;
+    const outputs: DeckSetupState[] = [];
+    vi.spyOn(deckSetup, 'applyDeckPass').mockImplementation((state, pass) => {
+      const applied = originalApply(state, pass);
+      if (applied.ok) outputs.push(applied.value);
+      return applied;
+    });
+    expect((await host.start()).ok).toBe(true);
+    expect((await guest.start()).ok).toBe(true);
+    await until(room, () => held && host.snapshot().phase === 'deck');
+    await Promise.all([host.flush(), guest.flush()]);
+    expect(outputs.length).toBeGreaterThan(0);
+    // These are the exact mutable values returned by the public validator.
+    // Cached states must own copies rather than retaining these references.
+    for (const output of outputs) output.points[0] = toBase64Url(new Uint8Array(32));
+    hold = false;
+    room.network.clock.advanceBy(1_001);
+    await settle(room, [host, guest]);
+    expect(host.snapshot().phase).toBe('ready');
+    expect(guest.snapshot().phase).toBe('ready');
+    expect(host.result()?.entry).toEqual(guest.result()?.entry);
+  }, 60_000);
+
+  test('an invalid late deck pass is rejected after caching its valid predecessors', async () => {
+    const room = setup();
+    const held: OnlineCeremonyPacket[] = [];
+    const guestTransport = interceptTransport(room, 1, (_to, _bytes, packet) => {
+      if (packet.body.kind !== 'deck-pass' || packet.body.step !== 5) return false;
+      held.push(packet);
+      return true;
+    });
+    const host = room.create(0);
+    const guest = room.create(1, required(room.stores[1]), guestTransport);
+    active.push(host, guest, room.network);
+    expect((await host.start()).ok).toBe(true);
+    expect((await guest.start()).ok).toBe(true);
+    await until(room, () => held.length > 0 && host.snapshot().phase === 'deck');
+    await Promise.all([host.flush(), guest.flush()]);
+    const packet = required(held[0]);
+    const payload = packet.body.payload;
+    if (!payload || typeof payload !== 'object') throw new Error('Missing held signed pass');
+    const invalid = value(
+      signOnlineCeremonyPacket(
+        {
+          ...packet.body,
+          payload: { ...payload, sig: toBase64Url(new Uint8Array(64)) },
+        },
+        required(room.deviceKeys[1]),
+      ),
+    );
+    room.network
+      .transport(
+        required(
+          room.agreement.state.seats[1]?.kind === 'human'
+            ? room.agreement.state.seats[1].peer
+            : null,
+        ),
+      )
+      .send(required(room.agreement.state.hostPeer), invalid.bytes);
+    await until(room, () => host.snapshot().phase === 'retired');
+    expect(host.snapshot().error).toBe('online-ceremony-invalid-packet:deck');
+    expect(host.result()).toBeNull();
   }, 60_000);
 
   test('same-phase retries and restart retain the original deadline', async () => {

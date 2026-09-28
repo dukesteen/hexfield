@@ -285,6 +285,11 @@ function unwrap<T>(result: Result<T>): T {
   return result.value;
 }
 
+function requiredDeckState(state: DeckSetupState | undefined): DeckSetupState {
+  if (!state) throw new Error('Validated deck prefix state is missing');
+  return state;
+}
+
 export class OnlineCeremony {
   readonly #agreement: LobbyFreezeAgreement;
   readonly #freezeHash: string;
@@ -297,6 +302,16 @@ export class OnlineCeremony {
   readonly #listeners = new Set<(progress: OnlineCeremonyProgress) => void>();
   readonly #accepted = new Map<string, unknown>();
   readonly #sentAt = new Map<string, number>();
+  // Owned by this attempt only. States never escape through the public transcript.
+  readonly #deckPrefixes = new Map<
+    string,
+    {
+      definitionHash: string;
+      passHashes: string[];
+      states: DeckSetupState[];
+      next?: { step: number; passHash: string; predecessorHash: string; state: DeckSetupState };
+    }
+  >();
   readonly #options: Pick<
     OnlineCeremonyOptions,
     'transport' | 'clock' | 'store' | 'engine' | 'hostCreatedAt'
@@ -445,6 +460,7 @@ export class OnlineCeremony {
       material.signingKey.fill(0);
     }
     this.#owned.clear();
+    this.#deckPrefixes.clear();
     this.#listeners.clear();
   }
 
@@ -2122,9 +2138,21 @@ export class OnlineCeremony {
     if (!definitions.ok) return definitions;
     const transcripts: { deckId: string; passes: SignedDeckPass[] }[] = [];
     for (const definition of definitions.value) {
-      const initial = initDeckSetup(definition);
-      if (!initial.ok) return initial;
-      let state: DeckSetupState = initial.value;
+      const definitionHash = toHex(hashValue({ attempt: this.#attemptId, definition }));
+      let prefix = this.#deckPrefixes.get(definition.deckId);
+      if (prefix && prefix.definitionHash !== definitionHash)
+        return failure(
+          'online-ceremony-deck',
+          'Cached deck definition differs from frozen manifest',
+        );
+      if (!prefix) {
+        const initial = initDeckSetup(definition);
+        if (!initial.ok) return initial;
+        prefix = { definitionHash, passHashes: [], states: [copy(initial.value)] };
+        this.#deckPrefixes.set(definition.deckId, prefix);
+      }
+      const deckPrefix = prefix;
+      let state: DeckSetupState = requiredDeckState(deckPrefix.states[0]);
       const passes: SignedDeckPass[] = [];
       for (let step = 0; step < definition.participants.length * 2; step += 1) {
         const actor = definition.participants[step % definition.participants.length];
@@ -2132,6 +2160,7 @@ export class OnlineCeremony {
         const ownerDevice = this.#ownerDevice(actor.seat);
         if (!ownerDevice) return failure('online-ceremony-deck', 'Deck actor has no device owner');
         const before = state;
+        const predecessorHash = toHex(hashValue(before));
         const slot: Slot<SignedDeckPass> = {
           kind: 'deck-pass',
           seat: actor.seat,
@@ -2140,6 +2169,12 @@ export class OnlineCeremony {
           validate: (payload) => {
             const applied = applyDeckPass(before, payload);
             if (!applied.ok) return applied;
+            deckPrefix.next = {
+              step,
+              passHash: toHex(hashValue(payload)),
+              predecessorHash,
+              state: copy(applied.value),
+            };
             // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- applyDeckPass validates the exact complete signed pass.
             return success(payload as SignedDeckPass);
           },
@@ -2176,9 +2211,27 @@ export class OnlineCeremony {
         if (exchanged.value === null) return success(null);
         const pass = exchanged.value[0];
         if (!pass) return failure('online-ceremony-deck', 'Deck pass is missing');
-        const applied = applyDeckPass(state, pass);
-        if (!applied.ok) return applied;
-        state = applied.value;
+        const passHash = toHex(hashValue(pass));
+        const cachedHash = deckPrefix.passHashes[step];
+        if (cachedHash !== undefined) {
+          if (cachedHash !== passHash)
+            return failure('online-ceremony-deck', 'Accepted pass differs from validated prefix');
+          state = requiredDeckState(deckPrefix.states[step + 1]);
+        } else {
+          const next = deckPrefix.next;
+          if (
+            deckPrefix.passHashes.length !== step ||
+            !next ||
+            next.step !== step ||
+            next.passHash !== passHash ||
+            next.predecessorHash !== predecessorHash
+          )
+            return failure('online-ceremony-deck', 'Validated deck prefix is incomplete');
+          deckPrefix.passHashes.push(passHash);
+          deckPrefix.states.push(next.state);
+          state = next.state;
+          delete deckPrefix.next;
+        }
         passes.push(pass);
       }
       transcripts.push({ deckId: definition.deckId, passes });

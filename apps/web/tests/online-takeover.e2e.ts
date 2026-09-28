@@ -1,6 +1,8 @@
 /* eslint-disable no-await-in-loop -- Each certified move and recovery action depends on the prior head. */
 /* oxlint-disable typescript/no-unsafe-type-assertion -- The test imports the exact browser-loaded Vite registry module to inspect certified public state. */
 import { expect, test } from '@playwright/test';
+import { RandomBot, createBotRng } from '@cp2p/bots';
+import type { CommandShape, Seat } from '@cp2p/engine';
 import type { Page } from '@playwright/test';
 
 test.use(
@@ -194,9 +196,14 @@ async function certifiedCommands(
 
 test('four humans certify takeover, recovered bot continues, and original device returns with a fresh key', async ({
   browser,
-}) => {
-  test.setTimeout(270_000);
+}, testInfo) => {
+  test.setTimeout(600_000);
   const contexts = await Promise.all(Array.from({ length: 4 }, () => browser.newContext()));
+  await Promise.all(
+    contexts.map((context) =>
+      context.addInitScript(() => performance.setResourceTimingBufferSize(5_000)),
+    ),
+  );
   const pages = await Promise.all(contexts.map((context) => context.newPage()));
   const host = pages[0];
   const survivors = pages.slice(1);
@@ -301,7 +308,7 @@ test('four humans certify takeover, recovered bot continues, and original device
     });
     await returning.getByRole('button', { name: 'Open game on this device' }).click();
     await expect(returning).toHaveURL(new RegExp(`/game/${gameId}$`), { timeout: 30_000 });
-    await expect(returning.getByText('Game info', { exact: true })).toBeVisible({
+    await expect(returning.locator('summary[aria-label="Open game menu"]')).toBeVisible({
       timeout: 45_000,
     });
     const returnedPage = returning;
@@ -320,6 +327,11 @@ test('four humans certify takeover, recovered bot continues, and original device
       );
     }
     expect(returnedCommand).toBe(true);
+    const terminal = await finishGame([returnedPage, ...survivors], gameId);
+    await testInfo.attach('native-lifecycle-terminal', {
+      body: JSON.stringify(terminal, null, 2),
+      contentType: 'application/json',
+    });
     expect(errors).toEqual([]);
   } catch (error) {
     const pageStatus = await Promise.all(
@@ -394,3 +406,123 @@ test('four humans certify takeover, recovered bot continues, and original device
     await Promise.all(contexts.map((context) => context.close()));
   }
 });
+
+async function finishGame(pages: readonly Page[], gameId: string) {
+  const snapshots = async (
+    page: Page,
+    requestedMove?: { seat: Seat; command: CommandShape; revision: number },
+  ) =>
+    page.evaluate(
+      async ({ id, move }) => {
+        const path = performance
+          .getEntriesByType('resource')
+          .map((entry) => entry.name)
+          .find((name) => new URL(name).pathname.endsWith('/room-registry.ts'));
+        if (!path) throw new Error('The running room registry is absent');
+        // oxlint-disable typescript/no-unsafe-type-assertion -- The actual app-loaded Vite module in a disposable browser profile.
+        const { getOnlineGameRoom } = (await import(
+          /* @vite-ignore */ path
+        )) as typeof import('../src/features/online/room-registry.js');
+        // oxlint-enable typescript/no-unsafe-type-assertion
+        const session = getOnlineGameRoom(id)?.getGame()?.session;
+        if (!session) throw new Error('The resumed session is absent');
+        let submitted = false;
+        if (move) {
+          const result = await session.submit(move.seat, move.command, {
+            expectedRevision: move.revision,
+          });
+          if (!result.ok && !['stale-revision', 'stale-head'].includes(result.error.code))
+            throw new Error(`Legal bot move ${move.command.type} refused: ${result.error.code}`);
+          submitted = result.ok;
+        }
+        const seat = session.controllableSeats()[0];
+        return {
+          head: session.getFairness?.()?.head,
+          state: session.getState(),
+          audit: session.getAudit?.(),
+          pending: session
+            .getPending()
+            .find((item) => item.kind === 'player' && item.seat === seat),
+          seat,
+          priv: seat === undefined ? null : session.getPrivate(seat),
+          legal: seat === undefined ? null : session.getLegalCommands(seat),
+          submitted,
+        };
+      },
+      { id: gameId, move: requestedMove },
+    );
+  let moves = 0;
+  const bot = new RandomBot();
+  const rng = createBotRng(new Uint8Array(32).fill(59));
+  await expect
+    .poll(
+      async () => {
+        for (const page of pages) {
+          // oxlint-disable-next-line no-await-in-loop -- Each command depends on the previous certified state.
+          const current = await snapshots(page);
+          if (
+            current.state.result ||
+            current.seat === undefined ||
+            current.pending?.kind !== 'player' ||
+            !current.priv ||
+            !current.head ||
+            !current.legal ||
+            !(current.legal.commands.length || current.legal.templates.length)
+          )
+            continue;
+          let command: CommandShape;
+          try {
+            command = bot.decide(
+              { state: current.state, priv: current.priv, seat: current.seat },
+              current.pending,
+              rng,
+            );
+          } catch (error) {
+            throw new Error(
+              `Bot could not choose: ${JSON.stringify({ head: current.head, pending: current.pending, legal: current.legal })}`,
+              { cause: error },
+            );
+          }
+          // oxlint-disable-next-line no-await-in-loop -- Submit against the captured revision and retry stale snapshots.
+          const next = await snapshots(page, {
+            seat: current.seat,
+            command,
+            revision: current.head.seq,
+          });
+          if (next.submitted) moves += 1;
+          if (moves > 1500) throw new Error('Bounded game exceeded 1500 player commands');
+        }
+        const all = await Promise.all(pages.map((page) => snapshots(page)));
+        return all.every((item) => item.state.result && item.audit?.kind === 'complete');
+      },
+      { timeout: 300_000, intervals: [50] },
+    )
+    .toBe(true);
+  const final = await Promise.all(pages.map((page) => snapshots(page)));
+  for (const item of final) {
+    expect(item.head).toEqual(final[0]?.head);
+    expect(item.state.result).toEqual(final[0]?.state.result);
+    expect(item.audit).toMatchObject({
+      kind: 'complete',
+      report: {
+        ok: true,
+        complete: true,
+        missingSeats: [],
+        violations: [],
+        inputErrors: [],
+        cheatFindings: [],
+        historyError: null,
+        auditError: null,
+      },
+    });
+  }
+  return {
+    moves,
+    peers: final.map(({ head, state, audit, seat }) => ({
+      seat,
+      head,
+      result: state.result,
+      audit,
+    })),
+  };
+}
