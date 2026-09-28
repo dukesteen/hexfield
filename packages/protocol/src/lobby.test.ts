@@ -283,6 +283,160 @@ describe('signed lobby controller', () => {
     expect(room.host.start(nonce).ok).toBe(false);
   });
 
+  test('simultaneous Ready requests commute only across readiness commits', () => {
+    const room = setup();
+    active.push(room);
+    room.flush();
+    value(room.second.request({ kind: 'takeSeat', seat: 1 }));
+    room.flush();
+    value(room.third.request({ kind: 'takeSeat', seat: 2 }));
+    room.flush();
+    const version = required(room.host.state()).version;
+    value(room.host.request({ kind: 'setReady', ready: true }));
+    // Both guests still sign the same base version, before the host's Ready arrives.
+    expect(room.second.state()?.version).toBe(version);
+    expect(room.third.state()?.version).toBe(version);
+    value(room.second.request({ kind: 'setReady', ready: true }));
+    value(room.third.request({ kind: 'setReady', ready: true }));
+    room.flush();
+    expect(room.host.state()?.seats.map((seat) => seat.ready)).toEqual([true, true, true]);
+    expect(room.host.state()?.version).toBe(version + 3);
+  });
+
+  test.each(['settings', 'roster'] as const)('Ready intent cannot cross a %s change', (change) => {
+    const room = setup();
+    active.push(room);
+    room.flush();
+    value(room.second.request({ kind: 'takeSeat', seat: 1 }));
+    room.flush();
+    value(room.third.request({ kind: 'takeSeat', seat: 2 }));
+    room.flush();
+    value(room.second.request({ kind: 'setReady', ready: true }));
+    // Mutate the consent context before this already-signed Ready reaches the host.
+    if (change === 'settings') value(room.host.configure(room.config));
+    else value(room.host.kick(required(room.peers[2])));
+    const version = room.host.state()?.version;
+    room.flush();
+    expect(room.host.state()?.version).toBe(version);
+    expect(room.host.state()?.seats[1]?.ready).toBe(false);
+  });
+
+  test('readiness window does not widen other requests or future versions', () => {
+    const room = setup();
+    active.push(room);
+    room.flush();
+    value(room.second.request({ kind: 'takeSeat', seat: 1 }));
+    room.flush();
+    value(room.host.request({ kind: 'setReady', ready: true }));
+    value(room.second.request({ kind: 'setName', name: 'Stale name' }));
+    const version = required(room.host.state()).version;
+    room.flush();
+    expect(room.host.state()?.seats[1]).toMatchObject({ name: 'Player 2', ready: false });
+    const body = {
+      lobbyId: 'room_one',
+      hostEpoch: 0,
+      baseVersion: version + 1,
+      nonce: 100,
+      peer: required(room.peers[1]),
+      action: { kind: 'setReady', ready: true },
+    };
+    room.net.transport(required(room.peers[1])).send(
+      required(room.peers[0]),
+      canonicalEncode({
+        t: 'LOBBY_REQ',
+        request: { body, sig: signObject('lobby-request', body, required(room.keys[1])) },
+      }),
+    );
+    room.flush();
+    expect(room.host.state()?.version).toBe(version);
+    expect(room.host.state()?.seats[1]?.ready).toBe(false);
+  });
+
+  test('out-of-order Ready toggles and stale host epochs remain rejected', () => {
+    const room = setup();
+    active.push(room);
+    room.flush();
+    value(room.second.request({ kind: 'takeSeat', seat: 1 }));
+    room.flush();
+    value(room.second.request({ kind: 'setReady', ready: true }));
+    room.flush();
+    const baseVersion = required(room.host.state()).version;
+    const send = (nonce: number, ready: boolean, hostEpoch = 0) => {
+      const body = {
+        lobbyId: 'room_one',
+        hostEpoch,
+        baseVersion,
+        nonce,
+        peer: required(room.peers[1]),
+        action: { kind: 'setReady', ready },
+      };
+      room.net.transport(required(room.peers[1])).send(
+        required(room.peers[0]),
+        canonicalEncode({
+          t: 'LOBBY_REQ',
+          request: { body, sig: signObject('lobby-request', body, required(room.keys[1])) },
+        }),
+      );
+    };
+    send(100, false);
+    send(99, true);
+    send(100, true);
+    room.flush();
+    expect(room.host.state()?.seats[1]?.ready).toBe(false);
+    expect(room.host.state()?.version).toBe(baseVersion + 1);
+    send(101, true, 1);
+    room.flush();
+    expect(room.host.state()?.seats[1]?.ready).toBe(false);
+    expect(room.host.state()?.version).toBe(baseVersion + 1);
+  });
+
+  test('host migration clears the readiness window and rejects the old epoch', () => {
+    const room = setup();
+    active.push(room);
+    room.flush();
+    value(room.second.request({ kind: 'takeSeat', seat: 1 }));
+    room.flush();
+    value(room.third.request({ kind: 'takeSeat', seat: 2 }));
+    room.flush();
+    value(room.host.request({ kind: 'setReady', ready: true }));
+    room.flush();
+    const priorVersion = required(room.host.state()).version;
+    room.net.partition([
+      [required(room.peers[0])],
+      [required(room.peers[1]), required(room.peers[2])],
+    ]);
+    room.flush();
+    const electedIndex = required(room.peers[1]) < required(room.peers[2]) ? 1 : 2;
+    const senderIndex = electedIndex === 1 ? 2 : 1;
+    const elected = electedIndex === 1 ? room.second : room.third;
+    const body = {
+      lobbyId: 'room_one',
+      hostEpoch: 0,
+      baseVersion: priorVersion,
+      nonce: 100,
+      peer: required(room.peers[senderIndex]),
+      action: { kind: 'setReady', ready: true },
+    };
+    room.net.transport(required(room.peers[senderIndex])).send(
+      required(room.peers[electedIndex]),
+      canonicalEncode({
+        t: 'LOBBY_REQ',
+        request: { body, sig: signObject('lobby-request', body, required(room.keys[senderIndex])) },
+      }),
+    );
+    room.flush();
+    expect(elected.state()?.hostEpoch).toBe(1);
+    expect(elected.state()?.version).toBe(0);
+    expect(elected.state()?.seats.every((seat) => !seat.ready)).toBe(true);
+    value(elected.request({ kind: 'setReady', ready: true }));
+    // The remaining guest still sees version 0 in the new epoch; that Ready is allowed.
+    const sender = senderIndex === 1 ? room.second : room.third;
+    value(sender.request({ kind: 'setReady', ready: true }));
+    room.flush();
+    expect(elected.state()?.version).toBe(2);
+    expect(elected.state()?.seats[senderIndex]?.ready).toBe(true);
+  });
+
   test('rejects unauthorized edits, spoofed requests, stale replay, and reports version mismatch', () => {
     const room = setup();
     active.push(room);

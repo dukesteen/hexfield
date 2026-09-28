@@ -1,0 +1,5 @@
+{
+  "packages/protocol/src/online-ceremony.ts": "ac4f9f7f6984c8931bddaa512b131205b8feec3db3907abcb96f535c76b8b8a5",
+  "packages/protocol/src/online-ceremony.test.ts": "7b02d98e58427b455bb12f59a25a9048b093f88c9b98b4a0f0c1f0d9332a54cb",
+  "packages/protocol/src/online-ceremony-wire.ts": "1a8fe6a39ff70a5af3db4c0b7d2e55b497e4f4c9b1e35a74bf83aefc9eccd51c"
+}

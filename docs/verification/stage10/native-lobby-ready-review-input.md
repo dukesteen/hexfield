@@ -1,3 +1,252 @@
+Read-only correctness/security review. Current lobby rejects any signed request whose baseVersion differs from global hostversion. Every Ready commit increments thatversion, so normal simultaneous Readyup requests from unchanged settings/roster are silently rejected; deterministic before regression leaves only hostready, and real browser preceremony trace confirms all3guestsstayNotready. Proposed minimal fix: host-private readinessVersionFloor permits signed setReady with floor<=baseVersion<=currentversion; all other requests stillrequire exactversion. Floor initializedfrominitialstate, resetoneverysignedsnapshotadoption/authoritymigration and everyhostcommit except checked setReady alone. Signature/from/hostEpoch/membership/nonce guards unchanged. Host ownReady is included. Settings/roster/anyother mutation establishes freshfloor, no globalversion/protocolshape change. No new request rejection protocol: existing LOBBY_REQ handling ignores applyRequest result and there is no request-specific ACK/rejection message. Review authority/consent safety, stale context across settings/roster/migration, futureversion rejection, nonce/out-of-order toggles, hostcommit identification. No secrets, only task-scoped deterministic testsource. Require blockers with locations or APPROVE.
+
+{
+  "packages/protocol/src/lobby.ts": "9bb3cd7a6215981648bff67b0bea10aa3c12af9bfc62c6c48bcd56e6bd4aa4dc",
+  "packages/protocol/src/lobby.test.ts": "c3560299550ac43522e58e04c1debdbc3b2ac1df71dbba78d726e4f767e7a22d",
+  "packages/protocol/src/lobby-types.ts": "d4cf75e4495171a02c7ea4006812ab36aaa7eb87b037e9804e8731a789471c00"
+}
+Diff:
+diff --git a/packages/protocol/src/lobby.test.ts b/packages/protocol/src/lobby.test.ts
+index 4ffb7bc..e7f1d45 100644
+--- a/packages/protocol/src/lobby.test.ts
++++ b/packages/protocol/src/lobby.test.ts
+@@ -283,6 +283,160 @@ describe('signed lobby controller', () => {
+     expect(room.host.start(nonce).ok).toBe(false);
+   });
+ 
++  test('simultaneous Ready requests commute only across readiness commits', () => {
++    const room = setup();
++    active.push(room);
++    room.flush();
++    value(room.second.request({ kind: 'takeSeat', seat: 1 }));
++    room.flush();
++    value(room.third.request({ kind: 'takeSeat', seat: 2 }));
++    room.flush();
++    const version = required(room.host.state()).version;
++    value(room.host.request({ kind: 'setReady', ready: true }));
++    // Both guests still sign the same base version, before the host's Ready arrives.
++    expect(room.second.state()?.version).toBe(version);
++    expect(room.third.state()?.version).toBe(version);
++    value(room.second.request({ kind: 'setReady', ready: true }));
++    value(room.third.request({ kind: 'setReady', ready: true }));
++    room.flush();
++    expect(room.host.state()?.seats.map((seat) => seat.ready)).toEqual([true, true, true]);
++    expect(room.host.state()?.version).toBe(version + 3);
++  });
++
++  test.each(['settings', 'roster'] as const)('Ready intent cannot cross a %s change', (change) => {
++    const room = setup();
++    active.push(room);
++    room.flush();
++    value(room.second.request({ kind: 'takeSeat', seat: 1 }));
++    room.flush();
++    value(room.third.request({ kind: 'takeSeat', seat: 2 }));
++    room.flush();
++    value(room.second.request({ kind: 'setReady', ready: true }));
++    // Mutate the consent context before this already-signed Ready reaches the host.
++    if (change === 'settings') value(room.host.configure(room.config));
++    else value(room.host.kick(required(room.peers[2])));
++    const version = room.host.state()?.version;
++    room.flush();
++    expect(room.host.state()?.version).toBe(version);
++    expect(room.host.state()?.seats[1]?.ready).toBe(false);
++  });
++
++  test('readiness window does not widen other requests or future versions', () => {
++    const room = setup();
++    active.push(room);
++    room.flush();
++    value(room.second.request({ kind: 'takeSeat', seat: 1 }));
++    room.flush();
++    value(room.host.request({ kind: 'setReady', ready: true }));
++    value(room.second.request({ kind: 'setName', name: 'Stale name' }));
++    const version = required(room.host.state()).version;
++    room.flush();
++    expect(room.host.state()?.seats[1]).toMatchObject({ name: 'Player 2', ready: false });
++    const body = {
++      lobbyId: 'room_one',
++      hostEpoch: 0,
++      baseVersion: version + 1,
++      nonce: 100,
++      peer: required(room.peers[1]),
++      action: { kind: 'setReady', ready: true },
++    };
++    room.net.transport(required(room.peers[1])).send(
++      required(room.peers[0]),
++      canonicalEncode({
++        t: 'LOBBY_REQ',
++        request: { body, sig: signObject('lobby-request', body, required(room.keys[1])) },
++      }),
++    );
++    room.flush();
++    expect(room.host.state()?.version).toBe(version);
++    expect(room.host.state()?.seats[1]?.ready).toBe(false);
++  });
++
++  test('out-of-order Ready toggles and stale host epochs remain rejected', () => {
++    const room = setup();
++    active.push(room);
++    room.flush();
++    value(room.second.request({ kind: 'takeSeat', seat: 1 }));
++    room.flush();
++    value(room.second.request({ kind: 'setReady', ready: true }));
++    room.flush();
++    const baseVersion = required(room.host.state()).version;
++    const send = (nonce: number, ready: boolean, hostEpoch = 0) => {
++      const body = {
++        lobbyId: 'room_one',
++        hostEpoch,
++        baseVersion,
++        nonce,
++        peer: required(room.peers[1]),
++        action: { kind: 'setReady', ready },
++      };
++      room.net.transport(required(room.peers[1])).send(
++        required(room.peers[0]),
++        canonicalEncode({
++          t: 'LOBBY_REQ',
++          request: { body, sig: signObject('lobby-request', body, required(room.keys[1])) },
++        }),
++      );
++    };
++    send(100, false);
++    send(99, true);
++    send(100, true);
++    room.flush();
++    expect(room.host.state()?.seats[1]?.ready).toBe(false);
++    expect(room.host.state()?.version).toBe(baseVersion + 1);
++    send(101, true, 1);
++    room.flush();
++    expect(room.host.state()?.seats[1]?.ready).toBe(false);
++    expect(room.host.state()?.version).toBe(baseVersion + 1);
++  });
++
++  test('host migration clears the readiness window and rejects the old epoch', () => {
++    const room = setup();
++    active.push(room);
++    room.flush();
++    value(room.second.request({ kind: 'takeSeat', seat: 1 }));
++    room.flush();
++    value(room.third.request({ kind: 'takeSeat', seat: 2 }));
++    room.flush();
++    value(room.host.request({ kind: 'setReady', ready: true }));
++    room.flush();
++    const priorVersion = required(room.host.state()).version;
++    room.net.partition([
++      [required(room.peers[0])],
++      [required(room.peers[1]), required(room.peers[2])],
++    ]);
++    room.flush();
++    const electedIndex = required(room.peers[1]) < required(room.peers[2]) ? 1 : 2;
++    const senderIndex = electedIndex === 1 ? 2 : 1;
++    const elected = electedIndex === 1 ? room.second : room.third;
++    const body = {
++      lobbyId: 'room_one',
++      hostEpoch: 0,
++      baseVersion: priorVersion,
++      nonce: 100,
++      peer: required(room.peers[senderIndex]),
++      action: { kind: 'setReady', ready: true },
++    };
++    room.net.transport(required(room.peers[senderIndex])).send(
++      required(room.peers[electedIndex]),
++      canonicalEncode({
++        t: 'LOBBY_REQ',
++        request: { body, sig: signObject('lobby-request', body, required(room.keys[senderIndex])) },
++      }),
++    );
++    room.flush();
++    expect(elected.state()?.hostEpoch).toBe(1);
++    expect(elected.state()?.version).toBe(0);
++    expect(elected.state()?.seats.every((seat) => !seat.ready)).toBe(true);
++    value(elected.request({ kind: 'setReady', ready: true }));
++    // The remaining guest still sees version 0 in the new epoch; that Ready is allowed.
++    const sender = senderIndex === 1 ? room.second : room.third;
++    value(sender.request({ kind: 'setReady', ready: true }));
++    room.flush();
++    expect(elected.state()?.version).toBe(2);
++    expect(elected.state()?.seats[senderIndex]?.ready).toBe(true);
++  });
++
+   test('rejects unauthorized edits, spoofed requests, stale replay, and reports version mismatch', () => {
+     const room = setup();
+     active.push(room);
+diff --git a/packages/protocol/src/lobby.ts b/packages/protocol/src/lobby.ts
+index 2516480..c41bfaa 100644
+--- a/packages/protocol/src/lobby.ts
++++ b/packages/protocol/src/lobby.ts
+@@ -334,6 +334,8 @@ export class LobbyController {
+   private diagnostic: LobbyDiagnostic | null = null;
+   private disrupted = false;
+   private sentNonce = 0;
++  // Older Ready intents may commute only across commits that changed readiness alone.
++  private readinessVersionFloor = 0;
+   private lastChangedAt: number;
+   private disposed = false;
+   private helloAttempts = 0;
+@@ -350,6 +352,7 @@ export class LobbyController {
+     this.key = options.secretKey.slice();
+     this.lastChangedAt = options.clock.now();
+     this.current = initial;
++    this.readinessVersionFloor = initial?.version ?? 0;
+     this.offMessage = options.transport.onMessage((from, bytes) => this.receive(from, bytes));
+     this.offPeer = options.transport.onPeerChange((peer, online) => this.peerChanged(peer, online));
+   }
+@@ -868,6 +871,7 @@ export class LobbyController {
+       if (candidates.toSorted()[0] !== from) return;
+     }
+     this.current = next;
++    this.readinessVersionFloor = next.version;
+     this.stopHello();
+     this.helloAttempts = 0;
+     this.agreement = null;
+@@ -888,7 +892,10 @@ export class LobbyController {
+       body.peer !== from ||
+       body.lobbyId !== state.lobbyId ||
+       body.hostEpoch !== state.hostEpoch ||
+-      body.baseVersion !== state.version ||
++      (body.baseVersion !== state.version &&
++        (body.action.kind !== 'setReady' ||
++          body.baseVersion < this.readinessVersionFloor ||
++          body.baseVersion > state.version)) ||
+       !connected(this.options.transport, from) ||
+       !verify('lobby-request', body, signed.sig, from)
+     )
+@@ -960,7 +967,7 @@ export class LobbyController {
+     const next = validState({ ...state, seats, spectators });
+     if (!next.ok) return next;
+     this.seenNonce.set(from, body.nonce);
+-    return this.commit(next.value);
++    return this.commit(next.value, action.kind === 'setReady');
+   }
+ 
+   private receiveAck(from: PeerId, ack: LobbyFreezeAck): Result<void> {
+@@ -1065,6 +1072,7 @@ export class LobbyController {
+           ceremonyNonce: null,
+           seats: resetReady(state.seats),
+         };
++        this.readinessVersionFloor = this.current.version;
+         this.seenNonce.clear();
+         this.publish();
+         this.emit();
+@@ -1111,13 +1119,14 @@ export class LobbyController {
+     return { body, sig: signObject(domain, body, this.key) };
+   }
+ 
+-  private commit(next: LobbyState): Result<void> {
++  private commit(next: LobbyState, readinessOnly = false): Result<void> {
+     const current = this.current;
+     if (!current || current.hostPeer !== this.peer)
+       return failure('lobby-host', 'Only the host can commit');
+     const checked = validState({ ...next, version: current.version + 1 });
+     if (!checked.ok) return checked;
+     this.current = checked.value;
++    if (!readinessOnly) this.readinessVersionFloor = checked.value.version;
+     this.agreement = null;
+     this.freezeSignatures.clear();
+     const sent = this.publish();
+
+FULL FILE packages/protocol/src/lobby.ts
 import { canonicalDecode, canonicalEncode, hashValue, toHex } from '@cp2p/codec';
 import { identityFromSecret, parsePeerId, signObject, verifyObject } from '@cp2p/crypto';
 import { BASE_VERSION, ENGINE_VERSION, createBaseEngine, failure, success } from '@cp2p/engine';
@@ -1155,3 +1404,714 @@ export class LobbyController {
     );
   }
 }
+
+FULL FILE packages/protocol/src/lobby.test.ts
+import { canonicalEncode, toBase64Url } from '@cp2p/codec';
+import { identityFromSecret, signObject } from '@cp2p/crypto';
+import { BASE_VERSION, ENGINE_VERSION } from '@cp2p/engine';
+import type { GameConfig, Result } from '@cp2p/engine';
+import { afterEach, describe, expect, test } from 'vitest';
+import { LobbyController, verifyLobbyFreezeAgreement } from './lobby.js';
+import { createMemnet } from './testing/memnet.js';
+import type { Transport } from './transport.js';
+import { PROTOCOL_VERSION } from './types.js';
+
+function required<T>(item: T | null | undefined): T {
+  if (item === null || item === undefined) throw new Error('Missing lobby fixture value');
+  return item;
+}
+
+function value<T>(result: Result<T>): T {
+  if (!result.ok) throw new Error(`${result.error.code}: ${result.error.message}`);
+  return result.value;
+}
+
+function setup() {
+  const keys = [1, 2, 3].map((number) => new Uint8Array(32).fill(number));
+  const peers = keys.map((key) => identityFromSecret(key).peerId);
+  const net = createMemnet({ peers });
+  const config: GameConfig = {
+    modules: [{ id: 'base', version: BASE_VERSION }],
+    seats: [0, 1, 2],
+    options: { base: { mapLayout: 'random', vpTarget: 3 } },
+  };
+  const host = value(
+    LobbyController.createHost({
+      lobbyId: 'room_one',
+      name: 'Friday game',
+      hostName: 'Avery',
+      config,
+      transport: net.transport(required(peers[0])),
+      clock: net.clock,
+      secretKey: required(keys[0]),
+    }),
+  );
+  const second = value(
+    LobbyController.join({
+      lobbyId: 'room_one',
+      hostPeer: required(peers[0]),
+      transport: net.transport(required(peers[1])),
+      clock: net.clock,
+      secretKey: required(keys[1]),
+    }),
+  );
+  const third = value(
+    LobbyController.join({
+      lobbyId: 'room_one',
+      hostPeer: required(peers[0]),
+      transport: net.transport(required(peers[2])),
+      clock: net.clock,
+      secretKey: required(keys[2]),
+    }),
+  );
+  const flush = () => net.clock.advanceBy(0);
+  const dispose = () => {
+    host.dispose();
+    second.dispose();
+    third.dispose();
+    net.dispose();
+  };
+  return { keys, peers, net, config, host, second, third, flush, dispose };
+}
+
+const active: { dispose(): void }[] = [];
+afterEach(() => {
+  while (active.length) active.pop()?.dispose();
+});
+
+describe('signed lobby controller', () => {
+  test('retries an initial pre-auth HELLO and a dropped authenticated HELLO', () => {
+    const keys = [new Uint8Array(32).fill(31), new Uint8Array(32).fill(32)];
+    const peers = keys.map((key) => identityFromSecret(key).peerId);
+    const hostPeer = required(peers[0]);
+    const guestPeer = required(peers[1]);
+    const net = createMemnet({ peers });
+    let authenticated = false;
+    let dropNextHello = true;
+    const actual = net.transport(guestPeer);
+    const delayed: Transport = {
+      self: actual.self,
+      peers: () => (authenticated ? actual.peers() : []),
+      send(to, bytes) {
+        if (!authenticated) throw new Error('WebRTC peer is not authenticated');
+        if (dropNextHello) {
+          dropNextHello = false;
+          return;
+        }
+        actual.send(to, bytes);
+      },
+      broadcast: (bytes) => actual.broadcast(bytes),
+      onMessage: (listener) => actual.onMessage(listener),
+      onPeerChange: (listener) => actual.onPeerChange(listener),
+      disconnect: (peer) => actual.disconnect(peer),
+    };
+    const config: GameConfig = {
+      modules: [{ id: 'base', version: BASE_VERSION }],
+      seats: [0, 1],
+      options: { base: { mapLayout: 'random', vpTarget: 3 } },
+    };
+    const host = value(
+      LobbyController.createHost({
+        lobbyId: 'delayed_room',
+        name: 'Room',
+        hostName: 'Host',
+        config,
+        transport: net.transport(hostPeer),
+        clock: net.clock,
+        secretKey: required(keys[0]),
+      }),
+    );
+    const guest = value(
+      LobbyController.join({
+        lobbyId: 'delayed_room',
+        hostPeer,
+        transport: delayed,
+        clock: net.clock,
+        secretKey: required(keys[1]),
+      }),
+    );
+    active.push({
+      dispose() {
+        guest.dispose();
+        host.dispose();
+        net.dispose();
+      },
+    });
+    net.clock.advanceBy(0);
+    expect(guest.state()).toBeNull();
+    net.disconnect(hostPeer, guestPeer);
+    authenticated = true;
+    net.connect(hostPeer, guestPeer);
+    net.clock.advanceBy(0);
+    expect(guest.state()).toBeNull();
+    net.clock.advanceBy(999);
+    expect(guest.state()).toBeNull();
+    net.clock.advanceBy(1);
+    expect(guest.state()?.hostPeer).toBe(hostPeer);
+    expect(guest.state()?.version).toBe(0);
+    net.disconnect(hostPeer, guestPeer);
+    value(host.configure({ ...config, options: { base: { vpTarget: 4 } } }));
+    net.clock.advanceBy(0);
+    expect(guest.state()?.version).toBe(0);
+    net.clock.advanceBy(500);
+    net.connect(hostPeer, guestPeer);
+    net.clock.advanceBy(0);
+    expect(guest.state()?.version).toBe(1);
+  });
+
+  test('three peers join, configure, ready, and agree on one exact freeze before ceremony', () => {
+    const room = setup();
+    active.push(room);
+    room.flush();
+    expect(room.second.state()?.hostPeer).toBe(room.peers[0]);
+    value(room.second.request({ kind: 'takeSeat', seat: 1 }));
+    room.flush();
+    value(room.third.request({ kind: 'takeSeat', seat: 2 }));
+    room.flush();
+    value(room.second.request({ kind: 'setName', name: 'Blake' }));
+    room.flush();
+    value(room.third.request({ kind: 'setColour', colour: 'yellow' }));
+    room.flush();
+    value(room.host.request({ kind: 'setReady', ready: true }));
+    room.flush();
+    value(room.second.request({ kind: 'setReady', ready: true }));
+    room.flush();
+    value(room.third.request({ kind: 'setReady', ready: true }));
+    room.flush();
+    expect(room.host.state()?.seats.every((seat) => seat.ready)).toBe(true);
+    expect(room.host.state()?.seedMode).toEqual({ kind: 'joint' });
+    expect(room.host.state()?.takeover).toEqual({ mode: 'vote', afterSeconds: 120 });
+    const fixedSeed = { kind: 'fixed' as const, seed: toBase64Url(new Uint8Array(32).fill(4)) };
+    const takeover = { mode: 'auto' as const, afterSeconds: 30 };
+    value(
+      room.host.configure(
+        { ...room.config, options: { base: { vpTarget: 4 } } },
+        fixedSeed,
+        takeover,
+      ),
+    );
+    room.flush();
+    expect(room.second.state()?.seats.every((seat) => !seat.ready)).toBe(true);
+    expect(room.second.state()?.seedMode).toEqual(fixedSeed);
+    expect(room.second.state()?.takeover).toEqual(takeover);
+    expect(room.third.configure(room.config, { kind: 'joint' }).ok).toBe(false);
+    expect(room.host.configure(room.config, { kind: 'fixed', seed: 'not-a-seed' }).ok).toBe(false);
+    expect(
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Exercise malformed input from an untyped caller.
+      room.host.configure(room.config, undefined, { mode: 'auto', afterSeconds: 'never' } as never)
+        .ok,
+    ).toBe(false);
+    expect(room.host.configure(room.config, undefined, { mode: 'vote', afterSeconds: 14 }).ok).toBe(
+      false,
+    );
+    expect(room.host.start(toBase64Url(new Uint8Array(32).fill(7))).ok).toBe(false);
+    value(room.host.request({ kind: 'setReady', ready: true }));
+    room.flush();
+    value(room.second.request({ kind: 'setReady', ready: true }));
+    room.flush();
+    value(room.third.request({ kind: 'setReady', ready: true }));
+    room.flush();
+    const nonce = toBase64Url(new Uint8Array(32).fill(8));
+    value(room.host.start(nonce));
+    room.flush();
+    expect(room.host.freezeAgreement()).toBeNull();
+    value(room.host.ackFreeze());
+    value(room.second.ackFreeze());
+    value(room.third.ackFreeze());
+    room.flush();
+    const agreements = [room.host, room.second, room.third].map((peer) => peer.freezeAgreement());
+    expect(agreements.every(Boolean)).toBe(true);
+    expect(agreements.map((agreement) => agreement?.state.ceremonyNonce)).toEqual([
+      nonce,
+      nonce,
+      nonce,
+    ]);
+    expect(agreements[0]?.acks).toHaveLength(3);
+    const agreement = required(agreements[0]);
+    const verified = value(
+      verifyLobbyFreezeAgreement({
+        state: agreement.state,
+        acks: agreement.acks.toReversed(),
+      }),
+    );
+    expect(verified.acks.map((ack) => ack.body.peer)).toEqual(
+      agreement.state.seats.filter((seat) => seat.kind === 'human').map((seat) => seat.peer),
+    );
+    expect(verified).not.toBe(agreement);
+    expect(verified.state).not.toBe(agreement.state);
+    expect(verified.acks[0]).not.toBe(agreement.acks[0]);
+    const changedState = { ...agreement.state, name: 'Different room' };
+    expect(verifyLobbyFreezeAgreement({ ...agreement, state: changedState }).ok).toBe(false);
+    expect(
+      verifyLobbyFreezeAgreement({
+        ...agreement,
+        state: { ...agreement.state, seedMode: { kind: 'joint' } },
+      }).ok,
+    ).toBe(false);
+    expect(
+      verifyLobbyFreezeAgreement({
+        ...agreement,
+        state: { ...agreement.state, takeover: { mode: 'vote', afterSeconds: 30 } },
+      }).ok,
+    ).toBe(false);
+    expect(
+      verifyLobbyFreezeAgreement({ ...agreement, state: { ...agreement.state, status: 'started' } })
+        .ok,
+    ).toBe(false);
+    expect(verifyLobbyFreezeAgreement({ ...agreement, acks: agreement.acks.slice(1) }).ok).toBe(
+      false,
+    );
+    expect(
+      verifyLobbyFreezeAgreement({
+        ...agreement,
+        acks: [agreement.acks[0], agreement.acks[0], agreement.acks[1]],
+      }).ok,
+    ).toBe(false);
+    const firstAck = required(agreement.acks[0]);
+    for (const body of [
+      { ...firstAck.body, lobbyId: 'another_room' },
+      { ...firstAck.body, hostEpoch: firstAck.body.hostEpoch + 1 },
+      { ...firstAck.body, ceremonyNonce: toBase64Url(new Uint8Array(32).fill(9)) },
+      { ...firstAck.body, stateHash: '0'.repeat(64) },
+      { ...firstAck.body, peer: required(room.peers[2]) },
+    ]) {
+      expect(
+        verifyLobbyFreezeAgreement({
+          ...agreement,
+          acks: [{ ...firstAck, body }, ...agreement.acks.slice(1)],
+        }).ok,
+      ).toBe(false);
+    }
+    expect(
+      verifyLobbyFreezeAgreement({
+        ...agreement,
+        acks: [{ ...firstAck, sig: required(agreement.acks[1]).sig }, ...agreement.acks.slice(1)],
+      }).ok,
+    ).toBe(false);
+    expect(room.host.start(nonce).ok).toBe(false);
+  });
+
+  test('simultaneous Ready requests commute only across readiness commits', () => {
+    const room = setup();
+    active.push(room);
+    room.flush();
+    value(room.second.request({ kind: 'takeSeat', seat: 1 }));
+    room.flush();
+    value(room.third.request({ kind: 'takeSeat', seat: 2 }));
+    room.flush();
+    const version = required(room.host.state()).version;
+    value(room.host.request({ kind: 'setReady', ready: true }));
+    // Both guests still sign the same base version, before the host's Ready arrives.
+    expect(room.second.state()?.version).toBe(version);
+    expect(room.third.state()?.version).toBe(version);
+    value(room.second.request({ kind: 'setReady', ready: true }));
+    value(room.third.request({ kind: 'setReady', ready: true }));
+    room.flush();
+    expect(room.host.state()?.seats.map((seat) => seat.ready)).toEqual([true, true, true]);
+    expect(room.host.state()?.version).toBe(version + 3);
+  });
+
+  test.each(['settings', 'roster'] as const)('Ready intent cannot cross a %s change', (change) => {
+    const room = setup();
+    active.push(room);
+    room.flush();
+    value(room.second.request({ kind: 'takeSeat', seat: 1 }));
+    room.flush();
+    value(room.third.request({ kind: 'takeSeat', seat: 2 }));
+    room.flush();
+    value(room.second.request({ kind: 'setReady', ready: true }));
+    // Mutate the consent context before this already-signed Ready reaches the host.
+    if (change === 'settings') value(room.host.configure(room.config));
+    else value(room.host.kick(required(room.peers[2])));
+    const version = room.host.state()?.version;
+    room.flush();
+    expect(room.host.state()?.version).toBe(version);
+    expect(room.host.state()?.seats[1]?.ready).toBe(false);
+  });
+
+  test('readiness window does not widen other requests or future versions', () => {
+    const room = setup();
+    active.push(room);
+    room.flush();
+    value(room.second.request({ kind: 'takeSeat', seat: 1 }));
+    room.flush();
+    value(room.host.request({ kind: 'setReady', ready: true }));
+    value(room.second.request({ kind: 'setName', name: 'Stale name' }));
+    const version = required(room.host.state()).version;
+    room.flush();
+    expect(room.host.state()?.seats[1]).toMatchObject({ name: 'Player 2', ready: false });
+    const body = {
+      lobbyId: 'room_one',
+      hostEpoch: 0,
+      baseVersion: version + 1,
+      nonce: 100,
+      peer: required(room.peers[1]),
+      action: { kind: 'setReady', ready: true },
+    };
+    room.net.transport(required(room.peers[1])).send(
+      required(room.peers[0]),
+      canonicalEncode({
+        t: 'LOBBY_REQ',
+        request: { body, sig: signObject('lobby-request', body, required(room.keys[1])) },
+      }),
+    );
+    room.flush();
+    expect(room.host.state()?.version).toBe(version);
+    expect(room.host.state()?.seats[1]?.ready).toBe(false);
+  });
+
+  test('out-of-order Ready toggles and stale host epochs remain rejected', () => {
+    const room = setup();
+    active.push(room);
+    room.flush();
+    value(room.second.request({ kind: 'takeSeat', seat: 1 }));
+    room.flush();
+    value(room.second.request({ kind: 'setReady', ready: true }));
+    room.flush();
+    const baseVersion = required(room.host.state()).version;
+    const send = (nonce: number, ready: boolean, hostEpoch = 0) => {
+      const body = {
+        lobbyId: 'room_one',
+        hostEpoch,
+        baseVersion,
+        nonce,
+        peer: required(room.peers[1]),
+        action: { kind: 'setReady', ready },
+      };
+      room.net.transport(required(room.peers[1])).send(
+        required(room.peers[0]),
+        canonicalEncode({
+          t: 'LOBBY_REQ',
+          request: { body, sig: signObject('lobby-request', body, required(room.keys[1])) },
+        }),
+      );
+    };
+    send(100, false);
+    send(99, true);
+    send(100, true);
+    room.flush();
+    expect(room.host.state()?.seats[1]?.ready).toBe(false);
+    expect(room.host.state()?.version).toBe(baseVersion + 1);
+    send(101, true, 1);
+    room.flush();
+    expect(room.host.state()?.seats[1]?.ready).toBe(false);
+    expect(room.host.state()?.version).toBe(baseVersion + 1);
+  });
+
+  test('host migration clears the readiness window and rejects the old epoch', () => {
+    const room = setup();
+    active.push(room);
+    room.flush();
+    value(room.second.request({ kind: 'takeSeat', seat: 1 }));
+    room.flush();
+    value(room.third.request({ kind: 'takeSeat', seat: 2 }));
+    room.flush();
+    value(room.host.request({ kind: 'setReady', ready: true }));
+    room.flush();
+    const priorVersion = required(room.host.state()).version;
+    room.net.partition([
+      [required(room.peers[0])],
+      [required(room.peers[1]), required(room.peers[2])],
+    ]);
+    room.flush();
+    const electedIndex = required(room.peers[1]) < required(room.peers[2]) ? 1 : 2;
+    const senderIndex = electedIndex === 1 ? 2 : 1;
+    const elected = electedIndex === 1 ? room.second : room.third;
+    const body = {
+      lobbyId: 'room_one',
+      hostEpoch: 0,
+      baseVersion: priorVersion,
+      nonce: 100,
+      peer: required(room.peers[senderIndex]),
+      action: { kind: 'setReady', ready: true },
+    };
+    room.net.transport(required(room.peers[senderIndex])).send(
+      required(room.peers[electedIndex]),
+      canonicalEncode({
+        t: 'LOBBY_REQ',
+        request: { body, sig: signObject('lobby-request', body, required(room.keys[senderIndex])) },
+      }),
+    );
+    room.flush();
+    expect(elected.state()?.hostEpoch).toBe(1);
+    expect(elected.state()?.version).toBe(0);
+    expect(elected.state()?.seats.every((seat) => !seat.ready)).toBe(true);
+    value(elected.request({ kind: 'setReady', ready: true }));
+    // The remaining guest still sees version 0 in the new epoch; that Ready is allowed.
+    const sender = senderIndex === 1 ? room.second : room.third;
+    value(sender.request({ kind: 'setReady', ready: true }));
+    room.flush();
+    expect(elected.state()?.version).toBe(2);
+    expect(elected.state()?.seats[senderIndex]?.ready).toBe(true);
+  });
+
+  test('rejects unauthorized edits, spoofed requests, stale replay, and reports version mismatch', () => {
+    const room = setup();
+    active.push(room);
+    room.flush();
+    expect(room.second.configure(room.config)).toMatchObject({
+      ok: false,
+      error: { code: 'lobby-host' },
+    });
+    expect(room.second.kick(required(room.peers[2]))).toMatchObject({
+      ok: false,
+      error: { code: 'lobby-host' },
+    });
+    expect(room.second.start(toBase64Url(new Uint8Array(32).fill(9)))).toMatchObject({
+      ok: false,
+      error: { code: 'lobby-host' },
+    });
+    const baseVersion = required(room.host.state()).version;
+    const unauthorizedEdit = {
+      lobbyId: 'room_one',
+      hostEpoch: 0,
+      baseVersion,
+      nonce: 1,
+      peer: required(room.peers[1]),
+      config: room.config,
+      seedMode: required(room.host.state()).seedMode,
+      takeover: required(room.host.state()).takeover,
+    };
+    room.net.transport(required(room.peers[1])).send(
+      required(room.peers[0]),
+      canonicalEncode({
+        t: 'LOBBY_CONFIG',
+        edit: {
+          body: unauthorizedEdit,
+          sig: signObject('lobby-config', unauthorizedEdit, required(room.keys[1])),
+        },
+      }),
+    );
+    room.flush();
+    expect(room.host.getDiagnostic()).toEqual({ kind: 'invalid-message', code: 'lobby-host-edit' });
+    expect(room.host.state()?.version).toBe(baseVersion);
+    const body = {
+      lobbyId: 'room_one',
+      hostEpoch: 0,
+      baseVersion,
+      nonce: 1,
+      peer: room.peers[0],
+      action: { kind: 'takeSeat', seat: 1 },
+    };
+    const spoof = canonicalEncode({
+      t: 'LOBBY_REQ',
+      request: { body, sig: signObject('lobby-request', body, required(room.keys[1])) },
+    });
+    room.net.transport(required(room.peers[1])).send(required(room.peers[0]), spoof);
+    room.flush();
+    expect(room.host.state()?.seats[1]?.kind).toBe('open');
+    const realBody = { ...body, peer: room.peers[1] };
+    const packet = canonicalEncode({
+      t: 'LOBBY_REQ',
+      request: {
+        body: realBody,
+        sig: signObject('lobby-request', realBody, required(room.keys[1])),
+      },
+    });
+    room.net.transport(required(room.peers[1])).send(required(room.peers[0]), packet);
+    room.flush();
+    expect(room.host.state()?.seats[1]?.kind).toBe('human');
+    const version = room.host.state()?.version;
+    room.net.transport(required(room.peers[1])).send(required(room.peers[0]), packet);
+    room.flush();
+    expect(room.host.state()?.version).toBe(version);
+    const state = required(room.host.state());
+    const incompatible = {
+      protocolVersion: PROTOCOL_VERSION + 1,
+      engineVersion: ENGINE_VERSION,
+      state,
+    };
+    room.net.transport(required(room.peers[0])).send(
+      required(room.peers[1]),
+      canonicalEncode({
+        t: 'LOBBY_STATE',
+        snapshot: {
+          body: incompatible,
+          sig: signObject('lobby-state', incompatible, required(room.keys[0])),
+        },
+      }),
+    );
+    room.flush();
+    expect(room.second.getDiagnostic()).toEqual({
+      kind: 'protocol-version',
+      hostVersion: PROTOCOL_VERSION + 1,
+    });
+    const oldState = { ...state } as Record<string, unknown>;
+    delete oldState.takeover;
+    const oldBody = { protocolVersion: 2, engineVersion: ENGINE_VERSION, state: oldState };
+    room.net.transport(required(room.peers[0])).send(
+      required(room.peers[1]),
+      canonicalEncode({
+        t: 'LOBBY_STATE',
+        snapshot: {
+          body: oldBody,
+          sig: signObject('lobby-state', oldBody, required(room.keys[0])),
+        },
+      }),
+    );
+    room.flush();
+    expect(room.second.getDiagnostic()).toEqual({ kind: 'protocol-version', hostVersion: 2 });
+  });
+
+  test('requires every bot host to occupy a human seat before signing a freeze', () => {
+    const room = setup();
+    active.push(room);
+    room.flush();
+    value(room.second.request({ kind: 'spectate' }));
+    room.flush();
+    expect(room.host.setBot(2, 'easy', required(room.peers[1]))).toMatchObject({
+      ok: false,
+      error: { code: 'lobby-bot' },
+    });
+    const current = required(room.host.state());
+    const forged = {
+      ...current,
+      version: current.version + 1,
+      seats: current.seats.map((seat) =>
+        seat.seat === 2
+          ? {
+              seat: 2,
+              kind: 'bot',
+              name: 'Bot',
+              colour: seat.colour,
+              ready: false,
+              botLevel: 'easy',
+              botHost: required(room.peers[1]),
+            }
+          : seat,
+      ),
+    };
+    const body = {
+      protocolVersion: PROTOCOL_VERSION,
+      engineVersion: ENGINE_VERSION,
+      state: forged,
+    };
+    room.net.transport(required(room.peers[0])).send(
+      required(room.peers[1]),
+      canonicalEncode({
+        t: 'LOBBY_STATE',
+        snapshot: { body, sig: signObject('lobby-state', body, required(room.keys[0])) },
+      }),
+    );
+    room.flush();
+    expect(room.second.state()?.version).toBe(current.version);
+  });
+
+  test('host departure resets readiness; a partition cannot complete stale freeze', () => {
+    const room = setup();
+    active.push(room);
+    room.flush();
+    value(room.second.request({ kind: 'takeSeat', seat: 1 }));
+    room.flush();
+    value(room.third.request({ kind: 'takeSeat', seat: 2 }));
+    room.flush();
+    value(room.host.request({ kind: 'setReady', ready: true }));
+    room.flush();
+    value(room.second.request({ kind: 'setReady', ready: true }));
+    room.flush();
+    value(room.third.request({ kind: 'setReady', ready: true }));
+    room.flush();
+    const nonce = toBase64Url(new Uint8Array(32).fill(10));
+    value(room.host.start(nonce));
+    room.flush();
+    value(room.host.ackFreeze());
+    room.net.partition([
+      [required(room.peers[0])],
+      [required(room.peers[1]), required(room.peers[2])],
+    ]);
+    room.flush();
+    const electedIndex = required(room.peers[1]) < required(room.peers[2]) ? 1 : 2;
+    const electedPeer = required(room.peers[electedIndex]);
+    const elected = electedIndex === 1 ? room.second : room.third;
+    expect(room.host.freezeAgreement()).toBeNull();
+    expect(room.second.ackFreeze().ok).toBe(false);
+    expect(room.third.state()?.hostPeer).toBe(electedPeer);
+    expect(elected.state()?.status).toBe('open');
+    expect(elected.state()?.seats.every((seat) => !seat.ready)).toBe(true);
+    room.net.crash(required(room.peers[0]));
+    room.flush();
+    value(elected.kick(required(room.peers[0])));
+    room.flush();
+    value(elected.setBot(0, 'easy', electedPeer));
+    room.flush();
+    value(room.second.request({ kind: 'setReady', ready: true }));
+    room.flush();
+    value(room.third.request({ kind: 'setReady', ready: true }));
+    room.flush();
+    value(elected.start(toBase64Url(new Uint8Array(32).fill(11))));
+    room.flush();
+    value(elected.ackFreeze());
+    value(electedIndex === 1 ? room.third.ackFreeze() : room.second.ackFreeze());
+    room.flush();
+    expect(room.second.freezeAgreement()?.acks).toHaveLength(2);
+    expect(room.third.freezeAgreement()?.acks).toHaveLength(2);
+  });
+});
+
+FULL FILE packages/protocol/src/lobby-types.ts
+import type { GameConfig, Seat } from '@cp2p/engine';
+import type { PeerId } from './transport.js';
+import type { GenesisSeedMode } from './genesis-seed.js';
+import type { TakeoverPolicy } from './takeover-policy.js';
+
+export const LOBBY_COLOURS = ['blue', 'orange', 'green', 'magenta', 'yellow', 'red'] as const;
+export type LobbyColour = (typeof LOBBY_COLOURS)[number];
+export type LobbyBotLevel = 'easy' | 'medium' | 'hard';
+
+export type LobbySeat =
+  | { seat: Seat; kind: 'open'; colour: LobbyColour; ready: false }
+  | { seat: Seat; kind: 'human'; peer: PeerId; name: string; colour: LobbyColour; ready: boolean }
+  | {
+      seat: Seat;
+      kind: 'bot';
+      name: string;
+      colour: LobbyColour;
+      ready: false;
+      botLevel: LobbyBotLevel;
+      botHost: PeerId;
+    };
+
+/** A host-signed draft. The ceremony must issue new per-game keys after freeze. */
+export interface LobbyState {
+  readonly lobbyId: string;
+  readonly hostPeer: PeerId;
+  readonly hostEpoch: number;
+  readonly version: number;
+  readonly name: string;
+  readonly seats: readonly LobbySeat[];
+  readonly spectators: readonly PeerId[];
+  readonly config: GameConfig;
+  readonly seedMode: GenesisSeedMode;
+  readonly takeover: TakeoverPolicy;
+  readonly status: 'open' | 'starting' | 'started';
+  readonly ceremonyNonce: string | null;
+}
+
+export type LobbyRequest =
+  | { kind: 'takeSeat'; seat: Seat }
+  | { kind: 'leaveSeat' }
+  | { kind: 'setName'; name: string }
+  | { kind: 'setColour'; colour: LobbyColour }
+  | { kind: 'setReady'; ready: boolean }
+  | { kind: 'spectate' };
+
+export interface LobbyFreezeAck {
+  readonly body: {
+    readonly lobbyId: string;
+    readonly hostEpoch: number;
+    readonly ceremonyNonce: string;
+    readonly stateHash: string;
+    readonly peer: PeerId;
+  };
+  readonly sig: string;
+}
+
+export interface LobbyFreezeAgreement {
+  readonly state: LobbyState;
+  readonly acks: readonly LobbyFreezeAck[];
+}
+
+export type LobbyDiagnostic =
+  | { kind: 'protocol-version'; hostVersion: number }
+  | { kind: 'engine-version'; hostVersion: string }
+  | { kind: 'invalid-message'; code: string };

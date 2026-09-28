@@ -1,0 +1,5 @@
+{
+  "packages/protocol/src/lobby.ts": "9bb3cd7a6215981648bff67b0bea10aa3c12af9bfc62c6c48bcd56e6bd4aa4dc",
+  "packages/protocol/src/lobby.test.ts": "c3560299550ac43522e58e04c1debdbc3b2ac1df71dbba78d726e4f767e7a22d",
+  "packages/protocol/src/lobby-types.ts": "d4cf75e4495171a02c7ea4006812ab36aaa7eb87b037e9804e8731a789471c00"
+}

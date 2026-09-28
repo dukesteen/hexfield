@@ -1,0 +1,74 @@
+{
+  "duration_api_ms": 56283,
+  "stop_reason": "end_turn",
+  "session_id": "83a2e523-bb3a-4ce1-9ff3-4d43d9a9e802",
+  "total_cost_usd": 0.39161759999999995,
+  "usage": {
+    "input_tokens": 2,
+    "cache_creation_input_tokens": 35778,
+    "cache_read_input_tokens": 6028,
+    "output_tokens": 5209,
+    "output_tokens_details": { "thinking_tokens": 3984 },
+    "server_tool_use": { "web_search_requests": 0, "web_fetch_requests": 0 },
+    "service_tier": "standard",
+    "cache_creation": { "ephemeral_1h_input_tokens": 35778, "ephemeral_5m_input_tokens": 0 },
+    "inference_geo": "not_available",
+    "iterations": [
+      {
+        "input_tokens": 2,
+        "output_tokens": 5209,
+        "cache_read_input_tokens": 6028,
+        "cache_creation_input_tokens": 35778,
+        "cache_creation": { "ephemeral_5m_input_tokens": 0, "ephemeral_1h_input_tokens": 35778 },
+        "type": "message"
+      }
+    ],
+    "speed": "standard"
+  },
+  "modelUsage": {
+    "claude-opus-5-5": {
+      "inputTokens": 2,
+      "outputTokens": 5209,
+      "cacheReadInputTokens": 6028,
+      "cacheCreationInputTokens": 35778,
+      "webSearchRequests": 0,
+      "costUSD": 0.39161759999999995,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "thinkingTokens": 3984,
+      "canonicalModel": "claude-opus-5-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "permission_denials": [],
+  "terminal_reason": "completed",
+  "fast_mode_state": "off",
+  "fast_mode_disabled_reason": "sdk_opt_in_required",
+  "subagent_stats": {
+    "spawned": 0,
+    "requested": { "background": 0, "foreground": 0, "unset": 0 },
+    "started_in_background": 0,
+    "max_depth": 0,
+    "spawned_by_subagents": 0,
+    "completed": 0,
+    "failed": 0,
+    "killed": { "parent": 0, "user": 0, "system": 0 },
+    "refused": { "depth_limit": 0, "concurrency_limit": 0, "budget": 0 },
+    "by_type": {}
+  },
+  "is_error": false,
+  "num_turns": 1,
+  "subtype": "success",
+  "api_error_status": null,
+  "result": "**Verdict: APPROVE.** I found no blockers.\n\nI couldn't check the three file hashes or run the tests because this session has no shell or file tools. This review covers only the diff and the full files you pasted.\n\n## Authority and consent\n- **Acceptance rule** (`applyRequest`, the `baseVersion` clause): a request can use an older base version only if it is `setReady` and `readinessVersionFloor <= baseVersion <= state.version`. Every other request kind still needs an exact version match. The `from`, `lobbyId`, `hostEpoch`, connected-peer and signature checks come before the widened clause and are unchanged. Nonce and capacity checks still run afterwards.\n- **What a stale Ready can cross:** only commits that changed a seat's `ready` bit. Seat ownership, names, colours, config, seed mode, takeover policy and spectators are identical at the signed base version and at the current version. Resolving `ownIndex` against current state therefore gives the same answer it would have given at the base version.\n- **Other players' readiness** isn't part of what a player consents to. `start()` still requires every human to be ready and a full mesh. Each human's freeze ACK still binds the exact state hash, so no one can be committed to a snapshot they didn't sign.\n\n## Where the floor is reset\n- The `commit(next, readinessOnly = false)` default is fail-safe. The only call that passes `true` is `applyRequest` with `action.kind === 'setReady'`. So `configure`, `setBot`, `openSeat`, `kick`, `start`, the host's disconnect reset, and `takeSeat`/`leaveSeat`/`spectate`/`setName`/`setColour` all raise the floor. Any commit call added later also raises it unless someone opts in.\n- Every direct assignment to `this.current` also sets the floor: the constructor, `receiveState` adoption, and the migration branch in `peerChanged`. I found no other place that writes `current`.\n- A Ready rejected because it's below the floor stays rejected. The floor never goes down within an epoch. After a migration the version drops back to 0, but the old-epoch request fails the `hostEpoch` check, so it can't slip into the new window.\n\n## Future versions, nonces and ordering\n- `baseVersion > state.version` is still rejected, so a peer can't pre-sign for a version that doesn't exist yet.\n- The per-peer nonce only increases, and it's recorded only when a request is accepted. So when two toggles arrive out of order, the lower nonce is dropped and the latest intent wins. An exact replay inside the window fails the nonce check. `seenNonce` is only cleared on migration, and the epoch check covers that case.\n\n## Non-blocking notes\n1. **Silent drops remain.** A guest's Ready still gets dropped if it races a non-readiness commit, such as a member disconnect (the host's `!online` reset). The next snapshot shows the guest as not ready, so the UI stays truthful. This is the same behaviour as before, and you've said a rejection message is out of scope.\n2. **Weak first call in the out-of-order test.** In `out-of-order Ready toggles…`, the first `send(100, false)` uses the current base version, so only the nonce-99 and replayed nonce-100 sends actually exercise the window. That's still sufficient.\n3. **Optional extra test:** check that a `setBot`/`openSeat` commit, or a member disconnect, closes the window. The default parameter already covers this structurally, but a test would guard against someone later passing `true` by mistake.\n\nThe Atlassian and Google Drive connectors in this session need authorising in your claude.ai connector settings before they can be used. They weren't needed for this review.",
+  "ttft_ms": 44228,
+  "type": "result",
+  "duration_ms": 56325,
+  "uuid": "2b2ea5f7-9fa1-446f-886f-08bcebaf727f",
+  "ttft_stream_ms": 1230,
+  "time_to_request_ms": 39,
+  "first_content_frame_ms": 1231,
+  "queued_turn_count": 0,
+  "result_index": 0
+}

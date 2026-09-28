@@ -1130,6 +1130,91 @@ describe('online genesis ceremony', () => {
     expect(guest.snapshot().phase).toBe('ready');
   }, 60_000);
 
+  /* oxlint-disable vitest/no-conditional-expect -- Each parameter exercises a distinct delivery outcome. */
+  test.each(['valid', 'invalid', 'restart'] as const)(
+    'future deck delivery %s waits privately for its exact predecessor',
+    async (mode) => {
+      const room = setup({ kind: 'joint' }, 4);
+      const observer = identityFromSecret(required(room.deviceKeys[3])).peerId;
+      const held: { bytes: Uint8Array | null } = { bytes: null };
+      let futureDelivered = false;
+      const hostTransport = interceptTransport(room, 0, (to, bytes, packet) => {
+        if (to !== observer || packet.body.kind !== 'deck-pass' || packet.body.step !== 0)
+          return false;
+        held.bytes = bytes.slice();
+        return true;
+      });
+      const guestTransport = interceptTransport(room, 1, (to, _bytes, packet) => {
+        if (to === observer && packet.body.kind === 'deck-pass' && packet.body.step === 1)
+          futureDelivered = true;
+        if (
+          mode === 'invalid' &&
+          to === observer &&
+          packet.body.kind === 'deck-pass' &&
+          packet.body.step === 1
+        ) {
+          const payload = packet.body.payload;
+          if (!payload || typeof payload !== 'object') throw new Error('Missing signed pass');
+          const invalid = value(
+            signOnlineCeremonyPacket(
+              {
+                ...packet.body,
+                payload: { ...payload, sig: toBase64Url(new Uint8Array(64)) },
+              },
+              required(room.deviceKeys[1]),
+            ),
+          );
+          room.network
+            .transport(identityFromSecret(required(room.deviceKeys[1])).peerId)
+            .send(to, invalid.bytes);
+          return true;
+        }
+        return false;
+      });
+      const peers = [
+        room.create(0, required(room.stores[0]), hostTransport),
+        room.create(1, required(room.stores[1]), guestTransport),
+        room.create(2),
+        room.create(3),
+      ];
+      active.push(...peers, room.network);
+      const persisted = vi.spyOn(required(room.stores[3]), 'putIfAbsent');
+      // oxlint-disable-next-line no-await-in-loop -- Start peers in deterministic actor order.
+      for (const peer of peers) expect((await peer.start()).ok).toBe(true);
+      await until(room, () => held.bytes !== null && futureDelivered);
+      room.network.clock.advanceBy(0);
+      await required(peers[3]).flush();
+      expect(required(peers[3]).snapshot().phase).toBe('deck');
+      expect(persisted.mock.calls.some(([key]) => key.endsWith('/deck-pass/1/1'))).toBe(false);
+      if (mode === 'restart') {
+        required(peers[3]).dispose();
+        peers[3] = room.create(3);
+        active.push(required(peers[3]));
+        expect((await required(peers[3]).start()).ok).toBe(true);
+      }
+      room.network
+        .transport(identityFromSecret(required(room.deviceKeys[0])).peerId)
+        .send(observer, required(held.bytes));
+      if (mode === 'invalid') {
+        await until(room, () => required(peers[3]).snapshot().phase === 'retired');
+        expect(required(peers[3]).snapshot().error).toBe('online-ceremony-invalid-packet:deck');
+        expect(required(peers[3]).result()).toBeNull();
+        return;
+      }
+      if (mode === 'restart') {
+        room.network.clock.advanceBy(0);
+        await required(peers[3]).flush();
+        expect(required(peers[3]).snapshot().phase).toBe('deck');
+        room.network.clock.advanceBy(1_001);
+      }
+      await settle(room, peers);
+      expect(peers.map((peer) => peer.snapshot().phase)).toEqual(Array(4).fill('ready'));
+    },
+    60_000,
+  );
+
+  /* oxlint-enable vitest/no-conditional-expect */
+
   test('cached deck retries skip validated passes, restart revalidates and retains deadline', async () => {
     const room = setup();
     let held = false;

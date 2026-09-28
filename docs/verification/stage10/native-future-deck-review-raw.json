@@ -1,0 +1,74 @@
+{
+  "duration_api_ms": 91284,
+  "stop_reason": "end_turn",
+  "session_id": "09173915-56f4-4b49-b2cb-a8b0f14681b3",
+  "total_cost_usd": 0.7292016,
+  "usage": {
+    "input_tokens": 2,
+    "cache_creation_input_tokens": 70346,
+    "cache_read_input_tokens": 6028,
+    "output_tokens": 8261,
+    "output_tokens_details": { "thinking_tokens": 6649 },
+    "server_tool_use": { "web_search_requests": 0, "web_fetch_requests": 0 },
+    "service_tier": "standard",
+    "cache_creation": { "ephemeral_1h_input_tokens": 70346, "ephemeral_5m_input_tokens": 0 },
+    "inference_geo": "not_available",
+    "iterations": [
+      {
+        "input_tokens": 2,
+        "output_tokens": 8261,
+        "cache_read_input_tokens": 6028,
+        "cache_creation_input_tokens": 70346,
+        "cache_creation": { "ephemeral_5m_input_tokens": 0, "ephemeral_1h_input_tokens": 70346 },
+        "type": "message"
+      }
+    ],
+    "speed": "standard"
+  },
+  "modelUsage": {
+    "claude-opus-5-5": {
+      "inputTokens": 2,
+      "outputTokens": 8261,
+      "cacheReadInputTokens": 6028,
+      "cacheCreationInputTokens": 70346,
+      "webSearchRequests": 0,
+      "costUSD": 0.7292016,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "thinkingTokens": 6649,
+      "canonicalModel": "claude-opus-5-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "permission_denials": [],
+  "terminal_reason": "completed",
+  "fast_mode_state": "off",
+  "fast_mode_disabled_reason": "sdk_opt_in_required",
+  "subagent_stats": {
+    "spawned": 0,
+    "requested": { "background": 0, "foreground": 0, "unset": 0 },
+    "started_in_background": 0,
+    "max_depth": 0,
+    "spawned_by_subagents": 0,
+    "completed": 0,
+    "failed": 0,
+    "killed": { "parent": 0, "user": 0, "system": 0 },
+    "refused": { "depth_limit": 0, "concurrency_limit": 0, "budget": 0 },
+    "by_type": {}
+  },
+  "is_error": false,
+  "num_turns": 1,
+  "subtype": "success",
+  "api_error_status": null,
+  "result": "# Review: buffering future deck passes in `OnlineCeremony`\n\n**Verdict: APPROVE.** I found no blockers. This review is based only on the supplied diff and full files. I did not run the tests or check the manifest hashes.\n\n## What I checked\n\n**Wrong sender, signature or metadata.** `#receive` checks the signature against the transport sender. It also checks that the sender is a frozen human, that the sender is `#ownerDevice(body.seat)`, and that `freezeHash` and nonce match. It then checks that the step is below 2n and that the seat is the frozen actor for that step. The replay in `#exchange` checks the packet again against `slot.ownerDevice`, and `#checkedPayload` compares kind, seat, step and `senderDevice` with the frozen slot. A peer can only fill buffer keys it owns, so it cannot poison or push out another seat's entry.\n\n**Exact predecessor.** A buffered packet is used only when `#deckTranscripts` has already accepted step N−1 and built the slot for step N from `before = states[N]`. At that point `store.load(key)` must return null. `validate` sets `deckPrefix.next` with this step and `predecessorHash`, and the existing prefix check then accepts it. Several buffered passes can be applied in one `#advance`, each against its own predecessor.\n\n**Same path as ordinary receive.** Both paths now go through `#acceptReceivedSlot`: validation (retiring with `invalid-packet` on failure), then the attempt lock, a check for retirement, a compare against any stored bytes, `putIfAbsent`, and only then `#accepted.set`. Nothing is persisted or adopted before validation. The test's check that `deck-pass/1/1` was never written covers this.\n\n**Interaction with the validated-prefix cache.** Nothing new. `next` is set by the same validator, and a failed save leaves a stale `next` that the step and predecessor checks reject.\n\n**Conflicts.** Two different buffered copies for one slot can only both be signed by the slot's owner device, so they are equivocation. Retiring the attempt matches the existing handling when stored bytes differ. After a buffered packet is consumed, a conflicting copy hits the ordinary conflict path. Honest senders cannot produce two versions, because `#outgoing` persists the packet before sending it.\n\n**Disposal, restart and retirement.** The buffer is cleared in `dispose()` and in `#emit('retired')`, and `#receive` ignores packets once retired. A new instance starts with an empty buffer and relies on the sender's 1 s retransmission; the restart test covers this with `advanceBy(1_001)`. The 20 s deadline is unchanged because no phase is entered and nothing touches `startedAt`.\n\n**Buffer size.** Keys must be exactly (actor(step), step) for step < 2n, so there are at most 2n entries, each no larger than `MAX_MESSAGE_BYTES`.\n\n## Non-blocking notes\n\n1. **Restore mode (`online-ceremony.ts`, the new `else if` in `#exchange`).** This branch comes before the `#restoreExpected` \"remote phase packet is missing\" check, and `#acceptReceivedSlot` has no restore guard (`#persistObject` does). In principle, a network packet could fill a missing durable slot during a restore. It can't happen today: messages queue behind `start()`, a missing slot makes `start()` fail and unsubscribe, and afterwards `#advance` stops early on `#result` or disclosure. Still, `&& !this.#restoreExpected` on that branch would make the rule enforced locally.\n2. **Pre-filter uses the agreement seats, not the deck participants.** The actor check uses `agreement.state.seats[step % n]` rather than `definition.participants`. If those ever differed in order or membership, honest future packets would just be dropped, which is the old behaviour. It's safe but tightly coupled.\n3. **\"Buffer is full\" can't be reached.** Because the key set is exactly 2n, a new key never meets a full buffer. Harmless.\n4. **A buffered packet is removed before it is saved.** If the save then fails with a store error rather than a conflict, the packet is lost and recovery falls back to retransmission. That's acceptable.\n5. **Earlier retirement is now possible.** Deck passes are now buffered in any earlier phase, so owner equivocation can retire an attempt before the deck phase starts. This still requires the owner's key, so it's acceptable.\n6. **Test gap (`online-ceremony.test.ts`, the new `test.each`).** The `valid` case proves no retransmission is needed, since `settle` only calls `advanceBy(0)`. It doesn't cover a conflicting duplicate in the buffer, or buffering that starts before the deck phase. Both would be cheap to add.",
+  "ttft_ms": 74352,
+  "type": "result",
+  "duration_ms": 91471,
+  "uuid": "bebfc760-8c48-48bd-942a-2310daef42aa",
+  "ttft_stream_ms": 2100,
+  "time_to_request_ms": 150,
+  "first_content_frame_ms": 2100,
+  "queued_turn_count": 0,
+  "result_index": 0
+}
