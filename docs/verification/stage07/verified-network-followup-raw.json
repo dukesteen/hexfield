@@ -1,0 +1,74 @@
+{
+  "duration_api_ms": 214850,
+  "stop_reason": "end_turn",
+  "session_id": "26690aed-e6fa-4e73-b6fb-9c8bc9b0f83e",
+  "total_cost_usd": 0.9640960000000001,
+  "usage": {
+    "input_tokens": 2,
+    "cache_creation_input_tokens": 67786,
+    "cache_read_input_tokens": 0,
+    "output_tokens": 21090,
+    "output_tokens_details": { "thinking_tokens": 17477 },
+    "server_tool_use": { "web_search_requests": 0, "web_fetch_requests": 0 },
+    "service_tier": "standard",
+    "cache_creation": { "ephemeral_1h_input_tokens": 67786, "ephemeral_5m_input_tokens": 0 },
+    "inference_geo": "not_available",
+    "iterations": [
+      {
+        "input_tokens": 2,
+        "output_tokens": 21090,
+        "cache_read_input_tokens": 0,
+        "cache_creation_input_tokens": 67786,
+        "cache_creation": { "ephemeral_5m_input_tokens": 0, "ephemeral_1h_input_tokens": 67786 },
+        "type": "message"
+      }
+    ],
+    "speed": "standard"
+  },
+  "modelUsage": {
+    "claude-opus-5-5": {
+      "inputTokens": 2,
+      "outputTokens": 21090,
+      "cacheReadInputTokens": 0,
+      "cacheCreationInputTokens": 67786,
+      "webSearchRequests": 0,
+      "costUSD": 0.9640960000000001,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "thinkingTokens": 17477,
+      "canonicalModel": "claude-opus-5-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "permission_denials": [],
+  "terminal_reason": "completed",
+  "fast_mode_state": "off",
+  "fast_mode_disabled_reason": "sdk_opt_in_required",
+  "subagent_stats": {
+    "spawned": 0,
+    "requested": { "background": 0, "foreground": 0, "unset": 0 },
+    "started_in_background": 0,
+    "max_depth": 0,
+    "spawned_by_subagents": 0,
+    "completed": 0,
+    "failed": 0,
+    "killed": { "parent": 0, "user": 0, "system": 0 },
+    "refused": { "depth_limit": 0, "concurrency_limit": 0, "budget": 0 },
+    "by_type": {}
+  },
+  "is_error": false,
+  "num_turns": 1,
+  "subtype": "success",
+  "api_error_status": null,
+  "result": "# Follow-up review: verified non-voter runner and actor (read-only)\n\nScope: the supplied sources only. I ran no tools and executed nothing. Scenario 6 live acceptance is still pending, so none of the findings below assume it passes.\n\n## Correctness defects\n\n### H1: `nonVoterTransport` drops all transport methods, so verified scenario 6 cannot create the actor\n**Path:** `tools/sim/src/net.ts`, `nonVoterTransport()` (`{ ...transport, send, broadcast }`); `packages/protocol/src/testing/verified-non-voter-actor.ts` (`unsubscribe = transport.onMessage(receive)`)\n\n**Why:**\n- `network.transport(peerId)` returns a `MemnetTransport` class instance.\n- Object spread copies only own enumerable fields. Those are `self`, `network`, `generation`, the listener sets and `active`.\n- The prototype methods `peers`, `onMessage`, `onPeerChange` and `disconnect` are lost.\n- The code still type-checks because the declared type is the `Transport` interface.\n- The `transport.self !== identity.peerId` check passes. `transport.onMessage(receive)` then throws `TypeError` the first time scenario 6 reaches `byzantineHalted && faultRecovered` in verified mode.\n\n**Secondary effect in the actor:**\n- That `onMessage` call sits outside the constructor `try`.\n- The actor therefore throws instead of returning a `Result`.\n- It also leaks the copied `signingKey`, the scoped driver and the `MasterRevealCoordinator`.\n- This contradicts disposition item M5 (\"constructor failure disposes initialized private resources\").\n\n**Why tests miss it:** the focused actor test builds an explicit delegating wrapper, so it never exercises this path.\n\n**Fix:**\n- Delegate each method explicitly, as the focused test does.\n- Move the subscription inside the guarded initialization, and dispose resources on failure.\n\n### M1: Retries are not scheduled on the virtual clock\n**Path:** `net.ts` main loop (`nonVoterContributionRetryAt`, `nonVoterCommand.pump`, `if (!network.clock.runNext()) throw …`); `non-voter-command.ts` (`RETRY_MS`)\n\n**Why:**\n- Both the SUBMIT retry and the contribution republish run only when the loop iterates.\n- The loop iterates once per unrelated queued clock event.\n- The \"250 ms retry\" therefore means \"at the next event at least 250 ms later\", however far away that is.\n- If honest replicas are idle waiting on seat 0 (its turn, a deck unlock, or its master reveal) and no timers are armed, `runNext()` returns false and the runner throws \"no queued network/timer work\" instead of retrying.\n- Whether P2PSession always keeps a timer armed is outside the supplied source, so this is a real liveness hole in the runner's retry design, not a proven failure.\n\n**Fix:** arm `network.clock.setTimeout` at `retryAt`. Alternatively, when `runNext()` is false and an actor retry is pending, advance the clock to the retry time.\n\n### M2: Terminal audit acceptance is too permissive for seat 0 in scenario 6\n**Path:** `net.ts` terminal audit block, `cheatFindings.some((f) => options.scenario !== 6 || f.seat !== 0)`\n\n**Why:**\n- In scenario 6, any finding against seat 0 is accepted.\n- That includes findings caused by the post-exclusion actor's own artifacts: a bad deck unlock, count or steal proof, trade proof, or master.\n- Those are exactly the per-seat private-authority behaviours this run is meant to validate. A real actor defect would still produce a passing \"honest audit\".\n- Nothing requires the expected invalid-command finding to be present either.\n\n**Fix:** require seat-0 findings to equal exactly the expected objective finding(s), bound to `maliciousEntryHash` or the malicious height. Reject any other seat-0 finding.\n\n### M3: Missed or censored actor commands pass silently\n**Path:** `net.ts` `byzantineSubmissionRevision` block and the `byzantineCommandCommits >= 1` check\n\n**Why:**\n- When the head moves past `headSeq`, the submission is cleared whether or not the actor's command committed.\n- A single committed actor command anywhere satisfies acceptance.\n- Commands later dropped, displaced or censored are never detected.\n- A stale result also leaves the commit count unchanged even if the command did commit, so the count is only a lower bound.\n\n**Fix:** record every actor intent. At the next certified entry for which seat 0 was the only pending actor, require that entry to be that command (or a documented system or automatic alternative).\n\n### L1: Head snapshots go stale across the actor `await`\n**Path:** `net.ts` actor block\n\n**Why:**\n- `latest` and `honestHead` are captured before `await verifiedNonVoter.advance(...)`.\n- If any session commit settles during that await:\n  - `pump()` compares against a stale head.\n  - The later check `actorHead.seq !== latest.revision` hard-throws \"lacks its private state at the certified head\".\n  - The actor was actually at the newer head, so this is a false failure.\n- Likely rare after `flush()`, but brittle.\n\n**Fix:** recompute `latest` and the honest head after the await, or skip the iteration on mismatch.\n\n### L2: The exact `{1,2,3}` certificate check conflates quorum with composition\n**Path:** `net.ts`, the `for (const certified of history.slice(maliciousHeight - 1))` check\n\n**Why:**\n- The check demands exactly voters `{1,2,3}` from the exclusion height onward.\n- If seat 0's session precommitted the exclusion entry before halting, the certificate is valid but includes seat 0. The check would falsely fail with \"changed the original three-of-four quorum\".\n- It also checks only the set of distinct seats, not `certificate.length`, phase, seq/term or value binding. Validity is fully trusted to replica storage.\n- This is acceptable only because replay revalidates, and should be documented as such.\n\n### L3: Publication coalescing can return an in-flight publish bound to an older context\n**Path:** `verified-non-voter-actor.ts`, the `publication ??=` wrapper\n\n**Why:**\n- `advance()` returns the shared promise.\n- That promise exits early with `success` once `context !== current`, so the new head's contributions are skipped until the caller retries.\n- The runner currently serializes its awaits, which makes this latent. Combined with M1 it could stall.\n\n**Fix:** re-run publication for the new context when the in-flight publish was for an older one.\n\n### L4: The `transmit` else-if chain can skip type-specific checks\n**Path:** `verified-non-voter-actor.ts`, `transmit`\n\n**Why:**\n- The generic `'genesisDigest' in outgoing` branch comes before the `MASTER_REVEAL` and `TRADE_PROOF_REQUEST` branches.\n- If either message ever carries a top-level matching `genesisDigest`, its type-specific checks are skipped. For `MASTER_REVEAL` that includes the terminal-state requirement.\n- I cannot confirm those schemas from the supplied source.\n\n**Fix:** make the digest check additive rather than exclusive.\n\n### L5: Runner-side misuse detection is swallowed by `transmit`\n**Path:** `net.ts` `observeNonVoterMessage`; `transmit`'s `catch`\n\n**Why:**\n- Throws from the observer become `non-voter-transport`.\n- Trade-request retry treats that code as transient and keeps retrying.\n- Trade responses drop it silently.\n- The final assertion still works because types are recorded before the throw. However, diagnostics are lost, and `nonVoterMessageTypes` records attempted sends, not deliveries.\n\n### L6: The stub scenario 6 path is still one-shot\n**Path:** `net.ts`, stub `signCommand` / `broadcast`\n\n**Why:**\n- It sends a single raw SUBMIT with no retry.\n- It bypasses `nonVoterTransport` observation.\n- If the SUBMIT is lost or ignored, the run stalls until the \"no work\" or 2-hour virtual limit.\n- `byzantinePrivate` also rebuilds the full replay with a fresh driver at each new revision, which is O(n²).\n- Stub-only, so low severity.\n\n## Test and coverage limitations (not defects)\n\n- **Focused actor test is synthetic, as documented.**\n  - After the fabricated exclusion, the actor's head diverges from the live replicas.\n  - Its SUBMIT is broadcast to replicas that cannot accept it.\n  - Any first legal command needing a remote trade proof would time out, because the answerers are at a different head.\n  - Coverage therefore depends on the first enumerated command not needing a remote proof.\n- **Failure masking on retry.** If the first post-exclusion `submit` fails, the next loop pass calls `advance(history.entries)` without the exclusion. It fails with `non-voter-prefix-shrunk`, which hides the real cause.\n- **Alternate certificate wrapper.** This only proves that an already-accepted entry is not re-validated. It is not a certificate-admission test, and the disposition says so correctly.\n- **Transport wrapping is untested.** No test exercises `nonVoterTransport` itself, which is why H1 is unobserved.\n- **No test for retry scheduling with an empty clock queue.** This is the M1 scenario.\n- **Timing sensitivity in `non-voter-command.test.ts`.** It relies on an 8-microtask `settle()`. Adequate, but sensitive to extra promise hops.\n- **Single-seed CI.** The workflow runs one seed per scenario, so one pass is weak evidence for scenario 6 once H1 is fixed.\n\n## Areas that look correct\n\n- `NonVoterCommand` has one in-flight submit, a 250 ms same-parent cadence, discards late results after a same-height fork, and surfaces thrown submits.\n- Actor `submit`:\n  - It rechecks context after the trade-proof await, and `pendingCommand` is cleared correctly by both the `finally` and `advance`.\n  - It enforces the automatic-input requirement.\n  - SUBMIT is bound to the current head, nonce and retained signature.\n- Private authority is scoped per seat: the fixture's `createDriver` and deck, hand and steal sources are pinned to their seat, and trade requests are bound to the requester's authenticated peer.\n- The runner's prefix feed tolerates differing honest certificate wrappers by comparing entry hashes.",
+  "ttft_ms": 183291,
+  "type": "result",
+  "duration_ms": 214942,
+  "uuid": "bb4e76f5-39e8-426d-a8f5-a9dd7bda9653",
+  "ttft_stream_ms": 1659,
+  "time_to_request_ms": 66,
+  "first_content_frame_ms": 1660,
+  "queued_turn_count": 0,
+  "result_index": 0
+}

@@ -1,0 +1,10 @@
+c2c9b1ad7548e7373bb84dca2a289a02ce500eddeef01543e0583292a8e30aeb  packages/protocol/src/testing/verified-non-voter-actor.ts
+d69e5f8ae54fa0d2d0bffa052899d76ad44ca5ee16212ff173c66af64b5f716e  packages/protocol/src/testing/verified-non-voter-actor.test.ts
+09ed4126025d594c06e115eb8fa5fe3d610a5cd3170cbff9a4969e6111379896  packages/protocol/src/testing/verified-network-fixture.ts
+e72263e667df080eed63966cbf2bcfa22861ff43510d1bb692d85abca207db0e  packages/protocol/src/testing/verified-network-fixture.test.ts
+633ff0288b92e5bdf37b89adc1444a450d2ac2b0dd7e2847094fe503b7a77d02  tools/sim/src/net.ts
+4c432a12c367c71dabe3e8c997b1660b64385d96410ded553c34e807b398c651  tools/sim/src/net-batch.ts
+3fefacd8d269b016964fe1f3a6e96aadbc4f3eef1353e4da1b5f89af0c859a91  tools/sim/src/net-worker.ts
+330be4055a132b97bb33e0bec9c19925544968c278a86d3705adc3a9436877e4  tools/sim/src/net-batch.test.ts
+abb533b185c0659c1ec4febd9ac4888ddcb4e010566347ea181da62df83d7b4f  .github/workflows/verified-network.yml
+151dca677a5c237a9bac724dff20a9434939a94e1e49d0afd6a849299b046bb0  docs/verification/p2p-acceptance-policy.md

@@ -6,6 +6,16 @@ export { SimulationDriver } from './testing/simulation-driver.js';
 export { createSimulationGenesis } from './testing/simulation-genesis.js';
 export type { SimulationGenesisOptions, SimulationGenesis } from './testing/simulation-genesis.js';
 export { createTerminalAuditFixture } from './testing/audit-fixture.js';
+export { createVerifiedNetworkFixture } from './testing/verified-network-fixture.js';
+export type {
+  VerifiedNetworkFixtureOptions,
+  VerifiedNetworkSessionOptions,
+} from './testing/verified-network-fixture.js';
+export { createVerifiedNonVoterActor } from './testing/verified-non-voter-actor.js';
+export type {
+  VerifiedNonVoterActor,
+  VerifiedNonVoterActorOptions,
+} from './testing/verified-non-voter-actor.js';
 export { createRetiredSafety } from './retired-safety.js';
 export { persistRecoveryPrivate } from './recovery-private.js';
 export {

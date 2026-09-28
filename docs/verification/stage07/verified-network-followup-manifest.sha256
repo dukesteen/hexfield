@@ -1,0 +1,12 @@
+981af472e0a11aca6280a3f60b7ae8a771377847fade52d7447695e365e38282  tools/sim/src/net.ts
+5726faf860e23900dd042ae8421c1ef4e5ab1fe795599633f59419e182eb3e61  tools/sim/src/non-voter-command.ts
+21ab879b91ced0c2a8762e6ac9930598c0fd144686df492047986cbb03f925fc  tools/sim/src/non-voter-command.test.ts
+d9ae8858c15523c455fc4033b358d98f869b514feab2f9c633b796a7ade18c0b  tools/sim/src/net-adversary.ts
+4c432a12c367c71dabe3e8c997b1660b64385d96410ded553c34e807b398c651  tools/sim/src/net-batch.ts
+7de479039d8993e469dbb81e8d8f471c76cbfcf6e38fe29843e9313b5c39b107  tools/sim/src/cli.ts
+c244a65788a557123fb6fb7dd1c6e6da975f39f642feeecb283892820b0309cc  packages/protocol/src/testing/verified-non-voter-actor.ts
+de0af7c357c19ba7c1376bf45722764d7c40f66b81bab28f2104da76466874b9  packages/protocol/src/testing/verified-non-voter-actor.test.ts
+09ed4126025d594c06e115eb8fa5fe3d610a5cd3170cbff9a4969e6111379896  packages/protocol/src/testing/verified-network-fixture.ts
+f70340b658370df4837a003241b87b2f89ab96edfca8f8a5c0416848777ec244  packages/protocol/src/testing/memnet.ts
+3ff006d85ecb82e72d0ae0f167950a8eb46f2462c316acc3fa2891191c0a44d1  docs/verification/stage07/verified-non-voter-review-disposition.md
+abb533b185c0659c1ec4febd9ac4888ddcb4e010566347ea181da62df83d7b4f  .github/workflows/verified-network.yml

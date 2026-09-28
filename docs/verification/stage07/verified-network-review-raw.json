@@ -1,0 +1,74 @@
+{
+  "duration_api_ms": 250456,
+  "stop_reason": "end_turn",
+  "session_id": "73309cfc-25f7-465e-a27b-74d62ff2d00b",
+  "total_cost_usd": 0.891856,
+  "usage": {
+    "input_tokens": 2,
+    "cache_creation_input_tokens": 50636,
+    "cache_read_input_tokens": 0,
+    "output_tokens": 24338,
+    "output_tokens_details": { "thinking_tokens": 20220 },
+    "server_tool_use": { "web_search_requests": 0, "web_fetch_requests": 0 },
+    "service_tier": "standard",
+    "cache_creation": { "ephemeral_1h_input_tokens": 50636, "ephemeral_5m_input_tokens": 0 },
+    "inference_geo": "not_available",
+    "iterations": [
+      {
+        "input_tokens": 2,
+        "output_tokens": 24338,
+        "cache_read_input_tokens": 0,
+        "cache_creation_input_tokens": 50636,
+        "cache_creation": { "ephemeral_5m_input_tokens": 0, "ephemeral_1h_input_tokens": 50636 },
+        "type": "message"
+      }
+    ],
+    "speed": "standard"
+  },
+  "modelUsage": {
+    "claude-opus-5-5": {
+      "inputTokens": 2,
+      "outputTokens": 24338,
+      "cacheReadInputTokens": 0,
+      "cacheCreationInputTokens": 50636,
+      "webSearchRequests": 0,
+      "costUSD": 0.891856,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "thinkingTokens": 20220,
+      "canonicalModel": "claude-opus-5-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "permission_denials": [],
+  "terminal_reason": "completed",
+  "fast_mode_state": "off",
+  "fast_mode_disabled_reason": "sdk_opt_in_required",
+  "subagent_stats": {
+    "spawned": 0,
+    "requested": { "background": 0, "foreground": 0, "unset": 0 },
+    "started_in_background": 0,
+    "max_depth": 0,
+    "spawned_by_subagents": 0,
+    "completed": 0,
+    "failed": 0,
+    "killed": { "parent": 0, "user": 0, "system": 0 },
+    "refused": { "depth_limit": 0, "concurrency_limit": 0, "budget": 0 },
+    "by_type": {}
+  },
+  "is_error": false,
+  "num_turns": 1,
+  "subtype": "success",
+  "api_error_status": null,
+  "result": "# Scenario 6 non-voter review: real-crypto network runner and verified endpoint\n\n**Verdict:** Not ready for acceptance. One likely blocker and two high-severity liveness gaps affect the full-game path. The focused test does not exercise the scenario-6 claims it asserts.\n\n---\n\n## Blocker\n\n### B1. Contribution retransmits grow the message queue exponentially\n\n**Where:** `tools/sim/src/net.ts`, `runNetworkGame` main loop (the `continuation` block). `verified-non-voter-actor.ts`, `publishContributions` and `publishMasterReveal`.\n\n**What happens:**\n- When the actor's head equals the honest head, the loop calls `verifiedNonVoter.publishContributions()` on every loop step.\n- Each step processes exactly one clock event (`network.clock.runNext()`).\n- Several branches broadcast again whenever their condition still holds:\n  - COUNT while `counts.remaining.includes(seat)`.\n  - STEAL while the operation is open.\n  - DECK whenever `unlock.value` is returned.\n  - SYS_CONTRIB whenever `beacon.value` is returned.\n  - MASTER_REVEAL on every call once `state.result !== null`.\n- Suppose memnet schedules one delivery event per recipient at a 1 ms latency.\n  - Each event at time T causes three events at T+1, so the queue triples every virtual millisecond.\n  - Any wait on consensus timers while a contribution is uncertified will hit `maxSteps` or exhaust memory.\n  - The post-terminal reveal has the same problem until all three audits complete.\n- Each duplicate also costs honest peers a real proof verification.\n\n**Fix direction:** Rate-limit retransmits per artifact ID on the virtual clock, or retransmit only on a new head or peer change. Do not retransmit once per loop iteration.\n\n---\n\n## High\n\n### H1. The non-voter has no automatic-input path\n\n**Where:** `net.ts`, the seat-0 branch; `choosePending`; `VerifiedNonVoterActor.submit`.\n\n- `choosePending` drops pendings whose only allowed action is `CLAIM_VICTORY`. Honest seats rely on P2PSession's automatic submission (`automaticParent`) for these. Nothing plays that role for seat 0 after the session is disposed.\n  - If seat 0 reaches a victory condition, or any seat-0 action that only appears as automatic, nobody submits it and the game stalls.\n- The runner picks commands with `bot.decide(...)` and never consults `actor.legalCommands()` or the engine's automatic input.\n  - If an automatic command exists and the bot picks something else, `submit` returns `non-voter-automatic`.\n  - The runner treats that code as fatal (`Submission rejected`).\n\n### H2. A lost or refused SUBMIT is never retried\n\n**Where:** `net.ts`, the seat-0 verified submit branch.\n\n- On success, `waiting.result` stays `null`, so `submission` stays set until `latest.revision > byzantineSubmissionRevision`.\n- If honest peers drop or refuse that one SUBMIT, the loop never calls `submit` again. This could happen through transient admission, arrival ordering, or evidence rejection.\n- The actor supports an idempotent resend (the same parent returns the same signature), but the loop never uses it.\n- The result is a silent stall until the two-hour virtual limit or `maxSteps`.\n\n### H3. The focused test does not prove post-exclusion liveness or non-voting\n\n**Where:** `verified-non-voter-actor.test.ts`.\n\n- **The exclusion is synthetic.** It is appended only to the actor's prefix. Live sessions never certify it, and session 0 stays alive and keeps voting.\n- **The command never gets certified.** The actor's post-exclusion SUBMIT is bound to a head no honest peer has. The test only checks that a SUBMIT message was emitted, not that it was certified.\n- **The \"no PROPOSAL/VOTE/COMMIT\" assertion is narrow.** `actorMessages.length = 0` runs just before `submit`, so the assertion covers only that final window. It is also structurally guaranteed by `OUTBOUND_TYPES`, so it exercises nothing.\n- **The exclusion certificate is weakened.** It includes the offender's own vote (seats 0, 1, 2). `proposerFor` may also elect seat 0 as the entry's sequencer.\n- **Transport sharing is unverified.** Session 0 and the actor share peer 0 via two `network.transport(peerId)` handles. Whether both receive deliveries is not shown.\n\n---\n\n## Medium\n\n### M1. The awaited-submit / virtual-clock deadlock remains in the focused test\n\nThe test still calls `await nonVoter.submit(...)` directly, and nothing advances the `VirtualClock` during that wait.\n\n- If `enumerateCommands(...)[0]` is a `CONFIRM_TRADE` that needs remote proofs, `requestTradeProofs` waits on deliveries and timers that never fire.\n- The honest peers are also at a different (non-synthetic) head, so they would reject the request anyway.\n- The 10 s timeout never elapses in virtual time, so the test hangs until the 90 s Vitest timeout.\n\n### M2. Mutation-alias test is vacuous\n\nIn the test, `actorHistory[0] = mutatedEntry` replaces an array slot. It does not mutate an object the actor might retain.\n\n- If `advance` stored caller-aliased objects (whether it does depends on `validateCertifiedEntry`), the test would still pass.\n- A real test would mutate `originalObject.entry.stateHash` (or the payload) in place, then re-advance.\n\n### M3. Alternate-certificate test is vacuous\n\n`advance` compares only `entryHash` for already-accepted indices and never validates the new wrapper. A garbage certificate would pass the same test.\n\n- The behaviour itself is acceptable, since the actor keeps its validated wrapper.\n- The test comment claims more than it checks. It also hardcodes `epoch: 0` instead of `membership.epoch`.\n\n### M4. Trade-proof response goes to the relayer, not the requester\n\n**Where:** `answerTradeProofRequest`.\n\n- The response goes to `from`, and nothing binds `from` to the peer that signed the request.\n- Any peer that replays a signed request receives the proofs. If hand proofs reveal private information to the counterparty, this leaks it.\n- Each request also triggers fresh proof generation with no caching or rate limit.\n\n### M5. Fire-and-forget promises have no rejection handler\n\n- `void verifiedNonVoter.submit(...).then(...)` in `net.ts` has no `.catch`.\n  - A throw inside `engine.validate`, `planTradeProof`, `driver.prepareCommand`, etc. leaves `waiting.result === null` forever, which is a silent stall.\n  - It can also raise an unhandled rejection in the worker.\n- `void answerTradeProofRequest(...)` has the same problem.\n- In `advance`, `entryHash(received.entry)` on unvalidated input can throw instead of returning a `Result`.\n\n### M6. Deck unlock prefix can change across the await\n\n**Where:** `publishContributions`, deck branch.\n\n- `prepareDeckUnlock` is computed against `deckInbox.prefix()` read before the `await`.\n- The broadcast `unlocks` array is rebuilt from `deckInbox.prefix()` read after the `await`, and `receive()` may add entries in between.\n- If the prefix grows, the unlock is broadcast with a prefix it was not computed against. Capture the prefix once and reuse it.\n- Separately, `operationId: deckInbox.operationId() ?? ''` against the owner check `=== deckInbox.operationId()` fails when the ID is `null`. The runner then treats it as fatal through `unwrap`.\n\n### M7. Scenario 6 acceptance does not assert its stated invariants\n\n**Where:** `net.ts`, final scenario-6 block. The following are not checked:\n\n- **Unchanged quorum:** that post-exclusion entries keep the same epoch/membership, and that every certificate has three distinct non-offender voters from seats 1–3. Only `control.certificate.length < 3` is checked, on the exclusion entry alone.\n- **Rejection and finding:** that the invalid signed command never committed, and that an attributable finding was certified. Both are policy-row requirements.\n- **Non-voting:** that the actor emitted no PROPOSAL/VOTE/COMMIT. The actor uses raw `network.transport` with no capture.\n- **Actor-published master:** that seat 0's master was published by the actor. This is implied only if a `complete` audit requires every master.\n\n---\n\n## Low\n\n- **Actor-creation window:** Contributions and trade-proof requests sent to peer 0 between session-0 halt and actor creation are lost. Recovery depends on honest peers retrying, and the actor only learns deck prefixes from sends after creation.\n- **Aliases out of the actor:** `privateState()` returns the driver's live object, which is passed to `bot.decide`. `legalCommands()` returns `automatic.command` by reference.\n- **Signed command not durable:** `pendingCommand` is in memory only. The test comment says \"persisted signed command\". Recreating the actor could sign a different command at the same parent and nonce. `??=` prevents recreation in `net.ts`.\n- **Leak on constructor failure:** If `createVerifiedNonVoterActor` throws after `createDriver`, the driver is never disposed.\n- **Unexpected-code fatality:** `non-voter-trade-timeout`, `non-voter-trade-busy` and `non-voter-command-pending` are fatal in the runner. Only the two stale codes are tolerated.\n- **Trade-proof peer lookup:** The requester resolves the owner peer through `resolveArtifactSigner`, while the host side uses `tradeProofHost`. They are equivalent only for all-human games.\n- **Focused-test follow-on error:** After a failed submit, the next pass calls `advance(history.entries)`, which is shorter than the actor's prefix (it includes the synthetic exclusion). This yields a misleading `prefix-shrunk` error.\n- **Unused and missed disposal:** `outgoingByPeer` in the test is unused. The fixture `dispose` does not dispose the beacon, count, steal or cheat stores.\n\n---\n\n## Could not verify from the supplied context\n\n- **Memnet:** delivery granularity (per-recipient events, dedupe), and whether it allows two live handles for one peer ID. Both B1 and the focused test depend on this.\n- **Session disposal:** whether `P2PSession.dispose` disposes shared seat-scoped objects, such as the beacon `provider.source` or stores, that the actor later reuses.\n- **Protocol helpers:** whether these reserve and return identical bytes on repeat, and when they return `null`:\n  - `prepareBeaconContribution`\n  - `prepareCountContribution`\n  - `prepareSteal*`\n  - `prepareDeckUnlock`\n  - `MasterRevealCoordinator.prepare`\n- **Coordinator journal:** whether `MasterRevealCoordinator` tolerates `commit` returning `false` and empty safety bytes.\n- **Detaching and drivers:** whether `validateCertifiedEntry` returns detached objects. Whether `VerifiedSessionDriver` implements `committedEntry` for control entries.\n- **Honest peers:** whether they accept SUBMITs from an excluded proposer's seat and retry trade-proof requests.\n- **Exclusion height:** whether the exclusion always lands exactly at `maliciousHeight`. The observe and final checks both assume it does.\n- **CI and the adversary:** whether `tools/sim/dist/index.js net` exits non-zero when `failures` is non-empty. If it does not, the workflow passes on a failed game. `net-adversary.ts` (`invalidCommandProposal`) was not supplied.\n- **Test results:** No test results were shown. The latest focused-test result is pending, and scenarios 2–9 have not passed.",
+  "ttft_ms": 213319,
+  "type": "result",
+  "duration_ms": 250550,
+  "uuid": "c7ac9378-0090-4380-9505-596c2815b009",
+  "ttft_stream_ms": 1593,
+  "time_to_request_ms": 61,
+  "first_content_frame_ms": 1593,
+  "queued_turn_count": 0,
+  "result_index": 0
+}
