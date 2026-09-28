@@ -34,7 +34,7 @@ import {
   createVerifiedNetworkFixture,
   createVerifiedNonVoterActor,
 } from '@cp2p/protocol/testing';
-import type { VerifiedNonVoterActor } from '@cp2p/protocol/testing';
+import type { VerifiedNetworkAuditTiming, VerifiedNonVoterActor } from '@cp2p/protocol/testing';
 import { deriveSeed } from './random-source.js';
 import { invalidCommandProposal } from './net-adversary.js';
 import { NonVoterCommand } from './non-voter-command.js';
@@ -88,14 +88,7 @@ export interface NetworkGameResult {
     finalHead: { seq: number; hash: string };
     cheatFindings: AuditReport['cheatFindings'];
   }[];
-  auditTimings?: readonly {
-    seat: Seat;
-    invocations: number;
-    totalMilliseconds: number;
-    lastMilliseconds: number;
-    privateComparisonInvocations: number;
-    privateComparisonMilliseconds: number;
-  }[];
+  auditTimings?: readonly VerifiedNetworkAuditTiming[];
   lifecycle?: {
     profile: 'persistence';
     restarts: readonly LifecycleRestart[];

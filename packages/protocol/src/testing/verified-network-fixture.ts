@@ -123,7 +123,17 @@ export interface VerifiedNetworkFixtureOptions {
 
 export interface VerifiedNetworkAuditTiming {
   readonly seat: Seat;
+  /** Dispatches, including jobs whose results are still pending. */
   readonly invocations: number;
+  /** Settled jobs, including failures and cancellation. */
+  readonly completedInvocations: number;
+  readonly pendingInvocations: number;
+  /** Most recent dispatch time, relative to fixture creation. */
+  readonly lastStartedMilliseconds: number;
+  /** Sum of elapsed wall time for pending jobs, not worker CPU time. */
+  readonly runningMilliseconds: number;
+  readonly oldestPendingMilliseconds: number;
+  /** Completed-job wall durations retain their previous meaning. */
   readonly totalMilliseconds: number;
   readonly lastMilliseconds: number;
   readonly privateComparisonInvocations: number;
@@ -135,6 +145,7 @@ export interface VerifiedNetworkAuditTiming {
  * in-memory outboxes are seat-scoped and remain stable for the fixture lifetime.
  */
 export function createVerifiedNetworkFixture(options: VerifiedNetworkFixtureOptions) {
+  const fixtureStarted = performance.now();
   const simulation = createSimulationGenesis({
     seed: options.seed,
     gameIndex: options.gameIndex ?? 0,
@@ -257,6 +268,9 @@ export function createVerifiedNetworkFixture(options: VerifiedNetworkFixtureOpti
       Seat,
       {
         invocations: number;
+        completedInvocations: number;
+        lastStartedMilliseconds: number;
+        running: Set<{ started: number }>;
         totalMilliseconds: number;
         lastMilliseconds: number;
         privateComparisonInvocations: number;
@@ -313,6 +327,9 @@ export function createVerifiedNetworkFixture(options: VerifiedNetworkFixtureOpti
         auditRunner: (input) => {
           const timing = auditTimings.get(seat) ?? {
             invocations: 0,
+            completedInvocations: 0,
+            lastStartedMilliseconds: 0,
+            running: new Set<{ started: number }>(),
             totalMilliseconds: 0,
             lastMilliseconds: 0,
             privateComparisonInvocations: 0,
@@ -320,6 +337,10 @@ export function createVerifiedNetworkFixture(options: VerifiedNetworkFixtureOpti
           };
           auditTimings.set(seat, timing);
           const started = performance.now();
+          const running = { started };
+          timing.invocations++;
+          timing.lastStartedMilliseconds = started - fixtureStarted;
+          timing.running.add(running);
           const compare = options.verifyLivePrivateStates && !comparisonReserved;
           if (compare) {
             comparisonReserved = true;
@@ -376,7 +397,8 @@ export function createVerifiedNetworkFixture(options: VerifiedNetworkFixtureOpti
             auditJobs.delete(job);
             auditResults.delete(result);
             const elapsed = performance.now() - started;
-            timing.invocations++;
+            timing.running.delete(running);
+            timing.completedInvocations++;
             timing.totalMilliseconds += elapsed;
             timing.lastMilliseconds = elapsed;
           }
@@ -447,10 +469,21 @@ export function createVerifiedNetworkFixture(options: VerifiedNetworkFixtureOpti
           ),
         ),
       }),
-      auditTimingEvidence: (): readonly VerifiedNetworkAuditTiming[] =>
-        [...auditTimings]
-          .map(([seat, timing]) => ({ seat, ...timing }))
-          .toSorted((left, right) => left.seat - right.seat),
+      auditTimingEvidence: (): readonly VerifiedNetworkAuditTiming[] => {
+        const now = performance.now();
+        return [...auditTimings]
+          .map(([seat, { running, ...timing }]) => {
+            const elapsed = [...running].map(({ started }) => Math.max(0, now - started));
+            return {
+              seat,
+              ...timing,
+              pendingInvocations: running.size,
+              runningMilliseconds: elapsed.reduce((sum, duration) => sum + duration, 0),
+              oldestPendingMilliseconds: Math.max(0, ...elapsed),
+            };
+          })
+          .toSorted((left, right) => left.seat - right.seat);
+      },
       mastersForAudit: () =>
         HUMAN_SEATS.map((seat) => {
           const master = masterSecrets.get(seat);

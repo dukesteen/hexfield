@@ -1,5 +1,5 @@
 import { scalarToBytes } from '@cp2p/crypto';
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test, vi } from 'vitest';
 import type {
   VerifiedNetworkAuditRequest,
   VerifiedNetworkAuditResult,
@@ -112,6 +112,9 @@ describe('verified network fixture', () => {
         };
       },
     });
+    const clock = vi.spyOn(performance, 'now');
+    const started = performance.now();
+    clock.mockReturnValue(started);
     try {
       const firstRunner = fixture.sessionOptions(0).auditRunner;
       const secondRunner = fixture.sessionOptions(1).auditRunner;
@@ -121,22 +124,71 @@ describe('verified network fixture', () => {
         entries: [],
         masters: fixture.mastersForAudit(),
       });
+      clock.mockReturnValue(started + 20);
       const second = secondRunner({
         genesisEntry: fixture.entry,
         entries: [],
         masters: fixture.mastersForAudit(),
       });
+      clock.mockReturnValue(started + 100);
+      expect(fixture.auditTimingEvidence()).toMatchObject([
+        {
+          seat: 0,
+          invocations: 1,
+          completedInvocations: 0,
+          pendingInvocations: 1,
+          runningMilliseconds: 100,
+          oldestPendingMilliseconds: 100,
+          totalMilliseconds: 0,
+          lastMilliseconds: 0,
+        },
+        {
+          seat: 1,
+          invocations: 1,
+          completedInvocations: 0,
+          pendingInvocations: 1,
+          runningMilliseconds: 80,
+          oldestPendingMilliseconds: 80,
+          totalMilliseconds: 0,
+          lastMilliseconds: 0,
+        },
+      ]);
+      const starts = fixture.auditTimingEvidence().map((timing) => timing.lastStartedMilliseconds);
+      expect((starts[1] ?? 0) - (starts[0] ?? 0)).toBe(20);
       expect(requests[0]?.privateStates).toBeDefined();
       expect(requests[1]?.privateStates).toBeUndefined();
       const failed = Promise.allSettled([first.result, second.result]);
       const waiting = fixture.waitForAudits().catch((error: unknown) => error);
       for (const reject of rejectors) reject(new Error('comparison failed'));
       expect((await failed).every((item) => item.status === 'rejected')).toBe(true);
+      expect(fixture.auditTimingEvidence()).toMatchObject([
+        {
+          seat: 0,
+          invocations: 1,
+          completedInvocations: 1,
+          pendingInvocations: 0,
+          runningMilliseconds: 0,
+          oldestPendingMilliseconds: 0,
+          totalMilliseconds: 100,
+          lastMilliseconds: 100,
+        },
+        {
+          seat: 1,
+          invocations: 1,
+          completedInvocations: 1,
+          pendingInvocations: 0,
+          runningMilliseconds: 0,
+          oldestPendingMilliseconds: 0,
+          totalMilliseconds: 80,
+          lastMilliseconds: 80,
+        },
+      ]);
       expect(await waiting).toMatchObject({ message: 'comparison failed' });
       expect(fixture.privateStateEvidence().checkedSequences).toBe(0);
       await expect(fixture.waitForAudits()).rejects.toThrow('comparison failed');
     } finally {
       fixture.dispose();
+      clock.mockRestore();
     }
   }, 30_000);
 });
