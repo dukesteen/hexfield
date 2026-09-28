@@ -64,7 +64,7 @@ function goldData(state: GameState): GoldFrameData {
   return value as GoldFrameData;
 }
 
-function goldFrame(queue: readonly GoldClaim[]): PhaseFrame {
+export function goldFrame(queue: readonly GoldClaim[]): PhaseFrame {
   return { id: GOLD_FRAME, module: SEAFARING_ID, data: { queue: [...queue] } };
 }
 

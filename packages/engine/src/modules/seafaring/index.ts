@@ -17,6 +17,17 @@ import {
   islandBonusPoints,
   recordSettlement,
 } from './islands.js';
+import { generateArchipelagoLayout, archipelagoParamsFor, pirateStartHex } from './archipelago.js';
+import {
+  FOG_FRAME,
+  FOG_REVEALED,
+  fogDecks,
+  fogProblem,
+  fogRevealPhase,
+  fogRevealed,
+  openFogReveal,
+  queueFogReveals,
+} from './fog.js';
 import { seafaringInvariants } from './invariants.js';
 import { movePirate, pirateBlocker } from './pirate.js';
 import { tradeRoute } from './routes.js';
@@ -32,8 +43,9 @@ import type { SeafaringExt } from './types.js';
 import { seafaringExt, seafaringOptions, updateSeafaring } from './types.js';
 
 export { SEAFARING_ID, SEAFARING_VERSION, SHIP_COST, SHIPS_PER_SEAT } from './config.js';
-export type { FogOption, SeafaringOptions } from './config.js';
-export type { GoldFrameData, IslandBonusToken, SeafaringExt } from './types.js';
+export type { FogOption, SeafaringLayout, SeafaringOptions } from './config.js';
+export { FOG_REVEALED, FOG_TERRAIN_DECK, FOG_TOKEN_DECK } from './fog.js';
+export type { FogReveal, GoldFrameData, IslandBonusToken, SeafaringExt } from './types.js';
 export { seafaringExt, seafaringOptions } from './types.js';
 export { canPlaceShip, legalShipEdges, legalShipMoves, movableShips, shipEdges } from './ships.js';
 export { regionMap, regionOfVertex } from './islands.js';
@@ -55,6 +67,14 @@ function finalized(entries: Record<string, CommandHandler>): Record<string, Comm
       { ...handler, apply: (state, input, ctx) => finalize(handler.apply(state, input, ctx), ctx) },
     ]),
   );
+}
+
+/** True when genesis builds the board itself: the archipelago layout with no explicit board. */
+function generatesBoard(config: GameConfig): boolean {
+  const options: unknown = config.options[SEAFARING_ID];
+  const layout: unknown =
+    typeof options === 'object' && options !== null ? Reflect.get(options, 'layout') : undefined;
+  return layout === 'archipelago' && !config.board;
 }
 
 const specs = new WeakMap<BoardState, BoardShapeSpec>();
@@ -88,10 +108,14 @@ function checkGenesis(config: GameConfig, board: BoardState): void {
   if (typeof options !== 'object' || options === null) throw new Error('Missing seafaring options');
   const { pirateHex, setupAreas, islandBonus, bonusRegions, fog } = seafaringOptions({ config });
   const byId = new Map(board.hexes.map((hex) => [hex.id, hex]));
-  const hasFog = board.hexes.some((hex) => hex.terrain === 'fog');
-  if ((fog !== null || hasFog) && islandBonus !== null)
+  const fogHexes = board.hexes.filter((hex) => hex.terrain === 'fog').length;
+  if ((fog !== null || fogHexes > 0) && islandBonus !== null)
     throw new Error('Seafaring cannot combine fog with the island bonus');
-  if (fog !== null || hasFog) throw new Error('Seafaring fog reveals are not implemented yet');
+  if (fog === null && fogHexes > 0) throw new Error('A board with fog hexes needs the fog option');
+  if (fog !== null) {
+    const problem = fogProblem(fog, fogHexes);
+    if (problem) throw new Error(problem);
+  }
   if (pirateHex !== null && byId.get(pirateHex)?.terrain !== 'sea')
     throw new Error('The pirate must start on a sea hex');
   for (const hex of [...(setupAreas ?? []), ...(bonusRegions ?? []).flat()])
@@ -106,19 +130,24 @@ export function seafaringModule(): GameModule {
     dependsOn: ['base'],
     conflictsWith: incompatibleModules(SEAFARING_ID),
     optionsSchema: [...SEAFARING_OPTIONS],
+    // An explicit board is validated as fixed. A generated archipelago replaces the board base
+    // builds, so base is left to build its (discarded) default layout from the same random stream.
     modifyConfig: (config) => ({
       ...config,
       options: {
         ...config.options,
         base: {
           ...(typeof config.options.base === 'object' ? config.options.base : {}),
-          mapLayout: 'standard-fixed',
+          mapLayout: generatesBoard(config) ? 'random' : 'standard-fixed',
         },
       },
     }),
     buildBoard: (ctx, board) => {
-      checkGenesis(ctx.config, board);
-      return { ...board, ships: [] };
+      const generated = generatesBoard(ctx.config)
+        ? generateArchipelagoLayout(ctx.rng, archipelagoParamsFor(ctx.config.seats.length)).board
+        : board;
+      checkGenesis(ctx.config, generated);
+      return { ...generated, ships: [] };
     },
     initState: (ctx): SeafaringExt => ({
       pirateHex: seafaringOptions(ctx).pirateHex,
@@ -126,7 +155,16 @@ export function seafaringModule(): GameModule {
       shipMovedTurn: null,
       homeRegions: ctx.config.seats.map(() => []),
       bonus: [],
+      ...(seafaringOptions(ctx).fog === null ? {} : { fog: null }),
     }),
+    // A generated archipelago names its own pirate start.
+    initializeState: (ctx, state) =>
+      generatesBoard(ctx.config)
+        ? updateSeafaring(state, (old) => ({
+            ...old,
+            pirateHex: pirateStartHex(state.board.hexes),
+          }))
+        : state,
     hooks: {
       boardSpec: (config, acc) => (config.board ? shapeOf(config.board) : acc),
       pieceLimits: (_config, acc) => ({ ...acc, ship: SHIPS_PER_SEAT }),
@@ -142,11 +180,15 @@ export function seafaringModule(): GameModule {
       freePieces: addFreeShips,
       routeGraph: tradeRoute,
       robberLike: pirateBlocker,
+      decks: fogDecks,
       pending: addShipPending,
       legalCommands: (state, seat, priv, acc, ctx) =>
         ctx ? addShipCommands(state, seat, priv, acc, ctx) : acc,
+      afterInput: openFogReveal,
       afterBuild: (state, seat, type, loc) =>
-        type === 'settlement' ? recordSettlement(state, seat, loc) : state,
+        type === 'settlement'
+          ? recordSettlement(state, seat, loc)
+          : queueFogReveals(state, seat, type, loc),
       onTurnStart: (state) => updateSeafaring(state, (old) => ({ ...old, builtThisTurn: [] })),
       victoryPoints: (state, seat, _priv, acc) => islandBonusPoints(state, seat, acc),
       timeoutAction: (state, request, acc) =>
@@ -161,8 +203,8 @@ export function seafaringModule(): GameModule {
       },
     },
     commands: finalized(COMMAND_HANDLERS),
-    systemInputs: {},
-    phases: { [GOLD_FRAME]: goldChoicePhase },
+    systemInputs: { [FOG_REVEALED]: fogRevealed },
+    phases: { [GOLD_FRAME]: goldChoicePhase, [FOG_FRAME]: fogRevealPhase },
     invariants: seafaringInvariants,
   };
 }

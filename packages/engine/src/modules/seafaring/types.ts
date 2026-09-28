@@ -10,6 +10,17 @@ export interface IslandBonusToken {
   vertex: string;
 }
 
+/**
+ * A placement's fog reveals in progress. `hexes` are still `fog`, in reveal order, and the head is
+ * the hex being drawn. `terrain` holds the head's terrain once drawn, while its token is drawn; the
+ * hex changes only when both are known. The revealer receives the reward.
+ */
+export interface FogReveal {
+  seat: Seat;
+  hexes: string[];
+  terrain: string | null;
+}
+
 /** Public state under `ext.seafaring`. */
 export interface SeafaringExt {
   /** The pirate's sea hex, or null while it is off the board. */
@@ -21,6 +32,8 @@ export interface SeafaringExt {
   /** Per seat (indexed by seat), the ids of the regions of its setup settlements. */
   homeRegions: string[][];
   bonus: IslandBonusToken[];
+  /** Present only when the scenario has fog. `null` while no reveal is pending. */
+  fog?: FogReveal | null;
 }
 
 /** One seat's gold claim, in the order the choices are made. */

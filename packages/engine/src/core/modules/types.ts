@@ -189,6 +189,11 @@ export interface Hooks {
   ): readonly Seat[];
   handLimit(state: GameState, seat: Seat, limit: number): number;
   afterBuild(state: GameState, seat: Seat, buildType: string, loc: string): GameState;
+  /**
+   * After every finalized input, once the handler has finished changing the phase stack and no
+   * game result is set. A module may push a frame, for example seafaring's fog reveal.
+   */
+  afterInput(state: GameState): GameState;
   onTurnStart(state: GameState, seat: Seat): GameState;
   onTurnEnd(state: GameState, seat: Seat): GameState;
   turnFlow(state: GameState, acc: readonly PhaseFrame[]): readonly PhaseFrame[];

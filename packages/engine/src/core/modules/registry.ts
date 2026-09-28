@@ -317,6 +317,7 @@ function composeHooks(modules: readonly GameModule[]): HookPipeline {
       stealTargets([state, seat, blocker, hex], targets),
     handLimit: (state, seat, limit) => handLimit([state, seat], limit),
     afterBuild: foldState<[Seat, string, string]>(modules, (hooks) => hooks.afterBuild),
+    afterInput: foldState<[]>(modules, (hooks) => hooks.afterInput),
     onTurnStart: foldState<[Seat]>(modules, (hooks) => hooks.onTurnStart),
     onTurnEnd: foldState<[Seat]>(modules, (hooks) => hooks.onTurnEnd),
     turnFlow: (state, acc) => turnFlow([state], acc),
