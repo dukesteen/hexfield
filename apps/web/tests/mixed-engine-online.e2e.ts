@@ -103,19 +103,41 @@ async function installFailureDiagnostics(page: Page): Promise<void> {
         Reflect.set(window, key, events);
       };
       // oxlint-disable-next-line unicorn/consistent-function-scoping -- The browser-evaluated callback must be self-contained.
-      const safeError = (error: unknown) => {
+      const safeError = async (error: unknown) => {
         const name = error instanceof Error ? error.name : typeof error;
         const message = error instanceof Error ? error.message : '';
+        const knownReasons: readonly [RegExp, string][] = [
+          [/Invalid signaling envelope body/i, 'invalid-signaling-envelope'],
+          [/Peer is outside the active mesh roster/i, 'peer-outside-active-roster'],
+          [/No signaling route to peer/i, 'no-signaling-route'],
+          [/Signaling adapter is closed/i, 'signaling-adapter-closed'],
+          [/Signaling send timed out/i, 'signaling-send-timeout'],
+          [/Signaling send waiters are full/i, 'signaling-waiters-full'],
+          [/Signaling send buffer is full/i, 'signaling-send-buffer-full'],
+          [/Manual offer is outside the room roster/i, 'manual-offer-outside-roster'],
+          [/Manual answer does not bind this invitation/i, 'manual-answer-binding'],
+          [/Manual invitation was already used/i, 'manual-invitation-already-used'],
+          [/Failed to set remote (?:offer|answer) sdp/i, 'remote-description-rejected'],
+          [/setRemoteDescription/i, 'remote-description-rejected'],
+        ];
+        const known = knownReasons.find(([pattern]) => pattern.test(message));
+        if (known)
+          return {
+            name: ['Error', 'TypeError', 'RangeError', 'DOMException'].includes(name)
+              ? name
+              : 'OtherError',
+            message: known[1],
+          };
+        const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(message));
         return {
           name: ['Error', 'TypeError', 'RangeError', 'DOMException'].includes(name)
             ? name
             : 'OtherError',
-          message: message
-            .replace(/HX1\.[A-Za-z0-9_.-]+/g, '[redacted-code]')
-            .replace(/(?:v=0|candidate:)[^\r\n]*/gi, '[redacted-sdp]')
-            .replace(/\b[A-Za-z0-9_-]{32,}\b/g, '[redacted-token]')
-            .replace(/\s+/g, ' ')
-            .slice(0, 180),
+          message: 'unclassified',
+          fingerprint: [...new Uint8Array(digest)]
+            .map((byte) => byte.toString(16).padStart(2, '0'))
+            .join('')
+            .slice(0, 16),
         };
       };
       // oxlint-disable-next-line unicorn/consistent-function-scoping -- Keep module URL resolution in the browser-evaluated callback.
@@ -139,7 +161,7 @@ async function installFailureDiagnostics(page: Page): Promise<void> {
         try {
           return await Reflect.apply(originalOpen, this, args);
         } catch (error) {
-          record({ source: 'room-open', error: safeError(error) });
+          record({ source: 'room-open', error: await safeError(error) });
           throw error;
         }
       };
@@ -176,22 +198,30 @@ async function installFailureDiagnostics(page: Page): Promise<void> {
           };
           try {
             const sent = Reflect.apply(originalSignal, this, signalArgs);
-            return Promise.resolve(sent).catch((error: unknown) => {
+            return Promise.resolve(sent).catch(async (error: unknown) => {
               record({
                 source: 'signal-callback',
                 stage: 'rejected',
                 ...metadata,
-                error: safeError(error),
+                error: await safeError(error),
               });
               throw error;
             });
           } catch (error) {
-            record({
-              source: 'signal-callback',
-              stage: 'threw',
-              ...metadata,
-              error: safeError(error),
-            });
+            void safeError(error)
+              .then((safe) => {
+                record({ source: 'signal-callback', stage: 'threw', ...metadata, error: safe });
+                return undefined;
+              })
+              .catch(() => {
+                record({
+                  source: 'signal-callback',
+                  stage: 'threw',
+                  ...metadata,
+                  error: { name: 'OtherError', message: 'diagnostic-capture-failed' },
+                });
+                return undefined;
+              });
             throw error;
           }
         };
@@ -218,8 +248,9 @@ async function readRoom(page: Page, includePeerStats = false) {
       )) as typeof import('../src/features/online/room-registry.js');
       // oxlint-enable typescript/no-unsafe-type-assertion
       const diagnosticEvents = Reflect.get(window, '__cp2pMixedEngineDiagnostics');
+      const route = location.hash.split('?')[0] ?? '';
       const pageEvidence = {
-        url: location.href,
+        route: `${location.origin}${location.pathname}${route}`,
         alerts: [...document.querySelectorAll('[role="alert"]')]
           .map((element) => element.textContent?.trim() ?? '')
           .filter(Boolean)
@@ -237,7 +268,8 @@ async function readRoom(page: Page, includePeerStats = false) {
         connectionError: snapshot.connectionError,
         diagnostic: snapshot.diagnostic,
         signalingState: snapshot.signaling.state,
-        peerStates: peerStats?.map(({ state, route }) => ({ state, route })) ?? [],
+        peerStates:
+          peerStats?.map(({ state, route: peerRoute }) => ({ state, route: peerRoute })) ?? [],
         startup: snapshot.startup?.phase ?? null,
         lobbyStatus: snapshot.lobby?.status ?? null,
         humanCount: snapshot.lobby?.seats.filter((seat) => seat.kind === 'human').length ?? 0,
@@ -251,6 +283,19 @@ async function readRoom(page: Page, includePeerStats = false) {
     },
     { modulePath: path, includePeerStats },
   );
+}
+
+async function navigateToInviteWithinDocument(page: Page, invitation: string): Promise<void> {
+  const target = new URL(invitation);
+  const current = await page.evaluate(() => ({
+    origin: location.origin,
+    pathname: location.pathname,
+  }));
+  if (target.origin !== current.origin || target.pathname !== current.pathname)
+    throw new Error('Invitation URL would leave the current app document');
+  await page.evaluate((hash) => {
+    location.hash = hash;
+  }, target.hash);
 }
 
 async function getManualInvitation(page: Page, peer?: string): Promise<string> {
@@ -342,7 +387,7 @@ async function startFourPlayerRoom(pages: readonly Page[], mode: 'signaling' | '
     for (const guest of guests) {
       await guest.goto('/#/join');
       await installFailureDiagnostics(guest);
-      await guest.goto(invite);
+      await navigateToInviteWithinDocument(guest, invite);
       await expect(guest.getByRole('heading', { name: gameName })).toBeVisible({ timeout: 45_000 });
       await guest.getByRole('button', { name: 'Take seat', exact: true }).first().click();
     }
