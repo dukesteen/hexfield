@@ -1,0 +1,15 @@
+ DEPRECATED  The workspace file is deprecated and will be removed in the next major. Please, use the `test.projects` field in /Users/duke/Dev/Personal/colonist-p2p/vitest.config.ts instead.
+
+ RUN  v3.2.7 /Users/duke/Dev/Personal/colonist-p2p
+
+stdout | src/automatic-takeover.test.ts > production pulse automatically certifies takeover after quorum-qualified signed policy time
+AUTOMATIC_TAKEOVER_TRACE {"signedPolicy":{"mode":"auto","afterSeconds":120},"virtualTimeMs":243000,"offline":{"seq":9,"hash":"7176711cfc7b746261476f88fe89777965d50b3adfb5af5d050d4a878ec81d43"},"authorization":{"seq":10,"hash":"b0fa7ed80573b55fdd22032b7811a2da0067ca6c1b69c23118c180dfc046cba1"},"activation":{"seq":11,"hash":"274aef8cf573968bb6108fb93ed062481b778976a82160a9e3fdd70961d43f21"},"head":{"seq":11,"hash":"274aef8cf573968bb6108fb93ed062481b778976a82160a9e3fdd70961d43f21"},"originalQuorum":3,"voters":[1,2,3],"automaticCalls":[[0,"easy"]],"manualApprovalCalls":[0,0,0]}
+
+ ✓ |@cp2p/protocol| src/automatic-takeover.test.ts (1 test) 20880ms
+   ✓ production pulse automatically certifies takeover after quorum-qualified signed policy time  20880ms
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  11:22:47
+   Duration  21.88s (transform 519ms, setup 0ms, collect 760ms, tests 20.88s, environment 0ms, prepare 40ms)
+

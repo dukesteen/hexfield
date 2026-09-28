@@ -1,0 +1,32 @@
+{
+  "result": "PASS",
+  "testDurationMs": 20880,
+  "runnerDurationSeconds": 21.88,
+  "trace": {
+    "signedPolicy": {
+      "mode": "auto",
+      "afterSeconds": 120
+    },
+    "virtualTimeMs": 243000,
+    "offline": {
+      "seq": 9,
+      "hash": "7176711cfc7b746261476f88fe89777965d50b3adfb5af5d050d4a878ec81d43"
+    },
+    "authorization": {
+      "seq": 10,
+      "hash": "b0fa7ed80573b55fdd22032b7811a2da0067ca6c1b69c23118c180dfc046cba1"
+    },
+    "activation": {
+      "seq": 11,
+      "hash": "274aef8cf573968bb6108fb93ed062481b778976a82160a9e3fdd70961d43f21"
+    },
+    "head": {
+      "seq": 11,
+      "hash": "274aef8cf573968bb6108fb93ed062481b778976a82160a9e3fdd70961d43f21"
+    },
+    "originalQuorum": 3,
+    "voters": [1, 2, 3],
+    "automaticCalls": [[0, "easy"]],
+    "manualApprovalCalls": [0, 0, 0]
+  }
+}

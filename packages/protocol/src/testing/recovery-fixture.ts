@@ -34,6 +34,7 @@ import type { EntryPayload, Genesis, LogEntry } from '../types.js';
 import { signVote } from '../votes.js';
 import { createGenesisDeckFixture } from './deck-fixture.js';
 import { createSimulationGenesis } from './simulation-genesis.js';
+import { DEFAULT_TAKEOVER_POLICY } from '../takeover-policy.js';
 
 const humanSeats = [0, 1, 2, 3] as const;
 const remainingSeats = [1, 2, 3] as const;
@@ -63,6 +64,7 @@ export function createRecoveryFixture(
     vpTarget?: number;
     lobbyId?: string;
     offlineSeat?: Seat | null;
+    takeoverMode?: 'vote' | 'auto';
   } = {},
 ) {
   const chainLength = options.chainLength ?? 2;
@@ -79,7 +81,14 @@ export function createRecoveryFixture(
           },
         }),
   });
-  const base = { ...genesisBody(source.genesis), security: 'verified' as const, commitments: {} };
+  const base = {
+    ...genesisBody(source.genesis),
+    security: 'verified' as const,
+    commitments: {},
+    ...(options.takeoverMode === undefined
+      ? {}
+      : { takeover: { ...DEFAULT_TAKEOVER_POLICY, mode: options.takeoverMode } }),
+  };
   const deck = createGenesisDeckFixture(base, source.identities, options.lobbyId);
   const chains = humanSeats.map((seat) => {
     if (!options.masterBackedBeacon)

@@ -1,0 +1,5 @@
+9938db4d15c5b8bdffe108f46fa9328e6a956ab2aa52d207840946de565df8dd  packages/protocol/src/automatic-takeover.test.ts
+52b29262bb44bfee13dd19f407c0d7d996dd7fe812255f4636fbc52b875a4b4f  packages/protocol/src/testing/recovery-fixture.ts
+0c012422017768f7ce8ad760b765bef7a35f6f66be4ade5e0b1b47fd1f40cadd  packages/protocol/src/replicated-log.ts
+e9b00de5f497b0ba7c5ed11fd0e01fc4e0983c26a83c96fffe17972eac67c2c0  packages/protocol/src/p2p-session.ts
+06a7a9bbc53a84431fbcd765b97987564488334943b40639e67f30f77b67c9f0  packages/protocol/src/takeover-policy.ts
