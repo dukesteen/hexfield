@@ -115,7 +115,9 @@ Version compatibility: in `HELLO` and in step 1, peers compare `protocolVersion`
 ## Acceptance criteria
 
 - [ ] Create → invite → join → start → finish → audit ✓ works over the signaling server and over manual codes.
-- [ ] Mixed humans and bots work. The bot host can be any peer.
+- [x] Mixed humans and bots work, and a guest peer can host a bot. The [hosted-bot terminal trace](verification/stage09/hosted-bot-v6-acceptance.md) verifies the full two-human/two-bot game and both audits; the [guest-hosted command trace](verification/stage09/guest-bot-consent-races-2026-09-28.md) certifies a bot command signed by a bot hosted on the other human peer and strictly replays it on both peers.
 - [x] A version mismatch is detected with a clear message. The [signed-version UI check](verification/stage09/lobby-ceremony-ui-bridge.md) rejects incompatible protocol and engine versions and displays the host version without a start action.
-- [ ] Every pre-consent ceremony abort path retires its keys and returns to the lobby cleanly; post-consent timeout/disclosure preserves the signed promise and shows a recoverable waiting state.
-- [ ] Turn timers work, and a disagreeing peer can't be forced into an early timeout.
+- [x] Pre-consent ceremony abort and timeout paths retire the attempt and return a retired state to the lobby. The [timeout/disclosure integration checks](verification/stage09/ceremony-timeout-disclosure-check-2026-09-28.md) cover missing phases and UI restoration; the [cross-coordinator consent races](verification/stage09/guest-bot-consent-races-2026-09-28.md) prove durable retirement-first and consent-first outcomes.
+- [x] A post-consent timeout preserves the signed promise and restores to a recoverable waiting state. The timeout/disclosure integration check retains the exact consent across restore and completes only when the missing signed packet arrives.
+- [ ] An authenticated post-consent disclosure preserves the promise and returns to a recoverable waiting state. The current check proves durable preservation and a safely halted UI; it does not prove a post-disclosure recovery/resume path.
+- [x] Turn timers work, and a disagreeing peer cannot be forced into an early timeout. The [signed timer traces](verification/stage10/timer-acceptance.md) cover early `preRoll` and trade timeout refusal at verified replicas; the [owner-private discard trace](verification/stage09/private-discard-timer-2026-09-28.md) proves no pre-expiry command and the owner's signed discard at local expiry.

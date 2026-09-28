@@ -42,6 +42,12 @@ power-loss durability, or mixed-browser/device coverage.
 | 5, three-against-one partition | Terminal public-victory entry at seq 869, turn 152, at 714.09 s. All peers had the same public winner and empty pending queue at timeout 900.10 s; audits remained `verifying`.              | Deadline expired during post-terminal audit progression. The report records no completed audits; it does not establish a missing reveal or an audit correctness failure. Its audit timing counters remained zero. |
 | 6, invalid proposer            | At 923.42 s, seat 2 was at terminal seq 1064 with winner 2 and awaited reveals from seats 0, 1, 3. Seats 1 and 3 remained at seq 1063 without a terminal result. Last progress was 892.88 s. | Deadline expired with a one-entry terminal propagation gap and incomplete reveal exchange. This is a failed acceptance run; the report does not establish the cause of the delayed commit/reveal.                 |
 
+A later [paired 60-second context-stamp progress profile](scenario6-context-stamp-profile-2026-09-28.md)
+compared the exact parent and candidate commits with the same seed and limits.
+Both runs timed out before the fault or terminal state; the candidate showed
+more progress, but the short profile is not an acceptance result or a
+single-cause performance finding.
+
 All four unit shards, the build/check job, engine simulation and all nine stub
 network scenarios passed. The run is therefore partial, not green: the three
 verified scenarios above remain open and are not converted into passes by the

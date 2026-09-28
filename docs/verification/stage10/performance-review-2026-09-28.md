@@ -2,7 +2,10 @@
 
 This is a read-only design review, not a review of the implementation now being
 developed. Claude Opus 5.5, medium effort, completed successfully in 161,620 ms.
-The invocation ran in plan mode with tools and MCP disabled; stderr was empty.
+The CLI used `--model claude-opus-5-5 --effort medium --print --output-format
+json --no-session-persistence --strict-mcp-config --mcp-config` with an empty
+MCP configuration, `--tools ''`, `--disable-slash-commands` and
+`--setting-sources ''`; stderr was empty.
 The prompt, exact source manifest, raw JSON response, stderr capture and empty
 MCP configuration are retained in the [review evidence archive](performance-review-2026-09-28-evidence.tar.gz),
 SHA-256 `161c6686a6c0ce148b16cda7c03cb6eff145842ba7ceda81067eff8d609e9515`.

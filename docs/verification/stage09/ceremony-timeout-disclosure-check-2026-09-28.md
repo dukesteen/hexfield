@@ -36,11 +36,11 @@ check preserves its unresolved disposition; it does not claim gameplay resumes.
 Shared test typecheck, scoped type-aware lint, formatting and diff checks pass.
 No concurrent crypto workload ran during either focused test command.
 
-The combined Stage 09 timer/abort gates remain unchecked. Early signed system
-timeout refusal is already covered at genuine replicas for `preRoll` and trade,
-but an integrated owner-private discard expiry is still missing. Guest bot-host
-ceremony signing is covered; an explicit guest-hosted bot command remains a
-small separate session check. These tests also do not exercise the distinct
-race where the durable local consent promise is being written as abort/timeout
-arrives. Existing lifecycle guards cover the irreversible promise, but this
-integration boundary should be mapped before claiming every abort path.
+The focused leaves this report initially identified now have separate
+acceptance evidence: the [owner-private discard expiry](private-discard-timer-2026-09-28.md),
+the [guest-hosted bot command](guest-bot-consent-races-2026-09-28.md), and both
+winners of the [cross-coordinator abort-versus-consent race](guest-bot-consent-races-2026-09-28.md).
+Early signed timeout refusal remains covered for `preRoll` and trade at verified
+replicas. The post-consent disclosure path in this report preserves the promise
+and halts the UI durably; gameplay recovery after disclosure is not established,
+and the Stage 09 recoverable-waiting wording remains open for reconciliation.

@@ -354,10 +354,12 @@ signed-lobby tests pass, including ready resets and seed binding. The actual
 browser form check is still pending.
 
 - [ ] Create → invite → join → start → finish → audit ✓ works over the signaling server and over manual codes.
-- [ ] Mixed humans and bots work. The bot host can be any peer.
+- [x] Mixed humans and bots work, and a guest can host a bot. The [hosted-bot terminal trace](verification/stage09/hosted-bot-v6-acceptance.md) finishes a two-human/two-bot game with both audits; the [guest-hosted command trace](verification/stage09/guest-bot-consent-races-2026-09-28.md) certifies and strictly replays a command from a bot hosted by the other human peer.
 - [x] A version mismatch is detected with a clear message. The [signed-version UI check](verification/stage09/lobby-ceremony-ui-bridge.md) covers incompatible protocol and engine versions, the host-version alert and unavailable start action.
-- [ ] Every pre-consent ceremony abort retires its keys and returns to the lobby; post-consent timeout or disclosure preserves the signed promise and shows recoverable waiting.
-- [ ] Turn timers work, and a disagreeing peer can't be forced into an early timeout.
+- [x] Pre-consent ceremony abort and timeout paths retire the attempt and return a retired state to the lobby. The [timeout/disclosure integration checks](verification/stage09/ceremony-timeout-disclosure-check-2026-09-28.md) and [cross-coordinator race traces](verification/stage09/guest-bot-consent-races-2026-09-28.md) cover the timeout phases and both durable race outcomes.
+- [x] A post-consent timeout preserves the promise and restores to a recoverable waiting state until the exact missing signed packet arrives ([integration check](verification/stage09/ceremony-timeout-disclosure-check-2026-09-28.md)).
+- [ ] After authenticated post-consent disclosure, the promise is durable and the UI halts safely, but a recoverable waiting/resume path is not established ([disclosure check](verification/stage09/ceremony-timeout-disclosure-check-2026-09-28.md)).
+- [x] Turn timers work, and a disagreeing peer cannot force an early timeout. The [signed timer checks](verification/stage10/timer-acceptance.md) cover early `preRoll` and trade timeout refusal; the [owner-private discard check](verification/stage09/private-discard-timer-2026-09-28.md) signs the discard only at its owner's local expiry.
 
 ## 10 — Persistence, Reconnection & Seat Takeover
 
@@ -443,7 +445,7 @@ Both pages and workers also close and reopen in reverse order, then accept
 another move at matching heads. This is a local laptop measurement; whole-browser
 process restart and cross-device performance remain separate checks.
 
-- [ ] All five chaos additions and every distinct unlock persistence boundary pass deterministic traces under the [bounded acceptance policy](verification/p2p-acceptance-policy.md).
+- [x] All five chaos additions and every distinct unlock persistence boundary pass deterministic traces under the [bounded acceptance policy](verification/p2p-acceptance-policy.md): periodic/everyone-left restarts and per-sequence private oracle ([persistence profile](verification/stage10/persistence-lifecycle-acceptance.md)), departure/return and second takeover ([native lifecycle](verification/stage10/native-takeover-acceptance.md)), and all three unlock interruption boundaries ([unlock trace](verification/stage10/unlock-interruption-checks.md)). Other Stage 10 transfer and browser gates remain separate.
 - [x] Refresh-resume takes < 3 s to be back in play on a typical laptop (measured).
 - [x] Four-human takeover and audit pass; two-/three-human departure pauses safely and resumes when the required voter returns. See the [current-v6 native lifecycle](verification/stage10/native-takeover-acceptance.md) and [signed departure tests](verification/stage10/product-acceptance-checkpoint.md#departure-safety).
 - [ ] A game can be exported and resumed in another browser as the same seat through a certified key transfer; a stale save cannot reactivate a retired key.
