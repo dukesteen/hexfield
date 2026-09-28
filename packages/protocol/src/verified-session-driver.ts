@@ -16,7 +16,6 @@ import type {
   PrivateState,
   Result,
   Seat,
-  Resource,
   SystemInput,
 } from '@cp2p/engine';
 import { decodeDeckCard, proveDeckReveal } from './deck-draw.js';

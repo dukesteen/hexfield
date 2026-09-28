@@ -10,8 +10,8 @@ import {
 import type { Result, Seat } from '@cp2p/engine';
 import { failure, success } from '@cp2p/engine';
 import * as v from 'valibot';
-import { BASE_CARD_KINDS, kindRecordSchema } from './card-kinds.js';
-import type { CardKinds } from './card-kinds.js';
+import { BASE_CARD_KINDS, kindRecordSchema, toKindMap } from './card-kinds.js';
+import type { CardKinds, KindMap } from './card-kinds.js';
 import { seatSchema } from './schema-values.js';
 import { parseCanonical } from './validation.js';
 
@@ -24,7 +24,7 @@ const validatedCommitments = new Set<string>();
 
 export interface SeatHandCommitments {
   seat: Seat;
-  commitments: Readonly<Record<string, string>>;
+  commitments: KindMap<string>;
 }
 
 export type PublicHandCommitments = readonly SeatHandCommitments[];
@@ -148,7 +148,9 @@ export function validateHandCommitments(
       }
       commitments[resource] = commitment;
     }
-    copied.push({ seat, commitments });
+    const map = toKindMap(commitments);
+    if (!map) return failure('hand-commitment-kind', 'Commitments must cover the base resources');
+    copied.push({ seat, commitments: map });
   }
   return success(copied);
 }
@@ -253,7 +255,9 @@ export function verifyHandOpening(
   return success(undefined);
 }
 
-function emptyCommitmentMap(kinds: CardKinds): Record<string, string> {
+function emptyCommitmentMap(kinds: CardKinds): KindMap<string> {
   const identity = pedersenCommit(0n, 0n);
-  return Object.fromEntries(kinds.map((kind) => [kind, identity]));
+  const map = toKindMap(Object.fromEntries(kinds.map((kind) => [kind, identity])));
+  if (!map) throw new RangeError('Card kinds must include the base resources');
+  return map;
 }

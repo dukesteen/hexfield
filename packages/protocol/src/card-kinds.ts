@@ -1,4 +1,5 @@
 import { RESOURCES } from '@cp2p/engine';
+import type { Resource } from '@cp2p/engine';
 import * as v from 'valibot';
 
 /** Card kinds are the five base resources plus at most three module kinds (knights: three). */
@@ -6,6 +7,26 @@ export const MAX_CARD_KINDS = 8;
 
 /** The card kinds a hand proof covers, in canonical order (base resources first). */
 export type CardKinds = readonly string[];
+
+/**
+ * One value per card kind: always the five base resources, plus one entry per module kind
+ * (read those through `kinds`, since an unlisted key indexes as undefined).
+ */
+export type KindMap<T> = Readonly<Record<Resource, T>> & Readonly<Record<string, T>>;
+
+/** Narrows a record to a `KindMap` when it names every base resource, else null. */
+export function toKindMap<T>(record: Readonly<Record<string, T>>): KindMap<T> | null {
+  const [brick, lumber, wool, grain, ore] = RESOURCES.map((resource) => record[resource]);
+  if (
+    brick === undefined ||
+    lumber === undefined ||
+    wool === undefined ||
+    grain === undefined ||
+    ore === undefined
+  )
+    return null;
+  return { ...record, brick, lumber, wool, grain, ore };
+}
 
 /** The base-game kinds; every hand API defaults to these so base games are unchanged. */
 export const BASE_CARD_KINDS: CardKinds = RESOURCES;

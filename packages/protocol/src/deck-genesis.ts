@@ -1,6 +1,6 @@
 import { hashValue, toBase64Url, toHex } from '@cp2p/codec';
 import { checkModuleSelection, deckCatalogueFor, decksFor, failure, success } from '@cp2p/engine';
-import type { Result } from '@cp2p/engine';
+import type { GameConfig, Result } from '@cp2p/engine';
 import * as v from 'valibot';
 import { applyDeckPass, initDeckSetup, replayDeckSetup } from './deck-setup.js';
 import type { DeckPassCheck } from './deck-setup.js';
@@ -37,6 +37,17 @@ export function deckCeremonyId(genesis: GenesisBody): string {
   );
 }
 
+/**
+ * The decks that need a shuffle ceremony: every declared deck with at least one card, in
+ * ascending id order. A deck a module declares empty (knights has no development cards) has
+ * nothing to shuffle, lock or deal, so it stays public-counter-only.
+ */
+export function ceremonyDeckIds(config: GameConfig): readonly string[] {
+  return Object.entries(decksFor(config)).flatMap(([id, spec]) =>
+    Object.values(spec.cards).some((count) => count > 0) ? [id] : [],
+  );
+}
+
 /** Every module-declared deck in ascending id order, all signed seats as participants. */
 export function genesisDeckDefinitions(genesis: GenesisBody): Result<readonly DeckDefinition[]> {
   try {
@@ -64,7 +75,7 @@ export function genesisDeckDefinitions(genesis: GenesisBody): Result<readonly De
       return failure('deck-genesis-module', 'Module selection has no matching deck catalogue');
     const ceremonyId = deckCeremonyId(genesis);
     const definitions: DeckDefinition[] = [];
-    for (const deckId of Object.keys(decksFor(genesis.config))) {
+    for (const deckId of ceremonyDeckIds(genesis.config)) {
       const initialized = initDeckSetup({
         ceremonyId,
         deckId,

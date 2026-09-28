@@ -25,8 +25,8 @@ import type { DleqProof, SchnorrProof, SealedPayload } from '@cp2p/crypto';
 import { RESOURCES, failure, kindsOfCounts, success } from '@cp2p/engine';
 import type { Result, Seat } from '@cp2p/engine';
 import * as v from 'valibot';
-import { MAX_CARD_KINDS, isKindName, kindRecordSchema } from './card-kinds.js';
-import type { CardKinds } from './card-kinds.js';
+import { MAX_CARD_KINDS, isKindName, kindRecordSchema, toKindMap } from './card-kinds.js';
+import type { CardKinds, KindMap } from './card-kinds.js';
 import type { EntryRef } from './beacon-state.js';
 import type { ArtifactSigner } from './authority-types.js';
 import { MAX_HAND_RESOURCE_COUNT, verifyHandOpening } from './hand-commitments.js';
@@ -54,7 +54,7 @@ export interface StealOperation {
   handSize: number;
   index: number;
   /** The victim's parent commitments, one per card kind of the game (base kinds first). */
-  commitments: Readonly<Record<string, string>>;
+  commitments: KindMap<string>;
 }
 
 export interface SignedStealContribution {
@@ -80,7 +80,7 @@ export interface FixedSteal {
 
 export interface StealOpening {
   resource: string;
-  blindings: Readonly<Record<string, string>>;
+  blindings: KindMap<string>;
 }
 
 interface StealReceiptBody {
@@ -254,7 +254,9 @@ export function validateStealOperation(value: unknown): Result<StealOperation> {
   } catch {
     return failure('steal-operation-key', 'Steal contains an invalid key or commitment');
   }
-  return success(operation);
+  const commitments = toKindMap(operation.commitments);
+  if (!commitments) return failure('steal-operation', 'Steal commitments miss a base resource');
+  return success({ ...operation, commitments });
 }
 
 export function stealOperationId(operation: StealOperation): string {
@@ -434,12 +436,13 @@ export function recoverStealTransferOpening(
         return failure('steal-transfer-opening', 'Fixed transfer differs from owned derivation');
     const resource = kinds[type];
     if (!resource) throw new Error('Incomplete fixed transfer');
-    return success({
-      resource,
-      blindings: Object.fromEntries(
+    const map = toKindMap(
+      Object.fromEntries(
         kinds.map((kind, index) => [kind, encodeScalar(transferBlindings[index] ?? 0n)]),
       ),
-    });
+    );
+    if (!map) throw new Error('Incomplete fixed transfer');
+    return success({ resource, blindings: map });
   } catch {
     return failure('steal-transfer-opening', 'Could not recover the fixed owned transfer');
   }
@@ -519,7 +522,9 @@ function openingFromBytes(
         );
       blindings[item] = scalar;
     }
-    return success({ resource, blindings });
+    const map = toKindMap(blindings);
+    if (!map) return failure('steal-opening-type', 'Opening misses a base resource');
+    return success({ resource, blindings: map });
   } catch {
     return failure('steal-opening', 'Sealed opening is malformed');
   } finally {

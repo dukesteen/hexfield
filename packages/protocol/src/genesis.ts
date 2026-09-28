@@ -7,7 +7,11 @@ import { genesisSchema, logEntrySchema } from './schemas.js';
 import { PROTOCOL_VERSION } from './types.js';
 import type { EntryBody, Genesis, GenesisBody, LogEntry, SeatSignature } from './types.js';
 import { parseCanonical } from './validation.js';
-import { validateDeckCeremony, validateDeckGenesisCommitments } from './deck-genesis.js';
+import {
+  ceremonyDeckIds,
+  validateDeckCeremony,
+  validateDeckGenesisCommitments,
+} from './deck-genesis.js';
 import type { SignedDeckPass } from './deck-setup.js';
 import * as v from 'valibot';
 import { validateGenesisEncryption } from './genesis-encryption.js';
@@ -195,7 +199,10 @@ export function validateGenesis(
       const decks = validateDeckGenesisCommitments(genesis);
       if (!decks.ok) return decks;
       const expected = decks.value.map((deck) => deck.definition.deckId).toSorted();
-      const actual = Object.keys(state.decks).toSorted();
+      const ceremonial = ceremonyDeckIds(state.config);
+      const actual = Object.keys(state.decks)
+        .filter((id) => ceremonial.includes(id))
+        .toSorted();
       if (
         actual.length !== expected.length ||
         actual.some((id, index) => id !== expected[index]) ||

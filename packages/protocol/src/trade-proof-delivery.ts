@@ -3,6 +3,7 @@ import { parsePeerId, signObject, verifyObject } from '@cp2p/crypto';
 import { failure, kindsOfCounts, success } from '@cp2p/engine';
 import type { Result, Seat, TradeOffer } from '@cp2p/engine';
 import * as v from 'valibot';
+import { kindRecordSchema } from './card-kinds.js';
 import { resolveArtifactSigner } from './authority.js';
 import type { SeatAuthorities } from './authority-types.js';
 import { entryHash, genesisDigest } from './genesis.js';
@@ -81,27 +82,33 @@ export const signedTradeProofResponseSchema = v.strictObject({
   sig: signature64Schema,
 });
 
-const resourceCountsSchema = v.strictObject({
-  brick: nonnegativeIntegerSchema,
-  lumber: nonnegativeIntegerSchema,
-  wool: nonnegativeIntegerSchema,
-  grain: nonnegativeIntegerSchema,
-  ore: nonnegativeIntegerSchema,
-});
-const offerSchema = v.strictObject({
-  id: nonnegativeIntegerSchema,
-  proposer: seatSchema,
-  give: resourceCountsSchema,
-  want: resourceCountsSchema,
-  to: v.pipe(v.array(seatSchema), v.maxLength(6)),
-  acceptedBy: v.pipe(v.array(seatSchema), v.maxLength(6)),
-  declinedBy: v.pipe(v.array(seatSchema), v.maxLength(6)),
-  valid: v.boolean(),
-});
-const offersSchema = v.object({ offers: v.pipe(v.array(offerSchema), v.maxLength(64)) });
+/** Offers carry one count per card kind of the game (commodities included). */
+function offersSchemaFor(kinds: readonly string[]) {
+  const counts = kindRecordSchema(kinds, nonnegativeIntegerSchema);
+  return v.object({
+    offers: v.pipe(
+      v.array(
+        v.strictObject({
+          id: nonnegativeIntegerSchema,
+          proposer: seatSchema,
+          give: counts,
+          want: counts,
+          to: v.pipe(v.array(seatSchema), v.maxLength(6)),
+          acceptedBy: v.pipe(v.array(seatSchema), v.maxLength(6)),
+          declinedBy: v.pipe(v.array(seatSchema), v.maxLength(6)),
+          valid: v.boolean(),
+        }),
+      ),
+      v.maxLength(64),
+    ),
+  });
+}
 
 function certifiedOffer(context: LogContext, offerId: number): Result<TradeOffer> {
-  const base = parseCanonical(context.state.ext.base, offersSchema);
+  const base = parseCanonical(
+    context.state.ext.base,
+    offersSchemaFor(kindsOfCounts(context.state.bank)),
+  );
   if (!base.ok) return base;
   const offer = base.value.offers.find((item) => item.id === offerId);
   return offer
