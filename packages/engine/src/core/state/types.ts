@@ -42,6 +42,22 @@ export interface BuildingPiece {
   kind: string;
 }
 
+/**
+ * A non-hex board piece, such as a two-hex track that replaces one sea-frame hex.
+ * Fixtures never take part in rules: the anchor still counts as the frame hex it replaced.
+ */
+export interface BoardFixture {
+  id: string;
+  module: ModuleId;
+  /** The board shape's fixture slot that genesis assigned to this fixture. */
+  slot: string;
+  /** Edge-adjacent positions, anchor first, then outward. */
+  footprint: { q: number; r: number }[];
+  /** Index into HEX_DIRECTIONS pointing from the anchor away from the island. */
+  orientation: number;
+  art: string;
+}
+
 /** Only JSON data belongs here. A BoardGraph is rebuilt from hex coordinates. */
 export interface BoardState {
   hexes: BoardHex[];
@@ -49,6 +65,8 @@ export interface BoardState {
   roads: RoadPiece[];
   buildings: BuildingPiece[];
   robberHex: string | null;
+  /** Present only when a module declares fixtures, so fixture-free boards hash unchanged. */
+  fixtures?: BoardFixture[];
 }
 
 export interface CardSlot {

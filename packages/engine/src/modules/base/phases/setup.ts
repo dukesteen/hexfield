@@ -130,7 +130,7 @@ export const placeSettlement: CommandHandler = {
     if (typeof input.command.vertex !== 'string')
       return failure('invalid-vertex', 'Vertex id is required');
     if (
-      !ctx.hooks.placementRules.settlement(
+      !ctx.hooks.placement.settlement(
         state,
         input.seat,
         input.command.vertex,
@@ -188,7 +188,7 @@ export const placeRoad: CommandHandler = {
     if (typeof input.command.edge !== 'string')
       return failure('invalid-edge', 'Edge id is required');
     if (
-      !ctx.hooks.placementRules.road(
+      !ctx.hooks.placement.road(
         state,
         input.seat,
         input.command.edge,

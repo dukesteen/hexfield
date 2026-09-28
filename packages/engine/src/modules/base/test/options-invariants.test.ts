@@ -53,7 +53,7 @@ describe('base options and invariant diagnostics', () => {
       'Invalid option base.mapLayout',
     );
     expect(() => engine.createGame(config({}, [0, 1, 2, 3, 4]), new Uint8Array(32))).toThrow(
-      'Base game requires two to four seats',
+      'Selected modules require 2 to 4 seats',
     );
   });
 

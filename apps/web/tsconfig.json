@@ -12,6 +12,7 @@
     }
   },
   "include": ["src/**/*.ts", "src/**/*.tsx", "vite.config.ts"],
+  "exclude": ["src/testing/**/*.test.ts"],
   "references": [
     {
       "path": "../../packages/engine"

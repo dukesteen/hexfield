@@ -1,3 +1,4 @@
+import type { HandlerContext, RouteGraph } from '../../../core/modules/types.js';
 import type { GameState } from '../../../core/state/types.js';
 import type { Seat } from '../../../core/types/index.js';
 import { boardGraph, edgeEndpoints } from '../board/index.js';
@@ -45,8 +46,8 @@ export function longestTrailLength(
   return best;
 }
 
-/** Longest edge-unique trail for one seat on the board. */
-export function longestRoadLength(state: GameState, seat: Seat): number {
+/** The base route graph: a seat's roads, interrupted by opponent buildings. */
+export function baseRouteGraph(state: GameState, seat: Seat): RouteGraph {
   const graph = boardGraph(state);
   const edges = state.board.roads
     .filter((piece) => piece.seat === seat)
@@ -54,10 +55,17 @@ export function longestRoadLength(state: GameState, seat: Seat): number {
       const vertices = edgeEndpoints(graph, piece.edge);
       return vertices ? [{ id: piece.edge, vertices }] : [];
     });
-  const blocked = new Set(
-    state.board.buildings.filter((piece) => piece.seat !== seat).map((piece) => piece.vertex),
-  );
-  return longestTrailLength(edges, blocked);
+  const blocked = state.board.buildings
+    .filter((piece) => piece.seat !== seat)
+    .map((piece) => piece.vertex);
+  return { edges, blocked };
+}
+
+/** Longest edge-unique trail for one seat, over the module-extended route graph. */
+export function longestRoadLength(state: GameState, seat: Seat, ctx?: HandlerContext): number {
+  const base = baseRouteGraph(state, seat);
+  const route = ctx ? ctx.hooks.routeGraph(state, seat, base) : base;
+  return longestTrailLength(route.edges, new Set(route.blocked));
 }
 
 function awardHolder(
@@ -74,9 +82,9 @@ function awardHolder(
 }
 
 /** Recalculate the road award, retaining a tied holder and clearing ambiguous ties. */
-export function recomputeLongestRoadAward(state: GameState): GameState {
+export function recomputeLongestRoadAward(state: GameState, ctx?: HandlerContext): GameState {
   const current = state.awards.longestRoad ?? null;
-  const lengths = state.config.seats.map((seat) => longestRoadLength(state, seat));
+  const lengths = state.config.seats.map((seat) => longestRoadLength(state, seat, ctx));
   const next = awardHolder(state.config.seats, lengths, current, 5);
   return next === current ? state : { ...state, awards: { ...state.awards, longestRoad: next } };
 }

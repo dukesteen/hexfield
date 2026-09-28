@@ -79,6 +79,14 @@ export function legalRobberHexes(state: GameState): string[] {
   return friendly.length ? friendly : candidates;
 }
 
+/** The robber's legal destinations after module blocker hooks. */
+export function robberHexes(state: GameState, ctx: HandlerContext): string[] {
+  const blockers = ctx.hooks.robberLike(state, [
+    { id: 'robber', hex: state.board.robberHex, legalHexes: legalRobberHexes(state) },
+  ]);
+  return [...(blockers.find((blocker) => blocker.id === 'robber')?.legalHexes ?? [])];
+}
+
 /** Eligible occupied opponents, in seat order, with module target hooks applied. */
 export function robberTargets(
   state: GameState,
@@ -95,18 +103,18 @@ export function robberTargets(
         (building) => building.seat === seat && vertices.has(building.vertex),
       ),
   );
-  return ctx.hooks.robberTargets(state, thief, hex, occupied).toSorted((a, b) => a - b);
+  return ctx.hooks.stealTargets(state, thief, 'robber', hex, occupied).toSorted((a, b) => a - b);
 }
 
 export const moveRobberPhase: PhaseHandler = {
   pending: (state) =>
     withClaim(state, [playerPending(state, state.turn.activeSeat, ['MOVE_ROBBER'], 'moveRobber')]),
-  legalCommands: (state, _frame, seat, priv) => {
-    const claim = claimCommands(state, seat, priv);
+  legalCommands: (state, _frame, seat, priv, ctx) => {
+    const claim = claimCommands(state, seat, priv, ctx);
     return seat === state.turn.activeSeat
       ? {
           commands: [
-            ...legalRobberHexes(state).map((hex) => ({ type: 'MOVE_ROBBER', hex })),
+            ...robberHexes(state, ctx).map((hex) => ({ type: 'MOVE_ROBBER', hex })),
             ...claim.commands,
           ],
           templates: claim.templates,
@@ -116,8 +124,8 @@ export const moveRobberPhase: PhaseHandler = {
 };
 
 export const moveRobber: CommandHandler = {
-  validate: (state, input) =>
-    typeof input.command.hex === 'string' && legalRobberHexes(state).includes(input.command.hex)
+  validate: (state, input, ctx) =>
+    typeof input.command.hex === 'string' && robberHexes(state, ctx).includes(input.command.hex)
       ? success(undefined)
       : failure('illegal-robber-hex', 'Robber must move to a legal different hex'),
   apply: (state, input, ctx) => {
@@ -143,8 +151,8 @@ export const moveRobber: CommandHandler = {
 export const stealPhase: PhaseHandler = {
   pending: (state) =>
     withClaim(state, [playerPending(state, state.turn.activeSeat, ['STEAL'], 'steal')]),
-  legalCommands: (state, _frame, seat, priv) => {
-    const claim = claimCommands(state, seat, priv);
+  legalCommands: (state, _frame, seat, priv, ctx) => {
+    const claim = claimCommands(state, seat, priv, ctx);
     return seat === state.turn.activeSeat
       ? {
           commands: [
@@ -178,7 +186,7 @@ export const steal: CommandHandler = {
 };
 
 export const stealResultPhase: PhaseHandler = {
-  legalCommands: (state, _frame, seat, priv) => claimCommands(state, seat, priv),
+  legalCommands: (state, _frame, seat, priv, ctx) => claimCommands(state, seat, priv, ctx),
   pending: (state) => {
     const data = resultData(state);
     return withClaim(state, [

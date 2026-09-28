@@ -1,17 +1,34 @@
-import type { GameState } from '../state/types.js';
+import type { CommandShape, LegalCommandSet, Pending } from '../pipeline/types.js';
+import type {
+  BoardState,
+  GameConfig,
+  GameState,
+  PhaseFrame,
+  PrivateState,
+} from '../state/types.js';
 import { cloneJson } from '../state/json.js';
 import type { Seat } from '../types/index.js';
 import type {
+  Blocker,
+  BoardShapeSpec,
   CommandHandler,
   Cost,
+  DiceSpec,
+  FixtureDeclaration,
   GameModule,
   HookPipeline,
+  ModuleHooks,
   ModuleRegistry,
   Production,
   RegisteredHandler,
+  RenderHint,
+  RouteGraph,
+  SeatRange,
   SystemInputHandler,
   PhaseHandler,
   InputKeys,
+  TimeoutRequest,
+  VpContribution,
 } from './types.js';
 
 function copyKeys(keys: InputKeys, reserved: readonly string[]): InputKeys {
@@ -67,8 +84,8 @@ function copyModule(module: GameModule): GameModule {
   const hooks = module.hooks
     ? Object.freeze({
         ...module.hooks,
-        ...(module.hooks.placementRules
-          ? { placementRules: Object.freeze({ ...module.hooks.placementRules }) }
+        ...(module.hooks.placement
+          ? { placement: Object.freeze({ ...module.hooks.placement }) }
           : {}),
       })
     : undefined;
@@ -149,92 +166,149 @@ function orderedModules(input: readonly GameModule[]): GameModule[] {
   return sorted;
 }
 
-function composeHooks(modules: readonly GameModule[]): HookPipeline {
-  return Object.freeze({
-    afterDiceRolled(state: GameState, dice: readonly [number, number]): GameState {
-      let next = state;
-      for (const module of modules) {
-        if (module.hooks?.afterDiceRolled) next = module.hooks.afterDiceRolled(next, dice);
-      }
-      return next;
-    },
-    computeProduction(state: GameState, roll: number, acc: Production): Production {
-      let next = acc;
-      for (const module of modules) {
-        if (module.hooks?.computeProduction)
-          next = module.hooks.computeProduction(state, roll, next);
-      }
-      return next;
-    },
-    placementRules: Object.freeze({
-      settlement(state: GameState, seat: Seat, loc: string, verdict: boolean): boolean {
-        let next = verdict;
-        for (const module of modules) {
-          if (module.hooks?.placementRules?.settlement)
-            next = module.hooks.placementRules.settlement(state, seat, loc, next);
-        }
-        return next;
-      },
-      road(state: GameState, seat: Seat, loc: string, verdict: boolean): boolean {
-        let next = verdict;
-        for (const module of modules) {
-          if (module.hooks?.placementRules?.road)
-            next = module.hooks.placementRules.road(state, seat, loc, next);
-        }
-        return next;
-      },
-      city(state: GameState, seat: Seat, loc: string, verdict: boolean): boolean {
-        let next = verdict;
-        for (const module of modules) {
-          if (module.hooks?.placementRules?.city)
-            next = module.hooks.placementRules.city(state, seat, loc, next);
-        }
-        return next;
-      },
-    }),
-    costOf(state: GameState, buildType: string, cost: Cost): Cost {
-      let next = cost;
-      for (const module of modules) {
-        if (module.hooks?.costOf) next = module.hooks.costOf(state, buildType, next);
-      }
-      return next;
-    },
-    afterBuild(state: GameState, seat: Seat, buildType: string, loc: string): GameState {
-      let next = state;
-      for (const module of modules) {
-        if (module.hooks?.afterBuild) next = module.hooks.afterBuild(next, seat, buildType, loc);
-      }
-      return next;
-    },
-    onTurnStart(state: GameState, seat: Seat): GameState {
-      let next = state;
-      for (const module of modules) {
-        if (module.hooks?.onTurnStart) next = module.hooks.onTurnStart(next, seat);
-      }
-      return next;
-    },
-    onTurnEnd(state: GameState, seat: Seat): GameState {
-      let next = state;
-      for (const module of modules) {
-        if (module.hooks?.onTurnEnd) next = module.hooks.onTurnEnd(next, seat);
-      }
-      return next;
-    },
-    robberTargets(state: GameState, seat: Seat, hex: string, targets: Seat[]): Seat[] {
-      let next = targets;
-      for (const module of modules) {
-        if (module.hooks?.robberTargets) next = module.hooks.robberTargets(state, seat, hex, next);
-      }
-      return next;
-    },
-    handLimit(state: GameState, seat: Seat, limit: number): number {
-      let next = limit;
-      for (const module of modules) {
-        if (module.hooks?.handLimit) next = module.hooks.handLimit(state, seat, next);
-      }
-      return next;
-    },
+/** Compose accumulator hooks: each module receives the previous module's result last. */
+function foldAcc<A extends unknown[], T>(
+  modules: readonly GameModule[],
+  pick: (hooks: ModuleHooks) => ((...args: [...A, T]) => T) | undefined,
+): (fixed: A, acc: T) => T {
+  const chain = modules.flatMap((module) => {
+    const hook = module.hooks ? pick(module.hooks) : undefined;
+    return hook ? [hook] : [];
   });
+  return (fixed: A, acc: T): T => {
+    let next = acc;
+    for (const hook of chain) next = hook(...fixed, next);
+    return next;
+  };
+}
+
+/** Compose state hooks: each module receives and returns the whole state. */
+function foldState<A extends unknown[]>(
+  modules: readonly GameModule[],
+  pick: (hooks: ModuleHooks) => ((state: GameState, ...args: A) => GameState) | undefined,
+): (state: GameState, ...args: A) => GameState {
+  const chain = modules.flatMap((module) => {
+    const hook = module.hooks ? pick(module.hooks) : undefined;
+    return hook ? [hook] : [];
+  });
+  return (state: GameState, ...args: A): GameState => {
+    let next = state;
+    for (const hook of chain) next = hook(next, ...args);
+    return next;
+  };
+}
+
+function composeHooks(modules: readonly GameModule[]): HookPipeline {
+  const seatRange = foldAcc<[GameConfig], SeatRange>(modules, (hooks) => hooks.seatRange);
+  const boardSpec = foldAcc<[GameConfig], BoardShapeSpec | null>(
+    modules,
+    (hooks) => hooks.boardSpec,
+  );
+  const boardFixtures = foldAcc<[GameConfig, BoardState], readonly FixtureDeclaration[]>(
+    modules,
+    (hooks) => hooks.boardFixtures,
+  );
+  const cardKinds = foldAcc<[], readonly string[]>(modules, (hooks) => hooks.cardKinds);
+  const bankInit = foldAcc<[GameConfig], Readonly<Record<string, number>>>(
+    modules,
+    (hooks) => hooks.bankInit,
+  );
+  const pieceLimits = foldAcc<[GameConfig], Readonly<Record<string, number>>>(
+    modules,
+    (hooks) => hooks.pieceLimits,
+  );
+  const devDeck = foldAcc<[GameConfig], Readonly<Record<string, number>>>(
+    modules,
+    (hooks) => hooks.devDeck,
+  );
+  const costs = foldAcc<[GameConfig], Readonly<Record<string, Cost>>>(
+    modules,
+    (hooks) => hooks.costs,
+  );
+  const costOf = foldAcc<[GameState, string], Cost>(modules, (hooks) => hooks.costOf);
+  const diceSpec = foldAcc<[GameState], DiceSpec>(modules, (hooks) => hooks.diceSpec);
+  const production = foldAcc<[GameState, number], Production>(modules, (hooks) => hooks.production);
+  const settlement = foldAcc<[GameState, Seat, string], boolean>(
+    modules,
+    (hooks) => hooks.placement?.settlement,
+  );
+  const road = foldAcc<[GameState, Seat, string], boolean>(
+    modules,
+    (hooks) => hooks.placement?.road,
+  );
+  const city = foldAcc<[GameState, Seat, string], boolean>(
+    modules,
+    (hooks) => hooks.placement?.city,
+  );
+  const connectivity = foldAcc<[GameState, Seat], readonly string[]>(
+    modules,
+    (hooks) => hooks.connectivity,
+  );
+  const routeGraph = foldAcc<[GameState, Seat], RouteGraph>(modules, (hooks) => hooks.routeGraph);
+  const robberLike = foldAcc<[GameState], readonly Blocker[]>(modules, (hooks) => hooks.robberLike);
+  const stealTargets = foldAcc<[GameState, Seat, string, string], readonly Seat[]>(
+    modules,
+    (hooks) => hooks.stealTargets,
+  );
+  const handLimit = foldAcc<[GameState, Seat], number>(modules, (hooks) => hooks.handLimit);
+  const turnFlow = foldAcc<[GameState], readonly PhaseFrame[]>(modules, (hooks) => hooks.turnFlow);
+  const pending = foldAcc<[GameState], readonly Pending[]>(modules, (hooks) => hooks.pending);
+  const victoryPoints = foldAcc<
+    [GameState, Seat, PrivateState | undefined],
+    readonly VpContribution[]
+  >(modules, (hooks) => hooks.victoryPoints);
+  const vpTarget = foldAcc<[GameConfig], number>(modules, (hooks) => hooks.vpTarget);
+  const legalCommands = foldAcc<[GameState, Seat, PrivateState | undefined], LegalCommandSet>(
+    modules,
+    (hooks) => hooks.legalCommands,
+  );
+  const timeoutAction = foldAcc<[GameState, TimeoutRequest], CommandShape | null>(
+    modules,
+    (hooks) => hooks.timeoutAction,
+  );
+  const renderHints = foldAcc<[GameState], readonly RenderHint[]>(
+    modules,
+    (hooks) => hooks.renderHints,
+  );
+  return Object.freeze({
+    seatRange: (config, acc) => seatRange([config], acc),
+    boardSpec: (config, acc) => boardSpec([config], acc),
+    boardFixtures: (config, board, acc) => boardFixtures([config, board], acc),
+    cardKinds: (acc) => cardKinds([], acc),
+    bankInit: (config, acc) => ({ ...bankInit([config], acc) }),
+    pieceLimits: (config, acc) => ({ ...pieceLimits([config], acc) }),
+    devDeck: (config, acc) => ({ ...devDeck([config], acc) }),
+    costs: (config, acc) => ({ ...costs([config], acc) }),
+    costOf: (state, buildType, cost) => costOf([state, buildType], cost),
+    diceSpec: (state, acc) => diceSpec([state], acc),
+    onDiceResult: foldState<[readonly [number, number]]>(modules, (hooks) => hooks.onDiceResult),
+    production: (state, roll, acc) => production([state, roll], acc),
+    onNoProduction: foldState<[Seat]>(modules, (hooks) => hooks.onNoProduction),
+    placement: Object.freeze({
+      settlement: (state: GameState, seat: Seat, loc: string, verdict: boolean) =>
+        settlement([state, seat, loc], verdict),
+      road: (state: GameState, seat: Seat, loc: string, verdict: boolean) =>
+        road([state, seat, loc], verdict),
+      city: (state: GameState, seat: Seat, loc: string, verdict: boolean) =>
+        city([state, seat, loc], verdict),
+    }),
+    connectivity: (state, seat, acc) => connectivity([state, seat], acc),
+    routeGraph: (state, seat, acc) => routeGraph([state, seat], acc),
+    robberLike: (state, acc) => robberLike([state], acc),
+    stealTargets: (state, seat, blocker, hex, targets) =>
+      stealTargets([state, seat, blocker, hex], targets),
+    handLimit: (state, seat, limit) => handLimit([state, seat], limit),
+    afterBuild: foldState<[Seat, string, string]>(modules, (hooks) => hooks.afterBuild),
+    onTurnStart: foldState<[Seat]>(modules, (hooks) => hooks.onTurnStart),
+    onTurnEnd: foldState<[Seat]>(modules, (hooks) => hooks.onTurnEnd),
+    turnFlow: (state, acc) => turnFlow([state], acc),
+    pending: (state, acc) => pending([state], acc),
+    victoryPoints: (state, seat, priv, acc) => victoryPoints([state, seat, priv], acc),
+    vpTarget: (config, acc) => vpTarget([config], acc),
+    legalCommands: (state, seat, priv, acc) => legalCommands([state, seat, priv], acc),
+    timeoutAction: (state, request, acc) => timeoutAction([state, request], acc),
+    renderHints: (state, acc) => renderHints([state], acc),
+  } satisfies HookPipeline);
 }
 
 /** Resolve dependencies once and snapshot module registration data. */

@@ -5,7 +5,7 @@ import type { CardSlot, GameState, PrivateState } from '../../core/state/index.j
 import { RESOURCES, failure, success } from '../../core/types/index.js';
 import type { Resource, ResourceCounts, Result, Seat } from '../../core/types/index.js';
 import { recomputeLargestArmyAward, recomputeLongestRoadAward } from './awards/index.js';
-import { DEV_CARD_COUNTS, DEV_COST, emptyResources } from './constants.js';
+import { DEV_CARD_COUNTS, emptyResources } from './constants.js';
 import type { DevCard } from './constants.js';
 import { legalRoadEdges, canPlaceRoad } from './placement/index.js';
 import { claimCommands } from './legal.js';
@@ -86,7 +86,7 @@ function plentyReceipt(state: GameState, requested: ResourceCounts): ResourceCou
 }
 
 export const drawDevPhase: PhaseHandler = {
-  legalCommands: (state, _frame, seat, priv) => claimCommands(state, seat, priv),
+  legalCommands: (state, _frame, seat, priv, ctx) => claimCommands(state, seat, priv, ctx),
   pending: (state) => {
     const data = drawData(state);
     return withClaim(state, [
@@ -109,11 +109,11 @@ export const buyDevCard: CommandHandler = {
   validate: (state, input, ctx) => {
     if ((state.decks.dev?.remaining ?? 0) <= 0)
       return failure('empty-dev-deck', 'No development cards remain');
-    const cost = buildCost(state, 'devCard', DEV_COST, ctx);
+    const cost = buildCost(state, 'devCard', ctx);
     return cost.ok ? affordable(state, input.seat, cost.value) : cost;
   },
   apply: (state, input, ctx) => {
-    const cost = buildCost(state, 'devCard', DEV_COST, ctx);
+    const cost = buildCost(state, 'devCard', ctx);
     if (!cost.ok) throw new Error('Validated dev cost missing');
     const id = `dev:${state.counters.nextSlotId}`;
     const spent = exchangeBank(state, input.seat, cost.value, false);
@@ -128,7 +128,7 @@ export const buyDevCard: CommandHandler = {
   },
   applyPrivate: (priv, before, input, _data, ctx) => {
     if (priv.seat !== input.seat) return success(priv);
-    const cost = buildCost(before, 'devCard', DEV_COST, ctx);
+    const cost = buildCost(before, 'devCard', ctx);
     return cost.ok ? privateExchange(priv, cost.value, false) : cost;
   },
 };
@@ -226,7 +226,7 @@ export const playDevCard: CommandHandler = {
     const params = playParams(state, card, input.command.params);
     return params.ok ? success(undefined) : params;
   },
-  apply: (state, input) => {
+  apply: (state, input, ctx) => {
     const card = input.command.card;
     const id = input.command.slotId;
     if (!isDevCard(card) || typeof id !== 'string') throw new Error('Validated card play missing');
@@ -253,7 +253,7 @@ export const playDevCard: CommandHandler = {
       next = pushPhase(next, frame('roadBuilding', { remaining: 2 }));
       if (
         (ownSeat(next, input.seat).piecesLeft.road ?? 0) === 0 ||
-        legalRoadEdges(next, input.seat).length === 0
+        legalRoadEdges(next, input.seat, {}, ctx).length === 0
       )
         next = popPhase(next);
     } else if (card === 'yearOfPlenty') {
@@ -310,13 +310,16 @@ export const roadBuildingPhase: PhaseHandler = {
     withClaim(state, [
       playerPending(state, state.turn.activeSeat, ['PLACE_FREE_ROAD', 'SKIP'], 'roadBuilding'),
     ]),
-  legalCommands: (state, _frame, seat, priv) => {
-    const claim = claimCommands(state, seat, priv);
+  legalCommands: (state, _frame, seat, priv, ctx) => {
+    const claim = claimCommands(state, seat, priv, ctx);
     return seat === state.turn.activeSeat
       ? {
           commands: [
             { type: 'SKIP' },
-            ...legalRoadEdges(state, seat).map((edge) => ({ type: 'PLACE_FREE_ROAD', edge })),
+            ...legalRoadEdges(state, seat, {}, ctx).map((edge) => ({
+              type: 'PLACE_FREE_ROAD',
+              edge,
+            })),
             ...claim.commands,
           ],
           templates: claim.templates,
@@ -330,7 +333,12 @@ export const placeFreeRoad: CommandHandler = {
     const edge = input.command.edge;
     if (
       typeof edge !== 'string' ||
-      !ctx.hooks.placementRules.road(state, input.seat, edge, canPlaceRoad(state, input.seat, edge))
+      !ctx.hooks.placement.road(
+        state,
+        input.seat,
+        edge,
+        canPlaceRoad(state, input.seat, edge, {}, ctx),
+      )
     )
       return failure('illegal-road', 'Free road location is illegal');
     return (ownSeat(state, input.seat).piecesLeft.road ?? 0) > 0
@@ -349,12 +357,12 @@ export const placeFreeRoad: CommandHandler = {
       piecesLeft: { ...old.piecesLeft, road: (old.piecesLeft.road ?? 0) - 1 },
     }));
     next = ctx.hooks.afterBuild(next, input.seat, 'road', edge);
-    next = recomputeLongestRoadAward(next);
+    next = recomputeLongestRoadAward(next, ctx);
     const remaining = roadBuildingData(state).remaining - 1;
     next =
       remaining <= 0 ||
       (ownSeat(next, input.seat).piecesLeft.road ?? 0) <= 0 ||
-      legalRoadEdges(next, input.seat).length === 0
+      legalRoadEdges(next, input.seat, {}, ctx).length === 0
         ? popPhase(next)
         : replaceTop(next, frame('roadBuilding', { remaining }));
     return {
@@ -371,7 +379,7 @@ export const skipRoadBuilding: CommandHandler = {
 };
 
 export const monopolyPhase: PhaseHandler = {
-  legalCommands: (state, _frame, seat, priv) => claimCommands(state, seat, priv),
+  legalCommands: (state, _frame, seat, priv, ctx) => claimCommands(state, seat, priv, ctx),
   pending: (state) => {
     const data = monopolyData(state);
     return withClaim(

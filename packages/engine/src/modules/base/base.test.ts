@@ -69,6 +69,6 @@ describe('base game setup and turn flow', () => {
   test('base genesis refuses five or six seats', () => {
     expect(() =>
       engine.createGame({ ...config, seats: [0, 1, 2, 3, 4] }, new Uint8Array(32)),
-    ).toThrow(/two to four/);
+    ).toThrow(/require 2 to 4 seats/);
   });
 });

@@ -9,6 +9,13 @@ const moduleIds = existsSync(modulesDir)
       .map((entry) => entry.name)
   : [];
 const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+/** Read a module's literal `dependsOn: [...]` declaration from its index.ts. */
+const declaredDependencies = (id) => {
+  const index = path.join(modulesDir, id, 'index.ts');
+  if (!existsSync(index)) return [];
+  const match = /dependsOn:\s*\[([^\]]*)\]/.exec(require('node:fs').readFileSync(index, 'utf8'));
+  return match ? [...match[1].matchAll(/'([^']+)'/g)].map((item) => item[1]) : [];
+};
 
 module.exports = {
   forbidden: [
@@ -38,7 +45,7 @@ module.exports = {
         dependencyTypesNot: ['type-only'],
       },
     },
-    // Stage 11 can allow sibling imports after reading each module's declared dependencies.
+    // A module may import only itself and the modules its index.ts declares in dependsOn.
     ...moduleIds.map((id) => ({
       name: `engine-module-${id}-no-siblings`,
       severity: 'error',
@@ -46,7 +53,11 @@ module.exports = {
         path: `^packages/engine/src/modules/${escapeRegex(id)}/`,
         pathNot: '\\.(?:test|spec)\\.[cm]?[jt]sx?$|/(?:__tests__|test|tests)/',
       },
-      to: { path: `^packages/engine/src/modules/(?!${escapeRegex(id)}/)[^/]+/` },
+      to: {
+        path: `^packages/engine/src/modules/(?!(?:${[id, ...declaredDependencies(id)]
+          .map(escapeRegex)
+          .join('|')})/)[^/]+/`,
+      },
     })),
     ...moduleIds.map((id) => ({
       name: `engine-module-${id}-setup-private`,

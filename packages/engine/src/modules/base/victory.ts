@@ -1,9 +1,8 @@
-import type { CommandHandler, VpContribution } from '../../core/modules/index.js';
+import type { CommandHandler, HandlerContext, VpContribution } from '../../core/modules/index.js';
 import type { GameState, PrivateState } from '../../core/state/index.js';
 import { failure, success } from '../../core/types/index.js';
 import type { Seat } from '../../core/types/index.js';
-import { baseOptions } from './types.js';
-import { ownSeat, updateSeat } from './shared.js';
+import { inTurnFlow, ownSeat, updateSeat, vpTarget } from './shared.js';
 
 function claimedIds(value: unknown): string[] | null {
   if (!Array.isArray(value) || value.length === 0 || !value.every((id) => typeof id === 'string'))
@@ -12,7 +11,7 @@ function claimedIds(value: unknown): string[] | null {
 }
 
 export const claimVictory: CommandHandler = {
-  validate: (state, input) => {
+  validate: (state, input, ctx) => {
     const ids = claimedIds(input.command.slotIds);
     if (!ids) return failure('invalid-victory-slots', 'At least one card slot id is required');
     if (new Set(ids).size !== ids.length)
@@ -23,7 +22,7 @@ export const claimVictory: CommandHandler = {
       if (!slot || slot.revealed)
         return failure('invalid-victory-slot', 'Victory card slot is foreign, missing or spent');
     }
-    return own.publicVp + ids.length >= baseOptions(state.config.options.base).vpTarget
+    return own.publicVp + ids.length >= vpTarget(state, ctx)
       ? success(undefined)
       : failure('insufficient-victory-points', 'Claim does not reach the victory target');
   },
@@ -82,12 +81,16 @@ export function hiddenVictoryPoints(
 }
 
 /** Emit the first sufficient set of actual hidden VP cards before any further input. */
-export function automaticVictoryClaim(state: GameState, privates: ReadonlyMap<Seat, PrivateState>) {
-  if (state.turn.phase.at(-1)?.id === 'setup') return null;
+export function automaticVictoryClaim(
+  state: GameState,
+  privates: ReadonlyMap<Seat, PrivateState>,
+  ctx: HandlerContext,
+) {
+  if (state.turn.phase.at(-1)?.id === 'setup' || inTurnFlow(state)) return null;
   const seat = state.turn.activeSeat;
   const priv = privates.get(seat);
   if (!priv) return null;
-  const needed = baseOptions(state.config.options.base).vpTarget - ownSeat(state, seat).publicVp;
+  const needed = vpTarget(state, ctx) - ownSeat(state, seat).publicVp;
   if (needed <= 0) return null;
   const ids = ownSeat(state, seat)
     .cardSlots.filter((slot) => !slot.revealed && priv.slots[slot.slotId] === 'victoryPoint')

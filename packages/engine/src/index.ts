@@ -1,11 +1,48 @@
 export const PACKAGE_NAME = '@cp2p/engine';
 
 export { baseModule, createBaseEngine } from './modules/base/index.js';
+export {
+  FIVE_SIX_BANK,
+  FIVE_SIX_DEV_CARDS,
+  FIVE_SIX_ID,
+  FIVE_SIX_VERSION,
+  SBP_COMMANDS,
+  fiveSixModule,
+} from './modules/five-six/index.js';
+export { FIVE_SIX_BOARD, FIVE_SIX_HEXES } from './modules/five-six/board.js';
+export { STANDARD_BOARD, STANDARD_HEXES } from './modules/base/board/shapes.js';
+export {
+  MODULE_CATALOGUE,
+  checkModuleSelection,
+  devCardCatalogueFor,
+  devCardCountsFor,
+  engineForConfig,
+  engineForModules,
+  moduleSelection,
+} from './modules/catalogue.js';
+export {
+  EXPANSION_IDS,
+  MODULE_COMPAT,
+  checkModuleCombination,
+  compatibility,
+} from './modules/compat.js';
+export type { Compatibility, ExpansionId } from './modules/compat.js';
+export {
+  boardShapeProblems,
+  coastEdgeCycle,
+  fixtureSlotProblem,
+  frameHexes,
+  seaSideOfEdge,
+} from './core/board/index.js';
+export { FixtureSlotError } from './core/state/createGame.js';
 export { CITY_COST, DEV_COST, ROAD_COST, SETTLEMENT_COST } from './modules/base/constants.js';
 export {
+  BANK_START,
   BASE_DEV_CARD_CATALOGUE,
   BASE_VERSION,
   DEV_CARD_COUNTS,
+  PIECES_START,
+  devCardCatalogue,
 } from './modules/base/constants.js';
 export { harborRate as baseHarborRate } from './modules/base/board/index.js';
 export { longestRoadLength as baseLongestRoadLength } from './modules/base/awards/index.js';
@@ -35,6 +72,7 @@ export type {
   GameState,
   PrivateState,
   PublicView,
+  BoardFixture,
   BoardState,
   BoardHex,
   PhaseFrame,
@@ -43,6 +81,17 @@ export type {
   ModuleSelection,
 } from './core/state/index.js';
 export type {
+  Blocker,
+  BoardShapeSpec,
+  DiceSpec,
+  FixtureDeclaration,
+  FixtureSlot,
+  HookName,
+  ModuleHooks,
+  RenderHint,
+  RouteGraph,
+  SeatRange,
+  TimeoutRequest,
   GameModule,
   CommandHandler,
   SystemInputHandler,

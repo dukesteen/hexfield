@@ -1,5 +1,11 @@
 import { createRegistry } from '../modules/registry.js';
-import type { GameModule, ModuleRegistry, Transition } from '../modules/types.js';
+import type {
+  GameModule,
+  HandlerContext,
+  HookPipeline,
+  ModuleRegistry,
+  Transition,
+} from '../modules/types.js';
 import { checkBounds } from '../resources/index.js';
 import { createGame as createGenesis, createPrivateState } from '../state/createGame.js';
 import { cloneJson, validateJson } from '../state/json.js';
@@ -17,6 +23,10 @@ import type {
 } from './types.js';
 
 export interface Engine {
+  /** Module ids and versions in hook order. */
+  readonly modules: readonly { id: string; version: string }[];
+  /** The composed, read-only hook pipeline, for UI hints and derived catalogues. */
+  readonly hooks: HookPipeline;
   /** Build deterministic public genesis using the supplied seed only during setup. */
   createGame(config: GameConfig, genesisSeed: Uint8Array): GameState;
   /** Build one owner's secret state outside the replicated public state. */
@@ -72,13 +82,13 @@ function topPhase(state: GameState): { id: string; module: string; data: unknown
   return state.turn.phase.at(-1);
 }
 
-function pendingFor(state: GameState, registry: ModuleRegistry): Pending[] {
+function pendingFor(state: GameState, registry: ModuleRegistry, ctx: HandlerContext): Pending[] {
   if (state.result) return [];
   const top = topPhase(state);
   if (!top) throw new Error('Live game has no phase');
   const phase = registry.phases.get(`${top.module}/${top.id}`);
   if (!phase) throw new Error(`Unregistered phase ${top.module}/${top.id}`);
-  return phase.handler.pending(state, top, { hooks: registry.hooks });
+  return [...registry.hooks.pending(state, phase.handler.pending(state, top, ctx))];
 }
 
 function validSeat(state: GameState, value: unknown): value is Seat {
@@ -127,8 +137,9 @@ function checkInputKeys(input: Input, registry: ModuleRegistry): Result<void> {
 function validateCommand(
   state: GameState,
   input: CommandInput,
-  pending: Pending[],
+  pending: Pending[] | null,
   registry: ModuleRegistry,
+  ctx: HandlerContext,
 ): Result<void> {
   if (!validSeat(state, input.seat))
     return failure('invalid-seat', 'Command seat is not in this game');
@@ -138,11 +149,13 @@ function validateCommand(
   const type = input.command.type;
   const entry = registry.commands.get(type);
   if (!entry) return failure('unknown-command', `Unknown command type: ${type}`);
-  const allowed = pending.some(
-    (item) => item.kind === 'player' && item.seat === input.seat && item.allowed.includes(type),
-  );
+  const allowed =
+    pending === null ||
+    pending.some(
+      (item) => item.kind === 'player' && item.seat === input.seat && item.allowed.includes(type),
+    );
   if (!allowed) return failure('not-pending', 'This seat or command is not currently pending');
-  return entry.handler.validate(state, input, { hooks: registry.hooks });
+  return entry.handler.validate(state, input, ctx);
 }
 
 function validateSystem(
@@ -150,6 +163,7 @@ function validateSystem(
   input: SystemInput,
   pending: Pending[],
   registry: ModuleRegistry,
+  ctx: HandlerContext,
 ): Result<void> {
   if (typeof input.type !== 'string') return failure('invalid-system-input', 'Missing system type');
   if (input.type === 'SEAT_STATUS') {
@@ -180,7 +194,7 @@ function validateSystem(
     );
     if (!matches) return failure('not-pending', 'System input does not answer a pending request');
   }
-  return entry.handler.validate(state, input, { hooks: registry.hooks });
+  return entry.handler.validate(state, input, ctx);
 }
 
 function advance(state: GameState, transition: Transition): Transition {
@@ -197,9 +211,35 @@ function advance(state: GameState, transition: Transition): Transition {
 /** Build a rules engine without process-global mutable module registration. */
 export function createEngine(modules: readonly GameModule[]): Engine {
   const registry = createRegistry(modules);
+  const ctx: HandlerContext = Object.freeze({
+    hooks: registry.hooks,
+    dispatch: (state: GameState, input: CommandInput): Result<Transition> => {
+      if (typeof input !== 'object' || input === null || input.kind !== 'command')
+        return failure('invalid-input', 'Dispatch needs a command');
+      const keys = checkInputKeys(input, registry);
+      if (!keys.ok) return keys;
+      const valid = validateCommand(state, input, null, registry, ctx);
+      if (!valid.ok) return valid;
+      const handler = registry.commands.get(input.command.type)?.handler;
+      return handler
+        ? success(handler.apply(state, input, ctx))
+        : failure('missing-handler', 'Validated command has no handler');
+    },
+    dispatchPrivate: (
+      priv: PrivateState,
+      before: GameState,
+      input: CommandInput,
+      data: PrivateInputData | undefined,
+    ): Result<PrivateState> => {
+      const handler = registry.commands.get(input.command.type)?.handler;
+      return handler?.applyPrivate
+        ? handler.applyPrivate(priv, before, input, data, ctx)
+        : success(priv);
+    },
+  });
 
   function getPending(state: GameState): Pending[] {
-    return pendingFor(state, registry);
+    return pendingFor(state, registry, ctx);
   }
 
   function getAutomaticInput(
@@ -209,7 +249,7 @@ export function createEngine(modules: readonly GameModule[]): Engine {
     if (state.result) return null;
     let chosen: Input | null = null;
     for (const module of registry.modules) {
-      const candidate = module.autoInput?.(state, privates);
+      const candidate = module.autoInput?.(state, privates, ctx);
       if (!candidate) continue;
       if (chosen) throw new Error('Multiple modules requested an automatic input');
       chosen = candidate;
@@ -230,8 +270,8 @@ export function createEngine(modules: readonly GameModule[]): Engine {
     const keys = checkInputKeys(input, registry);
     if (!keys.ok) return keys;
     const pending = getPending(state);
-    if (input.kind === 'command') return validateCommand(state, input, pending, registry);
-    if (input.kind === 'system') return validateSystem(state, input, pending, registry);
+    if (input.kind === 'command') return validateCommand(state, input, pending, registry, ctx);
+    if (input.kind === 'system') return validateSystem(state, input, pending, registry, ctx);
     return failure('invalid-input', 'Input kind must be command or system');
   }
 
@@ -249,11 +289,11 @@ export function createEngine(modules: readonly GameModule[]): Engine {
     if (input.kind === 'command') {
       const handler = registry.commands.get(input.command.type)?.handler;
       if (!handler) return failure('missing-handler', 'Validated command has no handler');
-      return success(advance(state, handler.apply(state, input, { hooks: registry.hooks })));
+      return success(advance(state, handler.apply(state, input, ctx)));
     }
     const handler = registry.systemInputs.get(input.type)?.handler;
     if (!handler) return failure('missing-handler', 'Validated system input has no handler');
-    return success(advance(state, handler.apply(state, input, { hooks: registry.hooks })));
+    return success(advance(state, handler.apply(state, input, ctx)));
   }
 
   function dispatchPrivate(
@@ -266,12 +306,12 @@ export function createEngine(modules: readonly GameModule[]): Engine {
     if (input.kind === 'command') {
       const handler = registry.commands.get(input.command.type)?.handler;
       return handler?.applyPrivate
-        ? handler.applyPrivate(priv, before, input, privInput, { hooks: registry.hooks })
+        ? handler.applyPrivate(priv, before, input, privInput, ctx)
         : success(priv);
     }
     const handler = registry.systemInputs.get(input.type)?.handler;
     return handler?.applyPrivate
-      ? handler.applyPrivate(priv, before, input, privInput, { hooks: registry.hooks })
+      ? handler.applyPrivate(priv, before, input, privInput, ctx)
       : success(priv);
   }
 
@@ -321,20 +361,22 @@ export function createEngine(modules: readonly GameModule[]): Engine {
     const top = topPhase(state);
     if (!top) return { commands: [], templates: [] };
     const handler = registry.phases.get(`${top.module}/${top.id}`)?.handler;
-    if (handler?.legalCommands) {
-      const listed = handler.legalCommands(state, top, seat, priv, { hooks: registry.hooks });
-      return {
-        commands: listed.commands.filter(
-          (command) =>
-            (filter?.(command) ?? true) && validate(state, { kind: 'command', seat, command }).ok,
-        ),
-        templates: listed.templates,
-      };
+    let own: LegalCommandSet;
+    if (handler?.legalCommands) own = handler.legalCommands(state, top, seat, priv, ctx);
+    else {
+      const allowed = getPending(state)
+        .filter((item) => item.kind === 'player' && item.seat === seat)
+        .flatMap((item) => (item.kind === 'player' ? item.allowed : []));
+      own = { commands: [], templates: [...new Set(allowed)].toSorted().map((type) => ({ type })) };
     }
-    const allowed = getPending(state)
-      .filter((item) => item.kind === 'player' && item.seat === seat)
-      .flatMap((item) => (item.kind === 'player' ? item.allowed : []));
-    return { commands: [], templates: [...new Set(allowed)].toSorted().map((type) => ({ type })) };
+    const listed = registry.hooks.legalCommands(state, seat, priv, own);
+    return {
+      commands: listed.commands.filter(
+        (command) =>
+          (filter?.(command) ?? true) && validate(state, { kind: 'command', seat, command }).ok,
+      ),
+      templates: listed.templates,
+    };
   }
 
   function computeVictoryPoints(
@@ -347,11 +389,9 @@ export function createEngine(modules: readonly GameModule[]): Engine {
     if (!ownSeat) throw new Error('Unknown seat');
     let publicPoints = ownSeat.publicVp;
     let hiddenPoints = 0;
-    for (const module of registry.modules) {
-      for (const contribution of module.victoryPoints?.(state, seat, priv) ?? []) {
-        if (contribution.public) publicPoints += contribution.points;
-        else if (priv) hiddenPoints += contribution.points;
-      }
+    for (const contribution of registry.hooks.victoryPoints(state, seat, priv, [])) {
+      if (contribution.public) publicPoints += contribution.points;
+      else if (priv) hiddenPoints += contribution.points;
     }
     return priv
       ? { public: publicPoints, total: publicPoints + hiddenPoints }
@@ -377,7 +417,7 @@ export function createEngine(modules: readonly GameModule[]): Engine {
     }
     for (const module of registry.modules) {
       try {
-        violations.push(...(module.invariants?.(state) ?? []));
+        violations.push(...(module.invariants?.(state, ctx) ?? []));
       } catch (error) {
         violations.push(`module ${module.id} invariant threw: ${String(error)}`);
       }
@@ -397,7 +437,7 @@ export function createEngine(modules: readonly GameModule[]): Engine {
     const violations: string[] = [];
     for (const module of registry.modules) {
       try {
-        violations.push(...(module.privateInvariants?.(state, privates) ?? []));
+        violations.push(...(module.privateInvariants?.(state, privates, ctx) ?? []));
       } catch (error) {
         violations.push(`module ${module.id} private invariant threw: ${String(error)}`);
       }
@@ -406,6 +446,10 @@ export function createEngine(modules: readonly GameModule[]): Engine {
   }
 
   return Object.freeze({
+    modules: Object.freeze(
+      registry.modules.map(({ id, version }) => Object.freeze({ id, version })),
+    ),
+    hooks: registry.hooks,
     createGame: (config: GameConfig, seed: Uint8Array) => createGenesis(config, seed, registry),
     createPrivateState: (seat: Seat) => createPrivateState(seat, registry),
     getAutomaticInput,

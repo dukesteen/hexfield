@@ -6,9 +6,22 @@ import type { HandlerContext } from '../../core/modules/index.js';
 import type { EngineEffect, ResourceEndpoint } from '../../core/effects/index.js';
 import { RESOURCES, failure, success } from '../../core/types/index.js';
 import type { Resource, ResourceCounts, Result, Seat } from '../../core/types/index.js';
-import { emptyResources } from './constants.js';
+import { BASE_COSTS, emptyResources } from './constants.js';
 import { baseExt, baseOptions } from './types.js';
 import type { BaseExt } from './types.js';
+
+/** The top frame, whichever module owns it. */
+export function topFrame(state: GameState): PhaseFrame | undefined {
+  return state.turn.phase.at(-1);
+}
+
+/**
+ * True while module turn-flow frames (such as a special build phase) run between turns.
+ * The ending seat can no longer win or claim, and nobody else is active yet.
+ */
+export function inTurnFlow(state: GameState): boolean {
+  return state.turn.phase.some((item) => item.module === 'base' && item.id === 'turnEnd');
+}
 
 export function top(state: GameState): PhaseFrame {
   const activePhase = state.turn.phase.at(-1);
@@ -170,13 +183,20 @@ export function bankHas(state: GameState, counts: ResourceCounts): boolean {
   return RESOURCES.every((kind) => (state.bank[kind] ?? 0) >= counts[kind]);
 }
 
+/** Build cost from the config-level costs table, then state-dependent costOf adjustments. */
 export function buildCost(
   state: GameState,
   buildType: string,
-  baseCost: ResourceCounts,
   ctx: HandlerContext,
 ): Result<ResourceCounts> {
-  return parseCounts(ctx.hooks.costOf(state, buildType, baseCost));
+  const listed = ctx.hooks.costs(state.config, BASE_COSTS)[buildType];
+  if (!listed) return failure('unknown-build-type', `No cost for ${buildType}`);
+  return parseCounts(ctx.hooks.costOf(state, buildType, listed));
+}
+
+/** Victory target after scenario and module overrides. */
+export function vpTarget(state: GameState, ctx: HandlerContext): number {
+  return ctx.hooks.vpTarget(state.config, baseOptions(state.config.options.base).vpTarget);
 }
 
 export function timer(state: GameState, phase: string): TimerSpec | undefined {
@@ -205,7 +225,7 @@ export function playerPending(
 
 /** Hidden VP claims remain available during every turn interrupt. */
 export function withClaim(state: GameState, pending: Pending[]): Pending[] {
-  if (top(state).id === 'setup') return pending;
+  if (topFrame(state)?.id === 'setup' || inTurnFlow(state)) return pending;
   const seat = state.turn.activeSeat;
   const existing = pending.find((item) => item.kind === 'player' && item.seat === seat);
   if (existing?.kind === 'player') {
@@ -216,7 +236,7 @@ export function withClaim(state: GameState, pending: Pending[]): Pending[] {
   return [...pending, { kind: 'player', seat, allowed: ['CLAIM_VICTORY'] }];
 }
 
-export function afterInput(state: GameState): GameState {
+export function afterInput(state: GameState, ctx: HandlerContext): GameState {
   let next = state;
   const offers = baseExt(state.ext.base).offers;
   if (offers.length) {
@@ -250,8 +270,12 @@ export function afterInput(state: GameState): GameState {
   });
   if (seatsChanged) next = { ...next, seats };
   const active = ownSeat(next, next.turn.activeSeat);
-  const options = baseOptions(next.config.options.base);
-  if (!next.result && top(next).id !== 'setup' && active.publicVp >= options.vpTarget) {
+  if (
+    !next.result &&
+    topFrame(next)?.id !== 'setup' &&
+    !inTurnFlow(next) &&
+    active.publicVp >= vpTarget(next, ctx)
+  ) {
     next = {
       ...next,
       result: { winner: active.seat, reason: 'public-vp', atTurn: next.turn.number },

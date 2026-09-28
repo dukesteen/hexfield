@@ -2,13 +2,16 @@ import { createEngine } from '../../core/pipeline/index.js';
 import type {
   CommandHandler,
   GameModule,
+  HandlerContext,
   SystemInputHandler,
   Transition,
   InputKeys,
 } from '../../core/modules/index.js';
 import type { GameState } from '../../core/state/index.js';
 import { BASE_OPTIONS } from './config.js';
-import { BANK_START, BASE_VERSION, PIECES_START } from './constants.js';
+import { BANK_START, BASE_VERSION, DEV_CARD_COUNTS, PIECES_START } from './constants.js';
+import { STANDARD_BOARD } from './board/shapes.js';
+import { incompatibleModules } from '../compat.js';
 import { generateBoard } from './setup/board/index.js';
 import {
   initialSetup,
@@ -26,6 +29,7 @@ import {
   mainPhase,
   preRollPhase,
   rollDice,
+  turnEndPhase,
 } from './phases/turn.js';
 import {
   moveRobber,
@@ -94,8 +98,8 @@ const SYSTEM_KEYS: Record<string, InputKeys> = {
   TIMEOUT: { allowed: ['seat', 'phase'] },
 };
 
-function finalize(transition: Transition): Transition {
-  const state = afterInput(transition.state);
+function finalize(transition: Transition, ctx: HandlerContext): Transition {
+  const state = afterInput(transition.state, ctx);
   if (!transition.state.result && state.result) {
     return {
       state,
@@ -121,7 +125,7 @@ function finalizedCommands(
       keys,
       apply: (state, input, ctx) => {
         const transition = handler.apply(state, input, ctx);
-        return finalize(transition);
+        return finalize(transition, ctx);
       },
     };
   }
@@ -140,7 +144,7 @@ function finalizedSystems(
       keys,
       apply: (state, input, ctx) => {
         const transition = handler.apply(state, input, ctx);
-        return finalize(transition);
+        return finalize(transition, ctx);
       },
     };
   }
@@ -153,19 +157,15 @@ export function baseModule(): GameModule {
     id: 'base',
     version: BASE_VERSION,
     dependsOn: [],
-    conflictsWith: [],
+    conflictsWith: incompatibleModules('base'),
     optionsSchema: [...BASE_OPTIONS],
-    modifyConfig: (config) => {
-      if (config.seats.length < 2 || config.seats.length > 4)
-        throw new Error('Base game requires two to four seats');
-      return config;
-    },
     buildBoard: (ctx) => {
       const options = baseOptions(ctx.config.options.base);
       return generateBoard(
         ctx.rng,
         { mapLayout: options.mapLayout, strictBalance: options.strictBalance },
         ctx.config.board,
+        ctx.hooks.boardSpec(ctx.config, null) ?? STANDARD_BOARD,
       );
     },
     initState: (ctx) => ({
@@ -174,13 +174,27 @@ export function baseModule(): GameModule {
       offers: [],
       diceDeck: Array.from({ length: 36 }, (_, index) => index),
     }),
-    initializeState: (_ctx, state): GameState => ({
-      ...state,
-      bank: { ...BANK_START },
-      decks: { dev: { remaining: 25, drawn: [] } },
-      awards: { longestRoad: null, largestArmy: null },
-      seats: state.seats.map((seat) => ({ ...seat, piecesLeft: { ...PIECES_START } })),
-    }),
+    initializeState: (ctx, state): GameState => {
+      const pieces = ctx.hooks.pieceLimits(ctx.config, PIECES_START);
+      const deck = Object.values(ctx.hooks.devDeck(ctx.config, DEV_CARD_COUNTS));
+      return {
+        ...state,
+        bank: { ...ctx.hooks.bankInit(ctx.config, BANK_START) },
+        decks: { dev: { remaining: deck.reduce((sum, count) => sum + count, 0), drawn: [] } },
+        awards: { longestRoad: null, largestArmy: null },
+        seats: state.seats.map((seat) => ({ ...seat, piecesLeft: { ...pieces } })),
+      };
+    },
+    // Base values are the initial accumulators at base call sites; these hooks only cover
+    // values that core, not base, starts.
+    hooks: {
+      seatRange: () => ({ min: 2, max: 4 }),
+      boardSpec: (_config, acc) => acc ?? STANDARD_BOARD,
+      victoryPoints: (state, seat, priv, acc) => [
+        ...acc,
+        ...hiddenVictoryPoints(state, seat, priv),
+      ],
+    },
     initialPhase: () => frame('setup', initialSetup),
     commands: finalizedCommands({
       PLACE_SETTLEMENT: placeSettlement,
@@ -225,9 +239,9 @@ export function baseModule(): GameModule {
       drawDev: drawDevPhase,
       roadBuilding: roadBuildingPhase,
       monopoly: monopolyPhase,
+      turnEnd: turnEndPhase,
     },
     autoInput: automaticVictoryClaim,
-    victoryPoints: hiddenVictoryPoints,
     invariants: baseInvariants,
     privateInvariants: basePrivateInvariants,
   };

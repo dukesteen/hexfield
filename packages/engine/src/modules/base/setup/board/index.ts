@@ -1,8 +1,11 @@
 import { buildBoardGraph, hexId } from '../../../../core/geometry/index.js';
-import type { BoardGraph, EdgeId, HexCoord, HexId } from '../../../../core/geometry/index.js';
-import type { GenesisRandom } from '../../../../core/modules/types.js';
+import type { BoardGraph, HexCoord, HexId } from '../../../../core/geometry/index.js';
+import type { BoardShapeSpec, GenesisRandom } from '../../../../core/modules/types.js';
 import type { BoardHex, BoardState, HarborState } from '../../../../core/state/types.js';
 import type { MapLayout } from '../../config.js';
+import { STANDARD_BOARD, STANDARD_HEXES } from '../../board/shapes.js';
+
+export { STANDARD_HEXES };
 
 /** Board generation options resolved from the base module config. */
 export interface BoardOptions {
@@ -10,39 +13,6 @@ export interface BoardOptions {
   strictBalance: boolean;
 }
 
-const TERRAINS = [
-  'forest',
-  'forest',
-  'forest',
-  'forest',
-  'pasture',
-  'pasture',
-  'pasture',
-  'pasture',
-  'fields',
-  'fields',
-  'fields',
-  'fields',
-  'hills',
-  'hills',
-  'hills',
-  'mountains',
-  'mountains',
-  'mountains',
-  'desert',
-] as const;
-const TOKENS = [2, 3, 3, 4, 4, 5, 5, 6, 6, 8, 8, 9, 9, 10, 10, 11, 11, 12] as const;
-const HARBORS = [
-  'generic',
-  'generic',
-  'generic',
-  'generic',
-  'brick',
-  'lumber',
-  'wool',
-  'grain',
-  'ore',
-] as const;
 const TOKEN_PIPS: Readonly<Record<number, number>> = {
   2: 1,
   3: 2,
@@ -65,64 +35,49 @@ export class BoardGenerationError extends Error {
   }
 }
 
-/** The 19 axial positions of the standard radius-two island. */
-export const STANDARD_HEXES: readonly HexCoord[] = Array.from(
-  { length: 5 },
-  (_, row) => row - 2,
-).flatMap((q) =>
-  Array.from({ length: 5 }, (_, row) => row - 2)
-    .filter((r) => Math.abs(q + r) <= 2)
-    .map((r) => ({ q, r })),
-);
-const GRAPH = buildBoardGraph(STANDARD_HEXES);
-const HEX_COORDS = new Map(STANDARD_HEXES.map((hex) => [hexId(hex), hex]));
-const STANDARD_IDS = new Set<string>(GRAPH.hexIds);
-
 function required<T>(value: T | undefined): T {
   if (value === undefined) throw new BoardGenerationError('Incomplete board graph');
   return value;
 }
 
-function computeStandardHarborSlots(): EdgeId[] {
-  const coast = new Set(
-    GRAPH.edgeIds.filter(
-      (edge) => required(GRAPH.edgeHexes[required(GRAPH.edgeIndex[edge])]).length === 1,
-    ),
-  );
-  const around = new Map<string, EdgeId[]>();
-  for (const edge of coast) {
-    for (const vertex of required(GRAPH.edgeVertices[required(GRAPH.edgeIndex[edge])])) {
-      const edges = around.get(vertex) ?? [];
-      edges.push(edge);
-      around.set(vertex, edges);
-    }
-  }
-  const first = required([...coast].toSorted()[0]);
-  let previous: EdgeId | undefined;
-  let current = first;
-  const cycle: EdgeId[] = [];
-  do {
-    cycle.push(current);
-    const ends = required(GRAPH.edgeVertices[required(GRAPH.edgeIndex[current])]);
-    const candidates = ends
-      .flatMap((vertex) => around.get(vertex) ?? [])
-      .filter((edge) => edge !== current && edge !== previous)
-      .toSorted();
-    const next = required(candidates[0]);
-    previous = current;
-    current = next;
-  } while (current !== first && cycle.length <= coast.size);
-  if (cycle.length !== 30 || current !== first)
-    throw new BoardGenerationError('Invalid standard coast');
-  const offsets = [0, 3, 6, 10, 13, 16, 20, 23, 26];
-  return offsets.map((offset) => required(cycle[offset]));
+interface ShapeData {
+  graph: BoardGraph;
+  coords: ReadonlyMap<string, HexCoord>;
+  ids: ReadonlySet<string>;
+  adjacent: ReadonlyMap<string, readonly HexId[]>;
 }
 
-const HARBOR_SLOTS = computeStandardHarborSlots();
+function adjacentHexes(graph: BoardGraph, hex: HexId): HexId[] {
+  const index = required(graph.hexIndex[hex]);
+  const neighbors = new Set<HexId>();
+  for (const edge of required(graph.hexEdges[index])) {
+    for (const other of required(graph.edgeHexes[required(graph.edgeIndex[edge])])) {
+      if (other !== hex) neighbors.add(other);
+    }
+  }
+  return [...neighbors].toSorted();
+}
+
+const shapes = new WeakMap<BoardShapeSpec, ShapeData>();
+
+function shapeData(spec: BoardShapeSpec): ShapeData {
+  let data = shapes.get(spec);
+  if (!data) {
+    const graph = buildBoardGraph(spec.hexes);
+    data = {
+      graph,
+      coords: new Map(spec.hexes.map((hex) => [hexId(hex), hex])),
+      ids: new Set<string>(graph.hexIds),
+      adjacent: new Map(graph.hexIds.map((hex) => [hex, adjacentHexes(graph, hex)])),
+    };
+    shapes.set(spec, data);
+  }
+  return data;
+}
 
 /** Nine disjoint positions around the thirty-edge coast, in perimeter order. */
-export function standardHarborSlots(): EdgeId[] {
-  return [...HARBOR_SLOTS];
+export function standardHarborSlots(): string[] {
+  return [...STANDARD_BOARD.harborSlots];
 }
 
 function counts<T extends string | number>(values: readonly T[]): Map<T, number> {
@@ -141,8 +96,10 @@ function sameCounts(
   );
 }
 
-/** Check every fixed-board component before accepting external map data. */
-export function validateStandardBoard(board: BoardState): void {
+/** Check every fixed-board component against a shape before accepting external map data. */
+export function validateFixedBoard(board: BoardState, spec: BoardShapeSpec): void {
+  const { ids } = shapeData(spec);
+  const size = spec.hexes.length;
   if (
     !board ||
     !Array.isArray(board.hexes) ||
@@ -153,80 +110,73 @@ export function validateStandardBoard(board: BoardState): void {
     throw new BoardGenerationError('Malformed fixed board');
   }
   if (
-    board.hexes.length !== 19 ||
+    board.hexes.length !== size ||
     board.hexes.some(
       (hex) =>
         !hex ||
         !Number.isSafeInteger(hex.q) ||
         !Number.isSafeInteger(hex.r) ||
         hex.id !== hexId(hex) ||
-        !STANDARD_IDS.has(hex.id),
+        !ids.has(hex.id),
     ) ||
-    new Set(board.hexes.map((hex) => hex.id)).size !== 19
+    new Set(board.hexes.map((hex) => hex.id)).size !== size
   ) {
-    throw new BoardGenerationError('Fixed board must have the 19 standard hexes');
+    throw new BoardGenerationError(`Fixed board must have the ${size} ${spec.id} hexes`);
   }
   if (
     !sameCounts(
       board.hexes.map((hex) => hex.terrain),
-      TERRAINS,
+      spec.terrains,
     ) ||
     !sameCounts(
       board.hexes
         .filter((hex) => hex.terrain !== 'desert')
         .flatMap((hex) => (hex.token === null ? [] : [hex.token])),
-      TOKENS,
+      spec.tokens,
     ) ||
     board.hexes.some((hex) => (hex.terrain === 'desert') !== (hex.token === null))
   ) {
     throw new BoardGenerationError('Fixed board has incorrect terrain or tokens');
   }
-  const desert = board.hexes.find((hex) => hex.terrain === 'desert');
-  if (board.robberHex !== desert?.id || board.roads.length !== 0 || board.buildings.length !== 0) {
+  const robber = board.hexes.find((hex) => hex.id === board.robberHex);
+  if (robber?.terrain !== 'desert' || board.roads.length !== 0 || board.buildings.length !== 0) {
     throw new BoardGenerationError('Fixed board must start empty with robber on desert');
   }
-  const slots = new Set<string>(HARBOR_SLOTS);
+  const slots = new Set<string>(spec.harborSlots);
   if (
-    board.harbors.length !== 9 ||
+    board.harbors.length !== spec.harbors.length ||
     board.harbors.some((harbor) => !harbor || !slots.has(harbor.edge)) ||
-    new Set(board.harbors.map((harbor) => harbor.edge)).size !== 9 ||
+    new Set(board.harbors.map((harbor) => harbor.edge)).size !== spec.harbors.length ||
     !sameCounts(
       board.harbors.map((harbor) => harbor.kind),
-      HARBORS,
+      spec.harbors,
     )
   ) {
     throw new BoardGenerationError('Fixed board has incorrect harbor positions or kinds');
   }
 }
 
-function adjacentHexes(graph: BoardGraph, hex: HexId): HexId[] {
-  const index = required(graph.hexIndex[hex]);
-  const neighbors = new Set<HexId>();
-  for (const edge of required(graph.hexEdges[index])) {
-    for (const other of required(graph.edgeHexes[required(graph.edgeIndex[edge])])) {
-      if (other !== hex) neighbors.add(other);
-    }
-  }
-  return [...neighbors].toSorted();
+/** Check every fixed-board component before accepting external standard map data. */
+export function validateStandardBoard(board: BoardState): void {
+  validateFixedBoard(board, STANDARD_BOARD);
 }
-const ADJACENT: ReadonlyMap<string, readonly HexId[]> = new Map(
-  GRAPH.hexIds.map((hex) => [hex, adjacentHexes(GRAPH, hex)]),
-);
 
 function balancedTokens(
   rng: GenesisRandom,
+  spec: BoardShapeSpec,
   hexes: readonly BoardHex[],
   strict: boolean,
 ): number[] | null {
+  const { adjacent } = shapeData(spec);
   const positions = hexes
     .map((hex, index) => ({ hex, index }))
     .filter(({ hex }) => hex.terrain !== 'desert');
   const byId = new Map(hexes.map((hex, index) => [hex.id, index]));
   const randomOrder = rng.shuffle(positions);
   randomOrder.sort(
-    (a, b) => (ADJACENT.get(b.hex.id)?.length ?? 0) - (ADJACENT.get(a.hex.id)?.length ?? 0),
+    (a, b) => (adjacent.get(b.hex.id)?.length ?? 0) - (adjacent.get(a.hex.id)?.length ?? 0),
   );
-  const remaining = counts(TOKENS);
+  const remaining = counts(spec.tokens);
   const assigned = Array.from({ length: hexes.length }, () => 0);
   const pips = new Map<string, number>();
   let attempts = 0;
@@ -238,7 +188,7 @@ function balancedTokens(
       if (attempts >= 10_000) return false;
       if ((remaining.get(token) ?? 0) === 0) continue;
       attempts++;
-      const neighbors = ADJACENT.get(hex.id) ?? [];
+      const neighbors = adjacent.get(hex.id) ?? [];
       if (
         neighbors.some((neighbor) => {
           const value = assigned[required(byId.get(neighbor))];
@@ -251,7 +201,7 @@ function balancedTokens(
       )
         continue;
       const nextPips = (pips.get(hex.terrain) ?? 0) + required(TOKEN_PIPS[token]);
-      const cap = ['forest', 'pasture', 'fields'].includes(hex.terrain) ? 14 : 11;
+      const cap = spec.pipCaps[hex.terrain] ?? Number.MAX_SAFE_INTEGER;
       if (strict && nextPips > cap) continue;
       assigned[index] = token;
       pips.set(hex.terrain, nextPips);
@@ -267,15 +217,16 @@ function balancedTokens(
   return search(0) ? assigned : null;
 }
 
-/** Generate a base board from genesis randomness or validate a supplied fixed board. */
+/** Generate a board for a shape from genesis randomness, or validate a supplied fixed board. */
 export function generateBoard(
   rng: GenesisRandom,
   options: BoardOptions,
   providedBoard?: BoardState,
+  spec: BoardShapeSpec = STANDARD_BOARD,
 ): BoardState {
   if (options.mapLayout === 'standard-fixed') {
     if (!providedBoard) throw new BoardGenerationError('Fixed layout requires config.board');
-    validateStandardBoard(providedBoard);
+    validateFixedBoard(providedBoard, spec);
     return {
       hexes: providedBoard.hexes
         .map((hex) => ({ ...hex }))
@@ -291,16 +242,17 @@ export function generateBoard(
   if (options.mapLayout !== 'random' && options.mapLayout !== 'balanced-random') {
     throw new BoardGenerationError('Unknown map layout');
   }
+  const { graph, coords } = shapeData(spec);
   for (let retry = 0; retry < (options.mapLayout === 'random' ? 1 : 100); retry++) {
-    const terrains = rng.shuffle(TERRAINS);
-    const hexes: BoardHex[] = GRAPH.hexIds.map((id, index) => {
-      const coord = required(HEX_COORDS.get(id));
+    const terrains = rng.shuffle(spec.terrains);
+    const hexes: BoardHex[] = graph.hexIds.map((id, index) => {
+      const coord = required(coords.get(id));
       return { id, q: coord.q, r: coord.r, terrain: required(terrains[index]), token: null };
     });
     const numbers =
       options.mapLayout === 'random'
-        ? rng.shuffle(TOKENS)
-        : balancedTokens(rng, hexes, options.strictBalance);
+        ? rng.shuffle(spec.tokens)
+        : balancedTokens(rng, spec, hexes, options.strictBalance);
     if (!numbers) continue;
     let tokenIndex = 0;
     for (const hex of hexes)
@@ -308,10 +260,10 @@ export function generateBoard(
         hex.token =
           options.mapLayout === 'random'
             ? required(numbers[tokenIndex++])
-            : required(numbers[required(GRAPH.hexIndex[hex.id])]);
+            : required(numbers[required(graph.hexIndex[hex.id])]);
       }
-    const kinds = rng.shuffle(HARBORS);
-    const harbors: HarborState[] = HARBOR_SLOTS.map((edge, index) => ({
+    const kinds = rng.shuffle(spec.harbors);
+    const harbors: HarborState[] = spec.harborSlots.map((edge, index) => ({
       edge,
       kind: required(kinds[index]),
     }));

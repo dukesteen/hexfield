@@ -53,7 +53,7 @@ When you're **unsure about an implementation detail** or want your work checked,
   - longest road/route algorithms,
   - bounds operations,
   - the sequencer/election logic,
-  - the beacon, deck protocol and DLEQ proofs, Shamir escrow and the audit,
+  - the beacon, deck protocol, shuffle/DLEQ/range/OR proofs, Feldman-verified escrow and the audit,
   - WebRTC negotiation, reconnection flows, module hooks.
 - **At the end of each stage**: ask for a review of the stage's diff against its doc's acceptance criteria, before ticking them in `STATUS.md`.
 - **When stuck** on a failing test, a flaky chaos seed, or a desync you can't explain after a reasonable attempt.
@@ -92,7 +92,7 @@ Handling the answer:
 | 04  | [Simulation & rule testing](04-simulation-testing.md)                     | Legal-move generator, RandomBot, fuzzing, invariants, golden replays | 03                              |
 | 05  | [Local UI (hotseat)](05-local-ui.md)                                      | Playable local game in the browser                                   | 04                              |
 | 06  | [Protocol & event log](06-protocol-event-log.md)                          | Signed commands, hash-chained log, sequencer, in-memory network      | 04                              |
-| 07  | [Fair randomness & hidden information](07-fair-randomness-hidden-info.md) | Dice beacon, mental-poker decks, hidden hands, audit, key escrow     | 06                              |
+| 07  | [Fair randomness & hidden information](07-fair-randomness-hidden-info.md) | Dice beacon, mental-poker decks, per-move hand proofs, key escrow    | 06                              |
 | 08  | [WebRTC networking](08-webrtc-networking.md)                              | Full-mesh transport, signaling adapters, STUN/TURN                   | 06                              |
 | 09  | [Lobby & game setup](09-lobby-and-game-setup.md)                          | Invites, seats, config, genesis ceremony, P2P play end-to-end        | 05, 07, 08                      |
 | 10  | [Persistence, reconnection, migration](10-persistence-reconnection.md)    | IndexedDB, resume, sequencer failover, seat takeover                 | 09                              |

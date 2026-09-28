@@ -56,5 +56,5 @@ The plan author's knowledge of these rules is partial. **Write `docs/rules/explo
 ## Acceptance criteria
 
 - [ ] `docs/rules/explorers.md` is complete and sourced.
-- [ ] _Land Ho!_ and at least two missions are playable locally and P2P, with audited reveals.
+- [ ] _Land Ho!_ and at least two missions are playable locally and P2P, with reveals verified on the move.
 - [ ] The mid-move reveal pause/resume flow survives the sequencer failover chaos test.

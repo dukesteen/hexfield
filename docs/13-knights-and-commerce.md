@@ -106,8 +106,8 @@ The bank-shortage rules apply per card kind.
   - Warlord: activate all your knights free.
   - Wedding: each player with more VP gives you 2 cards of their choice.
 - Hidden-info implications (P2P):
-  - Master Merchant / Spy / Commercial Harbor / Wedding / Saboteur / Resource Monopoly need **private reveals or choices** from other seats, using the stage-07 patterns: a private reveal to the actor + a public commitment + the audit.
-  - Spy reveals the target's progress-card identities to the actor. Use a DLEQ-verified per-card reveal to one recipient: the owner sends `(identity, proof)` privately, the actor verifies against the public `Z` point and the owner's lock key.
+  - Master Merchant / Spy / Commercial Harbor / Wedding / Saboteur / Resource Monopoly need **private reveals or choices** from other seats, using the stage-07 patterns: a reveal sealed to the actor in the log + one-hot transfer proofs against the committed hands, verified on the move.
+  - Spy reveals the target's progress-card identities to the actor. Use a DLEQ-verified per-card reveal to one recipient: the owner seals `(identity, proof)` to the actor in the log (stage 07 §5), the actor verifies against the public `Z` point and the owner's lock key.
 
 ### Knights
 
@@ -124,6 +124,7 @@ The bank-shortage rules apply per card kind.
 ### Barbarians
 
 - The track has 7 steps `[VERIFY]`. It advances 1 per ship face on the event die.
+- **On the board**: the track is a board fixture (stage 11 A2a), two hexes long, like the physical piece. It replaces one harbor-free sea-frame hex touching the land and sticks one hex out beyond the frame. The ship sails inward toward the island. It's printed with the start, the steps and the landing space `[VERIFY the physical piece's spaces]`. The barbarian ship piece sits on the current step. Its position is `knights.barbarians.step` in module state.
 - On arrival:
   - **Barbarian strength** = number of cities + metropolises on the board (all players).
   - **Defense** = the total level of all _active_ knights.
@@ -147,7 +148,9 @@ Settlement 1, city 2, metropolis +2 (a city with a metropolis = 4 total), Longes
 - **K4 — Barbarians**: the track, attack resolution, pillage, the defender card, the knight reset.
 - **K5 — Progress cards**: three decks via the deck protocol (3 deck ids), the draw rule, the hand limit, all 27 card effects, each as its own handler file with tests. Private-reveal flows for Spy, Master Merchant, Commercial Harbor, Wedding, Resource/Trade Monopoly and Saboteur.
 - **K6 — UI & bots**:
-  - a barbarian track widget,
+  - the barbarian track fixture art (the 2-hex piece) and the ship piece, drawn in the board's fixture layer,
+  - the ship sailing to the next step on each ship face, and an attack animation on landing, both skippable and respecting reduced motion,
+  - a small HUD countdown ("Barbarians: 2 steps") that appears only when the fixture is scrolled or zoomed out of view,
   - a city-improvement board per player (3 tracks × 5 levels),
   - a commodities hand,
   - a knight layer (3 strengths × active/inactive, drawn distinctly),
@@ -165,11 +168,11 @@ Settlement 1, city 2, metropolis +2 (a city with a metropolis = 4 total), Longes
 - Barbarian ties (both sides).
 - Aqueduct triggers only on non-7 rolls with zero production.
 - A seeded simulation of 20k games (3–4p) and 10k (5–6p); invariants for commodity conservation, knight counts, and metropolis uniqueness.
-- P2P: progress-card private flows under the chaos suite; the audit validates the Spy / Master Merchant exchanges.
+- P2P: progress-card private flows under the chaos suite; per-move proofs validate the Spy / Master Merchant exchanges, and the cheater suite covers them.
 
 ## Acceptance criteria
 
 - [ ] `docs/rules/knights.md` is complete, with all `[VERIFY]` items resolved and sourced.
 - [ ] K1–K6 are done, each with passing tests.
 - [ ] The simulation and P2P suites pass; golden replays for 5 knights games.
-- [ ] A human can play a full knights game against bots on mobile, with the barbarian track and improvements clearly visible.
+- [ ] A human can play a full knights game against bots on mobile, with the barbarian track visible on the board at the default camera fit and the improvements clearly visible.

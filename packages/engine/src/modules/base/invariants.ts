@@ -1,14 +1,21 @@
+import type { HandlerContext } from '../../core/modules/index.js';
 import type { GameState, PrivateState } from '../../core/state/index.js';
 import { RESOURCES } from '../../core/types/index.js';
 import type { Seat } from '../../core/types/index.js';
 import { boardGraph } from './board/index.js';
 import { longestRoadLength } from './awards/index.js';
-import { BANK_START, PIECES_START } from './constants.js';
+import { BANK_START, DEV_CARD_COUNTS, PIECES_START } from './constants.js';
 import { baseExt } from './types.js';
 
 /** Public checks that run without seeing any owner's secret cards. */
-export function baseInvariants(state: GameState): string[] {
+export function baseInvariants(state: GameState, ctx: HandlerContext): string[] {
   const errors: string[] = [];
+  const pieceLimits = ctx.hooks.pieceLimits(state.config, PIECES_START);
+  const bankStart = ctx.hooks.bankInit(state.config, BANK_START);
+  const deckSize = Object.values(ctx.hooks.devDeck(state.config, DEV_CARD_COUNTS)).reduce(
+    (sum, count) => sum + count,
+    0,
+  );
   const graph = boardGraph(state);
   const edgeIds = new Set(state.board.roads.map((road) => road.edge));
   const vertexIds = new Set(state.board.buildings.map((building) => building.vertex));
@@ -46,25 +53,26 @@ export function baseInvariants(state: GameState): string[] {
         remaining === undefined ||
         !Number.isSafeInteger(remaining) ||
         remaining < 0 ||
-        remaining > PIECES_START[kind]
+        remaining > (pieceLimits[kind] ?? 0)
       ) {
         errors.push(`seat ${seat.seat} invalid ${kind} supply`);
       }
     }
-    if (
-      ownedRoads > PIECES_START.road ||
-      settlements > PIECES_START.settlement ||
-      cities > PIECES_START.city
-    )
+    const limits = {
+      road: pieceLimits.road ?? 0,
+      settlement: pieceLimits.settlement ?? 0,
+      city: pieceLimits.city ?? 0,
+    };
+    if (ownedRoads > limits.road || settlements > limits.settlement || cities > limits.city)
       errors.push(`seat ${seat.seat} placed too many pieces`);
-    if (ownedRoads + (seat.piecesLeft.road ?? -1) !== PIECES_START.road)
+    if (ownedRoads + (seat.piecesLeft.road ?? -1) !== limits.road)
       errors.push(`seat ${seat.seat} road supply mismatch`);
-    if (settlements + (seat.piecesLeft.settlement ?? -1) !== PIECES_START.settlement)
+    if (settlements + (seat.piecesLeft.settlement ?? -1) !== limits.settlement)
       errors.push(`seat ${seat.seat} settlement supply mismatch`);
-    if (cities + (seat.piecesLeft.city ?? -1) !== PIECES_START.city)
+    if (cities + (seat.piecesLeft.city ?? -1) !== limits.city)
       errors.push(`seat ${seat.seat} city supply mismatch`);
   }
-  const lengths = state.config.seats.map((seat) => longestRoadLength(state, seat));
+  const lengths = state.config.seats.map((seat) => longestRoadLength(state, seat, ctx));
   const roadHolder = state.awards.longestRoad;
   if (roadHolder !== null && roadHolder !== undefined && (lengths[roadHolder] ?? 0) < 5)
     errors.push('longest road holder is below threshold');
@@ -75,14 +83,14 @@ export function baseInvariants(state: GameState): string[] {
     (baseExt(state.ext.base).knightsPlayed[armyHolder] ?? 0) < 3
   )
     errors.push('largest army holder is below threshold');
-  for (const resource of RESOURCES) {
+  for (const resource of ctx.hooks.cardKinds(RESOURCES)) {
     const bank = state.bank[resource];
-    if (bank === undefined || bank < 0 || bank > BANK_START[resource])
+    if (bank === undefined || bank < 0 || bank > (bankStart[resource] ?? 0))
       errors.push(`invalid bank ${resource}`);
   }
   const allSlots = state.seats.flatMap((seat) => seat.cardSlots.map((slot) => slot.slotId));
   if (new Set(allSlots).size !== allSlots.length) errors.push('duplicate card slot');
-  if ((state.decks.dev?.remaining ?? -1) + (state.decks.dev?.drawn.length ?? 0) !== 25)
+  if ((state.decks.dev?.remaining ?? -1) + (state.decks.dev?.drawn.length ?? 0) !== deckSize)
     errors.push('development deck count mismatch');
   const playedOn = baseExt(state.ext.base).devPlayedTurn;
   if (playedOn !== null && playedOn > state.turn.number)
@@ -90,13 +98,15 @@ export function baseInvariants(state: GameState): string[] {
   return errors;
 }
 
-/** Exact local audit: bank and all private resource hands conserve the 19-card supply. */
+/** Exact local audit: bank and all private resource hands conserve the configured supply. */
 export function basePrivateInvariants(
   state: GameState,
   privates: ReadonlyMap<Seat, PrivateState>,
+  ctx: HandlerContext,
 ): string[] {
   const errors: string[] = [];
-  for (const resource of RESOURCES) {
+  const bankStart = ctx.hooks.bankInit(state.config, BANK_START);
+  for (const resource of ctx.hooks.cardKinds(RESOURCES)) {
     let total = state.bank[resource] ?? 0;
     for (const seat of state.config.seats) {
       const privateState = privates.get(seat);
@@ -106,10 +116,9 @@ export function basePrivateInvariants(
       }
       total += privateState.hand[resource] ?? 0;
     }
-    if (total !== BANK_START[resource])
-      errors.push(
-        `${resource} bank and private hands total ${total}, expected ${BANK_START[resource]}`,
-      );
+    const expected = bankStart[resource] ?? 0;
+    if (total !== expected)
+      errors.push(`${resource} bank and private hands total ${total}, expected ${expected}`);
   }
   return errors;
 }

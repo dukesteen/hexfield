@@ -1,5 +1,18 @@
 export { createRegistry } from './registry.js';
 export type {
+  Blocker,
+  BoardShapeSpec,
+  Cost,
+  DiceSpec,
+  FixtureDeclaration,
+  FixtureSlot,
+  HookName,
+  ModuleHooks,
+  Production,
+  RenderHint,
+  RouteGraph,
+  SeatRange,
+  TimeoutRequest,
   CommandHandler,
   GameModule,
   GenesisRandom,

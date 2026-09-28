@@ -1,6 +1,7 @@
 export { cloneJson } from './json.js';
 export { createGame, createPrivateState, ENGINE_VERSION } from './createGame.js';
 export type {
+  BoardFixture,
   BoardHex,
   BoardState,
   BuildingPiece,

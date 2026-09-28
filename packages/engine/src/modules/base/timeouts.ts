@@ -1,11 +1,12 @@
-import type { SystemInputHandler } from '../../core/modules/index.js';
+import type { HandlerContext, SystemInputHandler } from '../../core/modules/index.js';
 import type { GameState } from '../../core/state/index.js';
 import { RESOURCES, failure, success } from '../../core/types/index.js';
 import type { ResourceCounts, Result, Seat } from '../../core/types/index.js';
+import type { CommandInput } from '../../core/pipeline/index.js';
 import { verticesForHex } from './board/index.js';
 import { emptyResources } from './constants.js';
-import { legalRobberHexes, moveRobber, steal, stealVictims } from './robber.js';
-import { ownSeat, top, updateBase } from './shared.js';
+import { moveRobber, robberHexes, steal, stealVictims } from './robber.js';
+import { ownSeat, top, topFrame, updateBase } from './shared.js';
 import { discard, endTurn, rollDice } from './phases/turn.js';
 import { skipRoadBuilding } from './devcards.js';
 import { baseExt } from './types.js';
@@ -47,8 +48,8 @@ function deterministicDiscard(state: GameState, seat: Seat): Result<ResourceCoun
     : failure('private-discard-required', 'Public hand cannot determine a discard');
 }
 
-function automaticRobberHex(state: GameState): string | undefined {
-  const candidates = legalRobberHexes(state);
+function automaticRobberHex(state: GameState, ctx: HandlerContext): string | undefined {
+  const candidates = robberHexes(state, ctx);
   const ownVertices = new Set(
     state.board.buildings
       .filter((building) => building.seat === state.turn.activeSeat)
@@ -61,11 +62,32 @@ function automaticRobberHex(state: GameState): string | undefined {
   );
 }
 
+/** A module-owned phase resolves its timeout through the timeoutAction hook. */
+function moduleTimeout(
+  state: GameState,
+  seat: Seat,
+  ctx: HandlerContext,
+): Result<CommandInput> | null {
+  const phase = topFrame(state);
+  if (!phase || phase.module === 'base') return null;
+  const command = ctx.hooks.timeoutAction(state, { seat, phase: phase.id }, null);
+  return command
+    ? success({ kind: 'command', seat, command })
+    : failure('unsupported-timeout', 'No timeout action is defined for this phase');
+}
+
 export const timeout: SystemInputHandler = {
   validate: (state, input, ctx) => {
     const seat = timeoutSeat(state, input.seat);
     if (seat === undefined)
       return failure('invalid-timeout-seat', 'Timeout seat is not in the game');
+    const delegated = moduleTimeout(state, seat, ctx);
+    if (delegated) {
+      if (!delegated.ok) return delegated;
+      if (!ctx.dispatch) return failure('unsupported-timeout', 'No command dispatcher');
+      const applied = ctx.dispatch(state, delegated.value);
+      return applied.ok ? success(undefined) : applied;
+    }
     switch (top(state).id) {
       case 'preRoll':
       case 'moveRobber':
@@ -94,11 +116,18 @@ export const timeout: SystemInputHandler = {
   apply: (state, input, ctx) => {
     const seat = timeoutSeat(state, input.seat);
     if (seat === undefined) throw new Error('Validated timeout seat missing');
+    const delegated = moduleTimeout(state, seat, ctx);
+    if (delegated) {
+      if (!delegated.ok || !ctx.dispatch) throw new Error('Validated module timeout missing');
+      const applied = ctx.dispatch(state, delegated.value);
+      if (!applied.ok) throw new Error(`Module timeout failed: ${applied.error.code}`);
+      return applied.value;
+    }
     const phase = top(state).id;
     if (phase === 'preRoll')
       return rollDice.apply(state, { kind: 'command', seat, command: { type: 'ROLL_DICE' } }, ctx);
     if (phase === 'moveRobber') {
-      const hex = automaticRobberHex(state);
+      const hex = automaticRobberHex(state, ctx);
       if (!hex) throw new Error('No legal robber hex');
       return moveRobber.apply(
         state,
@@ -147,9 +176,14 @@ export const timeout: SystemInputHandler = {
     }
     throw new Error('Unsupported validated timeout');
   },
-  applyPrivate: (priv, before, input, _data, ctx) => {
+  applyPrivate: (priv, before, input, data, ctx) => {
     const seat = timeoutSeat(before, input.seat);
-    if (seat === undefined || priv.seat !== seat || top(before).id !== 'discard')
+    const delegated = seat === undefined ? null : moduleTimeout(before, seat, ctx);
+    if (delegated)
+      return delegated.ok && ctx.dispatchPrivate
+        ? ctx.dispatchPrivate(priv, before, delegated.value, data)
+        : success(priv);
+    if (seat === undefined || priv.seat !== seat || topFrame(before)?.id !== 'discard')
       return success(priv);
     const counts = deterministicDiscard(before, seat);
     return counts.ok

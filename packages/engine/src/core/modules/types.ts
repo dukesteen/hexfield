@@ -1,7 +1,9 @@
 import type { GameEvent } from '../events/index.js';
 import type { EngineEffect } from '../effects/index.js';
+import type { HexCoord } from '../geometry/index.js';
 import type {
   CommandInput,
+  CommandShape,
   Input,
   LegalCommandSet,
   Pending,
@@ -28,6 +30,7 @@ export interface GenesisRandom {
 export interface SetupCtx {
   config: GameConfig;
   rng: GenesisRandom;
+  hooks: HookPipeline;
 }
 
 export interface OptionSpec {
@@ -44,27 +47,165 @@ export type Production = Record<string, Record<string, number>>;
 export type Cost = Record<string, number>;
 export type PlacementKind = 'settlement' | 'road' | 'city';
 
+/** Inclusive seat-count range allowed by the selected modules. */
+export interface SeatRange {
+  min: number;
+  max: number;
+}
+
+/** A fixed place for a board fixture: a harbor-free sea-frame anchor and its outward neighbour. */
+export interface FixtureSlot {
+  id: string;
+  anchor: HexCoord;
+  outer: HexCoord;
+}
+
+/**
+ * One board shape: land positions plus the tile, token and harbor bags that fill it.
+ * Harbor slots are coastal edges in perimeter order; fixture slots never share a harbor's frame hex.
+ */
+export interface BoardShapeSpec {
+  id: string;
+  hexes: readonly HexCoord[];
+  terrains: readonly string[];
+  tokens: readonly number[];
+  harbors: readonly string[];
+  harborSlots: readonly string[];
+  fixtureSlots: readonly FixtureSlot[];
+  /** Strict-balance cap on the summed token pips of each terrain. */
+  pipCaps: Readonly<Record<string, number>>;
+}
+
+/** A module's request for a fixture. Genesis assigns declarations to slots in order. */
+export interface FixtureDeclaration {
+  id: string;
+  module: ModuleId;
+  size: 2;
+  art: string;
+}
+
+/** The dice a roll requests. Extra dice are module-defined (for example an event die). */
+export interface DiceSpec {
+  count: number;
+  sides: number;
+  extra: readonly { id: string; faces: readonly string[] }[];
+}
+
+/** A movable blocker such as the robber or a pirate, with the hexes it may move to. */
+export interface Blocker {
+  id: string;
+  hex: string | null;
+  legalHexes: readonly string[];
+}
+
+/** Undirected route edges and the vertices that interrupt a route for longest-route awards. */
+export interface RouteGraph {
+  edges: readonly { id: string; vertices: readonly [string, string] }[];
+  blocked: readonly string[];
+}
+
+/** The public request that a TIMEOUT answers. */
+export interface TimeoutRequest {
+  seat: Seat;
+  phase: string;
+}
+
+/** UI-only description of module overlays and fixture state. Never used by rules. */
+export interface RenderHint {
+  module: ModuleId;
+  kind: string;
+  [key: string]: unknown;
+}
+
+/**
+ * The final hook catalogue. Every hook is composed in dependency order, then module id order.
+ * Hooks return new values and never mutate their arguments. Accumulator hooks receive the
+ * previous module's result as their last argument; state hooks receive and return state.
+ * Call sites are listed in docs/rules/hooks.md.
+ */
 export interface Hooks {
-  afterDiceRolled(state: GameState, dice: readonly [number, number]): GameState;
-  computeProduction(state: GameState, roll: number, acc: Production): Production;
-  placementRules: {
+  seatRange(config: GameConfig, acc: SeatRange): SeatRange;
+  boardSpec(config: GameConfig, acc: BoardShapeSpec | null): BoardShapeSpec | null;
+  boardFixtures(
+    config: GameConfig,
+    board: BoardState,
+    acc: readonly FixtureDeclaration[],
+  ): readonly FixtureDeclaration[];
+  cardKinds(acc: readonly string[]): readonly string[];
+  bankInit(config: GameConfig, acc: Readonly<Record<string, number>>): Record<string, number>;
+  pieceLimits(config: GameConfig, acc: Readonly<Record<string, number>>): Record<string, number>;
+  devDeck(config: GameConfig, acc: Readonly<Record<string, number>>): Record<string, number>;
+  costs(config: GameConfig, acc: Readonly<Record<string, Cost>>): Record<string, Cost>;
+  costOf(state: GameState, buildType: string, cost: Cost): Cost;
+  diceSpec(state: GameState, acc: DiceSpec): DiceSpec;
+  onDiceResult(state: GameState, dice: readonly [number, number]): GameState;
+  production(state: GameState, roll: number, acc: Production): Production;
+  onNoProduction(state: GameState, seat: Seat): GameState;
+  placement: {
     settlement(state: GameState, seat: Seat, loc: string, verdict: boolean): boolean;
     road(state: GameState, seat: Seat, loc: string, verdict: boolean): boolean;
     city(state: GameState, seat: Seat, loc: string, verdict: boolean): boolean;
   };
-  costOf(state: GameState, buildType: string, cost: Cost): Cost;
+  connectivity(state: GameState, seat: Seat, acc: readonly string[]): readonly string[];
+  routeGraph(state: GameState, seat: Seat, acc: RouteGraph): RouteGraph;
+  robberLike(state: GameState, acc: readonly Blocker[]): readonly Blocker[];
+  stealTargets(
+    state: GameState,
+    seat: Seat,
+    blocker: string,
+    hex: string,
+    targets: readonly Seat[],
+  ): readonly Seat[];
+  handLimit(state: GameState, seat: Seat, limit: number): number;
   afterBuild(state: GameState, seat: Seat, buildType: string, loc: string): GameState;
   onTurnStart(state: GameState, seat: Seat): GameState;
   onTurnEnd(state: GameState, seat: Seat): GameState;
-  robberTargets(state: GameState, seat: Seat, hex: string, targets: Seat[]): Seat[];
-  handLimit(state: GameState, seat: Seat, limit: number): number;
+  turnFlow(state: GameState, acc: readonly PhaseFrame[]): readonly PhaseFrame[];
+  pending(state: GameState, acc: readonly Pending[]): readonly Pending[];
+  victoryPoints(
+    state: GameState,
+    seat: Seat,
+    priv: PrivateState | undefined,
+    acc: readonly VpContribution[],
+  ): readonly VpContribution[];
+  vpTarget(config: GameConfig, acc: number): number;
+  legalCommands(
+    state: GameState,
+    seat: Seat,
+    priv: PrivateState | undefined,
+    acc: LegalCommandSet,
+  ): LegalCommandSet;
+  timeoutAction(
+    state: GameState,
+    request: TimeoutRequest,
+    acc: CommandShape | null,
+  ): CommandShape | null;
+  renderHints(state: GameState, acc: readonly RenderHint[]): readonly RenderHint[];
 }
+
+export type HookName = keyof Hooks;
 
 /** Hooks execute in dependency order, then module id order. */
 export interface HookPipeline extends Hooks {}
 
+export type ModuleHooks = Partial<Omit<Hooks, 'placement'>> & {
+  placement?: Partial<Hooks['placement']>;
+};
+
 export interface HandlerContext {
   hooks: HookPipeline;
+  /**
+   * Validate and apply a registered command outside the pending check. Used by automatic
+   * actions such as timeouts that resolve a module-owned phase.
+   */
+  dispatch?(state: GameState, input: CommandInput): Result<Transition>;
+  /** The private half of dispatch, for owners affected by an automatically applied command. */
+  dispatchPrivate?(
+    priv: PrivateState,
+    before: GameState,
+    input: CommandInput,
+    data: PrivateInputData | undefined,
+  ): Result<PrivateState>;
 }
 
 export interface Transition {
@@ -138,17 +279,22 @@ export interface GameModule<Ext = unknown, PExt = unknown> {
   initPrivate?(seat: Seat): PExt;
   initialPhase?(ctx: SetupCtx): PhaseFrame | null;
   /** Omniscient local driver input, such as a hidden victory claim or reveal. */
-  autoInput?(state: GameState, privates: ReadonlyMap<Seat, PrivateState>): Input | null;
+  autoInput?(
+    state: GameState,
+    privates: ReadonlyMap<Seat, PrivateState>,
+    ctx: HandlerContext,
+  ): Input | null;
   commands: Record<string, CommandHandler>;
   systemInputs: Record<string, SystemInputHandler>;
   phases: Record<string, PhaseHandler>;
-  hooks?: Partial<Omit<Hooks, 'placementRules'>> & {
-    placementRules?: Partial<Hooks['placementRules']>;
-  };
-  victoryPoints?(state: GameState, seat: Seat, priv?: PrivateState): VpContribution[];
-  invariants?(state: GameState): string[];
+  hooks?: ModuleHooks;
+  invariants?(state: GameState, ctx: HandlerContext): string[];
   /** Omniscient checks that require all private states; never used by public replay. */
-  privateInvariants?(state: GameState, privates: ReadonlyMap<Seat, PrivateState>): string[];
+  privateInvariants?(
+    state: GameState,
+    privates: ReadonlyMap<Seat, PrivateState>,
+    ctx: HandlerContext,
+  ): string[];
 }
 
 export interface RegisteredHandler<T> {

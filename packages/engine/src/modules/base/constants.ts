@@ -9,6 +9,13 @@ export const ROAD_COST = Object.freeze({ brick: 1, lumber: 1, wool: 0, grain: 0,
 export const SETTLEMENT_COST = Object.freeze({ brick: 1, lumber: 1, wool: 1, grain: 1, ore: 0 });
 export const CITY_COST = Object.freeze({ brick: 0, lumber: 0, wool: 0, grain: 2, ore: 3 });
 export const DEV_COST = Object.freeze({ brick: 0, lumber: 0, wool: 1, grain: 1, ore: 1 });
+/** Base build costs keyed by the build type passed to the costs and costOf hooks. */
+export const BASE_COSTS: Readonly<Record<string, ResourceCounts>> = Object.freeze({
+  road: ROAD_COST,
+  settlement: SETTLEMENT_COST,
+  city: CITY_COST,
+  devCard: DEV_COST,
+});
 export const DEV_CARD_COUNTS = Object.freeze({
   knight: 14,
   victoryPoint: 5,
@@ -18,17 +25,21 @@ export const DEV_CARD_COUNTS = Object.freeze({
 });
 export type DevCard = keyof typeof DEV_CARD_COUNTS;
 
-/** Canonical physical development cards; identities, types and order are game rules. */
-export const BASE_DEV_CARD_CATALOGUE: readonly Readonly<{
-  identity: string;
-  card: string;
-}>[] = Object.freeze(
-  Object.entries(DEV_CARD_COUNTS).flatMap(([card, count]) =>
-    Array.from({ length: count }, (_, index) =>
-      Object.freeze({ identity: `${card}#${index + 1}`, card }),
+/** Physical cards for a deck composition; identities, types and order are game rules. */
+export function devCardCatalogue(
+  counts: Readonly<Record<string, number>>,
+): readonly Readonly<{ identity: string; card: string }>[] {
+  return Object.freeze(
+    Object.entries(counts).flatMap(([card, count]) =>
+      Array.from({ length: count }, (_, index) =>
+        Object.freeze({ identity: `${card}#${index + 1}`, card }),
+      ),
     ),
-  ),
-);
+  );
+}
+
+/** Canonical physical development cards; identities, types and order are game rules. */
+export const BASE_DEV_CARD_CATALOGUE = devCardCatalogue(DEV_CARD_COUNTS);
 
 export const TERRAIN_RESOURCE: Readonly<Record<string, Resource | null>> = Object.freeze({
   hills: 'brick',

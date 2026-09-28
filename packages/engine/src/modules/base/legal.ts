@@ -1,19 +1,23 @@
 import type { HandlerContext } from '../../core/modules/index.js';
 import type { LegalCommandSet } from '../../core/pipeline/index.js';
 import type { GameState, PrivateState } from '../../core/state/index.js';
-import type { Seat } from '../../core/types/index.js';
+import type { ResourceCounts, Seat } from '../../core/types/index.js';
 import { RESOURCES } from '../../core/types/index.js';
-import { CITY_COST, DEV_COST, ROAD_COST, SETTLEMENT_COST } from './constants.js';
 import { legalCityVertices, legalRoadEdges, legalSettlementVertices } from './placement/index.js';
-import { affordable, buildCost, ownSeat, top } from './shared.js';
+import { affordable, buildCost, inTurnFlow, ownSeat, top } from './shared.js';
 import { baseExt, baseOptions } from './types.js';
 import { automaticVictoryClaim } from './victory.js';
 
-export function claimCommands(state: GameState, seat: Seat, priv?: PrivateState): LegalCommandSet {
-  if (seat !== state.turn.activeSeat) return { commands: [], templates: [] };
+export function claimCommands(
+  state: GameState,
+  seat: Seat,
+  priv: PrivateState | undefined,
+  ctx: HandlerContext,
+): LegalCommandSet {
+  if (seat !== state.turn.activeSeat || inTurnFlow(state)) return { commands: [], templates: [] };
   if (!priv)
     return { commands: [], templates: [{ type: 'CLAIM_VICTORY', slotIds: 'owned VP slots' }] };
-  const claim = automaticVictoryClaim(state, new Map([[seat, priv]]));
+  const claim = automaticVictoryClaim(state, new Map([[seat, priv]]), ctx);
   return claim ? { commands: [claim.command], templates: [] } : { commands: [], templates: [] };
 }
 
@@ -48,21 +52,17 @@ function canPay(
   state: GameState,
   seat: Seat,
   type: string,
-  cost: Parameters<typeof buildCost>[2],
   ctx: HandlerContext,
   priv?: PrivateState,
 ): boolean {
-  const adjusted = buildCost(state, type, cost, ctx);
+  const adjusted = buildCost(state, type, ctx);
   if (!adjusted.ok) return false;
   if (priv)
     return RESOURCES.every((resource) => (priv.hand[resource] ?? 0) >= adjusted.value[resource]);
   return affordable(state, seat, adjusted.value).ok;
 }
 
-function privateCanPay(
-  priv: PrivateState | undefined,
-  cost: Parameters<typeof buildCost>[2],
-): boolean {
+function privateCanPay(priv: PrivateState | undefined, cost: ResourceCounts): boolean {
   return !priv || RESOURCES.every((resource) => (priv.hand[resource] ?? 0) >= cost[resource]);
 }
 
@@ -71,14 +71,52 @@ export function preRollLegal(
   state: GameState,
   seat: Seat,
   priv: PrivateState | undefined,
+  ctx: HandlerContext,
 ): LegalCommandSet {
   if (seat !== state.turn.activeSeat) return { commands: [], templates: [] };
   const cards = playableDev(state, seat, priv);
-  const claim = claimCommands(state, seat, priv);
+  const claim = claimCommands(state, seat, priv, ctx);
   return {
     commands: [{ type: 'ROLL_DICE' }, ...cards.commands, ...claim.commands],
     templates: [...cards.templates, ...claim.templates],
   };
+}
+
+/** Affordable, legal road, settlement and city placements plus a development-card purchase. */
+export function buildCommands(
+  state: GameState,
+  seat: Seat,
+  priv: PrivateState | undefined,
+  ctx: HandlerContext,
+): LegalCommandSet['commands'] {
+  const commands: LegalCommandSet['commands'] = [];
+  if ((ownSeat(state, seat).piecesLeft.road ?? 0) > 0 && canPay(state, seat, 'road', ctx, priv)) {
+    commands.push(
+      ...legalRoadEdges(state, seat, {}, ctx)
+        .filter((edge) => ctx.hooks.placement.road(state, seat, edge, true))
+        .map((edge) => ({ type: 'BUILD_ROAD', edge })),
+    );
+  }
+  if (
+    (ownSeat(state, seat).piecesLeft.settlement ?? 0) > 0 &&
+    canPay(state, seat, 'settlement', ctx, priv)
+  ) {
+    commands.push(
+      ...legalSettlementVertices(state, seat, {}, ctx)
+        .filter((vertex) => ctx.hooks.placement.settlement(state, seat, vertex, true))
+        .map((vertex) => ({ type: 'BUILD_SETTLEMENT', vertex })),
+    );
+  }
+  if ((ownSeat(state, seat).piecesLeft.city ?? 0) > 0 && canPay(state, seat, 'city', ctx, priv)) {
+    commands.push(
+      ...legalCityVertices(state, seat)
+        .filter((vertex) => ctx.hooks.placement.city(state, seat, vertex, true))
+        .map((vertex) => ({ type: 'BUILD_CITY', vertex })),
+    );
+  }
+  if ((state.decks.dev?.remaining ?? 0) > 0 && canPay(state, seat, 'devCard', ctx, priv))
+    commands.push({ type: 'BUY_DEV_CARD' });
+  return commands;
 }
 
 /** Enumerate discrete builds; keep unbounded resource/trade selections as templates. */
@@ -121,44 +159,13 @@ export function mainLegal(
   const templates: LegalCommandSet['templates'] = [
     { type: 'MARITIME_TRADE', give: 'rate multiples', get: 'resources' },
   ];
-  const claim = claimCommands(state, seat, priv);
+  const claim = claimCommands(state, seat, priv, ctx);
   commands.push(...claim.commands);
   templates.push(...claim.templates);
   const cards = playableDev(state, seat, priv);
   commands.push(...cards.commands);
   templates.push(...cards.templates);
-  if (
-    (ownSeat(state, seat).piecesLeft.road ?? 0) > 0 &&
-    canPay(state, seat, 'road', ROAD_COST, ctx, priv)
-  ) {
-    commands.push(
-      ...legalRoadEdges(state, seat)
-        .filter((edge) => ctx.hooks.placementRules.road(state, seat, edge, true))
-        .map((edge) => ({ type: 'BUILD_ROAD', edge })),
-    );
-  }
-  if (
-    (ownSeat(state, seat).piecesLeft.settlement ?? 0) > 0 &&
-    canPay(state, seat, 'settlement', SETTLEMENT_COST, ctx, priv)
-  ) {
-    commands.push(
-      ...legalSettlementVertices(state, seat)
-        .filter((vertex) => ctx.hooks.placementRules.settlement(state, seat, vertex, true))
-        .map((vertex) => ({ type: 'BUILD_SETTLEMENT', vertex })),
-    );
-  }
-  if (
-    (ownSeat(state, seat).piecesLeft.city ?? 0) > 0 &&
-    canPay(state, seat, 'city', CITY_COST, ctx, priv)
-  ) {
-    commands.push(
-      ...legalCityVertices(state, seat)
-        .filter((vertex) => ctx.hooks.placementRules.city(state, seat, vertex, true))
-        .map((vertex) => ({ type: 'BUILD_CITY', vertex })),
-    );
-  }
-  if ((state.decks.dev?.remaining ?? 0) > 0 && canPay(state, seat, 'devCard', DEV_COST, ctx, priv))
-    commands.push({ type: 'BUY_DEV_CARD' });
+  commands.push(...buildCommands(state, seat, priv, ctx));
   if (options.playerTrades) {
     templates.push({ type: 'OFFER_TRADE', give: 'resources', want: 'resources', to: 'seats' });
     for (const offer of baseExt(state.ext.base).offers) {
@@ -173,7 +180,12 @@ export function mainLegal(
   return { commands, templates };
 }
 
-export function discardLegal(state: GameState, seat: Seat, priv?: PrivateState): LegalCommandSet {
+export function discardLegal(
+  state: GameState,
+  seat: Seat,
+  priv: PrivateState | undefined,
+  ctx: HandlerContext,
+): LegalCommandSet {
   const phase = top(state);
   const data = phase.data;
   const remaining =
@@ -183,7 +195,7 @@ export function discardLegal(state: GameState, seat: Seat, priv?: PrivateState):
     Array.isArray(data.remaining)
       ? data.remaining
       : [];
-  const claim = claimCommands(state, seat, priv);
+  const claim = claimCommands(state, seat, priv, ctx);
   if (!remaining.includes(seat)) return claim;
   return {
     commands: claim.commands,

@@ -1,10 +1,12 @@
 import type {
   CommandHandler,
+  DiceSpec,
   HandlerContext,
   PhaseHandler,
   SystemInputHandler,
+  Transition,
 } from '../../../core/modules/index.js';
-import type { SystemInput } from '../../../core/pipeline/index.js';
+import type { RandomRequest, SystemInput } from '../../../core/pipeline/index.js';
 import type { GameEvent } from '../../../core/events/index.js';
 import type { GameState, PrivateState } from '../../../core/state/index.js';
 import { failure, success } from '../../../core/types/index.js';
@@ -78,7 +80,7 @@ function diceForIndex(index: number): readonly [number, number] {
 
 function preparedDiceState(state: GameState, input: SystemInput, ctx: HandlerContext): GameState {
   if (!validDice(input.dice)) throw new Error('Validated dice missing');
-  let next = ctx.hooks.afterDiceRolled(state, input.dice);
+  let next = ctx.hooks.onDiceResult(state, input.dice);
   if (baseOptions(next.config.options.base).diceMode === 'balanced') {
     const index = input.index;
     if (typeof index !== 'number') throw new Error('Validated index missing');
@@ -95,21 +97,32 @@ export const preRollPhase: PhaseHandler = {
     withClaim(state, [
       playerPending(state, state.turn.activeSeat, ['ROLL_DICE', 'PLAY_DEV_CARD'], 'preRoll'),
     ]),
-  legalCommands: (state, _phase, seat, priv) => preRollLegal(state, seat, priv),
+  legalCommands: (state, _phase, seat, priv, ctx) => preRollLegal(state, seat, priv, ctx),
 };
 
+/** The standard pair of six-sided dice; modules add extra dice through the diceSpec hook. */
+export const BASE_DICE: DiceSpec = Object.freeze({ count: 2, sides: 6, extra: [] });
+
+function diceRequest(state: GameState, ctx: HandlerContext): RandomRequest {
+  if (baseOptions(state.config.options.base).diceMode === 'balanced')
+    return { type: 'dice', mode: 'balanced', remaining: baseExt(state.ext.base).diceDeck.length };
+  const spec = ctx.hooks.diceSpec(state, BASE_DICE);
+  return {
+    type: 'dice',
+    mode: 'random',
+    sides: spec.sides,
+    count: spec.count,
+    ...(spec.extra.length
+      ? { extra: spec.extra.map((die) => ({ ...die, faces: [...die.faces] })) }
+      : {}),
+  };
+}
+
 export const dicePhase: PhaseHandler = {
-  legalCommands: (state, _frame, seat, priv) => claimCommands(state, seat, priv),
-  pending: (state) =>
+  legalCommands: (state, _frame, seat, priv, ctx) => claimCommands(state, seat, priv, ctx),
+  pending: (state, _frame, ctx) =>
     withClaim(state, [
-      {
-        kind: 'random',
-        request:
-          baseOptions(state.config.options.base).diceMode === 'balanced'
-            ? { type: 'dice', mode: 'balanced', remaining: baseExt(state.ext.base).diceDeck.length }
-            : { type: 'dice', mode: 'random', sides: 6, count: 2 },
-        systemType: 'DICE_RESULT',
-      },
+      { kind: 'random', request: diceRequest(state, ctx), systemType: 'DICE_RESULT' },
     ]),
 };
 
@@ -134,7 +147,7 @@ export const discardPhase: PhaseHandler = {
         playerPending(state, seat, ['DISCARD'], 'discard'),
       ),
     ),
-  legalCommands: (state, _phase, seat, priv) => discardLegal(state, seat, priv),
+  legalCommands: (state, _phase, seat, priv, ctx) => discardLegal(state, seat, priv, ctx),
 };
 
 export const rollDice: CommandHandler = {
@@ -181,6 +194,8 @@ export const diceResult: SystemInputHandler = {
       next = production.state;
       effects = production.effects;
       productionEvent = { type: 'resourcesProduced', bySeat: production.bySeat };
+      for (const seat of next.config.seats)
+        if (!Object.hasOwn(production.bySeat, seat)) next = ctx.hooks.onNoProduction(next, seat);
       next = replaceTop(next, frame('main'));
     } else {
       const limit = baseOptions(next.config.options.base).discardLimit;
@@ -255,16 +270,43 @@ export const discard: CommandHandler = {
   },
 };
 
+/** Start the next seat's turn from a base turn-end marker or the ending main phase. */
+export function startNextTurn(state: GameState, ctx: HandlerContext): Transition {
+  const upcoming = nextSeat(state);
+  let next = replaceTop(state, frame('preRoll'));
+  next = { ...next, turn: { ...next.turn, activeSeat: upcoming, number: state.turn.number + 1 } };
+  next = ctx.hooks.onTurnStart(next, upcoming);
+  return { state: next, events: [{ type: 'turnStarted', seat: upcoming }], effects: [] };
+}
+
+/**
+ * Leave a module-inserted turn-flow frame. When only the base turn-end marker remains,
+ * the next seat's turn begins in the same input.
+ */
+export function finishTurnFlowFrame(state: GameState, ctx: HandlerContext): Transition {
+  const next = { ...state, turn: { ...state.turn, phase: state.turn.phase.slice(0, -1) } };
+  const marker = next.turn.phase.at(-1);
+  if (marker?.module === 'base' && marker.id === 'turnEnd') return startNextTurn(next, ctx);
+  return { state: next, events: [], effects: [] };
+}
+
 export const endTurn: CommandHandler = {
   validate: () => success(undefined),
   apply: (state, _input, ctx) => {
     const oldSeat = state.turn.activeSeat;
-    const upcoming = nextSeat(state);
     let next = ctx.hooks.onTurnEnd(state, oldSeat);
     next = updateBase(next, (old) => ({ ...old, offers: [] }));
-    next = replaceTop(next, frame('preRoll'));
-    next = { ...next, turn: { ...next.turn, activeSeat: upcoming, number: state.turn.number + 1 } };
-    next = ctx.hooks.onTurnStart(next, upcoming);
-    return { state: next, events: [{ type: 'turnStarted', seat: upcoming }], effects: [] };
+    const flow = ctx.hooks.turnFlow(next, []);
+    if (flow.length === 0) return startNextTurn(next, ctx);
+    next = replaceTop(next, frame('turnEnd'));
+    next = { ...next, turn: { ...next.turn, phase: [...next.turn.phase, ...flow.toReversed()] } };
+    return { state: next, events: [{ type: 'turnFlowStarted', seat: oldSeat }], effects: [] };
+  },
+};
+
+/** A marker below module turn-flow frames. It never reaches the top of the stack. */
+export const turnEndPhase: PhaseHandler = {
+  pending: () => {
+    throw new Error('The turn-end marker cannot be the active phase');
   },
 };

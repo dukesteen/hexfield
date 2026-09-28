@@ -115,7 +115,7 @@ Each scenario has an `about` text for the lobby, written originally.
 
 ## Acceptance criteria
 
-- [ ] All scenarios are playable locally and P2P; the audit covers fog draws.
+- [ ] All scenarios are playable locally and P2P; fog draws are verified on the move.
 - [ ] 20k simulated games per scenario pass the invariants (new invariants: ships ≤ 15, ships only on sea/coastal edges, pirate only at sea, robber only on land).
 - [ ] The trade-route fixtures pass, including the transition rules.
 - [ ] Fog contents are provably not derivable from genesis (a test: two games with the same genesis seed but different deck secrets reveal different fog tiles).

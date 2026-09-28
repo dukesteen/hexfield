@@ -143,7 +143,7 @@ describe('base accounting effects', () => {
         hooks: {
           costOf: (_state, buildType, cost) =>
             buildType === 'road' ? { ...cost, brick: 2 } : cost,
-          computeProduction: (_state, _roll, production) => ({
+          production: (_state, _roll, production) => ({
             ...production,
             '0': { ...production['0'], brick: 3 },
           }),
@@ -513,7 +513,7 @@ describe('base accounting effects', () => {
       {
         ...base,
         hooks: {
-          computeProduction: (_state, _roll, production) => ({
+          production: (_state, _roll, production) => ({
             ...production,
             '0': { ...production['0'], brick: 1 },
             '1': { ...production['1'], brick: 1 },

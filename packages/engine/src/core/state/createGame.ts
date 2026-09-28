@@ -2,6 +2,8 @@ import { exactResourceBounds, zeroCounts } from '../resources/index.js';
 import { createRng } from '../rng/index.js';
 import { RESOURCES } from '../types/index.js';
 import type { ResourceCounts, Seat } from '../types/index.js';
+import { HEX_DIRECTIONS } from '../geometry/index.js';
+import type { HexCoord } from '../geometry/index.js';
 import type { ModuleRegistry, OptionSpec, SetupCtx } from '../modules/types.js';
 import { cloneJson } from './json.js';
 import type {
@@ -22,6 +24,10 @@ function emptyBoard(): BoardState {
 function checkConfig(config: GameConfig, registry: ModuleRegistry): void {
   if (config.seats.length < 2 || config.seats.length > 6) {
     throw new Error('Game requires two to six seats');
+  }
+  const range = registry.hooks.seatRange(config, { min: 2, max: 6 });
+  if (config.seats.length < range.min || config.seats.length > range.max) {
+    throw new Error(`Selected modules require ${range.min} to ${range.max} seats`);
   }
   for (let index = 0; index < config.seats.length; index++) {
     if (config.seats[index] !== index) throw new Error('Seats must be ordered from zero');
@@ -110,6 +116,56 @@ function initialSeatStates(seats: readonly Seat[]): SeatState[] {
   });
 }
 
+/** A board has fewer fixture slots than the selected modules declare fixtures. */
+export class FixtureSlotError extends Error {
+  readonly code = 'NO_FIXTURE_SLOT';
+  constructor(message: string) {
+    super(message);
+    this.name = 'FixtureSlotError';
+  }
+}
+
+function directionIndex(from: HexCoord, to: HexCoord): number {
+  return HEX_DIRECTIONS.findIndex(
+    (direction) => from.q + direction.q === to.q && from.r + direction.r === to.r,
+  );
+}
+
+/** Assign declared fixtures to the board shape's fixed slots, in declaration order. */
+function placeFixtures(
+  config: GameConfig,
+  board: BoardState,
+  registry: ModuleRegistry,
+): BoardState {
+  const declared = registry.hooks.boardFixtures(config, board, []);
+  if (declared.length === 0) return board;
+  const slots = registry.hooks.boardSpec(config, null)?.fixtureSlots ?? [];
+  if (new Set(declared.map((fixture) => fixture.id)).size !== declared.length)
+    throw new Error('Duplicate board fixture id');
+  if (slots.length < declared.length)
+    throw new FixtureSlotError(
+      `Board declares ${slots.length} fixture slots for ${declared.length} fixtures`,
+    );
+  const fixtures = declared.map((fixture, index) => {
+    const slot = slots[index];
+    if (!slot) throw new FixtureSlotError('Missing fixture slot');
+    const orientation = directionIndex(slot.anchor, slot.outer);
+    if (orientation < 0) throw new FixtureSlotError(`Fixture slot ${slot.id} is not edge-adjacent`);
+    return {
+      id: fixture.id,
+      module: fixture.module,
+      slot: slot.id,
+      footprint: [
+        { q: slot.anchor.q, r: slot.anchor.r },
+        { q: slot.outer.q, r: slot.outer.r },
+      ],
+      orientation,
+      art: fixture.art,
+    };
+  });
+  return { ...board, fixtures };
+}
+
 /** Genesis is the only engine path that can access a seeded RNG. */
 export function createGame(
   inputConfig: GameConfig,
@@ -126,11 +182,12 @@ export function createGame(
   checkConfig(config, registry);
   config = normalizeOptions(config, registry);
   config = { ...config, modules: registry.modules.map(({ id, version }) => ({ id, version })) };
-  const ctx: SetupCtx = { config, rng };
+  const ctx: SetupCtx = { config, rng, hooks: registry.hooks };
   let board = cloneJson(config.board ?? emptyBoard());
   for (const module of registry.modules) {
     if (module.buildBoard) board = cloneJson(module.buildBoard(ctx, board));
   }
+  board = placeFixtures(config, board, registry);
   const ext = Object.fromEntries(
     registry.modules.map((module) => [module.id, cloneJson(module.initState?.(ctx) ?? null)]),
   );

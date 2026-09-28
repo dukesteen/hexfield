@@ -27,7 +27,7 @@ export function productionPayments(
       if (current) current[resource] += building.kind === 'city' ? 2 : 1;
     }
   }
-  const adjusted = ctx.hooks.computeProduction(
+  const adjusted = ctx.hooks.production(
     state,
     roll,
     Object.fromEntries([...demand].map(([seat, counts]) => [seat, counts])),

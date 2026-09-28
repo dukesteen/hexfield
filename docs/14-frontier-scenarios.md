@@ -66,11 +66,11 @@ The plan author's knowledge of these rules is incomplete, so every scenario foll
 
 - Unit tests for every rule in its rules doc.
 - A 10k-game simulation with scenario invariants.
-- A P2P chaos run with hidden piles/votes where applicable. The audit covers the fish pile and caravan bids.
+- A P2P chaos run with hidden piles/votes where applicable. Per-move proofs cover the fish pile and caravan bids.
 - Golden replays.
 
 ## Acceptance criteria
 
 - [ ] F1–F4 shipped (each: rules doc, engine, UI, bot support, simulation, P2P).
 - [ ] F5–F6 shipped, or explicitly deferred in STATUS.md with the reason.
-- [ ] Every hidden or secret mechanic uses the deck protocol or commit-reveal and is audited.
+- [ ] Every hidden or secret mechanic uses the deck protocol or commit-reveal and is verified on the move.

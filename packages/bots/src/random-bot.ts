@@ -1,4 +1,4 @@
-import { createBaseEngine, enumerateCommands } from '@cp2p/engine';
+import { engineForConfig, enumerateCommands } from '@cp2p/engine';
 import type { CommandShape, Engine, Pending, TradeOffer } from '@cp2p/engine';
 import type { Resource, ResourceCounts } from '@cp2p/engine';
 import { RESOURCES } from '@cp2p/engine';
@@ -172,6 +172,7 @@ function commandWeight(type: string, offersThisTurn: number, totalOffers: number
     return offersThisTurn >= 1 || totalOffers >= 8 ? 0 : 1;
   if (type === 'MARITIME_TRADE') return 2;
   if (type === 'END_TURN') return offersThisTurn >= 1 ? 8 : 4;
+  if (type === 'END_SBP') return 4;
   return 5;
 }
 
@@ -215,7 +216,12 @@ export class RandomBot implements Bot {
   private offersThisTurn = 0;
   private totalOffers = 0;
 
-  constructor(private readonly engine: Engine = createBaseEngine()) {}
+  /** Without an engine, the bot uses the rules engine named by each game's config. */
+  constructor(private readonly fixedEngine?: Engine) {}
+
+  private engineFor(view: BotView): Engine {
+    return this.fixedEngine ?? engineForConfig(view.state.config);
+  }
 
   respondToTrade(_view: BotView, _offer: TradeOffer, rng: BotRng): boolean {
     return rng.int(10) < 3;
@@ -233,8 +239,9 @@ export class RandomBot implements Bot {
       this.turnNumber = view.state.turn.number;
       this.offersThisTurn = 0;
     }
+    const engine = this.engineFor(view);
     if (view.state.turn.phase.at(-1)?.id === 'preRoll') {
-      const legal = this.engine.getLegalCommands(view.state, view.seat, view.priv);
+      const legal = engine.getLegalCommands(view.state, view.seat, view.priv);
       const sole = legal.templates.length === 0 ? legal.commands[0] : undefined;
       if (legal.commands.length === 1 && sole && pending.allowed.includes(sole.type)) return sole;
     }
@@ -270,13 +277,13 @@ export class RandomBot implements Bot {
       return true;
     };
     const options = { sampleIndex: (maxExclusive: number) => rng.int(maxExclusive) };
-    const preferred = enumerateCommands(this.engine, view.state, view.seat, view.priv, {
+    const preferred = enumerateCommands(engine, view.state, view.seat, view.priv, {
       ...options,
       candidateFilter: policyFilter,
     });
     const commands = preferred.length
       ? preferred
-      : enumerateCommands(this.engine, view.state, view.seat, view.priv, {
+      : enumerateCommands(engine, view.state, view.seat, view.priv, {
           ...options,
           candidateFilter: withinPending,
         });

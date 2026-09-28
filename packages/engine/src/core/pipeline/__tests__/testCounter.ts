@@ -252,7 +252,12 @@ export function testCounter(): GameModule {
         },
       },
     },
-    victoryPoints: (state) => [{ source: 'counter', points: counter(state).value, public: true }],
+    hooks: {
+      victoryPoints: (state, _seat, _priv, acc) => [
+        ...acc,
+        { source: 'counter', points: counter(state).value, public: true },
+      ],
+    },
     invariants: (state) => (counter(state).value < 0 ? ['counter must be non-negative'] : []),
   };
 }

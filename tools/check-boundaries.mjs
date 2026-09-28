@@ -198,6 +198,26 @@ try {
       label: 'undeclared sibling module import is rejected',
     },
   );
+  const dependentModule = await mkdtemp(path.join(siblingRoot, '__boundary_c__-'));
+  fixtureDirs.push(dependentModule);
+  const dependentId = path.basename(dependentModule);
+  const dependentIndex = path.join(dependentModule, 'index.ts');
+  await writeFile(
+    dependentIndex,
+    `export const manifest = { dependsOn: ['${secondId}'] };\n`,
+    { flag: 'wx' },
+  );
+  fixtures.push(dependentIndex);
+  await checkFixture(
+    `packages/engine/src/modules/${dependentId}/rule.ts`,
+    `import { value } from '../${secondId}/shared.js';\nexport { value };\n`,
+    {
+      shouldReject: false,
+      expectedRule: `engine-module-${dependentId}-no-siblings`,
+      expectedTarget: new RegExp(`packages/engine/src/modules/${secondId}/shared`),
+      label: 'declared dependency module import is allowed',
+    },
+  );
   const setupDir = path.join(firstModule, 'setup');
   await checkFixture(
     path.relative(repoRoot, path.join(setupDir, '__boundary_rng_fixture__.ts')),

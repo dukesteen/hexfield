@@ -1,7 +1,6 @@
 import type { CommandHandler } from '../../core/modules/index.js';
 import { failure, success } from '../../core/types/index.js';
 import { recomputeLongestRoadAward } from './awards/index.js';
-import { CITY_COST, ROAD_COST, SETTLEMENT_COST } from './constants.js';
 import { canPlaceRoad, canPlaceSettlement, canUpgradeCity } from './placement/index.js';
 import {
   affordable,
@@ -17,18 +16,23 @@ export const buildRoad: CommandHandler = {
     const edge = input.command.edge;
     if (typeof edge !== 'string') return failure('invalid-edge', 'Edge id is required');
     if (
-      !ctx.hooks.placementRules.road(state, input.seat, edge, canPlaceRoad(state, input.seat, edge))
+      !ctx.hooks.placement.road(
+        state,
+        input.seat,
+        edge,
+        canPlaceRoad(state, input.seat, edge, {}, ctx),
+      )
     )
       return failure('illegal-road', 'Road location is illegal');
     if ((ownSeat(state, input.seat).piecesLeft.road ?? 0) <= 0)
       return failure('no-roads', 'No road pieces remain');
-    const cost = buildCost(state, 'road', ROAD_COST, ctx);
+    const cost = buildCost(state, 'road', ctx);
     return cost.ok ? affordable(state, input.seat, cost.value) : cost;
   },
   apply: (state, input, ctx) => {
     const edge = input.command.edge;
     if (typeof edge !== 'string') throw new Error('Validated edge missing');
-    const cost = buildCost(state, 'road', ROAD_COST, ctx);
+    const cost = buildCost(state, 'road', ctx);
     if (!cost.ok) throw new Error('Validated road cost missing');
     const spent = exchangeBank(state, input.seat, cost.value, false);
     let next = spent.state;
@@ -41,7 +45,7 @@ export const buildRoad: CommandHandler = {
       piecesLeft: { ...old.piecesLeft, road: (old.piecesLeft.road ?? 0) - 1 },
     }));
     next = ctx.hooks.afterBuild(next, input.seat, 'road', edge);
-    next = recomputeLongestRoadAward(next);
+    next = recomputeLongestRoadAward(next, ctx);
     return {
       state: next,
       events: [{ type: 'roadBuilt', seat: input.seat, edge }],
@@ -50,7 +54,7 @@ export const buildRoad: CommandHandler = {
   },
   applyPrivate: (priv, before, input, _data, ctx) => {
     if (priv.seat !== input.seat) return success(priv);
-    const cost = buildCost(before, 'road', ROAD_COST, ctx);
+    const cost = buildCost(before, 'road', ctx);
     return cost.ok ? privateExchange(priv, cost.value, false) : cost;
   },
 };
@@ -60,23 +64,23 @@ export const buildSettlement: CommandHandler = {
     const vertex = input.command.vertex;
     if (typeof vertex !== 'string') return failure('invalid-vertex', 'Vertex id is required');
     if (
-      !ctx.hooks.placementRules.settlement(
+      !ctx.hooks.placement.settlement(
         state,
         input.seat,
         vertex,
-        canPlaceSettlement(state, input.seat, vertex),
+        canPlaceSettlement(state, input.seat, vertex, {}, ctx),
       )
     )
       return failure('illegal-settlement', 'Settlement location is illegal');
     if ((ownSeat(state, input.seat).piecesLeft.settlement ?? 0) <= 0)
       return failure('no-settlements', 'No settlement pieces remain');
-    const cost = buildCost(state, 'settlement', SETTLEMENT_COST, ctx);
+    const cost = buildCost(state, 'settlement', ctx);
     return cost.ok ? affordable(state, input.seat, cost.value) : cost;
   },
   apply: (state, input, ctx) => {
     const vertex = input.command.vertex;
     if (typeof vertex !== 'string') throw new Error('Validated vertex missing');
-    const cost = buildCost(state, 'settlement', SETTLEMENT_COST, ctx);
+    const cost = buildCost(state, 'settlement', ctx);
     if (!cost.ok) throw new Error('Validated settlement cost missing');
     const spent = exchangeBank(state, input.seat, cost.value, false);
     let next = spent.state;
@@ -92,7 +96,7 @@ export const buildSettlement: CommandHandler = {
       piecesLeft: { ...old.piecesLeft, settlement: (old.piecesLeft.settlement ?? 0) - 1 },
     }));
     next = ctx.hooks.afterBuild(next, input.seat, 'settlement', vertex);
-    next = recomputeLongestRoadAward(next);
+    next = recomputeLongestRoadAward(next, ctx);
     return {
       state: next,
       events: [{ type: 'settlementBuilt', seat: input.seat, vertex }],
@@ -101,7 +105,7 @@ export const buildSettlement: CommandHandler = {
   },
   applyPrivate: (priv, before, input, _data, ctx) => {
     if (priv.seat !== input.seat) return success(priv);
-    const cost = buildCost(before, 'settlement', SETTLEMENT_COST, ctx);
+    const cost = buildCost(before, 'settlement', ctx);
     return cost.ok ? privateExchange(priv, cost.value, false) : cost;
   },
 };
@@ -111,7 +115,7 @@ export const buildCity: CommandHandler = {
     const vertex = input.command.vertex;
     if (typeof vertex !== 'string') return failure('invalid-vertex', 'Vertex id is required');
     if (
-      !ctx.hooks.placementRules.city(
+      !ctx.hooks.placement.city(
         state,
         input.seat,
         vertex,
@@ -121,13 +125,13 @@ export const buildCity: CommandHandler = {
       return failure('illegal-city', 'City must replace your settlement');
     if ((ownSeat(state, input.seat).piecesLeft.city ?? 0) <= 0)
       return failure('no-cities', 'No city pieces remain');
-    const cost = buildCost(state, 'city', CITY_COST, ctx);
+    const cost = buildCost(state, 'city', ctx);
     return cost.ok ? affordable(state, input.seat, cost.value) : cost;
   },
   apply: (state, input, ctx) => {
     const vertex = input.command.vertex;
     if (typeof vertex !== 'string') throw new Error('Validated vertex missing');
-    const cost = buildCost(state, 'city', CITY_COST, ctx);
+    const cost = buildCost(state, 'city', ctx);
     if (!cost.ok) throw new Error('Validated city cost missing');
     const spent = exchangeBank(state, input.seat, cost.value, false);
     let next = spent.state;
@@ -157,7 +161,7 @@ export const buildCity: CommandHandler = {
   },
   applyPrivate: (priv, before, input, _data, ctx) => {
     if (priv.seat !== input.seat) return success(priv);
-    const cost = buildCost(before, 'city', CITY_COST, ctx);
+    const cost = buildCost(before, 'city', ctx);
     return cost.ok ? privateExchange(priv, cost.value, false) : cost;
   },
 };

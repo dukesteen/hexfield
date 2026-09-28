@@ -36,31 +36,43 @@ Record each change in DECISIONS.md.
 
 Extend the hook list from stage 02. Each hook has a precise signature, a documented call site, and an ordering (dependency order, then module id). Hooks return new values; they never mutate.
 
-| Hook                                               | Purpose / used by                                                                          |
-| -------------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| `boardSpec(cfg)`                                   | provide the board shape, tile bag, token bag, harbor slots (five-six, seafaring scenarios) |
-| `cardKinds()`                                      | add card kinds (commodities)                                                               |
-| `bankInit(cfg)`                                    | bank sizes                                                                                 |
-| `pieceLimits(cfg)`                                 | add piece types (ships, knights, walls)                                                    |
-| `costs(cfg)`                                       | add or modify build costs                                                                  |
-| `diceSpec(state)`                                  | which dice are rolled (knights: + event die)                                               |
-| `onDiceResult(state, dice)`                        | pre-production effects (barbarians, progress cards)                                        |
-| `production(state, roll, acc)`                     | modify/add production                                                                      |
-| `onNoProduction(state, seat)`                      | aqueduct-like effects                                                                      |
-| `placement.<pieceType>(state, seat, loc, verdict)` | legality chains                                                                            |
-| `connectivity(state, seat)`                        | which pieces connect for building and longest route (ships)                                |
-| `routeGraph(state, seat)`                          | graph for longest road / longest trade route                                               |
-| `robberLike(state)`                                | list of movable blockers (robber, pirate) with legal hexes                                 |
-| `stealTargets(state, seat, blocker, hex)`          |                                                                                            |
-| `handLimit(state, seat)`                           | city walls                                                                                 |
-| `turnFlow(state)`                                  | insert phases, e.g. special build phase                                                    |
-| `victoryPoints(state, seat, priv?)`                | contributions                                                                              |
-| `vpTarget(cfg)`                                    | scenario overrides                                                                         |
-| `legalCommands(state, seat, priv, acc)`            | enumerate module commands                                                                  |
-| `timeoutAction(state, pending)`                    | module-specific auto-actions                                                               |
-| `renderHints(state)`                               | tells the UI about module-specific overlays (e.g. barbarian track)                         |
+| Hook                                               | Purpose / used by                                                                                         |
+| -------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `boardSpec(cfg)`                                   | provide the board shape, tile bag, token bag, harbor slots, fixture slots (five-six, seafaring scenarios) |
+| `boardFixtures(cfg, board)`                        | declare board fixtures that sit on the board, e.g. the knights barbarian track (A2a)                      |
+| `cardKinds()`                                      | add card kinds (commodities)                                                                              |
+| `bankInit(cfg)`                                    | bank sizes                                                                                                |
+| `pieceLimits(cfg)`                                 | add piece types (ships, knights, walls)                                                                   |
+| `costs(cfg)`                                       | add or modify build costs                                                                                 |
+| `diceSpec(state)`                                  | which dice are rolled (knights: + event die)                                                              |
+| `onDiceResult(state, dice)`                        | pre-production effects (barbarians, progress cards)                                                       |
+| `production(state, roll, acc)`                     | modify/add production                                                                                     |
+| `onNoProduction(state, seat)`                      | aqueduct-like effects                                                                                     |
+| `placement.<pieceType>(state, seat, loc, verdict)` | legality chains                                                                                           |
+| `connectivity(state, seat)`                        | which pieces connect for building and longest route (ships)                                               |
+| `routeGraph(state, seat)`                          | graph for longest road / longest trade route                                                              |
+| `robberLike(state)`                                | list of movable blockers (robber, pirate) with legal hexes                                                |
+| `stealTargets(state, seat, blocker, hex)`          |                                                                                                           |
+| `handLimit(state, seat)`                           | city walls                                                                                                |
+| `turnFlow(state)`                                  | insert phases, e.g. special build phase                                                                   |
+| `victoryPoints(state, seat, priv?)`                | contributions                                                                                             |
+| `vpTarget(cfg)`                                    | scenario overrides                                                                                        |
+| `legalCommands(state, seat, priv, acc)`            | enumerate module commands                                                                                 |
+| `timeoutAction(state, pending)`                    | module-specific auto-actions                                                                              |
+| `renderHints(state)`                               | tells the UI about module-specific overlays and fixture state (e.g. the barbarian ship's step)            |
 
-### A3. Module compatibility matrix
+### A2a. Board fixtures
+
+Some expansions put a physical piece on the board that isn't a playable hex. The first is the knights **barbarian track**: in the physical game it's a piece two hexes long, printed with the ship's path. It replaces one sea-frame hex, so it touches the land, and sticks straight out from the island by one more hex. Model and draw it as part of the board, not as a HUD widget.
+
+- A **fixture** is `{ id, module, footprint: HexCoord[], orientation, art }`. The footprint is a list of edge-adjacent hex positions; the barbarian track uses 2.
+- Each board shape in `@cp2p/maps` declares **fixture slots**, where fixtures may go. A 2-hex slot has:
+  - an **anchor** hex: a sea-frame hex that touches at least one land hex and has no harbor. The fixture replaces this frame hex,
+  - an **outer** hex: the neighbour of the anchor directly outward from the island, beyond the frame (normally empty space),
+  - a fixed position per board shape (not random), so the same layout always looks the same. The harbor slots for that board shape must not use the anchor hex.
+- `boardFixtures(cfg, board)` returns the fixtures for the game. At genesis they are assigned to slots in declaration order, and the placement is part of the board and the state hash. Genesis fails with `NO_FIXTURE_SLOT` if a board has too few slots. Scenario boards (A5) declare their own slots.
+- Fixtures are **not** hexes for any rule. For rules, the anchor still counts as the frame hex it replaced: land edges and vertices next to it stay coastal. No harbor, ship or pirate can ever be on a fixture hex, and production and the robber ignore it. The module keeps the fixture's live state in its own module state; e.g. the ship's step lives in the knights state, not in the board.
+- Every board shape that can be combined with `knights` in the compat matrix (A3) must declare at least one slot that fits a 2-hex fixture: base, `five-six`, and later the seafaring scenario boards.
 
 `packages/engine/src/modules/compat.ts` declares allowed combinations, and the lobby uses it to disable invalid choices:
 
@@ -76,8 +88,11 @@ Extend the hook list from stage 02. Each hook has a precise signature, a documen
 
 ### A4. Module UI extension points
 
-- The web app gets a matching registry `uiModules[id]` with optional: `PlayerPanelExtras`, `HudWidgets` (e.g. barbarian track), `ActionBarItems`, `Dialogs` for module phases, `LogFormatters`, `RenderLayers` (renderer plugin interface), `LobbyOptionOverrides`.
+- The web app gets a matching registry `uiModules[id]` with optional: `PlayerPanelExtras`, `HudWidgets` (e.g. the barbarian attack countdown when the track is scrolled out of view), `BoardFixtures` (the art and live-state renderer for each fixture id), `ActionBarItems`, `Dialogs` for module phases, `LogFormatters`, `RenderLayers` (renderer plugin interface), `LobbyOptionOverrides`.
 - The renderer supports plugin layers with a z-index and a render-model slice.
+- Fixtures get their own layer, drawn above sea/background and below terrain: sea/background → fixtures → terrain → …. The sea-frame tile isn't drawn on the anchor hex; the fixture art replaces it and extends into the outer hex. Fixture pieces in the layer (e.g. the barbarian ship) are drawn in the pieces band so they sit on top of the printed track.
+- Fixtures count towards the board bounds for camera fit and pan clamping, so fitting the board always shows them.
+- Fixtures are hit-testable: tapping one opens its module dialog (for the barbarian track: step, strength vs. active-knight defence, per-player contribution).
 
 ### A5. Scenario abstraction
 
@@ -85,22 +100,23 @@ A **scenario** = module list + board definition (fixed or generator) + option ov
 
 ### A6. Framework tests
 
-- A "kitchen-sink" test module exercising every hook, to confirm call order and composition.
+- A "kitchen-sink" test module exercising every hook, to confirm call order and composition. It also declares a 2-hex fixture.
+- Fixture tests: every board shape passes the slot rules in A2a (the anchor is a harbor-free frame hex touching land; the outer hex is directly outward and outside the frame); fixture placement is deterministic from genesis; a fixture changes no rules result (placements, robber targets and production are identical with and without it).
 - Base-only golden replays still pass **unchanged** after the refactor (no hash changes; if hashes do change, a reason must be recorded and `engineVersion` bumped).
 
 ## Part B — `five-six` module
 
 ### Rules
 
-| Item              | 5–6 players                                                                                              |
-| ----------------- | -------------------------------------------------------------------------------------------------------- |
-| Land hexes        | 30: 5 hills, 5 mountains, 6 forest, 6 pasture, 6 fields, 2 desert `[VERIFY]`                             |
-| Number tokens     | 28 `[VERIFY distribution]`                                                                               |
-| Harbors           | 11: 5 generic 3:1 (4 + 1 extra), one 2:1 per resource, plus 1 extra 2:1 wool `[VERIFY]`                  |
-| Bank              | 24 per resource                                                                                          |
-| Dev deck          | 34: 20 knight, 5 VP, 3 road building, 3 year of plenty, 3 monopoly                                       |
-| Per player pieces | unchanged                                                                                                |
-| Board shape       | an elongated hexagon (rows of 3-4-5-6-5-4-3 land hexes) `[VERIFY]`. Define the exact coordinates in maps |
+| Item              | 5–6 players                                                                                                                                    |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| Land hexes        | 30: 5 hills, 5 mountains, 6 forest, 6 pasture, 6 fields, 2 desert `[VERIFY]`                                                                   |
+| Number tokens     | 28 `[VERIFY distribution]`                                                                                                                     |
+| Harbors           | 11: 5 generic 3:1 (4 + 1 extra), one 2:1 per resource, plus 1 extra 2:1 wool `[VERIFY]`                                                        |
+| Bank              | 24 per resource                                                                                                                                |
+| Dev deck          | 34: 20 knight, 5 VP, 3 road building, 3 year of plenty, 3 monopoly                                                                             |
+| Per player pieces | unchanged                                                                                                                                      |
+| Board shape       | an elongated hexagon (rows of 3-4-5-6-5-4-3 land hexes) `[VERIFY]`. Define the exact coordinates in maps, including a 2-hex fixture slot (A2a) |
 
 - **Special build phase (SBP)**: after the active player ends their turn, each other player in turn order gets an SBP. They may build and buy development cards, but **not trade** (neither player nor maritime) and **not play** development cards. The SBP ends with `END_SBP` (or a timeout). Then the next player's turn begins.
   - Colonist-style option `specialBuildPhase: true` (default for 5–6), plus an alternative option `pairedPlayers` `[VERIFY]` kept out of scope for now; record it in DECISIONS.md.
@@ -111,7 +127,7 @@ A **scenario** = module list + board definition (fixed or generator) + option ov
 
 ### UI
 
-- The larger board must fit on mobile. Test the camera fit.
+- The larger board must fit on mobile, including a declared fixture. Test the camera fit.
 - The SBP UI: a banner "Special build phase: <Name>", an action bar limited to builds and buying.
 - The lobby allows 5–6 seats when `five-six` is enabled (auto-enabled when the seat count is > 4).
 
@@ -129,7 +145,7 @@ RandomBot must handle the SBP. Enumerator support for the `sbp` phase.
 1. A1 audit + refactor (goldens unchanged).
 2. A2 hooks + the kitchen-sink tests.
 3. A3 compat matrix + lobby integration.
-4. A4 UI registry + renderer plugin layers.
+4. A2a fixture model, slots for the base and `five-six` boards; A4 UI registry + renderer plugin layers, including the fixture layer.
 5. A5 scenario abstraction in maps + the lobby scenario picker.
 6. `five-six` board spec, deck, bank, harbors.
 7. The SBP via `turnFlow`.

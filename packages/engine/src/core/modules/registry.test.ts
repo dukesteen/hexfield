@@ -62,15 +62,15 @@ describe('module registry', () => {
   test('runs each hook family in dependency order and composes its result', () => {
     const called: string[] = [];
     const decorate = (id: string, increment: number): NonNullable<GameModule['hooks']> => ({
-      afterDiceRolled: (state) => {
+      onDiceResult: (state) => {
         called.push(`${id}:dice`);
         return state;
       },
-      computeProduction: (_state, _roll, acc) => {
+      production: (_state, _roll, acc) => {
         called.push(`${id}:production`);
         return { ...acc, [id]: { grain: increment } };
       },
-      placementRules: {
+      placement: {
         settlement: (_state, _seat, _loc, verdict) => {
           called.push(`${id}:settlement`);
           return verdict;
@@ -100,7 +100,7 @@ describe('module registry', () => {
         called.push(`${id}:end`);
         return state;
       },
-      robberTargets: (_state, _seat, _hex, targets) => {
+      stealTargets: (_state, _seat, _blocker, _hex, targets) => {
         called.push(`${id}:robber`);
         return targets;
       },
@@ -118,20 +118,20 @@ describe('module registry', () => {
     tied.hooks = decorate('B', 2);
     const hooks = createRegistry([child, empty, parent, tied]).hooks;
 
-    hooks.afterDiceRolled(sampleState, [2, 4]);
-    expect(hooks.computeProduction(sampleState, 6, {})).toEqual({
+    hooks.onDiceResult(sampleState, [2, 4]);
+    expect(hooks.production(sampleState, 6, {})).toEqual({
       B: { grain: 2 },
       A: { grain: 1 },
       Z: { grain: 3 },
     });
-    expect(hooks.placementRules.settlement(sampleState, 0, 'v', true)).toBe(true);
-    expect(hooks.placementRules.road(sampleState, 0, 'e', true)).toBe(true);
-    expect(hooks.placementRules.city(sampleState, 0, 'v', true)).toBe(true);
+    expect(hooks.placement.settlement(sampleState, 0, 'v', true)).toBe(true);
+    expect(hooks.placement.road(sampleState, 0, 'e', true)).toBe(true);
+    expect(hooks.placement.city(sampleState, 0, 'v', true)).toBe(true);
     expect(hooks.costOf(sampleState, 'road', { brick: 0 })).toEqual({ brick: 6 });
     hooks.afterBuild(sampleState, 0, 'road', 'e');
     hooks.onTurnStart(sampleState, 0);
     hooks.onTurnEnd(sampleState, 0);
-    expect(hooks.robberTargets(sampleState, 0, 'h', [1])).toEqual([1]);
+    expect(hooks.stealTargets(sampleState, 0, 'robber', 'h', [1])).toEqual([1]);
     expect(hooks.handLimit(sampleState, 0, 0)).toBe(6);
 
     for (const family of [
