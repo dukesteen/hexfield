@@ -4,18 +4,26 @@ import type {
   PhaseHandler,
   SystemInputHandler,
 } from '../../core/modules/index.js';
-import { gainHidden, gainKnown, loseHidden, loseKnown } from '../../core/resources/index.js';
-import type { GameState, PrivateState } from '../../core/state/index.js';
+import {
+  gainHidden,
+  gainKnown,
+  kindBounds,
+  kindsOfCounts,
+  loseHidden,
+  loseKnown,
+  seatBounds,
+} from '../../core/resources/index.js';
+import type { GameState, PhaseFrame, PrivateState } from '../../core/state/index.js';
 import { failure, success } from '../../core/types/index.js';
-import type { Resource, Result, Seat } from '../../core/types/index.js';
+import type { Result, Seat } from '../../core/types/index.js';
 import { isLandHex, verticesForHex } from './board/index.js';
 import { claimCommands } from './legal.js';
-import { oneResource } from './constants.js';
 import { baseOptions } from './types.js';
 import type { RobberData, StealData, StealResultData } from './types.js';
 import {
+  cardKindsOf,
+  fillCounts,
   frame,
-  isResource,
   ownSeat,
   playerPending,
   popPhase,
@@ -86,6 +94,14 @@ export function robberHexes(state: GameState, ctx: HandlerContext): string[] {
     { id: 'robber', hex: state.board.robberHex, legalHexes: legalRobberHexes(state) },
   ]);
   return [...(blockers.find((blocker) => blocker.id === 'robber')?.legalHexes ?? [])];
+}
+
+/**
+ * The frame after a 7's discards: the robber step, or straight back to `main` when no hex is
+ * legal (a module locked the robber, as knights does until the first attack).
+ */
+export function robberStepFrame(state: GameState, ctx: HandlerContext): PhaseFrame {
+  return robberHexes(state, ctx).length ? frame('moveRobber', { returnTo: 'main' }) : frame('main');
 }
 
 /** Eligible occupied opponents, in seat order, with module target hooks applied. */
@@ -205,19 +221,26 @@ export const stealResultPhase: PhaseHandler = {
   },
 };
 
-function transferBounds(
-  state: GameState,
-  thief: Seat,
-  victim: Seat,
-  card: Resource | 'hidden',
-): GameState {
-  const from = ownSeat(state, victim).resources;
-  const to = ownSeat(state, thief).resources;
-  const loss = card === 'hidden' ? loseHidden(from, 1) : loseKnown(from, oneResource(card, 1));
-  const gain = card === 'hidden' ? gainHidden(to, 1) : gainKnown(to, oneResource(card, 1));
+/** One card of a kind, over every kind of the game. */
+function oneCard(state: GameState, kind: string): Record<string, number> {
+  return { ...fillCounts({}, cardKindsOf(state)), [kind]: 1 };
+}
+
+function isCardKind(state: GameState, value: unknown): value is string {
+  return typeof value === 'string' && cardKindsOf(state).includes(value);
+}
+
+function transferBounds(state: GameState, thief: Seat, victim: Seat, card: string): GameState {
+  const kinds = cardKindsOf(state);
+  const from = kindBounds(ownSeat(state, victim).resources);
+  const to = kindBounds(ownSeat(state, thief).resources);
+  const loss =
+    card === 'hidden' ? loseHidden(from, 1, kinds) : loseKnown(from, oneCard(state, card), kinds);
+  const gain =
+    card === 'hidden' ? gainHidden(to, 1, kinds) : gainKnown(to, oneCard(state, card), kinds);
   if (!loss.ok || !gain.ok) throw new Error('Validated steal bounds failed');
-  let next = updateSeat(state, victim, (old) => ({ ...old, resources: loss.value }));
-  next = updateSeat(next, thief, (old) => ({ ...old, resources: gain.value }));
+  let next = updateSeat(state, victim, (old) => ({ ...old, resources: seatBounds(loss.value) }));
+  next = updateSeat(next, thief, (old) => ({ ...old, resources: seatBounds(gain.value) }));
   return next;
 }
 
@@ -226,12 +249,16 @@ export const stealResult: SystemInputHandler = {
     const data = resultData(state);
     if (input.thief !== data.thief || input.victim !== data.victim)
       return failure('steal-result-mismatch', 'Steal result does not match the pending victim');
-    if (input.resource !== 'hidden' && !isResource(input.resource))
+    if (input.resource !== 'hidden' && !isCardKind(state, input.resource))
       return failure('invalid-steal-resource', 'Steal resource is invalid');
     const victim = ownSeat(state, data.victim);
     if (victim.resources.total <= 0) return failure('empty-victim-hand', 'Victim has no cards');
     if (input.resource !== 'hidden') {
-      const possible = loseKnown(victim.resources, oneResource(input.resource, 1));
+      const possible = loseKnown(
+        kindBounds(victim.resources),
+        oneCard(state, input.resource),
+        cardKindsOf(state),
+      );
       if (!possible.ok) return possible;
     }
     return success(undefined);
@@ -239,7 +266,8 @@ export const stealResult: SystemInputHandler = {
   apply: (state, input) => {
     const data = resultData(state);
     const card = input.resource;
-    if (card !== 'hidden' && !isResource(card)) throw new Error('Validated steal resource missing');
+    if (card !== 'hidden' && !isCardKind(state, card))
+      throw new Error('Validated steal resource missing');
     const next = resume(transferBounds(state, data.thief, data.victim, card), data.returnTo);
     return {
       state: next,
@@ -257,7 +285,7 @@ export const stealResult: SystemInputHandler = {
           : resourceTransfers(
               { kind: 'seat', seat: data.victim },
               { kind: 'seat', seat: data.thief },
-              oneResource(card, 1),
+              oneCard(state, card),
             ),
     };
   },
@@ -265,7 +293,7 @@ export const stealResult: SystemInputHandler = {
     const pending = resultData(before);
     if (priv.seat !== pending.thief && priv.seat !== pending.victim) return success(priv);
     const disclosed = input.resource === 'hidden' ? data?.resource : input.resource;
-    if (!isResource(disclosed))
+    if (typeof disclosed !== 'string' || !kindsOfCounts(priv.hand).includes(disclosed))
       return failure('missing-private-steal-card', 'Owner must know the stolen card');
     if (
       input.resource !== 'hidden' &&
@@ -273,6 +301,6 @@ export const stealResult: SystemInputHandler = {
       data.resource !== input.resource
     )
       return failure('steal-card-mismatch', 'Private steal card disagrees with public result');
-    return privateExchange(priv, oneResource(disclosed, 1), priv.seat === pending.thief);
+    return privateExchange(priv, { [disclosed]: 1 }, priv.seat === pending.thief);
   },
 };

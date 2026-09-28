@@ -1,4 +1,4 @@
-import type { Resource, Seat } from '../types/index.js';
+import type { CardKind, Seat } from '../types/index.js';
 
 export type ResourceEndpoint = { kind: 'bank' } | { kind: 'seat'; seat: Seat };
 
@@ -8,10 +8,10 @@ export type EngineEffect =
       type: 'resource-transfer';
       from: ResourceEndpoint;
       to: ResourceEndpoint;
-      resource: Resource;
+      resource: CardKind;
       count: number;
     }
-  | { type: 'resource-count-revealed'; seat: Seat; resource: Resource; count: number }
+  | { type: 'resource-count-revealed'; seat: Seat; resource: CardKind; count: number }
   | { type: 'hidden-resource-transfer'; from: Seat; to: Seat; count: 1 }
   | { type: 'card-slot-dealt'; seat: Seat; deck: string; slotId: string }
   /** A public draw: the deck advances one position and the card is shown to every seat. */

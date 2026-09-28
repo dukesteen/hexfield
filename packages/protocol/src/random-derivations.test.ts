@@ -1,8 +1,8 @@
-import { createBaseEngine, success } from '@cp2p/engine';
+import { EVENT_DIE, createBaseEngine, knightsConfig, knightsEngine, success } from '@cp2p/engine';
 import type { GameState, Result } from '@cp2p/engine';
 import { describe, expect, test } from 'vitest';
 import { createRandomDerivations, randomDerivations } from './random-derivations.js';
-import type { RandomDerivation, RandomPending } from './random-derivations.js';
+import type { BeaconOutcome, RandomDerivation, RandomPending } from './random-derivations.js';
 
 const seed = new Uint8Array(32).fill(9);
 const context = { game: 'test-game', parent: 4 };
@@ -324,5 +324,58 @@ describe('base beacon random derivations', () => {
     expect(request.request).toEqual({ marker: 'original', type: 'extensionChoice' });
     expect(localSeed).toEqual(seed);
     expect(operation).toEqual(context);
+  });
+});
+
+function eventFace(outcome: BeaconOutcome): string {
+  if (outcome.kind !== 'system') throw new Error('Expected system input');
+  const extra: unknown = outcome.input.extra;
+  const face =
+    typeof extra === 'object' && extra !== null ? Reflect.get(extra, 'event') : undefined;
+  if (typeof face !== 'string') throw new Error('Missing event face');
+  return face;
+}
+
+describe('event die derivation (knights)', () => {
+  const knights = knightsEngine().createGame(
+    knightsConfig({ seats: 3 }),
+    new Uint8Array(32).fill(2),
+  );
+  const extra = [{ id: 'event', faces: [...EVENT_DIE.faces] }];
+  const request = pending('dice', { mode: 'random', sides: 6, count: 2, extra }, 'DICE_RESULT');
+
+  test('derives red, yellow and the event face, each under its own label', () => {
+    expect(randomDerivations.validate(knights, request).ok).toBe(true);
+    const result = value(randomDerivations.derive(knights, request, seed, context));
+    if (result.kind !== 'system') throw new Error('Expected system input');
+    expect(result.input).toMatchObject({
+      type: 'DICE_RESULT',
+      extra: { event: expect.any(String) },
+    });
+    expect(EVENT_DIE.faces).toContain(eventFace(result));
+    expect(value(randomDerivations.derive(knights, request, seed, context))).toEqual(result);
+    // Distinct operation contexts give independent event faces across many rolls.
+    const faces = new Set(
+      Array.from({ length: 40 }, (_, parent) => {
+        const next = value(
+          randomDerivations.derive(knights, request, seed, { ...context, parent }),
+        );
+        return eventFace(next);
+      }),
+    );
+    expect(faces).toEqual(new Set(EVENT_DIE.faces));
+  });
+
+  test('the request must carry exactly the declared extra dice', () => {
+    const bare = pending('dice', { mode: 'random', sides: 6, count: 2 }, 'DICE_RESULT');
+    expect(randomDerivations.validate(knights, bare).ok).toBe(false);
+    const forged = pending(
+      'dice',
+      { mode: 'random', sides: 6, count: 2, extra: [{ id: 'event', faces: ['ship'] }] },
+      'DICE_RESULT',
+    );
+    expect(randomDerivations.validate(knights, forged).ok).toBe(false);
+    // A base game refuses extra dice it never declared.
+    expect(randomDerivations.validate(state, request).ok).toBe(false);
   });
 });

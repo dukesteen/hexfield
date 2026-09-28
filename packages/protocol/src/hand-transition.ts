@@ -12,7 +12,7 @@ import {
   verifySchnorr,
 } from '@cp2p/crypto';
 import type { RangeProof, SchnorrProof } from '@cp2p/crypto';
-import { RESOURCES, failure, success } from '@cp2p/engine';
+import { RESOURCES, failure, isBaseResource, success } from '@cp2p/engine';
 import type {
   EngineEffect,
   GameState,
@@ -164,7 +164,12 @@ export function planHandTransition(
           'hand-steal-unavailable',
           'Hidden movements require the sealed transfer protocol',
         );
-      if (effect.type === 'resource-count-revealed') {
+      if (
+        (effect.type === 'resource-count-revealed' || effect.type === 'resource-transfer') &&
+        !isBaseResource(effect.resource)
+      )
+        return failure('hand-card-kind-unsupported', 'Hand proofs cover the base resources only');
+      if (effect.type === 'resource-count-revealed' && isBaseResource(effect.resource)) {
         reveals.set(`${effect.seat}:${effect.resource}`, {
           kind: 'count',
           seat: effect.seat,
@@ -174,7 +179,7 @@ export function planHandTransition(
           effectIndices: [index],
         });
       }
-      if (effect.type !== 'resource-transfer') continue;
+      if (effect.type !== 'resource-transfer' || !isBaseResource(effect.resource)) continue;
       if (effect.from.kind === 'seat') {
         const key = `${effect.from.seat}:${effect.resource}`;
         const debit = debits.get(key) ?? {

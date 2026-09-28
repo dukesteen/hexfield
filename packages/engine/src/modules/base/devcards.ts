@@ -6,7 +6,13 @@ import type {
 } from '../../core/modules/index.js';
 import type { CommandShape } from '../../core/pipeline/index.js';
 import type { EngineEffect } from '../../core/effects/index.js';
-import { gainKnown, loseKnown, revealExact } from '../../core/resources/index.js';
+import {
+  gainKnown,
+  kindBounds,
+  loseKnown,
+  revealExact,
+  seatBounds,
+} from '../../core/resources/index.js';
 import type { CardSlot, GameState, PrivateState } from '../../core/state/index.js';
 import { RESOURCES, failure, success } from '../../core/types/index.js';
 import type { Resource, ResourceCounts, Result, Seat } from '../../core/types/index.js';
@@ -19,7 +25,9 @@ import { finishTurnFlowFrame } from './phases/turn.js';
 import {
   affordable,
   buildCost,
+  cardKindsOf,
   countTotal,
+  fillCounts,
   exchangeBank,
   frame,
   isResource,
@@ -301,7 +309,7 @@ export const playDevCard: CommandHandler = {
         throw new Error('Validated monopoly resource missing');
       const resource = params.value.resource;
       const remaining = state.config.seats.filter(
-        (seat) => seat !== input.seat && ownSeat(state, seat).resources.max[resource] > 0,
+        (seat) => seat !== input.seat && (ownSeat(state, seat).resources.max[resource] ?? 0) > 0,
       );
       if (remaining.length)
         next = pushPhase(next, frame('monopoly', { seat: input.seat, resource, remaining }));
@@ -439,13 +447,18 @@ export const revealCount: SystemInputHandler = {
       return failure('invalid-reveal-count', 'Count must be a non-negative integer');
     const holder = ownSeat(state, victim);
     if (
-      input.count < holder.resources.min[data.resource] ||
-      input.count > holder.resources.max[data.resource]
+      input.count < (holder.resources.min[data.resource] ?? 0) ||
+      input.count > (holder.resources.max[data.resource] ?? 0)
     )
       return failure('reveal-out-of-bounds', 'Count is outside public bounds');
-    const exact = revealExact(holder.resources, data.resource, input.count);
+    const kinds = cardKindsOf(state);
+    const exact = revealExact(kindBounds(holder.resources), data.resource, input.count, kinds);
     if (!exact.ok) return exact;
-    const paid = loseKnown(exact.value, { ...emptyResources(), [data.resource]: input.count });
+    const paid = loseKnown(
+      exact.value,
+      { ...fillCounts({}, kinds), [data.resource]: input.count },
+      kinds,
+    );
     return paid.ok ? success(undefined) : paid;
   },
   apply: (state, input) => {
@@ -453,14 +466,20 @@ export const revealCount: SystemInputHandler = {
     const victim = data.remaining.find((seat) => seat === input.seat);
     if (victim === undefined || typeof input.count !== 'number')
       throw new Error('Validated reveal missing');
-    const counts = { ...emptyResources(), [data.resource]: input.count };
-    const exact = revealExact(ownSeat(state, victim).resources, data.resource, input.count);
+    const kinds = cardKindsOf(state);
+    const counts = { ...fillCounts({}, kinds), [data.resource]: input.count };
+    const exact = revealExact(
+      kindBounds(ownSeat(state, victim).resources),
+      data.resource,
+      input.count,
+      kinds,
+    );
     if (!exact.ok) throw new Error('Validated monopoly reveal was infeasible');
-    const loss = loseKnown(exact.value, counts);
-    const gain = gainKnown(ownSeat(state, data.seat).resources, counts);
+    const loss = loseKnown(exact.value, counts, kinds);
+    const gain = gainKnown(kindBounds(ownSeat(state, data.seat).resources), counts, kinds);
     if (!loss.ok || !gain.ok) throw new Error('Validated monopoly bounds failed');
-    let next = updateSeat(state, victim, (old) => ({ ...old, resources: loss.value }));
-    next = updateSeat(next, data.seat, (old) => ({ ...old, resources: gain.value }));
+    let next = updateSeat(state, victim, (old) => ({ ...old, resources: seatBounds(loss.value) }));
+    next = updateSeat(next, data.seat, (old) => ({ ...old, resources: seatBounds(gain.value) }));
     const remaining = data.remaining.filter((seat) => seat !== victim);
     next = remaining.length
       ? replaceTop(next, frame('monopoly', { ...data, remaining }))

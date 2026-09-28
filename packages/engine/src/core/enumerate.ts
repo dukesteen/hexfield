@@ -1,10 +1,11 @@
 import type { Engine } from './pipeline/engine.js';
 import type { CommandShape } from './pipeline/types.js';
 import type { GameState, PrivateState } from './state/types.js';
+import { kindsOfCounts, zeroCounts } from './resources/index.js';
 import { RESOURCES } from './types/index.js';
-import type { Resource, ResourceCounts, Seat } from './types/index.js';
+import type { CardCounts, Seat } from './types/index.js';
 
-type MutableCounts = { -readonly [K in keyof ResourceCounts]: ResourceCounts[K] };
+type MutableCounts = Record<string, number>;
 
 export interface EnumerateOptions {
   /** Maximum distinct discards returned for one hand. Defaults to 50. */
@@ -23,13 +24,13 @@ function checkedCap(value: number | undefined, fallback: number, name: string): 
   return cap;
 }
 
-function counts(): MutableCounts {
-  return { brick: 0, lumber: 0, wool: 0, grain: 0, ore: 0 };
+function counts(kinds: readonly string[]): MutableCounts {
+  return { ...zeroCounts(kinds) };
 }
 
-function wholeHand(priv: PrivateState): MutableCounts {
-  const hand = counts();
-  for (const resource of RESOURCES) {
+function wholeHand(priv: PrivateState, kinds: readonly string[]): MutableCounts {
+  const hand = counts(kinds);
+  for (const resource of kinds) {
     const quantity = priv.hand[resource];
     if (quantity === undefined || !Number.isSafeInteger(quantity) || quantity < 0)
       throw new RangeError(`Invalid private hand count for ${resource}`);
@@ -39,7 +40,8 @@ function wholeHand(priv: PrivateState): MutableCounts {
 }
 
 function discardOptions(
-  hand: ResourceCounts,
+  hand: CardCounts,
+  kinds: readonly string[],
   count: number,
   limit: number,
   sampleIndex?: (maxExclusive: number) => number,
@@ -47,14 +49,14 @@ function discardOptions(
   if (!Number.isSafeInteger(count) || count < 0) return [];
   const memo = new Map<string, number>();
   function ways(index: number, remaining: number): number {
-    if (index === RESOURCES.length) return remaining === 0 ? 1 : 0;
+    if (index === kinds.length) return remaining === 0 ? 1 : 0;
     const key = `${index}:${remaining}`;
     const saved = memo.get(key);
     if (saved !== undefined) return saved;
-    const resource = RESOURCES[index];
+    const resource = kinds[index];
     if (resource === undefined) return 0;
     let total = 0;
-    for (let n = 0; n <= Math.min(hand[resource], remaining); n++)
+    for (let n = 0; n <= Math.min(hand[resource] ?? 0, remaining); n++)
       total += ways(index + 1, remaining - n);
     memo.set(key, total);
     return total;
@@ -75,13 +77,13 @@ function discardOptions(
     }
     selected.push(...[...ranks].toSorted((a, b) => a - b));
   }
-  function unrank(rank: number): ResourceCounts {
-    const result = counts();
+  function unrank(rank: number): CardCounts {
+    const result = counts(kinds);
     let remaining = count;
-    for (let index = 0; index < RESOURCES.length; index++) {
-      const resource = RESOURCES[index];
+    for (let index = 0; index < kinds.length; index++) {
+      const resource = kinds[index];
       if (resource === undefined) break;
-      for (let n = 0; n <= Math.min(hand[resource], remaining); n++) {
+      for (let n = 0; n <= Math.min(hand[resource] ?? 0, remaining); n++) {
         const size = ways(index + 1, remaining - n);
         if (rank >= size) rank -= size;
         else {
@@ -96,10 +98,10 @@ function discardOptions(
   return selected.map((rank) => ({ type: 'DISCARD', cards: unrank(rank) }));
 }
 
-function pair(first: Resource, second: Resource): ResourceCounts {
-  const selected = counts();
-  selected[first]++;
-  selected[second]++;
+function pair(first: string, second: string): CardCounts {
+  const selected = counts(RESOURCES);
+  selected[first] = (selected[first] ?? 0) + 1;
+  selected[second] = (selected[second] ?? 0) + 1;
   return selected;
 }
 
@@ -114,7 +116,8 @@ export function enumerateCommands(
   if (priv.seat !== seat) throw new Error('Private state belongs to another seat');
   const maxDiscardOptions = checkedCap(opts.maxDiscardOptions, 50, 'maxDiscardOptions');
   const maxTradeOffers = checkedCap(opts.maxTradeOffers, 40, 'maxTradeOffers');
-  const hand = wholeHand(priv);
+  const kinds = kindsOfCounts(priv.hand);
+  const hand = wholeHand(priv, kinds);
   const legal = engine.getLegalCommands(state, seat, priv, opts.candidateFilter);
   const candidates: CommandShape[] = [];
   for (const template of legal.templates) {
@@ -122,15 +125,15 @@ export function enumerateCommands(
       case 'DISCARD': {
         if (typeof template.count === 'number')
           candidates.push(
-            ...discardOptions(hand, template.count, maxDiscardOptions, opts.sampleIndex),
+            ...discardOptions(hand, kinds, template.count, maxDiscardOptions, opts.sampleIndex),
           );
         break;
       }
       case 'MARITIME_TRADE': {
-        for (const give of RESOURCES)
+        for (const give of kinds)
           for (const rate of [2, 3, 4]) {
-            if (hand[give] < rate) continue;
-            for (const get of RESOURCES) {
+            if ((hand[give] ?? 0) < rate) continue;
+            for (const get of kinds) {
               if (get === give || (state.bank[get] ?? 0) < 1) continue;
               candidates.push({
                 type: 'MARITIME_TRADE',
@@ -144,12 +147,12 @@ export function enumerateCommands(
       case 'OFFER_TRADE':
       case 'PROPOSE_TRADE': {
         let added = 0;
-        for (const give of RESOURCES) {
-          for (const want of RESOURCES) {
+        for (const give of kinds) {
+          for (const want of kinds) {
             if (give === want) continue;
             for (const amount of [1, 2]) {
               if (added >= maxTradeOffers) break;
-              if (hand[give] < amount) continue;
+              if ((hand[give] ?? 0) < amount) continue;
               candidates.push({
                 type: template.type,
                 give: { [give]: amount },

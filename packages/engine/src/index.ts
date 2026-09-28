@@ -43,6 +43,39 @@ export type {
   SeafaringOptions,
 } from './modules/seafaring/index.js';
 
+export {
+  COMMODITIES,
+  COMMODITY_BANK,
+  COMMODITY_BANK_FIVE_SIX,
+  EVENT_DIE,
+  KNIGHTS_ID,
+  KNIGHTS_VERSION,
+  KNIGHTS_VP_TARGET,
+  MAX_LEVEL,
+  TRACKS,
+  TRACK_COMMODITY,
+  availableCities,
+  citiesOf,
+  hasAbility,
+  improvementCost,
+  improvementLegal,
+  knightsExt,
+  knightsModule,
+  levelOf,
+  metropolisAward,
+} from './modules/knights/index.js';
+export type {
+  AqueductFrameData,
+  KnightsExt,
+  MetropolisFrameData,
+  MetropolisHolder,
+  Track,
+  TrackLevels,
+  WallPiece,
+} from './modules/knights/index.js';
+export { knightsConfig, knightsEngine } from './modules/knights/testing.js';
+export type { KnightsConfigOptions } from './modules/knights/testing.js';
+
 export { finishTurnFlowFrame } from './modules/base/phases/turn.js';
 export { STANDARD_BOARD, STANDARD_HEXES } from './modules/base/board/shapes.js';
 export {
@@ -111,7 +144,14 @@ export type { TradeOffer } from './modules/base/types.js';
 export { enumerateCommands } from './core/enumerate.js';
 export type { EnumerateOptions } from './core/enumerate.js';
 
-export { createEngine, isPublicDraw, LocalGame, publicDrawInput } from './core/pipeline/index.js';
+export {
+  createEngine,
+  extraDiceOf,
+  isPublicDraw,
+  LocalGame,
+  publicDrawInput,
+  rollExtraDice,
+} from './core/pipeline/index.js';
 export type {
   Engine,
   Input,
@@ -173,6 +213,8 @@ export type { EngineEffect, ResourceEndpoint } from './core/effects/index.js';
 export type { ResourceBounds } from './core/resources/index.js';
 export {
   addCounts,
+  canonicalKinds,
+  kindsOfCounts,
   subtractCounts,
   sumCounts,
   validateCounts,
@@ -184,13 +226,15 @@ export {
   gainHidden,
   gainKnown,
   isExact,
+  kindBounds,
   loseHidden,
   loseKnown,
   normalizeBounds,
   revealExact,
 } from './core/resources/index.js';
-export { RESOURCES, failure, ruleError, success } from './core/types/index.js';
+export { RESOURCES, failure, isBaseResource, ruleError, success } from './core/types/index.js';
 export type {
+  CardCounts,
   CardKind,
   CountMap,
   Resource,

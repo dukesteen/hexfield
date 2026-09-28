@@ -1,5 +1,13 @@
 import { canonicalDecode, canonicalEncode, hashValue, toHex } from '@cp2p/codec';
-import { RESOURCES, decksFor, failure, isPublicDraw, publicDrawInput, success } from '@cp2p/engine';
+import {
+  RESOURCES,
+  decksFor,
+  failure,
+  isPublicDraw,
+  publicDrawInput,
+  rollExtraDice,
+  success,
+} from '@cp2p/engine';
 import type {
   Engine,
   GameState,
@@ -31,6 +39,15 @@ function copyPrivate(value: PrivateState): PrivateState {
       Object.entries(value.ext).map(([key, item]) => [key, canonicalDecode(canonicalEncode(item))]),
     ),
   };
+}
+
+/** The faces of the extra dice a dice request asks for; nothing in a base game. */
+function extraDice(
+  pending: SystemPending,
+  rng: ReturnType<typeof createRng>,
+): { extra?: Record<string, string> } {
+  const extra = rollExtraDice(pending.request, (bound) => rng.int(bound));
+  return Object.keys(extra).length ? { extra } : {};
 }
 
 function seatOf(state: GameState, value: unknown): Seat {
@@ -240,11 +257,13 @@ export class SimulationDriver {
               type: 'DICE_RESULT',
               index,
               dice: [Math.floor(card / 6) + 1, (card % 6) + 1],
+              ...extraDice(pending, rng),
             },
           };
         }
+        const dice = [rng.int(6) + 1, rng.int(6) + 1];
         return {
-          input: { kind: 'system', type: 'DICE_RESULT', dice: [rng.int(6) + 1, rng.int(6) + 1] },
+          input: { kind: 'system', type: 'DICE_RESULT', dice, ...extraDice(pending, rng) },
         };
       }
       case 'CARD_DEALT':

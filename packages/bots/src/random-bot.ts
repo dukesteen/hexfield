@@ -168,6 +168,7 @@ function commandWeight(type: string, offersThisTurn: number, totalOffers: number
   if (type === 'BUILD_CITY') return 30;
   if (type === 'BUILD_ROAD') return 12;
   if (type === 'BUILD_SHIP') return 8;
+  if (type === 'BUILD_IMPROVEMENT') return 10;
   if (type === 'MOVE_SHIP' || type === 'PLACE_SETUP_SHIP') return 2;
   if (type === 'BUY_DEV_CARD' || type === 'PLAY_DEV_CARD') return 8;
   if (type === 'OFFER_TRADE' || type === 'PROPOSE_TRADE')

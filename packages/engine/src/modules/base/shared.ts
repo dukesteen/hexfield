@@ -1,12 +1,20 @@
-import { canAfford, gainKnown, loseKnown } from '../../core/resources/index.js';
+import {
+  canAfford,
+  gainKnown,
+  kindsOfCounts,
+  kindBounds,
+  loseKnown,
+  seatBounds,
+  zeroCounts,
+} from '../../core/resources/index.js';
 import type { ResourceBounds } from '../../core/resources/index.js';
 import type { GameState, PhaseFrame, PrivateState, SeatState } from '../../core/state/index.js';
 import type { Pending, TimerSpec } from '../../core/pipeline/index.js';
 import type { HandlerContext, Transition } from '../../core/modules/index.js';
 import type { EngineEffect, ResourceEndpoint } from '../../core/effects/index.js';
 import { RESOURCES, failure, success } from '../../core/types/index.js';
-import type { Resource, ResourceCounts, Result, Seat } from '../../core/types/index.js';
-import { BASE_COSTS, emptyResources } from './constants.js';
+import type { CardCounts, Resource, ResourceCounts, Result, Seat } from '../../core/types/index.js';
+import { BASE_COSTS } from './constants.js';
 import { baseExt, baseOptions } from './types.js';
 import type { BaseExt } from './types.js';
 
@@ -79,14 +87,32 @@ export function isResource(value: unknown): value is Resource {
   }
 }
 
+/** The card kinds in play: base resources plus module kinds, read from the bank's keys. */
+export function cardKindsOf(state: Pick<GameState, 'bank'>): readonly string[] {
+  return kindsOfCounts(state.bank);
+}
+
 /** Accept partial command maps and fill omitted base-resource keys with zero. */
 export function parseCounts(value: unknown): Result<ResourceCounts> {
+  const parsed = parseCardCounts(value, RESOURCES);
+  if (!parsed.ok) return parsed;
+  return success({
+    brick: parsed.value.brick ?? 0,
+    lumber: parsed.value.lumber ?? 0,
+    wool: parsed.value.wool ?? 0,
+    grain: parsed.value.grain ?? 0,
+    ore: parsed.value.ore ?? 0,
+  });
+}
+
+/** Like `parseCounts` for any card kinds, such as a game with commodities. */
+export function parseCardCounts(value: unknown, kinds: readonly string[]): Result<CardCounts> {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
     return failure('invalid-counts', 'Resource counts must be an object');
   }
-  const counts = emptyResources();
+  const counts: Record<string, number> = { ...zeroCounts(kinds) };
   for (const key of Reflect.ownKeys(value)) {
-    if (typeof key !== 'string' || !isResource(key))
+    if (typeof key !== 'string' || !kinds.includes(key))
       return failure('invalid-resource', `Unknown resource ${String(key)}`);
     const descriptor = Object.getOwnPropertyDescriptor(value, key);
     if (
@@ -104,12 +130,32 @@ export function parseCounts(value: unknown): Result<ResourceCounts> {
   return success(counts);
 }
 
-export function countTotal(counts: ResourceCounts): number {
-  return RESOURCES.reduce((total, resource) => total + counts[resource], 0);
+export function countTotal(counts: CardCounts): number {
+  let total = 0;
+  for (const count of Object.values(counts)) total += count;
+  return total;
 }
 
-export function affordable(state: GameState, seat: Seat, cost: ResourceCounts): Result<void> {
-  const possible = canAfford(ownSeat(state, seat).resources, cost);
+/** Counts over exactly the given kinds, omitted kinds being zero. A kind outside them is a bug. */
+export function fillCounts(counts: CardCounts, kinds: readonly string[]): Record<string, number> {
+  const filled: Record<string, number> = { ...zeroCounts(kinds) };
+  for (const [kind, count] of Object.entries(counts)) {
+    if (!kinds.includes(kind)) {
+      if (count === 0) continue;
+      throw new Error(`Card kind ${kind} is not part of this game`);
+    }
+    filled[kind] = count;
+  }
+  return filled;
+}
+
+export function affordable(state: GameState, seat: Seat, cost: CardCounts): Result<void> {
+  const kinds = cardKindsOf(state);
+  const possible = canAfford(
+    kindBounds(ownSeat(state, seat).resources),
+    fillCounts(cost, kinds),
+    kinds,
+  );
   if (!possible.ok) return possible;
   return possible.value
     ? success(undefined)
@@ -117,11 +163,13 @@ export function affordable(state: GameState, seat: Seat, cost: ResourceCounts): 
 }
 
 function changedBounds(
-  bounds: ResourceBounds,
-  counts: ResourceCounts,
+  bounds: ResourceBounds<string>,
+  counts: CardCounts,
   gain: boolean,
-): ResourceBounds {
-  const result = gain ? gainKnown(bounds, counts) : loseKnown(bounds, counts);
+  kinds: readonly string[],
+): ResourceBounds<string> {
+  const filled = fillCounts(counts, kinds);
+  const result = gain ? gainKnown(bounds, filled, kinds) : loseKnown(bounds, filled, kinds);
   if (!result.ok) throw new Error(`Validated resource update failed: ${result.error.code}`);
   return result.value;
 }
@@ -130,10 +178,10 @@ function changedBounds(
 export function resourceTransfers(
   from: ResourceEndpoint,
   to: ResourceEndpoint,
-  counts: ResourceCounts,
+  counts: CardCounts,
 ): EngineEffect[] {
-  return RESOURCES.flatMap((resource) => {
-    const count = counts[resource];
+  return kindsOfCounts(counts).flatMap((resource) => {
+    const count = counts[resource] ?? 0;
     if (!Number.isSafeInteger(count) || count < 0)
       throw new Error(`Invalid ${resource} transfer count`);
     return count === 0 ? [] : [{ type: 'resource-transfer' as const, from, to, resource, count }];
@@ -144,18 +192,19 @@ export function resourceTransfers(
 export function exchangeBank(
   state: GameState,
   seat: Seat,
-  counts: ResourceCounts,
+  counts: CardCounts,
   gain: boolean,
 ): { state: GameState; effects: EngineEffect[] } {
+  const kinds = cardKindsOf(state);
   const bank = { ...state.bank };
-  for (const kind of RESOURCES) {
-    const next = (bank[kind] ?? 0) + (gain ? -counts[kind] : counts[kind]);
+  for (const kind of kinds) {
+    const next = (bank[kind] ?? 0) + (gain ? -(counts[kind] ?? 0) : (counts[kind] ?? 0));
     if (next < 0) throw new Error(`Bank lacks ${kind}`);
     bank[kind] = next;
   }
   const next = updateSeat({ ...state, bank }, seat, (old) => ({
     ...old,
-    resources: changedBounds(old.resources, counts, gain),
+    resources: seatBounds(changedBounds(old.resources, counts, gain, kinds)),
   }));
   const owner: ResourceEndpoint = { kind: 'seat', seat };
   const bankEndpoint: ResourceEndpoint = { kind: 'bank' };
@@ -167,20 +216,21 @@ export function exchangeBank(
 
 export function privateExchange(
   priv: PrivateState,
-  counts: ResourceCounts,
+  counts: CardCounts,
   gain: boolean,
 ): Result<PrivateState> {
   const hand = { ...priv.hand };
-  for (const kind of RESOURCES) {
-    const next = (hand[kind] ?? 0) + (gain ? counts[kind] : -counts[kind]);
+  for (const kind of kindsOfCounts(priv.hand)) {
+    const change = counts[kind] ?? 0;
+    const next = (hand[kind] ?? 0) + (gain ? change : -change);
     if (next < 0) return failure('private-insufficient-resources', `Private hand lacks ${kind}`);
     hand[kind] = next;
   }
   return success({ ...priv, hand });
 }
 
-export function bankHas(state: GameState, counts: ResourceCounts): boolean {
-  return RESOURCES.every((kind) => (state.bank[kind] ?? 0) >= counts[kind]);
+export function bankHas(state: GameState, counts: CardCounts): boolean {
+  return Object.entries(counts).every(([kind, count]) => (state.bank[kind] ?? 0) >= count);
 }
 
 /** Build cost from the config-level costs table, then state-dependent costOf adjustments. */
@@ -188,10 +238,10 @@ export function buildCost(
   state: GameState,
   buildType: string,
   ctx: HandlerContext,
-): Result<ResourceCounts> {
+): Result<CardCounts> {
   const listed = ctx.hooks.costs(state.config, BASE_COSTS)[buildType];
   if (!listed) return failure('unknown-build-type', `No cost for ${buildType}`);
-  return parseCounts(ctx.hooks.costOf(state, buildType, listed));
+  return parseCardCounts(ctx.hooks.costOf(state, buildType, listed), cardKindsOf(state));
 }
 
 /** Victory target after scenario and module overrides. */

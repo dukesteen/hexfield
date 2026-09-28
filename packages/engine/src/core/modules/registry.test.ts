@@ -118,7 +118,7 @@ describe('module registry', () => {
     tied.hooks = decorate('B', 2);
     const hooks = createRegistry([child, empty, parent, tied]).hooks;
 
-    hooks.onDiceResult(sampleState, [2, 4]);
+    hooks.onDiceResult(sampleState, [2, 4], {});
     expect(hooks.production(sampleState, 6, {})).toEqual({
       B: { grain: 2 },
       A: { grain: 1 },

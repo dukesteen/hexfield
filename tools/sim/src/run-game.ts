@@ -19,6 +19,8 @@ export interface RunGameOptions extends LocalRandomOptions {
   gameIndex: number;
   players?: number;
   baseOptions?: Record<string, unknown>;
+  /** Add the knights (Cities and Knights) module to the players-chosen set; ignored with `config`. */
+  knights?: boolean;
   /** A complete genesis config (for example a seafaring board), replacing `players` and `baseOptions`. */
   config?: GameConfig;
   verify?: boolean;
@@ -124,15 +126,23 @@ export function cardConservation(
   return problems;
 }
 
-/** Two to four players use base alone; five or six add the five-six module. */
-export function gameConfig(players: number, baseOptions: Record<string, unknown>): GameConfig {
+/** Two to four players use base alone; five or six add five-six. `knights` adds Cities and Knights. */
+export function gameConfig(
+  players: number,
+  baseOptions: Record<string, unknown>,
+  knights = false,
+): GameConfig {
   if (!Number.isSafeInteger(players) || players < 2 || players > 6)
     throw new RangeError('Simulation requires 2–6 players');
   if (players > 4 && baseOptions.mapLayout === 'standard-fixed')
     throw new RangeError('The fixed map is only available for 2–4 players');
   const seats: Seat[] = [0, 1, 2, 3, 4, 5];
   return {
-    modules: moduleSelection(players > 4 ? ['base', 'five-six'] : ['base']),
+    modules: moduleSelection([
+      'base',
+      ...(players > 4 ? ['five-six'] : []),
+      ...(knights ? ['knights'] : []),
+    ]),
     seats: seats.slice(0, players),
     options: { base: { vpTarget: 10, ...baseOptions } },
     ...(baseOptions.mapLayout === 'standard-fixed' ? { board: standardFixedBoard() } : {}),
@@ -164,7 +174,8 @@ function choosePending(
 export function runGame(options: RunGameOptions): RunGameResult {
   const gameStarted = process.hrtime.bigint();
   const players = options.players ?? 4;
-  const config = options.config ?? gameConfig(players, options.baseOptions ?? {});
+  const config =
+    options.config ?? gameConfig(players, options.baseOptions ?? {}, options.knights === true);
   const genesisSeed = deriveSeed(options.seed, options.gameIndex, 'genesis');
   const deck = devCardCountsFor(config);
   const randomSource = createLocalRandomSource(

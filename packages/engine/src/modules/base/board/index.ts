@@ -9,7 +9,7 @@ import type { EdgeKind, Island } from '../../../core/board/index.js';
 import { buildBoardGraph } from '../../../core/geometry/index.js';
 import type { BoardGraph, VertexId } from '../../../core/geometry/index.js';
 import type { GameState } from '../../../core/state/types.js';
-import type { Resource, Seat } from '../../../core/types/index.js';
+import type { Seat } from '../../../core/types/index.js';
 
 const graphs = new WeakMap<GameState['board']['hexes'], BoardGraph>();
 
@@ -148,7 +148,7 @@ export function hexesForVertex(state: GameState, vertex: string): string[] {
 }
 
 /** Return the best maritime trade rate granted by built harbor vertices. */
-export function harborRate(state: GameState, seat: Seat, resource: Resource): number {
+export function harborRate(state: GameState, seat: Seat, resource: string): number {
   const graph = boardGraph(state);
   const occupied = new Set(
     state.board.buildings.filter((piece) => piece.seat === seat).map((piece) => piece.vertex),

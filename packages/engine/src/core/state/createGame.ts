@@ -1,7 +1,12 @@
-import { exactResourceBounds, zeroCounts } from '../resources/index.js';
+import {
+  canonicalKinds,
+  createResourceBounds,
+  seatBounds,
+  zeroCounts,
+} from '../resources/index.js';
 import { createRng } from '../rng/index.js';
 import { RESOURCES } from '../types/index.js';
-import type { ResourceCounts, Seat } from '../types/index.js';
+import type { Seat } from '../types/index.js';
 import { HEX_DIRECTIONS } from '../geometry/index.js';
 import type { HexCoord } from '../geometry/index.js';
 import type { ModuleRegistry, OptionSpec, SetupCtx } from '../modules/types.js';
@@ -104,14 +109,19 @@ function normalizeOptions(config: GameConfig, registry: ModuleRegistry): GameCon
   return { ...config, options };
 }
 
-function initialSeatStates(seats: readonly Seat[]): SeatState[] {
+/** The game's card kinds: the base resources plus whatever the modules add. */
+function cardKindsOf(registry: ModuleRegistry): readonly string[] {
+  return canonicalKinds(registry.hooks.cardKinds(RESOURCES));
+}
+
+function initialSeatStates(seats: readonly Seat[], kinds: readonly string[]): SeatState[] {
   return seats.map((seat) => {
-    const zeros = zeroCounts(RESOURCES) as ResourceCounts;
-    const bounds = exactResourceBounds(zeros);
+    const zeros = zeroCounts(kinds);
+    const bounds = createResourceBounds(0, zeros, zeros, kinds);
     if (!bounds.ok) throw new Error(bounds.error.message);
     return {
       seat,
-      resources: bounds.value,
+      resources: seatBounds(bounds.value),
       piecesLeft: {},
       cardSlots: [],
       publicVp: 0,
@@ -212,7 +222,7 @@ export function createGame(
     engineVersion: ENGINE_VERSION,
     config,
     board,
-    seats: initialSeatStates(config.seats),
+    seats: initialSeatStates(config.seats, cardKindsOf(registry)),
     bank: {},
     decks: {},
     turn: { number: 0, activeSeat: firstSeat, phase: [initial] },
@@ -232,5 +242,5 @@ export function createPrivateState(seat: Seat, registry: ModuleRegistry): Privat
   const ext = Object.fromEntries(
     registry.modules.map((module) => [module.id, cloneJson(module.initPrivate?.(seat) ?? null)]),
   );
-  return cloneJson({ seat, hand: zeroCounts(RESOURCES), slots: {}, ext });
+  return cloneJson({ seat, hand: zeroCounts(cardKindsOf(registry)), slots: {}, ext });
 }

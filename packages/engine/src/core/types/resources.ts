@@ -18,3 +18,11 @@ export type CardKind = string;
 
 /** Exact base-game resource counts. */
 export type ResourceCounts = CountMap<Resource>;
+
+/** Counts over the card kinds of one game: base resources plus module kinds such as commodities. */
+export type CardCounts = CountMap;
+
+/** True for a base-game resource kind, false for a module's card kind such as a commodity. */
+export function isBaseResource(value: unknown): value is Resource {
+  return typeof value === 'string' && (RESOURCES as readonly string[]).includes(value);
+}

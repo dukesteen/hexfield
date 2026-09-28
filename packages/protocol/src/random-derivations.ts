@@ -1,6 +1,6 @@
 import { canonicalDecode, canonicalEncode } from '@cp2p/codec';
 import { uniformInt } from '@cp2p/crypto';
-import { failure, success } from '@cp2p/engine';
+import { engineForConfig, failure, success } from '@cp2p/engine';
 import type { GameState, Pending, Result, Seat, SystemInput } from '@cp2p/engine';
 
 export type RandomPending = Extract<Pending, { kind: 'random' }>;
@@ -24,6 +24,9 @@ export interface RandomDerivation {
 export const RANDOM_LABELS = Object.freeze({
   dieOne: 'd1',
   dieTwo: 'd2',
+  /** The two production dice of a game that also rolls extra dice (Cities and Knights). */
+  red: 'red',
+  yellow: 'yellow',
   startSeat: 'start-seat',
   balancedDice: 'balanced-dice',
   stealIndex: 'steal-index',
@@ -77,7 +80,12 @@ function requestFor(
   if (!exactRecord(pending, ['kind', 'request', 'systemType']))
     return fail('invalid-random-pending', 'Random pending has invalid fields');
   const request = pending.request;
-  const keys = SYSTEM_REQUEST_KEYS[type];
+  const declared = SYSTEM_REQUEST_KEYS[type];
+  // A dice request may add the extra dice its modules declare (checked by `checkExtraDice`).
+  const keys =
+    declared && type === 'dice' && record(request) && Object.hasOwn(request, 'extra')
+      ? [...declared, 'extra']
+      : declared;
   if (!keys || !exactRecord(request, keys) || request.type !== type)
     return fail('invalid-random-request', 'Random request has invalid fields');
   if (!record(state) || !record(state.config) || !Array.isArray(state.config.seats))
@@ -126,6 +134,39 @@ function validateStartSeat(state: GameState, pending: RandomPending): Result<voi
   return success(undefined);
 }
 
+interface ExtraDie {
+  id: string;
+  faces: readonly string[];
+}
+
+/** The request's extra dice must be exactly the ones the game's modules declare, in order. */
+function checkExtraDice(state: GameState, request: Record<string, unknown>): Result<ExtraDie[]> {
+  const declared = engineForConfig(state.config).hooks.diceSpec(state, {
+    count: 2,
+    sides: 6,
+    extra: [],
+  }).extra;
+  const listed = request.extra;
+  if (declared.length === 0)
+    return Object.hasOwn(request, 'extra')
+      ? fail('invalid-dice-request', 'This game has no extra dice')
+      : success([]);
+  if (
+    !Array.isArray(listed) ||
+    listed.length !== declared.length ||
+    !listed.every(
+      (die, index) =>
+        exactRecord(die, ['faces', 'id']) &&
+        die.id === declared[index]?.id &&
+        Array.isArray(die.faces) &&
+        die.faces.length === declared[index]?.faces.length &&
+        die.faces.every((face, at) => face === declared[index]?.faces[at]),
+    )
+  )
+    return fail('invalid-dice-request', 'Extra dice must match the game’s declared dice');
+  return success(declared.map((die) => ({ id: die.id, faces: [...die.faces] })));
+}
+
 function validateDice(state: GameState, pending: RandomPending): Result<void> {
   const request = pending.request;
   if (!record(request)) return fail('invalid-random-request', 'Random request has invalid fields');
@@ -137,15 +178,26 @@ function validateDice(state: GameState, pending: RandomPending): Result<void> {
       return fail('invalid-dice-request', 'Random request does not match configured dice mode');
     const result = requestFor(state, pending, 'dice');
     if (!result.ok) return result;
-    return result.value.count === 2 && result.value.sides === 6
-      ? success(undefined)
-      : fail('invalid-dice-request', 'Random dice must request two six-sided dice');
+    if (result.value.count !== 2 || result.value.sides !== 6)
+      return fail('invalid-dice-request', 'Random dice must request two six-sided dice');
+    const extra = checkExtraDice(state, result.value);
+    return extra.ok ? success(undefined) : extra;
   }
   if (request.mode === 'balanced') {
     if (options.diceMode !== 'balanced')
       return fail('invalid-dice-request', 'Balanced request does not match configured dice mode');
-    if (!exactRecord(request, ['mode', 'remaining', 'type']) || request.type !== 'dice')
+    if (
+      !exactRecord(request, [
+        'mode',
+        'remaining',
+        'type',
+        ...(Object.hasOwn(request, 'extra') ? ['extra'] : []),
+      ]) ||
+      request.type !== 'dice'
+    )
       return fail('invalid-random-request', 'Balanced dice request has invalid fields');
+    const extra = checkExtraDice(state, request);
+    if (!extra.ok) return extra;
     if (!record(pending) || pending.kind !== 'random' || pending.systemType !== 'DICE_RESULT')
       return fail('random-pending-mismatch', 'Balanced dice has unexpected system type');
     const ids = diceIds(state);
@@ -192,6 +244,31 @@ function safeDerive(
   }
 }
 
+/** One face per extra die, each derived under the die's own label (for example `event`). */
+function deriveExtraDice(
+  request: Readonly<Record<string, unknown>>,
+  seed: Uint8Array,
+  context: unknown,
+): Result<Record<string, string>> {
+  const listed: unknown = request.extra;
+  const faces: Record<string, string> = {};
+  if (!Array.isArray(listed)) return success(faces);
+  for (const die of listed) {
+    if (
+      !exactRecord(die, ['faces', 'id']) ||
+      typeof die.id !== 'string' ||
+      !Array.isArray(die.faces)
+    )
+      return fail('invalid-dice-request', 'Extra die is malformed');
+    const face = safeDerive(die.id, die.faces.length, seed, context, request);
+    if (!face.ok) return face;
+    const chosen: unknown = die.faces[face.value];
+    if (typeof chosen !== 'string') return fail('invalid-dice-request', 'Extra die has no faces');
+    faces[die.id] = chosen;
+  }
+  return success(faces);
+}
+
 function baseDerivation(type: string): RandomDerivation {
   switch (type) {
     case 'startSeat':
@@ -234,6 +311,8 @@ function baseDerivation(type: string): RandomDerivation {
             const index = selected.value;
             const id = ids[index];
             if (id === undefined) return fail('invalid-random-state', 'Dice deck index is invalid');
+            const extra = deriveExtraDice(pending.request, seed, context);
+            if (!extra.ok) return extra;
             return success({
               kind: 'system',
               input: {
@@ -241,19 +320,38 @@ function baseDerivation(type: string): RandomDerivation {
                 type: 'DICE_RESULT',
                 index,
                 dice: [Math.floor(id / 6) + 1, (id % 6) + 1],
+                ...(Object.keys(extra.value).length ? { extra: extra.value } : {}),
               },
             });
           }
-          const first = safeDerive(RANDOM_LABELS.dieOne, 6, seed, context, pending.request);
+          // A game with extra dice labels its production dice red and yellow, so every die of a
+          // roll has a name of its own; base games keep d1 and d2.
+          const withExtra = Object.hasOwn(pending.request, 'extra');
+          const first = safeDerive(
+            withExtra ? RANDOM_LABELS.red : RANDOM_LABELS.dieOne,
+            6,
+            seed,
+            context,
+            pending.request,
+          );
           if (!first.ok) return first;
-          const second = safeDerive(RANDOM_LABELS.dieTwo, 6, seed, context, pending.request);
+          const second = safeDerive(
+            withExtra ? RANDOM_LABELS.yellow : RANDOM_LABELS.dieTwo,
+            6,
+            seed,
+            context,
+            pending.request,
+          );
           if (!second.ok) return second;
+          const extra = deriveExtraDice(pending.request, seed, context);
+          if (!extra.ok) return extra;
           return success({
             kind: 'system',
             input: {
               kind: 'system',
               type: 'DICE_RESULT',
               dice: [first.value + 1, second.value + 1],
+              ...(Object.keys(extra.value).length ? { extra: extra.value } : {}),
             },
           });
         },

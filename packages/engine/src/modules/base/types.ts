@@ -1,11 +1,11 @@
-import type { Resource, ResourceCounts, Seat } from '../../core/types/index.js';
+import type { CardCounts, Resource, Seat } from '../../core/types/index.js';
 import type { BaseOptions } from './config.js';
 
 export interface TradeOffer {
   id: number;
   proposer: Seat;
-  give: ResourceCounts;
-  want: ResourceCounts;
+  give: CardCounts;
+  want: CardCounts;
   to: Seat[];
   acceptedBy: Seat[];
   declinedBy: Seat[];

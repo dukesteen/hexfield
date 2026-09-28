@@ -7,6 +7,8 @@ import {
   engineForConfig,
   enumerateCommands,
   RESOURCES,
+  kindBounds,
+  kindsOfCounts,
 } from '@cp2p/engine';
 import type {
   CommandShape,
@@ -453,13 +455,13 @@ function privateProblems(
       continue;
     }
     let total = 0;
-    for (const resource of RESOURCES) {
+    for (const resource of kindsOfCounts(holder.resources.min)) {
       const count = priv.hand[resource];
       if (
         typeof count !== 'number' ||
         !Number.isSafeInteger(count) ||
-        count < holder.resources.min[resource] ||
-        count > holder.resources.max[resource]
+        count < (kindBounds(holder.resources).min[resource] ?? 0) ||
+        count > (kindBounds(holder.resources).max[resource] ?? 0)
       )
         problems.push(`Seat ${holder.seat} ${resource} is outside public bounds`);
       total += count ?? 0;
