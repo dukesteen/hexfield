@@ -79,32 +79,38 @@ async function roomModulePath(page: Page): Promise<string> {
   return loadedPath;
 }
 
-async function readRoom(page: Page) {
+async function readRoom(page: Page, includePeerStats = false) {
   const path = await roomModulePath(page);
-  return page.evaluate(async (modulePath) => {
-    // oxlint-disable typescript/no-unsafe-type-assertion -- Import the registry module actually loaded by this browser context.
-    const { getOnlineRoom } = (await import(
-      /* @vite-ignore */ modulePath
-    )) as typeof import('../src/features/online/room-registry.js');
-    // oxlint-enable typescript/no-unsafe-type-assertion
-    const room = getOnlineRoom(new URL(location.href).hash.match(/\/lobby\/([^/?]+)/)?.[1] ?? '');
-    if (!room) return null;
-    const snapshot = room.getSnapshot();
-    return {
-      peerCount: snapshot.peers.length,
-      hasConnectionError: snapshot.connectionError !== null,
-      diagnosticKind: snapshot.diagnostic?.kind ?? null,
-      startup: snapshot.startup?.phase ?? null,
-      lobbyStatus: snapshot.lobby?.status ?? null,
-      humanCount: snapshot.lobby?.seats.filter((seat) => seat.kind === 'human').length ?? 0,
-      manual: {
-        phase: snapshot.manual.phase,
-        gatheringComplete: snapshot.manual.gatheringComplete,
-        hasCode: snapshot.manual.code !== null,
-      },
-      closed: snapshot.closed,
-    };
-  }, path);
+  return page.evaluate(
+    async ({ modulePath, includePeerStats: readPeerStats }) => {
+      // oxlint-disable typescript/no-unsafe-type-assertion -- Import the registry module actually loaded by this browser context.
+      const { getOnlineRoom } = (await import(
+        /* @vite-ignore */ modulePath
+      )) as typeof import('../src/features/online/room-registry.js');
+      // oxlint-enable typescript/no-unsafe-type-assertion
+      const room = getOnlineRoom(new URL(location.href).hash.match(/\/lobby\/([^/?]+)/)?.[1] ?? '');
+      if (!room) return null;
+      const snapshot = room.getSnapshot();
+      const peerStats = readPeerStats ? await room.getPeerStats?.().catch(() => []) : [];
+      return {
+        peerCount: snapshot.peers.length,
+        connectionError: snapshot.connectionError,
+        diagnostic: snapshot.diagnostic,
+        signalingState: snapshot.signaling.state,
+        peerStates: peerStats?.map(({ state, route }) => ({ state, route })) ?? [],
+        startup: snapshot.startup?.phase ?? null,
+        lobbyStatus: snapshot.lobby?.status ?? null,
+        humanCount: snapshot.lobby?.seats.filter((seat) => seat.kind === 'human').length ?? 0,
+        manual: {
+          phase: snapshot.manual.phase,
+          gatheringComplete: snapshot.manual.gatheringComplete,
+          hasCode: snapshot.manual.code !== null,
+        },
+        closed: snapshot.closed,
+      };
+    },
+    { modulePath: path, includePeerStats },
+  );
 }
 
 async function getManualInvitation(page: Page, peer?: string): Promise<string> {
@@ -119,9 +125,8 @@ async function getManualInvitation(page: Page, peer?: string): Promise<string> {
       const roomId = new URL(location.href).hash.match(/\/lobby\/([^/?]+)/)?.[1];
       const room = roomId ? getOnlineRoom(roomId) : null;
       if (!room) throw new Error('The host lobby is not open');
-      const start = room.startManualInvitation;
-      if (!start) throw new Error('Manual invitation is unavailable');
-      const created = await start(target ?? undefined);
+      if (!room.startManualInvitation) throw new Error('Manual invitation is unavailable');
+      const created = await room.startManualInvitation(target ?? undefined);
       if (!created.ok) throw new Error(`Manual offer failed: ${created.error.code}`);
       return created.value;
     },
@@ -164,9 +169,8 @@ async function acceptManualAnswer(inviter: Page, code: string): Promise<void> {
       const roomId = new URL(location.href).hash.match(/\/lobby\/([^/?]+)/)?.[1];
       const room = roomId ? getOnlineRoom(roomId) : null;
       if (!room) throw new Error('The inviter lobby is not open');
-      const accept = room.acceptManualAnswer;
-      if (!accept) throw new Error('Manual answer is unavailable');
-      const accepted = await accept(answer);
+      if (!room.acceptManualAnswer) throw new Error('Manual answer is unavailable');
+      const accepted = await room.acceptManualAnswer(answer);
       return accepted.ok ? null : accepted.error.code;
     },
     { modulePath: path, answer: code },
@@ -440,7 +444,7 @@ async function runMode(playwright: Playwright, mode: 'signaling' | 'manual') {
     const diagnostics = await Promise.all(
       opened.pages.map(async (page, index) => ({
         engine: engineNames[index],
-        ...(await readRoom(page).catch(() => null)),
+        ...(await readRoom(page, true).catch(() => null)),
       })),
     );
     throw new Error(
