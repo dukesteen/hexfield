@@ -8,9 +8,10 @@ The immediate release goal is now the [first multiplayer beta](multiplayer-beta.
 following the user's 2026-09-27 scope reduction. It prioritizes manual-code play
 with friends without operating a server, same-browser reconnect, and completed
 games with audits. Seat transfer, recovered-human return, takeover UI and other
-large features remain deferred from the beta. The app and signaling service are
-now deployed together on Cloudflare. Full M-C and M-D remain incomplete; the
-smaller beta does not change their acceptance claims.
+large features were deferred from that first beta. The app and signaling service
+are now deployed together on Cloudflare. M-D's explicit acceptance criteria now
+have evidence; M-C remains open for the browser and physical-device checks in its
+[current evidence map](verification/stage09/mc-remaining-acceptance.md).
 
 The [current beta browser check](verification/stage09/beta-browser-check.md)
 passes four-human manual-code startup, all setup placements, a shared roll, a
@@ -24,10 +25,14 @@ checks pass. External-network connectivity remains unverified, and the full
 milestone acceptance items below remain open.
 
 The current app is [Hexfield on Cloudflare](https://hexfield.steenbakkers.cc/).
-The [redesign release](verification/cloudflare/redesign-release.md) is deployed
-from `127f6ab` and includes the merged artwork, multiplayer controls and certified
-seat-transfer flow. Its live check covers startup, human/bot setup and saved-game
-exit. Later local checkpoints below have not yet been deployed.
+The [protocol v6 release](verification/cloudflare/protocol-v6-release.md) is deployed
+from `9652085` and includes the merged artwork, encrypted saves, certified transfer
+and recovery, and the reviewed protocol fixes. Published assets match the build
+and the live signaling checks pass. A two-profile production UI check passes
+startup and peer-accepted settlement/road placement without page errors.
+Everyone must refresh and create a new room
+for this protocol version. The [earlier redesign release](verification/cloudflare/redesign-release.md)
+records the prior v5 deployment.
 The earlier [deployment check](verification/cloudflare/deployment.md) records live
 invite-link startup, replicated setup moves, reload, lobby autosave and desktop /
 mobile viewport checks. Workers Free remains the deployment constraint; TURN is
@@ -80,7 +85,9 @@ keeps manual-relay full-game acceptance open.
 The [current M-C matrix](verification/stage09/mc-remaining-acceptance.md) and
 [M-D matrix](verification/stage10/remaining-acceptance.md) distinguish current-v6
 evidence from older traces. Reviewed lobby readiness and ceremony delivery fixes
-are committed locally and on `acceptance/mc-md-v6`; they are not deployed.
+are included in the protocol v6 deployment. The implementation checkpoints below
+describe their state when recorded; the current evidence maps determine what
+remains open.
 The [persistence profile](verification/stage10/persistence-lifecycle-acceptance.md)
 now completes a default ten-point game with twelve rotating restarts, an
 everyone-left interval, four clean independent audits and exact private-state
