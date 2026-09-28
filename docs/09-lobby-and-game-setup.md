@@ -116,6 +116,6 @@ Version compatibility: in `HELLO` and in step 1, peers compare `protocolVersion`
 
 - [ ] Create → invite → join → start → finish → audit ✓ works over the signaling server and over manual codes.
 - [ ] Mixed humans and bots work. The bot host can be any peer.
-- [ ] A version mismatch is detected with a clear message.
+- [x] A version mismatch is detected with a clear message. The [signed-version UI check](verification/stage09/lobby-ceremony-ui-bridge.md) rejects incompatible protocol and engine versions and displays the host version without a start action.
 - [ ] Every pre-consent ceremony abort path retires its keys and returns to the lobby cleanly; post-consent timeout/disclosure preserves the signed promise and shows a recoverable waiting state.
 - [ ] Turn timers work, and a disagreeing peer can't be forced into an early timeout.

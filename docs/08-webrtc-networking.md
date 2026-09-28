@@ -126,6 +126,9 @@ A "Connection" panel in lobby and game:
 
 - [ ] 4 browsers (including Firefox and WebKit) form a full mesh via the signaling server and via manual codes plus mesh relay.
 - [ ] Offer codes fit a QR code and scan successfully on a phone camera (manual test, recorded in STATUS.md).
-- [ ] The identity binding rejects a tampered signaling path (unit test with a MITM fake signaling adapter swapping fingerprints).
-- [ ] A 1 MiB message transfers correctly with backpressure.
-- [ ] The signaling server never logs or inspects blobs (code review checklist item plus a test asserting blobs are forwarded verbatim).
+- [x] The identity binding rejects a tampered signaling path (unit test with a MITM fake signaling adapter swapping fingerprints).
+- [x] A 1 MiB message transfers correctly with backpressure.
+- [x] The signaling server never logs or inspects blobs (code review checklist item plus a test asserting blobs are forwarded verbatim).
+
+The [networking acceptance audit](verification/stage08/current-acceptance-audit.md)
+records the source review and passing focused checks for these three items.
