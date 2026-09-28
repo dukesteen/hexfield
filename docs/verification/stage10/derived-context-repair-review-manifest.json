@@ -1,0 +1,74 @@
+{
+  "sources": [
+    {
+      "path": "packages/protocol/src/consensus.ts",
+      "sha256": "a1692964c58423b3c903dcea8403761dec0476ff1a29bcc5f3afb6261b133777"
+    },
+    {
+      "path": "packages/protocol/src/consensus-controller.ts",
+      "sha256": "74a55971e84684bbacbd8c585123353c68c2ad43f30a360f418bf965cb691a92"
+    },
+    {
+      "path": "packages/protocol/src/consensus-controller.test.ts",
+      "sha256": "6ba0449edd0a566aae29e64a237c07de9648dc7ebf0ef79c8f2214395c34c306"
+    },
+    {
+      "path": "packages/protocol/src/replicated-log.ts",
+      "sha256": "bec3a375fa3b0086f978d8116f045b1374159b203086c920bcefbc2bcdf5f10b"
+    },
+    {
+      "path": "packages/protocol/src/replicated-log.test.ts",
+      "sha256": "21985d02774404d7685db6d88602ea5ade96179424a6e5c9212dccb97b7ec393"
+    },
+    {
+      "path": "packages/protocol/src/replay.ts",
+      "sha256": "9ab16ad3ec9487d1adabffcbd9e66b3945251a436c3fe51b153953cfc7a50ccc"
+    },
+    {
+      "path": "packages/protocol/src/journal.ts",
+      "sha256": "027bffef4385e0c983f407b3379984d256b5b25690813bd88134cf34473b8e1a"
+    },
+    {
+      "path": "packages/protocol/src/safety-store.ts",
+      "sha256": "6f4d14269c6666bae70674887d447306a84b20c19d70b324b2562caadb4be484"
+    },
+    {
+      "path": "docs/06-protocol-event-log.md",
+      "sha256": "b5c627d1dff2deab3e78af7a22ce70ef8a698d9b7d4b84e28c2aed2a1ab5039f"
+    },
+    {
+      "path": "docs/verification/p2p-acceptance-policy.md",
+      "sha256": "151dca677a5c237a9bac724dff20a9434939a94e1e49d0afd6a849299b046bb0"
+    },
+    {
+      "path": "tools/sim/src/net.ts",
+      "sha256": "2f7c6a01ec47546f7ebc2c565ef06171da3d3874bf699a00aa71d3c673ecae62",
+      "included_ranges": [
+        [
+          180,
+          275
+        ],
+        [
+          345,
+          480
+        ],
+        [
+          980,
+          1005
+        ],
+        [
+          1290,
+          1310
+        ]
+      ]
+    },
+    {
+      "path": "/private/tmp/hexfield-derived-context-design-raw.json",
+      "sha256": "0c26408133c7897300eae3b8a651120a41ca1bd9697d6bf739771388f4824f21"
+    },
+    {
+      "path": "docs/verification/stage10/derived-context-repair-review-input.md",
+      "sha256": "80b1b738d7452b1c547484cc1d93ffae04207a4baa5fcfe0afcebdd44ad075ee"
+    }
+  ]
+}

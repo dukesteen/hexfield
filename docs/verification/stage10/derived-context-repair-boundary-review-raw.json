@@ -1,0 +1,97 @@
+{
+  "duration_api_ms": 95318,
+  "stop_reason": "end_turn",
+  "session_id": "5becd23a-88dc-4441-a6b3-1ca546ad2479",
+  "total_cost_usd": 0.41985760000000005,
+  "usage": {
+    "input_tokens": 2,
+    "cache_creation_input_tokens": 28613,
+    "cache_read_input_tokens": 6028,
+    "output_tokens": 9487,
+    "output_tokens_details": {
+      "thinking_tokens": 7363
+    },
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 28613,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "not_available",
+    "iterations": [
+      {
+        "input_tokens": 2,
+        "output_tokens": 9487,
+        "cache_read_input_tokens": 6028,
+        "cache_creation_input_tokens": 28613,
+        "cache_creation": {
+          "ephemeral_5m_input_tokens": 0,
+          "ephemeral_1h_input_tokens": 28613
+        },
+        "type": "message"
+      }
+    ],
+    "speed": "standard"
+  },
+  "modelUsage": {
+    "claude-opus-5-5": {
+      "inputTokens": 2,
+      "outputTokens": 9487,
+      "cacheReadInputTokens": 6028,
+      "cacheCreationInputTokens": 28613,
+      "webSearchRequests": 0,
+      "costUSD": 0.41985760000000005,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "thinkingTokens": 7363,
+      "canonicalModel": "claude-opus-5-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "permission_denials": [],
+  "terminal_reason": "completed",
+  "fast_mode_state": "off",
+  "fast_mode_disabled_reason": "sdk_opt_in_required",
+  "subagent_stats": {
+    "spawned": 0,
+    "requested": {
+      "background": 0,
+      "foreground": 0,
+      "unset": 0
+    },
+    "started_in_background": 0,
+    "max_depth": 0,
+    "spawned_by_subagents": 0,
+    "completed": 0,
+    "failed": 0,
+    "killed": {
+      "parent": 0,
+      "user": 0,
+      "system": 0
+    },
+    "refused": {
+      "depth_limit": 0,
+      "concurrency_limit": 0,
+      "budget": 0
+    },
+    "by_type": {}
+  },
+  "is_error": false,
+  "num_turns": 1,
+  "subtype": "success",
+  "api_error_status": null,
+  "result": "# Repair queue-boundary correction review\n\n**Verdict: APPROVE, with one condition.** I didn't use any tools and ran nothing. This review covers only the source you pasted.\n\n**The condition:** the approval assumes `ConsensusController.snapshot()` still succeeds on a controller that has been disposed but whose context is fine. If `snapshot()` fails once `stopped` is set, the item below is a blocker and the verdict is REQUEST_CHANGES. The fix is two lines.\n\nI found no safety defects. Every remaining path either fails closed or costs liveness only.\n\n## Conditional blocker: synchronous `failClosed` while `persistCommit` swaps controllers\n\n**Where:** the non-`consensus-context` branch in `strikePeer` and in `requestTradeProof`.\n\n**The window:** `persistCommit` calls `this.activeController().dispose()`, sets `this.context = next`, and then awaits `openController()`. There may be an earlier await on `cheatCandidateStore.delete` as well. For that whole window, `this.controller` is the old controller, which has already been stopped. This happens on every commit.\n\n**Trigger:** two calls can land in that window:\n- Any known peer sends an oversized frame, which reaches `strikePeer` through `onMessage`.\n- The local UI calls `requestTradeProof`.\n\nBoth call `this.controller?.snapshot()`. If that call returns a code such as `consensus-stopped` because the controller is stopped, both paths call `failClosed`, and the replica is disposed. That is the same kind of remotely triggered dispose that M-A was about, reached from a different window.\n\n**Test gap:** `commit-strike` pauses at `loadSafety`, which is before `dispose()`. No test covers this window.\n\n**Fix (smallest):** in `strikePeer`, return on any `snapshot()` failure. In `requestTradeProof`, return `replica-repairing` or `replica-unavailable` without calling `failClosed`. Terminal errors are then classified only at the serialized `enqueue` boundary, which already handles them correctly.\n\n**Alternative:** confirm that `snapshot()` never checks `stopped`, and add a regression test that injects an oversized frame while `openController` is paused.\n\n## Verified from the pasted source\n\n**M-A: fixed**\n- **Strike and capture paths:** `strikePeer` and `captureRejectedProofs` no longer enter repair themselves. A context fault only queues the bounded no-op, and `contextCheckQueued` dedupes it.\n- **`enqueue` pre-check:** queued work stops once a fault is known, and this now also covers `duringRepair` operations.\n- **Post-check and `catch`:** both give a new fault priority over the consequential errors (`consensus-effects`, `consensus-stopped`). Terminal errors that aren't caused by a context fault still dispose.\n- **The reproduced sequence resolves to the hold:**\n  1. The strike's `snapshot()` sets the fault.\n  2. `persistCommit`'s second snapshot check throws.\n  3. The controller's `emit` returns `consensus-effects`.\n  4. The `enqueue` post-check sees `hasContextFault()` and enters the hold. The result is a hold, not a dispose.\n- **Pending-save interleaving:** the controller persists the vote and updates `persistedBytes`, but because `stopped` is set it emits nothing. Repair then retransmits exactly the persisted prevote, and the test asserts this.\n\n**Scenario-8 `persistCommit` ordering: fixed.** The first thing `persistCommit` does is check `prior = snapshot()`. A corrupted context fails there, before `validateCertifiedEntry`, and ends up in the hold as described above.\n\n**Cache guards: fixed.** Both the recorded-replay return and the cached-rejection return check `snapshot()` first. The test covers both the accepted and rejected cases, with no store change and no emission.\n\n**L-A: disproved.** `verifyReplaySnapshot` checks exact canonical hash equality, so the pre-gate is equivalent.\n\n**L-B: fixed.** `repairNow` no longer clears `invalidByPeer` or `blockedPeers`, and the `blocked-peer` case asserts that the peer stays blocked. Side effect: strikes are ignored for the whole hold, so misbehaving peers go unpunished during repair. Each message is still size-bounded, and only voter messages are processed. This is acceptable.\n\n**L-C: fixed.** `snapshot()` runs before the proof is verified, before `pendingTradeProofs` changes and before anything is sent.\n\n**L-D: disproved.** The held-commit path and `authenticateCertifiedEntry` call the same strict `verifyCertificate`, with the same expected fields and against a frozen membership.\n\n## Hypothetical, not blocking\n\n1. **Fault flag without a scheduled boundary.** `requestTradeProof` returns early on `hasContextFault()` without calling `queueContextCheck()`. If some future caller swallows a `snapshot()` failure outside the queue, nothing schedules the repair boundary until the next ingress. Calling `queueContextCheck()` there too would cost almost nothing.\n2. **`hashValue(message.snapshot)` is not wrapped.** It runs outside a `try` in `receiveDuringRepair`/`admitExpensiveRequest` and in the `repairNow` pre-gate. If it ever threw on data decoded from the wire, the `enqueue` `catch` would dispose the replica during the hold, because `repairing` is set and `controller` is null. It's probably unreachable, since the input was canonically decoded, but it's worth confirming.\n\n## Acceptance status\n\nThese are gaps in acceptance, not code defects:\n- The 62 focused tests are adequate for this boundary, apart from the window described above.\n- The scenario-8 trigger description is now correct: an incoming non-nil precommit, with no drop filter, an exact `consensus-context` check, matching snapshot parent and hash, then a later certified command. However, no full scenario-8 game has been run, so scenario 8 can't be counted as accepted yet.\n- No full-game acceptance is claimed, and none should be inferred from this review.\n\n---\n\nSeparately, the Atlassian and Google Drive connectors can't be used until you authorize them in your claude.ai connector settings.",
+  "ttft_ms": 75367,
+  "type": "result",
+  "duration_ms": 95401,
+  "uuid": "855e2965-c5d8-4667-99bf-8073d15f5088",
+  "ttft_stream_ms": 1500,
+  "time_to_request_ms": 31,
+  "first_content_frame_ms": 1500,
+  "queued_turn_count": 0,
+  "result_index": 0
+}

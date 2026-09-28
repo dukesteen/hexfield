@@ -112,6 +112,7 @@ import type {
 import { genesisSchema, logEntrySchema } from './schemas.js';
 import { MAX_MESSAGE_BYTES, parseCanonical } from './validation.js';
 import { validateVote, verifyCertificate } from './votes.js';
+import type { VoteContext } from './votes.js';
 import { authenticatedCheatSigner, verifyCheatProof } from './cheat-proof.js';
 import type { CheatClaim, CheatFinding } from './cheat-proof.js';
 import {
@@ -339,6 +340,26 @@ export class ReplicatedLog {
   private queuedMessages = 0;
   private pulseTimer: unknown = null;
   private disposed = false;
+  private contextCheckQueued = false;
+  private controllerAnchor: {
+    seq: number;
+    hash: string;
+    genesisDigest: string;
+    voters: readonly string[];
+    membership: VoteContext;
+  } | null = null;
+  private derivedRepair: {
+    stopped: ConsensusController;
+    anchor: NonNullable<ReplicatedLog['controllerAnchor']>;
+    heldCommits: Map<string, CertifiedEntry>;
+    lastRequestAt: number;
+    replayed?: {
+      context: ProposalContext;
+      entries: CertifiedEntry[];
+      snapshotHash: string;
+      prefixHash: string;
+    };
+  } | null = null;
 
   private constructor(
     private readonly options: ReplicatedLogOptions,
@@ -488,14 +509,25 @@ export class ReplicatedLog {
 
   /** Replays the certified parent before retrying a retained, authenticated certificate. */
   repair(snapshot?: unknown): Promise<Result<void>> {
-    return this.enqueue(() => this.repairNow(snapshot));
+    return this.enqueue(() => this.repairNow(snapshot), true);
   }
 
   private async repairNow(snapshot?: unknown): Promise<Result<void>> {
-    const state = this.activeController().snapshot();
-    if (!state.ok) return state;
-    if (state.value.haltKind !== 'certified-validation')
-      return failure('replica-repair', 'Only a certified validation halt can be repaired');
+    const hold = this.derivedRepair;
+    if (hold) await hold.stopped.settled();
+    else {
+      const state = this.activeController().snapshot();
+      if (!state.ok) return state;
+      if (state.value.haltKind !== 'certified-validation')
+        return failure('replica-repair', 'Only a certified validation halt can be repaired');
+    }
+    if (
+      hold?.replayed &&
+      snapshot !== undefined &&
+      // verifyReplaySnapshot uses this same canonical hash equality.
+      toHex(hashValue(snapshot)) !== hold.replayed.snapshotHash
+    )
+      return failure('snapshot-mismatch', 'Snapshot differs from the certified replay');
     let record: Awaited<ReturnType<ProtocolJournal['load']>>;
     try {
       record = await this.options.journal.load();
@@ -504,25 +536,79 @@ export class ReplicatedLog {
     }
     if (!record)
       return this.failClosed('replica-journal', 'Certified journal is missing during repair');
-    const replayed = replayCertifiedPrefix(
-      record.genesis,
-      record.entries,
-      this.options.engine,
-      this.options.policy,
-    );
-    if (!replayed.ok) return replayed;
+    if (
+      !sameBytes(canonicalEncode(record.genesis), canonicalEncode(this.genesisEntry)) ||
+      !sameBytes(canonicalEncode(record.genesis), canonicalEncode(this.options.genesisEntry))
+    )
+      return this.failClosed('replica-genesis', 'Repair journal differs from the original genesis');
+    const prefixHash = toHex(hashValue({ genesis: record.genesis, entries: record.entries }));
+    if (hold?.replayed && prefixHash !== hold.replayed.prefixHash)
+      return this.failClosed('replica-journal', 'Certified journal changed during repair');
+    const replayed = hold?.replayed
+      ? success(hold.replayed)
+      : replayCertifiedPrefix(
+          record.genesis,
+          record.entries,
+          this.options.engine,
+          this.options.policy,
+        );
+    if (!replayed.ok)
+      return hold ? this.failClosed(replayed.error.code, replayed.error.message) : replayed;
     const fresh = replayed.value.context;
     if (
       record.height !== fresh.log.head.seq + 1 ||
-      fresh.log.head.seq !== this.context.log.head.seq ||
-      entryHash(fresh.log.head) !== entryHash(this.context.log.head)
+      fresh.log.head.seq !== (hold?.anchor.seq ?? this.context.log.head.seq) ||
+      entryHash(fresh.log.head) !== (hold?.anchor.hash ?? entryHash(this.context.log.head))
     )
       return this.failClosed('replica-journal', 'Certified parent changed during repair');
+    if (hold && !hold.stopped.opensOn(fresh))
+      return this.failClosed(
+        'replica-authority',
+        'Durable replay differs from the controller opening context',
+      );
+    if (hold && !hold.replayed)
+      hold.replayed = {
+        context: fresh,
+        entries: replayed.value.entries,
+        snapshotHash: toHex(hashValue(snapshotFromContext(fresh))),
+        prefixHash,
+      };
+    if (hold && snapshot === undefined)
+      return failure('replica-repairing', 'Derived repair requires a replay-verified snapshot');
     if (snapshot !== undefined) {
       const checked = verifyReplaySnapshot(snapshot, fresh);
       if (!checked.ok) return checked;
     }
-    this.activeController().dispose();
+    let restored: ConsensusController | null = null;
+    if (hold) {
+      const safety = record.safety;
+      if (!hold.stopped.matchesPersistedRecord(safety))
+        return this.failClosed(
+          'consensus-write-conflict',
+          'Durable vote or lock record changed during repair',
+        );
+      const local = checkLocalKey(this.options, fresh);
+      if (!local.ok) return this.failClosed(local.error.code, local.error.message);
+      for (const key of local.value.keys.values()) key.fill(0);
+      const opened = await this.restoreController(fresh, true);
+      if (!opened.ok) return this.failClosed(opened.error.code, opened.error.message);
+      restored = opened.value;
+      let stillStored: Awaited<ReturnType<ProtocolJournal['loadSafety']>>;
+      try {
+        stillStored = await this.options.journal.loadSafety(record.height);
+      } catch {
+        restored.dispose();
+        return failure('replica-storage', 'Could not recheck durable safety during repair');
+      }
+      if (!stillStored || !hold.stopped.matchesPersistedRecord(stillStored)) {
+        restored.dispose();
+        return this.failClosed(
+          'consensus-write-conflict',
+          'Durable safety changed while restoring repair',
+        );
+      }
+    }
+    if (!hold) this.activeController().dispose();
     this.controller = null;
     this.context = fresh;
     this.timerObserver.advance(fresh.log.timers ?? []);
@@ -531,13 +617,31 @@ export class ReplicatedLog {
     this.rejectedCommands.clear();
     this.rejectedProposals.clear();
     this.rejectedDeckContributions.clear();
+    this.rejectedCountContributions.clear();
+    this.rejectedStealMessages.clear();
+    this.rejectedMasterReveals.clear();
     this.preparedDeckPrefix = null;
     this.sentDeckPrefix = null;
     this.entries = replayed.value.entries;
     this.refreshHistoricalHumanPeers();
-    const opened = await this.openController();
-    if (!opened.ok) return this.failClosed(opened.error.code, opened.error.message);
-    return this.activeController().dispatch({ kind: 'resume-after-replay' });
+    for (const [id, claim] of this.cheatCandidates)
+      if (!this.verifiedCheatClaim(claim).ok) this.cheatCandidates.delete(id);
+    if (!restored) {
+      const opened = await this.openController();
+      if (!opened.ok) return this.failClosed(opened.error.code, opened.error.message);
+      return this.activeController().dispatch({ kind: 'resume-after-replay' });
+    }
+    this.installController(restored, fresh);
+    this.derivedRepair = null;
+    const resumed = await restored.resume();
+    if (!resumed.ok) return resumed;
+    for (const certified of hold?.heldCommits.values() ?? []) {
+      // oxlint-disable-next-line no-await-in-loop -- Retained untrusted hints are fully validated on the freshly restored parent.
+      const accepted = await this.acceptCertified(certified);
+      if (!accepted.ok && FATAL_CONTROLLER_ERRORS.has(accepted.error.code)) return accepted;
+    }
+    this.schedulePulse();
+    return this.requestSync(this.context.log.head.seq + 1);
   }
 
   /** Resolves on matching commitment; another committed value requires renewed intent. */
@@ -858,6 +962,8 @@ export class ReplicatedLog {
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
+    this.derivedRepair?.stopped.dispose();
+    this.derivedRepair = null;
     this.pendingTradeProofs.clear();
     this.tradeProofResponses.clear();
     this.tradeProofRequestsByFinalizer.clear();
@@ -912,6 +1018,15 @@ export class ReplicatedLog {
   /** Send one authorized trade-proof request directly to its counterparty host. */
   requestTradeProof(value: SignedTradeProofRequest): Result<void> {
     if (this.disposed) return failure('replica-disposed', 'Replica has been disposed');
+    if (this.derivedRepair || this.controller?.hasContextFault())
+      return failure('replica-repairing', 'Awaiting certified derived-state repair');
+    const context = this.controller?.snapshot();
+    if (context && !context.ok) {
+      if (context.error.code !== 'consensus-context')
+        return this.failClosed(context.error.code, context.error.message);
+      this.queueContextCheck();
+      return failure('replica-repairing', 'Awaiting certified derived-state repair');
+    }
     const checked = verifyTradeProofRequest(value, this.context.log);
     if (!checked.ok) return checked;
     const request = checked.value;
@@ -1084,12 +1199,16 @@ export class ReplicatedLog {
     }
   }
 
-  private async openController(): Promise<Result<void>> {
-    const controller = await ConsensusController.restore({
-      context: this.context,
+  private restoreController(
+    context: ProposalContext,
+    exact = false,
+  ): Promise<Result<ConsensusController>> {
+    return ConsensusController.restore({
+      context,
+      requireExactRestore: exact,
       seat: this.options.seat,
       secretKey: this.secretKey,
-      store: journalSafetyStore(this.options.journal, this.context.log.head.seq + 1),
+      store: journalSafetyStore(this.options.journal, context.log.head.seq + 1),
       onEffects: (effects) => this.handleEffects(effects),
       admitLocalValue: (proposal) => this.canVoteForRecoveryProposal(proposal),
       beforePersist: (previous, next) => {
@@ -1097,22 +1216,140 @@ export class ReplicatedLog {
         return timed.ok ? this.admitRecoveryVotes(previous, next) : timed;
       },
     });
-    if (!controller.ok) return controller;
-    this.controller = controller.value;
+  }
+
+  private installController(controller: ConsensusController, context: ProposalContext): void {
+    this.controller = controller;
+    this.controllerAnchor = Object.freeze({
+      seq: context.log.head.seq,
+      hash: entryHash(context.log.head),
+      genesisDigest: context.membership.genesisDigest,
+      voters: Object.freeze(context.membership.voters.map((voter) => voter.publicKey)),
+      membership: Object.freeze({
+        ...context.membership,
+        voters: Object.freeze(
+          context.membership.voters.map((voter) => Object.freeze({ ...voter })),
+        ),
+      }),
+    });
+  }
+
+  private async openController(): Promise<Result<void>> {
+    const opened = await this.restoreController(this.context);
+    if (!opened.ok) return opened;
+    this.installController(opened.value, this.context);
     return success(undefined);
   }
 
-  private enqueue<T>(operation: () => Promise<Result<T>>): Promise<Result<T>> {
+  private enterDerivedRepair(): boolean {
+    if (this.derivedRepair) return true;
+    if (!this.controller || !this.controllerAnchor) return false;
+    const stopped = this.controller;
+    stopped.dispose();
+    this.controller = null;
+    this.derivedRepair = {
+      stopped,
+      anchor: this.controllerAnchor,
+      heldCommits: new Map(),
+      lastRequestAt: -Infinity,
+    };
+    this.clearConsensusTimers();
+    this.clearTimedVoteRetry();
+    this.status({ kind: 'halted', code: 'consensus-context' });
+    this.requestDerivedSnapshot();
+    this.schedulePulse();
+    return true;
+  }
+
+  private requestDerivedSnapshot(): Result<void> {
+    const hold = this.derivedRepair;
+    if (!hold || this.options.clock.now() - hold.lastRequestAt < 2_000) return success(undefined);
+    hold.lastRequestAt = this.options.clock.now();
+    return this.broadcast({
+      t: 'SNAPSHOT_REQ',
+      genesisDigest: hold.anchor.genesisDigest,
+      atSeq: hold.anchor.seq,
+    });
+  }
+
+  private retainHeldCommit(certified: CertifiedEntry): void {
+    const hold = this.derivedRepair;
+    if (
+      !hold ||
+      certified.entry.seq !== hold.anchor.seq + 1 ||
+      certified.entry.prevHash !== hold.anchor.hash ||
+      hold.heldCommits.size >= 4
+    )
+      return;
+    const hash = entryHash(certified.entry);
+    if (hold.heldCommits.has(hash)) return;
+    if (
+      !verifyObject(
+        'entry',
+        entryBody(certified.entry),
+        certified.entry.sig,
+        parsePeerId(certified.entry.sequencer),
+      )
+    )
+      return;
+    const certificate = verifyCertificate(certified.certificate, hold.anchor.membership, {
+      seq: certified.entry.seq,
+      term: certified.entry.term,
+      phase: 'precommit',
+      valueHash: hash,
+    });
+    if (!certificate.ok) return;
+    hold.heldCommits.set(hash, copyCanonical(certified));
+  }
+
+  private receiveDuringRepair(from: PeerId, message: ProtocolMessage): Promise<Result<void>> {
+    const hold = this.derivedRepair;
+    if (!hold || !hold.anchor.voters.includes(from)) return Promise.resolve(success(undefined));
+    if (message.t === 'SNAPSHOT_RES') {
+      if (
+        message.genesisDigest !== hold.anchor.genesisDigest ||
+        message.atSeq !== hold.anchor.seq ||
+        !this.admitExpensiveRequest(from, `snapshot-response/${toHex(hashValue(message.snapshot))}`)
+      )
+        return Promise.resolve(success(undefined));
+      return this.repairNow(message.snapshot);
+    }
+    if (message.t === 'COMMIT') this.retainHeldCommit(message.certified);
+    if (message.t === 'PING') return Promise.resolve(this.send(from, { t: 'PONG', n: message.n }));
+    return Promise.resolve(success(undefined));
+  }
+
+  private enqueue<T>(
+    operation: () => Promise<Result<T>>,
+    duringRepair = false,
+  ): Promise<Result<T>> {
     const result = this.queue.then(async (): Promise<Result<T>> => {
       if (this.disposed) return failure('replica-disposed', 'Replicated log is closed');
+      if (this.controller?.hasContextFault() && this.enterDerivedRepair())
+        return failure('consensus-context', 'Certified context changed; awaiting durable replay');
+      if (this.derivedRepair && !duringRepair)
+        return failure('replica-repairing', 'Awaiting certified derived-state repair');
+      const repairing = this.derivedRepair;
       try {
         const outcome = await operation();
+        if (
+          ((!repairing && this.derivedRepair) ||
+            this.controller?.hasContextFault() ||
+            (!outcome.ok && outcome.error.code === 'consensus-context')) &&
+          this.enterDerivedRepair()
+        )
+          return failure('consensus-context', 'Certified context changed; awaiting durable replay');
         if (!outcome.ok && FATAL_CONTROLLER_ERRORS.has(outcome.error.code)) {
           this.status({ kind: 'halted', code: outcome.error.code });
           this.dispose();
         }
         return outcome;
       } catch {
+        if (
+          ((!repairing && this.derivedRepair) || this.controller?.hasContextFault()) &&
+          this.enterDerivedRepair()
+        )
+          return failure('consensus-context', 'Certified context changed; awaiting durable replay');
         this.status({ kind: 'halted', code: 'replica-transition' });
         this.dispose();
         return failure('replica-transition', 'Replicated log transition failed');
@@ -1120,6 +1357,16 @@ export class ReplicatedLog {
     });
     this.queue = result;
     return result;
+  }
+
+  /** Synchronous ingress may detect a fault while a persisted transition is awaiting storage. */
+  private queueContextCheck(): void {
+    if (this.contextCheckQueued || this.disposed) return;
+    this.contextCheckQueued = true;
+    void this.enqueue(() => Promise.resolve(success(undefined)), true).then(() => {
+      this.contextCheckQueued = false;
+      return undefined;
+    });
   }
 
   private attachTransport(): void {
@@ -1148,10 +1395,15 @@ export class ReplicatedLog {
         this.queuedMessages += 1;
         void this.enqueue(async () => {
           const result = await this.receive(from, copy);
-          if (!result.ok && !FATAL_CONTROLLER_ERRORS.has(result.error.code))
+          if (
+            !this.derivedRepair &&
+            !this.controller?.hasContextFault() &&
+            !result.ok &&
+            !FATAL_CONTROLLER_ERRORS.has(result.error.code)
+          )
             await this.captureRejectedProofs(from, copy);
           return result;
-        }).then((result) => {
+        }, true).then((result) => {
           this.queuedMessages -= 1;
           const remaining = (this.queuedByPeer.get(from) ?? 1) - 1;
           if (remaining === 0) this.queuedByPeer.delete(from);
@@ -1172,10 +1424,13 @@ export class ReplicatedLog {
     this.unsubscribers.push(
       this.options.transport.onPeerChange((peer, online) => {
         void this.enqueue(async () => {
+          if (this.derivedRepair) return this.pulse();
+          const checked = this.activeController().snapshot();
+          if (!checked.ok) return checked;
           this.observeAllRecoveryPresence();
           if (online) this.cancelRecoveryForReturningPeer(peer);
           return this.pulse();
-        });
+        }, true);
       }),
     );
   }
@@ -1202,12 +1457,20 @@ export class ReplicatedLog {
 
   private knownSyncPeer(peer: PeerId): boolean {
     return (
-      this.context.membership.voters.some((voter) => voter.publicKey === peer) ||
+      (this.derivedRepair?.anchor.voters.includes(peer) ??
+        this.context.membership.voters.some((voter) => voter.publicKey === peer)) ||
       this.formerHumanPeer(peer)
     );
   }
 
   private strikePeer(peer: PeerId): void {
+    if (this.derivedRepair) return;
+    const checked = this.controller?.snapshot();
+    if (checked && !checked.ok) {
+      if (checked.error.code === 'consensus-context') this.queueContextCheck();
+      else this.failClosed(checked.error.code, checked.error.message);
+      return;
+    }
     const count = (this.invalidByPeer.get(peer) ?? 0) + 1;
     this.invalidByPeer.set(peer, count);
     if (count >= INVALID_MESSAGE_LIMIT) this.rejectPeer(peer);
@@ -1687,12 +1950,13 @@ export class ReplicatedLog {
 
   private async receive(from: PeerId, bytes: Uint8Array): Promise<Result<void>> {
     if (this.blockedPeers.has(from)) return success(undefined);
-    const voter = this.context.membership.voters.some((item) => item.publicKey === from);
-    if (!voter && !this.formerHumanPeer(from))
-      return failure('replica-peer', 'Sender is not a certified voter or historical human');
     const decoded = decodeProtocolMessage(bytes);
     if (!decoded.ok) return decoded;
     const message = decoded.value;
+    if (this.derivedRepair) return this.receiveDuringRepair(from, message);
+    const voter = this.context.membership.voters.some((item) => item.publicKey === from);
+    if (!voter && !this.formerHumanPeer(from))
+      return failure('replica-peer', 'Sender is not a certified voter or historical human');
     if (!voter && message.t !== 'SYNC_REQ')
       return failure('replica-peer', 'Former voters may only request certified history');
     switch (message.t) {
@@ -1915,6 +2179,7 @@ export class ReplicatedLog {
           proposal: message.proposal,
         });
         if (!received.ok) {
+          if (FATAL_CONTROLLER_ERRORS.has(received.error.code)) return received;
           await this.captureRejectedProofs(from, bytes);
           if (
             received.error.code === 'recovery-approval-required' &&
@@ -2137,7 +2402,10 @@ export class ReplicatedLog {
         return success(undefined);
       return this.requestSync(height);
     }
-    return this.activeController().dispatch({ kind: 'commit', certified });
+    const accepted = await this.activeController().dispatch({ kind: 'commit', certified });
+    if (!accepted.ok && accepted.error.code === 'consensus-context' && this.enterDerivedRepair())
+      this.retainHeldCommit(certified);
+    return accepted;
   }
 
   /** A cheap gate only; the certified parent decides the authoritative voter set. */
@@ -3362,7 +3630,18 @@ export class ReplicatedLog {
   private async captureRejectedProofs(from: PeerId, bytes: Uint8Array): Promise<void> {
     if (
       this.disposed ||
-      this.context.log.genesis.security !== 'verified' ||
+      this.derivedRepair ||
+      this.controller?.hasContextFault() ||
+      this.context.log.genesis.security !== 'verified'
+    )
+      return;
+    const checked = this.controller?.snapshot();
+    if (checked && !checked.ok) {
+      if (checked.error.code !== 'consensus-context')
+        this.failClosed(checked.error.code, checked.error.message);
+      return;
+    }
+    if (
       !this.context.membership.voters.some((voter) => voter.publicKey === from) ||
       !this.admitExpensiveRequest(from, `capture/${toHex(hashValue(bytes))}`, 'cheat')
     )
@@ -3590,7 +3869,7 @@ export class ReplicatedLog {
 
   private async handleEffects(effects: readonly ConsensusEffect[], index = 0): Promise<void> {
     const effect = effects[index];
-    if (!effect) return;
+    if (!effect || this.derivedRepair) return;
     switch (effect.kind) {
       case 'broadcast-proposal':
         this.requireSend(this.broadcast({ t: 'PROPOSAL', proposal: effect.proposal }));
@@ -3641,14 +3920,14 @@ export class ReplicatedLog {
   }
 
   private async persistCommit(certified: CertifiedEntry): Promise<void> {
+    const prior = this.activeController().snapshot();
+    if (!prior.ok) throw new Error(`Voting record failed: ${prior.error.code}`);
     const previous = this.context;
     const checked = validateCertifiedEntry(certified, previous);
     if (!checked.ok) throw new Error(`Certified entry failed replay: ${checked.error.code}`);
     const advanced = advanceContext(previous, checked.value);
     if (!advanced.ok) throw new Error(`Certified context failed: ${advanced.error.code}`);
     const next = advanced.value;
-    const prior = this.activeController().snapshot();
-    if (!prior.ok) throw new Error(`Voting record failed: ${prior.error.code}`);
     const controlProof =
       checked.value.entry.payload.kind === 'control'
         ? objectiveProofParentHash(checked.value.entry.payload, previous)
@@ -3847,16 +4126,17 @@ export class ReplicatedLog {
     if (this.disposed) return;
     if (this.pulseTimer !== null) this.options.clock.clearTimeout(this.pulseTimer);
     this.pulseTimer = this.options.clock.setTimeout(() => {
-      void this.enqueue(() => this.pulse());
+      void this.enqueue(() => this.pulse(), true);
     }, 2_000);
   }
 
   private async pulse(): Promise<Result<void>> {
     try {
-      this.observeAllRecoveryPresence();
-      this.notifyAutoTakeoverEligibility();
+      if (this.derivedRepair) return this.requestDerivedSnapshot();
       const snapshot = this.activeController().snapshot();
       if (!snapshot.ok) return snapshot;
+      this.observeAllRecoveryPresence();
+      this.notifyAutoTakeoverEligibility();
       const body = {
         genesisDigest: this.context.membership.genesisDigest,
         epoch: this.context.membership.epoch,

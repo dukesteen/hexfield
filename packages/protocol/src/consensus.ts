@@ -239,7 +239,11 @@ function contextStamp(context: ProposalContext): ContextStamp {
   return {
     contextBytes: canonicalEncode({
       ...other,
-      log: { ...log, lastNonces: [...log.lastNonces], engine: nonfunctions(engine) },
+      log: {
+        ...log,
+        lastNonces: [...log.lastNonces],
+        engine: nonfunctions(engine),
+      },
       policy: {
         ...nonfunctions(context.policy),
         randomDerivations: nonfunctions(context.policy.randomDerivations ?? {}),
@@ -1628,6 +1632,7 @@ export type ConsensusEvent =
 
 /** Private, validated state for one controller height. Public reducers stay fully validating. */
 export interface OwnedConsensusState {
+  matchesOpenedContext(candidate: ProposalContext): boolean;
   snapshot(): Result<ConsensusState>;
   dispatch(
     event: ConsensusEvent,
@@ -1644,10 +1649,39 @@ class OwnedConsensusStateImpl implements OwnedConsensusState {
   constructor(
     private state: ConsensusState,
     private readonly context: ProposalContext,
-    private readonly seat: Seat,
     private readonly stamp: ContextStamp,
   ) {
     ownedStates.add(state);
+  }
+
+  matchesOpenedContext(candidate: ProposalContext): boolean {
+    try {
+      const replayed = contextStamp(candidate);
+      // Full replay rebuilds these record wrappers and ancestry closures. Engine,
+      // policy, prototypes and their function references must remain identical.
+      const rebuilt = new Set([
+        'context',
+        // runtimeReferences depth zero repeats the wrapper itself; deeper
+        // prototype references remain part of the comparison.
+        'context/prototype/0',
+        'log',
+        'log/prototype/0',
+        'context/verifyHistoricalCheat',
+        'context/verifyHistoricalAccusation',
+      ]);
+      const openedFunctions = this.stamp.functions.filter(([name]) => !rebuilt.has(name));
+      const replayedFunctions = replayed.functions.filter(([name]) => !rebuilt.has(name));
+      return (
+        sameBytes(this.stamp.contextBytes, replayed.contextBytes) &&
+        openedFunctions.length === replayedFunctions.length &&
+        openedFunctions.every(
+          ([name, reference], index) =>
+            name === replayedFunctions[index]?.[0] && reference === replayedFunctions[index]?.[1],
+        )
+      );
+    } catch {
+      return false;
+    }
   }
 
   private checkContext(): Result<void> {
@@ -1655,15 +1689,13 @@ class OwnedConsensusStateImpl implements OwnedConsensusState {
     try {
       current = contextStamp(this.context);
     } catch {
-      return failure('consensus-restore', 'Certified context is not canonical data');
+      return failure('consensus-context', 'Certified context changed to noncanonical data');
     }
     if (sameContextStamp(this.stamp, current)) return success(undefined);
     if (this.pending)
       return failure('consensus-context', 'Certified context changed during persistence');
-    const restored = restoreConsensusState(this.state, this.context, this.seat);
-    if (!restored.ok) return restored;
-    if (!sameBytes(canonicalEncode(restored.value), canonicalEncode(this.state)))
-      return failure('consensus-restore', 'Restore to persist newly verified terminal evidence');
+    // Once the opening stamp differs, this context cannot validate stored
+    // proposals or locks. Only durable replay may establish their authority.
     return failure('consensus-context', 'Certified context changed; restore this voting record');
   }
 
@@ -1754,7 +1786,7 @@ export function openOwnedConsensusState(
   if (!restored.ok) return restored;
   try {
     return success(
-      new OwnedConsensusStateImpl(restored.value, context, seat, contextStamp(context)),
+      new OwnedConsensusStateImpl(restored.value, context, contextStamp(context)),
     );
   } catch {
     return failure('consensus-restore', 'Certified context is not canonical data');

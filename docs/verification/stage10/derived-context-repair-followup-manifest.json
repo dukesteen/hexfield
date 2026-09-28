@@ -1,0 +1,45 @@
+{
+  "sources": [
+    {
+      "path": "/private/tmp/hexfield-derived-context-repair-review-raw.json",
+      "sha256": "be26f0b87576ed1c422b02a5df13cae5a8279c8641408e8ab3251c915ddd346d"
+    },
+    {
+      "path": "packages/protocol/src/consensus.ts",
+      "sha256": "03188297861b2f06435b8389558e30faa397a5e8711d779b1f56d83eba15d827"
+    },
+    {
+      "path": "packages/protocol/src/consensus-controller.ts",
+      "sha256": "dbf68f309c7ce4b1b4a7a3532a9d245cb4e27b6b4cb8b56e7d4d76898545041a"
+    },
+    {
+      "path": "packages/protocol/src/consensus-controller.test.ts",
+      "sha256": "36f92170d442b4055fc9c427a5d9556b4ba87d8a7aba8a7843dd6b19c6a77f3b"
+    },
+    {
+      "path": "packages/protocol/src/replicated-log.ts",
+      "sha256": "8d7de11df546161a391c6cf14c0e4446fc425b481f0a57ae4ba32bed4c10d32b"
+    },
+    {
+      "path": "packages/protocol/src/replicated-log.test.ts",
+      "sha256": "771c4581e9d049550cbd0333f0274764feaf45e2cb6b650f5d99ad9017943f7b"
+    },
+    {
+      "path": "tools/sim/src/net.ts",
+      "sha256": "21a88167a1c99fa513ecf0ea5bab1e84d841201e3f1cd8c06aeee21fd6260717",
+      "role": "context-only, owned by Luna for scenario8"
+    },
+    {
+      "path": "docs/06-protocol-event-log.md",
+      "sha256": "b5c627d1dff2deab3e78af7a22ce70ef8a698d9b7d4b84e28c2aed2a1ab5039f"
+    },
+    {
+      "path": "docs/verification/p2p-acceptance-policy.md",
+      "sha256": "151dca677a5c237a9bac724dff20a9434939a94e1e49d0afd6a849299b046bb0"
+    },
+    {
+      "path": "docs/verification/stage10/derived-context-repair-followup-input.md",
+      "sha256": "7749a5b2283eb28a3e05e366c3c2c69bc98ab5f5ebbacd2d18b79d1f2580eef0"
+    }
+  ]
+}

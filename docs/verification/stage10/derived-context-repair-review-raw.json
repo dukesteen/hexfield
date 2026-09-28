@@ -1,0 +1,97 @@
+{
+  "duration_api_ms": 310442,
+  "stop_reason": "end_turn",
+  "session_id": "f07e3878-c931-4ba0-8ccf-b9001423526a",
+  "total_cost_usd": 2.1504536,
+  "usage": {
+    "input_tokens": 2,
+    "cache_creation_input_tokens": 191670,
+    "cache_read_input_tokens": 6028,
+    "output_tokens": 30794,
+    "output_tokens_details": {
+      "thinking_tokens": 26588
+    },
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 191670,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "not_available",
+    "iterations": [
+      {
+        "input_tokens": 2,
+        "output_tokens": 30794,
+        "cache_read_input_tokens": 6028,
+        "cache_creation_input_tokens": 191670,
+        "cache_creation": {
+          "ephemeral_5m_input_tokens": 0,
+          "ephemeral_1h_input_tokens": 191670
+        },
+        "type": "message"
+      }
+    ],
+    "speed": "standard"
+  },
+  "modelUsage": {
+    "claude-opus-5-5": {
+      "inputTokens": 2,
+      "outputTokens": 30794,
+      "cacheReadInputTokens": 6028,
+      "cacheCreationInputTokens": 191670,
+      "webSearchRequests": 0,
+      "costUSD": 2.1504536,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "thinkingTokens": 26588,
+      "canonicalModel": "claude-opus-5-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "permission_denials": [],
+  "terminal_reason": "completed",
+  "fast_mode_state": "off",
+  "fast_mode_disabled_reason": "sdk_opt_in_required",
+  "subagent_stats": {
+    "spawned": 0,
+    "requested": {
+      "background": 0,
+      "foreground": 0,
+      "unset": 0
+    },
+    "started_in_background": 0,
+    "max_depth": 0,
+    "spawned_by_subagents": 0,
+    "completed": 0,
+    "failed": 0,
+    "killed": {
+      "parent": 0,
+      "user": 0,
+      "system": 0
+    },
+    "refused": {
+      "depth_limit": 0,
+      "concurrency_limit": 0,
+      "budget": 0
+    },
+    "by_type": {}
+  },
+  "is_error": false,
+  "num_turns": 1,
+  "subtype": "success",
+  "api_error_status": null,
+  "result": "# Review: derived-context repair (frozen source, read-only)\n\nI found one high-severity defect, three medium and four low. The high one means the repair path only works when the height's voting record is empty, and the scenario 8 harness is shaped to produce exactly that case.\n\nI didn't run anything. I worked from the frozen source you pasted, so locations are given as function names rather than line numbers.\n\n## H1 — High (liveness, hidden by the harness): a corrupted context becomes a terminal `consensus-restore` whenever the height has recorded proposal data\n\n**Where:** `consensus.ts`, `OwnedConsensusStateImpl.checkContext`. Also `ReplicatedLog.enqueue`, which treats `consensus-restore` as fatal.\n\n**Mechanism:**\n- When the stamp doesn't match, `checkContext` runs `restoreConsensusState(this.state, this.context)` against the mutated, untrusted context. It returns `consensus-context` only if that restore succeeds with identical bytes.\n- `restoreConsensusState` calls `validateProposal` on every stored proposal, proposal hint, `valid`/`locked` record, and `validateCertifiedEntry` on `decision`. Under state corruption those all fail on the state hash, so the result is `consensus-restore`.\n- `consensus-restore` is in `FATAL_CONTROLLER_ERRORS`, so the replica disposes and never enters `enterDerivedRepair`.\n- Your own controller test (\"corrupt local derivation stops an active controller…\") shows this: with a stored proposal the code is `consensus-restore`.\n\n**Consequences:**\n- Repair is only reachable when the local record at that height has no proposals, locks, hints or decision.\n- `tools/sim/src/net.ts:455-460` drops the corrupted height's `PROPOSAL` and `VOTE` messages for peer 0 (\"Keep this peer's target-height voting record empty\"). That is what makes scenario 8 pass.\n- A peer holding a lock can never reach the \"exact vote/lock restore\" at replica level.\n- Organic scenario-8 corruption, for example after the peer has prevoted a proposal, is terminal. That contradicts doc 06 §6.\n\n**Smallest fix:** when the stamp differs and nothing is pending, return `failure('consensus-context', …)` directly. Drop the restore against the untrusted context. Deciding from a context that is already known to be wrong proves nothing. The repair's exact restore against a trusted replay still fails closed on real terminal evidence, and the stopped controller persists nothing either way.\n\n**Test:** at replica level, receive a proposal, prevote, reach a polka and lock, then corrupt the bank. Assert the replica enters the hold (not a dispose), repairs, and keeps safety bytes and revision identical. Then remove the drop filter in `net.ts` and rerun scenario 8.\n\n## M1 — Medium (quarantine breach): side effects run in the same operation after the controller reports the corruption\n\n**Where:** `ReplicatedLog.receive`, `PROPOSAL` case.\n\n**Mechanism:**\n- Repair is only entered when the operation returns to `enqueue`, or from inside `acceptCertified`.\n- The `PROPOSAL` branch calls `captureRejectedProofs(from, bytes)` unconditionally after a failed dispatch, including when the failure is `consensus-context`.\n- That verifies claims against the corrupted `this.context.log`, then:\n  - writes a durable `cheatCandidateStore.putIfAbsent`,\n  - broadcasts `CHEAT_CLAIM`,\n  - keeps the claim in `this.cheatCandidates`.\n- `repairNow` never clears or rechecks `cheatCandidates`. After repair, `candidate()` proposes the first cheat claim first. If that claim is false, `validateProposal` rejects our proposal every time we are proposer, so our proposer rounds stall.\n\n**Fix:**\n- In the `PROPOSAL` branch, `if (!received.ok && FATAL_CONTROLLER_ERRORS.has(received.error.code)) return received;` before any capture or accusation logic.\n- In the shared reset in `repairNow`, recheck each `cheatCandidates` entry with `verifiedCheatClaim`, as `recoverCheatCandidates` does.\n\n## M2 — Medium (liveness): strikes and rejection caches built from the corrupted context survive repair\n\n**Where:** the `receive` branches that validate against `this.context` without calling the controller, and `repairNow`'s reset list.\n\n**Mechanism:**\n- Corruption is detected lazily, on the next controller call or pulse.\n- Before detection, these branches validate against the corrupted state:\n  - `SUBMIT` → `deriveCandidate` (bank+1 breaks invariants) → `command-proof-invalid` → strike.\n  - `DECK_CONTRIB`, `COUNT_CONTRIB`, `STEAL_*` → rejection cache plus strike.\n  - `TRADE_PROOF_REQUEST` → strike.\n- None of those return `consensus-context`, so the hold is never entered from them.\n- Repair clears `rejectedCommands`, `rejectedProposals` and `rejectedDeckContributions`. It does not reset:\n  - `invalidByPeer` or `blockedPeers`,\n  - `rejectedCountContributions` or `rejectedStealMessages`,\n  - `rejectedMasterReveals`.\n- If honest voters get disconnected this way, they can't deliver the `SNAPSHOT_RES` the hold needs.\n\n**Fix:**\n- In `strikePeer` (only reached on failure paths), first check `this.controller?.snapshot()`. If it fails, call `enterDerivedRepair()` and return without striking.\n- In `repairNow`'s shared reset, clear `invalidByPeer`, `rejectedCountContributions` and `rejectedStealMessages`. Also unblock peers whose strikes landed after `controllerAnchor` was installed. The simplest version clears the strike state entirely on repair.\n\n## M3 — Medium/low (ingress amplification): every admitted snapshot triggers a full journal replay before the cheap check\n\n**Where:** `repairNow`, hold path.\n\n**Mechanism:**\n- The order is `journal.load` → `replayCertifiedPrefix` over the whole history → `opensOn` → `verifyReplaySnapshot`.\n- `receiveDuringRepair` admits 3 distinct snapshot hashes per voter per 10 s. So one Byzantine voter can force about 3 full replays every 10 s, including verified-crypto proofs late in a game.\n- The replica queue is serialized and drops messages beyond 32, so honest snapshots queue behind this work.\n\n**Fix:**\n- Cache `{ safety revision + bytes, fresh, expected = hashValue(snapshotFromContext(fresh)) }` in the hold after the first successful replay and `opensOn` check.\n- For later snapshots, compare the hash first. Re-read only `journal.loadSafety` and the head before restoring.\n\n## L1 — Low (liveness; sync is the fallback): held commits are unauthenticated and can be overwritten\n\n**Where:** `retainHeldCommit`.\n\n**Mechanism:**\n- The only checks are `seq` and `prevHash`.\n- `Map.set` overwrites an existing key. A Byzantine voter can resend the honest entry with a garbage certificate and replace the honest one, or fill all 4 slots first.\n- After repair, `acceptCertified` rejects the bad copies, so \"automatic held-commit continuation\" silently degrades to `requestSync`.\n\n**Fix:**\n- Freeze a copy of the anchor's membership.\n- Before retaining, check the entry signature and run `verifyCertificate` against that frozen membership.\n- Don't overwrite an existing key.\n\n## L2 — Low (liveness; untested): opening stamp vs. full replay for honest peers\n\n**Where:** `matchesOpenedContext`.\n\n**Mechanism:**\n- The opening stamp comes from the incremental `advanceContext`. The comparison candidate comes from a full replay.\n- Equivalence is tested for one stub commit only. It isn't tested for verified games, where these can differ:\n  - optional `transfer`, `timers`, `recovery` or `authority` keys that are absent in one and `undefined` in the other,\n  - crypto epochs,\n  - `lastNonces` Map insertion order (the stamp uses `[...log.lastNonces]`, which is unsorted).\n- Any byte difference makes an honest peer's repair end in terminal `replica-authority`.\n\n**Fix:**\n- Sort `lastNonces` in `contextStamp`.\n- Add a sim assertion after every commit in a verified lifecycle game: `opensOn(replayCertifiedPrefix(journal))` must be true.\n\nThe omission list itself looks sound. It only names the depth-0 wrappers and the two ancestry closures. Engine and policy identity, their prototypes and methods, and `randomDerivations` are all still compared. The candidate is always the local durable replay.\n\n## L3 — Low: a swallowed snapshot failure makes the next dispatch fatal instead of entering repair\n\n**Mechanism:** `controller.snapshot()` calls `stopVoting()` when it fails. Some callers ignore the result, for example the `handleEffects` `halt` case. The next dispatch then returns `consensus-stopped`, which is fatal, and the replica disposes.\n\n**Fix:** have the controller expose a `contextFault` flag. In `enqueue`, enter repair when `this.controller?.contextFault` is set, whatever the operation's own result code.\n\n## L4 — Evidence and coverage gaps\n\n- **`locked-safety` test:** it writes a schema-invalid lock (`polka`). It shows the byte guard fires first, but no test shows a locked replica actually repairing, which H1 prevents.\n- **Pending write:** tested only at controller level. The replica-level version (a context mutation during `saveSafety`, then exactly one retransmitted prevote whose bytes equal the durable copy) is untested.\n- **Quarantine:** there are no tests that fire `SUBMIT`, `SYS_CONTRIB`, `DECK_CONTRIB`, `CHEAT_CLAIM`, timers or pulses during the hold.\n- **Scenario 8 evidence in `net.ts`:**\n  - `desyncObserved` accepts any `error` status on seat 0, not specifically `consensus-context`.\n  - `snapshotResponsePairs` only proves a `SNAPSHOT_RES` arrived, not that the repair used it.\n  - Together with the proposal/vote drop filter, a passing run doesn't prove organic repair.\n\n## Checked and found sound\n\n- **Anchor:** frozen when the controller is installed, and read only from the anchor during the hold. Snapshot requests, sender admission and held commits all use it.\n- **Durable authority:** genesis is byte-compared against both sources. The journal height and head must match the anchor.\n- **Safety record:** revision and bytes are compared before the exact restore and rechecked after it (`matchesPersistedRecord`). Because revisions only increase, a changed-then-restored record can't slip through.\n- **No reset path:** there is no `create` or `initialize`. `requireExactRestore` refuses to normalize terminal evidence.\n- **Ordering:**\n  - The context swap happens only after the restore succeeds.\n  - `derivedRepair` is cleared before `resume`, so retransmission sends the stored bytes exactly.\n  - Operations that don't carry the repair flag are rejected when they run, not just when they're queued.\n  - `handleEffects` returns early during the hold.\n  - Timers are cleared.\n  - The pulse during the hold only sends rate-limited `SNAPSHOT_REQ`.\n- **Forged snapshots:** a hash mismatch leaves the replica held, with no strike and no mutation.\n- **Pending write at controller level:** a stopped controller doesn't emit after its write resolves. `persistedBytes` and `revision` follow the durable record even when `owned.commit()` fails.\n\n**Not verified:** no full scenario 8 game has been run. With H1 unfixed, I wouldn't infer scenario acceptance from these unit results.\n\nSeparately, the Atlassian and Google Drive connectors need to be authorized in your claude.ai connector settings before they can be used.",
+  "ttft_ms": 272537,
+  "type": "result",
+  "duration_ms": 310524,
+  "uuid": "fb3aae29-35e2-4f6f-917e-63805fb2885c",
+  "ttft_stream_ms": 3834,
+  "time_to_request_ms": 44,
+  "first_content_frame_ms": 3834,
+  "queued_turn_count": 0,
+  "result_index": 0
+}

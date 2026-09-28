@@ -29,6 +29,8 @@ export interface ConsensusControllerOptions {
   secretKey: Uint8Array;
   /** One record for this game/key/height, retained across controller crashes. */
   store: SafetyStore;
+  /** Repair must reuse exact durable bytes without normalizing newly found terminal evidence. */
+  requireExactRestore?: boolean;
   /** Effects are at-least-once. Handlers must deduplicate committed sequence/value. */
   onEffects: (effects: readonly ConsensusEffect[]) => void | Promise<void>;
   /** Local admission only. It must not alter replay or objective validity. */
@@ -43,6 +45,8 @@ export interface ConsensusControllerOptions {
 export class ConsensusController {
   private queue: Promise<unknown> = Promise.resolve();
   private stopped = false;
+  private contextFault = false;
+  private persistedBytes: Uint8Array;
   private readonly secretKey: Uint8Array;
   private readonly rejectedProposals = new Map<string, { code: string; message: string }>();
 
@@ -53,6 +57,7 @@ export class ConsensusController {
     private readonly owned: OwnedConsensusState,
   ) {
     this.secretKey = options.secretKey.slice();
+    this.persistedBytes = canonicalEncode(state);
   }
 
   /** Only for a genuinely new height; existing or lost stores are not reset here. */
@@ -109,7 +114,7 @@ export class ConsensusController {
     let revision = record.revision;
     const normalized = canonicalEncode(restored.value);
     if (!sameBytes(normalized, record.bytes)) {
-      if (restored.value.haltKind !== 'terminal')
+      if (options.requireExactRestore || restored.value.haltKind !== 'terminal')
         return failure('consensus-restore', 'Voting record changed without a terminal proof');
       try {
         if (!(await options.store.save(revision, normalized)))
@@ -129,7 +134,7 @@ export class ConsensusController {
   snapshot(): Result<ConsensusState> {
     const snapshot = this.owned.snapshot();
     if (!snapshot.ok) {
-      this.stopVoting();
+      this.stopVoting(snapshot.error.code);
       return snapshot;
     }
     if (!sameBytes(canonicalEncode(snapshot.value), canonicalEncode(this.state))) {
@@ -137,6 +142,26 @@ export class ConsensusController {
       return failure('consensus-restore', 'Restore to persist newly verified terminal evidence');
     }
     return snapshot;
+  }
+
+  /** The opening stamp remains usable after the mutable derived context fails its guard. */
+  opensOn(context: ProposalContext): boolean {
+    return this.owned.matchesOpenedContext(context);
+  }
+
+  hasContextFault(): boolean {
+    return this.contextFault;
+  }
+
+  settled(): Promise<void> {
+    return this.queue.then(
+      () => undefined,
+      () => undefined,
+    );
+  }
+
+  matchesPersistedRecord(record: StoredSafety): boolean {
+    return record.revision === this.revision && sameBytes(record.bytes, this.persistedBytes);
   }
 
   /** Expected CAS revision for atomically committing this controller's height. */
@@ -160,19 +185,24 @@ export class ConsensusController {
 
   dispatch(event: ConsensusEvent): Promise<Result<void>> {
     return this.enqueue(async () => {
-      if (event.kind === 'proposal' && this.isRecordedProposalReplay(event.proposal))
-        return success(undefined);
+      if (event.kind === 'proposal' && this.isRecordedProposalReplay(event.proposal)) {
+        const checked = this.snapshot();
+        return checked.ok ? success(undefined) : checked;
+      }
       const proposalKey = event.kind === 'proposal' ? this.proposalKey(event.proposal) : null;
       const rejected = proposalKey ? this.rejectedProposals.get(proposalKey) : undefined;
-      if (rejected)
+      if (rejected) {
+        const checked = this.snapshot();
+        if (!checked.ok) return checked;
         return failure(rejected.code, rejected.message, {
           proposalEntryRejected: true,
           cached: true,
         });
+      }
       const next = this.reduce(event);
       if (!next.ok) {
         if (next.error.code === 'consensus-restore' || next.error.code === 'consensus-context')
-          this.stopVoting();
+          this.stopVoting(next.error.code);
         else if (
           proposalKey &&
           next.error.details?.proposalEntryRejected === true &&
@@ -201,8 +231,11 @@ export class ConsensusController {
         this.owned.discard();
         return admitted;
       }
+      let persistedBytes: Uint8Array;
       try {
-        if (!(await this.options.store.save(this.revision, canonicalEncode(candidate)))) {
+        const bytes = canonicalEncode(candidate);
+        persistedBytes = bytes.slice();
+        if (!(await this.options.store.save(this.revision, bytes))) {
           this.owned.discard();
           this.stopped = true;
           return failure(
@@ -218,11 +251,12 @@ export class ConsensusController {
           'Voting stopped because its state could not be persisted',
         );
       }
+      this.persistedBytes = persistedBytes;
       this.revision += 1;
       const committed = this.owned.commit();
       if (!committed.ok) {
         this.owned.discard();
-        this.stopVoting();
+        this.stopVoting(committed.error.code);
         return committed;
       }
       this.state = copyConsensusStateData(candidate);
@@ -237,7 +271,8 @@ export class ConsensusController {
     this.stopVoting();
   }
 
-  private stopVoting(): void {
+  private stopVoting(code?: string): void {
+    if (code === 'consensus-context') this.contextFault = true;
     this.stopped = true;
     this.secretKey.fill(0);
     this.rejectedProposals.clear();

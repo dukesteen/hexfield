@@ -217,6 +217,13 @@ describe('durable consensus controller', () => {
       ).toBe(true);
       const locked = controller.snapshot();
       expect(locked.ok && locked.value.locked?.hash).toBe(entryHash(candidate));
+      const durableLock = await options.store.load();
+      const exact = await restore({ ...options, requireExactRestore: true });
+      expect(exact.snapshot()).toEqual(locked);
+      expect(await options.store.load()).toEqual(durableLock);
+      expect((await exact.resume()).ok).toBe(true);
+      expect(await options.store.load()).toEqual(durableLock);
+      exact.dispose();
       expect(
         (await controller.dispatch({ kind: 'vote', vote: vote(1, 'precommit', null) })).ok,
       ).toBe(true);
@@ -458,6 +465,43 @@ describe('durable consensus controller', () => {
     expect(emissions.flat().filter((effect) => effect.kind === 'broadcast-vote')).toHaveLength(1);
   });
 
+  test.each(['accepted', 'rejected'] as const)(
+    'a %s proposal cache cannot mask a changed controller context',
+    async (kind) => {
+      const { options, candidate, emissions, store } = setup();
+      const controller = await create(options);
+      const proposal = signProposal(
+        {
+          genesisDigest: options.context.membership.genesisDigest,
+          epoch: 0,
+          entry:
+            kind === 'accepted'
+              ? candidate
+              : signEntry(
+                  { ...entryBody(candidate), stateHash: '0'.repeat(64) },
+                  options.secretKey,
+                ),
+          validRound: null,
+          prevotes: [],
+        },
+        options.secretKey,
+      );
+      expect((await controller.dispatch({ kind: 'proposal', proposal })).ok).toBe(
+        kind === 'accepted',
+      );
+      const saved = await store.load();
+      const sent = emissions.flat().length;
+      options.context.excludedProposers = [1];
+      expect(errorCode(await controller.dispatch({ kind: 'proposal', proposal }))).toBe(
+        'consensus-context',
+      );
+      expect(controller.hasContextFault()).toBe(true);
+      expect(await store.load()).toEqual(saved);
+      expect(emissions.flat()).toHaveLength(sent);
+      controller.dispose();
+    },
+  );
+
   test('holds signed effects until the new safety record is saved', async () => {
     const store = new PausableStore();
     const { options, candidate, emissions } = setup(store);
@@ -478,16 +522,49 @@ describe('durable consensus controller', () => {
     const store = new PausableStore();
     const { options, candidate, emissions } = setup(store);
     const controller = await create(options);
+    const opened = {
+      ...options.context,
+      excludedProposers: [...options.context.excludedProposers],
+    };
     store.pauseUpdates = true;
     const pending = controller.dispatch({ kind: 'propose', candidate });
     await store.entered.promise;
+    let settled = false;
+    const settlement = controller.settled().then(() => {
+      settled = true;
+      return undefined;
+    });
+    await Promise.resolve();
+    expect(settled).toBe(false);
     options.context.excludedProposers = [1];
     store.resume.release();
     expect(errorCode(await pending)).toBe('consensus-context');
+    await settlement;
+    expect(settled).toBe(true);
+    const saved = await store.load();
+    if (!saved) throw new Error('Missing persisted vote after interrupted write');
+    expect(saved.revision).toBe(1);
+    expect(controller.matchesPersistedRecord(saved)).toBe(true);
+    expect(controller.opensOn(opened)).toBe(true);
+    expect(controller.opensOn(options.context)).toBe(false);
     expect(emissions).toHaveLength(0);
     expect(errorCode(await controller.dispatch({ kind: 'input-available' }))).toBe(
       'consensus-stopped',
     );
+    const recoveredEffects: ConsensusEffect[][] = [];
+    const repaired = await restore({
+      ...options,
+      context: opened,
+      requireExactRestore: true,
+      onEffects: (effects) => {
+        recoveredEffects.push([...effects]);
+      },
+    });
+    expect(await store.load()).toEqual(saved);
+    expect((await repaired.resume()).ok).toBe(true);
+    expect(recoveredEffects.flat().map((effect) => effect.kind)).toContain('broadcast-vote');
+    expect(await store.load()).toEqual(saved);
+    repaired.dispose();
   });
 
   test('does not persist an initial record when context stamping fails', async () => {
@@ -781,7 +858,7 @@ describe('durable consensus controller', () => {
     };
     // The same persisted proposal can no longer be derived from corrupted local state.
     options.context.log.state = corruptContext.log.state;
-    expect(errorCode(controller.snapshot())).toBe('consensus-restore');
+    expect(errorCode(controller.snapshot())).toBe('consensus-context');
     expect(errorCode(await controller.dispatch({ kind: 'input-available' }))).toBe(
       'consensus-stopped',
     );
@@ -796,7 +873,7 @@ describe('durable consensus controller', () => {
     const dispatchController = await restore({ ...options, context: dispatchContext });
     dispatchContext.log.state = corruptContext.log.state;
     expect(errorCode(await dispatchController.dispatch({ kind: 'input-available' }))).toBe(
-      'consensus-restore',
+      'consensus-context',
     );
     expect(errorCode(await dispatchController.resume())).toBe('consensus-stopped');
 
@@ -806,7 +883,7 @@ describe('durable consensus controller', () => {
     };
     const resumeController = await restore({ ...options, context: resumeContext });
     resumeContext.log.state = corruptContext.log.state;
-    expect(errorCode(await resumeController.resume())).toBe('consensus-restore');
+    expect(errorCode(await resumeController.resume())).toBe('consensus-context');
     expect(errorCode(await resumeController.dispatch({ kind: 'input-available' }))).toBe(
       'consensus-stopped',
     );

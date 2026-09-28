@@ -3,18 +3,21 @@ import { failure, success } from '@cp2p/engine';
 import type { Engine, Result, Seat, SystemInput } from '@cp2p/engine';
 import { describe, expect, test } from 'vitest';
 import type { ConsensusState } from './consensus.js';
+import { createConsensusState, openOwnedConsensusState } from './consensus.js';
 import { entryHash, genesisDigest, genesisId, signEntry, signGenesis } from './genesis.js';
 import { MemoryProtocolJournal } from './journal.js';
 import { signCommand, stubEvidence } from './log.js';
 import { decodeProtocolMessage, encodeProtocolMessage } from './messages.js';
 import type { ProtocolMessage } from './messages.js';
-import { proposerFor, signProposal, validateCertifiedEntry } from './proposal.js';
-import type { ProposalContext } from './proposal.js';
+import { advanceContext, proposerFor, signProposal, validateCertifiedEntry } from './proposal.js';
+import type { CertifiedEntry, ProposalContext } from './proposal.js';
 import { ReplicatedLog } from './replicated-log.js';
 import { initialProposalContext, replayCertifiedPrefix, snapshotFromContext } from './replay.js';
 import { fixtureAt, protocolFixture } from './testing/fixtures.js';
+import { createVerifiedNetworkFixture } from './testing/verified-network-fixture.js';
 import type { PeerId, ProtocolClock, Transport, Unsubscribe } from './transport.js';
 import { signVote } from './votes.js';
+import { signTradeProofRequest } from './trade-proof-delivery.js';
 
 function value<T>(result: Result<T>): T {
   if (!result.ok) throw new Error(`${result.error.code}: ${result.error.message}`);
@@ -23,6 +26,61 @@ function value<T>(result: Result<T>): T {
 
 function mutateNonceMap(nonces: ReadonlyMap<Seat, number>): void {
   if (nonces instanceof Map) nonces.set(0, 999);
+}
+
+class PausableJournal extends MemoryProtocolJournal {
+  pauseUpdates = false;
+  pauseSafetyReadHeight: number | null = null;
+  safetyWrites = 0;
+  loads = 0;
+  private notify: () => void = () => undefined;
+  private release: () => void = () => undefined;
+  readonly entered = new Promise<void>((resolve) => {
+    this.notify = resolve;
+  });
+  private readonly resumed = new Promise<void>((resolve) => {
+    this.release = resolve;
+  });
+  private notifyRead: () => void = () => undefined;
+  private releaseRead: () => void = () => undefined;
+  readonly readEntered = new Promise<void>((resolve) => {
+    this.notifyRead = resolve;
+  });
+  private readonly readResumed = new Promise<void>((resolve) => {
+    this.releaseRead = resolve;
+  });
+
+  releaseWrite(): void {
+    this.pauseUpdates = false;
+    this.release();
+  }
+
+  releaseSafetyRead(): void {
+    this.pauseSafetyReadHeight = null;
+    this.releaseRead();
+  }
+
+  override async loadSafety(height: number) {
+    if (this.pauseSafetyReadHeight === height) {
+      this.notifyRead();
+      await this.readResumed;
+    }
+    return super.loadSafety(height);
+  }
+
+  override load() {
+    this.loads++;
+    return super.load();
+  }
+
+  override async saveSafety(height: number, revision: number, bytes: Uint8Array): Promise<boolean> {
+    this.safetyWrites++;
+    if (this.pauseUpdates) {
+      this.notify();
+      await this.resumed;
+    }
+    return super.saveSafety(height, revision, bytes);
+  }
 }
 
 class ManualClock implements ProtocolClock {
@@ -2030,7 +2088,7 @@ describe('replicated certified log adapter', () => {
     const fixture = protocolFixture();
     const first = fixtureAt(fixture.identities, 0);
     const second = fixtureAt(fixture.identities, 1);
-    const journal = new MemoryProtocolJournal();
+    const journal = new PausableJournal();
     const clock = new ManualClock();
     const transport = new CapturingTransport(first.peerId);
     const notifications: number[] = [];
@@ -2086,7 +2144,16 @@ describe('replicated certified log adapter', () => {
       );
     transport.inject(second.peerId, { t: 'VOTE', vote: vote(1, 1, 1, 'prevote', hash) });
     await replica.flush();
+    journal.pauseSafetyReadHeight = 2;
     transport.inject(second.peerId, { t: 'VOTE', vote: vote(1, 1, 1, 'precommit', hash) });
+    await journal.readEntered;
+    // The old controller is disposed, but its certified snapshot remains valid
+    // while the next height's controller awaits its durable safety record.
+    expect(replica['activeController']().snapshot().ok).toBe(true);
+    transport.injectBytes(second.peerId, new Uint8Array(256 * 1024 + 1));
+    expect(replica['disposed']).toBe(false);
+    expect(notifications).toHaveLength(0);
+    journal.releaseSafetyRead();
     await replica.flush();
     expect((await journal.load())?.height).toBe(2);
     expect(replica.getContext().log.head.seq).toBe(1);
@@ -2499,4 +2566,435 @@ describe('replicated certified log adapter', () => {
     expect(replica.getContext().log.head.seq).toBe(1);
     replica.dispose();
   });
+
+  test('verified incremental contexts match durable replay at genesis and two certified deck passes', () => {
+    const fixture = createVerifiedNetworkFixture({ seed: 42 });
+    try {
+      const options = fixture.sessionOptions(0);
+      let context = value(
+        replayCertifiedPrefix(fixture.entry, [], fixture.engine, options.policy),
+      ).context;
+      const entries: CertifiedEntry[] = [];
+      const passes = options.deckSetupPasses?.slice(0, 2);
+      if (!passes || passes.length !== 2)
+        throw new Error('Missing representative public deck passes');
+      for (let prefix = 0; prefix <= passes.length; prefix++) {
+        const opened = value(
+          openOwnedConsensusState(value(createConsensusState(context, 3)), context, 3),
+        );
+        const replayed = value(
+          replayCertifiedPrefix(fixture.entry, entries, fixture.engine, options.policy),
+        );
+        expect(opened.matchesOpenedContext(replayed.context)).toBe(true);
+        expect([...context.log.lastNonces]).toEqual([...replayed.context.log.lastNonces]);
+        const pass = passes[prefix];
+        if (!pass) break;
+        const proposer = fixtureAt(
+          [...fixture.identities.values()],
+          proposerFor(context.log.head.seq + 1, 1, context.membership).seat,
+        );
+        const entry = signEntry(
+          {
+            seq: context.log.head.seq + 1,
+            term: 1,
+            prevHash: entryHash(context.log.head),
+            payload: { kind: 'crypto', action: 'deck-pass', evidence: pass },
+            stateHash: context.log.head.stateHash,
+            sequencer: proposer.peerId,
+          },
+          proposer.secretKey,
+        );
+        const certified = {
+          entry,
+          certificate: ([0, 1, 2] as const).map((seat) =>
+            signVote(
+              {
+                genesisDigest: context.membership.genesisDigest,
+                epoch: 0,
+                seat,
+                seq: entry.seq,
+                term: 1,
+                phase: 'precommit',
+                valueHash: entryHash(entry),
+              },
+              fixtureAt([...fixture.identities.values()], seat).secretKey,
+            ),
+          ),
+        };
+        context = value(advanceContext(context, value(validateCertifiedEntry(certified, context))));
+        entries.push(certified);
+      }
+    } finally {
+      fixture.dispose();
+    }
+  }, 30_000);
+
+  test.each([
+    'unchanged',
+    'locked',
+    'proposal',
+    'pending',
+    'pending-strike',
+    'commit-strike',
+    'trade-unobserved',
+    'blocked-peer',
+    'swallowed',
+    'bad-submit',
+    'safety',
+    'locked-safety',
+    'engine',
+  ] as const)(
+    'repairs a corrupted derived context only with unchanged durable authority (%s)',
+    async (mutation) => {
+      const fixture = fourHumanFixture();
+      const engine = { ...fixture.engine };
+      const first = fixtureAt(fixture.identities, 0);
+      const second = fixtureAt(fixture.identities, 1);
+      const local = fixtureAt(fixture.identities, 3);
+      const journal = new PausableJournal();
+      const transport = new CapturingTransport(local.peerId);
+      const clock = new ManualClock();
+      const statuses: string[] = [];
+      const replica = value(
+        await ReplicatedLog.create({
+          genesisEntry: fixture.entry,
+          engine,
+          policy: { genesis: { allowStub: true }, entry: { allowStub: true } },
+          seat: 3,
+          secretKey: local.secretKey,
+          transport,
+          clock,
+          journal,
+          onStatus: (status) => statuses.push(status.kind === 'halted' ? status.code : status.kind),
+        }),
+      );
+      const parent = replica.getContext();
+      if (mutation === 'blocked-peer')
+        for (let index = 0; index < 5; index++)
+          transport.injectBytes(
+            fixtureAt(fixture.identities, 2).peerId,
+            new Uint8Array(256 * 1024 + 1),
+          );
+      let safetyBefore = await journal.loadSafety(1);
+      if (!safetyBefore) throw new Error('Missing initial durable safety record');
+
+      const input: SystemInput = { kind: 'system', type: 'START_SEAT', seat: 0 };
+      const applied = value(fixture.engine.apply(parent.log.state, input));
+      const entry = signEntry(
+        {
+          seq: 1,
+          term: 1,
+          prevHash: entryHash(parent.log.head),
+          payload: { kind: 'system', input, evidence: stubEvidence(parent.log, input) },
+          stateHash: toHex(hashValue(applied.state)),
+          sequencer: first.peerId,
+        },
+        first.secretKey,
+      );
+      const certified = {
+        entry,
+        certificate: ([0, 1, 2] as const).map((seat) =>
+          signVote(
+            {
+              genesisDigest: genesisDigest(fixture.genesis),
+              epoch: 0,
+              seat,
+              seq: 1,
+              term: 1,
+              phase: 'precommit',
+              valueHash: entryHash(entry),
+            },
+            fixtureAt(fixture.identities, seat).secretKey,
+          ),
+        ),
+      };
+
+      const proposal = signProposal(
+        {
+          genesisDigest: parent.membership.genesisDigest,
+          epoch: 0,
+          entry,
+          validRound: null,
+          prevotes: [],
+        },
+        first.secretKey,
+      );
+      const commandBody = {
+        gameId: parent.log.genesis.gameId,
+        genesisDigest: parent.membership.genesisDigest,
+        seat: 0 as const,
+        nonce: 1,
+        headSeq: 0,
+        headHash: entryHash(parent.log.head),
+        command: { type: 'END_TURN' },
+      };
+      if (mutation === 'locked' || mutation === 'locked-safety') {
+        transport.inject(first.peerId, {
+          t: 'PROPOSAL',
+          proposal,
+        });
+        await replica.flush();
+        for (const seat of [0, 1] as const) {
+          transport.inject(fixtureAt(fixture.identities, seat).peerId, {
+            t: 'VOTE',
+            vote: signVote(
+              { ...fixtureAt(certified.certificate, seat).body, phase: 'prevote' },
+              fixtureAt(fixture.identities, seat).secretKey,
+            ),
+          });
+          // oxlint-disable-next-line no-await-in-loop -- Persist each authentic prevote before reaching the polka.
+          await replica.flush();
+        }
+        const locked = value(replica['activeController']().snapshot());
+        if (
+          locked.locked?.hash !== entryHash(entry) ||
+          !locked.votes.some((vote) => vote.body.seat === 3 && vote.body.phase === 'precommit')
+        )
+          throw new Error('Fixture did not persist a real local lock and precommit');
+        safetyBefore = await journal.loadSafety(1);
+        if (!safetyBefore) throw new Error('Missing locked safety');
+      }
+      let capturedRejectedProofs = 0;
+      const capture = replica['captureRejectedProofs'];
+      replica['captureRejectedProofs'] = async (from, bytes) => {
+        capturedRejectedProofs++;
+        return capture.call(replica, from, bytes);
+      };
+      const votesBefore = transport.sent.filter((message) => message.t === 'VOTE').length;
+      if (mutation === 'pending' || mutation === 'pending-strike') {
+        journal.pauseUpdates = true;
+        transport.inject(first.peerId, {
+          t: 'PROPOSAL',
+          proposal,
+        });
+        await journal.entered;
+      } else if (mutation === 'commit-strike') {
+        journal.pauseSafetyReadHeight = 1;
+        transport.inject(second.peerId, { t: 'COMMIT', certified });
+        await journal.readEntered;
+      }
+      let derived: unknown = replica;
+      for (const property of ['context', 'log', 'state', 'bank']) {
+        if (typeof derived !== 'object' || derived === null)
+          throw new Error(`Cannot corrupt derived state at ${property}`);
+        derived = Reflect.get(derived, property);
+      }
+      if (typeof derived !== 'object' || derived === null)
+        throw new Error('Missing derived bank state');
+      const brick = Reflect.get(derived, 'brick');
+      if (typeof brick !== 'number' || !Reflect.set(derived, 'brick', brick + 1))
+        throw new Error('Could not corrupt derived bank state');
+
+      if (mutation === 'trade-unobserved') {
+        const request = replica.requestTradeProof(
+          signTradeProofRequest(
+            {
+              ...commandBody,
+              seat: 3,
+              command: { type: 'CONFIRM_TRADE', offerId: 0, withSeat: 1 },
+            },
+            local.secretKey,
+          ),
+        );
+        if (request.ok || request.error.code !== 'replica-repairing')
+          throw new Error('Unobserved corrupt context was used for an outbound trade request');
+      } else if (mutation === 'commit-strike') {
+        transport.injectBytes(second.peerId, new Uint8Array(256 * 1024 + 1));
+        journal.releaseSafetyRead();
+      } else if (mutation === 'pending-strike') {
+        transport.injectBytes(second.peerId, new Uint8Array(256 * 1024 + 1));
+        journal.releaseWrite();
+      } else if (mutation === 'pending') journal.releaseWrite();
+      else if (mutation === 'swallowed') {
+        const fault = replica['activeController']().snapshot();
+        if (fault.ok || fault.error.code !== 'consensus-context')
+          throw new Error('Swallowed snapshot did not detect the context fault');
+        transport.inject(second.peerId, { t: 'VOTE', vote: fixtureAt(certified.certificate, 1) });
+      } else if (mutation === 'bad-submit')
+        transport.inject(first.peerId, {
+          t: 'SUBMIT',
+          cmd: signCommand(commandBody, second.secretKey),
+        });
+      else if (mutation === 'locked')
+        transport.inject(second.peerId, { t: 'VOTE', vote: fixtureAt(certified.certificate, 1) });
+      else if (mutation === 'proposal')
+        transport.inject(first.peerId, {
+          t: 'PROPOSAL',
+          proposal,
+        });
+      else transport.inject(second.peerId, { t: 'COMMIT', certified });
+      await replica.flush();
+      if (mutation === 'pending' || mutation === 'pending-strike' || mutation === 'commit-strike') {
+        safetyBefore = await journal.loadSafety(1);
+        if (!safetyBefore || safetyBefore.revision !== 1)
+          throw new Error('Pending write did not durably retain the signed prevote');
+      }
+      expect(statuses).toContain('consensus-context');
+      expect(replica['disposed']).toBe(false);
+      expect(capturedRejectedProofs).toBe(mutation === 'bad-submit' ? 1 : 0);
+      expect(transport.sent.filter((message) => message.t === 'VOTE')).toHaveLength(votesBefore);
+      expect(transport.sent).toContainEqual({
+        t: 'SNAPSHOT_REQ',
+        genesisDigest: parent.membership.genesisDigest,
+        atSeq: parent.log.head.seq,
+      });
+      expect((await journal.load())?.height).toBe(1);
+      expect(await journal.loadSafety(1)).toEqual(safetyBefore);
+      expect(replica.getContext().log.head.seq).toBe(0);
+
+      const writesBeforeHoldTraffic = journal.safetyWrites;
+      const tradeRequest = replica.requestTradeProof(
+        signTradeProofRequest(
+          {
+            gameId: parent.log.genesis.gameId,
+            genesisDigest: parent.membership.genesisDigest,
+            seat: 3,
+            nonce: 1,
+            headSeq: 0,
+            headHash: entryHash(parent.log.head),
+            command: { type: 'CONFIRM_TRADE', offerId: 0, withSeat: 1 },
+          },
+          local.secretKey,
+        ),
+      );
+      expect(tradeRequest.ok ? null : tradeRequest.error.code).toBe('replica-repairing');
+      expect(replica['pendingTradeProofs'].size).toBe(0);
+      replica.cancelTradeProofRequest('absent');
+      transport.inject(first.peerId, {
+        t: 'SUBMIT',
+        cmd: signCommand(commandBody, first.secretKey),
+      });
+      transport.inject(second.peerId, { t: 'VOTE', vote: fixtureAt(certified.certificate, 1) });
+      transport.inject(second.peerId, {
+        t: 'COMMIT',
+        certified: {
+          entry,
+          certificate: certified.certificate.map((vote) => ({
+            ...vote,
+            sig: fixtureAt(certified.certificate, 0).sig,
+          })),
+        },
+      });
+      transport.inject(first.peerId, {
+        t: 'SYS_CONTRIB',
+        genesisDigest: parent.membership.genesisDigest,
+        contribution: {
+          kind: 'beacon-reveal',
+          signed: {
+            body: {
+              operationId: entryHash(entry),
+              seat: 0,
+              index: 1,
+              value: parent.membership.genesisDigest,
+            },
+            sig: fixtureAt(certified.certificate, 0).sig,
+          },
+        },
+      });
+      clock.advance(2_000);
+      clock.fireFirst();
+      await replica.flush();
+      expect(journal.safetyWrites).toBe(writesBeforeHoldTraffic);
+      expect(transport.sent.filter((message) => message.t === 'VOTE')).toHaveLength(votesBefore);
+      expect(transport.sent.filter((message) => message.t === 'CHEAT_CLAIM')).toHaveLength(0);
+      expect(transport.sent.filter((message) => message.t === 'TRADE_PROOF_REQUEST')).toHaveLength(
+        0,
+      );
+      expect(transport.disconnected).toHaveLength(mutation === 'blocked-peer' ? 1 : 0);
+
+      transport.inject(second.peerId, {
+        t: 'SNAPSHOT_RES',
+        genesisDigest: parent.membership.genesisDigest,
+        atSeq: parent.log.head.seq,
+        snapshot: { forged: true },
+      });
+      await replica.flush();
+      expect((await journal.load())?.height).toBe(1);
+      expect(await journal.loadSafety(1)).toEqual(safetyBefore);
+      expect(transport.sent.filter((message) => message.t === 'VOTE')).toHaveLength(votesBefore);
+      const loadedAfterReplay = journal.loads;
+      transport.inject(second.peerId, {
+        t: 'SNAPSHOT_RES',
+        genesisDigest: parent.membership.genesisDigest,
+        atSeq: 0,
+        snapshot: { forged: 'distinct' },
+      });
+      await replica.flush();
+      expect(journal.loads).toBe(loadedAfterReplay);
+
+      if (mutation === 'safety') {
+        if (!(await journal.saveSafety(1, safetyBefore.revision, safetyBefore.bytes)))
+          throw new Error('Could not inject a competing durable safety revision');
+      } else if (mutation === 'locked-safety') {
+        const changed: unknown = canonicalDecode(safetyBefore.bytes);
+        if (typeof changed !== 'object' || changed === null || !journal['record'])
+          throw new Error('Missing durable safety fixture');
+        Reflect.set(changed, 'locked', null);
+        // Deliberately corrupt durable bytes without advancing its CAS revision.
+        Reflect.set(journal['record'].safety, 'bytes', canonicalEncode(changed));
+      } else if (mutation === 'engine') {
+        const apply = engine.apply.bind(engine);
+        engine.apply = (state, nextInput) => apply(state, nextInput);
+      }
+
+      transport.inject(second.peerId, {
+        t: 'SNAPSHOT_RES',
+        genesisDigest: parent.membership.genesisDigest,
+        atSeq: parent.log.head.seq,
+        snapshot: snapshotFromContext(parent),
+      });
+      await replica.flush();
+      // oxlint-disable vitest/no-conditional-expect -- Parameterized authority mutations intentionally have different terminal outcomes.
+      if (mutation === 'safety' || mutation === 'locked-safety' || mutation === 'engine') {
+        expect((await journal.load())?.height).toBe(1);
+        expect(transport.sent.filter((message) => message.t === 'VOTE')).toHaveLength(votesBefore);
+        expect(statuses).toContain(
+          mutation === 'engine' ? 'replica-authority' : 'consensus-write-conflict',
+        );
+        replica.dispose();
+        return;
+      }
+      // oxlint-enable vitest/no-conditional-expect
+      if (
+        mutation === 'locked' ||
+        mutation === 'proposal' ||
+        mutation === 'pending' ||
+        mutation === 'pending-strike' ||
+        mutation === 'trade-unobserved' ||
+        mutation === 'swallowed' ||
+        mutation === 'bad-submit'
+      ) {
+        if (JSON.stringify(await journal.loadSafety(1)) !== JSON.stringify(safetyBefore))
+          throw new Error('Repair changed locked durable safety');
+        if (mutation === 'pending' || mutation === 'pending-strike') {
+          const saved: unknown = canonicalDecode(safetyBefore.bytes);
+          if (typeof saved !== 'object' || saved === null)
+            throw new Error('Missing decoded pending safety');
+          const durableVotes: unknown = Reflect.get(saved, 'votes');
+          const emitted = transport.sent
+            .filter((message) => message.t === 'VOTE')
+            .map((message) => message.vote);
+          if (
+            !Array.isArray(durableVotes) ||
+            durableVotes.length !== 1 ||
+            toHex(canonicalEncode(emitted)) !== toHex(canonicalEncode(durableVotes))
+          )
+            throw new Error('Repair did not retransmit exactly the persisted local prevote');
+        }
+        transport.inject(second.peerId, { t: 'COMMIT', certified });
+        await replica.flush();
+      }
+      expect((await journal.load())?.height).toBe(2);
+      expect(replica.getContext().log.head).toEqual(entry);
+      expect((await journal.load())?.entries).toEqual([certified]);
+      const replayed = value(
+        replayCertifiedPrefix(fixture.entry, [certified], engine, replica['options'].policy),
+      );
+      expect(replica['activeController']().opensOn(replayed.context)).toBe(true);
+      expect(replica['blockedPeers'].has(fixtureAt(fixture.identities, 2).peerId)).toBe(
+        mutation === 'blocked-peer',
+      );
+      replica.dispose();
+    },
+  );
 });

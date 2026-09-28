@@ -15,6 +15,7 @@
     "docs/verification/stage10/seat-transfer-review-raw.md",
     "docs/verification/stage10/takeover-policy-review-response.md",
     "docs/verification/stage10/return-prefix-followup-input.md",
+    "docs/verification/stage10/derived-context-repair-followup-input.md",
     "docs/verification/stage10/return-prefix-followup-raw.md",
     "apps/signaling/worker/worker-configuration.d.ts",
     "docs/verification/cloudflare/deployment-review-input.md"
