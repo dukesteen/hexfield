@@ -250,7 +250,7 @@ cross-device acceptance remain open.
 - [x] Human-only, hosted-bot and recovered-bot compositions finish without false `CHEAT_PROOF` entries and with successful independent audits from every survivor, under the [bounded acceptance policy](verification/p2p-acceptance-policy.md).
 - [x] Dice outcomes from the beacon pass the 100,000-round chi-square check; the [measured checkpoint](verification/stage09/local-checkpoint-2026-09-27.md) records the face and sum distributions.
 - [x] Escrow recovery works after a seat departs mid-game, and the recovered seat continues as a bot. The [current-v6 native lifecycle](verification/stage10/native-takeover-acceptance.md) passes two takeovers, human return, default-ten-point finish and all three surviving audits.
-- [ ] Shuffle and steal proofs meet the performance targets in Steps 3 and 5. The [M-C matrix](verification/stage09/mc-remaining-acceptance.md) links the measured results; confirm the full draw target on the current v6 path.
+- [x] Shuffle and steal proofs meet the performance targets in Steps 3 and 5. The [current-v6 draw](verification/stage07/draw-owned-genesis-2026-09-28.md) passes three independent-cache 50 ms-link samples, worst 889.0 ms against one second. The [shuffle checkpoint](verification/stage07/step3-victory-local-checks.md) retains 2.30/2.17 s against three seconds and the prior failed draw sample; the [reviewed eight-type proof](verification/stage07/step5-zero-scalar-hardening.md) remains below 300 ms. These measurements do not establish cross-device timing.
 
 ## 08 — WebRTC Networking & Signaling
 
