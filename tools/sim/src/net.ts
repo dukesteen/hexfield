@@ -37,6 +37,7 @@ import {
   createVerifiedNonVoterActor,
 } from '@cp2p/protocol/testing';
 import type { VerifiedNetworkAuditTiming, VerifiedNonVoterActor } from '@cp2p/protocol/testing';
+import { ExplorerBot } from './explorer-bot.js';
 import { deriveSeed } from './random-source.js';
 import { invalidCommandProposal } from './net-adversary.js';
 import { NonVoterCommand } from './non-voter-command.js';
@@ -264,7 +265,7 @@ export async function runNetworkGame(options: NetworkGameOptions): Promise<Netwo
     game.genesis.config.seats.map((seat) => [
       seat,
       {
-        bot: new RandomBot(game.engine),
+        bot: options.map === undefined ? new RandomBot(game.engine) : new ExplorerBot(game.engine),
         rng: createBotRng(deriveSeed(options.seed, options.gameIndex, 'net-bot', seat)),
       },
     ]),

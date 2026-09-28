@@ -20,9 +20,9 @@ const signalingUrl = 'ws://127.0.0.1:8909';
  */
 const scenarioId = process.env.CP2P_MIXED_ENGINE_SCENARIO || undefined;
 /** Victory target: 3 keeps a base game short; a seafaring game needs more turns to sail and explore. */
-const victoryPoints = process.env.CP2P_MIXED_ENGINE_VP ?? (scenarioId ? '10' : '3');
+const victoryPoints = process.env.CP2P_MIXED_ENGINE_VP ?? (scenarioId ? '8' : '3');
 /** A seafaring game is longer than the race to three points. */
-const gameLength = scenarioId ? 5 : 1;
+const gameLength = scenarioId ? 10 : 1;
 const appBaseUrl = `http://127.0.0.1:${process.env.PLAYWRIGHT_TEST_PORT ?? '5187'}`;
 /** Whole-test budget. Six seats add peers, deck passes and special build phases. */
 function modeTimeout(mode: 'signaling' | 'manual'): number {
@@ -690,7 +690,7 @@ async function startRoom(pages: readonly Page[], mode: 'signaling' | 'manual', d
   await host.getByLabel('Your player name', { exact: true }).fill('Player 1');
   await host.getByText('Advanced connection options', { exact: true }).click();
   await host.getByLabel('Player count').selectOption(String(seatCount));
-  if (scenarioId) await host.getByLabel('Scenario', { exact: true }).selectOption(scenarioId);
+  if (scenarioId) await host.locator('.scenario-picker select').selectOption(scenarioId);
   await host.getByLabel('Victory points to win', { exact: true }).fill(victoryPoints);
   await host
     .getByLabel('Invite friends with')
@@ -1051,6 +1051,11 @@ async function finishAndAudit(
             actor.rng,
             actor.bot,
           );
+          // Non-base games name each move, so a stalled game shows what was in flight.
+          if (scenarioId)
+            process.stdout.write(
+              `${JSON.stringify({ move: command, seat: view.seat, seq: view.head.seq })}\n`,
+            );
           const refused = await withinDeadline(
             submit(page, gameId, view.seat, command, view.head.seq),
             finishDeadline,
