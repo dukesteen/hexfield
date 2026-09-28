@@ -1,6 +1,7 @@
 import { engineForConfig } from '@cp2p/engine';
 import type { GameState, Seat } from '@cp2p/engine';
 import { buildBoardGraph } from '@cp2p/engine/geometry';
+import type { HexId, VertexId } from '@cp2p/engine/geometry';
 import type { RenderModel } from '@cp2p/renderer';
 import { uiModulesFor } from '../modules';
 
@@ -22,6 +23,39 @@ function moduleLayerSlices(state: Readonly<GameState>): { layers?: Record<string
     layers: Object.fromEntries(
       plugins.map((layer) => [layer.plugin.id, layer.slice(state, hints)]),
     ),
+  };
+}
+
+/** Seafaring's public pieces: the pirate and the island-bonus chits, read from render hints. */
+function seafaringSlices(
+  state: Readonly<GameState>,
+  hexIds: readonly HexId[],
+  vertexIds: readonly VertexId[],
+): Pick<RenderModel, 'pirateHex' | 'islandBonuses'> {
+  const hints = engineForConfig(state.config).hooks.renderHints(state, []);
+  const pirate = hints.find((hint) => hint.module === 'seafaring' && hint.kind === 'pirate');
+  const hex = hexIds.find((id) => id === pirate?.hex) ?? null;
+  const options: unknown = state.config.options.seafaring;
+  const bonus =
+    typeof options === 'object' && options !== null && 'islandBonus' in options
+      ? options.islandBonus
+      : null;
+  const vp =
+    typeof bonus === 'object' && bonus !== null && 'vp' in bonus && typeof bonus.vp === 'number'
+      ? bonus.vp
+      : 1;
+  return {
+    pirateHex: hex,
+    islandBonuses: hints.flatMap((hint) => {
+      const vertex = vertexIds.find((id) => id === hint.vertex);
+      const seat = state.config.seats.find((candidate) => candidate === hint.seat);
+      return hint.module === 'seafaring' &&
+        hint.kind === 'island-bonus' &&
+        vertex !== undefined &&
+        seat !== undefined
+        ? [{ vertex, seat, vp }]
+        : [];
+    }),
   };
 }
 
@@ -60,6 +94,18 @@ export function toRenderModel(state: Readonly<GameState>, _viewer: BoardViewer):
       seat: building.seat,
       kind: building.kind === 'city' ? 'city' : 'settlement',
     })),
+    ...(state.board.ships
+      ? {
+          ships: state.board.ships.map((ship) => ({
+            edge: required(
+              graph.edgeIds.find((id) => id === ship.edge),
+              `ship edge ${ship.edge}`,
+            ),
+            seat: ship.seat,
+          })),
+          ...seafaringSlices(state, graph.hexIds, graph.vertexIds),
+        }
+      : {}),
     ...(state.board.fixtures?.length
       ? {
           fixtures: state.board.fixtures.map((fixture) => ({

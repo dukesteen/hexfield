@@ -23,5 +23,9 @@
   "phaseChanged": "The next phase began.",
   "gameEnded": "{{player}} won the game.",
   "gameUpdated": "The game changed.",
-  "specialBuildStarted": "{{player}} ended their turn. The other players may now build in turn."
+  "specialBuildStarted": "{{player}} ended their turn. The other players may now build in turn.",
+  "shipBuilt": "{{player}} built a ship.",
+  "shipMoved": "{{player}} moved a ship.",
+  "pirateMoved": "{{player}} moved the pirate.",
+  "goldChosen": "{{player}} took gold: {{details}}."
 }

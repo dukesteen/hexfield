@@ -45,7 +45,8 @@
     "road": "Road",
     "settlement": "Settlement",
     "city": "City",
-    "developmentCard": "Development card"
+    "developmentCard": "Development card",
+    "ship": "Ship"
   },
   "buildCostResource": "{{count}} {{resource}}",
   "awaitingAction": "Waiting for the next move",
@@ -128,12 +129,15 @@
   "piece": {
     "road": "road",
     "settlement": "settlement",
-    "city": "city"
+    "city": "city",
+    "ship": "ship"
   },
   "confirm": {
     "road": "Confirm road",
     "settlement": "Confirm settlement",
-    "city": "Confirm city"
+    "city": "Confirm city",
+    "ship": "Confirm ship",
+    "moveShip": "Confirm move"
   },
   "chooseBoardAction": "Choose a board action",
   "contextActions": "Other actions",
@@ -169,7 +173,11 @@
     "road": "Build road",
     "city": "Upgrade city",
     "freeRoad": "Place free road",
-    "robber": "Move robber"
+    "robber": "Move robber",
+    "ship": "Build ship",
+    "freeShip": "Place free ship",
+    "pirate": "Move pirate",
+    "moveShip": "Move ship"
   },
   "targetOption": "{{action}} {{number}}",
   "targetOptionDetail": "{{action}} {{number}} · near {{context}}",
@@ -184,7 +192,10 @@
     "pasture": "pasture",
     "fields": "fields",
     "mountains": "mountains",
-    "desert": "desert"
+    "desert": "desert",
+    "sea": "sea",
+    "gold": "gold field",
+    "fog": "unexplored sea"
   },
   "staleAction": "The game changed. Choose your action again.",
   "invalidAction": "That action is no longer available.",
@@ -196,7 +207,12 @@
     "road": "road edge",
     "city": "city site",
     "freeRoad": "free road edge",
-    "robber": "robber destination"
+    "robber": "robber destination",
+    "ship": "sea edge",
+    "freeShip": "free ship edge",
+    "pirate": "pirate destination",
+    "moveShip": "ship to move",
+    "moveShipTarget": "sea edge to sail to"
   },
   "command": {
     "ROLL_DICE": "Roll dice",
@@ -241,5 +257,28 @@
   "buildPanel": "Build",
   "tradePanel": "Trade",
   "specialBuild": "Special build phase: {{name}}",
-  "specialBuildHint": "Build or buy a development card. Trading and playing cards wait for your turn."
+  "specialBuildHint": "Build or buy a development card. Trading and playing cards wait for your turn.",
+  "shipsLeft": "Ships left: {{count}}",
+  "moveShipOnce": "Free, once per turn",
+  "choice": {
+    "road": "Road",
+    "ship": "Ship",
+    "freeRoad": "Road",
+    "freeShip": "Ship",
+    "robber": "Robber",
+    "pirate": "Pirate"
+  },
+  "movePreviewTitle": "Sail this ship here?",
+  "shipInstruction_one": "Choose the marked sea edge, then confirm it on the board.",
+  "shipInstruction_other": "Choose one of {{count}} marked sea edges, then confirm it on the board.",
+  "moveShipPick_one": "Choose your ship that can sail.",
+  "moveShipPick_other": "Choose one of your {{count}} ships that can sail.",
+  "moveShipTarget_one": "Choose the marked sea edge to sail to, then confirm it on the board.",
+  "moveShipTarget_other": "Choose one of {{count}} marked sea edges to sail to, then confirm it on the board.",
+  "longestTradeRoute": "Longest trade route",
+  "statRoute": "Route",
+  "islandBonus": "New islands",
+  "islandBonusBadge_one": "{{count}} new island, +{{points}} VP",
+  "islandBonusBadge_other": "{{count}} new islands, +{{points}} VP",
+  "scoreIslands": "New islands"
 }

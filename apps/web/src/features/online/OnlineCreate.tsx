@@ -195,6 +195,7 @@ export function OnlineCreate() {
               scenarioId={scenario.id}
               onScenario={setScenario}
               onSeatCount={changeSeatCount}
+              classicOnly
             />
             {scenario.board.kind === 'generator' && (
               <label>

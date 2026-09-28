@@ -1,8 +1,9 @@
 import { createFileRoute, notFound } from '@tanstack/react-router';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { standardFixedBoard } from '@cp2p/maps';
+import { scenarioById, scenarioConfig, standardFixedBoard } from '@cp2p/maps';
 import { FIVE_SIX_BOARD, engineForConfig, moduleSelection } from '@cp2p/engine';
+import type { BoardState } from '@cp2p/engine';
 import * as v from 'valibot';
 import { toRenderModel } from '../../features/board/toRenderModel.js';
 import { buildBoardGraph } from '@cp2p/engine/geometry';
@@ -78,6 +79,85 @@ function fiveSixModel(): RenderModel {
   };
 }
 
+const SEAFARING_LAYOUTS = [
+  'new-horizons',
+  'four-isles',
+  'desert-crossing',
+  'fogbound',
+  'open-sea',
+] as const;
+
+/** The pieces-free model of a board, without starting a game on it. */
+function boardModel(layout: BoardState): RenderModel {
+  const boardGraph = buildBoardGraph(layout.hexes);
+  return {
+    hexes: layout.hexes.map((hex) => ({
+      ...hex,
+      id: required(
+        boardGraph.hexIds.find((id) => id === hex.id),
+        `hex ${hex.id}`,
+      ),
+    })),
+    harbors: layout.harbors.map((harbor) => ({
+      edge: required(
+        boardGraph.edgeIds.find((id) => id === harbor.edge),
+        `edge ${harbor.edge}`,
+      ),
+      kind: harbor.kind,
+    })),
+    roads: [],
+    buildings: [],
+    ships: [],
+    pirateHex: null,
+    robberHex: null,
+  };
+}
+
+/**
+ * A seafaring scenario at genesis, with a few sample ships and bonus chits so the art and
+ * the fit can be checked without playing a game.
+ */
+function seafaringModel(id: string): RenderModel {
+  const scenario = required(scenarioById(id), `scenario ${id}`);
+  // Fixed scenarios preview straight from their board, so a scenario the engine cannot start
+  // yet (fog reveals) can still be looked at.
+  const state =
+    scenario.board.kind === 'fixed'
+      ? null
+      : engineForConfig(scenarioConfig(scenario, 4)).createGame(
+          scenarioConfig(scenario, 4),
+          new Uint8Array(32).fill(7),
+        );
+  const base =
+    scenario.board.kind === 'fixed'
+      ? boardModel(scenario.board.board())
+      : toRenderModel(required(state ?? undefined, 'game'), 'spectator');
+  const byId = new Map(base.hexes.map((hex) => [hex.id, hex]));
+  const seaGraph = buildBoardGraph(base.hexes.map(({ q, r }) => ({ q, r })));
+  const seaEdges = seaGraph.edgeIds.filter((_, index) => {
+    const terrains = (seaGraph.edgeHexes[index] ?? []).map((hex) => byId.get(hex)?.terrain);
+    return terrains.length === 2 && terrains.every((terrain) => terrain === 'sea');
+  });
+  const stride = Math.max(1, Math.floor(seaEdges.length / 12));
+  const land = base.hexes.find((hex) => hex.terrain !== 'sea');
+  const landVertex = land
+    ? seaGraph.vertexIds.find((_, index) => seaGraph.vertexHexes[index]?.includes(land.id))
+    : undefined;
+  return {
+    ...base,
+    ships: seaEdges
+      .filter((_, index) => index % stride === 0)
+      .slice(0, 12)
+      .map((edge, index) => ({ edge, seat: index % 2 === 0 ? 0 : 1 })),
+    ...(landVertex
+      ? {
+          buildings: [{ vertex: landVertex, seat: 0, kind: 'settlement' as const }],
+          islandBonuses: [{ vertex: landVertex, seat: 0, vp: 2 }],
+        }
+      : {}),
+  };
+}
+
 declare global {
   interface Window {
     __cp2pBoard?: { readonly renderer: BoardRenderer; readonly model: RenderModel };
@@ -85,7 +165,9 @@ declare global {
 }
 
 export const Route = createFileRoute('/dev/board')({
-  validateSearch: v.object({ layout: v.optional(v.picklist(['standard', 'five-six'])) }),
+  validateSearch: v.object({
+    layout: v.optional(v.picklist(['standard', 'five-six', ...SEAFARING_LAYOUTS])),
+  }),
   beforeLoad: () => {
     if (!import.meta.env.DEV) throw notFound();
   },
@@ -96,7 +178,11 @@ function BoardDevelopmentPage() {
   const { t } = useTranslation('common');
   const layout = Route.useSearch().layout ?? 'standard';
   const [model] = useState<RenderModel>(() =>
-    layout === 'five-six' ? fiveSixModel() : standardModel,
+    layout === 'five-six'
+      ? fiveSixModel()
+      : layout === 'standard'
+        ? standardModel
+        : seafaringModel(layout),
   );
   const [rendererError, setRendererError] = useState<string | null>(null);
   const [reducedMotion, setReducedMotion] = useState(false);

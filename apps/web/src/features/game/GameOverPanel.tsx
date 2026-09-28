@@ -22,6 +22,12 @@ function ScoreParts({ score }: { score: Score }) {
         <dt>{t('game:scoreAwards')}</dt>
         <dd>{score.awards}</dd>
       </div>
+      {score.islands !== undefined && (
+        <div>
+          <dt>{t('game:scoreIslands')}</dt>
+          <dd>{score.islands}</dd>
+        </div>
+      )}
       <div>
         <dt>{t('game:scoreVpCards')}</dt>
         <dd>
@@ -174,7 +180,10 @@ export function GameOverPanel({
                   </span>
                   <span className="results-standing-breakdown">
                     {t('game:scoreBuildings')} {player.score.buildings} · {t('game:scoreAwards')}{' '}
-                    {player.score.awards} · {t('game:scoreVpCards')}{' '}
+                    {player.score.awards} ·{' '}
+                    {player.score.islands !== undefined &&
+                      `${t('game:scoreIslands')} ${player.score.islands} · `}
+                    {t('game:scoreVpCards')}{' '}
                     {player.score.vpCards === null
                       ? t('game:scoreVpCardsPartial', { count: player.score.revealed })
                       : player.score.vpCards}
