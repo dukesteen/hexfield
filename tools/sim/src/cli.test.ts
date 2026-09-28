@@ -36,9 +36,24 @@ describe('failure replay', () => {
   test('--scenario runs the scenario board and reports its id', async () => {
     const log = vi.spyOn(console, 'log').mockImplementation(() => {});
     try {
-      await main(['run', '--scenario', 'fogbound', '--players', '3', '--games', '2']);
+      await main([
+        'run',
+        '--scenario',
+        'fogbound',
+        '--players',
+        '3',
+        '--games',
+        '2',
+        '--max-turns',
+        '900',
+      ]);
       const line: unknown = JSON.parse(String(log.mock.calls[0]?.[0]));
-      expect(line).toMatchObject({ scenario: 'fogbound', players: 3, completedGames: 2 });
+      expect(line).toMatchObject({
+        scenario: 'fogbound',
+        players: 3,
+        completedGames: 2,
+        maxTurns: 900,
+      });
     } finally {
       log.mockRestore();
     }

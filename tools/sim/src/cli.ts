@@ -103,6 +103,9 @@ function runOptions(args: ParsedArgs, verify: boolean): BatchOptions & { paralle
     players: integer(args.players, 4, 'players'),
     seed: integer(args.seed, 42, 'seed'),
     parallel: integer(args.parallel, 1, 'parallel'),
+    ...(args['max-turns'] === undefined
+      ? {}
+      : { maxTurns: integer(args['max-turns'], 500, 'max-turns') }),
     baseOptions: parseBaseOptions(args.options),
     ...scenarioOptions(args.scenario, integer(args.players, 4, 'players')),
     ...(modules.knights ? { knights: true } : {}),
@@ -180,6 +183,7 @@ async function runCommand(args: ParsedArgs, bench: boolean): Promise<void> {
     ...(batch.scenario === undefined ? {} : { scenario: batch.scenario }),
     baseOptions: batch.baseOptions,
     knights: batch.knights === true,
+    maxTurns: batch.maxTurns ?? 500,
     requestedGames: batch.games,
     parallel,
     warmupGames,
