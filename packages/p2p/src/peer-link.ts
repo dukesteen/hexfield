@@ -15,6 +15,7 @@ const SEND_HIGH_WATER = 1_048_576;
 const SEND_LOW_WATER = 262_144;
 const MAX_QUEUED_BYTES = 2_097_152;
 const MAX_EARLY_CANDIDATES = 16;
+const MAX_PENDING_DESCRIPTIONS = 16;
 const utf8 = new TextEncoder();
 
 interface HelloBody {
@@ -80,6 +81,9 @@ export class PeerLink {
   private makingOffer = false;
   private ignoreOffer = false;
   private isSettingRemoteAnswerPending = false;
+  private descriptionTail: Promise<void> | null = null;
+  private pendingDescriptions = 0;
+  private negotiationQueued = false;
   private unauthBytes = 0;
   private unauthMessages = 0;
   private helloTimer: unknown = null;
@@ -149,7 +153,15 @@ export class PeerLink {
       channel.addEventListener('message', (event) => this.receive(channel, event.data));
     }
     this.pc.addEventListener('negotiationneeded', () => {
-      void this.negotiate();
+      if (
+        this.negotiationQueued ||
+        (this.options.offerMode === 'answer-only' && !this.authenticated)
+      )
+        return;
+      this.negotiationQueued = true;
+      void this.enqueueDescription(() => this.negotiate()).finally(() => {
+        this.negotiationQueued = false;
+      });
     });
     this.pc.addEventListener('icecandidate', (event) => {
       if (this.localRevision === 0) return;
@@ -182,7 +194,49 @@ export class PeerLink {
     return !this.closed && this.game.readyState === 'open' && this.bulk.readyState === 'open';
   }
 
-  async receiveSignal(blob: SignalBlob): Promise<void> {
+  receiveSignal(blob: SignalBlob): Promise<void> {
+    if (blob?.kind !== 'description') return this.applySignal(blob);
+    const description = blob.description;
+    if (
+      !description ||
+      !['offer', 'answer'].includes(description.type) ||
+      typeof description.sdp !== 'string' ||
+      description.sdp.length > 65_536
+    )
+      return Promise.resolve();
+    // Detach fields before waiting; remote and local SDP operations share one
+    // queue so a second setLocalDescription cannot replace an unsent answer.
+    const detached: SignalBlob = {
+      kind: 'description',
+      generation: blob.generation,
+      revision: blob.revision,
+      description: { type: description.type, sdp: description.sdp },
+      ...(blob.inReplyTo === undefined ? {} : { inReplyTo: blob.inReplyTo }),
+    };
+    return this.enqueueDescription(() => this.applySignal(detached));
+  }
+
+  private enqueueDescription(action: () => Promise<void>): Promise<void> {
+    if (this.closed) return Promise.resolve();
+    if (this.pendingDescriptions >= MAX_PENDING_DESCRIPTIONS) {
+      this.fail('signaling-overflow');
+      return Promise.resolve();
+    }
+    this.pendingDescriptions++;
+    const operation = this.descriptionTail
+      ? this.descriptionTail.then(() => (this.closed ? undefined : action()))
+      : action();
+    const settled = operation
+      .catch(() => this.fail('negotiation-error'))
+      .finally(() => {
+        this.pendingDescriptions--;
+        if (this.descriptionTail === settled) this.descriptionTail = null;
+      });
+    this.descriptionTail = settled;
+    return settled;
+  }
+
+  private async applySignal(blob: SignalBlob): Promise<void> {
     if (
       this.closed ||
       !blob ||
@@ -243,6 +297,7 @@ export class PeerLink {
         }
         this.isSettingRemoteAnswerPending = description.type === 'answer';
         await this.pc.setRemoteDescription(description);
+        if (this.closed) return;
         this.isSettingRemoteAnswerPending = false;
         this.localOfferRevision = null;
         this.remoteRevision = blob.revision;
@@ -252,8 +307,9 @@ export class PeerLink {
         if (description.type === 'offer') {
           this.localRevision++;
           await this.pc.setLocalDescription();
+          if (this.closed) return;
           const answer = this.pc.localDescription;
-          if (!answer) throw new Error('Missing local answer');
+          if (!answer || answer.type !== 'answer') throw new Error('Missing local answer');
           this.sendSignal({
             kind: 'description',
             generation: this.options.generation,
@@ -327,24 +383,28 @@ export class PeerLink {
   }
 
   private async negotiate(): Promise<void> {
-    if (this.closed || (this.options.offerMode === 'answer-only' && !this.authenticated)) return;
+    if (
+      this.closed ||
+      this.pc.signalingState !== 'stable' ||
+      (this.options.offerMode === 'answer-only' && !this.authenticated)
+    )
+      return;
     try {
       this.makingOffer = true;
       this.localRevision++;
       await this.pc.setLocalDescription();
-      if (!this.pc.localDescription) throw new Error('Missing local description');
-      if (this.pc.localDescription.type === 'offer') this.localOfferRevision = this.localRevision;
+      if (this.closed) return;
+      const description = this.pc.localDescription;
+      if (!description || description.type !== 'offer') throw new Error('Missing local offer');
+      this.localOfferRevision = this.localRevision;
       this.sendSignal({
         kind: 'description',
         generation: this.options.generation,
         revision: this.localRevision,
         description: {
-          type: this.pc.localDescription.type,
-          sdp: this.pc.localDescription.sdp ?? '',
+          type: description.type,
+          sdp: description.sdp ?? '',
         },
-        ...(this.pc.localDescription.type === 'answer'
-          ? { inReplyTo: this.acceptedRemoteRevision }
-          : {}),
       });
     } catch {
       this.fail('negotiation-error');

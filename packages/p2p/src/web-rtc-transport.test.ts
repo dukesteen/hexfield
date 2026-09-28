@@ -217,8 +217,9 @@ class Fabric {
 }
 
 async function settle(): Promise<void> {
-  // oxlint-disable-next-line no-await-in-loop -- each turn drains the next signaling microtask.
-  for (let index = 0; index < 30; index++) await Promise.resolve();
+  // Drain the current signaling microtasks without depending on queue depth or
+  // advancing the fixture's virtual protocol clock.
+  await new Promise<void>((resolve) => setImmediate(resolve));
 }
 
 function member<T>(values: readonly T[], index: number): T {

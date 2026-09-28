@@ -419,6 +419,37 @@ describe('authenticated peer link', () => {
     }
   });
 
+  test('overlapping duplicate offers produce one answer instead of an offer with inReplyTo', async () => {
+    const leftId = identityFromSecret(new Uint8Array(32).fill(1)).peerId;
+    const rightSeed = [2, 3, 4, 5, 6, 7, 8, 9, 10].find(
+      (seed) => leftId < identityFromSecret(new Uint8Array(32).fill(seed)).peerId,
+    );
+    if (rightSeed === undefined) throw new Error('Missing polite peer fixture');
+    const f = pair(sdp('BB'), 3, rightSeed);
+    try {
+      const offer: SignalBlob = {
+        kind: 'description',
+        generation: 1,
+        revision: 1,
+        description: { type: 'offer', sdp: sdp('BB') },
+      };
+      await Promise.all([f.left.receiveSignal(offer), f.left.receiveSignal(offer)]);
+      expect(f.leftSignals).toEqual([
+        {
+          kind: 'description',
+          generation: 1,
+          revision: 1,
+          description: { type: 'answer', sdp: sdp('AA') },
+          inReplyTo: 1,
+        },
+      ]);
+      expect(f.leftPc.signalingState).toBe('stable');
+      expect(f.leftDown).toEqual([]);
+    } finally {
+      f.close();
+    }
+  });
+
   test('native-style getter descriptions become plain signed signaling data', async () => {
     const f = pair();
     try {
@@ -430,6 +461,150 @@ describe('authenticated peer link', () => {
       if (signal?.kind !== 'description') throw new Error('Missing offer');
       expect(Object.keys(signal.description)).toEqual(['type', 'sdp']);
       expect(signal.description).toEqual({ type: 'offer', sdp: sdp('AA') });
+    } finally {
+      f.close();
+    }
+  });
+
+  test('local negotiation waits until the remote answer is sent and coalesces repeated events', async () => {
+    const f = pair();
+    try {
+      const release = f.leftPc.holdNextRemoteDescription();
+      const received = f.left.receiveSignal({
+        kind: 'description',
+        generation: 1,
+        revision: 1,
+        description: { type: 'offer', sdp: sdp('BB') },
+      });
+      for (let index = 0; index < 10; index++) f.leftPc.emit('negotiationneeded');
+      release();
+      await received;
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(f.leftSignals).toEqual([
+        {
+          kind: 'description',
+          generation: 1,
+          revision: 1,
+          description: { type: 'answer', sdp: sdp('AA') },
+          inReplyTo: 1,
+        },
+        {
+          kind: 'description',
+          generation: 1,
+          revision: 2,
+          description: { type: 'offer', sdp: sdp('AA') },
+        },
+      ]);
+      expect(f.leftDown).toEqual([]);
+    } finally {
+      f.close();
+    }
+  });
+
+  test('ICE restart during an outstanding offer can negotiate again after its answer', async () => {
+    const f = pair();
+    try {
+      f.open();
+      f.leftPc.emit('negotiationneeded');
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(f.leftPc.signalingState).toBe('have-local-offer');
+      f.leftPc.connectionState = 'disconnected';
+      f.leftPc.emit('connectionstatechange');
+      f.clock.advanceBy(5_000);
+      expect(f.leftPc.restarted).toBe(1);
+      f.leftPc.emit('negotiationneeded');
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(f.leftSignals).toHaveLength(1);
+
+      await f.left.receiveSignal({
+        kind: 'description',
+        generation: 1,
+        revision: 1,
+        description: { type: 'answer', sdp: sdp('BB') },
+        inReplyTo: 1,
+      });
+      // Native RTC re-emits negotiationneeded for the pending restart once stable.
+      f.leftPc.emit('negotiationneeded');
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(f.leftSignals).toEqual([
+        {
+          kind: 'description',
+          generation: 1,
+          revision: 1,
+          description: { type: 'offer', sdp: sdp('AA') },
+        },
+        {
+          kind: 'description',
+          generation: 1,
+          revision: 2,
+          description: { type: 'offer', sdp: sdp('AA') },
+        },
+      ]);
+      await f.left.receiveSignal({
+        kind: 'description',
+        generation: 1,
+        revision: 2,
+        description: { type: 'answer', sdp: sdp('BB') },
+        inReplyTo: 2,
+      });
+      expect(f.leftPc.signalingState).toBe('stable');
+      expect(f.left.isAuthenticated).toBe(true);
+      expect(f.leftDown).toEqual([]);
+    } finally {
+      f.close();
+    }
+  });
+
+  test('queued descriptions are detached and closing stops their RTC work', async () => {
+    const f = pair();
+    try {
+      const release = f.leftPc.holdNextRemoteDescription();
+      const first = f.left.receiveSignal({
+        kind: 'description',
+        generation: 1,
+        revision: 1,
+        description: { type: 'offer', sdp: sdp('BB') },
+      });
+      const queued = {
+        kind: 'description' as const,
+        generation: 1,
+        revision: 2,
+        description: { type: 'offer' as const, sdp: sdp('CC') },
+      };
+      const second = f.left.receiveSignal(queued);
+      queued.description.sdp = sdp('EE');
+      release();
+      await Promise.all([first, second]);
+      expect(f.leftPc.currentRemoteDescription?.sdp).toBe(sdp('CC'));
+      expect(f.leftSignals).toHaveLength(2);
+      const releaseNext = f.leftPc.holdNextRemoteDescription();
+      const closing = f.left.receiveSignal({ ...queued, revision: 3 });
+      f.left.close();
+      releaseNext();
+      await closing;
+      expect(f.leftSignals).toHaveLength(2);
+      expect(f.leftPc.localDescription?.type).toBe('answer');
+    } finally {
+      f.close();
+    }
+  });
+
+  test('pending SDP work is bounded and overflow closes without emitting queued answers', async () => {
+    const f = pair();
+    try {
+      const release = f.leftPc.holdNextRemoteDescription();
+      const work = Array.from({ length: 17 }, (_, index) =>
+        f.left.receiveSignal({
+          kind: 'description',
+          generation: 1,
+          revision: index + 1,
+          description: { type: 'offer', sdp: sdp('BB') },
+        }),
+      );
+      expect(f.leftDown).toEqual(['signaling-overflow']);
+      release();
+      await Promise.all(work);
+      expect(f.leftSignals).toEqual([]);
     } finally {
       f.close();
     }
@@ -867,7 +1042,7 @@ describe('authenticated peer link', () => {
     }
   });
 
-  test('a second answer during asynchronous answer application is ignored', async () => {
+  test('a queued second answer cannot replace an answer being applied', async () => {
     const f = pair();
     try {
       f.leftPc.emit('negotiationneeded');
@@ -880,7 +1055,7 @@ describe('authenticated peer link', () => {
         description: { type: 'answer', sdp: sdp('BB') },
         inReplyTo: 1,
       });
-      await f.left.receiveSignal({
+      const second = f.left.receiveSignal({
         kind: 'description',
         generation: 1,
         revision: 2,
@@ -888,8 +1063,54 @@ describe('authenticated peer link', () => {
         inReplyTo: 1,
       });
       release();
-      await first;
+      await Promise.all([first, second]);
       expect(f.leftPc.signalingState).toBe('stable');
+      expect(f.leftDown).toEqual([]);
+    } finally {
+      f.close();
+    }
+  });
+
+  test('a duplicate pending answer preserves early and subsequent ICE candidates', async () => {
+    const f = pair();
+    try {
+      f.leftPc.emit('negotiationneeded');
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      const release = f.leftPc.holdNextRemoteDescription();
+      const answer: SignalBlob = {
+        kind: 'description',
+        generation: 1,
+        revision: 1,
+        description: { type: 'answer', sdp: sdp('BB') },
+        inReplyTo: 1,
+      };
+      const first = f.left.receiveSignal(answer);
+      await f.left.receiveSignal({
+        kind: 'candidate',
+        generation: 1,
+        revision: 1,
+        candidate: { candidate: 'candidate:before-duplicate' },
+      });
+      const duplicate = f.left.receiveSignal(answer);
+      await f.left.receiveSignal({
+        kind: 'candidate',
+        generation: 1,
+        revision: 1,
+        candidate: { candidate: 'candidate:after-duplicate' },
+      });
+      release();
+      await Promise.all([first, duplicate]);
+      await f.left.receiveSignal({
+        kind: 'candidate',
+        generation: 1,
+        revision: 1,
+        candidate: { candidate: 'candidate:after-acceptance' },
+      });
+      expect(f.leftPc.candidates).toEqual([
+        { candidate: 'candidate:before-duplicate' },
+        { candidate: 'candidate:after-duplicate' },
+        { candidate: 'candidate:after-acceptance' },
+      ]);
       expect(f.leftDown).toEqual([]);
     } finally {
       f.close();
