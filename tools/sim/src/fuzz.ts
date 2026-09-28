@@ -1,7 +1,13 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { hashValue, toHex } from '@cp2p/codec';
-import { baseModule, createBaseEngine, enumerateCommands, RESOURCES } from '@cp2p/engine';
+import {
+  baseModule,
+  createBaseEngine,
+  engineForConfig,
+  enumerateCommands,
+  RESOURCES,
+} from '@cp2p/engine';
 import type {
   CommandShape,
   Engine,
@@ -500,7 +506,10 @@ function saveFailure(
     ['Recorded input was rejected', 'trace-rejected'],
   ] as const;
   const category = categories.find(([start]) => message.startsWith(start))?.[1] ?? 'state-mutation';
-  writeReplay(replayPath, makeReplay(createBaseEngine(), trace.config, trace.genesisSeed, prefix));
+  writeReplay(
+    replayPath,
+    makeReplay(engineForConfig(trace.config), trace.config, trace.genesisSeed, prefix),
+  );
   writeFileSync(
     sidecarPath,
     `${JSON.stringify(

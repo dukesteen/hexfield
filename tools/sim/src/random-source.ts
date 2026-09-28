@@ -7,20 +7,18 @@ import type {
   PrivateState,
   Seat,
 } from '@cp2p/engine';
-import { RESOURCES } from '@cp2p/engine';
+import { DEV_CARD_COUNTS, RESOURCES } from '@cp2p/engine';
 import { createRng } from '@cp2p/engine/rng';
 
 type SystemPending = Extract<Pending, { kind: 'random' | 'reveal' }>;
 
-const DEV_CARDS = [
-  ...Array<string>(14).fill('knight'),
-  ...Array<string>(5).fill('victoryPoint'),
-  ...Array<string>(2).fill('roadBuilding'),
-  ...Array<string>(2).fill('yearOfPlenty'),
-  ...Array<string>(2).fill('monopoly'),
-];
+function deckCards(counts: Readonly<Record<string, number>>): string[] {
+  return Object.entries(counts).flatMap(([card, count]) => Array<string>(count).fill(card));
+}
 
 export interface LocalRandomOptions {
+  /** Development deck composition; defaults to the 25-card base deck. */
+  devCards?: Readonly<Record<string, number>>;
   /** Exact draw order for directed simulation fixtures; every standard card is still present. */
   devCardOrder?: readonly string[];
   /** Directed dice total for feature fixtures; random-mode requests only. */
@@ -65,7 +63,7 @@ function diceDeck(state: GameState): number[] {
   return deck;
 }
 
-/** Seeded local system source with the real 25-card deck. Local inputs record dealt identities. */
+/** Seeded local system source with the real configured deck. Local inputs record dealt identities. */
 export function createLocalRandomSource(
   seed: Uint8Array,
   options: LocalRandomOptions = {},
@@ -78,14 +76,15 @@ export function createLocalRandomSource(
       options.fixedDiceTotal > 12)
   )
     throw new RangeError('Directed dice total must be an integer from 2 to 12');
+  const cards = deckCards(options.devCards ?? DEV_CARD_COUNTS);
   const ordered = options.devCardOrder;
   if (
     ordered &&
-    (ordered.length !== DEV_CARDS.length ||
-      [...ordered].toSorted().join(',') !== [...DEV_CARDS].toSorted().join(','))
+    (ordered.length !== cards.length ||
+      [...ordered].toSorted().join(',') !== [...cards].toSorted().join(','))
   )
-    throw new RangeError('Directed development deck must contain exactly the standard 25 cards');
-  const devDeck = ordered ? [...ordered].toReversed() : rng.shuffle(DEV_CARDS);
+    throw new RangeError('Directed development deck must contain exactly the configured cards');
+  const devDeck = ordered ? [...ordered].toReversed() : rng.shuffle(cards);
   return {
     remainingCards: () => [...devDeck],
     resolve(

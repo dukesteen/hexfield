@@ -1,6 +1,6 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { createBaseEngine } from '@cp2p/engine';
+import { engineForConfig } from '@cp2p/engine';
 import { makeReplay, writeReplay } from './replay.js';
 import { runGame, SimulationFailure } from './run-game.js';
 import type { RunGameOptions } from './run-game.js';
@@ -35,9 +35,16 @@ function writeFailure(
 ): BatchFailure {
   mkdirSync(directory, { recursive: true });
   const replayPath = join(directory, `${seed}-${gameIndex}.replay.json`);
-  const replay = makeReplay(createBaseEngine(), error.config, error.genesisSeed, error.inputs, 25, {
-    allowFinalInvariantFailure: true,
-  });
+  const replay = makeReplay(
+    engineForConfig(error.config),
+    error.config,
+    error.genesisSeed,
+    error.inputs,
+    25,
+    {
+      allowFinalInvariantFailure: true,
+    },
+  );
   writeReplay(replayPath, replay);
   const repro = `pnpm sim replay ${replayPath}`;
   writeFileSync(

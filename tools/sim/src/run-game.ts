@@ -1,6 +1,6 @@
 import { RandomBot, createBotRng } from '@cp2p/bots';
 import { canonicalEncode, hashValue, toHex } from '@cp2p/codec';
-import { createBaseEngine, LocalGame } from '@cp2p/engine';
+import { LocalGame, devCardCountsFor, engineForConfig, moduleSelection } from '@cp2p/engine';
 import type {
   Engine,
   GameConfig,
@@ -79,19 +79,12 @@ function checkedState(engine: Engine, state: GameState, inputCount: number): voi
   if (inputCount % 100 === 0) canonicalEncode(state);
 }
 
-const DEV_CARD_COUNTS: Record<string, number> = {
-  knight: 14,
-  victoryPoint: 5,
-  roadBuilding: 2,
-  yearOfPlenty: 2,
-  monopoly: 2,
-};
-
 /** Check the real local deck against public slots, private identities, and stock. */
 export function cardConservation(
   state: GameState,
   privates: ReadonlyMap<Seat, PrivateState>,
   remaining: readonly string[],
+  deck: Readonly<Record<string, number>> = devCardCountsFor(state.config),
 ): string[] {
   const problems: string[] = [];
   const publicRemaining = state.decks.dev?.remaining;
@@ -101,7 +94,7 @@ export function cardConservation(
     );
   const counts: Record<string, number> = {};
   const count = (card: string): void => {
-    if (!Object.hasOwn(DEV_CARD_COUNTS, card)) problems.push(`Unknown development card ${card}`);
+    if (!Object.hasOwn(deck, card)) problems.push(`Unknown development card ${card}`);
     counts[card] = (counts[card] ?? 0) + 1;
   };
   for (const card of remaining) count(card);
@@ -123,18 +116,21 @@ export function cardConservation(
   }
   for (const seat of state.seats)
     for (const slot of seat.cardSlots) if (slot.revealed) count(slot.revealed);
-  for (const [card, expected] of Object.entries(DEV_CARD_COUNTS))
+  for (const [card, expected] of Object.entries(deck))
     if (counts[card] !== expected)
       problems.push(`${card} count ${counts[card] ?? 0}, expected ${expected}`);
   return problems;
 }
 
-function gameConfig(players: number, baseOptions: Record<string, unknown>): GameConfig {
-  if (!Number.isSafeInteger(players) || players < 2 || players > 4)
-    throw new RangeError('Base simulation requires 2–4 players');
-  const seats: Seat[] = [0, 1, 2, 3];
+/** Two to four players use base alone; five or six add the five-six module. */
+export function gameConfig(players: number, baseOptions: Record<string, unknown>): GameConfig {
+  if (!Number.isSafeInteger(players) || players < 2 || players > 6)
+    throw new RangeError('Simulation requires 2–6 players');
+  if (players > 4 && baseOptions.mapLayout === 'standard-fixed')
+    throw new RangeError('The fixed map is only available for 2–4 players');
+  const seats: Seat[] = [0, 1, 2, 3, 4, 5];
   return {
-    modules: [{ id: 'base', version: '1.0.0' }],
+    modules: moduleSelection(players > 4 ? ['base', 'five-six'] : ['base']),
     seats: seats.slice(0, players),
     options: { base: { vpTarget: 10, ...baseOptions } },
     ...(baseOptions.mapLayout === 'standard-fixed' ? { board: standardFixedBoard() } : {}),
@@ -168,11 +164,12 @@ export function runGame(options: RunGameOptions): RunGameResult {
   const players = options.players ?? 4;
   const config = gameConfig(players, options.baseOptions ?? {});
   const genesisSeed = deriveSeed(options.seed, options.gameIndex, 'genesis');
+  const deck = devCardCountsFor(config);
   const randomSource = createLocalRandomSource(
     deriveSeed(options.seed, options.gameIndex, 'system'),
-    options,
+    { ...options, devCards: deck },
   );
-  const underlying = createBaseEngine();
+  const underlying = engineForConfig(config);
   const dice = Array<number>(13).fill(0);
   const commands: Record<string, number> = {};
   const applyDurationsNanoseconds: number[] = [];
@@ -192,7 +189,7 @@ export function runGame(options: RunGameOptions): RunGameResult {
       if (verify && applyCount % 100 === 0)
         for (const priv of privates.values()) canonicalEncode(priv);
       return verify
-        ? [...violations, ...cardConservation(state, privates, randomSource.remainingCards())]
+        ? [...violations, ...cardConservation(state, privates, randomSource.remainingCards(), deck)]
         : violations;
     },
     createGame(gameOptions, seed) {

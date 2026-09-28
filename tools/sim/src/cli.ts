@@ -1,7 +1,8 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { Worker } from 'node:worker_threads';
 import { fromBase64Url, hashValue, toHex } from '@cp2p/codec';
-import { createBaseEngine, RESOURCES } from '@cp2p/engine';
+import { RESOURCES, engineForConfig } from '@cp2p/engine';
+import type { Engine } from '@cp2p/engine';
 import type { GameState, Input, PrivateState, Seat } from '@cp2p/engine';
 import { runBatch } from './batch.js';
 import type { BatchOptions, BatchResult } from './batch.js';
@@ -56,8 +57,8 @@ function parseBaseOptions(value: string | boolean | undefined): Record<string, u
 }
 
 function runOptions(args: ParsedArgs, verify: boolean): BatchOptions & { parallel: number } {
-  if (args.modules !== undefined && args.modules !== 'base')
-    throw new Error('Only --modules base is available in Stage04');
+  if (args.modules !== undefined && args.modules !== 'base' && args.modules !== 'base,five-six')
+    throw new Error('--modules must be base or base,five-six (chosen by --players)');
   if (
     args.bots !== undefined &&
     (typeof args.bots !== 'string' || args.bots.split(',').some((bot) => bot !== 'random'))
@@ -195,10 +196,7 @@ export function failureMatches(category: string, observed: string): boolean {
   return false;
 }
 
-function replayPrivates(
-  engine: ReturnType<typeof createBaseEngine>,
-  replay: ReplayFile,
-): Map<Seat, PrivateState> {
+function replayPrivates(engine: Engine, replay: ReplayFile): Map<Seat, PrivateState> {
   let before = engine.createGame(replay.config, fromBase64Url(replay.genesisSeed));
   let privates = new Map(
     before.config.seats.map((seat) => [seat, engine.createPrivateState(seat)]),
@@ -221,7 +219,7 @@ function replayPrivates(
 }
 
 function observePrivateAttempt(
-  engine: ReturnType<typeof createBaseEngine>,
+  engine: Engine,
   before: GameState,
   after: GameState,
   input: Input,
@@ -284,7 +282,7 @@ function observePrivateAttempt(
 }
 
 function observeAttempt(
-  engine: ReturnType<typeof createBaseEngine>,
+  engine: Engine,
   state: ReturnType<typeof verifyReplay>,
   attempted: unknown,
   category: string,
@@ -325,7 +323,7 @@ export function replayCommand(path: string): Record<string, unknown> {
   const replay = readReplay(path);
   const sidecar = path.replace(/\.replay\.json$/, '.failure.json');
   const hasFailure = existsSync(sidecar);
-  const engine = createBaseEngine();
+  const engine = engineForConfig(replay.config);
   const state = verifyReplay(engine, replay, { allowFinalInvariantFailure: hasFailure });
   if (!hasFailure) {
     return { path, inputs: replay.inputs.length, turn: state.turn.number, result: state.result };
