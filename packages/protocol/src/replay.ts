@@ -2,6 +2,7 @@ import { canonicalDecode, canonicalEncode, hashValue, toHex } from '@cp2p/codec'
 import { failure, success } from '@cp2p/engine';
 import type { Engine, GameEvent, Input, Result } from '@cp2p/engine';
 import { entryHash, genesisDigest, validateGenesisEntry } from './genesis.js';
+import { ownImmutableGenesis } from './genesis-identity.js';
 import { objectiveEvidenceSeq, validateObjectiveAccusation } from './control.js';
 import { initializeCryptoContext } from './crypto-context.js';
 import type { GenesisPolicy } from './genesis.js';
@@ -36,7 +37,8 @@ export function initialProposalContext(
 ): Result<ProposalContext> {
   const checked = validateGenesisEntry(genesisEntry, engine, policy.genesis);
   if (!checked.ok) return checked;
-  const { genesis, state, entry } = checked.value;
+  const { state, entry } = checked.value;
+  const genesis = ownImmutableGenesis(checked.value.genesis);
   const authority = initialSeatAuthorities(genesis);
   if (!authority.ok) return authority;
   const transfer =
