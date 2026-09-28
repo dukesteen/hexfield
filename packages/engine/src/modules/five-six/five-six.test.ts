@@ -12,6 +12,8 @@ import { FIVE_SIX_BOARD } from './board.js';
 import { FIVE_SIX_DEV_CARDS, SBP_COMMANDS } from './index.js';
 
 const engine = engineForModules(moduleSelection(['base', 'five-six']));
+/** Keeps every special build phase open so tests can step through each seat. */
+const manual: Engine = { ...engine, getAutomaticInput: () => null };
 const zero: ResourceCounts = { brick: 0, lumber: 0, wool: 0, grain: 0, ore: 0 };
 
 function config(seats: number, fiveSix: Record<string, unknown> = {}): GameConfig {
@@ -97,10 +99,14 @@ function randomSource(value: number, counts: Readonly<Record<string, number>>): 
   };
 }
 
-function start(seats: number, fiveSix: Record<string, unknown> = {}): LocalGame {
+function start(
+  seats: number,
+  fiveSix: Record<string, unknown> = {},
+  rules: Engine = manual,
+): LocalGame {
   const cfg = config(seats, fiveSix);
   const created = LocalGame.create(
-    engine,
+    rules,
     cfg,
     seed(seats),
     randomSource(seats, FIVE_SIX_DEV_CARDS),
@@ -312,6 +318,48 @@ describe('five-six module', () => {
     expect(dealt.ok).toBe(true);
     if (!dealt.ok) return;
     expect(dealt.value.state.turn.phase.at(-1)).toMatchObject({ id: 'sbp', data: { seat: 1 } });
+  });
+
+  test('a seat whose own hand can build nothing has its special build phase ended for it', () => {
+    const game = start(5);
+    endMainTurn(game);
+    const state = game.snapshot();
+    const own = game.privateView(1);
+    if (!own) throw new Error('No private state');
+    const hand = (counts: ResourceCounts) => new Map([[1 as Seat, { ...own, hand: counts }]]);
+    expect(engine.getAutomaticInput(state, hand(zero))).toEqual({
+      kind: 'command',
+      seat: 1,
+      command: { type: 'END_SBP' },
+    });
+    expect(engine.getAutomaticInput(state, hand({ ...zero, wool: 1, grain: 1, ore: 1 }))).toBe(
+      null,
+    );
+    // Only the seat's own client knows its hand, so other seats never end it.
+    const other = game.privateView(2);
+    if (!other) throw new Error('No private state');
+    expect(engine.getAutomaticInput(state, new Map([[2 as Seat, other]]))).toBe(null);
+
+    const auto = start(6, {}, engine);
+    const turns = 12;
+    let open = 0;
+    for (let turn = 0; turn < turns; turn++) {
+      endMainTurn(auto);
+      while (auto.state.turn.phase.at(-1)?.id === 'sbp') {
+        const pending = auto.getPending()[0];
+        if (pending?.kind !== 'player') throw new Error('SBP is not a player pending');
+        const legal = engine.getLegalCommands(
+          auto.snapshot(),
+          pending.seat,
+          auto.privateView(pending.seat) ?? undefined,
+        );
+        expect(legal.commands.some((command) => command.type !== 'END_SBP')).toBe(true);
+        open++;
+        submit(auto, { kind: 'command', seat: pending.seat, command: { type: 'END_SBP' } });
+      }
+    }
+    expect(open).toBeLessThan(turns * 5);
+    expect(engine.checkInvariants(auto.snapshot())).toEqual([]);
   });
 
   test('a timeout ends the special build phase for that seat only', () => {

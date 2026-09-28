@@ -7,7 +7,7 @@
     "CP2P_MIXED_ENGINE_NO_WEBKIT": "1"
   },
   "result": "passed",
-  "durationMinutes": 3.4,
+  "durationMinutes": 3.0,
   "phases": [
     "lobby",
     "lobby",
@@ -15,13 +15,11 @@
     "lobby",
     "lobby",
     "lobby",
+    "lobby",
     "setup",
     "setup",
     "setup",
     "setup",
-    "play-and-audit",
-    "play-and-audit",
-    "play-and-audit",
     "play-and-audit",
     "play-and-audit",
     "play-and-audit",
@@ -35,70 +33,73 @@
     "complete"
   ],
   "finish": {
-    "commands": 92,
+    "commands": 30,
     "accepted": {
-      "END_TURN": 12,
-      "END_SBP": 60,
-      "ROLL_DICE": 11,
-      "MOVE_ROBBER": 3,
-      "STEAL": 3,
-      "BUILD_ROAD": 1,
-      "BUILD_CITY": 1,
-      "MARITIME_TRADE": 1
+      "BUILD_ROAD": 3,
+      "END_TURN": 6,
+      "END_SBP": 12,
+      "ROLL_DICE": 6,
+      "MOVE_ROBBER": 1,
+      "STEAL": 1,
+      "BUILD_SETTLEMENT": 1
     },
-    "refusedCommands": {},
+    "refusedCommands": {
+      "command-pending": 102,
+      "stale-head": 1,
+      "stale-revision": 1
+    },
     "peers": [
       {
         "head": {
-          "hash": "6ea7c6fca881fc76e17c5492e2a40c945b83e2fc5ece401ae71820e724a6a05a",
-          "seq": 151
+          "hash": "56402e209f7b57b96630b53bf8c930917e1d4ace8517b8c30a8651ac51bc5648",
+          "seq": 96
         },
         "resultPresent": true,
         "audit": "complete"
       },
       {
         "head": {
-          "hash": "6ea7c6fca881fc76e17c5492e2a40c945b83e2fc5ece401ae71820e724a6a05a",
-          "seq": 151
+          "hash": "56402e209f7b57b96630b53bf8c930917e1d4ace8517b8c30a8651ac51bc5648",
+          "seq": 96
         },
         "resultPresent": true,
         "audit": "complete"
       },
       {
         "head": {
-          "hash": "6ea7c6fca881fc76e17c5492e2a40c945b83e2fc5ece401ae71820e724a6a05a",
-          "seq": 151
+          "hash": "56402e209f7b57b96630b53bf8c930917e1d4ace8517b8c30a8651ac51bc5648",
+          "seq": 96
         },
         "resultPresent": true,
         "audit": "complete"
       },
       {
         "head": {
-          "hash": "6ea7c6fca881fc76e17c5492e2a40c945b83e2fc5ece401ae71820e724a6a05a",
-          "seq": 151
+          "hash": "56402e209f7b57b96630b53bf8c930917e1d4ace8517b8c30a8651ac51bc5648",
+          "seq": 96
         },
         "resultPresent": true,
         "audit": "complete"
       },
       {
         "head": {
-          "hash": "6ea7c6fca881fc76e17c5492e2a40c945b83e2fc5ece401ae71820e724a6a05a",
-          "seq": 151
+          "hash": "56402e209f7b57b96630b53bf8c930917e1d4ace8517b8c30a8651ac51bc5648",
+          "seq": 96
         },
         "resultPresent": true,
         "audit": "complete"
       },
       {
         "head": {
-          "hash": "6ea7c6fca881fc76e17c5492e2a40c945b83e2fc5ece401ae71820e724a6a05a",
-          "seq": 151
+          "hash": "56402e209f7b57b96630b53bf8c930917e1d4ace8517b8c30a8651ac51bc5648",
+          "seq": 96
         },
         "resultPresent": true,
         "audit": "complete"
       }
     ],
-    "playElapsedMs": 90896,
-    "auditElapsedMs": 24783
+    "playElapsedMs": 57960,
+    "auditElapsedMs": 18866
   },
-  "auditProblems": [null, null, null, null, null, null]
+  "auditProblems": []
 }

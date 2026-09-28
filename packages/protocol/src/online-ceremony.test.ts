@@ -1564,6 +1564,10 @@ describe('online genesis ceremony', () => {
     expect((await guest.start()).ok).toBe(true);
     await until(room, () => held && host.snapshot().phase === 'deck');
     await Promise.all([host.flush(), guest.flush()]);
+    // Let the one-time background proof checks of already accepted passes run first; retries
+    // themselves must not validate those passes again.
+    room.network.clock.advanceBy(0);
+    await Promise.all([host.flush(), guest.flush()]);
     applied.mockClear();
     const previousRetries = retries;
     room.network.clock.advanceBy(1_001);

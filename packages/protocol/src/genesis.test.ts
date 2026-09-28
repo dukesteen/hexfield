@@ -14,7 +14,11 @@ import {
   validateGenesis,
   validateGenesisEntry,
 } from './genesis.js';
-import { deckPassHash, validateDeckGenesisCommitments } from './deck-genesis.js';
+import {
+  deckPassHash,
+  validateDeckCeremony,
+  validateDeckGenesisCommitments,
+} from './deck-genesis.js';
 import { validateGenesisOnlineStart } from './genesis-online-start.js';
 import { createGenesisDeckFixture } from './testing/deck-fixture.js';
 import { fixtureAt, protocolFixture } from './testing/fixtures.js';
@@ -473,9 +477,13 @@ describe('genesis validation', () => {
         ],
       },
     };
-    expect(
-      errorCode(signVerifiedGenesis(changedBody, changedTranscripts, 0, human.secretKey)),
-    ).toBe('deck-shuffle-proof');
+    // Consent checks deck passes structurally (user-approved speed trade-off): a correctly
+    // signed, committed pass with a wrong proof is accepted here, and refused by full
+    // verification, which the certified in-game deck-pass entries apply before any deal.
+    expect(signVerifiedGenesis(changedBody, changedTranscripts, 0, human.secretKey).ok).toBe(true);
+    expect(errorCode(validateDeckCeremony(changedBody, changedTranscripts))).toBe(
+      'deck-shuffle-proof',
+    );
     expect(
       errorCode(signVerifiedGenesis(ceremony.body, changedTranscripts, 0, human.secretKey)),
     ).toBe('deck-ceremony-hash');

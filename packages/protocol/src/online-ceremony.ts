@@ -839,6 +839,18 @@ export class OnlineCeremony {
     return retired;
   }
 
+  /**
+   * Verify a structurally accepted deck pass's proofs in idle time. This only warms the proof
+   * cache so the certified in-game deck-pass entries (the authority) verify quickly; a bad
+   * proof is still refused there, as `deck-pass` cheat evidence, before any card is dealt.
+   */
+  #preverifyDeckPass(before: DeckSetupState, payload: unknown): void {
+    if (this.#disposed) return;
+    this.#options.clock.setTimeout(() => {
+      if (!this.#disposed) applyDeckPass(before, payload);
+    }, 0);
+  }
+
   #timeoutFor(phase: string): number {
     const config = this.#agreement.state.config;
     let deckCards = 0;
@@ -2306,10 +2318,12 @@ export class OnlineCeremony {
           step,
           ownerDevice,
           validate: (payload) => {
-            // Structural only: proofs are verified by the certified in-game deck-pass entries
-            // before any card is dealt (a user-approved speed trade-off; see DECISIONS.md).
+            // Structural only on the critical path, so the next seat can prove at once. The
+            // certified in-game deck-pass entries verify every proof before any card is dealt
+            // (a user-approved speed trade-off; see DECISIONS.md).
             const applied = applyDeckPass(before, payload, { proofs: 'structural' });
             if (!applied.ok) return applied;
+            this.#preverifyDeckPass(before, payload);
             deckPrefix.next = {
               step,
               passHash: toHex(hashValue(payload)),

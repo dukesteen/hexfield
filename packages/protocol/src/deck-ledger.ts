@@ -359,9 +359,6 @@ export function captureDeckPending(
       : current;
   const request = drawPending(pending);
   if (!request.ok) return request;
-  // A draw requested before every setup pass is certified stays unfrozen. The capture after
-  // the final certified pass freezes it, so no unlock can be signed over unverified proofs.
-  if (!decksReady(current.value) && !current.value.active) return current;
   const deck = current.value.decks.find(
     (item) => item.commitment.definition.deckId === request.value.request.deck,
   );

@@ -13,7 +13,7 @@
   "averageTurns": 99,
   "averageInputs": 1127,
   "averageVirtualMilliseconds": 4223,
-  "averageElapsedMilliseconds": 261129.333792,
+  "averageElapsedMilliseconds": 361642.67541699996,
   "results": [
     {
       "security": "stub",
@@ -24,22 +24,22 @@
       "turns": 99,
       "inputs": 1127,
       "virtualMilliseconds": 4223,
-      "elapsedMilliseconds": 261129.333792,
+      "elapsedMilliseconds": 361642.67541699996,
       "operationTimings": {
         "sessionFlush": {
           "calls": 113290,
-          "totalMilliseconds": 254043.7944219997,
-          "maximumMilliseconds": 72.21562499999709
+          "totalMilliseconds": 351341.13114099595,
+          "maximumMilliseconds": 201.60708400000294
         },
         "networkDelivery": {
           "calls": 112296,
-          "totalMilliseconds": 5343.734563001283,
-          "maximumMilliseconds": 10.234540999999808
+          "totalMilliseconds": 7882.956169005962,
+          "maximumMilliseconds": 26.329083999997238
         },
         "botDecide": {
           "calls": 993,
-          "totalMilliseconds": 391.4042599997201,
-          "maximumMilliseconds": 7.438040999986697
+          "totalMilliseconds": 491.8872550004053,
+          "maximumMilliseconds": 8.126499999998487
         }
       },
       "finalStateHash": "6171e0d7ab70653f402ccdede021f4058d2c2aa841d129ae68cc68955e692775",
@@ -72,6 +72,6 @@
   ],
   "failures": [],
   "parallel": 1,
-  "sourceFingerprint": "c8de712177a1acd18ba27eb7d1b76fea75dd01f7081a535e6bf88304bf22c436",
-  "sourceUnchanged": false
+  "sourceFingerprint": "5166e58338f08f5df199e30ec7ffa63025d13e4099856f40bd95519ca14ab01b",
+  "sourceUnchanged": true
 }

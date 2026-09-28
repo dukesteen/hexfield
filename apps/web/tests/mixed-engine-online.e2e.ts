@@ -1047,7 +1047,14 @@ async function finishAndAudit(
             accepted[command.type] = (accepted[command.type] ?? 0) + 1;
           }
           onProgress(diagnostic());
-          if (refused && refused !== 'stale-head' && refused !== 'stale-revision')
+          // `command-pending`: the page's own automatic input (such as ending a special
+          // build phase that its hand cannot use) was already in flight for this seat.
+          if (
+            refused &&
+            refused !== 'stale-head' &&
+            refused !== 'stale-revision' &&
+            refused !== 'command-pending'
+          )
             throw new Error(`A legal browser move was rejected: ${refused}`);
           if (commands > 300) throw new Error('The bounded mixed-engine game exceeded 300 moves');
           return false;

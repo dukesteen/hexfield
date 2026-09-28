@@ -3,6 +3,8 @@ import type { GameState, Pending, Seat } from '@cp2p/engine';
 type PlayerPending = Extract<Pending, { kind: 'player' }>;
 type TurnView = { turn: Pick<GameState['turn'], 'activeSeat'> };
 
+const OPTIONAL = new Set(['CLAIM_VICTORY', 'PROPOSE_TRADE', 'CANCEL_TRADE', 'RESPOND_TRADE']);
+
 /** Select one mandatory or active-player action for an eligible hosted bot. */
 export function chooseBotPending(
   state: TurnView,
@@ -23,9 +25,10 @@ export function chooseBotPending(
   if (response) return botSeats.has(response.seat) ? response : null;
 
   // Between turns (a special build phase) the only actionable request can belong to
-  // a seat other than the active one.
+  // a seat other than the active one. A lone trade-only request is optional, so it waits.
+  const sole = players.length === 1 ? players[0] : undefined;
   const active =
     players.find((item) => item.seat === state.turn.activeSeat) ??
-    (players.length === 1 ? players[0] : undefined);
+    (sole?.allowed.some((type) => !OPTIONAL.has(type)) ? sole : undefined);
   return active && botSeats.has(active.seat) ? active : null;
 }

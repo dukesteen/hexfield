@@ -1,11 +1,12 @@
 import type {
   CommandHandler,
   GameModule,
+  HandlerContext,
   PhaseHandler,
   RenderHint,
 } from '../../core/modules/index.js';
-import type { Pending } from '../../core/pipeline/index.js';
-import type { GameState, PhaseFrame } from '../../core/state/index.js';
+import type { Input, Pending } from '../../core/pipeline/index.js';
+import type { GameState, PhaseFrame, PrivateState } from '../../core/state/index.js';
 import { failure, success } from '../../core/types/index.js';
 import type { Seat } from '../../core/types/index.js';
 import { buildCommands } from '../base/legal.js';
@@ -81,6 +82,18 @@ const sbpPhase: PhaseHandler = {
       : { commands: [], templates: [] },
 };
 
+/** End a seat's special build phase for it when its own hand can build nothing. */
+function autoEndSbp(
+  state: GameState,
+  privates: ReadonlyMap<Seat, PrivateState>,
+  ctx: HandlerContext,
+): Input | null {
+  const seat = sbpSeat(state.turn.phase.at(-1));
+  const priv = seat === null ? undefined : privates.get(seat);
+  if (seat === null || !priv || buildCommands(state, seat, priv, ctx).length > 0) return null;
+  return { kind: 'command', seat, command: { type: 'END_SBP' } };
+}
+
 const endSbp: CommandHandler = {
   keys: { allowed: [] },
   validate: (state, input) =>
@@ -142,6 +155,7 @@ export function fiveSixModule(): GameModule {
         return [...acc, ...hint];
       },
     },
+    autoInput: autoEndSbp,
     commands: { END_SBP: endSbp },
     systemInputs: {},
     phases: { sbp: sbpPhase },

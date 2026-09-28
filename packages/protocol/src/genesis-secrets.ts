@@ -29,11 +29,17 @@ function same(left: unknown, right: unknown): boolean {
  * authenticates genesis/certificates; callers must supply their certified genesis.
  * It does not constitute the full historical game audit.
  */
+/**
+ * `allowIncompleteSetup` is only for end-of-game checks (master reveal, audit, void): a game
+ * can end on certified deck-pass cheat evidence before every setup pass is in, and then only
+ * the keys of certified passes can be checked. Transfers and recovery keep the strict rule.
+ */
 export function verifyRevealedMaster(
   value: GenesisBody,
   ledger: DeckLedger,
   seat: Seat,
   suppliedMaster: unknown,
+  options: { readonly allowIncompleteSetup?: boolean } = {},
 ): Result<void> {
   const body = parseCanonical(value, bodySchema);
   if (!body.ok) return body;
@@ -110,11 +116,12 @@ export function verifyRevealedMaster(
     )
       return failure('master-deck-context', 'Locked decks differ from the certified genesis');
     for (const deck of checked.value.decks) {
+      if (!options.allowIncompleteSetup && deck.nextPass !== deck.commitment.passHashes.length)
+        return failure('master-deck-pending', 'Master checks require completed deck setup');
       const index = deck.setup.definition.participants.findIndex((item) => item.seat === seat);
       if (index < 0)
         return failure('master-deck-context', 'Original seat is missing from a genesis deck');
-      // Deck passes certify during setup, so a game can end (for example on certified cheat
-      // evidence) before every pass is in. Check the keys the certified passes established.
+      // With allowIncompleteSetup, only the keys established by certified passes are checked.
       const source = createDeckSecretSource(master, deck.setup.definition, seat);
       try {
         if (

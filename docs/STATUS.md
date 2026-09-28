@@ -487,11 +487,13 @@ process restart and cross-device performance remain separate checks.
 
 Source: [11-module-framework-5-6-players.md](11-module-framework-5-6-players.md)
 
-- [ ] Base goldens unchanged after the refactor (or the change is justified and versioned).
-- [ ] 50k simulated 6-player games without invariant violations.
-- [ ] A 6-browser P2P Playwright game completes, and the audit passes.
-- [ ] The SBP is enforced (trading and dev-card plays rejected in the SBP; builds and buys allowed).
-- [ ] The module compatibility matrix is enforced in the lobby and in `createGame`.
+Stage 11 is complete (Milestone M-E). The [acceptance evidence](verification/stage11/acceptance.md) also covers the six-peer chaos suite and the framework tests. Deck-setup proofs are now checked after the genesis ceremony rather than during it, with the user's approval; see [DECISIONS](DECISIONS.md).
+
+- [x] Base goldens unchanged after the refactor (or the change is justified and versioned). Every golden replay and checkpoint hash is byte-identical ([evidence](verification/stage11/acceptance.md#base-goldens-unchanged)).
+- [x] 50k simulated 6-player games without invariant violations. [50,000/50,000](verification/stage11/sim-6p-50k.json) with 0 failures, and a [5,000-game confirmation](verification/stage11/sim-6p-5k-final.json) on the final tree.
+- [x] A 6-browser P2P Playwright game completes, and the audit passes. Three Chromium and three Firefox peers finish at the same head with six complete audits ([run](verification/stage11/six-browser-p2p.json)).
+- [x] The SBP is enforced (trading and dev-card plays rejected in the SBP; builds and buys allowed). See [SBP enforcement](verification/stage11/acceptance.md#special-build-phase-enforcement).
+- [x] The module compatibility matrix is enforced in the lobby and in `createGame`. See the [acceptance evidence](verification/stage11/acceptance.md#compatibility-matrix-in-the-lobby-and-creategame).
 
 ## 12 — Seafaring Module (`seafaring`)
 

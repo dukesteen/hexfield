@@ -12,6 +12,7 @@ import {
 import { getBeaconExtensionOperation, getBeaconOperation } from './beacon-state.js';
 import { BEACON_EVIDENCE_PROTOCOL } from './crypto-context.js';
 import type { CryptoContext } from './crypto-context.js';
+import { decksReady } from './deck-ledger.js';
 import type { LogContext } from './log.js';
 import type { BeaconDerivations } from './beacon-state.js';
 import { randomDerivations } from './random-derivations.js';
@@ -44,7 +45,7 @@ export class BeaconInbox {
     authority?: SeatAuthorities,
   ): Result<void> {
     let next: Phase | null = null;
-    if (crypto?.beacon.active) {
+    if (crypto?.beacon.active && decksReady(crypto.decks)) {
       const extending = crypto.beacon.active.participants.some((p) => p.index === p.length);
       const operation = extending
         ? getBeaconExtensionOperation(crypto.beacon)

@@ -27,6 +27,7 @@ With `specialBuildPhase: true` (the default), `END_TURN` starts a special build 
 - A seat in its special build phase may use `BUILD_ROAD`, `BUILD_SETTLEMENT`, `BUILD_CITY`, `BUY_DEV_CARD` and `END_SBP`. Every trade command, `PLAY_DEV_CARD`, `ROLL_DICE` and `END_TURN` fails with `not-pending`. No other seat may act.
 - A development card bought in the special build phase is acquired on the previous seat's turn number, so its buyer can play it on their own next turn.
 - `END_SBP`, or a `TIMEOUT` for that seat in phase `sbp`, passes to the next seat. After the last seat, the next turn starts in the same input. With a turn timer, the phase uses the main-phase limit.
+- Convenience (not a published rule): when a seat's own hand affords no legal build or purchase, its client submits `END_SBP` automatically, so the phase passes without waiting.
 - The phase is implemented through the `turnFlow` hook as one `sbp { seat }` frame per seat, above a base `turnEnd` marker.
 - Nobody can win during a special build phase. The base rules end the game when a player has 10 points during their own turn. A seat that reaches the target while building wins when its own turn begins, before it rolls. Hidden victory-point claims are also held until the owner's turn.
 - With `specialBuildPhase: false`, turns pass directly, as in the base game.

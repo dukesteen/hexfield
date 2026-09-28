@@ -219,6 +219,7 @@ function checkMaster(
     context.log.crypto.decks,
     packet.body.originalSeat,
     packet.body.master,
+    { allowIncompleteSetup: true },
   );
   if (full.ok) return success('valid');
   return [

@@ -149,7 +149,9 @@ export async function produceRecoveryVoidCheckFromShares(
       return failure('recovery-void-unproven', 'Private reconstruction failed for another reason');
     let dealerSeat: Seat | null = null;
     for (const { seat, master } of secrets) {
-      const checked = verifyRevealedMaster(context.genesis, context.crypto.decks, seat, master);
+      const checked = verifyRevealedMaster(context.genesis, context.crypto.decks, seat, master, {
+        allowIncompleteSetup: true,
+      });
       if (!checked.ok) {
         if (!isVoidReason(checked.error.code))
           return failure('recovery-void-unproven', 'Master verification failed for another reason');

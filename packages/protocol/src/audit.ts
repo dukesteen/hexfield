@@ -230,7 +230,9 @@ export function auditCertifiedGame(input: AuditCertifiedGameInput): AuditReport 
       }
       missingSeats = genesis.seats.map((seat) => seat.seat).filter((seat) => !masters.has(seat));
       for (const [seat, master] of masters) {
-        const verified = verifyRevealedMaster(genesis, crypto.decks, seat, toBase64Url(master));
+        const verified = verifyRevealedMaster(genesis, crypto.decks, seat, toBase64Url(master), {
+          allowIncompleteSetup: true,
+        });
         if (verified.ok) continue;
         if (
           verified.error.code === 'master-public-key' ||
