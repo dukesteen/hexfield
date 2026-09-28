@@ -140,6 +140,144 @@ async function certifyMove(actor: Page, peer: Page, gameId: string) {
   return (await inspect(peer, gameId))?.head;
 }
 
+test('a second live tab cannot sign until the original game writer closes', async ({
+  browser,
+  baseURL,
+}, testInfo) => {
+  test.skip(process.env.CP2P_WRITER_TAB_E2E !== '1', 'Opt-in native same-game writer check');
+  test.setTimeout(90_000);
+  if (!baseURL) throw new Error('The writer check requires a configured app URL');
+  const contexts = await Promise.all(
+    [0, 1].map(() => browser.newContext({ baseURL, viewport: { width: 1280, height: 900 } })),
+  );
+  const [hostContext, guestContext] = contexts;
+  if (!hostContext || !guestContext) throw new Error('Missing writer test contexts');
+  await Promise.all(
+    contexts.map((context) =>
+      context.addInitScript(() => performance.setResourceTimingBufferSize(5_000)),
+    ),
+  );
+  const host = await hostContext.newPage();
+  const guest = await guestContext.newPage();
+  const duplicate = await hostContext.newPage();
+  const errors: string[] = [];
+  for (const page of [host, guest, duplicate])
+    page.on('pageerror', (error) => errors.push(error.message));
+  try {
+    await host.goto('/#/online/create');
+    await host.getByLabel('Room name').fill('Writer contention acceptance');
+    await host.getByLabel('Your player name').fill('Writer host');
+    await host.getByText('Advanced connection options', { exact: true }).click();
+    await host.getByLabel('Invite friends with').selectOption('server');
+    await host.getByLabel('Custom room server').fill('ws://127.0.0.1:8916');
+    await host.getByLabel('Player count').selectOption('2');
+    await host.getByRole('button', { name: 'Create room' }).click();
+    const invitation = host.getByRole('textbox', { name: /^Invitation link/ });
+    await expect(invitation).toBeVisible();
+    await guest.goto(await invitation.inputValue());
+    await guest.getByRole('button', { name: 'Take seat' }).click();
+    await host.getByRole('button', { name: 'Ready up' }).click();
+    await guest.getByRole('button', { name: 'Ready up' }).click();
+    await expect(host.getByRole('button', { name: 'Start game' })).toBeEnabled();
+    await host.getByRole('button', { name: 'Start game' }).click();
+    await expect(host).toHaveURL(/\/game\/[^/]+$/, { timeout: 60_000 });
+    await expect(guest).toHaveURL(/\/game\/[^/]+$/, { timeout: 60_000 });
+    const route = host.url();
+    const gameId = new URL(route).hash.match(/\/game\/([^/?]+)/)?.[1];
+    if (!gameId) throw new Error('Missing game identifier');
+    await expect
+      .poll(
+        async () => (await inspect(host, gameId))?.legal || (await inspect(guest, gameId))?.legal,
+        { timeout: 30_000 },
+      )
+      .toBe(true);
+    const initial = await inspect(host, gameId);
+    if (!initial?.head) throw new Error('Live owner has no certified head');
+
+    await duplicate.goto(route);
+    await expect(
+      duplicate.getByText(
+        "This game could not be restored. If it is open in another tab, return there. Otherwise, keep this browser's saved data and try again.",
+        { exact: true },
+      ),
+    ).toBeVisible({ timeout: 20_000 });
+    expect(await inspect(duplicate, gameId)).toBeNull();
+    const lockNames = await duplicate.evaluate(
+      async () => (await navigator.locks.query()).held?.map((lock) => lock.name) ?? [],
+    );
+    const gameLocks = lockNames.filter(
+      (name) => name === `cp2p/game-active/${gameId.length}:${gameId}`,
+    );
+    expect(gameLocks).toHaveLength(1);
+
+    // The rejected copy must leave the original signer and peer connection usable.
+    const hostActs = (await inspect(host, gameId))?.legal;
+    const continuedHead = await certifyMove(
+      hostActs ? host : guest,
+      hostActs ? guest : host,
+      gameId,
+    );
+    expect(await inspect(duplicate, gameId)).toBeNull();
+    await host.close();
+    await duplicate.reload();
+    await expect
+      .poll(async () => (await inspect(duplicate, gameId))?.head, { timeout: 20_000 })
+      .toEqual(continuedHead);
+    const resumed = await inspect(duplicate, gameId);
+    expect(resumed?.seats).toEqual(initial.seats);
+    expect(resumed?.devicePeer).toBe(initial.devicePeer);
+
+    // Setup gives two consecutive commands to each seat. Let the remote seat
+    // finish its pair if needed, then certify a command signed by the new tab.
+    for (let step = 0; step < 2; step++) {
+      // oxlint-disable-next-line no-await-in-loop -- Each legal setup command determines the next actor.
+      if ((await inspect(duplicate, gameId))?.legal) break;
+      // oxlint-disable-next-line no-await-in-loop
+      await certifyMove(guest, duplicate, gameId);
+    }
+    const finalHead = await certifyMove(duplicate, guest, gameId);
+    expect(finalHead?.seq).toBeGreaterThan(continuedHead?.seq ?? 0);
+    expect(errors).toEqual([]);
+    await testInfo.attach('writer-contention', {
+      body: JSON.stringify(
+        {
+          gameId,
+          initialHead: initial.head,
+          continuedHead,
+          finalHead,
+          competingGameLocks: gameLocks.length,
+          rejectedCopyOpenedSession: false,
+          resumedSeats: resumed?.seats,
+          pageErrors: errors,
+        },
+        null,
+        2,
+      ),
+      contentType: 'application/json',
+    });
+  } catch (error) {
+    await testInfo.attach('writer-pages', {
+      body: JSON.stringify(
+        await Promise.all(
+          [host, guest, duplicate].map(async (page) => ({
+            url: page.url(),
+            body: await page
+              .locator('body')
+              .innerText()
+              .catch(() => 'Page closed'),
+          })),
+        ),
+        null,
+        2,
+      ),
+      contentType: 'application/json',
+    });
+    throw error;
+  } finally {
+    await Promise.all(contexts.map((context) => context.close()));
+  }
+});
+
 test('refresh and whole-browser restart preserve the certified game through its final audit', async ({
   playwright,
   baseURL,
