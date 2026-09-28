@@ -81,18 +81,43 @@ async function roomModulePath(page: Page): Promise<string> {
 }
 
 async function installFailureDiagnostics(page: Page): Promise<void> {
-  const paths = await page.evaluate(() => {
-    const resources = performance
-      .getEntriesByType('resource')
-      .map((entry) => entry.name)
-      .map((name) => ({ name, path: new URL(name).pathname }));
-    return {
-      room: resources.find(({ path }) => path.endsWith('/online-room.ts'))?.name ?? null,
-      peerLink: resources.find(({ path }) => path.endsWith('/peer-link.ts'))?.name ?? null,
-    };
-  });
+  const modules = () =>
+    page.evaluate(() => {
+      const resources = performance
+        .getEntriesByType('resource')
+        .map((entry) => entry.name)
+        .map((name) => ({ name, path: new URL(name).pathname }));
+      return {
+        room: resources.find(({ path }) => /\/online-room\.(?:ts|js)$/.test(path))?.name ?? null,
+        peerLink: resources.find(({ path }) => /\/peer-link\.(?:ts|js)$/.test(path))?.name ?? null,
+      };
+    });
+  try {
+    await expect
+      .poll(
+        async () => {
+          const paths = await modules();
+          return Boolean(paths.room && paths.peerLink);
+        },
+        { timeout: 10_000 },
+      )
+      .toBe(true);
+  } catch {
+    const filenames = await page.evaluate(() =>
+      performance
+        .getEntriesByType('resource')
+        .map((entry) => new URL(entry.name).pathname.split('/').at(-1) ?? '')
+        .filter(Boolean)
+        .toSorted()
+        .slice(-50),
+    );
+    throw new Error(
+      `Mixed-engine diagnostics could not find the loaded room and peer modules after UI readiness; loaded module filenames: ${filenames.join(', ') || 'none'}`,
+    );
+  }
+  const paths = await modules();
   if (!paths.room || !paths.peerLink)
-    throw new Error('Mixed-engine diagnostics could not find the loaded room and peer modules');
+    throw new Error('Mixed-engine diagnostic modules disappeared after they were loaded');
   await page.evaluate(
     async ({ roomPath, peerLinkPath, key }) => {
       const record = (event: Record<string, unknown>) => {
@@ -368,6 +393,7 @@ async function startFourPlayerRoom(pages: readonly Page[], mode: 'signaling' | '
   if (!host || guests.length !== 3) throw new Error('Expected four isolated browser pages');
   const gameName = mode === 'signaling' ? 'Mixed signaling acceptance' : 'Mixed manual acceptance';
   await host.goto('/#/online/create');
+  await expect(host.getByLabel('Room name', { exact: true })).toBeVisible();
   await installFailureDiagnostics(host);
   await host.getByLabel('Room name', { exact: true }).fill(gameName);
   await host.getByLabel('Your player name', { exact: true }).fill('Player 1');
@@ -386,6 +412,7 @@ async function startFourPlayerRoom(pages: readonly Page[], mode: 'signaling' | '
     const invite = await host.getByRole('textbox', { name: /^Invitation link/ }).inputValue();
     for (const guest of guests) {
       await guest.goto('/#/join');
+      await expect(guest.getByLabel('Invitation link or code', { exact: true })).toBeVisible();
       await installFailureDiagnostics(guest);
       await navigateToInviteWithinDocument(guest, invite);
       await expect(guest.getByRole('heading', { name: gameName })).toBeVisible({ timeout: 45_000 });
@@ -394,6 +421,7 @@ async function startFourPlayerRoom(pages: readonly Page[], mode: 'signaling' | '
   } else {
     for (const guest of guests) {
       await guest.goto('/#/join');
+      await expect(guest.getByLabel('Invitation link or code', { exact: true })).toBeVisible();
       await installFailureDiagnostics(guest);
       const invite = await getManualInvitation(host);
       await guest.getByLabel('Invitation link or code', { exact: true }).fill(invite);
