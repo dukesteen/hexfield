@@ -8,6 +8,11 @@ on:
         type: choice
         default: mixed-game
         options: [mixed-game, imported-transfer]
+      connection_mode:
+        description: Connection mode for mixed-game checks
+        type: choice
+        default: all
+        options: [all, signaling, manual-relay]
 
 permissions:
   contents: read
@@ -25,7 +30,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        mode: [signaling, manual-relay]
+        mode: ${{ fromJSON(inputs.connection_mode == 'signaling' && '["signaling"]' || inputs.connection_mode == 'manual-relay' && '["manual-relay"]' || '["signaling","manual-relay"]') }}
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4

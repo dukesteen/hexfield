@@ -59,16 +59,24 @@ check passes the nested audit-worker path for the same 53-entry history.
 Proof/heartbeat performance acceptance for the new boundary remains open.
 
 The [earlier real-crypto CI report](verification/stage07/verified-ci-hand-cache-2026-09-28.md)
-records six passing scenarios on its pinned source. Run 36411956997 later timed
-out on scenarios 2, 5 and 6, while its persistence profile passed. In run
-36416940673, scenario 5 completed in 798.29 seconds with four clean audits at
-head 869; scenarios 2 and 6 again hit the unchanged 900-second limit. Scenario
-2 was still nonterminal at seq 494 near cutoff. Scenario 6 had a shared terminal
-result at seq 1064, but its three audits had not completed. Unit shard 3 reported
-462 passing tests followed by a Vitest `onTaskUpdate` worker RPC timeout, with
-no failed assertion. The [run report](verification/stage07/verified-ci-followup-36416940673.md)
-and [M-C matrix](verification/stage09/mc-remaining-acceptance.md) retain these
-outcomes without treating the incomplete cases as passes.
+records six passing scenarios on its pinned source. Later, scenario 5 passed in
+798.29 seconds on `80133af`; scenario 2 and 6 timed out in that run, as detailed
+in the [historical follow-up](verification/stage07/verified-ci-followup-36416940673.md).
+Scenario 2 now passes locally in 620.93 seconds and scenario 6 passes in CI in
+738.03 seconds on source `21553e3`; both used seed 42, index 0 and the unchanged
+900-second limit. The [latency report](verification/stage07/verified-latency-local-2026-09-28.md)
+and [scenario 6 report](verification/stage07/verified-scenario6-2026-09-28.md)
+record their exact inputs, audits and source fingerprints. With the six earlier
+traces, all nine scenario IDs have a passing seed-42 full-game result across the
+reported source pins, not a single all-nine run on one commit. The latest main
+workflow also passed all four unit shards; the earlier shard-3 RPC error remains
+historical. See the [M-C matrix](verification/stage09/mc-remaining-acceptance.md)
+for the full evidence map.
+On the same source pin, mixed-engine CI passed the signaling-relay full game.
+The manual-relay run formed a connected, agreeing four-peer mesh but remained
+nonterminal at sequence 97 after its bounded finish-and-audit poll; it reported
+no connection error or divergence. The [run report](verification/stage08/mixed-engine-followup-36422582118.md)
+keeps manual-relay full-game acceptance open.
 The [current M-C matrix](verification/stage09/mc-remaining-acceptance.md) and
 [M-D matrix](verification/stage10/remaining-acceptance.md) distinguish current-v6
 evidence from older traces. Reviewed lobby readiness and ceremony delivery fixes
@@ -253,7 +261,7 @@ under the replacement authority. The same 109-entry history also passes the
 native Chrome audit worker with an exact report match. Broader adversarial and
 cross-device acceptance remain open.
 
-- [ ] All nine real-crypto fault scenarios pass one reproducible complete game under the [bounded acceptance policy](verification/p2p-acceptance-policy.md).
+- [x] All nine real-crypto fault scenarios pass one reproducible complete game under the [bounded acceptance policy](verification/p2p-acceptance-policy.md), across the pinned source runs recorded in the [M-C matrix](verification/stage09/mc-remaining-acceptance.md). This is per-scenario seed-42 coverage, not one run containing all nine.
 - [x] Every cheat-table row has a passing signed-admission check at the stated boundary. The [coverage matrix](verification/stage07/cheat-table-coverage.md) records the live gameplay, signed ceremony and private recovery-void scopes.
 - [x] Human-only, hosted-bot and recovered-bot compositions finish without false `CHEAT_PROOF` entries and with successful independent audits from every survivor, under the [bounded acceptance policy](verification/p2p-acceptance-policy.md).
 - [x] Dice outcomes from the beacon pass the 100,000-round chi-square check; the [measured checkpoint](verification/stage09/local-checkpoint-2026-09-27.md) records the face and sum distributions.
