@@ -46,6 +46,21 @@ export function MobileGameControls({
           aria-live="polite"
         >
           <span>{step.text}</span>
+          {step.kind === 'board' && step.alternatives && (
+            <span className="piece-choice" role="group" aria-label={t('game:chooseBoardAction')}>
+              {step.alternatives.map((choice) => (
+                <button
+                  className={`button piece-choice-button ${choice.active ? 'button-primary' : 'button-quiet'}`}
+                  type="button"
+                  key={choice.kind}
+                  aria-pressed={choice.active}
+                  onClick={choice.select}
+                >
+                  {choice.label}
+                </button>
+              ))}
+            </span>
+          )}
           {step.kind === 'board' && step.cancel && (
             <button className="button button-quiet" type="button" onClick={step.cancel}>
               {t('game:cancelAction')}

@@ -9,7 +9,12 @@ import { OnlineCreate } from './OnlineCreate';
 const fixtures = vi.hoisted(() => ({
   network: null as null | NetworkSettings,
   loading: false,
-  begin: vi.fn<() => { promise: Promise<never>; cancel: () => void; keep: () => void }>(() => ({
+  begin: vi.fn<
+    (
+      id: string,
+      options: unknown,
+    ) => { promise: Promise<never>; cancel: () => void; keep: () => void }
+  >(() => ({
     promise: new Promise<never>(() => undefined),
     cancel: vi.fn<() => void>(),
     keep: vi.fn<() => void>(),
@@ -74,4 +79,21 @@ test('host create uses the saved custom server and allows a manual override', ()
     expect.any(String),
     expect.objectContaining({ kind: 'host', serverUrl: 'wss://custom.example' }),
   );
+});
+
+test('a seafaring scenario can be hosted, with its own board and victory target', () => {
+  fixtures.network = { ...DEFAULT_NETWORK_SETTINGS, signalingUrl: 'wss://custom.example' };
+  const page = render(<OnlineCreate />);
+  fireEvent.change(page.getByLabelText('lobby:onlineRoomName'), { target: { value: 'Friends' } });
+  fireEvent.change(page.getByLabelText('lobby:onlineHostName'), { target: { value: 'Duke' } });
+  fireEvent.change(page.getByLabelText('lobby:scenario'), { target: { value: 'fogbound' } });
+  expect(page.getByLabelText('lobby:vpTarget')).toHaveProperty('value', '12');
+  const form = page.container.querySelector('form');
+  if (!form) throw new Error('Missing host form');
+  fireEvent.submit(form);
+  const config = fixtures.begin.mock.calls[0]?.[1];
+  expect(config).toMatchObject({
+    kind: 'host',
+    config: { modules: [{ id: 'base' }, { id: 'seafaring' }], seats: [0, 1, 2, 3] },
+  });
 });

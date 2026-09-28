@@ -4,7 +4,7 @@ import { canonicalDecode, canonicalEncode, toBase64Url } from '@cp2p/codec';
 import { baseModule, success } from '@cp2p/engine';
 import type { GameConfig, Result } from '@cp2p/engine';
 import type { GenesisSeedMode, TakeoverPolicy } from '@cp2p/protocol';
-import { standardFixedBoard } from '@cp2p/maps';
+import { scenarioById, scenarioConfig, standardFixedBoard } from '@cp2p/maps';
 import { genesisSchema } from '@cp2p/protocol';
 import { afterEach, expect, test, vi } from 'vitest';
 import * as v from 'valibot';
@@ -360,4 +360,54 @@ test('five or six seats select the five-six module and drop a fixed island', () 
   void act(() => vi.advanceTimersByTime(400));
   expect(save.mock.lastCall?.[0].seats).toEqual([0, 1, 2, 3]);
   expect(save.mock.lastCall?.[0].modules.map((module) => module.id)).toEqual(['base']);
+});
+
+test('the host can pick a seafaring scenario, and its board and rules module travel in the config', () => {
+  vi.useFakeTimers();
+  const save = vi.fn<(config: GameConfig, seed: GenesisSeedMode) => Result<void>>(() =>
+    success(undefined),
+  );
+  const page = render(
+    <OnlineConfiguration
+      takeover={takeover}
+      humanCount={4}
+      config={config}
+      seedMode={{ kind: 'joint' }}
+      editable
+      onSave={save}
+    />,
+  );
+  fireEvent.change(page.getByLabelText('lobby:scenario'), { target: { value: 'fogbound' } });
+  void act(() => vi.advanceTimersByTime(400));
+  const saved = save.mock.lastCall?.[0];
+  expect(saved?.modules.map((module) => module.id)).toEqual(['base', 'seafaring']);
+  expect(saved?.board?.hexes.some((hex) => hex.terrain === 'fog')).toBe(true);
+  expect(saved?.options.base).toMatchObject({ vpTarget: 12 });
+  expect(page.queryByLabelText('lobby:mapLayout')).toBeNull();
+  // An edit keeps the scenario rather than resetting to the base game.
+  fireEvent.change(page.getByLabelText('lobby:discardLimit'), { target: { value: '9' } });
+  void act(() => vi.advanceTimersByTime(400));
+  expect(save.mock.lastCall?.[0].modules.map((module) => module.id)).toEqual(['base', 'seafaring']);
+  expect(save.mock.lastCall?.[0].options.base).toMatchObject({ discardLimit: 9 });
+  // A seat count the scenario does not fit falls back to a classic game.
+  fireEvent.change(page.getByLabelText('lobby:playerCount'), { target: { value: '6' } });
+  void act(() => vi.advanceTimersByTime(400));
+  expect(save.mock.lastCall?.[0].modules.map((module) => module.id)).toEqual(['base', 'five-six']);
+  expect(save.mock.lastCall?.[0]).not.toHaveProperty('board');
+});
+
+test('an existing seafaring configuration opens on its own scenario', () => {
+  const scenario = scenarioById('four-isles');
+  if (!scenario) throw new Error('Missing scenario');
+  const page = render(
+    <OnlineConfiguration
+      takeover={takeover}
+      humanCount={4}
+      config={scenarioConfig(scenario, 4)}
+      seedMode={{ kind: 'joint' }}
+      editable
+      onSave={() => success(undefined)}
+    />,
+  );
+  expect(page.getByLabelText('lobby:scenario')).toHaveProperty('value', 'four-isles');
 });

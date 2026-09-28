@@ -14,6 +14,8 @@ export interface NetBatchOptions {
   lifecycle?: 'persistence';
   maxElapsedMs?: number;
   players?: 4 | 6;
+  /** A catalogue scenario id (seafaring boards) to play instead of the default base game. */
+  map?: string;
 }
 
 export interface NetBatchFailure {
@@ -48,6 +50,7 @@ export function parseNetBatchOptions(args: readonly string[]): NetBatchOptions {
     'lifecycle',
     'max-elapsed-ms',
     'players',
+    'map',
   ]);
   for (let index = 0; index < args.length; index++) {
     const flag = args[index];
@@ -58,7 +61,9 @@ export function parseNetBatchOptions(args: readonly string[]): NetBatchOptions {
     const value = args[index + 1];
     if (value === undefined || value.startsWith('--'))
       throw new Error(`--${name} needs an integer value`);
-    if (name === 'security') {
+    if (name === 'map') {
+      if (!/^[a-z0-9-]+$/.test(value)) throw new Error('--map needs a scenario id');
+    } else if (name === 'security') {
       if (value !== 'stub' && value !== 'verified')
         throw new Error('--security must be stub or verified');
     } else if (name === 'lifecycle') {
@@ -86,6 +91,7 @@ export function parseNetBatchOptions(args: readonly string[]): NetBatchOptions {
     ...(values.has('lifecycle') ? { lifecycle: 'persistence' as const } : {}),
     ...(maxElapsedMs === undefined ? {} : { maxElapsedMs }),
     ...(values.has('players') ? { players: parse('players', 4) === 6 ? 6 : 4 } : {}),
+    ...(values.has('map') ? { map: values.get('map') ?? '' } : {}),
   };
   if (options.scenario < 1 || options.scenario > 9)
     throw new Error('--scenario must be between 1 and 9');
@@ -137,6 +143,7 @@ async function runWorker(indices: number[], options: NetBatchOptions): Promise<N
         ...(options.lifecycle === undefined ? {} : { lifecycle: options.lifecycle }),
         ...(options.maxElapsedMs === undefined ? {} : { maxElapsedMs: options.maxElapsedMs }),
         ...(options.players === undefined ? {} : { players: options.players }),
+        ...(options.map === undefined ? {} : { map: options.map }),
       },
     });
     let settled = false;
@@ -165,6 +172,7 @@ async function runIndices(
         gameIndex,
         scenario: options.scenario,
         ...(options.players === undefined ? {} : { players: options.players }),
+        ...(options.map === undefined ? {} : { map: options.map }),
         ...(options.security === undefined ? {} : { security: options.security }),
         ...(options.lifecycle === undefined ? {} : { lifecycle: options.lifecycle }),
         ...(options.maxElapsedMs === undefined ? {} : { maxElapsedMs: options.maxElapsedMs }),

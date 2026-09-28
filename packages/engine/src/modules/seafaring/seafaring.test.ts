@@ -80,7 +80,7 @@ describe('genesis', () => {
     expect(checkModuleSelection(moduleSelection(['base', 'seafaring'])).ok).toBe(true);
     expect(checkModuleSelection(moduleSelection(['base', 'five-six', 'seafaring'])).ok).toBe(true);
   });
-  test('genesis rejects a missing board, fog, fog with a bonus, a land pirate and unknown hexes', () => {
+  test('genesis rejects a missing board, bad fog stacks, fog with a bonus, a land pirate and unknown hexes', () => {
     const missing = { ...seafaringConfig() };
     delete missing.board;
     expect(() => engine.createGame(missing, new Uint8Array(32))).toThrow(/config.board/);
@@ -89,12 +89,22 @@ describe('genesis', () => {
       hex.id === 'h:3,1' ? { ...hex, terrain: 'fog', token: null } : hex,
     );
     reject(seafaringConfig({ board: fogged }), /fog with the island bonus/);
-    reject(seafaringConfig({ board: fogged, seafaring: { islandBonus: null } }), /fog reveals/);
+    reject(
+      seafaringConfig({ board: fogged, seafaring: { islandBonus: null } }),
+      /needs the fog option/,
+    );
     reject(
       seafaringConfig({
         seafaring: { fog: { terrains: { sea: 1 }, tokens: {} }, islandBonus: null },
       }),
-      /fog reveals/,
+      /fog tiles must match/i,
+    );
+    reject(
+      seafaringConfig({
+        board: fogged,
+        seafaring: { fog: { terrains: { forest: 1 }, tokens: {} }, islandBonus: null },
+      }),
+      /fog tokens must match/i,
     );
     reject(
       seafaringConfig({ seafaring: { pirateHex: 'h:0,0' } }),

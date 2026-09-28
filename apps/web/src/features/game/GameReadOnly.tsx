@@ -1,13 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import {
-  RESOURCES,
-  baseLongestRoadLength,
-  type CommandShape,
-  type GameState,
-  type Seat,
-} from '@cp2p/engine';
+import { RESOURCES, type CommandShape, type GameState, type Seat } from '@cp2p/engine';
 import { BoardView } from '../board/BoardView';
 import { ResourceCard } from '../trade/ResourceCard';
 import {
@@ -15,6 +9,7 @@ import {
   getGameArtUrl,
   getPieceIconUrl,
   getResourceIconUrl,
+  getShipIconUrl,
   type BoardRenderer,
   type DevelopmentCard,
 } from '@cp2p/renderer';
@@ -38,6 +33,8 @@ import { useCompactCockpit } from './use-compact-cockpit.js';
 import type { SaveStatus } from './save-coordinator';
 import { AwardsPanel } from './AwardsPanel';
 import { ModuleHud } from '../modules/ModuleHud';
+import { ModulePanelExtras } from '../modules/ModulePanelExtras';
+import { isSeafaring, routeLength } from './seafaring';
 import { FixtureDialog } from '../modules/FixtureDialog';
 
 const MAX_INLINE_DEVELOPMENT_CARDS = 5;
@@ -126,6 +123,7 @@ function PlayerRail({
   const base = state.config.options.base;
   const target =
     typeof base === 'object' && base !== null && 'vpTarget' in base ? base.vpTarget : 10;
+  const seafaring = isSeafaring(state);
   return (
     <aside className="player-rail" aria-label={t('game:players')}>
       <div className="player-rail-heading">
@@ -158,6 +156,15 @@ function PlayerRail({
               count: seatState.piecesLeft.city ?? 0,
               label: t('game:citiesLeft', { count: seatState.piecesLeft.city ?? 0 }),
             },
+            ...(seafaring
+              ? [
+                  {
+                    kind: 'ship' as const,
+                    count: seatState.piecesLeft.ship ?? 0,
+                    label: t('game:shipsLeft', { count: seatState.piecesLeft.ship ?? 0 }),
+                  },
+                ]
+              : []),
           ] as const;
           return (
             <section
@@ -257,11 +264,11 @@ function PlayerRail({
                 </div>
                 <div
                   title={t('game:roadLength', {
-                    count: baseLongestRoadLength(state, seatState.seat),
+                    count: routeLength(state, seatState.seat),
                   })}
                 >
-                  <dt>{t('game:statRoad')}</dt>
-                  <dd>{baseLongestRoadLength(state, seatState.seat)}</dd>
+                  <dt>{seafaring ? t('game:statRoute') : t('game:statRoad')}</dt>
+                  <dd>{routeLength(state, seatState.seat)}</dd>
                 </div>
               </dl>
               <div className="player-piece-counts" role="group" aria-label={t('game:piecesLeft')}>
@@ -273,14 +280,25 @@ function PlayerRail({
                     title={label}
                     key={kind}
                   >
-                    <img src={getPieceIconUrl(kind, identity?.color)} alt="" aria-hidden="true" />
+                    <img
+                      src={
+                        kind === 'ship'
+                          ? getShipIconUrl(identity?.color)
+                          : getPieceIconUrl(kind, identity?.color)
+                      }
+                      alt=""
+                      aria-hidden="true"
+                    />
                     <span aria-hidden="true">{count}</span>
                   </span>
                 ))}
               </div>
               {state.awards.longestRoad === seatState.seat && (
-                <span className="award-chip">{t('game:longestRoad')}</span>
+                <span className="award-chip">
+                  {seafaring ? t('game:longestTradeRoute') : t('game:longestRoad')}
+                </span>
               )}
+              <ModulePanelExtras state={state} seat={seatState.seat} presentation={presentation} />
               {state.awards.largestArmy === seatState.seat && (
                 <span className="award-chip">{t('game:largestArmy')}</span>
               )}
@@ -328,8 +346,13 @@ function PlayerDetails({
     const count = receipt?.resources[resource];
     return count && count > 0 ? [{ resource, count }] : [];
   });
+  const seafaring = isSeafaring(state);
   const awards = [
-    state.awards.longestRoad === seat ? t('game:longestRoad') : null,
+    state.awards.longestRoad === seat
+      ? seafaring
+        ? t('game:longestTradeRoute')
+        : t('game:longestRoad')
+      : null,
     state.awards.largestArmy === seat ? t('game:largestArmy') : null,
   ].filter((award) => award !== null);
   return (
@@ -360,21 +383,40 @@ function PlayerDetails({
           <dd>{knightsPlayed(state, seat)}</dd>
         </div>
         <div>
-          <dt>{t(summary ? 'game:statRoad' : 'game:cockpit.longestRoute')}</dt>
-          <dd>{baseLongestRoadLength(state, seat)}</dd>
+          <dt>
+            {t(
+              summary
+                ? seafaring
+                  ? 'game:statRoute'
+                  : 'game:statRoad'
+                : 'game:cockpit.longestRoute',
+            )}
+          </dt>
+          <dd>{routeLength(state, seat)}</dd>
         </div>
       </dl>
       <h3>{t('game:piecesLeft')}</h3>
       <div className="player-details-pieces">
-        {(['road', 'settlement', 'city'] as const).map((piece) => {
+        {(seafaring
+          ? (['road', 'settlement', 'city', 'ship'] as const)
+          : (['road', 'settlement', 'city'] as const)
+        ).map((piece) => {
           const count = publicSeat.piecesLeft[piece] ?? 0;
           const label = t(
-            `game:${piece === 'road' ? 'roadsLeft' : piece === 'settlement' ? 'settlementsLeft' : 'citiesLeft'}`,
+            `game:${piece === 'road' ? 'roadsLeft' : piece === 'settlement' ? 'settlementsLeft' : piece === 'city' ? 'citiesLeft' : 'shipsLeft'}`,
             { count },
           );
           return (
             <span role="img" aria-label={label} key={piece}>
-              <img src={getPieceIconUrl(piece, identity?.color)} alt="" aria-hidden="true" />
+              <img
+                src={
+                  piece === 'ship'
+                    ? getShipIconUrl(identity?.color)
+                    : getPieceIconUrl(piece, identity?.color)
+                }
+                alt=""
+                aria-hidden="true"
+              />
               <b aria-hidden="true">{count}</b>
             </span>
           );
@@ -382,6 +424,7 @@ function PlayerDetails({
       </div>
       <h3>{t('game:cockpit.awards')}</h3>
       <p>{awards.length ? awards.join(' · ') : t('game:cockpit.noAwards')}</p>
+      <ModulePanelExtras state={state} seat={seat} presentation={presentation} />
       <h3>{t('game:cockpit.status')}</h3>
       <p>
         {activeSeat === seat
@@ -996,7 +1039,7 @@ function LiveGame({
     },
   });
   const forcedForm = actions.availability?.availableTypes.some(
-    (type) => type === 'DISCARD' || type === 'STEAL',
+    (type) => type === 'DISCARD' || type === 'STEAL' || type === 'CHOOSE_GOLD',
   );
   const lastRevealedSeat = useRef(revealedSeat);
   useEffect(() => {
@@ -1137,6 +1180,7 @@ function LiveGame({
               renderer={renderer}
               hit={actions.placementConfirmation.hit}
               piece={actions.placementConfirmation.piece}
+              move={actions.placementConfirmation.move}
               label={actions.placementConfirmation.label}
               onConfirm={actions.placementConfirmation.confirm}
               onCancel={actions.placementConfirmation.cancel}

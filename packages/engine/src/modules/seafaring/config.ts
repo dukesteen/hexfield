@@ -8,11 +8,18 @@ export const SHIPS_PER_SEAT = 15;
 /** One lumber and one wool. */
 export const SHIP_COST = Object.freeze({ lumber: 1, wool: 1 });
 
-/** Unrevealed fog contents, as counts. Reserved: fog reveals are not implemented yet. */
+/**
+ * Contents of the hidden fog stacks, as counts: terrain tiles by terrain, and number tokens by
+ * number (as a string). The terrain counts sum to the board's `fog` hexes. Tokens cover every
+ * gold and resource tile; sea and desert tiles take none.
+ */
 export interface FogOption {
   terrains: Record<string, number>;
   tokens: Record<string, number>;
 }
+
+/** `fixed` builds from `config.board`; `archipelago` generates the board at genesis from the seed. */
+export type SeafaringLayout = 'fixed' | 'archipelago';
 
 export interface SeafaringOptions {
   /** The pirate's starting sea hex, or null to start it off the board. */
@@ -23,8 +30,10 @@ export interface SeafaringOptions {
   islandBonus: { vp: number } | null;
   /** Explicit bonus regions (groups of hex ids). Null makes every island a region. */
   bonusRegions: string[][] | null;
-  /** Reserved for fog reveals. Genesis rejects a non-null value for now. */
+  /** The hidden fog stacks, or null when the board has no fog. */
   fog: FogOption | null;
+  /** Where the board comes from. Default `fixed`. */
+  layout: SeafaringLayout;
 }
 
 function isStringArray(value: unknown): value is string[] {
@@ -100,4 +109,5 @@ export const SEAFARING_OPTIONS: readonly OptionSpec[] = [
         isCounts(Reflect.get(value, 'terrains')) &&
         isCounts(Reflect.get(value, 'tokens'))),
   },
+  { key: 'layout', type: 'enum', values: ['fixed', 'archipelago'], default: 'fixed' },
 ];

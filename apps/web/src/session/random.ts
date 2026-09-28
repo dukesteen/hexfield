@@ -9,6 +9,7 @@ import {
 } from '@cp2p/engine';
 import type {
   GameState,
+  Input,
   LocalRandomAnswer,
   LocalRandomSource,
   Pending,
@@ -117,12 +118,22 @@ export function remainingDevPool(
 export interface BrowserRandomSource extends LocalRandomSource {
   forceNextDice(dice: readonly [number, number]): void;
   clearForcedDice(): void;
+  /**
+   * Rebuild the public-deck bookkeeping of a resumed game from its replayed input log. Public
+   * cards leave no identity in state, so the log is the record of what was already shown. Throws
+   * when the log shows more of a card than the deck holds or a different number than the state.
+   */
+  resume(log: readonly Input[], state: Readonly<GameState>): void;
 }
 
-/** Local system input source. It keeps no secret deck order, so a save can resume safely. */
+/**
+ * Local system input source. It keeps no secret deck order, so a save can resume safely: private
+ * decks are derived from slots, and `resume` rebuilds the public decks from the replayed log.
+ */
 export function createBrowserRandomSource(entropy: Entropy = browserEntropy): BrowserRandomSource {
   let forcedDice: readonly [number, number] | null = null;
-  // Public-deck cards already shown in this session; the rest of the deck is picked uniformly.
+  // Public-deck cards already shown, from the replayed log and this session; the rest of the
+  // deck is picked uniformly.
   const shown = new Map<string, Map<string, number>>();
   const publicCard = (state: Readonly<GameState>, deckId: unknown): string => {
     if (typeof deckId !== 'string') throw new Error('Public draw has no deck');
@@ -154,6 +165,33 @@ export function createBrowserRandomSource(entropy: Entropy = browserEntropy): Br
     },
     clearForcedDice() {
       forcedDice = null;
+    },
+    resume(log, state) {
+      const decks = decksFor(state.config);
+      const seen = new Map<string, Map<string, number>>();
+      for (const input of log) {
+        if (input.kind !== 'system') continue;
+        const { deck, card } = input;
+        if (typeof deck !== 'string' || typeof card !== 'string') continue;
+        if (decks[deck]?.reveal !== 'public') continue;
+        const counts = seen.get(deck) ?? new Map<string, number>();
+        counts.set(card, (counts.get(card) ?? 0) + 1);
+        seen.set(deck, counts);
+      }
+      for (const [deck, declared] of Object.entries(decks)) {
+        if (declared.reveal !== 'public') continue;
+        const counts = seen.get(deck) ?? new Map<string, number>();
+        let total = 0;
+        for (const [card, count] of counts) {
+          if (count > (declared.cards[card] ?? 0))
+            throw new Error(`Public deck ${deck} shows ${card} more often than it holds`);
+          total += count;
+        }
+        if (total !== state.decks[deck]?.drawn.length)
+          throw new Error(`Public deck ${deck} log does not match its public draw count`);
+      }
+      shown.clear();
+      for (const [deck, counts] of seen) shown.set(deck, counts);
     },
     resolve(
       pending: SystemPending,

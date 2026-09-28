@@ -6,6 +6,8 @@ import {
   getGameArtUrl,
   getPieceIconUrl,
   getResourceIconUrl,
+  getSeafaringIconUrl,
+  getShipIconUrl,
 } from '@cp2p/renderer';
 import type { GamePresentation } from '../../queries/repositories/saved-games';
 import { formatGameEvent } from './event-format';
@@ -15,6 +17,10 @@ const actorEvents = new Set([
   'roadBuilt',
   'settlementBuilt',
   'cityBuilt',
+  'shipBuilt',
+  'shipMoved',
+  'pirateMoved',
+  'goldChosen',
   'resourcesDiscarded',
   'devCardBought',
   'devCardDealt',
@@ -64,6 +70,9 @@ function eventArt(event: GameEvent, color?: string): string[] {
   if (event.type === 'roadBuilt') return [getPieceIconUrl('road', color)];
   if (event.type === 'settlementBuilt') return [getPieceIconUrl('settlement', color)];
   if (event.type === 'cityBuilt') return [getPieceIconUrl('city', color)];
+  if (event.type === 'shipBuilt' || event.type === 'shipMoved') return [getShipIconUrl(color)];
+  if (event.type === 'pirateMoved') return [getSeafaringIconUrl('pirate')];
+  if (event.type === 'goldChosen') return [getSeafaringIconUrl('gold')];
   if (event.type === 'diceRolled') {
     const dice = event.dice;
     return Array.isArray(dice) &&

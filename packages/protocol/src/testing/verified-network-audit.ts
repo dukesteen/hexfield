@@ -1,5 +1,5 @@
 import { hashValue, toHex } from '@cp2p/codec';
-import { createBaseEngine, failure, success } from '@cp2p/engine';
+import { createCatalogueEngine, failure, success } from '@cp2p/engine';
 import type { Seat } from '@cp2p/engine';
 import { auditCertifiedGame } from '../audit.js';
 import type { AuditReport } from '../audit-types.js';
@@ -36,7 +36,7 @@ export interface VerifiedNetworkAuditJob {
 export function performVerifiedNetworkAudit(
   input: VerifiedNetworkAuditRequest,
 ): VerifiedNetworkAuditResult {
-  const engine = createBaseEngine();
+  const engine = createCatalogueEngine();
   const policy = {
     genesis: {
       verifyCommitments: (candidate: Parameters<typeof validateDeckCeremony>[0]) =>

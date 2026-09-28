@@ -1,4 +1,5 @@
 import { RESOURCES, type GameEvent, type GameState, type Seat } from '@cp2p/engine';
+import { islandBonusOf } from './seafaring';
 
 function record(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -41,12 +42,15 @@ export function victoryBreakdown(state: GameState, seat: Seat, hidden: number | 
   const publicSeat = state.seats.find((item) => item.seat === seat);
   const revealed =
     publicSeat?.cardSlots.filter((slot) => slot.revealed === 'victoryPoint').length ?? 0;
+  // Present only when the new-island bonus scored, so other games' breakdowns are unchanged.
+  const islands = islandBonusOf(state, seat).points;
   return {
     buildings,
     awards,
+    ...(islands > 0 ? { islands } : {}),
     revealed,
     hidden,
     vpCards: hidden === null ? null : revealed + hidden,
-    total: hidden === null ? null : buildings + awards + revealed + hidden,
+    total: hidden === null ? null : buildings + awards + islands + revealed + hidden,
   };
 }

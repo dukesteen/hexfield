@@ -47,3 +47,26 @@ test('trade response and completion use their actual public event names', () => 
   );
   expect(formatGameEvent({ type: 'tradeConfirmed' }, i18n.t, label)).toBe('A trade was completed.');
 });
+
+test('seafaring events name the ship, the pirate and the gold taken', () => {
+  expect(formatGameEvent({ type: 'shipBuilt', seat: 0, edge: 'e:1,1,W' }, i18n.t, label)).toBe(
+    'Player 1 built a ship.',
+  );
+  expect(
+    formatGameEvent({ type: 'shipMoved', seat: 1, from: 'e:1,1,W', to: 'e:2,1,W' }, i18n.t, label),
+  ).toBe('Player 2 moved a ship.');
+  expect(formatGameEvent({ type: 'pirateMoved', seat: 2, hex: 'h:3,0' }, i18n.t, label)).toBe(
+    'Player 3 moved the pirate.',
+  );
+  expect(
+    formatGameEvent(
+      {
+        type: 'goldChosen',
+        seat: 0,
+        resources: { brick: 0, lumber: 1, wool: 0, grain: 0, ore: 1 },
+      },
+      i18n.t,
+      label,
+    ),
+  ).toBe('Player 1 took gold: +1 Lumber, +1 Ore.');
+});

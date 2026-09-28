@@ -1,6 +1,6 @@
 import { fromBase64Url, hashValue, toBase64Url, toHex } from '@cp2p/codec';
 import { scalarToBytes } from '@cp2p/crypto';
-import type { Seat } from '@cp2p/engine';
+import type { GameConfig, Seat } from '@cp2p/engine';
 import { createBeaconSecretSource } from '../beacon-source.js';
 import type { BeaconSecretProvider } from '../beacon-source.js';
 import { MemoryBeaconContributionStore } from '../beacon-contributions.js';
@@ -106,6 +106,8 @@ export type VerifiedNetworkSessionOptions = Pick<
 
 export interface VerifiedNetworkFixtureOptions {
   readonly seed: number;
+  /** A complete genesis config (for example a seafaring scenario) in place of the default base game. */
+  readonly config?: GameConfig;
   readonly gameIndex?: number;
   readonly vpTarget?: number;
   /** Test-only settings applied before the genuine genesis is signed. */
@@ -146,11 +148,12 @@ export interface VerifiedNetworkAuditTiming {
  */
 export function createVerifiedNetworkFixture(options: VerifiedNetworkFixtureOptions) {
   const fixtureStarted = performance.now();
+  const humanSeats: readonly Seat[] = options.config?.seats ?? HUMAN_SEATS;
   const simulation = createSimulationGenesis({
     seed: options.seed,
     gameIndex: options.gameIndex ?? 0,
-    humanCount: HUMAN_SEATS.length,
-    config: {
+    humanCount: humanSeats.length,
+    config: options.config ?? {
       modules: [{ id: 'base', version: '1.0.0' }],
       seats: [...HUMAN_SEATS],
       options: {
@@ -173,7 +176,7 @@ export function createVerifiedNetworkFixture(options: VerifiedNetworkFixtureOpti
   if (!decks.ok)
     throw new Error(`Verified fixture deck definitions failed: ${decks.error.message}`);
   const masterSecrets = new Map<Seat, Uint8Array>(
-    HUMAN_SEATS.map((seat) => [seat, scalarToBytes(BigInt(17 + seat))]),
+    humanSeats.map((seat) => [seat, scalarToBytes(BigInt(17 + seat))]),
   );
   const providers = new Map<Seat, BeaconSecretProvider>();
   const stores = new Map<Seat, SeatStores>();
@@ -194,7 +197,7 @@ export function createVerifiedNetworkFixture(options: VerifiedNetworkFixtureOpti
 
   try {
     const ceremonyId = deckCeremonyId(deck.body);
-    for (const seat of HUMAN_SEATS) {
+    for (const seat of humanSeats) {
       const master = masterSecrets.get(seat);
       if (!master) throw new Error(`Missing fixture master for seat ${seat}`);
       providers.set(seat, createBeaconSecretSource(master, { ceremonyId, seat }, BEACON_LENGTH));
@@ -212,7 +215,7 @@ export function createVerifiedNetworkFixture(options: VerifiedNetworkFixtureOpti
       ...deck.body,
       commitments: {
         ...deck.body.commitments,
-        beaconChains: HUMAN_SEATS.map((seat) => {
+        beaconChains: humanSeats.map((seat) => {
           const provider = providers.get(seat);
           if (!provider) throw new Error(`Missing beacon provider for seat ${seat}`);
           return {
@@ -226,7 +229,7 @@ export function createVerifiedNetworkFixture(options: VerifiedNetworkFixtureOpti
     const genesis: Genesis = {
       ...body,
       gameId: genesisId(body),
-      signatures: HUMAN_SEATS.map((seat) => {
+      signatures: humanSeats.map((seat) => {
         const identity = simulation.identities.get(seat);
         if (!identity) throw new Error(`Missing fixture identity for seat ${seat}`);
         const signed = signVerifiedGenesis(body, deck.transcripts, seat, identity.secretKey);
@@ -242,7 +245,7 @@ export function createVerifiedNetworkFixture(options: VerifiedNetworkFixtureOpti
       entry: {},
     };
     const state = simulation.engine.createGame(genesis.config, fromBase64Url(genesis.genesisSeed));
-    const sequencer = simulation.identities.get(HUMAN_SEATS[0]);
+    const sequencer = simulation.identities.get(humanSeats[0] ?? 0);
     if (!sequencer) throw new Error('Missing initial fixture sequencer');
     const entry = signEntry(
       {
@@ -485,7 +488,7 @@ export function createVerifiedNetworkFixture(options: VerifiedNetworkFixtureOpti
           .toSorted((left, right) => left.seat - right.seat);
       },
       mastersForAudit: () =>
-        HUMAN_SEATS.map((seat) => {
+        humanSeats.map((seat) => {
           const master = masterSecrets.get(seat);
           if (!master) throw new Error(`Fixture master for seat ${seat} is unavailable`);
           return { seat, master: master.slice() };

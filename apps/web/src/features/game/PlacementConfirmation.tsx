@@ -7,7 +7,9 @@ interface Props {
   boardRef: RefObject<HTMLElement | null>;
   renderer: BoardRenderer | null;
   hit: BoardHit;
-  piece: 'road' | 'settlement' | 'city';
+  piece: 'road' | 'ship' | 'settlement' | 'city';
+  /** A ship that already exists sails here, so nothing is built. */
+  move?: boolean;
   label: string;
   onConfirm: () => void;
   onCancel: () => void;
@@ -20,6 +22,7 @@ export function PlacementConfirmation({
   renderer,
   hit,
   piece,
+  move = false,
   label,
   onConfirm,
   onCancel,
@@ -69,26 +72,29 @@ export function PlacementConfirmation({
       window.removeEventListener('scroll', place, true);
     };
   }, [boardRef, hit, piece, renderer]);
+  const title = move
+    ? t('game:movePreviewTitle')
+    : t('game:placementPreviewTitle', { piece: t(`game:piece.${piece}`) });
 
   return (
     <div
       ref={popupRef}
       className="placement-confirmation"
       role="group"
-      aria-label={t('game:placementPreviewTitle', { piece: t(`game:piece.${piece}`) })}
+      aria-label={title}
       style={{
         left: position?.x ?? 8,
         top: position?.y ?? 8,
         visibility: position ? 'visible' : 'hidden',
       }}
     >
-      <strong>{t('game:placementPreviewTitle', { piece: t(`game:piece.${piece}`) })}</strong>
+      <strong>{title}</strong>
       <p aria-live="polite">{label}</p>
       <div className="action-row" aria-busy={submitting}>
         <button
           className="button button-primary"
           type="button"
-          aria-label={t(`game:confirm.${piece}`)}
+          aria-label={move ? t('game:confirm.moveShip') : t(`game:confirm.${piece}`)}
           onClick={onConfirm}
           disabled={submitting}
         >

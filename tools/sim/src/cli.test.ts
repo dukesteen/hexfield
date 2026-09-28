@@ -1,7 +1,7 @@
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test, vi } from 'vitest';
 import { createBaseEngine } from '@cp2p/engine';
 import { hashValue, toHex } from '@cp2p/codec';
 import { failureMatches, main, replayCommand } from './cli.js';
@@ -22,6 +22,42 @@ describe('failure replay', () => {
       '--games must be positive',
     );
   });
+
+  test('--scenario rejects unknown ids, bad seat counts and module flags', async () => {
+    await expect(main(['run', '--scenario', 'nope'])).rejects.toThrow('Unknown scenario nope');
+    await expect(main(['run', '--scenario', 'fogbound', '--players', '6'])).rejects.toThrow(
+      '3–4 seats',
+    );
+    await expect(main(['run', '--scenario', 'fogbound', '--modules', 'base'])).rejects.toThrow(
+      '--scenario replaces',
+    );
+  });
+
+  test('--scenario runs the scenario board and reports its id', async () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      await main([
+        'run',
+        '--scenario',
+        'fogbound',
+        '--players',
+        '3',
+        '--games',
+        '2',
+        '--max-turns',
+        '900',
+      ]);
+      const line: unknown = JSON.parse(String(log.mock.calls[0]?.[0]));
+      expect(line).toMatchObject({
+        scenario: 'fogbound',
+        players: 3,
+        completedGames: 2,
+        maxTurns: 900,
+      });
+    } finally {
+      log.mockRestore();
+    }
+  }, 120_000);
 
   test('requires one worker for per-game latency benchmarks', async () => {
     await expect(main(['bench', '--games', '1', '--parallel', '2'])).rejects.toThrow(

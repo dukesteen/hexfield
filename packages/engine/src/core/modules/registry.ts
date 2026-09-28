@@ -327,6 +327,7 @@ function composeHooks(modules: readonly GameModule[]): HookPipeline {
     afterDraw: (draw, acc, ctx) =>
       afterDrawChain.reduce((next, hook) => hook(draw, next, ctx), acc),
     afterBuild: foldState<[Seat, string, string]>(modules, (hooks) => hooks.afterBuild),
+    afterInput: foldState<[]>(modules, (hooks) => hooks.afterInput),
     onTurnStart: foldState<[Seat]>(modules, (hooks) => hooks.onTurnStart),
     onTurnEnd: foldState<[Seat]>(modules, (hooks) => hooks.onTurnEnd),
     turnFlow: (state, acc) => turnFlow([state], acc),

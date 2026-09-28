@@ -9,6 +9,8 @@ import type { SimulationSummary } from './stats.js';
 
 export interface BatchOptions extends Omit<RunGameOptions, 'gameIndex'> {
   games: number;
+  /** Scenario id when `config` came from one, recorded for failure repros. */
+  scenario?: string;
   startIndex?: number;
   stride?: number;
   failuresDirectory?: string;
@@ -60,6 +62,7 @@ function writeFailure(
         players: options.players ?? 4,
         baseOptions: options.baseOptions ?? {},
         knights: options.knights === true,
+        ...(options.scenario === undefined ? {} : { scenario: options.scenario }),
         maxTurns: options.maxTurns ?? 500,
         maxInputsWithoutTurn: options.maxInputsWithoutTurn ?? 2_000,
         verify: options.verify !== false,
