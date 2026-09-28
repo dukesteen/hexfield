@@ -684,13 +684,17 @@ async function startFourPlayerRoom(pages: readonly Page[], mode: 'signaling' | '
   }
 
   await expect
-    .poll(async () =>
-      Promise.all(
-        pages.map(async (page) => {
-          const state = await readRoom(page);
-          return state.roomOpen ? state.peerCount : 0;
-        }),
-      ),
+    .poll(
+      async () =>
+        Promise.all(
+          pages.map(async (page) => {
+            const state = await readRoom(page);
+            return state.roomOpen ? state.peerCount : 0;
+          }),
+        ),
+      // Allow the production 30s attempt, 250ms retry and 10s HELLO window.
+      // The overall test and subsequent play/audit limits stay unchanged.
+      { timeout: 45_000, intervals: [100] },
     )
     .toEqual([3, 3, 3, 3]);
   await Promise.all(pages.map((page) => page.getByRole('button', { name: 'Ready up' }).click()));
