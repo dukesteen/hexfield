@@ -10,16 +10,20 @@ export {
   fiveSixModule,
 } from './modules/five-six/index.js';
 export { FIVE_SIX_BOARD, FIVE_SIX_HEXES } from './modules/five-six/board.js';
+export { finishTurnFlowFrame } from './modules/base/phases/turn.js';
 export { STANDARD_BOARD, STANDARD_HEXES } from './modules/base/board/shapes.js';
 export {
   MODULE_CATALOGUE,
   checkModuleSelection,
   createCatalogueEngine,
+  deckCatalogueFor,
+  decksFor,
   devCardCatalogueFor,
   devCardCountsFor,
   engineForConfig,
   engineForModules,
   moduleSelection,
+  registerAdHocModule,
 } from './modules/catalogue.js';
 export {
   EXPANSION_IDS,
@@ -52,7 +56,7 @@ export type { TradeOffer } from './modules/base/types.js';
 export { enumerateCommands } from './core/enumerate.js';
 export type { EnumerateOptions } from './core/enumerate.js';
 
-export { createEngine, LocalGame } from './core/pipeline/index.js';
+export { createEngine, isPublicDraw, LocalGame, publicDrawInput } from './core/pipeline/index.js';
 export type {
   Engine,
   Input,
@@ -84,6 +88,8 @@ export type {
 export type {
   Blocker,
   BoardShapeSpec,
+  DeckReveal,
+  DeckSpec,
   DiceSpec,
   FixtureDeclaration,
   FixtureSlot,

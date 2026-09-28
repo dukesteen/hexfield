@@ -3,6 +3,8 @@ export type {
   Blocker,
   BoardShapeSpec,
   Cost,
+  DeckReveal,
+  DeckSpec,
   DiceSpec,
   FixtureDeclaration,
   FixtureSlot,
