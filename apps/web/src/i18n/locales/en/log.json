@@ -27,5 +27,8 @@
   "shipBuilt": "{{player}} built a ship.",
   "shipMoved": "{{player}} moved a ship.",
   "pirateMoved": "{{player}} moved the pirate.",
-  "goldChosen": "{{player}} took gold: {{details}}."
+  "goldChosen": "{{player}} took gold: {{details}}.",
+  "fogRevealedResource": "{{player}} revealed {{terrain}} ({{token}}) and drew 1 {{resource}}.",
+  "fogRevealedGold": "{{player}} revealed a {{terrain}} ({{token}}) and may take a card of their choice.",
+  "fogRevealedOpen": "{{player}} revealed {{terrain}}."
 }

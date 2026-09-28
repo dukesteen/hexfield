@@ -310,8 +310,13 @@ export function deriveVisualEffects(
       }
     }
   }
-  for (const hex of reveals)
-    board.push({ id: `${revision}:reveal:${hex}`, kind: 'fog-reveal', hex });
+  for (const [order, hex] of reveals.entries())
+    board.push({
+      id: `${revision}:reveal:${hex}`,
+      kind: 'fog-reveal',
+      hex,
+      ...(order > 0 ? { order } : {}),
+    });
   if (board.some((effect) => effect.kind === 'dice-roll')) {
     const hexes = after.board.hexes.flatMap((hex) =>
       hex.token === roll && hex.id !== after.board.robberHex && isHexId(hex.id) ? [hex.id] : [],

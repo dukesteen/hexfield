@@ -783,6 +783,11 @@
   .desktop-action-status .desktop-context-actions:not(:empty) + .desktop-placement-instruction {
     margin-top: 6px;
   }
+  .desktop-action-status .desktop-fog-revealing {
+    margin: 0;
+    justify-content: center;
+    font-size: 11px;
+  }
   .desktop-action-status .desktop-awaiting-action {
     margin: 0;
     font-size: 11px;

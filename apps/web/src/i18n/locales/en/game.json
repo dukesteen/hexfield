@@ -51,6 +51,7 @@
   "buildCostResource": "{{count}} {{resource}}",
   "awaitingAction": "Waiting for the next move",
   "submittingAction": "Sending action…",
+  "fogRevealing": "Revealing unexplored sea…",
   "passToPlayer": "Pass to {{player}}",
   "privacyInstruction": "Only {{player}} should look at the screen now.",
   "revealHand": "Reveal hand",

@@ -47,7 +47,7 @@ import { actingSeat } from '../../store/pending-actors';
 import type { GamePresentation } from '../../queries/repositories/saved-games';
 import { recordOrdinaryActionRejection } from './action-diagnostics';
 import { BuildCostsDialog } from './BuildCostsDialog.js';
-import { isSeafaring } from './seafaring';
+import { fogDrawPending, isSeafaring } from './seafaring';
 
 const boardOrder: readonly PlacementKind[] = [
   'settlement',
@@ -254,12 +254,20 @@ function afterNextPaint(): Promise<void> {
   });
 }
 
+/** How long a gold reveal plays on the board before its choice dialog covers it. */
+const GOLD_AFTER_REVEAL_MS = 1100;
+
 /** The controller only offers engine-provided commands and checks the live revision on submission. */
 export function useGameActions(
   state: GameState,
   pending: readonly Pending[],
   presentation: GamePresentation,
-  options: { compact?: boolean; onHandOff?: () => void; onFormClosed?: () => void } = {},
+  options: {
+    compact?: boolean;
+    reducedMotion?: boolean;
+    onHandOff?: () => void;
+    onFormClosed?: () => void;
+  } = {},
 ): GameActionController {
   const { t } = useTranslation('game');
   const seat = useSessionStore((store) => store.revealedSeat);
@@ -269,6 +277,7 @@ export function useGameActions(
   const voided = status?.kind === 'void';
   const conflicted = useSessionStore((store) => store.conflicted);
   const revision = useSessionStore((store) => store.revision);
+  const lastEvent = useSessionStore((store) => store.events)?.at(-1);
   const boardKind = useSessionStore((store) => store.placementMode);
   const boardCancelled = useSessionStore((store) => store.placementCancelled);
   const previewPlacement = useSessionStore((store) => store.previewPlacement);
@@ -283,6 +292,16 @@ export function useGameActions(
   const [submittingCommand, setSubmittingCommand] = useState<CommandShape['type'] | null>(null);
   const isSubmitting = submittingCommand !== null;
   const actorSeat = actingSeat(state, pending);
+  // A gold reveal is answered at once, but its dialog waits until the tile has turned over.
+  const goldReveal = lastEvent?.type === 'fogRevealed' && lastEvent.terrain === 'gold';
+  const [goldShownAt, setGoldShownAt] = useState<number | null>(null);
+  const goldHeld = goldReveal && goldShownAt !== revision && !options.reducedMotion;
+  useEffect(() => {
+    if (!goldHeld) return undefined;
+    const timer = window.setTimeout(() => setGoldShownAt(revision), GOLD_AFTER_REVEAL_MS);
+    return () => window.clearTimeout(timer);
+  }, [goldHeld, revision]);
+  const revealing = fogDrawPending(pending) !== null || goldHeld;
   const availability = useMemo(
     () =>
       !voided && seat !== null && legal ? deriveActionAvailability(legal, pending, seat) : null,
@@ -586,7 +605,7 @@ export function useGameActions(
     ? 'discard'
     : availability?.availableTypes.includes('STEAL')
       ? 'steal'
-      : availability?.availableTypes.includes('CHOOSE_GOLD')
+      : availability?.availableTypes.includes('CHOOSE_GOLD') && !goldHeld
         ? 'gold'
         : null;
   const visibleForm = forcedForm ?? form;
@@ -782,10 +801,10 @@ export function useGameActions(
     <section className="action-dock" aria-label={t('game:actions')} aria-busy={isSubmitting}>
       <div className="action-dock-heading">
         <h2>{t('game:actions')}</h2>
-        {isSubmitting ? (
+        {isSubmitting || revealing ? (
           <span className="action-pending" role="status">
             <span className="action-spinner" aria-hidden="true" />
-            {t('game:submittingAction')}
+            {t(isSubmitting ? 'game:submittingAction' : 'game:fogRevealing')}
           </span>
         ) : (
           <button
@@ -1020,7 +1039,13 @@ export function useGameActions(
     </section>
   );
   const desktopStatus = (
-    <div className="desktop-action-status" aria-busy={isSubmitting}>
+    <div className="desktop-action-status" aria-busy={isSubmitting || revealing}>
+      {revealing && (
+        <p className="desktop-fog-revealing action-pending" role="status">
+          <span className="action-spinner" aria-hidden="true" />
+          {t('game:fogRevealing')}
+        </p>
+      )}
       {(contextKinds.length > 0 || contextualGroups.length > 0 || cardPlayButtons.length > 0) && (
         <div className="desktop-context-actions" role="group" aria-label={t('game:contextActions')}>
           {contextKinds.map((kind) => (
@@ -1289,6 +1314,8 @@ export function useGameActions(
           }
         : {}),
     };
+  } else if (revealing) {
+    nextStep = { kind: 'pending', text: t('game:fogRevealing') };
   } else if (error) {
     nextStep = { kind: 'text', tone: 'alert', text: error };
   } else if (seat === null || !availability) {
