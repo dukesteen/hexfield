@@ -97,6 +97,11 @@ function checkExtraDice(state: GameState, input: SystemInput, ctx: HandlerContex
     : failure('invalid-dice', 'An extra die shows a face it does not have');
 }
 
+/** The production dice a module set instead of rolling (the Alchemist), if any. */
+function fixedDice(state: GameState, ctx: HandlerContext): readonly [number, number] | undefined {
+  return ctx.hooks.diceSpec(state, BASE_DICE).fixed;
+}
+
 function validDice(value: unknown): value is [number, number] {
   return (
     Array.isArray(value) &&
@@ -114,7 +119,7 @@ function diceForIndex(index: number): readonly [number, number] {
 function preparedDiceState(state: GameState, input: SystemInput, ctx: HandlerContext): GameState {
   if (!validDice(input.dice)) throw new Error('Validated dice missing');
   let next = ctx.hooks.onDiceResult(state, input.dice, extraFaces(input));
-  if (baseOptions(next.config.options.base).diceMode === 'balanced') {
+  if (baseOptions(next.config.options.base).diceMode === 'balanced' && !fixedDice(state, ctx)) {
     const index = input.index;
     if (typeof index !== 'number') throw new Error('Validated index missing');
     next = updateBase(next, (old) => ({
@@ -143,6 +148,14 @@ function extraRequest(spec: DiceSpec): { extra?: { id: string; faces: string[] }
 }
 
 function diceRequest(state: GameState, ctx: HandlerContext): RandomRequest {
+  const fixed = fixedDice(state, ctx);
+  if (fixed)
+    return {
+      type: 'dice',
+      mode: 'fixed',
+      dice: [...fixed],
+      ...extraRequest(ctx.hooks.diceSpec(state, BASE_DICE)),
+    };
   if (baseOptions(state.config.options.base).diceMode === 'balanced')
     return {
       type: 'dice',
@@ -259,6 +272,16 @@ export const diceResult: SystemInputHandler = {
       return failure('invalid-dice', 'Dice must contain two faces from 1 to 6');
     const extra = checkExtraDice(state, input, ctx);
     if (!extra.ok) return extra;
+    const fixed = fixedDice(state, ctx);
+    if (fixed)
+      return input.dice[0] === fixed[0] &&
+        input.dice[1] === fixed[1] &&
+        !Object.hasOwn(input, 'index')
+        ? success(undefined)
+        : failure(
+            'fixed-dice-mismatch',
+            'The production dice were set and must repeat their faces',
+          );
     if (baseOptions(state.config.options.base).diceMode !== 'balanced')
       return Object.hasOwn(input, 'index')
         ? failure('unknown-field', 'Random dice results cannot include an index')

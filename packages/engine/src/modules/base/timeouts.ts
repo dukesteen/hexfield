@@ -7,7 +7,7 @@ import type { CommandInput } from '../../core/pipeline/index.js';
 import { verticesForHex } from './board/index.js';
 import { moveRobber, robberHexes, steal, stealVictims } from './robber.js';
 import { cardKindsOf, ownSeat, top, topFrame, updateBase } from './shared.js';
-import { discard, endTurn, rollDice } from './phases/turn.js';
+import { discard, endTurn, mainPhase, rollDice } from './phases/turn.js';
 import { skipRoadBuilding } from './devcards.js';
 import { baseExt } from './types.js';
 
@@ -64,6 +64,15 @@ function automaticRobberHex(state: GameState, ctx: HandlerContext): string | und
   );
 }
 
+/** Whether a module leaves `END_TURN` among the active seat's main-phase commands (progress card limit). */
+function endTurnAllowed(state: GameState, seat: Seat, ctx: HandlerContext): boolean {
+  return ctx.hooks
+    .pending(state, mainPhase.pending(state, top(state), ctx))
+    .some(
+      (item) => item.kind === 'player' && item.seat === seat && item.allowed.includes('END_TURN'),
+    );
+}
+
 /** A module-owned phase resolves its timeout through the timeoutAction hook. */
 function moduleTimeout(
   state: GameState,
@@ -108,7 +117,14 @@ export const timeout: SystemInputHandler = {
         );
       }
       case 'main':
-        return seat === state.turn.activeSeat || hasUnansweredOffer(state, seat)
+        if (seat === state.turn.activeSeat)
+          return endTurnAllowed(state, seat, ctx)
+            ? success(undefined)
+            : failure(
+                'turn-end-blocked',
+                'A module requires the seat to act before ending the turn',
+              );
+        return hasUnansweredOffer(state, seat)
           ? success(undefined)
           : failure('no-trade-response', 'Seat has no unanswered trade offer');
       default:

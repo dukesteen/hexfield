@@ -26,7 +26,8 @@ function playableDev(state: GameState, seat: Seat, priv?: PrivateState): LegalCo
   const commands: LegalCommandSet['commands'] = [];
   const templates: LegalCommandSet['templates'] = [];
   for (const slot of ownSeat(state, seat).cardSlots) {
-    if (slot.revealed || slot.acquiredTurn === state.turn.number) continue;
+    // Module decks (progress cards) have their own play command.
+    if (slot.deck !== 'dev' || slot.revealed || slot.acquiredTurn === state.turn.number) continue;
     const card = priv?.slots[slot.slotId];
     if (!card) {
       templates.push({ type: 'PLAY_DEV_CARD', slotId: slot.slotId, card: 'private identity' });

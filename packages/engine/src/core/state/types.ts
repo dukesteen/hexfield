@@ -76,6 +76,11 @@ export interface CardSlot {
   deck: string;
   acquiredTurn: number;
   revealed?: CardIdentity;
+  /**
+   * The card's identity when every seat already knows it while it is still in hand, for example a
+   * played progress card that was dealt again from a public queue. No hidden identity exists for it.
+   */
+  known?: CardIdentity;
 }
 
 export interface SeatState {

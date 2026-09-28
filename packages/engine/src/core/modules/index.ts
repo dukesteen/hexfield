@@ -6,6 +6,7 @@ export type {
   DeckReveal,
   DeckSpec,
   DiceSpec,
+  DrawInfo,
   FixtureDeclaration,
   FixtureSlot,
   HookName,
