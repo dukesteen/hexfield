@@ -71,6 +71,8 @@ afterEach(() => {
   while (active.length) active.pop()?.dispose();
 });
 
+const seats = (count: number) => ([0, 1, 2, 3, 4, 5] as const).slice(0, count);
+
 describe('signed lobby controller', () => {
   test('retries an initial pre-auth HELLO and a dropped authenticated HELLO', () => {
     const keys = [new Uint8Array(32).fill(31), new Uint8Array(32).fill(32)];
@@ -443,7 +445,6 @@ describe('signed lobby controller', () => {
     room.flush();
     const base = { id: 'base', version: BASE_VERSION };
     const fiveSix = { id: 'five-six', version: FIVE_SIX_VERSION };
-    const seats = (count: number) => ([0, 1, 2, 3, 4, 5] as const).slice(0, count);
     const attempt = (config: GameConfig) => room.host.configure(config);
     // Five or six seats need five-six; five-six needs five or six seats.
     expect(attempt({ modules: [base], seats: [...seats(5)], options: {} }).ok).toBe(false);

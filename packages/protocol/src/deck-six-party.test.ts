@@ -54,7 +54,7 @@ test('six-party deck ceremony and five-hop unlock chain', () => {
   let setup = initial.value;
   const shuffleSecrets = Array.from({ length: SEATS }, (_, seat) => BigInt(1_009 + seat * 7));
   const lockRows = Array.from({ length: SEATS }, (_, seat) =>
-    Array.from({ length: cards.length }, (_, position) =>
+    Array.from({ length: cards.length }, (_unused, position) =>
       BigInt(2_003 + seat * 97 + position * 13),
     ),
   );
