@@ -30,6 +30,7 @@ import type {
   SignedTradeProofRequest,
   SignedTradeProofResponse,
 } from './trade-proof-delivery.js';
+import { deckUnlockers } from './deck-draw.js';
 import { deckPassHash } from './deck-genesis.js';
 import { DeckInbox } from './deck-inbox.js';
 import { decksReady } from './deck-ledger.js';
@@ -3544,7 +3545,7 @@ export class ReplicatedLog {
         'Verified draws need local sources and durable contributions',
       );
     const signers: ArtifactSigner[] = [];
-    for (const participant of active.participants.filter((item) => item.seat !== active.seat)) {
+    for (const participant of deckUnlockers(active)) {
       const signer = resolveArtifactSigner(
         this.context.log.authority,
         this.context.log.genesis,
@@ -3563,6 +3564,7 @@ export class ReplicatedLog {
         position: active.position,
         seat: active.seat,
         slotId: active.slotId,
+        ...(active.public ? { public: true as const } : {}),
       };
       // Seat order matches the unlock chain. One host may append several bot
       // unlocks. Even the drawer reserves the certified position before returning.

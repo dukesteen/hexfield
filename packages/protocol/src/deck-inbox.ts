@@ -1,9 +1,11 @@
-import { success } from '@cp2p/engine';
+import { publicDrawInput, success } from '@cp2p/engine';
 import type { Result } from '@cp2p/engine';
 import * as v from 'valibot';
 import {
+  decodePublicDeckCard,
   deckDrawOperationId,
   deckUnlockSchema,
+  deckUnlockers,
   validateDeckDrawOperation,
   verifyDeckUnlockPrefix,
 } from './deck-draw.js';
@@ -22,7 +24,7 @@ import { failure } from '@cp2p/engine';
 export const deckUnlockContributionSchema = v.strictObject({
   kind: v.literal('deck-unlock'),
   operationId: hashSchema,
-  unlocks: v.pipe(v.array(deckUnlockSchema), v.minLength(1), v.maxLength(5)),
+  unlocks: v.pipe(v.array(deckUnlockSchema), v.minLength(1), v.maxLength(6)),
 });
 
 export interface DeckUnlockContribution {
@@ -75,9 +77,7 @@ export class DeckInbox {
     let signers: ArtifactSigner[] | undefined;
     if (genesis && (authority || crypto.epoch > 0)) {
       signers = [];
-      for (const participant of checked.value.participants.filter(
-        (item) => item.seat !== checked.value.seat,
-      )) {
+      for (const participant of deckUnlockers(checked.value)) {
         const signer = resolveArtifactSigner(authority, genesis, crypto.epoch, participant.seat);
         if (!signer.ok) return signer;
         signers.push(signer.value);
@@ -120,10 +120,11 @@ export class DeckInbox {
     const refreshed = this.refresh(context.crypto, context.genesis, context.authority);
     if (!refreshed.ok) return refreshed;
     const operation = this.operation;
-    if (!operation || this.unlocks.length !== operation.participants.length - 1)
-      return success(null);
+    if (!operation || this.unlocks.length !== deckUnlockers(operation).length) return success(null);
     // remember() already verified this entire prefix for the same operation ID.
     // Proposal validation independently checks the final evidence before voting.
+    const evidence = { kind: 'proof', protocol: DECK_DRAW_PROTOCOL, data: this.prefix() } as const;
+    if (operation.public) return this.publicCandidate(context, operation, evidence);
     return success({
       kind: 'system',
       input: {
@@ -133,8 +134,37 @@ export class DeckInbox {
         seat: operation.seat,
         slotId: operation.slotId,
       },
-      evidence: { kind: 'proof', protocol: DECK_DRAW_PROTOCOL, data: this.prefix() },
+      evidence,
     });
+  }
+
+  /** A public reveal names its card in the input, decoded from the verified unlock chain. */
+  private publicCandidate(
+    context: LogContext,
+    operation: DeckDrawOperation,
+    evidence: Extract<DealPayload['evidence'], { kind: 'proof' }>,
+  ): Result<DealPayload | null> {
+    const setup = context.crypto?.decks.decks.find(
+      (deck) => deck.commitment.definition.deckId === operation.deckId,
+    )?.setup;
+    const pending = context.engine
+      .getPending(context.state)
+      .find((item) => item.kind === 'random' && item.request.type === 'draw');
+    const last = this.unlocks.at(-1);
+    if (!setup || pending?.kind !== 'random' || !last)
+      return failure('deck-public-context', 'A public reveal needs its certified deck and request');
+    const revealed = decodePublicDeckCard(
+      setup,
+      { operation, point: last.body.point, unlocks: this.prefix() },
+      this.signers,
+    );
+    return revealed.ok
+      ? success({
+          kind: 'system',
+          input: publicDrawInput(pending, revealed.value.card),
+          evidence,
+        })
+      : revealed;
   }
 
   private clear(): void {

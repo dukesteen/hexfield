@@ -7,7 +7,7 @@ import type {
 } from '../../core/modules/index.js';
 import type { GameState } from '../../core/state/index.js';
 import { BASE_OPTIONS } from './config.js';
-import { BANK_START, BASE_VERSION, DEV_CARD_COUNTS, PIECES_START } from './constants.js';
+import { BANK_START, BASE_DECKS, BASE_VERSION, PIECES_START } from './constants.js';
 import { STANDARD_BOARD } from './board/shapes.js';
 import { incompatibleModules } from '../compat.js';
 import { generateBoard } from './setup/board/index.js';
@@ -159,11 +159,19 @@ export function baseModule(): GameModule {
     }),
     initializeState: (ctx, state): GameState => {
       const pieces = ctx.hooks.pieceLimits(ctx.config, PIECES_START);
-      const deck = Object.values(ctx.hooks.devDeck(ctx.config, DEV_CARD_COUNTS));
+      const decks = Object.fromEntries(
+        Object.entries(ctx.hooks.decks(ctx.config, BASE_DECKS)).map(([id, spec]) => [
+          id,
+          {
+            remaining: Object.values(spec.cards).reduce((sum, count) => sum + count, 0),
+            drawn: [],
+          },
+        ]),
+      );
       return {
         ...state,
         bank: { ...ctx.hooks.bankInit(ctx.config, BANK_START) },
-        decks: { dev: { remaining: deck.reduce((sum, count) => sum + count, 0), drawn: [] } },
+        decks,
         awards: { longestRoad: null, largestArmy: null },
         seats: state.seats.map((seat) => ({ ...seat, piecesLeft: { ...pieces } })),
       };

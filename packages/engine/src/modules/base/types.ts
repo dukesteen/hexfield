@@ -46,6 +46,8 @@ export interface StealResultData {
 export interface DrawData {
   seat: Seat;
   slotId: string;
+  /** Private deck being drawn; absent means the base `dev` deck. */
+  deck?: string;
 }
 export interface RoadBuildingData {
   remaining: number;

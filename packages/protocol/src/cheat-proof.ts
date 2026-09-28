@@ -12,6 +12,7 @@ import { countOperationId, verifyCountContribution } from './count-reveal.js';
 import { MAX_HAND_RESOURCE_COUNT } from './hand-commitments.js';
 import {
   deckDrawOperationId,
+  deckUnlockers,
   deckUnlockSchema,
   verifyDeckUnlock,
   verifyDeckUnlockPrefix,
@@ -243,11 +244,9 @@ export function verifyCheatProof(value: unknown, context: LogContext): Result<Ch
         frozenAtParent(operation, context, 'deck', route.value.operationId) &&
         evidence.prefix.length < operation.participants.length
       ) {
-        const owner = operation.participants.filter((item) => item.seat !== operation.seat)[
-          evidence.prefix.length
-        ];
+        const owner = deckUnlockers(operation)[evidence.prefix.length];
         const shaped = parseCanonical(artifact.body, unlockBodyRouteSchema);
-        const expected = operation.participants.filter((item) => item.seat !== operation.seat);
+        const expected = deckUnlockers(operation);
         const signers = expected.map((item) => currentSigner(context, item.seat));
         const signer = signers[evidence.prefix.length];
         if (

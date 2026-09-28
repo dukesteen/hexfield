@@ -13,6 +13,7 @@ import type {
   BoardShapeSpec,
   CommandHandler,
   Cost,
+  DeckSpec,
   DiceSpec,
   FixtureDeclaration,
   GameModule,
@@ -221,6 +222,10 @@ function composeHooks(modules: readonly GameModule[]): HookPipeline {
     modules,
     (hooks) => hooks.devDeck,
   );
+  const decks = foldAcc<[GameConfig], Readonly<Record<string, DeckSpec>>>(
+    modules,
+    (hooks) => hooks.decks,
+  );
   const costs = foldAcc<[GameConfig], Readonly<Record<string, Cost>>>(
     modules,
     (hooks) => hooks.costs,
@@ -281,6 +286,14 @@ function composeHooks(modules: readonly GameModule[]): HookPipeline {
     bankInit: (config, acc) => ({ ...bankInit([config], acc) }),
     pieceLimits: (config, acc) => ({ ...pieceLimits([config], acc) }),
     devDeck: (config, acc) => ({ ...devDeck([config], acc) }),
+    // The `dev` deck is base's; its composition is the `devDeck` result, before module `decks`.
+    decks: (config, acc) => {
+      const dev = acc.dev;
+      const seeded = dev
+        ? { ...acc, dev: { ...dev, cards: { ...devDeck([config], dev.cards) } } }
+        : acc;
+      return { ...decks([config], seeded) };
+    },
     costs: (config, acc) => ({ ...costs([config], acc) }),
     costOf: (state, buildType, cost) => costOf([state, buildType], cost),
     diceSpec: (state, acc) => diceSpec([state], acc),

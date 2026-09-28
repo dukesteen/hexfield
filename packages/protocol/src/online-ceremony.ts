@@ -16,7 +16,7 @@ import {
   signObject,
   verifyObject,
 } from '@cp2p/crypto';
-import { ENGINE_VERSION, devCardCatalogueFor, failure, success } from '@cp2p/engine';
+import { ENGINE_VERSION, decksFor, failure, success } from '@cp2p/engine';
 import type { Engine, Result, Seat } from '@cp2p/engine';
 import * as v from 'valibot';
 import { createBeaconSecretSource } from './beacon-source.js';
@@ -851,11 +851,23 @@ export class OnlineCeremony {
     }, 0);
   }
 
+  /** Decks the frozen configuration declares; every one runs the full pass ceremony. */
+  #deckCount(): number {
+    try {
+      return Math.max(1, Object.keys(decksFor(this.#agreement.state.config)).length);
+    } catch {
+      return 1;
+    }
+  }
+
   #timeoutFor(phase: string): number {
     const config = this.#agreement.state.config;
     let deckCards = 0;
     try {
-      deckCards = devCardCatalogueFor(config).length;
+      deckCards = Object.values(decksFor(config)).reduce(
+        (total, deck) => total + Object.values(deck.cards).reduce((sum, count) => sum + count, 0),
+        0,
+      );
     } catch {
       deckCards = 0;
     }
@@ -1212,15 +1224,16 @@ export class OnlineCeremony {
       if (prior === null && body.kind === 'deck-pass') {
         const seats = this.#agreement.state.seats;
         const actor = seats[body.step % seats.length];
-        if (body.step >= seats.length * 2 || actor?.seat !== body.seat)
+        const passes = seats.length * 2 * this.#deckCount();
+        if (body.step >= passes || actor?.seat !== body.seat)
           return failure('online-ceremony-deck', 'Future deck packet has no frozen actor slot');
         const queued = this.#futureDeckPackets.get(key);
         if (queued && !sameBytes(queued, bytes)) {
           await this.#abortUnsafe('online-ceremony-conflict');
           return failure('online-ceremony-conflict', 'Conflicting future deck packet');
         }
-        // There are exactly two passes per frozen seat; envelope size is bounded by verification.
-        if (!queued && this.#futureDeckPackets.size >= seats.length * 2)
+        // There are exactly two passes per frozen seat and deck; envelope size is bounded by verification.
+        if (!queued && this.#futureDeckPackets.size >= passes)
           return failure('online-ceremony-deck', 'Future deck packet buffer is full');
         this.#futureDeckPackets.set(key, bytes.slice());
       }
@@ -2288,7 +2301,7 @@ export class OnlineCeremony {
     const definitions = genesisDeckDefinitions(manifest);
     if (!definitions.ok) return definitions;
     const transcripts: { deckId: string; passes: SignedDeckPass[] }[] = [];
-    for (const definition of definitions.value) {
+    for (const [deckIndex, definition] of definitions.value.entries()) {
       const definitionHash = toHex(hashValue({ attempt: this.#attemptId, definition }));
       let prefix = this.#deckPrefixes.get(definition.deckId);
       if (prefix && prefix.definitionHash !== definitionHash)
@@ -2315,7 +2328,8 @@ export class OnlineCeremony {
         const slot: Slot<SignedDeckPass> = {
           kind: 'deck-pass',
           seat: actor.seat,
-          step,
+          // Decks are ceremonied in order; the slot index is global so packets never collide.
+          step: deckIndex * definition.participants.length * 2 + step,
           ownerDevice,
           validate: (payload) => {
             // Structural only on the critical path, so the next seat can prove at once. The

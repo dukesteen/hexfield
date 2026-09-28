@@ -188,6 +188,25 @@ export function verifyResourceAccounting(
           deck.drawn.push({ slotId: effect.slotId, seat: effect.seat });
           break;
         }
+        case 'deck-card-shown': {
+          const deck = decks[effect.deck];
+          requireAccounting(
+            !!deck && deck.remaining > 0 && seats.includes(effect.seat),
+            'Unknown drawer or empty deck',
+          );
+          requireAccounting(
+            typeof effect.slotId === 'string' &&
+              effect.slotId.length > 0 &&
+              typeof effect.card === 'string' &&
+              effect.card.length > 0 &&
+              !deck?.drawn.some((slot) => slot.slotId === effect.slotId),
+            'Shown card needs a new slot and an identity',
+          );
+          if (!deck) throw new Error('Missing shown-card accounting target');
+          deck.remaining -= 1;
+          deck.drawn.push({ slotId: effect.slotId, seat: effect.seat });
+          break;
+        }
         case 'card-slot-revealed': {
           const owned = slots
             .get(effect.seat)

@@ -1,5 +1,5 @@
 import { hashValue, toBase64Url, toHex } from '@cp2p/codec';
-import { checkModuleSelection, devCardCatalogueFor, failure, success } from '@cp2p/engine';
+import { checkModuleSelection, deckCatalogueFor, decksFor, failure, success } from '@cp2p/engine';
 import type { Result } from '@cp2p/engine';
 import * as v from 'valibot';
 import { applyDeckPass, initDeckSetup, replayDeckSetup } from './deck-setup.js';
@@ -37,7 +37,7 @@ export function deckCeremonyId(genesis: GenesisBody): string {
   );
 }
 
-/** Module-owned physical card order, with every signed seat as a deck participant. */
+/** Every module-declared deck in ascending id order, all signed seats as participants. */
 export function genesisDeckDefinitions(genesis: GenesisBody): Result<readonly DeckDefinition[]> {
   try {
     const nonce = parseCanonical(genesis.ceremonyNonce, key32Schema);
@@ -62,16 +62,24 @@ export function genesisDeckDefinitions(genesis: GenesisBody): Result<readonly De
     const selection = checkModuleSelection(modules);
     if (!selection.ok)
       return failure('deck-genesis-module', 'Module selection has no matching deck catalogue');
-    const definition: DeckDefinition = {
-      ceremonyId: deckCeremonyId(genesis),
-      deckId: 'dev',
-      deckEpoch: 0,
-      creation: { kind: 'ceremony' },
-      cards: devCardCatalogueFor(genesis.config).map(({ identity, card }) => ({ identity, card })),
-      participants: seats.map(({ seat, publicKey }) => ({ seat, publicKey })),
-    };
-    const initialized = initDeckSetup(definition);
-    return initialized.ok ? success([initialized.value.definition]) : initialized;
+    const ceremonyId = deckCeremonyId(genesis);
+    const definitions: DeckDefinition[] = [];
+    for (const deckId of Object.keys(decksFor(genesis.config))) {
+      const initialized = initDeckSetup({
+        ceremonyId,
+        deckId,
+        deckEpoch: 0,
+        creation: { kind: 'ceremony' },
+        cards: deckCatalogueFor(genesis.config, deckId).map(({ identity, card }) => ({
+          identity,
+          card,
+        })),
+        participants: seats.map(({ seat, publicKey }) => ({ seat, publicKey })),
+      });
+      if (!initialized.ok) return initialized;
+      definitions.push(initialized.value.definition);
+    }
+    return success(definitions);
   } catch {
     return failure('deck-genesis-definition', 'Deck genesis definition is not canonical data');
   }

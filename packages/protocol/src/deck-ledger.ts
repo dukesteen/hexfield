@@ -1,10 +1,12 @@
 import { hashValue, toHex } from '@cp2p/codec';
 import { parsePeerId } from '@cp2p/crypto';
-import { failure, success } from '@cp2p/engine';
+import { decksFor, failure, publicDrawInput, success } from '@cp2p/engine';
 import type { GameState, Result, Seat, SystemInput } from '@cp2p/engine';
 import * as v from 'valibot';
 import {
   completeDeckDraw,
+  decodePublicDeckCard,
+  deckUnlockers,
   freezeDeckDraw,
   validateDeckDrawOperation,
   verifyDeckReveal,
@@ -45,7 +47,7 @@ const slotSchema = v.strictObject({
     v.array(
       v.strictObject({ seat: seatSchema, publicKey: key32Schema, generation: entryRefSchema }),
     ),
-    v.maxLength(5),
+    v.maxLength(6),
   ),
 });
 const deckSchema = v.strictObject({
@@ -67,19 +69,32 @@ const proofSchema = v.strictObject({
 const receiptSchema = v.strictObject({
   operation: v.unknown(),
   point: key32Schema,
-  unlocks: v.pipe(v.array(deckUnlockSchema), v.maxLength(5)),
+  unlocks: v.pipe(v.array(deckUnlockSchema), v.maxLength(6)),
 });
-const drawPendingSchema = v.strictObject({
-  kind: v.literal('random'),
-  request: v.strictObject({
-    type: v.literal('draw'),
-    deck: labelSchema,
-    seat: seatSchema,
-    slotId: labelSchema,
-    remaining: positionSchema,
+const drawFields = {
+  deck: labelSchema,
+  seat: seatSchema,
+  slotId: labelSchema,
+  remaining: positionSchema,
+};
+const drawPendingSchema = v.union([
+  v.strictObject({
+    kind: v.literal('random'),
+    request: v.strictObject({ type: v.literal('draw'), ...drawFields }),
+    systemType: v.literal('CARD_DEALT'),
   }),
-  systemType: v.literal('CARD_DEALT'),
-});
+  // A public draw echoes its request under a module-owned system input, so extras are allowed.
+  v.strictObject({
+    kind: v.literal('random'),
+    request: v.looseObject({ type: v.literal('draw'), ...drawFields, public: v.literal(true) }),
+    systemType: v.pipe(
+      v.string(),
+      v.minLength(1),
+      v.maxLength(64),
+      v.check((type) => type !== 'CARD_DEALT'),
+    ),
+  }),
+]);
 const dealInputSchema = v.strictObject({
   kind: v.literal('system'),
   type: v.literal('CARD_DEALT'),
@@ -90,7 +105,7 @@ const dealInputSchema = v.strictObject({
 const dealEvidenceSchema = v.strictObject({
   kind: v.literal('proof'),
   protocol: v.literal(DECK_DRAW_PROTOCOL),
-  data: v.pipe(v.array(deckUnlockSchema), v.maxLength(5)),
+  data: v.pipe(v.array(deckUnlockSchema), v.maxLength(6)),
 });
 const revealEvidenceSchema = v.strictObject({
   protocol: v.literal(DECK_REVEAL_PROTOCOL),
@@ -146,6 +161,7 @@ function checkedOperation(setup: DeckSetupState, operation: DeckDrawOperation): 
     position: operation.position,
     seat: operation.seat,
     slotId: operation.slotId,
+    ...(operation.public ? { public: true as const } : {}),
   });
   return expected.ok && same(expected.value, operation);
 }
@@ -184,8 +200,9 @@ export function validateDeckLedger(value: unknown): Result<DeckLedger> {
       if (!parsedReceipt.ok) return parsedReceipt;
       const operation = validateDeckDrawOperation(parsedReceipt.value.operation);
       if (!operation.ok) return operation;
-      const unlockers = operation.value.participants.filter(({ seat }) => seat !== slot.seat);
+      const unlockers = deckUnlockers(operation.value);
       if (
+        operation.value.public ||
         item.nextPass !== item.commitment.passHashes.length ||
         operation.value.deckId !== definition.deckId ||
         operation.value.genesisDigest !== parsed.value.genesisDigest ||
@@ -315,8 +332,38 @@ export function applyDeckSetupEntry(ledger: DeckLedger, evidence: unknown): Resu
   return validateDeckLedger({ ...current.value, decks });
 }
 
-function drawPending(value: RandomPending | null): Result<v.InferOutput<typeof drawPendingSchema>> {
-  return parseCanonical(value, drawPendingSchema);
+interface DrawRequest {
+  deck: string;
+  seat: Seat;
+  slotId: string;
+  remaining: number;
+  public: boolean;
+  pending: RandomPending;
+}
+
+function drawPending(value: RandomPending | null): Result<DrawRequest> {
+  const parsed = parseCanonical(value, drawPendingSchema);
+  if (!parsed.ok) return parsed;
+  const { request } = parsed.value;
+  return success({
+    deck: request.deck,
+    seat: request.seat,
+    slotId: request.slotId,
+    remaining: request.remaining,
+    public: 'public' in request,
+    // Retained exactly as certified: the public answer echoes every request field.
+    pending: parsed.value,
+  });
+}
+
+/** The reveal mode the game's modules declare for a deck; a draw must use exactly that mode. */
+function declaredReveal(state: GameState, deckId: string): 'private' | 'public' | null {
+  try {
+    const decks = decksFor(state.config);
+    return Object.hasOwn(decks, deckId) ? (decks[deckId]?.reveal ?? null) : null;
+  } catch {
+    return null;
+  }
 }
 
 function publicDeckMatches(deck: LedgerDeck, state: GameState): boolean {
@@ -360,23 +407,29 @@ export function captureDeckPending(
   const request = drawPending(pending);
   if (!request.ok) return request;
   const deck = current.value.decks.find(
-    (item) => item.commitment.definition.deckId === request.value.request.deck,
+    (item) => item.commitment.definition.deckId === request.value.deck,
   );
   if (
     !deck ||
     !decksReady(current.value) ||
     !publicDeckMatches(deck, state) ||
-    request.value.request.remaining !== deck.commitment.definition.cards.length - deck.nextPosition
+    request.value.remaining !== deck.commitment.definition.cards.length - deck.nextPosition
   )
     return failure('deck-request-state', 'Draw request differs from the certified deck cursor');
-  const { seat, slotId } = request.value.request;
-  if (state.decks[request.value.request.deck]?.drawn.some((slot) => slot.slotId === slotId))
+  if (declaredReveal(state, request.value.deck) !== (request.value.public ? 'public' : 'private'))
+    return failure(
+      'deck-reveal-mode',
+      'Draw request differs from the reveal mode its deck declares',
+    );
+  const { seat, slotId } = request.value;
+  if (state.decks[request.value.deck]?.drawn.some((slot) => slot.slotId === slotId))
     return failure('deck-slot-reused', 'The requested slot was already dealt');
   if (current.value.active) {
     const active = current.value.active;
-    return active.deckId === request.value.request.deck &&
+    return active.deckId === request.value.deck &&
       active.seat === seat &&
       active.slotId === slotId &&
+      (active.public === true) === request.value.public &&
       active.position === deck.nextPosition
       ? current
       : failure('deck-request-changed', 'An unfinished draw request cannot change');
@@ -388,6 +441,7 @@ export function captureDeckPending(
     position: deck.nextPosition,
     seat,
     slotId,
+    ...(request.value.public ? { public: true as const } : {}),
   });
   return operation.ok
     ? validateDeckLedger({ ...current.value, active: operation.value })
@@ -410,8 +464,6 @@ export function completeDeckDeal(
   if (!active) return failure('deck-draw-absent', 'No certified deck draw is active');
   const request = drawPending(pending);
   if (!request.ok) return request;
-  const dealt = parseCanonical(input, dealInputSchema);
-  if (!dealt.ok) return dealt;
   const proof = parseCanonical(evidence, dealEvidenceSchema);
   if (!proof.ok) return proof;
   const deckIndex = current.value.decks.findIndex(
@@ -421,20 +473,34 @@ export function completeDeckDeal(
   if (
     !deck ||
     !publicDeckMatches(deck, state) ||
-    request.value.request.deck !== active.deckId ||
-    request.value.request.seat !== active.seat ||
-    request.value.request.slotId !== active.slotId ||
-    request.value.request.remaining !==
-      deck.commitment.definition.cards.length - deck.nextPosition ||
-    dealt.value.deck !== active.deckId ||
-    dealt.value.seat !== active.seat ||
-    dealt.value.slotId !== active.slotId ||
+    request.value.deck !== active.deckId ||
+    request.value.seat !== active.seat ||
+    request.value.slotId !== active.slotId ||
+    request.value.public !== (active.public === true) ||
+    request.value.remaining !== deck.commitment.definition.cards.length - deck.nextPosition ||
     active.position !== deck.nextPosition ||
     deal.seq <= active.anchor.seq
   )
     return failure('deck-deal-context', 'Deal does not match the frozen request');
   const receipt = completeDeckDraw(active, proof.value.data, signers);
   if (!receipt.ok) return receipt;
+  if (active.public) {
+    // The revealed card is public: every peer decodes it from the verified unlock chain and the
+    // certified input must be exactly the echo of the request naming that card.
+    const revealed = decodePublicDeckCard(deck.setup, receipt.value, signers);
+    if (!revealed.ok) return revealed;
+    if (!same(input, publicDrawInput(request.value.pending, revealed.value.card)))
+      return failure('deck-reveal-input', 'Public draw input differs from the verified reveal');
+  } else {
+    const dealt = parseCanonical(input, dealInputSchema);
+    if (!dealt.ok) return dealt;
+    if (
+      dealt.value.deck !== active.deckId ||
+      dealt.value.seat !== active.seat ||
+      dealt.value.slotId !== active.slotId
+    )
+      return failure('deck-deal-context', 'Deal does not match the frozen request');
+  }
   // This projection is produced only after the log resolves the authorized keys
   // and verifies every unlock. Later reveals must use these historical keys,
   // not the genesis roster or the controllers active when the card is played.
@@ -443,16 +509,19 @@ export function completeDeckDeal(
       ? {
           ...item,
           nextPosition: item.nextPosition + 1,
-          slots: [
-            ...item.slots,
-            {
-              slotId: active.slotId,
-              seat: active.seat,
-              receipt: receipt.value,
-              deal,
-              unlockSigners: signers,
-            },
-          ],
+          // A public card is shown to everyone, so no hidden slot remains to reveal later.
+          slots: active.public
+            ? item.slots
+            : [
+                ...item.slots,
+                {
+                  slotId: active.slotId,
+                  seat: active.seat,
+                  receipt: receipt.value,
+                  deal,
+                  unlockSigners: signers,
+                },
+              ],
         }
       : item,
   );

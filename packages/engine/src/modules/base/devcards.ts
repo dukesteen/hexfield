@@ -11,10 +11,11 @@ import type { CardSlot, GameState, PrivateState } from '../../core/state/index.j
 import { RESOURCES, failure, success } from '../../core/types/index.js';
 import type { Resource, ResourceCounts, Result, Seat } from '../../core/types/index.js';
 import { recomputeLargestArmyAward, recomputeLongestRoadAward } from './awards/index.js';
-import { DEV_CARD_COUNTS, emptyResources } from './constants.js';
+import { BASE_DECKS, DEV_CARD_COUNTS, emptyResources } from './constants.js';
 import type { DevCard } from './constants.js';
 import { legalRoadEdges, canPlaceRoad } from './placement/index.js';
 import { claimCommands } from './legal.js';
+import { finishTurnFlowFrame } from './phases/turn.js';
 import {
   affordable,
   buildCost,
@@ -100,10 +101,10 @@ export const drawDevPhase: PhaseHandler = {
         kind: 'random',
         request: {
           type: 'draw',
-          deck: 'dev',
+          deck: data.deck ?? 'dev',
           seat: data.seat,
           slotId: data.slotId,
-          remaining: state.decks.dev?.remaining ?? 0,
+          remaining: state.decks[data.deck ?? 'dev']?.remaining ?? 0,
         },
         systemType: 'CARD_DEALT',
       },
@@ -139,22 +140,36 @@ export const buyDevCard: CommandHandler = {
   },
 };
 
+/** Deck of the pending private draw: `dev` unless the drawing phase names another module deck. */
+function drawDeck(state: GameState): string {
+  return drawData(state).deck ?? 'dev';
+}
+
+function declaresCard(state: GameState, ctx: HandlerContext, deck: string, card: unknown): boolean {
+  const specs = ctx.hooks.decks(state.config, BASE_DECKS);
+  const spec = Object.hasOwn(specs, deck) ? specs[deck] : undefined;
+  return typeof card === 'string' && spec !== undefined && Object.hasOwn(spec.cards, card);
+}
+
+/** Private deal for any declared deck; the answered phase's `DrawData` names seat, slot and deck. */
 export const cardDealt: SystemInputHandler = {
-  validate: (state, input) => {
+  validate: (state, input, ctx) => {
     const data = drawData(state);
-    if (input.seat !== data.seat || input.slotId !== data.slotId || input.deck !== 'dev')
+    const deckId = drawDeck(state);
+    if (input.seat !== data.seat || input.slotId !== data.slotId || input.deck !== deckId)
       return failure('deal-mismatch', 'Deal does not match the pending draw');
-    return input.card === undefined || isDevCard(input.card)
+    return input.card === undefined || declaresCard(state, ctx, deckId, input.card)
       ? success(undefined)
-      : failure('invalid-dev-card', 'Unknown development card');
+      : failure('invalid-dev-card', 'Unknown card for this deck');
   },
-  apply: (state) => {
+  apply: (state, _input, ctx) => {
     const data = drawData(state);
-    const deck = state.decks.dev;
+    const deckId = drawDeck(state);
+    const deck = state.decks[deckId];
     if (!deck || deck.remaining <= 0) throw new Error('Validated deck missing');
     const publicSlot: CardSlot = {
       slotId: data.slotId,
-      deck: 'dev',
+      deck: deckId,
       acquiredTurn: state.turn.number,
     };
     let next = updateSeat(state, data.seat, (old) => ({
@@ -165,23 +180,33 @@ export const cardDealt: SystemInputHandler = {
       ...next,
       decks: {
         ...next.decks,
-        dev: {
+        [deckId]: {
           remaining: deck.remaining - 1,
           drawn: [...deck.drawn, { slotId: data.slotId, seat: data.seat }],
         },
       },
     };
+    // A draw frame may also sit above a turn-end marker, where leaving it starts the next turn.
+    const left = finishTurnFlowFrame(next, ctx);
     return {
-      state: popPhase(next),
-      events: [{ type: 'devCardDealt', seat: data.seat, slotId: data.slotId }],
-      effects: [{ type: 'card-slot-dealt', seat: data.seat, deck: 'dev', slotId: data.slotId }],
+      state: left.state,
+      events: [
+        deckId === 'dev'
+          ? { type: 'devCardDealt', seat: data.seat, slotId: data.slotId }
+          : { type: 'cardDealt', deck: deckId, seat: data.seat, slotId: data.slotId },
+        ...left.events,
+      ],
+      effects: [
+        { type: 'card-slot-dealt', seat: data.seat, deck: deckId, slotId: data.slotId },
+        ...left.effects,
+      ],
     };
   },
-  applyPrivate: (priv, before, input, data) => {
+  applyPrivate: (priv, before, input, data, ctx) => {
     const pending = drawData(before);
     if (priv.seat !== pending.seat) return success(priv);
     const card = input.card ?? data?.card;
-    if (!isDevCard(card))
+    if (typeof card !== 'string' || !declaresCard(before, ctx, drawDeck(before), card))
       return failure('missing-private-card', 'Owner must receive the dealt card identity');
     if (input.card !== undefined && data?.card !== undefined && data.card !== input.card)
       return failure('card-identity-mismatch', 'Private card identity disagrees with local deal');

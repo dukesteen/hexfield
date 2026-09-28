@@ -19,7 +19,7 @@ export const cheatClaimSchema = v.strictObject({
     v.strictObject({
       kind: v.literal('deck-unlock'),
       ...base,
-      prefix: v.pipe(v.array(v.unknown()), v.maxLength(5)),
+      prefix: v.pipe(v.array(v.unknown()), v.maxLength(6)),
     }),
     v.strictObject({ kind: v.literal('count-proof'), ...base }),
     v.strictObject({ kind: v.literal('steal-contribution'), ...base }),

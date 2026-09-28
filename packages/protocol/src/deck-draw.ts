@@ -36,6 +36,8 @@ export interface DeckDrawRequest {
   position: number;
   seat: Seat;
   slotId: string;
+  /** Public draw: every seat, the requester included, removes its lock and the card is shown. */
+  public?: true;
 }
 
 /** Derived from a certified engine request and the verified setup transcript. */
@@ -83,6 +85,7 @@ const requestFields = {
   position: v.pipe(nonnegativeIntegerSchema, v.maxValue(127)),
   seat: seatSchema,
   slotId: label,
+  public: v.exactOptional(v.literal(true)),
 };
 const operationSchema = v.strictObject({
   ...requestFields,
@@ -103,7 +106,7 @@ const proofSchema = v.strictObject({
 export const deckUnlockSchema = v.strictObject({
   body: v.strictObject({
     operationId: hashSchema,
-    step: v.pipe(nonnegativeIntegerSchema, v.maxValue(4)),
+    step: v.pipe(nonnegativeIntegerSchema, v.maxValue(5)),
     seat: seatSchema,
     point: key32Schema,
     proof: proofSchema,
@@ -148,6 +151,18 @@ export function validateDeckDrawOperation(value: unknown): Result<DeckDrawOperat
   } catch {
     return failure('deck-key', 'The frozen deck contains an invalid point or signing key');
   }
+}
+
+/**
+ * The seats that remove a lock, in order. A private draw is unlocked by every seat but the
+ * drawer, who opens the last layer alone. A public draw is unlocked by every seat.
+ */
+export function deckUnlockers(
+  operation: Pick<DeckDrawOperation, 'seat' | 'participants' | 'public'>,
+): DeckDrawOperation['participants'] {
+  return operation.public
+    ? operation.participants
+    : operation.participants.filter((participant) => participant.seat !== operation.seat);
 }
 
 export function freezeDeckDraw(
@@ -241,7 +256,7 @@ export function verifyDeckUnlockPrefix(
   const parsedOperation = validateDeckDrawOperation(operation);
   if (!parsedOperation.ok) return parsedOperation;
   const op = parsedOperation.value;
-  const expected = op.participants.filter((participant) => participant.seat !== op.seat);
+  const expected = deckUnlockers(op);
   if (
     signers &&
     (signers.length !== expected.length ||
@@ -307,9 +322,7 @@ export function signDeckUnlock(
 ): SignedDeckUnlock {
   const previous = checked(verifyDeckUnlockPrefix(operation, prefix, signers));
   const step = previous.unlocks.length;
-  const participant = previous.operation.participants.filter(
-    (item) => item.seat !== previous.operation.seat,
-  )[step];
+  const participant = deckUnlockers(previous.operation)[step];
   if (!participant) throw new RangeError('This draw has no remaining unlock');
   const identity = identityFromSecret(key);
   const signer = signers?.[step];
@@ -351,8 +364,13 @@ export function completeDeckDraw(
 ): Result<DealtDeckCard> {
   const verified = verifyDeckUnlockPrefix(operation, evidence, signers);
   if (!verified.ok) return verified;
-  if (verified.value.unlocks.length !== verified.value.operation.participants.length - 1)
-    return failure('deck-unlock-incomplete', 'Every other seat must unlock before dealing');
+  if (verified.value.unlocks.length !== deckUnlockers(verified.value.operation).length)
+    return failure(
+      'deck-unlock-incomplete',
+      verified.value.operation.public
+        ? 'Every seat must unlock before a public reveal'
+        : 'Every other seat must unlock before dealing',
+    );
   return success(verified.value);
 }
 
@@ -368,7 +386,7 @@ function verifiedReceipt(
     v.strictObject({
       operation: operationSchema,
       point: key32Schema,
-      unlocks: v.pipe(v.array(deckUnlockSchema), v.maxLength(5)),
+      unlocks: v.pipe(v.array(deckUnlockSchema), v.maxLength(6)),
     }),
   );
   if (!parsed.ok) return parsed;
@@ -380,6 +398,7 @@ function verifiedReceipt(
     position,
     seat,
     slotId,
+    ...(parsed.value.operation.public ? { public: true as const } : {}),
   });
   if (!expected.ok) return expected;
   if (deckDrawOperationId(expected.value) !== deckDrawOperationId(parsed.value.operation))
@@ -421,6 +440,31 @@ export function decodeDeckCard(
       : failure('deck-decode', 'The opened point has no canonical card identity');
   } catch {
     return failure('deck-owner-lock', "The drawer's position lock is invalid");
+  }
+}
+
+/**
+ * The identity a completed public draw shows. Everything is checked: the frozen operation is
+ * public, every seat's unlock verifies, and the final point is a canonical card of this deck.
+ */
+export function decodePublicDeckCard(
+  setup: DeckSetupState,
+  receipt: DealtDeckCard,
+  signers?: readonly ArtifactSigner[],
+): Result<{ identity: string; card: string }> {
+  if (receipt.operation.public !== true)
+    return failure('deck-public-mode', 'Only a public draw can be decoded without a lock');
+  const verified = verifiedReceipt(setup, receipt, signers);
+  if (!verified.ok) return verified;
+  const deck = verified.value.setup;
+  try {
+    const point = verified.value.receipt.point;
+    const card = deck.definition.cards.find((item) => identityPoint(deck, item.identity) === point);
+    return card
+      ? success({ ...card })
+      : failure('deck-decode', 'The opened point has no canonical card identity');
+  } catch {
+    return failure('deck-decode', 'The opened point is invalid');
   }
 }
 

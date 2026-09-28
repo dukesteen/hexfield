@@ -124,6 +124,18 @@ export interface TimeoutRequest {
   phase: string;
 }
 
+/** How a draw from a deck is revealed: to the drawer alone, or to every seat. */
+export type DeckReveal = 'private' | 'public';
+
+/**
+ * A module-declared physical deck. `cards` counts each card type; physical identities are
+ * `${type}#${n}` in insertion order. Order and counts are game rules.
+ */
+export interface DeckSpec {
+  cards: Readonly<Record<string, number>>;
+  reveal: DeckReveal;
+}
+
 /** UI-only description of module overlays and fixture state. Never used by rules. */
 export interface RenderHint {
   module: ModuleId;
@@ -149,6 +161,7 @@ export interface Hooks {
   bankInit(config: GameConfig, acc: Readonly<Record<string, number>>): Record<string, number>;
   pieceLimits(config: GameConfig, acc: Readonly<Record<string, number>>): Record<string, number>;
   devDeck(config: GameConfig, acc: Readonly<Record<string, number>>): Record<string, number>;
+  decks(config: GameConfig, acc: Readonly<Record<string, DeckSpec>>): Record<string, DeckSpec>;
   costs(config: GameConfig, acc: Readonly<Record<string, Cost>>): Record<string, Cost>;
   costOf(state: GameState, buildType: string, cost: Cost): Cost;
   diceSpec(state: GameState, acc: DiceSpec): DiceSpec;

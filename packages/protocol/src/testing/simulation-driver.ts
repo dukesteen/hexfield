@@ -1,5 +1,5 @@
 import { canonicalDecode, canonicalEncode, hashValue, toHex } from '@cp2p/codec';
-import { RESOURCES, devCardCountsFor, failure, success } from '@cp2p/engine';
+import { RESOURCES, decksFor, failure, isPublicDraw, publicDrawInput, success } from '@cp2p/engine';
 import type {
   Engine,
   GameState,
@@ -33,6 +33,12 @@ function copyPrivate(value: PrivateState): PrivateState {
   };
 }
 
+function seatOf(state: GameState, value: unknown): Seat {
+  const found = state.config.seats.find((item) => item === value);
+  if (found === undefined) throw new Error('Unknown simulation seat');
+  return found;
+}
+
 /**
  * Explicitly omniscient simulation driver. Never use with a verified genesis.
  * Peers derive the same stub answer from the committed parent, so retries and
@@ -41,7 +47,7 @@ function copyPrivate(value: PrivateState): PrivateState {
 export class SimulationDriver {
   private privates: Map<Seat, PrivateState>;
   /** Dealt identities outlive the playable private slots consumed by dev-card actions. */
-  private readonly dealtCards = new Map<string, { seat: Seat; card: string }>();
+  private readonly dealtCards = new Map<string, { seat: Seat; card: string; deck: string }>();
   private readonly digest: string;
   private readonly timers = new Map<string, { seat: Seat; phase: string; expiresAt: number }>();
 
@@ -102,15 +108,20 @@ export class SimulationDriver {
   /** Apply private consequences only after the public entry is certified and persisted. */
   committed(before: LogContext, input: Input, after: GameState): Result<void> {
     let privateData: LocalRandomAnswer['privateData'];
-    let dealt: { slotId: string; seat: Seat; card: string } | null = null;
+    let dealt: { slotId: string; seat: Seat; card: string; deck: string } | null = null;
+    const answered =
+      input.kind === 'system'
+        ? this.engine
+            .getPending(before.state)
+            .find((item) => item.kind !== 'player' && item.systemType === input.type)
+        : undefined;
     if (
       input.kind === 'system' &&
       (input.type === 'CARD_DEALT' ||
-        (input.type === 'STEAL_RESULT' && input.resource === 'hidden'))
+        (input.type === 'STEAL_RESULT' && input.resource === 'hidden') ||
+        (answered !== undefined && isPublicDraw(answered)))
     ) {
-      const pending = this.engine
-        .getPending(before.state)
-        .find((item) => item.kind !== 'player' && item.systemType === input.type);
+      const pending = answered;
       if (!pending || pending.kind === 'player')
         return failure('simulation-pending', 'Private result has no matching request');
       const expected = this.answer(before, pending);
@@ -120,20 +131,23 @@ export class SimulationDriver {
           'Committed private result differs from the simulation answer',
         );
       privateData = expected.privateData;
-      if (input.type === 'CARD_DEALT') {
+      if (input.type === 'CARD_DEALT' || isPublicDraw(pending)) {
         const seat = before.state.config.seats.find((candidate) => candidate === input.seat);
         const slotId = input.slotId;
-        if (seat === undefined || typeof slotId !== 'string')
+        const deckId = input.deck;
+        if (seat === undefined || typeof slotId !== 'string' || typeof deckId !== 'string')
           return failure('simulation-deck', 'Committed draw has no valid seat or slot');
-        const card = privateData?.[seat]?.card;
+        const card = isPublicDraw(pending) ? input.card : privateData?.[seat]?.card;
+        const declared = decksFor(before.state.config)[deckId];
         if (
           typeof card !== 'string' ||
-          !Object.hasOwn(devCardCountsFor(before.state.config), card) ||
+          !declared ||
+          !Object.hasOwn(declared.cards, card) ||
           this.dealtCards.has(slotId)
         )
           return failure('simulation-deck', 'Committed draw has no unique private card identity');
-        const beforeDeck = before.state.decks.dev;
-        const afterDeck = after.decks.dev;
+        const beforeDeck = before.state.decks[deckId];
+        const afterDeck = after.decks[deckId];
         const appended = afterDeck?.drawn.at(-1);
         if (
           !beforeDeck ||
@@ -148,7 +162,7 @@ export class SimulationDriver {
             'simulation-deck',
             'Committed draw did not advance the public deck exactly once',
           );
-        dealt = { slotId, seat, card };
+        dealt = { slotId, seat, card, deck: deckId };
       }
     }
     const applied = this.engine.applyAllPrivates(this.privates, before.state, input, privateData);
@@ -171,7 +185,8 @@ export class SimulationDriver {
     const violations = this.engine.checkPrivateInvariants(after, applied.value);
     if (violations.length) return failure('simulation-private', violations.join('; '));
     this.privates = applied.value;
-    if (dealt) this.dealtCards.set(dealt.slotId, { seat: dealt.seat, card: dealt.card });
+    if (dealt)
+      this.dealtCards.set(dealt.slotId, { seat: dealt.seat, card: dealt.card, deck: dealt.deck });
     this.refreshTimers(after);
     return success(undefined);
   }
@@ -197,11 +212,7 @@ export class SimulationDriver {
   private answer(context: LogContext, pending: SystemPending): LocalRandomAnswer {
     const state = context.state;
     const rng = createRng(hashValue(['cp2p-simulation', this.digest, entryHash(context.head)]));
-    const seat = (value: unknown): Seat => {
-      const found = state.config.seats.find((item) => item === value);
-      if (found === undefined) throw new Error('Unknown simulation seat');
-      return found;
-    };
+    const seat = (value: unknown): Seat => seatOf(state, value);
     switch (pending.systemType) {
       case 'START_SEAT':
         return {
@@ -236,37 +247,8 @@ export class SimulationDriver {
           input: { kind: 'system', type: 'DICE_RESULT', dice: [rng.int(6) + 1, rng.int(6) + 1] },
         };
       }
-      case 'CARD_DEALT': {
-        const owner = seat(pending.request.seat);
-        const slotId = pending.request.slotId;
-        if (typeof slotId !== 'string') throw new Error('Draw request has no slot');
-        const remaining = new Map<string, number>(Object.entries(devCardCountsFor(state.config)));
-        const deck = state.decks.dev;
-        if (!deck) throw new Error('Development deck missing');
-        if (this.dealtCards.size !== deck.drawn.length)
-          throw new Error('Private deck history differs from public draw count');
-        const seen = new Set<string>();
-        for (const ref of deck.drawn) {
-          const owned = this.dealtCards.get(ref.slotId);
-          const count = owned ? remaining.get(owned.card) : undefined;
-          if (
-            !owned ||
-            seen.has(ref.slotId) ||
-            owned.seat !== ref.seat ||
-            count === undefined ||
-            count < 1
-          )
-            throw new Error('Private deck history is invalid');
-          seen.add(ref.slotId);
-          remaining.set(owned.card, count - 1);
-        }
-        const cards = [...remaining].flatMap(([card, count]) => Array<string>(count).fill(card));
-        if (cards.length !== deck.remaining) throw new Error('Development deck count differs');
-        return {
-          input: { kind: 'system', type: 'CARD_DEALT', deck: 'dev', seat: owner, slotId },
-          privateData: { [owner]: { card: rng.pick(cards) } },
-        };
-      }
+      case 'CARD_DEALT':
+        return this.deckAnswer(state, pending, rng);
       case 'STEAL_RESULT': {
         const thief = seat(pending.request.thief);
         const victim = seat(pending.request.victim);
@@ -297,7 +279,52 @@ export class SimulationDriver {
         };
       }
       default:
+        if (isPublicDraw(pending)) return this.deckAnswer(state, pending, rng);
         throw new Error(`Unsupported simulation request ${pending.systemType}`);
     }
+  }
+
+  private deckAnswer(
+    state: GameState,
+    pending: SystemPending,
+    rng: ReturnType<typeof createRng>,
+  ): LocalRandomAnswer {
+    const deckId = pending.request.deck;
+    if (typeof deckId !== 'string') throw new Error('Draw request has no deck');
+    const owner = seatOf(state, pending.request.seat);
+    const slotId = pending.request.slotId;
+    if (typeof slotId !== 'string') throw new Error('Draw request has no slot');
+    const declared = decksFor(state.config)[deckId];
+    const remaining = new Map<string, number>(Object.entries(declared?.cards ?? {}));
+    const deck = state.decks[deckId];
+    if (!deck) throw new Error('Deck missing');
+    if (
+      [...this.dealtCards.values()].filter((item) => item.deck === deckId).length !==
+      deck.drawn.length
+    )
+      throw new Error('Private deck history differs from public draw count');
+    const seen = new Set<string>();
+    for (const ref of deck.drawn) {
+      const owned = this.dealtCards.get(ref.slotId);
+      const count = owned ? remaining.get(owned.card) : undefined;
+      if (
+        !owned ||
+        owned.deck !== deckId ||
+        seen.has(ref.slotId) ||
+        owned.seat !== ref.seat ||
+        count === undefined ||
+        count < 1
+      )
+        throw new Error('Private deck history is invalid');
+      seen.add(ref.slotId);
+      remaining.set(owned.card, count - 1);
+    }
+    const cards = [...remaining].flatMap(([card, count]) => Array<string>(count).fill(card));
+    if (cards.length !== deck.remaining) throw new Error('Deck count differs');
+    if (isPublicDraw(pending)) return { input: publicDrawInput(pending, rng.pick(cards)) };
+    return {
+      input: { kind: 'system', type: 'CARD_DEALT', deck: deckId, seat: owner, slotId },
+      privateData: { [owner]: { card: rng.pick(cards) } },
+    };
   }
 }

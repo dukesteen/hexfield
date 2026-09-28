@@ -1,5 +1,6 @@
 import { zeroCounts } from '../../core/resources/index.js';
 import { RESOURCES } from '../../core/types/index.js';
+import type { DeckSpec } from '../../core/modules/index.js';
 import type { Resource, ResourceCounts } from '../../core/types/index.js';
 
 export const BASE_VERSION = '1.0.0';
@@ -24,6 +25,10 @@ export const DEV_CARD_COUNTS = Object.freeze({
   monopoly: 2,
 });
 export type DevCard = keyof typeof DEV_CARD_COUNTS;
+/** Base decks: the initial accumulator of the `decks` hook at every call site. */
+export const BASE_DECKS: Readonly<Record<string, DeckSpec>> = Object.freeze({
+  dev: Object.freeze({ cards: DEV_CARD_COUNTS, reveal: 'private' }),
+});
 
 /** Physical cards for a deck composition; identities, types and order are game rules. */
 export function devCardCatalogue(
