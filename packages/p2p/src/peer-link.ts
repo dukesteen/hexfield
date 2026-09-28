@@ -16,6 +16,7 @@ const SEND_LOW_WATER = 262_144;
 const MAX_QUEUED_BYTES = 2_097_152;
 const MAX_EARLY_CANDIDATES = 16;
 const MAX_PENDING_DESCRIPTIONS = 16;
+const INITIAL_OFFER_RETRY_DELAYS_MS = [250, 500, 1_000, 2_000] as const;
 const utf8 = new TextEncoder();
 
 interface HelloBody {
@@ -89,6 +90,7 @@ export class PeerLink {
   private helloTimer: unknown = null;
   private pingTimer: unknown = null;
   private disconnectedTimer: unknown = null;
+  private initialOfferRetryTimer: unknown = null;
   private disconnectedSince: number | null = null;
   private pingSequence = 0;
   private missedPongs = 0;
@@ -298,6 +300,7 @@ export class PeerLink {
         this.isSettingRemoteAnswerPending = description.type === 'answer';
         await this.pc.setRemoteDescription(description);
         if (this.closed) return;
+        this.clearTimer('initialOfferRetryTimer');
         this.isSettingRemoteAnswerPending = false;
         this.localOfferRevision = null;
         this.remoteRevision = blob.revision;
@@ -391,6 +394,7 @@ export class PeerLink {
       return;
     try {
       this.makingOffer = true;
+      this.clearTimer('initialOfferRetryTimer');
       this.localRevision++;
       await this.pc.setLocalDescription();
       if (this.closed) return;
@@ -406,6 +410,7 @@ export class PeerLink {
           sdp: description.sdp ?? '',
         },
       });
+      this.scheduleInitialOfferRetry(this.localRevision);
     } catch {
       this.fail('negotiation-error');
     } finally {
@@ -420,6 +425,38 @@ export class PeerLink {
     } catch {
       this.fail('signal-error');
     }
+  }
+
+  private scheduleInitialOfferRetry(revision: number, index = 0): void {
+    const delay = INITIAL_OFFER_RETRY_DELAYS_MS[index];
+    if (delay === undefined || !this.awaitingInitialAnswer(revision)) return;
+    this.initialOfferRetryTimer = this.options.clock.setTimeout(() => {
+      this.initialOfferRetryTimer = null;
+      if (!this.awaitingInitialAnswer(revision)) return;
+      // Read again so the retry includes candidates gathered since the first send.
+      const description = this.pc.localDescription;
+      if (!description || description.type !== 'offer') return;
+      this.sendSignal({
+        kind: 'description',
+        generation: this.options.generation,
+        revision,
+        description: { type: 'offer', sdp: description.sdp ?? '' },
+      });
+      this.scheduleInitialOfferRetry(revision, index + 1);
+    }, delay);
+  }
+
+  private awaitingInitialAnswer(revision: number): boolean {
+    return (
+      !this.closed &&
+      !this.authenticated &&
+      !this.isSettingRemoteAnswerPending &&
+      revision === 1 &&
+      this.acceptedRemoteRevision === -1 &&
+      this.localRevision === revision &&
+      this.localOfferRevision === revision &&
+      this.pc.signalingState === 'have-local-offer'
+    );
   }
 
   private channelOpened(): void {
@@ -756,7 +793,9 @@ export class PeerLink {
       this.fail('fingerprint-changed');
   }
 
-  private clearTimer(which: 'helloTimer' | 'pingTimer' | 'disconnectedTimer'): void {
+  private clearTimer(
+    which: 'helloTimer' | 'pingTimer' | 'disconnectedTimer' | 'initialOfferRetryTimer',
+  ): void {
     const handle = this[which];
     if (handle !== null) this.options.clock.clearTimeout(handle);
     this[which] = null;
@@ -769,6 +808,7 @@ export class PeerLink {
     this.clearTimer('helloTimer');
     this.clearTimer('pingTimer');
     this.clearTimer('disconnectedTimer');
+    this.clearTimer('initialOfferRetryTimer');
     this.framer.clear();
     this.incoming.clear();
     this.earlyCandidates.clear();

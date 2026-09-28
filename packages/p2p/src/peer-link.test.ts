@@ -68,6 +68,7 @@ class GetterDescription {
 }
 
 class FakePc {
+  localDescriptionCalls = 0;
   readonly listeners = new Map<string, Listener[]>();
   readonly channels = new Map<number, FakeChannel>();
   signalingState: RTCSignalingState = 'stable';
@@ -128,6 +129,7 @@ class FakePc {
     return () => release?.();
   }
   async setLocalDescription(): Promise<void> {
+    this.localDescriptionCalls += 1;
     const gate = this.localGate;
     this.localGate = null;
     if (gate) await gate;
@@ -272,6 +274,120 @@ function pair(
 }
 
 describe('authenticated peer link', () => {
+  test('initial offer retries use current gathered SDP without renegotiating and stop at the bound', async () => {
+    const f = pair();
+    try {
+      f.leftPc.emit('negotiationneeded');
+      await Promise.resolve();
+      expect(f.leftSignals).toHaveLength(1);
+      expect(f.clock.pendingTimerCount()).toBe(1);
+      const gathered = `${sdp('AA')}a=candidate:1 1 UDP 1 192.0.2.1 1234 typ host\r\n`;
+      f.leftPc.localDescription = new GetterDescription('offer', gathered);
+      f.clock.advanceBy(249);
+      expect(f.leftSignals).toHaveLength(1);
+      f.clock.advanceBy(1);
+      expect(f.leftSignals[1]).toEqual({
+        kind: 'description',
+        generation: 1,
+        revision: 1,
+        description: { type: 'offer', sdp: gathered },
+      });
+      f.clock.advanceBy(500 + 1_000 + 2_000);
+      expect(f.leftSignals).toHaveLength(5);
+      expect(f.leftSignals.slice(1)).toEqual(Array(4).fill(f.leftSignals[1]));
+      expect(f.leftPc.localDescriptionCalls).toBe(1);
+      expect(f.clock.pendingTimerCount()).toBe(0);
+      f.clock.advanceBy(20_000);
+      expect(f.leftSignals).toHaveLength(5);
+      expect(f.leftDown).toEqual([]);
+    } finally {
+      f.close();
+    }
+  });
+
+  test('accepted answer clears offer retry and later negotiations never restart it', async () => {
+    const f = pair();
+    try {
+      f.leftPc.emit('negotiationneeded');
+      await Promise.resolve();
+      expect(f.clock.pendingTimerCount()).toBe(1);
+      await f.left.receiveSignal({
+        kind: 'description',
+        generation: 1,
+        revision: 1,
+        description: { type: 'answer', sdp: sdp('BB') },
+        inReplyTo: 1,
+      });
+      expect(f.clock.pendingTimerCount()).toBe(0);
+      f.clock.advanceBy(4_000);
+      expect(f.leftSignals).toHaveLength(1);
+      f.leftPc.emit('negotiationneeded');
+      await Promise.resolve();
+      expect(f.leftSignals).toHaveLength(2);
+      expect(f.clock.pendingTimerCount()).toBe(0);
+      f.clock.advanceBy(4_000);
+      expect(f.leftSignals).toHaveLength(2);
+    } finally {
+      f.close();
+    }
+  });
+
+  test('a changed local revision cancels initial offer retries', async () => {
+    const f = pair();
+    try {
+      f.leftPc.emit('negotiationneeded');
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(f.clock.pendingTimerCount()).toBe(1);
+      f.leftPc.signalingState = 'stable';
+      f.leftPc.emit('negotiationneeded');
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(f.leftSignals).toHaveLength(2);
+      expect(f.clock.pendingTimerCount()).toBe(0);
+      f.close();
+      expect(f.clock.pendingTimerCount()).toBe(0);
+      f.clock.advanceBy(4_000);
+      expect(f.leftSignals).toHaveLength(2);
+    } finally {
+      f.close();
+    }
+  });
+
+  test('closure clears a pending initial offer retry', async () => {
+    const f = pair();
+    f.leftPc.emit('negotiationneeded');
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(f.clock.pendingTimerCount()).toBe(1);
+    f.close();
+    expect(f.clock.pendingTimerCount()).toBe(0);
+    f.clock.advanceBy(4_000);
+    expect(f.leftSignals).toHaveLength(1);
+  });
+
+  test('an answer already being applied suppresses initial offer retransmission', async () => {
+    const f = pair();
+    try {
+      f.leftPc.emit('negotiationneeded');
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      const release = f.leftPc.holdNextRemoteDescription();
+      const answer = f.left.receiveSignal({
+        kind: 'description',
+        generation: 1,
+        revision: 1,
+        description: { type: 'answer', sdp: sdp('BB') },
+        inReplyTo: 1,
+      });
+      f.clock.advanceBy(250);
+      expect(f.leftSignals).toHaveLength(1);
+      expect(f.clock.pendingTimerCount()).toBe(0);
+      release();
+      await answer;
+      expect(f.leftPc.signalingState).toBe('stable');
+    } finally {
+      f.close();
+    }
+  });
+
   test('binds both identities and current DTLS fingerprints before delivering data', () => {
     const f = pair();
     try {

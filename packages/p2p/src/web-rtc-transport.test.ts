@@ -649,6 +649,53 @@ describe('authenticated WebRTC mesh', () => {
     }
   });
 
+  test('retries the same initial offer after the answerer admits its roster later', async () => {
+    const f = mesh(2, false, true, true);
+    try {
+      const a = member(f.roster, 0);
+      const b = member(f.roster, 1);
+      const initiator = a < b ? 0 : 1;
+      const responder = 1 - initiator;
+      const initiatorPeer = member(f.peers, initiator);
+      const responderPeer = member(f.peers, responder);
+      const initiatorId = member(f.roster, initiator);
+      const responderId = member(f.roster, responder);
+      for (const peer of f.peers) peer.start();
+      const adapter = member(f.adapters, initiator);
+      const originalSend = adapter.send.bind(adapter);
+      const sent: SignedSignalEnvelope[] = [];
+      adapter.send = async (to, envelope) => {
+        sent.push(envelope);
+        await originalSend(to, envelope);
+      };
+      initiatorPeer.updatePreGameRoster([a, b]);
+      await settle();
+      expect(responderPeer.roster()).toEqual([responderId]);
+      expect(responderPeer.peers()).toEqual([]);
+      expect(f.fabric.connection(initiatorId, responderId)?.signalingState).toBe(
+        'have-local-offer',
+      );
+      responderPeer.updatePreGameRoster([a, b]);
+      await settle();
+      expect(initiatorPeer.peers()).toEqual([]);
+      expect(responderPeer.peers()).toEqual([]);
+      f.clock.advanceBy(249);
+      await settle();
+      expect(responderPeer.peers()).toEqual([]);
+      f.clock.advanceBy(1);
+      await settle();
+      expect(initiatorPeer.peers()).toEqual([responderId]);
+      expect(responderPeer.peers()).toEqual([initiatorId]);
+      const offers = sent.filter(
+        ({ body }) => body.blob.kind === 'description' && body.blob.description.type === 'offer',
+      );
+      expect(offers).toHaveLength(2);
+      expect(offers[1]?.body).toEqual(offers[0]?.body);
+    } finally {
+      f.dispose();
+    }
+  });
+
   test('grows a one-peer lobby, preserves links, retires removed peers and freezes the roster', async () => {
     const f = mesh(3, false, false, true);
     try {
@@ -831,7 +878,9 @@ describe('authenticated WebRTC mesh', () => {
           envelope.body.blob.description.type !== 'offer'
         )
           return false;
-        offers.push(envelope);
+        // Drop both initial attempts, including their bounded same-attempt retries.
+        if (!offers.some((offer) => offer.body.attemptId === envelope.body.attemptId))
+          offers.push(envelope);
         return offers.length <= 2;
       });
       for (const peer of f.peers) {

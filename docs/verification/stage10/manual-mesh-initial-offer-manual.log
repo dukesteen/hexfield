@@ -1,0 +1,11 @@
+ DEPRECATED  The workspace file is deprecated and will be removed in the next major. Please, use the `test.projects` field in /Users/duke/Dev/Personal/colonist-p2p/vitest.config.ts instead.
+
+ RUN  v3.2.7 /Users/duke/Dev/Personal/colonist-p2p
+
+ ✓ |@cp2p/p2p| src/manual-bootstrap.test.ts (5 tests) 91ms
+
+ Test Files  1 passed (1)
+      Tests  5 passed (5)
+   Start at  11:59:49
+   Duration  497ms (transform 96ms, setup 0ms, collect 178ms, tests 91ms, environment 0ms, prepare 35ms)
+

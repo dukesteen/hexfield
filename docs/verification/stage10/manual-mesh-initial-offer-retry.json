@@ -1,0 +1,33 @@
+{
+  "result": "PASS",
+  "retryDelaysMs": [250, 500, 1000, 2000],
+  "cumulativeRetryTimesMs": [250, 750, 1750, 3750],
+  "maximumResends": 4,
+  "failBefore": {
+    "result": "FAIL as expected",
+    "runnerSeconds": 0.462,
+    "failedAssertion": "late-admitted peers remain disconnected at first retry time"
+  },
+  "focused": {
+    "testFiles": 2,
+    "tests": 73,
+    "runnerSeconds": 1.83
+  },
+  "manualBootstrap": {
+    "tests": 5,
+    "testMilliseconds": 91,
+    "runnerSeconds": 0.497
+  },
+  "checks": {
+    "sharedTestTypecheck": "PASS",
+    "scopedTypeAwareLint": "PASS",
+    "scopedFormatting": "PASS",
+    "diffCheck": "PASS"
+  },
+  "sourceHashes": {
+    "packages/p2p/src/peer-link.ts": "184524f2c59178d41465920a60385fe8a74e5b3758cb62749af6b8ed3fdaebed",
+    "packages/p2p/src/peer-link.test.ts": "8199f3d77bc488240dedba09142408ec0fb25a18f4ab1ade83bf70bbadb5978c",
+    "packages/p2p/src/web-rtc-transport.test.ts": "340b96729de22176bc47a82b17474712ade276e5653ca4af306d8af801e627ca"
+  },
+  "beforeProductionSha256": "5dc738de2e4c4f5aa4be6916d8fb136b1b066610903ec4cb3b53276bc52fb8b1"
+}

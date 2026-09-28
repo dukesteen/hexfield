@@ -1,0 +1,13 @@
+ DEPRECATED  The workspace file is deprecated and will be removed in the next major. Please, use the `test.projects` field in /Users/duke/Dev/Personal/colonist-p2p/vitest.config.ts instead.
+
+ RUN  v3.2.7 /Users/duke/Dev/Personal/colonist-p2p
+
+ ✓ |@cp2p/p2p| src/web-rtc-transport.test.ts (28 tests) 351ms
+ ✓ |@cp2p/p2p| src/peer-link.test.ts (45 tests) 1384ms
+   ✓ authenticated peer link > a 1 MiB game message completes after DataChannel backpressure clears  1218ms
+
+ Test Files  2 passed (2)
+      Tests  73 passed (73)
+   Start at  11:57:53
+   Duration  1.83s (transform 166ms, setup 0ms, collect 390ms, tests 1.74s, environment 0ms, prepare 114ms)
+

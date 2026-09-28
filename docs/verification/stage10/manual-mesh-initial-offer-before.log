@@ -1,0 +1,64 @@
+ DEPRECATED  The workspace file is deprecated and will be removed in the next major. Please, use the `test.projects` field in /Users/duke/Dev/Personal/colonist-p2p/vitest.config.ts instead.
+
+ RUN  v3.2.7 /Users/duke/Dev/Personal/colonist-p2p
+
+ ❯ |@cp2p/p2p| src/web-rtc-transport.test.ts (28 tests | 1 failed | 27 skipped) 35ms
+   ↓ authenticated WebRTC mesh > exposes address-free selected route and RTT only for authenticated peers
+   ↓ authenticated WebRTC mesh > returns unknown route and RTT when browser statistics fail
+   ↓ authenticated WebRTC mesh > signed in-mesh signaling forms the missing link after the server disappears
+   ↓ authenticated WebRTC mesh > a bounded relay holds an early signal until the target authenticates with the host
+   ↓ authenticated WebRTC mesh > can freeze a single-host game roster
+   ↓ authenticated WebRTC mesh > admits certified destination and catch-up devices after freeze, then retires catch-up
+   ↓ authenticated WebRTC mesh > rejects stale, malformed and over-capacity certified rosters without changing admission
+   ↓ authenticated WebRTC mesh > a newer certified update from a link-down observer wins over the update closing that link
+   × authenticated WebRTC mesh > retries the same initial offer after the answerer admits its roster later 34ms
+     → expected [] to deeply equal [ Array(1) ]
+   ↓ authenticated WebRTC mesh > grows a one-peer lobby, preserves links, retires removed peers and freezes the roster
+   ↓ authenticated WebRTC mesh > signaling loss alone leaves an authenticated game channel in place
+   ↓ authenticated WebRTC mesh > four peers form six links and deliver only authenticated Transport bytes
+   ↓ authenticated WebRTC mesh > manual disconnect emits one down event and blocks stale replay
+   ↓ authenticated WebRTC mesh > canonical initiator reconnects a lost pair once
+   ↓ authenticated WebRTC mesh > a rostered peer availability hint replaces a lost offer before its 30-second deadline
+   ↓ authenticated WebRTC mesh > a fresh attempt replaces a stale unanswered offer with descending IDs=false
+   ↓ authenticated WebRTC mesh > a fresh attempt replaces a stale unanswered offer with descending IDs=true
+   ↓ authenticated WebRTC mesh > a signed offer replay from an unseen old session cannot retire an authenticated primary
+   ↓ authenticated WebRTC mesh > the newest same-session offer inside the replacement interval is deferred, then applied
+   ↓ authenticated WebRTC mesh > wrong socket hint, lower sequence and retired attempt cannot replace a live link
+   ↓ authenticated WebRTC mesh > one-sided connection failure replaces a still-authenticated remote link
+   ↓ authenticated WebRTC mesh > disconnect from the replacement down observer cannot resurrect its pending link
+   ↓ authenticated WebRTC mesh > responder-only failure is noticed by initiator heartbeat and reconnects
+   ↓ authenticated WebRTC mesh > verified candidates before their offer use one bounded early queue
+   ↓ authenticated WebRTC mesh > an unopened default attempt times out and retries without relying on peer clocks
+   ↓ authenticated WebRTC mesh > manual deadline remains finite and symmetric for initiator and answerer
+   ↓ authenticated WebRTC mesh > two-sided fingerprint substitution reports a security failure without redial
+   ↓ authenticated WebRTC mesh > a signaling adapter cannot swap DTLS fingerprints inside a signed offer
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@cp2p/p2p| src/web-rtc-transport.test.ts > authenticated WebRTC mesh > retries the same initial offer after the answerer admits its roster later
+AssertionError: expected [] to deeply equal [ Array(1) ]
+
+- Expected
++ Received
+
+- [
+-   "iojj3XQJ8ZX9UtstPLpdcspnCb8dlBIb83SIAbQPb1w",
+- ]
++ []
+
+ ❯ src/web-rtc-transport.test.ts:687:37
+    685|       f.clock.advanceBy(1);
+    686|       await settle();
+    687|       expect(initiatorPeer.peers()).toEqual([responderId]);
+       |                                     ^
+    688|       expect(responderPeer.peers()).toEqual([initiatorId]);
+    689|       const offers = sent.filter(
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 27 skipped (28)
+   Start at  11:53:56
+   Duration  462ms (transform 114ms, setup 0ms, collect 198ms, tests 35ms, environment 0ms, prepare 37ms)
+
