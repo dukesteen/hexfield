@@ -169,12 +169,39 @@ Every scenario uses both the robber and the pirate. The start hexes of both are 
 
 ## Options
 
-| Option     | Default         | Implemented behavior                                                         |
-| ---------- | --------------- | ---------------------------------------------------------------------------- |
-| `scenario` | chosen in lobby | Picks the board, VP target, island bonus, fog, setup areas and pirate start. |
-| `vpTarget` | scenario value  | The scenario's target replaces the base default.                             |
+| Option         | Default | Implemented behavior                                                                                                                                                                                                                                                 |
+| -------------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pirateHex`    | `null`  | The pirate's starting sea hex id, or `null` to start it off the board. Genesis rejects a hex that is not `sea`. An off-board pirate enters at the first move.                                                                                                        |
+| `setupAreas`   | `null`  | Hex ids whose vertices allow setup settlements, and whose edges allow setup roads. `null` allows any land vertex. Setup ships need no area. Fog never counts as land.                                                                                                |
+| `islandBonus`  | `null`  | `{ vp }` with `vp` from 1 to 5. The first settlement a seat builds on each foreign region earns `vp` points. `null` means no bonus.                                                                                                                                  |
+| `bonusRegions` | `null`  | Explicit regions as groups of hex ids, disjoint. `null` makes every island a region. A region is named by its least hex id. A hex in no group belongs to no region and earns nothing.                                                                                |
+| `fog`          | `null`  | Reserved: `{ terrains: Record<terrain, count>, tokens: Record<token, count> }`. Fog reveals are not implemented yet, so genesis rejects a non-null value and any board with a `fog` hex. Genesis also rejects fog together with `islandBonus`, with its own message. |
+| `vpTarget`     | 10      | The base option. The scenario's target replaces the default.                                                                                                                                                                                                         |
 
-The remaining base options apply unchanged.
+The remaining base options apply unchanged. The board is not an option: it is the explicit `config.board`, and the module sets `mapLayout` to `standard-fixed` so base validates it. Seafaring builds a board shape from that board (`seafaring: true`), so validation checks structure and not counts: tokens follow terrain, harbors are on coastal edges, the robber stands on land or is `null`, and no piece is placed. A scenario may therefore have no desert and start the robber off the board.
+
+## Implementation
+
+State: `board.ships` (a list of `{ edge, seat }`, present only in seafaring games, so base states hash as before) and `ext.seafaring`: `pirateHex`, `builtThisTurn` (ship edges built, placed free or moved this turn), `shipMovedTurn`, `homeRegions` (per seat) and `bonus` (tokens `{ seat, region, vertex }`). Piece supply is `piecesLeft.ship` (15) and the cost table has `ship` (1 lumber, 1 wool).
+
+| Command                     | Where                                        | Notes                                                                                                                                        |
+| --------------------------- | -------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `BUILD_SHIP { edge }`       | `main`, and the five-six special build phase | Costs a ship. The edge must be a legal ship edge, connected as described under Ships.                                                        |
+| `MOVE_SHIP { from, to }`    | `main` only, active seat, once per turn      | Free. See Moving a ship.                                                                                                                     |
+| `PLACE_SETUP_SHIP { edge }` | Setup, in place of `PLACE_ROAD`              | The edge must touch the settlement just placed.                                                                                              |
+| `PLACE_FREE_SHIP { edge }`  | Road Building                                | One of the two free pieces, next to `PLACE_FREE_ROAD` and `SKIP`. The phase ends when no legal piece is left, counting both roads and ships. |
+| `MOVE_PIRATE { hex }`       | The robber phase (a 7 or a knight)           | A new command, so `MOVE_ROBBER` keeps its payload. `MOVE_ROBBER` still moves only the robber, and only to land.                              |
+| `CHOOSE_GOLD { resources }` | The `goldChoice` phase                       | Exactly `min(claim, bank total)` cards, of kinds the bank holds.                                                                             |
+
+Longest Trade Route reuses the `longestRoad` award key, so base state and hashes are unchanged and the award still scores 2 points. Its route graph comes from the `routeGraph` hook. Island bonus points are a public `victoryPoints` contribution marked `stored`, so base folds them into `seat.publicVp` after every input. Victory checks, hidden-point claims, `friendlyRobber` and scoreboards then see them, and `computeVictoryPoints` does not add them twice.
+
+Further implementation choices:
+
+- **Gold** opens after ordinary production as a `goldChoice` frame above `main` with the queue of `{ seat, claim }`, in turn order from the active seat. A choice that empties the bank ends the queue. A timeout takes the first cards the bank holds, in canonical resource order (brick, lumber, wool, grain, ore). Legal commands list every choice when there are at most 60, and otherwise one greedy fill per starting resource.
+- **Regions** for a vertex: the least region id among its land hexes that belong to a region. A vertex touching two explicit regions therefore counts for the lower id. Home regions are recorded in setup even when there is no bonus.
+- **Routes** for closure and movement are chains of a seat's ships joined at shared vertices that hold no own building, so an own settlement in the middle of a chain splits it into two routes. A ship on a circle is movable as described in the table above, using the ship graph including the building vertex.
+- **Ship edges** need a revealed sea side: a sea hex or the off-board side of a perimeter edge. Fog is never counted, and a road needs a revealed land side.
+- **Connectivity.** Base roads connect through the seat's own roads and buildings only. The `connectivity` hook now adds the seat's ships for settlements only, so a settlement at the end of a shipping route works without letting a ship connect a road.
 
 ## Test map
 
