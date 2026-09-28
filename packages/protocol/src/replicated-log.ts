@@ -244,6 +244,9 @@ interface LocalConfiguration {
   signingKey: Uint8Array;
 }
 
+// Available in supported browsers/workers and Node 22, without importing DOM globals.
+declare const structuredClone: <T>(value: T) => T;
+
 /** Certified history plus one active, durable consensus height. */
 export class ReplicatedLog {
   private controller: ConsensusController | null = null;
