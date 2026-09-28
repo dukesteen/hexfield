@@ -111,7 +111,7 @@ export function createVerifiedDeckSession(
   function botKeysFor(hostSeat: Seat): ReadonlyMap<Seat, Uint8Array> {
     const host = required(simulation.identities.get(hostSeat)).peerId;
     return new Map(
-      simulation.genesis.seats
+      genesis.seats
         .filter((seat) => seat.kind === 'bot' && seat.botHost === host)
         .map((seat) => [seat.seat, required(simulation.identities.get(seat.seat)).secretKey]),
     );
@@ -122,7 +122,7 @@ export function createVerifiedDeckSession(
     const host = required(simulation.identities.get(human.seat)).peerId;
     const owned = [
       human.seat,
-      ...simulation.genesis.seats
+      ...genesis.seats
         .filter((seat) => seat.kind === 'bot' && seat.botHost === host)
         .map((seat) => seat.seat),
     ];

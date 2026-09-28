@@ -1,4 +1,4 @@
-import { canonicalEncode, hashValue, toBase64Url, toHex } from '@cp2p/codec';
+import { canonicalDecode, canonicalEncode, hashValue, toBase64Url, toHex } from '@cp2p/codec';
 import {
   decodePoint,
   encodePoint,
@@ -942,6 +942,115 @@ describe('online genesis ceremony', () => {
     expect(peers[1]?.snapshot().error).toBe('online-ceremony-escrow-invalid');
     expect(peers.every((peer) => peer.result() === null)).toBe(true);
   }, 60_000);
+
+  // oxlint-disable vitest/no-conditional-expect -- Each parameter represents a different durable winner and its required outcome.
+  test.each(['retirement', 'consent'] as const)(
+    'durable %s wins a cross-coordinator abort versus consent race',
+    async (winner) => {
+      const room = setup({ kind: 'fixed', seed: toBase64Url(new Uint8Array(32).fill(37)) }, 1);
+      const store = required(room.stores[0]);
+      let release!: () => void;
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      let reached = false;
+      let consentWrites = 0;
+      const actualLock = store.withCeremonyLock.bind(store);
+      vi.spyOn(store, 'withCeremonyLock').mockImplementation(async (id, task) => {
+        const bytes = await store.load(`online-attempt/${id}`);
+        const record = bytes ? canonicalDecode(bytes) : null;
+        if (
+          winner === 'retirement' &&
+          !reached &&
+          record &&
+          typeof record === 'object' &&
+          'phase' in record &&
+          record.phase === 'consent'
+        ) {
+          // Pause before acquiring the outer attempt lock: another coordinator may retire first.
+          reached = true;
+          await gate;
+        }
+        return actualLock(id, task);
+      });
+      const actualCas = store.compareAndSwap.bind(store);
+      vi.spyOn(store, 'compareAndSwap').mockImplementation(async (id, expected, replacement) => {
+        const won = await actualCas(id, expected, replacement);
+        if (id === 'escrow-lifecycle/device-index-v1' && won) {
+          const registry = canonicalDecode(replacement);
+          if (
+            registry &&
+            typeof registry === 'object' &&
+            'consentingCeremonies' in registry &&
+            Array.isArray(registry.consentingCeremonies) &&
+            registry.consentingCeremonies.length > 0
+          ) {
+            consentWrites += 1;
+            if (winner === 'consent' && !reached) {
+              reached = true;
+              await gate;
+            }
+          }
+        }
+        return won;
+      });
+      const producer = room.create(0);
+      const contender = room.create(0);
+      active.push(producer, contender, room.network);
+      const started = producer.start();
+      await until(room, () => reached);
+      let aborted: Result<void> | null = null;
+      const abort = contender.abort().then((result) => {
+        aborted = result;
+        return result;
+      });
+      if (winner === 'retirement') {
+        expect((await abort).ok).toBe(true);
+        expect(contender.snapshot().phase).toBe('retired');
+        release();
+        await started;
+        await producer.flush();
+        expect(producer.result()).toBeNull();
+        expect(consentWrites).toBe(0);
+        expect(producer.snapshot().locallyConsented).toBe(false);
+        const restored = room.create(0);
+        active.push(restored);
+        expect(await restored.start()).toMatchObject({
+          ok: false,
+          error: { code: 'online-ceremony-retired' },
+        });
+        expect(restored.result()).toBeNull();
+      } else {
+        // The competing coordinator must wait for the same device-global lock.
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        expect(aborted).toBeNull();
+        release();
+        expect(await abort).toMatchObject({
+          ok: false,
+          error: { code: 'escrow-ceremony-completed' },
+        });
+        expect((await started).ok).toBe(true);
+        await settle(room, [producer]);
+        const result = required(producer.result());
+        expect(consentWrites).toBeGreaterThan(0);
+        expect(producer.snapshot().locallyConsented).toBe(true);
+        producer.dispose();
+        contender.dispose();
+        const restored = room.create(0);
+        active.push(restored);
+        expect((await restored.start()).ok).toBe(true);
+        await settle(room, [restored]);
+        expect(restored.result()).toEqual(result);
+        expect(await restored.abort()).toMatchObject({
+          ok: false,
+          error: { code: 'online-ceremony-consented' },
+        });
+      }
+    },
+    60000,
+  );
+
+  // oxlint-enable vitest/no-conditional-expect
 
   test('timeout after durable local consent waits for the exact missing peer packet', async () => {
     const room = setup();

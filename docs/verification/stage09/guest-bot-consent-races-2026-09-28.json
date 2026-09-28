@@ -1,0 +1,24 @@
+{
+  "scope": "Post-check source pins; no before/after runtime immutability claim. Focused verified protocol correctness, not full game/browser/performance acceptance.",
+  "results": {
+    "guestBot": {
+      "handle": 72561,
+      "tests": 1,
+      "testMilliseconds": 8878,
+      "runnerSeconds": 9.99
+    },
+    "consentRaces": {
+      "handle": 53806,
+      "tests": 2,
+      "testMilliseconds": [5828, 4164],
+      "runnerSeconds": 10.95
+    },
+    "sharedTypecheck": 42799,
+    "scopedStaticChecks": 59887
+  },
+  "sourceSha256": {
+    "packages/protocol/src/guest-hosted-bot.test.ts": "56dafb6826759ceba3f85df7e88d3ea0a96ef8cc89a36a03ffdda0a56dccdff2",
+    "packages/protocol/src/testing/verified-deck-session.ts": "b6f3daf26a57f17ed56ecf217142fa0f9c8832f8281c01321781a156e099ad52",
+    "packages/protocol/src/online-ceremony.test.ts": "0c2340476347a75ea34af7229195b6538c1a053ed1bdad7ecb9be1e73b120cbc"
+  }
+}
