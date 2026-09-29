@@ -131,6 +131,8 @@ async function playRounds(page: Page, rounds: number, ships: number): Promise<Ta
       if (!outcome.startsWith('ok:')) break;
     }
     tally.rounds += 1;
+    // A build can open a choice of its own first, such as where a first metropolis stands.
+    if (!(await untilHumanTurn(page, 'main'))) break;
     await endTurn(page);
   }
   const state = await gameState(page);
