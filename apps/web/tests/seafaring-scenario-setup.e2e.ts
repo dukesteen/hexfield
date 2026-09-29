@@ -3,6 +3,7 @@ import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { SCENARIOS } from '@cp2p/maps';
 import type { DevHook } from '../src/features/devtools/hook.js';
+import { waitForRenderer } from './helpers/renderer-ready.js';
 
 declare global {
   interface Window {
@@ -21,7 +22,7 @@ async function newGame(page: Page, scenario: string, seats: number): Promise<voi
   await page.getByLabel('Bot pace, milliseconds').fill('0');
   await page.getByRole('button', { name: 'Create game' }).click();
   await expect(page).toHaveURL(/#\/local\/[^/]+$/);
-  await expect.poll(() => page.evaluate(() => Boolean(window['__cp2p']?.renderer))).toBe(true);
+  await waitForRenderer(page);
 }
 
 /** Submit the first legal command of a type for the human seat, through the session. */

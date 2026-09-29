@@ -2,6 +2,7 @@ import { expect } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import type { GameState } from '@cp2p/engine';
 import type { DevHook } from '../../src/features/devtools/hook.js';
+import { waitForRenderer } from './renderer-ready.js';
 
 declare global {
   interface Window {
@@ -99,7 +100,7 @@ export async function newLocalGame(
   await page.getByLabel('Bot pace, milliseconds').fill('0');
   await page.getByRole('button', { name: 'Create game' }).click();
   await expect(page).toHaveURL(/#\/local\/[^/]+$/);
-  await expect.poll(() => page.evaluate(() => Boolean(window['__cp2p']?.renderer))).toBe(true);
+  await waitForRenderer(page);
 }
 
 export function gameState(page: Page): Promise<GameState> {
