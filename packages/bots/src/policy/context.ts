@@ -1,8 +1,9 @@
 import type { CommandShape, Engine, GameState, LegalCommandSet, Pending, Seat } from '@cp2p/engine';
 import { boardInfo, incomePerTurn, planGoals, tradeRates } from '../eval/index.js';
-import type { BoardInfo, Goal, HandContext } from '../eval/index.js';
+import type { BoardInfo, Goal, HandContext, PointsOf } from '../eval/index.js';
 import type { BotRng, BotView } from '../types.js';
 import type { LevelConfig } from './config.js';
+import { pointsFor } from './endgame.js';
 
 /** Everything one decision reads, computed once and shared by the policy and its plugins. */
 export interface TurnContext {
@@ -26,6 +27,8 @@ export interface TurnContext {
   goal(): Goal | null;
   /** How the seat values a hand, toward its current goal. */
   handContext(): HandContext;
+  /** Every seat's points as the bot reads them (with hidden-point estimates in the endgame). */
+  points(): PointsOf;
   /** True when the engine accepts the command from this seat now. */
   valid(command: CommandShape): boolean;
   /** The concrete legal commands of one type. */
@@ -64,6 +67,7 @@ export function createTurnContext(
   const types = new Set([...commands, ...templates].map((item) => item.type));
   let goals: Goal[] | null = null;
   let handContext: HandContext | null = null;
+  let points: PointsOf | null = null;
   const context: TurnContext = {
     view,
     engine,
@@ -94,6 +98,10 @@ export function createTurnContext(
         };
       }
       return handContext;
+    },
+    points() {
+      points ??= pointsFor(context);
+      return points;
     },
     valid(command) {
       return (
