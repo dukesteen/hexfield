@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeAll, describe, expect, test, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { createInstance } from 'i18next';
 import { I18nextProvider } from 'react-i18next';
 import { createBaseEngine, exactResourceBounds, failure, success } from '@cp2p/engine';
@@ -117,6 +117,19 @@ describe('rule-backed dialogs', () => {
       card: 'yearOfPlenty',
       params: { resources: { brick: 2, lumber: 0, wool: 0, grain: 0, ore: 0 } },
     });
+  });
+
+  test('Year of Plenty shows the cards already in hand', () => {
+    mount(
+      <YearOfPlentyDialog
+        {...props({
+          commands: [],
+          templates: [{ type: 'PLAY_DEV_CARD', slotId: 'slot-2', card: 'yearOfPlenty' }],
+        })}
+      />,
+    );
+    const shown = within(screen.getByRole('group', { name: 'Your hand' })).getAllByRole('listitem');
+    expect(shown).toHaveLength(Object.values(hand).filter((count) => count > 0).length);
   });
 
   test('Year of Plenty explains a disabled choice with localized copy', () => {

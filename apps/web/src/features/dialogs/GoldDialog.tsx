@@ -76,7 +76,7 @@ export function GoldDialog(props: CommandFormProps) {
       />
       {hiddenBank && <p>{t('rules:gold.bankHidden')}</p>}
       {/* The dialog covers the hand on phones, so show what the seat already holds. */}
-      <ResourceCardSummary label={t('rules:gold.yourHand')} values={privateState.hand} />
+      <ResourceCardSummary label={t('rules:trade.yourHand')} values={privateState.hand} />
       {selected === request.count && validation === 'invalid' && (
         <p role="alert">{t('rules:validation.gold')}</p>
       )}
