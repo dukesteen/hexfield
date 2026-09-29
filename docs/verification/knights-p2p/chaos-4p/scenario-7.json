@@ -1,1 +1,224 @@
-{"mode":"net","options":{"scenario":7,"seeds":1,"startIndex":0,"seed":42,"parallel":1,"security":"verified","maxElapsedMs":5400000,"players":4,"map":"knights"},"requestedSeeds":1,"completedGames":1,"averageTurns":190,"averageInputs":1592,"averageVirtualMilliseconds":7826,"averageElapsedMilliseconds":968430.3992920001,"results":[{"map":{"id":"knights","inputCounts":{"START_SEAT":1,"PLACE_SETTLEMENT":8,"PLACE_ROAD":8,"ROLL_DICE":190,"DICE_RESULT":190,"BUILD_KNIGHT":18,"END_TURN":189,"BUILD_ROAD":14,"BUILD_IMPROVEMENT":28,"OFFER_TRADE":31,"RESPOND_TRADE":93,"MARITIME_TRADE":23,"CANCEL_TRADE":11,"CARD_DEALT":54,"SEAT_INPUT":114,"PROMOTE_KNIGHT":14,"ACTIVATE_KNIGHT":68,"BUILD_CITY":9,"BUILD_CITY_WALL":7,"PLAY_PROGRESS_CARD":109,"CHOOSE_PILLAGE":4,"DISCARD":57,"MOVE_ROBBER":29,"STEAL":23,"STEAL_RESULT":27,"WEDDING_GIVE":7,"DESERTER_REMOVE":5,"DESERTER_SKIP":2,"CONFIRM_TRADE":5,"BUILD_SETTLEMENT":6,"SABOTEUR_DISCARD":8,"CHOOSE_AQUEDUCT":86,"RELOCATE_KNIGHT":1,"CHOOSE_PROGRESS_DECK":7,"CHASE_ROBBER":3,"REVEAL_COUNT":34,"PLACE_METROPOLIS":3,"MOVE_KNIGHT":2,"PLACE_FREE_ROAD":4,"SKIP":4,"DISCARD_PROGRESS":10,"DESERTER_PLACE":1,"HARBOR_OFFER":3,"HARBOR_REPLY":3}},"security":"verified","protocolVersion":6,"seed":42,"gameIndex":0,"scenario":7,"turns":190,"inputs":1592,"virtualMilliseconds":7826,"elapsedMilliseconds":968430.3992920001,"operationTimings":{"sessionFlush":{"calls":71640,"totalMilliseconds":836555.6231109991,"maximumMilliseconds":1522.3754999999946},"networkDelivery":{"calls":70545,"totalMilliseconds":2896.1613720064524,"maximumMilliseconds":4.178500000038184},"botDecide":{"calls":1093,"totalMilliseconds":478.74054799880105,"maximumMilliseconds":5.095792000065558}},"finalStateHash":"c56b7010f0f559301b170c1b7992f55d15472f92ea96b18af9d6eb087529c154","finalLogHash":"44d26bb07656ce66c82b3903e53a2e9a5b99956a4a463592609115e4df797848","audits":[{"seat":1,"ok":true,"complete":true,"finalHead":{"hash":"44d26bb07656ce66c82b3903e53a2e9a5b99956a4a463592609115e4df797848","seq":1592},"cheatFindings":[]},{"seat":2,"ok":true,"complete":true,"finalHead":{"hash":"44d26bb07656ce66c82b3903e53a2e9a5b99956a4a463592609115e4df797848","seq":1592},"cheatFindings":[]},{"seat":3,"ok":true,"complete":true,"finalHead":{"hash":"44d26bb07656ce66c82b3903e53a2e9a5b99956a4a463592609115e4df797848","seq":1592},"cheatFindings":[]},{"seat":0,"ok":true,"complete":true,"finalHead":{"hash":"44d26bb07656ce66c82b3903e53a2e9a5b99956a4a463592609115e4df797848","seq":1592},"cheatFindings":[]}],"auditTimings":[{"seat":0,"invocations":1,"completedInvocations":1,"lastStartedMilliseconds":866123.1832910001,"totalMilliseconds":98945.45066699991,"lastMilliseconds":98945.45066699991,"privateComparisonInvocations":0,"privateComparisonMilliseconds":0,"pendingInvocations":0,"runningMilliseconds":0,"oldestPendingMilliseconds":0},{"seat":1,"invocations":1,"completedInvocations":1,"lastStartedMilliseconds":865711.6664580001,"totalMilliseconds":99889.93679199996,"lastMilliseconds":99889.93679199996,"privateComparisonInvocations":0,"privateComparisonMilliseconds":0,"pendingInvocations":0,"runningMilliseconds":0,"oldestPendingMilliseconds":0},{"seat":2,"invocations":1,"completedInvocations":1,"lastStartedMilliseconds":866986.552041,"totalMilliseconds":101180.53270900005,"lastMilliseconds":101180.53270900005,"privateComparisonInvocations":0,"privateComparisonMilliseconds":0,"pendingInvocations":0,"runningMilliseconds":0,"oldestPendingMilliseconds":0},{"seat":3,"invocations":1,"completedInvocations":1,"lastStartedMilliseconds":866538.948083,"totalMilliseconds":101050.74512500002,"lastMilliseconds":101050.74512500002,"privateComparisonInvocations":0,"privateComparisonMilliseconds":0,"pendingInvocations":0,"runningMilliseconds":0,"oldestPendingMilliseconds":0}],"faultInjected":true,"faultRecovered":true,"faultEvidence":{"injectedAtRevision":28,"majorityCommitsDuringPartition":null,"isolatedCommitsDuringPartition":null,"pausedPeersDuringPartition":0,"replacementTerm":2,"censoredCommandCommitted":true,"snapshotRequests":0,"snapshotResponses":0,"derivedContextDiagnostic":null,"snapshotRepairAdopted":false,"repairSnapshotParentSeq":null,"repairSnapshotHash":null,"continuationCommandHash":null,"duplicateDeliveries":0,"certifiedExclusionPeers":0,"byzantineCommandCommits":0,"rejectedProposalHash":null,"nonVoterMessageTypes":[],"nonVoterPublishedMaster":false}}],"failures":[],"parallel":1,"sourceFingerprint":"aaaee0061cfaef1ce8989d03059f4bf3c88f1af69b62f0b4f3429ebecbaf9f8b","sourceUnchanged":false}
+{
+  "mode": "net",
+  "options": {
+    "scenario": 7,
+    "seeds": 1,
+    "startIndex": 0,
+    "seed": 42,
+    "parallel": 1,
+    "security": "verified",
+    "maxElapsedMs": 5400000,
+    "players": 4,
+    "map": "knights"
+  },
+  "requestedSeeds": 1,
+  "completedGames": 1,
+  "averageTurns": 190,
+  "averageInputs": 1592,
+  "averageVirtualMilliseconds": 7826,
+  "averageElapsedMilliseconds": 968430.3992920001,
+  "results": [
+    {
+      "map": {
+        "id": "knights",
+        "inputCounts": {
+          "START_SEAT": 1,
+          "PLACE_SETTLEMENT": 8,
+          "PLACE_ROAD": 8,
+          "ROLL_DICE": 190,
+          "DICE_RESULT": 190,
+          "BUILD_KNIGHT": 18,
+          "END_TURN": 189,
+          "BUILD_ROAD": 14,
+          "BUILD_IMPROVEMENT": 28,
+          "OFFER_TRADE": 31,
+          "RESPOND_TRADE": 93,
+          "MARITIME_TRADE": 23,
+          "CANCEL_TRADE": 11,
+          "CARD_DEALT": 54,
+          "SEAT_INPUT": 114,
+          "PROMOTE_KNIGHT": 14,
+          "ACTIVATE_KNIGHT": 68,
+          "BUILD_CITY": 9,
+          "BUILD_CITY_WALL": 7,
+          "PLAY_PROGRESS_CARD": 109,
+          "CHOOSE_PILLAGE": 4,
+          "DISCARD": 57,
+          "MOVE_ROBBER": 29,
+          "STEAL": 23,
+          "STEAL_RESULT": 27,
+          "WEDDING_GIVE": 7,
+          "DESERTER_REMOVE": 5,
+          "DESERTER_SKIP": 2,
+          "CONFIRM_TRADE": 5,
+          "BUILD_SETTLEMENT": 6,
+          "SABOTEUR_DISCARD": 8,
+          "CHOOSE_AQUEDUCT": 86,
+          "RELOCATE_KNIGHT": 1,
+          "CHOOSE_PROGRESS_DECK": 7,
+          "CHASE_ROBBER": 3,
+          "REVEAL_COUNT": 34,
+          "PLACE_METROPOLIS": 3,
+          "MOVE_KNIGHT": 2,
+          "PLACE_FREE_ROAD": 4,
+          "SKIP": 4,
+          "DISCARD_PROGRESS": 10,
+          "DESERTER_PLACE": 1,
+          "HARBOR_OFFER": 3,
+          "HARBOR_REPLY": 3
+        }
+      },
+      "security": "verified",
+      "protocolVersion": 6,
+      "seed": 42,
+      "gameIndex": 0,
+      "scenario": 7,
+      "turns": 190,
+      "inputs": 1592,
+      "virtualMilliseconds": 7826,
+      "elapsedMilliseconds": 968430.3992920001,
+      "operationTimings": {
+        "sessionFlush": {
+          "calls": 71640,
+          "totalMilliseconds": 836555.6231109991,
+          "maximumMilliseconds": 1522.3754999999946
+        },
+        "networkDelivery": {
+          "calls": 70545,
+          "totalMilliseconds": 2896.1613720064524,
+          "maximumMilliseconds": 4.178500000038184
+        },
+        "botDecide": {
+          "calls": 1093,
+          "totalMilliseconds": 478.74054799880105,
+          "maximumMilliseconds": 5.095792000065558
+        }
+      },
+      "finalStateHash": "c56b7010f0f559301b170c1b7992f55d15472f92ea96b18af9d6eb087529c154",
+      "finalLogHash": "44d26bb07656ce66c82b3903e53a2e9a5b99956a4a463592609115e4df797848",
+      "audits": [
+        {
+          "seat": 1,
+          "ok": true,
+          "complete": true,
+          "finalHead": {
+            "hash": "44d26bb07656ce66c82b3903e53a2e9a5b99956a4a463592609115e4df797848",
+            "seq": 1592
+          },
+          "cheatFindings": []
+        },
+        {
+          "seat": 2,
+          "ok": true,
+          "complete": true,
+          "finalHead": {
+            "hash": "44d26bb07656ce66c82b3903e53a2e9a5b99956a4a463592609115e4df797848",
+            "seq": 1592
+          },
+          "cheatFindings": []
+        },
+        {
+          "seat": 3,
+          "ok": true,
+          "complete": true,
+          "finalHead": {
+            "hash": "44d26bb07656ce66c82b3903e53a2e9a5b99956a4a463592609115e4df797848",
+            "seq": 1592
+          },
+          "cheatFindings": []
+        },
+        {
+          "seat": 0,
+          "ok": true,
+          "complete": true,
+          "finalHead": {
+            "hash": "44d26bb07656ce66c82b3903e53a2e9a5b99956a4a463592609115e4df797848",
+            "seq": 1592
+          },
+          "cheatFindings": []
+        }
+      ],
+      "auditTimings": [
+        {
+          "seat": 0,
+          "invocations": 1,
+          "completedInvocations": 1,
+          "lastStartedMilliseconds": 866123.1832910001,
+          "totalMilliseconds": 98945.45066699991,
+          "lastMilliseconds": 98945.45066699991,
+          "privateComparisonInvocations": 0,
+          "privateComparisonMilliseconds": 0,
+          "pendingInvocations": 0,
+          "runningMilliseconds": 0,
+          "oldestPendingMilliseconds": 0
+        },
+        {
+          "seat": 1,
+          "invocations": 1,
+          "completedInvocations": 1,
+          "lastStartedMilliseconds": 865711.6664580001,
+          "totalMilliseconds": 99889.93679199996,
+          "lastMilliseconds": 99889.93679199996,
+          "privateComparisonInvocations": 0,
+          "privateComparisonMilliseconds": 0,
+          "pendingInvocations": 0,
+          "runningMilliseconds": 0,
+          "oldestPendingMilliseconds": 0
+        },
+        {
+          "seat": 2,
+          "invocations": 1,
+          "completedInvocations": 1,
+          "lastStartedMilliseconds": 866986.552041,
+          "totalMilliseconds": 101180.53270900005,
+          "lastMilliseconds": 101180.53270900005,
+          "privateComparisonInvocations": 0,
+          "privateComparisonMilliseconds": 0,
+          "pendingInvocations": 0,
+          "runningMilliseconds": 0,
+          "oldestPendingMilliseconds": 0
+        },
+        {
+          "seat": 3,
+          "invocations": 1,
+          "completedInvocations": 1,
+          "lastStartedMilliseconds": 866538.948083,
+          "totalMilliseconds": 101050.74512500002,
+          "lastMilliseconds": 101050.74512500002,
+          "privateComparisonInvocations": 0,
+          "privateComparisonMilliseconds": 0,
+          "pendingInvocations": 0,
+          "runningMilliseconds": 0,
+          "oldestPendingMilliseconds": 0
+        }
+      ],
+      "faultInjected": true,
+      "faultRecovered": true,
+      "faultEvidence": {
+        "injectedAtRevision": 28,
+        "majorityCommitsDuringPartition": null,
+        "isolatedCommitsDuringPartition": null,
+        "pausedPeersDuringPartition": 0,
+        "replacementTerm": 2,
+        "censoredCommandCommitted": true,
+        "snapshotRequests": 0,
+        "snapshotResponses": 0,
+        "derivedContextDiagnostic": null,
+        "snapshotRepairAdopted": false,
+        "repairSnapshotParentSeq": null,
+        "repairSnapshotHash": null,
+        "continuationCommandHash": null,
+        "duplicateDeliveries": 0,
+        "certifiedExclusionPeers": 0,
+        "byzantineCommandCommits": 0,
+        "rejectedProposalHash": null,
+        "nonVoterMessageTypes": [],
+        "nonVoterPublishedMaster": false
+      }
+    }
+  ],
+  "failures": [],
+  "parallel": 1,
+  "sourceFingerprint": "aaaee0061cfaef1ce8989d03059f4bf3c88f1af69b62f0b4f3429ebecbaf9f8b",
+  "sourceUnchanged": false
+}
