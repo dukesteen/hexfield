@@ -70,3 +70,16 @@ test('seafaring events name the ship, the pirate and the gold taken', () => {
     ),
   ).toBe('Player 1 took gold: +1 Lumber, +1 Ore.');
 });
+
+const reveal = (terrain: string, token: number | null) =>
+  formatGameEvent({ type: 'fogRevealed', seat: 1, hex: 'h:2,1', terrain, token }, i18n.t, label);
+
+test('a fog reveal names the tile, its number and what the revealer drew', () => {
+  expect(reveal('forest', 6)).toBe('Player 2 revealed forest (6) and drew 1 Lumber.');
+  expect(reveal('mountains', 8)).toBe('Player 2 revealed mountains (8) and drew 1 Ore.');
+  expect(reveal('gold', 5)).toBe(
+    'Player 2 revealed a gold field (5) and may take a card of their choice.',
+  );
+  expect(reveal('sea', null)).toBe('Player 2 revealed sea.');
+  expect(reveal('desert', null)).toBe('Player 2 revealed desert.');
+});

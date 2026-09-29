@@ -1,5 +1,5 @@
 import { RESOURCES, SEAFARING_ID, baseLongestRoadLength, engineForConfig } from '@cp2p/engine';
-import type { GameState, Seat } from '@cp2p/engine';
+import type { GameState, Pending, Seat } from '@cp2p/engine';
 
 function record(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -61,4 +61,19 @@ export function goldRequest(
         : [],
     ),
   };
+}
+
+/** The system input that answers a fog draw (`FOG_REVEALED` in the seafaring module). */
+const FOG_DRAW_INPUT = 'FOG_REVEALED';
+
+/**
+ * The fog draw the game is waiting for, or null. It is a public random pending that the driver
+ * resolves at once in a local game and through the deck ceremony online, where it takes
+ * network time, so the screen says a reveal is under way while it is open.
+ */
+export function fogDrawPending(pending: readonly Pending[]): { readonly hex: string } | null {
+  for (const item of pending)
+    if (item.kind === 'random' && item.systemType === FOG_DRAW_INPUT)
+      return { hex: typeof item.request.hex === 'string' ? item.request.hex : '' };
+  return null;
 }

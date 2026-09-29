@@ -1030,6 +1030,7 @@ function LiveGame({
   const model = useMemo(() => toRenderModel(state, 'spectator'), [state]);
   const actions = useGameActions(state, pending, presentation, {
     compact,
+    reducedMotion,
     onHandOff: () => closeSheet(false),
     onFormClosed: () => {
       if (compact)

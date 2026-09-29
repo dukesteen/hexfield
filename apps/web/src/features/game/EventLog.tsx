@@ -10,7 +10,7 @@ import {
   getShipIconUrl,
 } from '@cp2p/renderer';
 import type { GamePresentation } from '../../queries/repositories/saved-games';
-import { formatGameEvent } from './event-format';
+import { FOG_TERRAIN_RESOURCE, formatGameEvent } from './event-format';
 import { FairnessFindings } from './FairnessStatus.js';
 
 const actorEvents = new Set([
@@ -21,6 +21,7 @@ const actorEvents = new Set([
   'shipMoved',
   'pirateMoved',
   'goldChosen',
+  'fogRevealed',
   'resourcesDiscarded',
   'devCardBought',
   'devCardDealt',
@@ -73,6 +74,12 @@ function eventArt(event: GameEvent, color?: string): string[] {
   if (event.type === 'shipBuilt' || event.type === 'shipMoved') return [getShipIconUrl(color)];
   if (event.type === 'pirateMoved') return [getSeafaringIconUrl('pirate')];
   if (event.type === 'goldChosen') return [getSeafaringIconUrl('gold')];
+  if (event.type === 'fogRevealed') {
+    const resource =
+      typeof event.terrain === 'string' ? FOG_TERRAIN_RESOURCE[event.terrain] : undefined;
+    if (resource) return [getResourceIconUrl(resource)];
+    return [getSeafaringIconUrl(event.terrain === 'gold' ? 'gold' : 'fog')];
+  }
   if (event.type === 'diceRolled') {
     const dice = event.dice;
     return Array.isArray(dice) &&

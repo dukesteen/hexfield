@@ -10,6 +10,7 @@ import type { BoardGraph } from '@cp2p/engine/geometry';
 import type { BoardHit } from '@cp2p/renderer';
 import type { DevHook } from '../src/features/devtools/hook.js';
 import { LocalSession } from '../src/session/local-session.js';
+import { hexCornersOutside } from './helpers/seafaring-board.js';
 
 declare global {
   interface Window {
@@ -25,8 +26,6 @@ async function shot(page: Page, testInfo: TestInfo, name: string): Promise<void>
   await testInfo.attach(name, { body, contentType: 'image/png' });
 }
 
-/** The renderer's default hex radius in board units. */
-const HEX_SIZE = 54;
 /** The human seat in every game here. */
 const SEAT: Seat = 0;
 
@@ -122,37 +121,6 @@ function handOf(page: Page): Promise<Record<Resource, number>> {
 
 function handSize(hand: Record<Resource, number>): number {
   return Object.values(hand).reduce((sum, count) => sum + count, 0);
-}
-
-/** The corners of every hex that fall outside the canvas, in client pixels. */
-async function hexCornersOutside(page: Page, state: GameState): Promise<number> {
-  const canvas = page.locator('.board-view-canvas canvas');
-  const box = await canvas.boundingBox();
-  if (!box) throw new Error('Board canvas has no box');
-  const corners = await page.evaluate(
-    ({ hexes, size }) => {
-      const renderer = window['__cp2p']?.renderer;
-      if (!renderer) throw new Error('Renderer is not ready');
-      return hexes.flatMap(({ q, r }) => {
-        const center = { x: Math.sqrt(3) * size * (q + r / 2), y: 1.5 * size * r };
-        return Array.from({ length: 6 }, (_, index) => {
-          const angle = (Math.PI / 180) * (60 * index - 90);
-          return renderer.boardToScreen({
-            x: center.x + size * 0.95 * Math.cos(angle),
-            y: center.y + size * 0.95 * Math.sin(angle),
-          });
-        });
-      });
-    },
-    { hexes: state.board.hexes.map(({ q, r }) => ({ q, r })), size: HEX_SIZE },
-  );
-  return corners.filter(
-    (point) =>
-      point.x < box.x - 1 ||
-      point.x > box.x + box.width + 1 ||
-      point.y < box.y - 1 ||
-      point.y > box.y + box.height + 1,
-  ).length;
 }
 
 /** The promoted turn button: roll dice or end turn, on either layout. */
@@ -393,7 +361,7 @@ test.describe('seafaring on the game screen', () => {
         const state = await gameState(page);
         expect(state.board.hexes.length).toBeGreaterThan(50);
         expect(state.board.ships).toEqual([]);
-        await page.evaluate(() => window['__cp2p']?.renderer?.fitToBoard());
+        // The default fit, with no nudge: the hexes and the water ring are all on screen.
         await expect.poll(() => hexCornersOutside(page, state)).toBe(0);
         await shot(page, testInfo, `board-new-horizons-${name}`);
         expect(errors).toEqual([]);

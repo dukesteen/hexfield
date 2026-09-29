@@ -50,3 +50,25 @@ test('a hosted bot takes its special build phase while another seat is active', 
   expect(chooseBotPending(state(2), [build], new Set([3]))).toBe(build);
   expect(chooseBotPending(state(2), [build], new Set([2]))).toBeNull();
 });
+
+test('a fog draw is the driver’s to resolve, and the bot then takes its gold choice', () => {
+  const fog = {
+    kind: 'random' as const,
+    request: {
+      type: 'draw',
+      deck: 'fog-terrain',
+      public: true,
+      seat: 0,
+      slotId: 'fog-terrain:0',
+      remaining: 9,
+      hex: 'h:2,1',
+    },
+    systemType: 'FOG_REVEALED',
+  };
+  // While the draw is pending no bot acts, even with a claim-only player pending beside it.
+  expect(chooseBotPending(state(0), [fog], new Set([0]))).toBeNull();
+  expect(chooseBotPending(state(0), [fog, player(0, 'CLAIM_VICTORY')], new Set([0]))).toBeNull();
+  // A gold reveal leaves the revealer's one-card choice, which the bot answers.
+  const gold = player(0, 'CHOOSE_GOLD');
+  expect(chooseBotPending(state(0), [gold], new Set([0]))).toBe(gold);
+});

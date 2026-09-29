@@ -414,8 +414,10 @@ export function getShipIconUrl(color = 'blue', variant = 3): string {
   const clamped = Math.min(SHIP_VARIANTS, Math.max(1, Math.trunc(variant) || 1));
   return artUrl(`sf-ship-${normalizeArtColor(color)}-${clamped}`);
 }
-export function getSeafaringIconUrl(icon: 'gold' | 'ship' | 'pirate'): string {
-  return artUrl(icon === 'pirate' ? 'sf-pirate-ship' : `sf-icon-${icon}`);
+export function getSeafaringIconUrl(icon: 'gold' | 'ship' | 'pirate' | 'fog'): string {
+  return artUrl(
+    icon === 'pirate' ? 'sf-pirate-ship' : icon === 'fog' ? 'sf-tile-fog' : `sf-icon-${icon}`,
+  );
 }
 /** The island-bonus chit for a bonus worth `vp` points. Only 1 and 2 have their own art. */
 export function getIslandChitUrl(vp: number): string {

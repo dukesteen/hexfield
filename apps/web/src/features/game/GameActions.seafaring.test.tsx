@@ -235,6 +235,33 @@ test('setup offers a ship beside the road, and Road Building a free ship beside 
   expect(free.alternatives?.map(({ kind }) => kind)).toEqual(['freeRoad', 'freeShip']);
 });
 
+test('an open fog draw shows a revealing status on the board and in the next-step bar', () => {
+  const draw = {
+    kind: 'random' as const,
+    request: {
+      type: 'draw',
+      deck: 'fog-terrain',
+      public: true,
+      seat: 0,
+      slotId: 'fog-terrain:0',
+      remaining: 8,
+      hex: 'h:2,1',
+    },
+    systemType: 'FOG_REVEALED',
+  };
+  const state = seaState('fogReveal');
+  const view = renderHook(() => useGameActions(state, [draw], presentation));
+  expect(view.result.current.nextStep).toEqual({ kind: 'pending', text: 'game:fogRevealing' });
+  const status = render(<>{view.result.current.desktopStatus}</>);
+  expect(status.getByRole('status').textContent).toBe('game:fogRevealing');
+  cleanup();
+  // Once the draw is answered the indicator goes.
+  const done = renderHook(() => useGameActions(state, [], presentation));
+  expect(done.result.current.nextStep.kind).not.toBe('pending');
+  const after = render(<>{done.result.current.desktopStatus}</>);
+  expect(after.container.querySelector('.desktop-fog-revealing')).toBeNull();
+});
+
 test('the build menu of a seafaring game shows the ship with its supply and a move button', () => {
   harness.placements.ship.push(choice('BUILD_SHIP', 'e:1,0,W'));
   harness.placements.moveShip.push(...MOVES);

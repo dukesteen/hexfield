@@ -21,6 +21,7 @@ import {
 } from './assets/terrainTextures.js';
 import { assignTerrainVariants } from './assets/terrainVariants.js';
 import { hexExtents, isLandTerrain, islandBoundarySegments } from './boardShape.js';
+import { fogRevealShape } from './fogReveal.js';
 import { roadVariantForEdge } from './roadVariant.js';
 import { shipVariantForEdge } from './shipVariant.js';
 import type { BoardTextures, SeafaringTextures } from './assets/terrainTextures.js';
@@ -57,6 +58,8 @@ const HEX_SIZE = 54;
 const MIN_ZOOM = 0.35;
 const MAX_ZOOM = 3.2;
 const FIT_PADDING = 24;
+/** A seafaring board keeps more room, because the phone layout bleeds the canvas 30px past the screen. */
+const SEA_FIT_PADDING = 40;
 const ROAD_ART_SCALE = 0.64;
 const ROBBER_GROUND_ANCHOR = 70 / 92;
 const LANE_INSET = 0.22;
@@ -84,10 +87,15 @@ const PIRATE_WIDTH = 1.2;
 const PIRATE_ANCHOR_Y = 0.8;
 const BONUS_CHIT_SIZE = 0.46;
 const BONUS_CHIT_OFFSET = { x: 0.3, y: -0.32 } as const;
-/** Extra water kept around an explicit-sea board when fitting the camera. */
-const SEA_FIT_MARGIN = 0.3;
+/** Extra water kept around an explicit-sea board and its scenery ring when fitting the camera. */
+const SEA_FIT_MARGIN = 0.1;
+/** The smallest zoom a fit may pick, below the pinch floor, so a large board still fits whole. */
+const FIT_FLOOR_ZOOM = 0.1;
 const SHIP_MOVE_MS = 700;
-const FOG_REVEAL_MS = 900;
+/** One fog tile turning over, and the wait between the tiles of a batch. */
+const FOG_REVEAL_MS = 1000;
+const FOG_STAGGER_MS = 450;
+const FOG_MAX_STAGGERED = 4;
 const FOG_COLOR = 0xa9bcc6;
 const DEBUG_ISLAND_COLORS = [0xe63946, 0x1d7874, 0xf4a261, 0x6a4c93, 0x2a9d8f, 0xd62828, 0x3a86ff];
 const LAYER_NAMES = [
@@ -222,6 +230,7 @@ export class PixiBoardRenderer implements BoardRenderer {
   private hiddenBuilding: VertexId | null = null;
   private appearance: BoardAppearance;
   private zoom = 1;
+  private minZoom = MIN_ZOOM;
   private cameraX = 0;
   private cameraY = 0;
   private drag: { pointerId: number; x: number; y: number; moved: boolean } | null = null;
@@ -633,7 +642,7 @@ export class PixiBoardRenderer implements BoardRenderer {
           : effect.kind === 'ship-move'
             ? SHIP_MOVE_MS
             : effect.kind === 'fog-reveal'
-              ? FOG_REVEAL_MS
+              ? FOG_REVEAL_MS + Math.min(effect.order ?? 0, FOG_MAX_STAGGERED) * FOG_STAGGER_MS
               : 420;
     if (effect.kind === 'dice-roll') {
       if (effect.dice.some((face) => !Number.isInteger(face) || face < 1 || face > 6)) return null;
@@ -763,14 +772,29 @@ export class PixiBoardRenderer implements BoardRenderer {
       sprite.height = (174 / 80) * this.hexSize;
       const scaleX = sprite.scale.x;
       const scaleY = sprite.scale.y;
+      // The new terrain is already drawn underneath. The fog turns edge-on to show it, and a
+      // light ring marks the tile as it lands.
+      const ring = new Graphics()
+        .poly(hexCorners(center, this.hexSize * 0.98), true)
+        .stroke({ color: 0xfff6d6, width: Math.max(2, this.hexSize * 0.08) });
+      ring.alpha = 0;
+      // Scale the ring about the hex centre.
+      ring.pivot.set(center.x, center.y);
+      ring.position.set(center.x, center.y);
       node.addChild(sprite);
+      node.addChild(ring);
       this.layers.effects.addChild(node);
+      const wait = Math.min(effect.order ?? 0, FOG_MAX_STAGGERED) * FOG_STAGGER_MS;
       return {
         node,
         duration,
         update: (progress) => {
-          node.alpha = 1 - progress * progress;
-          sprite.scale.set(scaleX * (1 + progress * 0.18), scaleY * (1 + progress * 0.18));
+          const shown = fogRevealShape((progress * duration - wait) / FOG_REVEAL_MS);
+          sprite.scale.set(scaleX * shown.flip, scaleY * shown.lift);
+          sprite.position.y = center.y - shown.rise * this.hexSize;
+          sprite.visible = shown.flip > 0.002;
+          ring.alpha = shown.glow;
+          ring.scale.set(shown.glowScale);
           return progress >= 1;
         },
       };
@@ -1221,10 +1245,12 @@ export class PixiBoardRenderer implements BoardRenderer {
       height,
       this.app.screen.width,
       this.app.screen.height,
-      FIT_PADDING,
-      MIN_ZOOM,
+      this.hasSeaHexes() ? SEA_FIT_PADDING : FIT_PADDING,
+      FIT_FLOOR_ZOOM,
       MAX_ZOOM,
     );
+    // A board too big to fit at the usual floor lets the player zoom back out to the fit.
+    this.minZoom = Math.min(MIN_ZOOM, this.zoom);
     const centerX = (bounds.minX + bounds.maxX) / 2;
     const centerY = (bounds.minY + bounds.maxY) / 2;
     this.cameraX = this.app.screen.width / 2 - centerX * this.zoom;
@@ -1595,6 +1621,11 @@ export class PixiBoardRenderer implements BoardRenderer {
       .map((plugin) => [plugin.id, this.model?.layers?.[plugin.id] ?? null]);
   }
 
+  /** True for a board that lists its own sea hexes, which is how seafaring boards are made. */
+  private hasSeaHexes(): boolean {
+    return this.model?.hexes.some((hex) => hex.terrain === 'sea') ?? false;
+  }
+
   private isStandardFootprint(): boolean {
     if (!this.model || this.model.hexes.length !== 19) return false;
     const cells = new Set(this.model.hexes.map(({ q, r }) => `${q},${r}`));
@@ -1703,9 +1734,14 @@ export class PixiBoardRenderer implements BoardRenderer {
         maxY: this.hexSize * 6.5,
       };
     }
-    // Seafaring boards list their sea hexes, so the hexes already are the frame.
-    if (this.model.hexes.some((hex) => hex.terrain === 'sea'))
-      return hexExtents(this.model.hexes, this.hexSize, this.hexSize * SEA_FIT_MARGIN);
+    // Seafaring boards list their sea hexes. The scenery water ring around them is part of the
+    // picture, so the whole thing is fitted, not only the game hexes.
+    if (this.hasSeaHexes())
+      return hexExtents(
+        [...this.model.hexes, ...this.waterCells()],
+        this.hexSize,
+        this.hexSize * SEA_FIT_MARGIN,
+      );
     const centers = [
       ...this.model.hexes.map((hex) => hexToPixel(hex.q, hex.r, this.hexSize)),
       ...this.waterCenters(),
@@ -1797,7 +1833,7 @@ export class PixiBoardRenderer implements BoardRenderer {
 
   private zoomAt(client: ScreenPoint, factor: number): void {
     const before = this.screenToBoard(client);
-    this.zoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, this.zoom * factor));
+    this.zoom = Math.max(this.minZoom, Math.min(MAX_ZOOM, this.zoom * factor));
     const rect = this.app.canvas.getBoundingClientRect();
     const scaleX = this.app.screen.width / rect.width || 1;
     const scaleY = this.app.screen.height / rect.height || 1;
@@ -1860,7 +1896,7 @@ export class PixiBoardRenderer implements BoardRenderer {
         const center = { x: (first.x + second.x) / 2, y: (first.y + second.y) / 2 };
         const worldAnchor = this.screenToBoard({ x: this.pinch.x, y: this.pinch.y });
         this.zoom = Math.max(
-          MIN_ZOOM,
+          this.minZoom,
           Math.min(MAX_ZOOM, this.pinch.zoom * (nextDistance / Math.max(1, this.pinch.distance))),
         );
         const rect = this.app.canvas.getBoundingClientRect();
