@@ -60,6 +60,24 @@ test('seafaring scenarios are their own group and start the scenario they name',
   expect(onScenario).toHaveBeenCalledWith(expect.objectContaining({ id: 'new-horizons' }));
 });
 
+test('seafaring with Cities & Knights has its own group, at three to four and five to six seats', () => {
+  const onScenario = mount({ seatCount: 4 });
+  const group = screen.getByRole('group', { name: 'Seafaring with Cities & Knights' });
+  expect(optionNames(group)).toEqual([
+    'New Horizons with Cities & Knights',
+    'Desert Crossing with Cities & Knights',
+  ]);
+  fireEvent.change(screen.getByRole('combobox'), { target: { value: 'desert-crossing-knights' } });
+  expect(onScenario).toHaveBeenCalledWith(
+    expect.objectContaining({ id: 'desert-crossing-knights', vpTarget: 15 }),
+  );
+  cleanup();
+  mount({ seatCount: 6, scenarioId: 'five-six' });
+  expect(
+    optionNames(screen.getByRole('group', { name: 'Seafaring with Cities & Knights' })),
+  ).toEqual(['New Horizons with Cities & Knights (5–6 players)']);
+});
+
 test('a five to six player game is offered the large seafaring variants only', () => {
   mount({ seatCount: 5, scenarioId: 'five-six' });
   expect(optionNames(screen.getByRole('group', { name: 'Seafaring' }))).toEqual([
