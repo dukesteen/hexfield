@@ -1,6 +1,6 @@
 # Seafaring (`seafaring`) as implemented
 
-The `seafaring` module depends on `base` and is compatible with `five-six`. Everything not listed here follows [the base rules](base.md), and with `five-six` also [the five-six rules](five-six.md).
+The `seafaring` module depends on `base` and is compatible with `five-six`. Everything not listed here follows [the base rules](base.md), and with `five-six` also [the five-six rules](five-six.md). Together with `knights` see [combos.md](combos.md).
 
 Sources, all read on 2026-09-28:
 

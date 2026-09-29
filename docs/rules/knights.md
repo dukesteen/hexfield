@@ -1,6 +1,6 @@
 # Cities & Knights (`knights`) as implemented
 
-The `knights` module depends on `base` and is compatible with `five-six`. Combining it with `seafaring` is a separate task (see [Recorded for the seafaring combination](#recorded-for-the-seafaring-combination)). Everything not listed here follows [the base rules](base.md), and with `five-six` also [the five-six rules](five-six.md).
+The `knights` module depends on `base` and is compatible with `five-six`. Combining it with `seafaring` is written in [combos.md](combos.md) (see also [Recorded for the seafaring combination](#recorded-for-the-seafaring-combination)). Everything not listed here follows [the base rules](base.md), and with `five-six` also [the five-six rules](five-six.md).
 
 Sources, all read on 2026-09-28:
 
@@ -394,7 +394,7 @@ Hooks from [hooks.md](hooks.md) the module uses:
 
 ## Recorded for the seafaring combination
 
-From 2025 p.12 and 2020 p.13, for the later combo task, not implemented here: rules for roads also apply to ships. The pirate sits on the final space of the barbarian track and enters play only after the first attack. Knights move over routes of roads and ships, may end on a sea vertex, and must stay connected, so a ship that would break that connection cannot move. A knight on a sea vertex can chase away the pirate. Taxation moves only the robber. Diplomacy on a ship places a ship. Gold fields give resources only and the merchant cannot stand on one. The barbarians attack every island at once. The winning score of a Seafarers scenario rises by 2 points.
+From 2025 p.12 and 2020 p.13, implemented by [combos.md](combos.md): rules for roads also apply to ships. The pirate sits on the final space of the barbarian track and enters play only after the first attack. Knights move over routes of roads and ships, may end on a sea vertex, and must stay connected, so a ship that would break that connection cannot move. A knight on a sea vertex can chase away the pirate. Taxation moves only the robber. Diplomacy on a ship places a ship. Gold fields give resources only and the merchant cannot stand on one. The barbarians attack every island at once. The winning score of a Seafarers scenario rises by 2 points.
 
 ## As implemented in K1 and K2
 
