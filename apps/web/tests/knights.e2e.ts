@@ -13,6 +13,7 @@ import {
   legalTypes,
   rollDice,
   startKnightsGame,
+  trackInView,
   untilHumanTurn,
 } from './helpers/knights-play.js';
 
@@ -86,7 +87,8 @@ async function playRounds(page: Page, rounds: number, ships: number): Promise<Ta
 /** Buy the first level of the science track when the engine allows it. */
 function submitScience(page: Page): Promise<string> {
   return page.evaluate(async (seat) => {
-    const session = window['__cp2p']!.session;
+    const session = window['__cp2p']?.session;
+    if (!session) throw new Error('No dev hook');
     const command = session
       .getLegalCommands(seat)
       .commands.find((item) => item.type === 'BUILD_IMPROVEMENT' && item['track'] === 'science');
@@ -182,11 +184,7 @@ test.describe('cities and knights, local', () => {
     await page.setViewportSize({ width: 390, height: 844 });
     const errors = watchErrors(page);
     await startKnightsGame(page);
-    await expect
-      .poll(() =>
-        page.evaluate(() => window['__cp2p']!.renderer!.isFixtureInView('barbarian-track')),
-      )
-      .toBe(true);
+    await expect.poll(() => trackInView(page)).toBe(true);
     await expect(page.getByTestId('barbarian-countdown')).toHaveCount(0);
     await shot(page, testInfo, 'phone-default-fit');
     await untilHumanTurn(page, 'roll');
@@ -203,8 +201,7 @@ test.describe('cities and knights, local', () => {
   test('the countdown pill shows only while the track is out of view', async ({ page }) => {
     const errors = watchErrors(page);
     await startKnightsGame(page);
-    const track = (): Promise<boolean> =>
-      page.evaluate(() => window['__cp2p']!.renderer!.isFixtureInView('barbarian-track'));
+    const track = (): Promise<boolean> => trackInView(page);
     await expect.poll(track).toBe(true);
     await expect(page.getByTestId('barbarian-countdown')).toHaveCount(0);
     const box = await page.locator('.board-view-canvas canvas').boundingBox();

@@ -20,7 +20,7 @@ function withKnights(change: Record<string, unknown>): GameState {
 
 describe('the cost table', () => {
   test('is the same as the prices the engine charges', () => {
-    const costs = knightsModule().hooks.costs?.(genesis.config, {}) ?? {};
+    const costs = knightsModule().hooks?.costs?.(genesis.config, {}) ?? {};
     expect(KNIGHT_COST_TABLE.knight).toEqual(costs['knight']);
     expect(KNIGHT_COST_TABLE.promote).toEqual(costs['promote']);
     expect(KNIGHT_COST_TABLE.activate).toEqual(costs['activate']);

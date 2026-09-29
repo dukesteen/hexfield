@@ -1,7 +1,8 @@
 /* eslint-disable no-await-in-loop -- Each step of the autoplay depends on the game the last one left. */
 import { expect } from '@playwright/test';
 import type { Page } from '@playwright/test';
-import type { CommandShape, GameState } from '@cp2p/engine';
+import { knightsExt } from '@cp2p/engine';
+import type { CommandShape, GameState, KnightsExt, Seat } from '@cp2p/engine';
 import type { DevHook } from '../../src/features/devtools/hook.js';
 
 declare global {
@@ -11,20 +12,10 @@ declare global {
 }
 
 /** The human seat: the first one, as the lobby sets it up. */
-export const SEAT = 0;
+export const SEAT: Seat = 0;
 
-/** What the knights extension keeps in public state, as far as these tests read it. */
-export interface KnightsView {
-  readonly barbarians: { readonly step: number };
-  readonly knights: readonly { readonly seat: number; readonly active: boolean }[];
-  readonly improvements: Readonly<Record<string, Readonly<Record<string, number>>>>;
-  readonly lastAttack: { readonly outcome: string } | null;
-}
-
-export function knightsOf(state: GameState): KnightsView {
-  const ext = Reflect.get(state.ext as object, 'knights') as KnightsView | undefined;
-  if (!ext) throw new Error('This game has no knights state');
-  return ext;
+export function knightsOf(state: GameState): KnightsExt {
+  return knightsExt(state);
 }
 
 /** Start a local Cities and Knights game from the lobby form, the human at seat 0. */
@@ -43,17 +34,22 @@ export async function startKnightsGame(
 }
 
 export function gameState(page: Page): Promise<GameState> {
-  return page.evaluate(() => structuredClone(window['__cp2p']!.session.getState()));
+  return page.evaluate(() => {
+    const hook = window['__cp2p'];
+    if (!hook) throw new Error('No dev hook');
+    return structuredClone(hook.session.getState());
+  });
 }
 
 /** What the human is asked for right now: the commands the engine allows it. */
 function allowedNow(page: Page): Promise<string[]> {
   return page.evaluate((seat) => {
-    const session = window['__cp2p']!.session;
+    const session = window['__cp2p']?.session;
+    if (!session) throw new Error('No dev hook');
     if (session.getState().result) return ['GAME_OVER'];
     const pending = session
       .getPending()
-      .find((item) => item.kind === 'player' && item.seat === seat);
+      .flatMap((item) => (item.kind === 'player' && item.seat === seat ? [item] : []))[0];
     return pending ? [...pending.allowed] : [];
   }, SEAT);
 }
@@ -62,10 +58,11 @@ function allowedNow(page: Page): Promise<string[]> {
 export function humanSubmit(page: Page, prefer: readonly string[]): Promise<string> {
   return page.evaluate(
     async ({ seat, order }) => {
-      const session = window['__cp2p']!.session;
+      const session = window['__cp2p']?.session;
+      if (!session) throw new Error('No dev hook');
       const pending = session
         .getPending()
-        .find((item) => item.kind === 'player' && item.seat === seat);
+        .flatMap((item) => (item.kind === 'player' && item.seat === seat ? [item] : []))[0];
       if (!pending) return 'wait';
       const legal = session.getLegalCommands(seat);
       const commands = legal.commands.filter((command) => pending.allowed.includes(command.type));
@@ -78,7 +75,7 @@ export function humanSubmit(page: Page, prefer: readonly string[]): Promise<stri
         const hand: Record<string, number> = { ...session.getPrivate(seat)?.hand };
         const cards: Record<string, number> = {};
         let left = template.count;
-        for (const [kind, count] of Object.entries(hand).sort((a, b) => b[1] - a[1])) {
+        for (const [kind, count] of Object.entries(hand).toSorted((a, b) => b[1] - a[1])) {
           const take = Math.min(count, left);
           if (take > 0) cards[kind] = take;
           left -= take;
@@ -136,8 +133,15 @@ export async function rollDice(
 ): Promise<void> {
   if (forced)
     await page.evaluate(({ dice, event }) => {
-      const result = window['__cp2p']!.session.forceDice(dice, event ? { event } : undefined);
-      if (!result.ok) throw new Error(result.error.message);
+      const session = window['__cp2p']?.session;
+      if (!session) throw new Error('No dev hook');
+      if (!('forceDice' in session) || typeof session.forceDice !== 'function')
+        throw new Error('This session cannot force dice');
+      const result: { ok: boolean } = Reflect.apply(session.forceDice, session, [
+        dice,
+        event ? { event } : undefined,
+      ]);
+      if (!result.ok) throw new Error('The dice could not be forced');
     }, forced);
   await page.locator('.desktop-turn-button:visible, .mobile-turn-button:visible').first().click();
 }
@@ -148,10 +152,20 @@ export async function endTurn(page: Page): Promise<void> {
 
 /** Every command type the human may play right now in its main turn. */
 export function legalTypes(page: Page): Promise<string[]> {
-  return page.evaluate(
-    (seat) => window['__cp2p']!.session.getLegalCommands(seat).commands.map((c) => c.type),
-    SEAT,
-  );
+  return page.evaluate((seat) => {
+    const session = window['__cp2p']?.session;
+    if (!session) throw new Error('No dev hook');
+    return session.getLegalCommands(seat).commands.map((command) => command.type);
+  }, SEAT);
+}
+
+/** True while the printed barbarian track is on screen. */
+export function trackInView(page: Page): Promise<boolean> {
+  return page.evaluate(() => {
+    const renderer = window['__cp2p']?.renderer;
+    if (!renderer) throw new Error('No renderer');
+    return renderer.isFixtureInView('barbarian-track');
+  });
 }
 
 /** Swap surplus cards for the kinds asked for through the bank, until `need` is in hand. */
@@ -162,13 +176,14 @@ export async function ensureCards(
   for (let guard = 0; guard < 40; guard++) {
     const done = await page.evaluate(
       async ({ seat, wanted }) => {
-        const session = window['__cp2p']!.session;
+        const session = window['__cp2p']?.session;
+        if (!session) throw new Error('No dev hook');
         const held: Record<string, number> = { ...session.getPrivate(seat)?.hand };
         const missing = Object.entries(wanted).find(([kind, count]) => (held[kind] ?? 0) < count);
         if (!missing) return 'done';
         const spare = Object.entries(held)
           .filter(([kind, count]) => count - (wanted[kind] ?? 0) >= 2)
-          .sort((a, b) => b[1] - (wanted[b[0]] ?? 0) - (a[1] - (wanted[a[0]] ?? 0)));
+          .toSorted((a, b) => b[1] - (wanted[b[0]] ?? 0) - (a[1] - (wanted[a[0]] ?? 0)));
         for (const [kind] of spare)
           for (const rate of [2, 3, 4]) {
             if ((held[kind] ?? 0) - (wanted[kind] ?? 0) < rate) continue;

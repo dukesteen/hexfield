@@ -483,3 +483,12 @@ Only the choices the module made beyond the rules above:
 - A `progress` frame asks all draws first, then the victory checks, then the off-turn discards, in parallel within each step and always before production. Checking after all draws instead of after each is not observable.
 - A seat's progress card count is public (the size of a physical hand), which the Spy's legality uses.
 - A draw from a deck with no card left is dropped; a deck whose hidden positions are used up deals its returned cards in the order they came back.
+
+## As implemented in K6 (UI)
+
+- The barbarian track is a two-hex board fixture the engine declares (`boardFixtures`, id `barbarian-track`, slot `north` on the base board and `north-west` on the five-six board), so the renderer places it and the default fit includes it. The ship piece sits on the current step and sails when a ship face is rolled. The renderer keeps knights, walls, metropolises, the merchant and sideways cities in a `knights` slice of the render model, filled by `toRenderModel` from `ext.knights`.
+- An attack emits no event, so the UI derives it from the state delta (`lastAttack` changes) for the effect and for its log lines. The attack effect is skippable and never plays with reduced motion.
+- The board taps of every knights command come from the legal command list (`knightsPlacements`), the same way the base kinds do. Two-pick commands (move, displace, Inventor, Smith, Diplomat) pick a first thing and then a target.
+- A local human who plays Master Merchant or the Spy sees the target's hand before the play commits (`session.peekHand`) and states the card taken (`preferTake`), because the take resolves in the same step as the play. Online sealed flows are out of scope and online knights stays gated in the lobby.
+- The Deserter's replacement knight is taken from the highest level the seat has in supply.
+- The final score breakdown adds a "Metropolises and defenders" row when it scored.

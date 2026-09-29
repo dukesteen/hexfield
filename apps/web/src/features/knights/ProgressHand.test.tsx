@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeAll, expect, test, vi } from 'vitest';
+import type { Mock } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { createInstance } from 'i18next';
 import { I18nextProvider } from 'react-i18next';
@@ -47,17 +48,17 @@ function holding(cards: readonly string[]): { state: GameState; priv: PrivateSta
 }
 
 function controller(playable: readonly string[]): KnightsController & {
-  playCard: ReturnType<typeof vi.fn>;
-  openDiscard: ReturnType<typeof vi.fn>;
+  playCard: Mock<(slotId: string, card: string) => void>;
+  openDiscard: Mock<() => void>;
 } {
   return {
     improvable: [],
-    improve: vi.fn(),
-    playCard: vi.fn(),
+    improve: vi.fn<() => void>(),
+    playCard: vi.fn<(slotId: string, card: string) => void>(),
     playable: (slotId) => playable.includes(slotId),
-    openDiscard: vi.fn(),
-    openImprovements: vi.fn(),
-    openHarbor: vi.fn(),
+    openDiscard: vi.fn<() => void>(),
+    openImprovements: vi.fn<() => void>(),
+    openHarbor: vi.fn<() => void>(),
     disabled: false,
     harborOpen: false,
   };
