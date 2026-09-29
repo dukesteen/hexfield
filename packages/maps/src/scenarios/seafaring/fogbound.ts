@@ -54,3 +54,69 @@ export const FOGBOUND = defineFixedSeafaring(
     fog: FOGBOUND_FOG,
   }),
 );
+
+/**
+ * The 5-6 player fog stack: 19 tiles, 15 of them land (two gold) and four open sea. The token
+ * counts cover the 15 land tiles.
+ */
+export const FOGBOUND_56_FOG = Object.freeze({
+  terrains: Object.freeze({
+    forest: 3,
+    hills: 3,
+    pasture: 2,
+    fields: 3,
+    mountains: 2,
+    gold: 2,
+    sea: 4,
+  }),
+  tokens: Object.freeze({
+    '2': 1,
+    '3': 1,
+    '4': 2,
+    '5': 2,
+    '6': 2,
+    '8': 2,
+    '9': 2,
+    '10': 2,
+    '11': 1,
+  }),
+});
+
+/**
+ * Fogbound, 5-6 players: two 17-hex islands, each with a desert at its heart, in an 11x9 frame
+ * with a band of 19 fog hexes between them, one sea hex from either coast. No island bonus.
+ */
+export const FOGBOUND_56 = defineFixedSeafaring(
+  'fogbound-56',
+  {
+    rows: [
+      '~. ~. ~. ~. ~. ?. ~. ~. ~. ~. ~.',
+      '  ~. F9 P3 ~. ?. ?. ~. ~. Ac H4 ~.',
+      '~. Ha A8 ~. ?. ?. ?. ~. P5 M6 ~.',
+      '  M6 Fb P4 ~. ?. ?. ~. ~. F4 A9 P6',
+      'Ab D. H9 ~. ?. ?. ?. ~. H5 D. Mb',
+      '  F8 M3 A8 ~. ?. ?. ~. ~. P8 Fa A5',
+      '~. P2 F5 ~. ?. ?. ?. ~. M4 P9 ~.',
+      '  ~. H6 Ma ~. ?. ?. ~. ~. Fa H3 ~.',
+      '~. ~. ~. ~. ~. ?. ~. ~. ~. ~. ~.',
+    ],
+    harbors: [
+      ['e:1,1,NW', 'generic'],
+      ['e:2,2,W', 'grain'],
+      ['e:-3,6,NE', 'ore'],
+      ['e:1,5,W', 'generic'],
+      ['e:-2,8,NW', 'lumber'],
+      ['e:9,1,NE', 'generic'],
+      ['e:7,2,W', 'wool'],
+      ['e:9,3,NW', 'generic'],
+      ['e:6,5,W', 'brick'],
+      ['e:6,8,NW', 'generic'],
+    ],
+    robberHex: cellId(1, 4),
+  },
+  (board) => ({
+    pirateHex: cellId(6, 8),
+    setupAreas: board.hexes.filter((hex) => isLandTerrain(hex.terrain)).map((hex) => hex.id),
+    fog: FOGBOUND_56_FOG,
+  }),
+);
