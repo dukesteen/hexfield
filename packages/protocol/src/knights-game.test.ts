@@ -325,7 +325,8 @@ describe('knights over the verified P2P protocol', () => {
     // of the same kind between two seats is a hidden steal; the thief's hand reveals its kind.
     let previous = new Map<Seat, Readonly<Record<string, number>>>();
     const stolen: string[] = [];
-    const { fixture } = await play(config, 65, {
+    // Seed 68: a game in which a commodity is among the stolen cards (seeds 65 to 67 steal none).
+    const { fixture } = await play(config, 68, {
       wrapEngine: withFreeRobber,
       onStep(sessions) {
         const hands = new Map<Seat, Readonly<Record<string, number>>>();
