@@ -1,62 +1,18 @@
 name: CI
 
+# Fast, deterministic checks only. Tests, simulations, browser suites and network acceptance run
+# locally (`pnpm check:full`, `pnpm test:e2e`, `pnpm sim …`); see "Verify locally" in the README.
+
 on:
   push:
   pull_request:
   workflow_dispatch:
-    inputs:
-      skip_e2e:
-        description: Skip browser tests after they pass locally on the same commit
-        type: boolean
-        required: false
-        default: false
-      verified_network:
-        description: Run bounded real-crypto fault acceptance
-        type: boolean
-        required: false
-        default: false
-      verified_scenario:
-        description: Real-crypto scenario to check
-        type: choice
-        required: false
-        default: all
-        options: [all, '1', '2', '3', '4', '5', '6', '7', '8', '9', '2,5,6']
-      persistence_lifecycle:
-        description: Run one four-human restart and private-state acceptance game
-        type: boolean
-        required: false
-        default: false
-      network_seeds:
-        description: Full-game seeds per scenario (1–1000; default 20)
-        type: number
-        required: true
-        default: 20
-      network_start_index:
-        description: First deterministic game index for a manual run
-        type: number
-        required: true
-        default: 0
-  schedule:
-    - cron: '17 2 * * *'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  verified-network:
-    if: github.event_name == 'workflow_dispatch' && inputs.verified_network
-    uses: ./.github/workflows/verified-network.yml
-    with:
-      scenario: ${{ inputs.verified_scenario }}
-
-  persistence-lifecycle:
-    if: github.event_name == 'workflow_dispatch' && inputs.persistence_lifecycle
-    uses: ./.github/workflows/verified-network.yml
-    with:
-      scenario: '1'
-      lifecycle: true
-
   check:
     runs-on: ubuntu-latest
     steps:
@@ -76,13 +32,6 @@ jobs:
       - run: pnpm purity:check
       - run: pnpm i18n:check
       - run: pnpm build
-      - run: pnpm test:coverage:engine
-      - run: pnpm exec playwright install --with-deps ${{ github.event_name == 'pull_request' && 'chromium' || 'chromium firefox webkit' }}
-        if: github.event_name != 'workflow_dispatch' || !inputs.skip_e2e
-      - run: pnpm test:e2e
-        if: github.event_name != 'workflow_dispatch' || !inputs.skip_e2e
-        env:
-          CI_BROWSER_SET: ${{ github.event_name == 'pull_request' && 'chromium' || 'all' }}
       - name: Build GitHub Pages site
         if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
         run: pnpm --filter @cp2p/web build
@@ -93,131 +42,10 @@ jobs:
         uses: actions/upload-pages-artifact@v4
         with:
           path: apps/web/dist
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: coverage
-          path: coverage/
-          if-no-files-found: ignore
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: playwright-report
-          path: apps/web/playwright-report/
-          if-no-files-found: ignore
-
-  unit-tests:
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
-    strategy:
-      fail-fast: false
-      matrix:
-        shard: [1, 2, 3, 4]
-    steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10.7.1
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      # Each runner keeps one test worker so expensive curve proofs do not
-      # compete for CPU and miss their existing wall-clock deadlines.
-      - run: pnpm build
-      - run: pnpm exec vitest run --shard=${{ matrix.shard }}/4
-
-  simulation:
-    runs-on: ubuntu-latest
-    timeout-minutes: 90
-    steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10.7.1
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm exec tsc -b tools/sim
-      - name: Verified games
-        run: |
-          if [ "${{ github.event_name }}" = "schedule" ]; then
-            node tools/sim/dist/index.js run --games 100000 --players 4 --seed 42 --parallel 4 > simulation-games.json
-          else
-            node tools/sim/dist/index.js run --games 2000 --players 4 --seed 42 --parallel 4 > simulation-games.json
-          fi
-      - name: Fuzz inputs
-        if: github.event_name != 'schedule'
-        run: node tools/sim/dist/index.js fuzz --iterations 50000 --seed 42 > simulation-fuzz.json
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: simulation
-          path: |
-            simulation-games.json
-            simulation-fuzz.json
-            failures/
-          if-no-files-found: ignore
-
-  network-plan:
-    runs-on: ubuntu-latest
-    outputs:
-      matrix: ${{ steps.plan.outputs.matrix }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-      - name: Validate network matrix planner
-        run: node --test .github/scripts/network-matrix.test.mjs
-      - name: Plan deterministic scenario shards
-        id: plan
-        run: node .github/scripts/network-matrix.mjs
-        env:
-          GITHUB_EVENT_NAME: ${{ github.event_name }}
-          NETWORK_SEEDS: ${{ inputs.network_seeds }}
-          NETWORK_START_INDEX: ${{ inputs.network_start_index }}
-
-  network-simulation:
-    needs: [network-plan]
-    runs-on: ubuntu-latest
-    timeout-minutes: 90
-    strategy:
-      fail-fast: false
-      matrix: ${{ fromJSON(needs.network-plan.outputs.matrix) }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10.7.1
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm exec tsc -b tools/sim
-      - name: Full P2P game simulation
-        run: >-
-          node tools/sim/dist/index.js net
-          --scenario ${{ matrix.scenario }}
-          --seeds ${{ matrix.seeds }}
-          --seed 42
-          --parallel 1
-          --start-index ${{ matrix.startIndex }}
-          > network-scenario-${{ matrix.scenario }}-start-${{ matrix.startIndex }}.json
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: network-scenario-${{ matrix.scenario }}-start-${{ matrix.startIndex }}
-          path: network-scenario-${{ matrix.scenario }}-start-${{ matrix.startIndex }}.json
-          if-no-files-found: ignore
 
   deploy:
     if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
-    needs: [check, unit-tests, simulation, network-simulation]
+    needs: [check]
     runs-on: ubuntu-latest
     permissions:
       contents: read
