@@ -1,5 +1,6 @@
 import { engineForConfig } from '@cp2p/engine';
 import type { CommandShape, Engine, Pending, Seat } from '@cp2p/engine';
+import type { HandContext } from '../eval/index.js';
 import { RandomBot } from '../random-bot.js';
 import type { Bot, BotRng, BotView, DecideContext } from '../types.js';
 import type { LevelConfig } from './config.js';
@@ -17,6 +18,8 @@ export interface BotPlugin {
   decide?(context: TurnContext): CommandShape | null;
   /** A module action worth taking in the main phase after the base builds, or null. */
   mainAction?(context: TurnContext): CommandShape | null;
+  /** Module adjustments to how the seat values a hand (commodity values, the discard limit). */
+  handContext?(context: TurnContext, base: HandContext): HandContext;
 }
 
 type PlayerPending = Extract<Pending, { kind: 'player' }>;
@@ -45,7 +48,22 @@ export class HeuristicBot implements Bot {
   }
 
   protected contextFor(view: BotView, pending: PlayerPending, rng: BotRng): TurnContext {
-    return createTurnContext(view, this.engineFor(view), pending, this.config, rng);
+    const context = createTurnContext(view, this.engineFor(view), pending, this.config, rng);
+    const active = new Set(view.state.config.modules.map((module) => module.id));
+    const adjusters = this.plugins.filter(
+      (plugin) => plugin.handContext !== undefined && active.has(plugin.module),
+    );
+    if (!adjusters.length) return context;
+    const base = context.handContext.bind(context);
+    let adjusted: HandContext | null = null;
+    context.handContext = () => {
+      adjusted ??= adjusters.reduce(
+        (current, plugin) => plugin.handContext?.(context, current) ?? current,
+        base(),
+      );
+      return adjusted;
+    };
+    return context;
   }
 
   wantsTrade(

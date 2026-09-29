@@ -18,14 +18,14 @@ function levelOn(levels: object | undefined, track: string): number {
   return typeof level === 'number' ? level : 0;
 }
 
-function cities(state: GameState, seat?: Seat): number {
+export function cities(state: GameState, seat?: Seat): number {
   return state.board.buildings.filter(
     (piece) => piece.kind === 'city' && (seat === undefined || piece.seat === seat),
   ).length;
 }
 
 /** Active knight strength per seat, and the total. */
-function defense(state: GameState): { total: number; bySeat: Map<Seat, number> } {
+export function defense(state: GameState): { total: number; bySeat: Map<Seat, number> } {
   const bySeat = new Map<Seat, number>();
   let total = 0;
   for (const knight of knightsExt(state).knights) {
@@ -41,7 +41,7 @@ function defense(state: GameState): { total: number; bySeat: Map<Seat, number> }
  * faces (about a dozen rolls), the island's defense is below their strength, or the bot's own
  * knights are the weakest while it has a city to lose.
  */
-function underThreat(context: TurnContext): boolean {
+export function underThreat(context: TurnContext): boolean {
   const { state, seat } = context.view;
   const ext = knightsExt(state);
   const stepsLeft = BARBARIAN_STEPS - ext.barbarians.step;
@@ -53,7 +53,7 @@ function underThreat(context: TurnContext): boolean {
   return stepsLeft <= 3 && (total < cities(state) || mine <= weakest || mine < own);
 }
 
-function improvement(context: TurnContext): CommandShape | null {
+export function improvement(context: TurnContext): CommandShape | null {
   const { state, seat } = context.view;
   const levels = knightsExt(state).improvements[seat];
   return best(
@@ -70,7 +70,7 @@ function improvement(context: TurnContext): CommandShape | null {
   );
 }
 
-function knightMove(context: TurnContext): CommandShape | null {
+export function knightMove(context: TurnContext): CommandShape | null {
   const threat = underThreat(context);
   const activate = context.ofType('ACTIVATE_KNIGHT')[0];
   if (activate && threat) return activate;
@@ -87,13 +87,13 @@ function knightMove(context: TurnContext): CommandShape | null {
   return null;
 }
 
-function wall(context: TurnContext): CommandShape | null {
+export function wall(context: TurnContext): CommandShape | null {
   const cards = Object.values(context.view.priv.hand).reduce((sum, count) => sum + count, 0);
   return cards >= 7 ? (context.ofType('BUILD_CITY_WALL')[0] ?? null) : null;
 }
 
 /** Progress cards: play a fully specified one now and then (a seat may hold only four). */
-function progressCard(context: TurnContext): CommandShape | null {
+export function progressCard(context: TurnContext): CommandShape | null {
   const plays = context.ofType('PLAY_PROGRESS_CARD');
   if (!plays.length) return null;
   const held =
@@ -105,7 +105,7 @@ function progressCard(context: TurnContext): CommandShape | null {
 }
 
 /** The deck of the bot's strongest track: its draws there are likeliest to be good. */
-function progressDeck(context: TurnContext): CommandShape | null {
+export function progressDeck(context: TurnContext): CommandShape | null {
   const { state, seat } = context.view;
   const levels = knightsExt(state).improvements[seat];
   return best(
@@ -118,7 +118,7 @@ function progressDeck(context: TurnContext): CommandShape | null {
   );
 }
 
-function aqueduct(context: TurnContext): CommandShape | null {
+export function aqueduct(context: TurnContext): CommandShape | null {
   const hand = context.view.priv.hand;
   const handContext = context.handContext();
   return best(
@@ -132,7 +132,7 @@ function aqueduct(context: TurnContext): CommandShape | null {
 }
 
 /** Metropolis on the richest city; a pillaged city is the poorest one. */
-function byCityValue(context: TurnContext, type: string, sign: 1 | -1): CommandShape | null {
+export function byCityValue(context: TurnContext, type: string, sign: 1 | -1): CommandShape | null {
   return best(
     context.ofType(type),
     (command) => sign * rawPips(context.view.state, String(command.vertex), context.info),
@@ -141,7 +141,7 @@ function byCityValue(context: TurnContext, type: string, sign: 1 | -1): CommandS
 }
 
 /** The Deserter: give up the weakest knight; place a gained knight as strong and rich as allowed. */
-function deserter(context: TurnContext): CommandShape | null {
+export function deserter(context: TurnContext): CommandShape | null {
   const { state } = context.view;
   const levelAt = (vertex: unknown): number =>
     knightsExt(state).knights.find((knight) => knight.vertex === vertex)?.level ?? 0;
@@ -159,7 +159,7 @@ function deserter(context: TurnContext): CommandShape | null {
 }
 
 /** A displaced knight moves to the richest free spot it may take. */
-function relocate(context: TurnContext): CommandShape | null {
+export function relocate(context: TurnContext): CommandShape | null {
   return best(
     context.ofType('RELOCATE_KNIGHT'),
     (command) => rawPips(context.view.state, String(command.to), context.info),

@@ -3,7 +3,7 @@ import { RandomBot } from './random-bot.js';
 import { EASY, NORMAL } from './policy/config.js';
 import { HeuristicBot } from './policy/heuristic-bot.js';
 import type { BotPlugin } from './policy/heuristic-bot.js';
-import { knightsPlugin } from './plugins/knights.js';
+import { knightsPlugin } from './plugins/knights/index.js';
 import { knightsPluginV1 } from './plugins/knights-v1.js';
 import { seafaringPlugin } from './plugins/seafaring.js';
 import { HardBot } from './search/hard-bot.js';
