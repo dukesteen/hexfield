@@ -1,0 +1,10536 @@
+{
+  "format": "cp2p-replay",
+  "version": 1,
+  "engineVersion": "0.1.0",
+  "config": {
+    "modules": [
+      {
+        "id": "base",
+        "version": "1.0.0"
+      },
+      {
+        "id": "five-six",
+        "version": "1.0.0"
+      },
+      {
+        "id": "knights",
+        "version": "1.0.0"
+      }
+    ],
+    "options": {
+      "base": {
+        "diceMode": "random",
+        "discardLimit": 7,
+        "friendlyRobber": false,
+        "hideBankCounts": false,
+        "mapLayout": "balanced-random",
+        "playerTrades": true,
+        "strictBalance": false,
+        "turnTimer": null,
+        "vpTarget": 13
+      },
+      "five-six": {
+        "specialBuildPhase": true
+      },
+      "knights": {}
+    },
+    "seats": [
+      0,
+      1,
+      2,
+      3,
+      4
+    ]
+  },
+  "genesisSeed": "XEBpaIjxEzAKr3chONP9_9CJB_w73_IeNfIgi40agAw",
+  "inputs": [
+    {
+      "kind": "system",
+      "seat": 4,
+      "type": "START_SEAT"
+    },
+    {
+      "command": {
+        "type": "PLACE_SETTLEMENT",
+        "vertex": "v:0,-1,S"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "edge": "e:-1,0,NE",
+        "type": "PLACE_ROAD"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "PLACE_SETTLEMENT",
+        "vertex": "v:2,-1,S"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "edge": "e:2,0,W",
+        "type": "PLACE_ROAD"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "PLACE_SETTLEMENT",
+        "vertex": "v:2,-1,N"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "edge": "e:2,-1,NE",
+        "type": "PLACE_ROAD"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "PLACE_SETTLEMENT",
+        "vertex": "v:-2,1,N"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "edge": "e:-1,0,W",
+        "type": "PLACE_ROAD"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "PLACE_SETTLEMENT",
+        "vertex": "v:1,-1,S"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "edge": "e:0,0,NE",
+        "type": "PLACE_ROAD"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "PLACE_SETTLEMENT",
+        "vertex": "v:1,2,N"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "edge": "e:1,2,NW",
+        "type": "PLACE_ROAD"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "PLACE_SETTLEMENT",
+        "vertex": "v:2,1,N"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "edge": "e:2,1,NE",
+        "type": "PLACE_ROAD"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "PLACE_SETTLEMENT",
+        "vertex": "v:1,-2,S"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "edge": "e:1,-1,W",
+        "type": "PLACE_ROAD"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "PLACE_SETTLEMENT",
+        "vertex": "v:2,-3,S"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "edge": "e:1,-2,NE",
+        "type": "PLACE_ROAD"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "PLACE_SETTLEMENT",
+        "vertex": "v:0,-2,S"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "edge": "e:-1,-1,NE",
+        "type": "PLACE_ROAD"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "dice": [
+        6,
+        6
+      ],
+      "extra": {
+        "event": "ship"
+      },
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "BUILD_KNIGHT",
+        "vertex": "v:-1,-1,S"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "BUILD_KNIGHT",
+        "vertex": "v:1,1,S"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "dice": [
+        1,
+        4
+      ],
+      "extra": {
+        "event": "politics"
+      },
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "type": "BUILD_KNIGHT",
+        "vertex": "v:1,-2,N"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "track": "science",
+        "type": "BUILD_IMPROVEMENT"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "track": "science",
+        "type": "BUILD_IMPROVEMENT"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "dice": [
+        2,
+        3
+      ],
+      "extra": {
+        "event": "politics"
+      },
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "edge": "e:3,-1,NW",
+        "type": "BUILD_ROAD"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "track": "politics",
+        "type": "BUILD_IMPROVEMENT"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "ACTIVATE_KNIGHT",
+        "vertex": "v:1,-2,N"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "BUILD_KNIGHT",
+        "vertex": "v:1,1,N"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "dice": [
+        5,
+        6
+      ],
+      "extra": {
+        "event": "ship"
+      },
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "dice": [
+        1,
+        2
+      ],
+      "extra": {
+        "event": "ship"
+      },
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "type": "BUILD_KNIGHT",
+        "vertex": "v:0,0,N"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "track": "politics",
+        "type": "BUILD_IMPROVEMENT"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "dice": [
+        1,
+        6
+      ],
+      "extra": {
+        "event": "politics"
+      },
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "card": "spy",
+      "deck": "progress-politics",
+      "kind": "system",
+      "seat": 2,
+      "slotId": "progress:0",
+      "type": "CARD_DEALT"
+    },
+    {
+      "card": "diplomat",
+      "deck": "progress-politics",
+      "kind": "system",
+      "seat": 3,
+      "slotId": "progress:1",
+      "type": "CARD_DEALT"
+    },
+    {
+      "card": "none",
+      "kind": "system",
+      "seat": 2,
+      "slotId": "progress:0",
+      "type": "REVEAL_PROGRESS"
+    },
+    {
+      "card": "none",
+      "kind": "system",
+      "seat": 3,
+      "slotId": "progress:1",
+      "type": "REVEAL_PROGRESS"
+    },
+    {
+      "command": {
+        "cards": {
+          "brick": 0,
+          "cloth": 0,
+          "coin": 0,
+          "grain": 2,
+          "lumber": 2,
+          "ore": 0,
+          "paper": 1,
+          "wool": 0
+        },
+        "type": "DISCARD"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "dice": [
+        5,
+        2
+      ],
+      "extra": {
+        "event": "politics"
+      },
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "dice": [
+        6,
+        2
+      ],
+      "extra": {
+        "event": "trade"
+      },
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "give": {
+          "lumber": 1
+        },
+        "type": "OFFER_TRADE",
+        "want": {
+          "brick": 1
+        }
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "dice": [
+        4,
+        6
+      ],
+      "extra": {
+        "event": "science"
+      },
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "track": "trade",
+        "type": "BUILD_IMPROVEMENT"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "track": "trade",
+        "type": "BUILD_IMPROVEMENT"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "dice": [
+        2,
+        2
+      ],
+      "extra": {
+        "event": "science"
+      },
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "card": "roadBuilding",
+      "deck": "progress-science",
+      "kind": "system",
+      "seat": 4,
+      "slotId": "progress:2",
+      "type": "CARD_DEALT"
+    },
+    {
+      "card": "smith",
+      "deck": "progress-science",
+      "kind": "system",
+      "seat": 1,
+      "slotId": "progress:3",
+      "type": "CARD_DEALT"
+    },
+    {
+      "card": "none",
+      "kind": "system",
+      "seat": 4,
+      "slotId": "progress:2",
+      "type": "REVEAL_PROGRESS"
+    },
+    {
+      "card": "none",
+      "kind": "system",
+      "seat": 1,
+      "slotId": "progress:3",
+      "type": "REVEAL_PROGRESS"
+    },
+    {
+      "command": {
+        "card": "diplomat",
+        "params": {
+          "build": null,
+          "edge": "e:2,1,NE"
+        },
+        "slotId": "progress:1",
+        "type": "PLAY_PROGRESS_CARD"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "BUILD_CITY_WALL",
+        "vertex": "v:1,2,N"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "ACTIVATE_KNIGHT",
+        "vertex": "v:-1,-1,S"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "track": "science",
+        "type": "BUILD_IMPROVEMENT"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "dice": [
+        5,
+        6
+      ],
+      "extra": {
+        "event": "science"
+      },
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "card": "roadBuilding",
+        "slotId": "progress:2",
+        "type": "PLAY_PROGRESS_CARD"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "edge": "e:-1,-1,NW",
+        "type": "PLACE_FREE_ROAD"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "SKIP"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "dice": [
+        1,
+        6
+      ],
+      "extra": {
+        "event": "science"
+      },
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "card": "irrigation",
+      "deck": "progress-science",
+      "kind": "system",
+      "seat": 1,
+      "slotId": "progress:4",
+      "type": "CARD_DEALT"
+    },
+    {
+      "card": "engineer",
+      "deck": "progress-science",
+      "kind": "system",
+      "seat": 2,
+      "slotId": "progress:5",
+      "type": "CARD_DEALT"
+    },
+    {
+      "card": "mining",
+      "deck": "progress-science",
+      "kind": "system",
+      "seat": 4,
+      "slotId": "progress:6",
+      "type": "CARD_DEALT"
+    },
+    {
+      "card": "none",
+      "kind": "system",
+      "seat": 1,
+      "slotId": "progress:4",
+      "type": "REVEAL_PROGRESS"
+    },
+    {
+      "card": "none",
+      "kind": "system",
+      "seat": 2,
+      "slotId": "progress:5",
+      "type": "REVEAL_PROGRESS"
+    },
+    {
+      "card": "none",
+      "kind": "system",
+      "seat": 4,
+      "slotId": "progress:6",
+      "type": "REVEAL_PROGRESS"
+    },
+    {
+      "command": {
+        "cards": {
+          "brick": 0,
+          "cloth": 0,
+          "coin": 0,
+          "grain": 2,
+          "lumber": 2,
+          "ore": 0,
+          "paper": 0,
+          "wool": 0
+        },
+        "type": "DISCARD"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "dice": [
+        3,
+        2
+      ],
+      "extra": {
+        "event": "politics"
+      },
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "card": "irrigation",
+        "slotId": "progress:4",
+        "type": "PLAY_PROGRESS_CARD"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "track": "science",
+        "type": "BUILD_IMPROVEMENT"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "give": {
+          "lumber": 2
+        },
+        "type": "OFFER_TRADE",
+        "want": {
+          "brick": 1
+        }
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "accept": false,
+        "offerId": 1,
+        "type": "RESPOND_TRADE"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "accept": false,
+        "offerId": 1,
+        "type": "RESPOND_TRADE"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "accept": true,
+        "offerId": 1,
+        "type": "RESPOND_TRADE"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "get": {
+          "brick": 1
+        },
+        "give": {
+          "wool": 4
+        },
+        "type": "MARITIME_TRADE"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "BUILD_SETTLEMENT",
+        "vertex": "v:3,-1,N"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "offerId": 1,
+        "type": "CONFIRM_TRADE",
+        "withSeat": 3
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "track": "politics",
+        "type": "BUILD_IMPROVEMENT"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "dice": [
+        1,
+        3
+      ],
+      "extra": {
+        "event": "ship"
+      },
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "give": {
+          "lumber": 1
+        },
+        "type": "OFFER_TRADE",
+        "want": {
+          "grain": 1
+        }
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "offerId": 2,
+        "type": "CANCEL_TRADE"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "dice": [
+        6,
+        2
+      ],
+      "extra": {
+        "event": "trade"
+      },
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "BUILD_CITY",
+        "vertex": "v:-2,1,N"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "dice": [
+        6,
+        1
+      ],
+      "extra": {
+        "event": "trade"
+      },
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "cards": {
+          "brick": 0,
+          "cloth": 0,
+          "coin": 0,
+          "grain": 1,
+          "lumber": 3,
+          "ore": 0,
+          "paper": 1,
+          "wool": 0
+        },
+        "type": "DISCARD"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "card": "mining",
+        "slotId": "progress:6",
+        "type": "PLAY_PROGRESS_CARD"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "BUILD_CITY",
+        "vertex": "v:0,-1,S"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "give": {
+          "ore": 1
+        },
+        "type": "OFFER_TRADE",
+        "want": {
+          "brick": 1
+        }
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "PROMOTE_KNIGHT",
+        "vertex": "v:1,-2,N"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "dice": [
+        5,
+        5
+      ],
+      "extra": {
+        "event": "trade"
+      },
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "give": {
+          "lumber": 1
+        },
+        "type": "OFFER_TRADE",
+        "want": {
+          "ore": 1
+        }
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "edge": "e:0,2,NE",
+        "type": "BUILD_ROAD"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "dice": [
+        1,
+        3
+      ],
+      "extra": {
+        "event": "ship"
+      },
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "dice": [
+        3,
+        3
+      ],
+      "extra": {
+        "event": "trade"
+      },
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "dice": [
+        4,
+        4
+      ],
+      "extra": {
+        "event": "trade"
+      },
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "type": "PROMOTE_KNIGHT",
+        "vertex": "v:0,0,N"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "track": "trade",
+        "type": "BUILD_IMPROVEMENT"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "track": "politics",
+        "type": "BUILD_IMPROVEMENT"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "track": "trade",
+        "type": "BUILD_IMPROVEMENT"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "track": "science",
+        "type": "BUILD_IMPROVEMENT"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "dice": [
+        6,
+        3
+      ],
+      "extra": {
+        "event": "ship"
+      },
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "track": "science",
+        "type": "BUILD_IMPROVEMENT"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "dice": [
+        4,
+        5
+      ],
+      "extra": {
+        "event": "ship"
+      },
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "type": "CHOOSE_PILLAGE",
+        "vertex": "v:0,-1,S"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "edge": "e:2,-3,W",
+        "type": "BUILD_ROAD"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "PROMOTE_KNIGHT",
+        "vertex": "v:-1,-1,S"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "ACTIVATE_KNIGHT",
+        "vertex": "v:-1,-1,S"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "BUILD_CITY",
+        "vertex": "v:0,-1,S"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "dice": [
+        4,
+        3
+      ],
+      "extra": {
+        "event": "trade"
+      },
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "cards": {
+          "brick": 3,
+          "cloth": 0,
+          "coin": 0,
+          "grain": 0,
+          "lumber": 0,
+          "ore": 0,
+          "paper": 0,
+          "wool": 1
+        },
+        "type": "DISCARD"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "cards": {
+          "brick": 0,
+          "cloth": 0,
+          "coin": 2,
+          "grain": 0,
+          "lumber": 2,
+          "ore": 1,
+          "paper": 0,
+          "wool": 0
+        },
+        "type": "DISCARD"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "hex": "h:-2,3",
+        "type": "MOVE_ROBBER"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "dice": [
+        2,
+        4
+      ],
+      "extra": {
+        "event": "ship"
+      },
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "BUILD_KNIGHT",
+        "vertex": "v:0,2,N"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "dice": [
+        4,
+        4
+      ],
+      "extra": {
+        "event": "ship"
+      },
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "track": "politics",
+        "type": "BUILD_IMPROVEMENT"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "dice": [
+        2,
+        5
+      ],
+      "extra": {
+        "event": "politics"
+      },
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "card": "bishop",
+      "deck": "progress-politics",
+      "kind": "system",
+      "seat": 4,
+      "slotId": "progress:7",
+      "type": "CARD_DEALT"
+    },
+    {
+      "card": "bishop",
+      "deck": "progress-politics",
+      "kind": "system",
+      "seat": 2,
+      "slotId": "progress:8",
+      "type": "CARD_DEALT"
+    },
+    {
+      "card": "deserter",
+      "deck": "progress-politics",
+      "kind": "system",
+      "seat": 3,
+      "slotId": "progress:9",
+      "type": "CARD_DEALT"
+    },
+    {
+      "card": "none",
+      "kind": "system",
+      "seat": 4,
+      "slotId": "progress:7",
+      "type": "REVEAL_PROGRESS"
+    },
+    {
+      "card": "none",
+      "kind": "system",
+      "seat": 2,
+      "slotId": "progress:8",
+      "type": "REVEAL_PROGRESS"
+    },
+    {
+      "card": "none",
+      "kind": "system",
+      "seat": 3,
+      "slotId": "progress:9",
+      "type": "REVEAL_PROGRESS"
+    },
+    {
+      "command": {
+        "cards": {
+          "brick": 0,
+          "cloth": 1,
+          "coin": 0,
+          "grain": 2,
+          "lumber": 1,
+          "ore": 0,
+          "paper": 0,
+          "wool": 0
+        },
+        "type": "DISCARD"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "hex": "h:3,0",
+        "type": "MOVE_ROBBER"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "STEAL",
+        "victim": 2
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "kind": "system",
+      "resource": "grain",
+      "thief": 4,
+      "type": "STEAL_RESULT",
+      "victim": 2
+    },
+    {
+      "command": {
+        "card": "bishop",
+        "params": {
+          "hex": "h:2,1"
+        },
+        "slotId": "progress:7",
+        "type": "PLAY_PROGRESS_CARD"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "kind": "system",
+      "resource": "wool",
+      "thief": 4,
+      "type": "STEAL_RESULT",
+      "victim": 2
+    },
+    {
+      "kind": "system",
+      "resource": "lumber",
+      "thief": 4,
+      "type": "STEAL_RESULT",
+      "victim": 3
+    },
+    {
+      "command": {
+        "type": "BUILD_KNIGHT",
+        "vertex": "v:-1,-2,S"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "dice": [
+        1,
+        3
+      ],
+      "extra": {
+        "event": "science"
+      },
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "card": "inventor",
+      "deck": "progress-science",
+      "kind": "system",
+      "seat": 0,
+      "slotId": "progress:10",
+      "type": "CARD_DEALT"
+    },
+    {
+      "card": "medicine",
+      "deck": "progress-science",
+      "kind": "system",
+      "seat": 1,
+      "slotId": "progress:11",
+      "type": "CARD_DEALT"
+    },
+    {
+      "card": "roadBuilding",
+      "deck": "progress-science",
+      "kind": "system",
+      "seat": 2,
+      "slotId": "progress:12",
+      "type": "CARD_DEALT"
+    },
+    {
+      "card": "alchemist",
+      "deck": "progress-science",
+      "kind": "system",
+      "seat": 4,
+      "slotId": "progress:13",
+      "type": "CARD_DEALT"
+    },
+    {
+      "card": "none",
+      "kind": "system",
+      "seat": 0,
+      "slotId": "progress:10",
+      "type": "REVEAL_PROGRESS"
+    },
+    {
+      "card": "none",
+      "kind": "system",
+      "seat": 1,
+      "slotId": "progress:11",
+      "type": "REVEAL_PROGRESS"
+    },
+    {
+      "card": "none",
+      "kind": "system",
+      "seat": 2,
+      "slotId": "progress:12",
+      "type": "REVEAL_PROGRESS"
+    },
+    {
+      "card": "none",
+      "kind": "system",
+      "seat": 4,
+      "slotId": "progress:13",
+      "type": "REVEAL_PROGRESS"
+    },
+    {
+      "command": {
+        "card": "inventor",
+        "params": {
+          "hexes": [
+            "h:-2,2",
+            "h:0,3"
+          ]
+        },
+        "slotId": "progress:10",
+        "type": "PLAY_PROGRESS_CARD"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "ACTIVATE_KNIGHT",
+        "vertex": "v:-1,-2,S"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "dice": [
+        1,
+        2
+      ],
+      "extra": {
+        "event": "ship"
+      },
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "dice": [
+        3,
+        2
+      ],
+      "extra": {
+        "event": "ship"
+      },
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "card": "bishop",
+        "params": {
+          "hex": "h:0,-2"
+        },
+        "slotId": "progress:8",
+        "type": "PLAY_PROGRESS_CARD"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "kind": "system",
+      "resource": "paper",
+      "thief": 2,
+      "type": "STEAL_RESULT",
+      "victim": 4
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "BUILD_KNIGHT",
+        "vertex": "v:2,-4,S"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "dice": [
+        2,
+        6
+      ],
+      "extra": {
+        "event": "ship"
+      },
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "card": "deserter",
+        "params": {
+          "target": 4
+        },
+        "slotId": "progress:9",
+        "type": "PLAY_PROGRESS_CARD"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "DESERTER_REMOVE",
+        "vertex": "v:-1,-2,S"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "card": "alchemist",
+        "params": {
+          "dice": [
+            5,
+            5
+          ]
+        },
+        "slotId": "progress:13",
+        "type": "PLAY_PROGRESS_CARD"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "dice": [
+        5,
+        5
+      ],
+      "extra": {
+        "event": "politics"
+      },
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "track": "trade",
+        "type": "BUILD_IMPROVEMENT"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "dice": [
+        2,
+        2
+      ],
+      "extra": {
+        "event": "politics"
+      },
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "card": "saboteur",
+      "deck": "progress-politics",
+      "kind": "system",
+      "seat": 2,
+      "slotId": "progress:14",
+      "type": "CARD_DEALT"
+    },
+    {
+      "card": "spy",
+      "deck": "progress-politics",
+      "kind": "system",
+      "seat": 3,
+      "slotId": "progress:15",
+      "type": "CARD_DEALT"
+    },
+    {
+      "card": "saboteur",
+      "deck": "progress-politics",
+      "kind": "system",
+      "seat": 4,
+      "slotId": "progress:16",
+      "type": "CARD_DEALT"
+    },
+    {
+      "card": "none",
+      "kind": "system",
+      "seat": 2,
+      "slotId": "progress:14",
+      "type": "REVEAL_PROGRESS"
+    },
+    {
+      "card": "none",
+      "kind": "system",
+      "seat": 3,
+      "slotId": "progress:15",
+      "type": "REVEAL_PROGRESS"
+    },
+    {
+      "card": "none",
+      "kind": "system",
+      "seat": 4,
+      "slotId": "progress:16",
+      "type": "REVEAL_PROGRESS"
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "edge": "e:1,-1,NW",
+        "type": "BUILD_ROAD"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "track": "science",
+        "type": "BUILD_IMPROVEMENT"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "dice": [
+        3,
+        6
+      ],
+      "extra": {
+        "event": "trade"
+      },
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "card": "resourceMonopoly",
+      "deck": "progress-trade",
+      "kind": "system",
+      "seat": 0,
+      "slotId": "progress:17",
+      "type": "CARD_DEALT"
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "dice": [
+        5,
+        6
+      ],
+      "extra": {
+        "event": "science"
+      },
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "resource": "lumber",
+        "type": "CHOOSE_AQUEDUCT"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "card": "saboteur",
+        "slotId": "progress:14",
+        "type": "PLAY_PROGRESS_CARD"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "cards": {
+          "brick": 0,
+          "cloth": 0,
+          "coin": 2,
+          "grain": 2,
+          "lumber": 2,
+          "ore": 1,
+          "paper": 1,
+          "wool": 0
+        },
+        "type": "SABOTEUR_DISCARD"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "give": {
+          "lumber": 2
+        },
+        "type": "OFFER_TRADE",
+        "want": {
+          "brick": 1
+        }
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "card": "spy",
+        "params": {
+          "target": 1
+        },
+        "slotId": "progress:0",
+        "type": "PLAY_PROGRESS_CARD"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "kind": "system",
+      "seat": 1,
+      "to": 2,
+      "type": "SHOW_HAND",
+      "what": "progress"
+    },
+    {
+      "card": "medicine",
+      "from": 1,
+      "kind": "system",
+      "seat": 2,
+      "slotId": "progress:11",
+      "type": "TAKE_PROGRESS"
+    },
+    {
+      "command": {
+        "accept": false,
+        "offerId": 5,
+        "type": "RESPOND_TRADE"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "get": {
+          "brick": 1
+        },
+        "give": {
+          "grain": 4
+        },
+        "type": "MARITIME_TRADE"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "accept": false,
+        "offerId": 5,
+        "type": "RESPOND_TRADE"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "card": "engineer",
+        "params": {
+          "vertex": "v:2,1,N"
+        },
+        "slotId": "progress:5",
+        "type": "PLAY_PROGRESS_CARD"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "edge": "e:-2,0,NE",
+        "type": "BUILD_ROAD"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "card": "roadBuilding",
+        "slotId": "progress:12",
+        "type": "PLAY_PROGRESS_CARD"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "SKIP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "dice": [
+        4,
+        3
+      ],
+      "extra": {
+        "event": "trade"
+      },
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "cards": {
+          "brick": 2,
+          "cloth": 0,
+          "coin": 0,
+          "grain": 0,
+          "lumber": 0,
+          "ore": 0,
+          "paper": 0,
+          "wool": 2
+        },
+        "type": "DISCARD"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "cards": {
+          "brick": 4,
+          "cloth": 0,
+          "coin": 0,
+          "grain": 0,
+          "lumber": 0,
+          "ore": 0,
+          "paper": 0,
+          "wool": 0
+        },
+        "type": "DISCARD"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "cards": {
+          "brick": 0,
+          "cloth": 0,
+          "coin": 0,
+          "grain": 0,
+          "lumber": 0,
+          "ore": 4,
+          "paper": 0,
+          "wool": 0
+        },
+        "type": "DISCARD"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "hex": "h:0,3",
+        "type": "MOVE_ROBBER"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "card": "spy",
+        "params": {
+          "target": 1
+        },
+        "slotId": "progress:15",
+        "type": "PLAY_PROGRESS_CARD"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "kind": "system",
+      "seat": 1,
+      "to": 3,
+      "type": "SHOW_HAND",
+      "what": "progress"
+    },
+    {
+      "card": "smith",
+      "from": 1,
+      "kind": "system",
+      "seat": 3,
+      "slotId": "progress:3",
+      "type": "TAKE_PROGRESS"
+    },
+    {
+      "command": {
+        "card": "smith",
+        "params": {
+          "vertices": [
+            "v:1,1,S"
+          ]
+        },
+        "slotId": "progress:3",
+        "type": "PLAY_PROGRESS_CARD"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "dice": [
+        5,
+        1
+      ],
+      "extra": {
+        "event": "science"
+      },
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "card": "saboteur",
+        "slotId": "progress:16",
+        "type": "PLAY_PROGRESS_CARD"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "cards": {
+          "brick": 0,
+          "cloth": 1,
+          "coin": 1,
+          "grain": 1,
+          "lumber": 0,
+          "ore": 2,
+          "paper": 0,
+          "wool": 0
+        },
+        "type": "SABOTEUR_DISCARD"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "dice": [
+        5,
+        3
+      ],
+      "extra": {
+        "event": "science"
+      },
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "edge": "e:2,-1,NW",
+        "type": "BUILD_ROAD"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "dice": [
+        3,
+        6
+      ],
+      "extra": {
+        "event": "ship"
+      },
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "BUILD_KNIGHT",
+        "vertex": "v:-2,0,N"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "dice": [
+        6,
+        1
+      ],
+      "extra": {
+        "event": "politics"
+      },
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "cards": {
+          "brick": 0,
+          "cloth": 0,
+          "coin": 0,
+          "grain": 0,
+          "lumber": 2,
+          "ore": 0,
+          "paper": 2,
+          "wool": 0
+        },
+        "type": "DISCARD"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "cards": {
+          "brick": 2,
+          "cloth": 0,
+          "coin": 0,
+          "grain": 0,
+          "lumber": 0,
+          "ore": 1,
+          "paper": 0,
+          "wool": 1
+        },
+        "type": "DISCARD"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "cards": {
+          "brick": 0,
+          "cloth": 0,
+          "coin": 2,
+          "grain": 0,
+          "lumber": 0,
+          "ore": 2,
+          "paper": 0,
+          "wool": 0
+        },
+        "type": "DISCARD"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "hex": "h:3,0",
+        "type": "MOVE_ROBBER"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "ACTIVATE_KNIGHT",
+        "vertex": "v:-2,0,N"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "dice": [
+        4,
+        6
+      ],
+      "extra": {
+        "event": "ship"
+      },
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "type": "CHOOSE_PILLAGE",
+        "vertex": "v:0,-2,S"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "ACTIVATE_KNIGHT",
+        "vertex": "v:-1,-1,S"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "ACTIVATE_KNIGHT",
+        "vertex": "v:-2,0,N"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "dice": [
+        3,
+        6
+      ],
+      "extra": {
+        "event": "trade"
+      },
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "card": "merchantFleet",
+      "deck": "progress-trade",
+      "kind": "system",
+      "seat": 0,
+      "slotId": "progress:18",
+      "type": "CARD_DEALT"
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "track": "politics",
+        "type": "BUILD_IMPROVEMENT"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "dice": [
+        4,
+        1
+      ],
+      "extra": {
+        "event": "ship"
+      },
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "type": "PROMOTE_KNIGHT",
+        "vertex": "v:2,-4,S"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "card": "resourceMonopoly",
+        "params": {
+          "kind": "grain"
+        },
+        "slotId": "progress:17",
+        "type": "PLAY_PROGRESS_CARD"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "count": 1,
+      "kind": "system",
+      "resource": "grain",
+      "seat": 1,
+      "type": "REVEAL_COUNT"
+    },
+    {
+      "count": 2,
+      "kind": "system",
+      "resource": "grain",
+      "seat": 2,
+      "type": "REVEAL_COUNT"
+    },
+    {
+      "count": 3,
+      "kind": "system",
+      "resource": "grain",
+      "seat": 4,
+      "type": "REVEAL_COUNT"
+    },
+    {
+      "command": {
+        "card": "merchantFleet",
+        "params": {
+          "kind": "lumber"
+        },
+        "slotId": "progress:18",
+        "type": "PLAY_PROGRESS_CARD"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "ACTIVATE_KNIGHT",
+        "vertex": "v:2,-4,S"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "ACTIVATE_KNIGHT",
+        "vertex": "v:1,-2,N"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "edge": "e:2,-2,W",
+        "type": "BUILD_ROAD"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "dice": [
+        1,
+        2
+      ],
+      "extra": {
+        "event": "politics"
+      },
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "card": "constitution",
+      "deck": "progress-politics",
+      "kind": "system",
+      "seat": 2,
+      "slotId": "progress:19",
+      "type": "CARD_DEALT"
+    },
+    {
+      "card": "spy",
+      "deck": "progress-politics",
+      "kind": "system",
+      "seat": 3,
+      "slotId": "progress:20",
+      "type": "CARD_DEALT"
+    },
+    {
+      "card": "deserter",
+      "deck": "progress-politics",
+      "kind": "system",
+      "seat": 4,
+      "slotId": "progress:21",
+      "type": "CARD_DEALT"
+    },
+    {
+      "card": "constitution",
+      "kind": "system",
+      "seat": 2,
+      "slotId": "progress:19",
+      "type": "REVEAL_PROGRESS"
+    },
+    {
+      "card": "none",
+      "kind": "system",
+      "seat": 3,
+      "slotId": "progress:20",
+      "type": "REVEAL_PROGRESS"
+    },
+    {
+      "card": "none",
+      "kind": "system",
+      "seat": 4,
+      "slotId": "progress:21",
+      "type": "REVEAL_PROGRESS"
+    },
+    {
+      "command": {
+        "resource": "ore",
+        "type": "CHOOSE_AQUEDUCT"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "ACTIVATE_KNIGHT",
+        "vertex": "v:1,1,N"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "dice": [
+        3,
+        4
+      ],
+      "extra": {
+        "event": "politics"
+      },
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "card": "intrigue",
+      "deck": "progress-politics",
+      "kind": "system",
+      "seat": 2,
+      "slotId": "progress:22",
+      "type": "CARD_DEALT"
+    },
+    {
+      "card": "diplomat",
+      "deck": "progress-politics",
+      "kind": "system",
+      "seat": 4,
+      "slotId": "progress:23",
+      "type": "CARD_DEALT"
+    },
+    {
+      "command": {
+        "cards": {
+          "brick": 0,
+          "cloth": 0,
+          "coin": 1,
+          "grain": 0,
+          "lumber": 2,
+          "ore": 0,
+          "paper": 1,
+          "wool": 0
+        },
+        "type": "DISCARD"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "hex": "h:1,0",
+        "type": "MOVE_ROBBER"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "STEAL",
+        "victim": 3
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "kind": "system",
+      "resource": "ore",
+      "thief": 2,
+      "type": "STEAL_RESULT",
+      "victim": 3
+    },
+    {
+      "command": {
+        "get": {
+          "brick": 1
+        },
+        "give": {
+          "ore": 4
+        },
+        "type": "MARITIME_TRADE"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "dice": [
+        2,
+        2
+      ],
+      "extra": {
+        "event": "ship"
+      },
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "give": {
+          "ore": 1
+        },
+        "type": "OFFER_TRADE",
+        "want": {
+          "grain": 1
+        }
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "accept": false,
+        "offerId": 6,
+        "type": "RESPOND_TRADE"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "accept": false,
+        "offerId": 6,
+        "type": "RESPOND_TRADE"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "dice": [
+        2,
+        4
+      ],
+      "extra": {
+        "event": "science"
+      },
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "card": "alchemist",
+      "deck": "progress-science",
+      "kind": "system",
+      "seat": 4,
+      "slotId": "progress:24",
+      "type": "CARD_DEALT"
+    },
+    {
+      "card": "inventor",
+      "deck": "progress-science",
+      "kind": "system",
+      "seat": 0,
+      "slotId": "progress:25",
+      "type": "CARD_DEALT"
+    },
+    {
+      "card": "smith",
+      "deck": "progress-science",
+      "kind": "system",
+      "seat": 1,
+      "slotId": "progress:26",
+      "type": "CARD_DEALT"
+    },
+    {
+      "card": "printer",
+      "deck": "progress-science",
+      "kind": "system",
+      "seat": 2,
+      "slotId": "progress:27",
+      "type": "CARD_DEALT"
+    },
+    {
+      "card": "none",
+      "kind": "system",
+      "seat": 4,
+      "slotId": "progress:24",
+      "type": "REVEAL_PROGRESS"
+    },
+    {
+      "card": "none",
+      "kind": "system",
+      "seat": 0,
+      "slotId": "progress:25",
+      "type": "REVEAL_PROGRESS"
+    },
+    {
+      "card": "none",
+      "kind": "system",
+      "seat": 1,
+      "slotId": "progress:26",
+      "type": "REVEAL_PROGRESS"
+    },
+    {
+      "card": "printer",
+      "kind": "system",
+      "seat": 2,
+      "slotId": "progress:27",
+      "type": "REVEAL_PROGRESS"
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "dice": [
+        1,
+        3
+      ],
+      "extra": {
+        "event": "politics"
+      },
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "card": "wedding",
+      "deck": "progress-politics",
+      "kind": "system",
+      "seat": 2,
+      "slotId": "progress:28",
+      "type": "CARD_DEALT"
+    },
+    {
+      "card": "wedding",
+      "deck": "progress-politics",
+      "kind": "system",
+      "seat": 3,
+      "slotId": "progress:29",
+      "type": "CARD_DEALT"
+    },
+    {
+      "card": "warlord",
+      "deck": "progress-politics",
+      "kind": "system",
+      "seat": 4,
+      "slotId": "progress:30",
+      "type": "CARD_DEALT"
+    },
+    {
+      "command": {
+        "card": "inventor",
+        "params": {
+          "hexes": [
+            "h:-2,1",
+            "h:3,-3"
+          ]
+        },
+        "slotId": "progress:25",
+        "type": "PLAY_PROGRESS_CARD"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "dice": [
+        3,
+        2
+      ],
+      "extra": {
+        "event": "ship"
+      },
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "edge": "e:3,-1,W",
+        "type": "BUILD_ROAD"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "get": {
+          "ore": 1
+        },
+        "give": {
+          "wool": 2
+        },
+        "type": "MARITIME_TRADE"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "BUILD_KNIGHT",
+        "vertex": "v:2,0,N"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "PROMOTE_KNIGHT",
+        "vertex": "v:-1,-1,S"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "dice": [
+        2,
+        3
+      ],
+      "extra": {
+        "event": "ship"
+      },
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "get": {
+          "wool": 1
+        },
+        "give": {
+          "lumber": 4
+        },
+        "type": "MARITIME_TRADE"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "track": "science",
+        "type": "BUILD_IMPROVEMENT"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "dice": [
+        6,
+        1
+      ],
+      "extra": {
+        "event": "trade"
+      },
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "cards": {
+          "brick": 2,
+          "cloth": 0,
+          "coin": 0,
+          "grain": 1,
+          "lumber": 0,
+          "ore": 2,
+          "paper": 0,
+          "wool": 0
+        },
+        "type": "DISCARD"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "cards": {
+          "brick": 0,
+          "cloth": 1,
+          "coin": 0,
+          "grain": 0,
+          "lumber": 1,
+          "ore": 0,
+          "paper": 0,
+          "wool": 2
+        },
+        "type": "DISCARD"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "cards": {
+          "brick": 0,
+          "cloth": 1,
+          "coin": 3,
+          "grain": 0,
+          "lumber": 0,
+          "ore": 0,
+          "paper": 1,
+          "wool": 0
+        },
+        "type": "DISCARD"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "cards": {
+          "brick": 0,
+          "cloth": 0,
+          "coin": 0,
+          "grain": 2,
+          "lumber": 3,
+          "ore": 0,
+          "paper": 0,
+          "wool": 0
+        },
+        "type": "DISCARD"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "hex": "h:1,2",
+        "type": "MOVE_ROBBER"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "card": "wedding",
+        "slotId": "progress:29",
+        "type": "PLAY_PROGRESS_CARD"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "cards": {
+          "brick": 0,
+          "cloth": 0,
+          "coin": 0,
+          "grain": 0,
+          "lumber": 0,
+          "ore": 0,
+          "paper": 0,
+          "wool": 2
+        },
+        "type": "WEDDING_GIVE"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "cards": {
+          "brick": 1,
+          "cloth": 0,
+          "coin": 0,
+          "grain": 0,
+          "lumber": 0,
+          "ore": 0,
+          "paper": 0,
+          "wool": 1
+        },
+        "type": "WEDDING_GIVE"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "cards": {
+          "brick": 0,
+          "cloth": 0,
+          "coin": 0,
+          "grain": 2,
+          "lumber": 0,
+          "ore": 0,
+          "paper": 0,
+          "wool": 0
+        },
+        "type": "WEDDING_GIVE"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "BUILD_CITY",
+        "vertex": "v:1,2,N"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "card": "alchemist",
+        "params": {
+          "dice": [
+            6,
+            3
+          ]
+        },
+        "slotId": "progress:24",
+        "type": "PLAY_PROGRESS_CARD"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "dice": [
+        6,
+        3
+      ],
+      "extra": {
+        "event": "ship"
+      },
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "card": "diplomat",
+        "params": {
+          "build": "e:0,-1,W",
+          "edge": "e:-1,-1,NW"
+        },
+        "slotId": "progress:23",
+        "type": "PLAY_PROGRESS_CARD"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "card": "deserter",
+        "params": {
+          "target": 0
+        },
+        "slotId": "progress:21",
+        "type": "PLAY_PROGRESS_CARD"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "DESERTER_REMOVE",
+        "vertex": "v:2,-4,S"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "DESERTER_SKIP"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "give": {
+          "lumber": 1
+        },
+        "type": "OFFER_TRADE",
+        "want": {
+          "ore": 1
+        }
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "offerId": 7,
+        "type": "CANCEL_TRADE"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "BUILD_SETTLEMENT",
+        "vertex": "v:2,-4,S"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "BUILD_CITY_WALL",
+        "vertex": "v:1,2,N"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "dice": [
+        4,
+        1
+      ],
+      "extra": {
+        "event": "ship"
+      },
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "give": {
+          "lumber": 1
+        },
+        "type": "OFFER_TRADE",
+        "want": {
+          "ore": 1
+        }
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "accept": false,
+        "offerId": 8,
+        "type": "RESPOND_TRADE"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "edge": "e:3,-2,W",
+        "type": "BUILD_ROAD"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "dice": [
+        1,
+        6
+      ],
+      "extra": {
+        "event": "ship"
+      },
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "cards": {
+          "brick": 0,
+          "cloth": 0,
+          "coin": 1,
+          "grain": 0,
+          "lumber": 3,
+          "ore": 0,
+          "paper": 0,
+          "wool": 0
+        },
+        "type": "DISCARD"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "hex": "h:-1,3",
+        "type": "MOVE_ROBBER"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "dice": [
+        1,
+        4
+      ],
+      "extra": {
+        "event": "ship"
+      },
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "give": {
+          "ore": 1
+        },
+        "type": "OFFER_TRADE",
+        "want": {
+          "brick": 1
+        }
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "edge": "e:3,-2,NW",
+        "type": "BUILD_ROAD"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "dice": [
+        4,
+        2
+      ],
+      "extra": {
+        "event": "ship"
+      },
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "card": "spy",
+        "params": {
+          "target": 2
+        },
+        "slotId": "progress:20",
+        "type": "PLAY_PROGRESS_CARD"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "kind": "system",
+      "seat": 2,
+      "to": 3,
+      "type": "SHOW_HAND",
+      "what": "progress"
+    },
+    {
+      "card": "intrigue",
+      "from": 2,
+      "kind": "system",
+      "seat": 3,
+      "slotId": "progress:22",
+      "type": "TAKE_PROGRESS"
+    },
+    {
+      "command": {
+        "get": {
+          "lumber": 1
+        },
+        "give": {
+          "wool": 4
+        },
+        "type": "MARITIME_TRADE"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "edge": "e:1,-2,NW",
+        "type": "BUILD_ROAD"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "dice": [
+        3,
+        1
+      ],
+      "extra": {
+        "event": "science"
+      },
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "card": "medicine",
+      "deck": "progress-science",
+      "kind": "system",
+      "seat": 4,
+      "slotId": "progress:31",
+      "type": "CARD_DEALT"
+    },
+    {
+      "card": "crane",
+      "deck": "progress-science",
+      "kind": "system",
+      "seat": 1,
+      "slotId": "progress:32",
+      "type": "CARD_DEALT"
+    },
+    {
+      "card": "mining",
+      "deck": "progress-science",
+      "kind": "system",
+      "seat": 2,
+      "slotId": "progress:33",
+      "type": "CARD_DEALT"
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "PROMOTE_KNIGHT",
+        "vertex": "v:-2,0,N"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "dice": [
+        3,
+        4
+      ],
+      "extra": {
+        "event": "ship"
+      },
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "cards": {
+          "brick": 0,
+          "cloth": 0,
+          "coin": 1,
+          "grain": 0,
+          "lumber": 0,
+          "ore": 3,
+          "paper": 1,
+          "wool": 0
+        },
+        "type": "DISCARD"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "cards": {
+          "brick": 0,
+          "cloth": 0,
+          "coin": 0,
+          "grain": 0,
+          "lumber": 3,
+          "ore": 0,
+          "paper": 1,
+          "wool": 0
+        },
+        "type": "DISCARD"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "hex": "h:1,1",
+        "type": "MOVE_ROBBER"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "STEAL",
+        "victim": 3
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "kind": "system",
+      "resource": "ore",
+      "thief": 0,
+      "type": "STEAL_RESULT",
+      "victim": 3
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "dice": [
+        1,
+        4
+      ],
+      "extra": {
+        "event": "ship"
+      },
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "card": "smith",
+        "params": {
+          "vertices": [
+            "v:2,0,N"
+          ]
+        },
+        "slotId": "progress:26",
+        "type": "PLAY_PROGRESS_CARD"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "get": {
+          "grain": 1
+        },
+        "give": {
+          "wool": 2
+        },
+        "type": "MARITIME_TRADE"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "BUILD_SETTLEMENT",
+        "vertex": "v:3,-2,N"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "get": {
+          "ore": 1
+        },
+        "give": {
+          "wool": 2
+        },
+        "type": "MARITIME_TRADE"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "dice": [
+        4,
+        5
+      ],
+      "extra": {
+        "event": "ship"
+      },
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "card": "mining",
+        "slotId": "progress:33",
+        "type": "PLAY_PROGRESS_CARD"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "BUILD_KNIGHT",
+        "vertex": "v:3,-2,S"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "dice": [
+        5,
+        3
+      ],
+      "extra": {
+        "event": "trade"
+      },
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "ACTIVATE_KNIGHT",
+        "vertex": "v:-1,-1,S"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "ACTIVATE_KNIGHT",
+        "vertex": "v:-2,0,N"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "track": "politics",
+        "type": "BUILD_IMPROVEMENT"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "track": "politics",
+        "type": "PLACE_METROPOLIS",
+        "vertex": "v:-2,1,N"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "dice": [
+        5,
+        3
+      ],
+      "extra": {
+        "event": "ship"
+      },
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "card": "medicine",
+        "params": {
+          "vertex": "v:0,-2,S"
+        },
+        "slotId": "progress:31",
+        "type": "PLAY_PROGRESS_CARD"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "dice": [
+        4,
+        3
+      ],
+      "extra": {
+        "event": "trade"
+      },
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "cards": {
+          "brick": 0,
+          "cloth": 0,
+          "coin": 0,
+          "grain": 0,
+          "lumber": 0,
+          "ore": 5,
+          "paper": 1,
+          "wool": 0
+        },
+        "type": "DISCARD"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "cards": {
+          "brick": 0,
+          "cloth": 0,
+          "coin": 3,
+          "grain": 0,
+          "lumber": 0,
+          "ore": 0,
+          "paper": 2,
+          "wool": 0
+        },
+        "type": "DISCARD"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "hex": "h:0,0",
+        "type": "MOVE_ROBBER"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "STEAL",
+        "victim": 4
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "kind": "system",
+      "resource": "ore",
+      "thief": 0,
+      "type": "STEAL_RESULT",
+      "victim": 4
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "dice": [
+        1,
+        5
+      ],
+      "extra": {
+        "event": "science"
+      },
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "card": "crane",
+      "deck": "progress-science",
+      "kind": "system",
+      "seat": 1,
+      "slotId": "progress:34",
+      "type": "CARD_DEALT"
+    },
+    {
+      "card": "irrigation",
+      "deck": "progress-science",
+      "kind": "system",
+      "seat": 2,
+      "slotId": "progress:35",
+      "type": "CARD_DEALT"
+    },
+    {
+      "card": "roadBuilding",
+      "deck": "progress-science",
+      "kind": "system",
+      "seat": 4,
+      "slotId": "progress:36",
+      "type": "DEAL_KNOWN"
+    },
+    {
+      "card": "irrigation",
+      "deck": "progress-science",
+      "kind": "system",
+      "seat": 0,
+      "slotId": "progress:37",
+      "type": "DEAL_KNOWN"
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "track": "trade",
+        "type": "BUILD_IMPROVEMENT"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "dice": [
+        2,
+        6
+      ],
+      "extra": {
+        "event": "ship"
+      },
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "type": "ACTIVATE_KNIGHT",
+        "vertex": "v:-1,-1,S"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "track": "trade",
+        "type": "BUILD_IMPROVEMENT"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "dice": [
+        1,
+        5
+      ],
+      "extra": {
+        "event": "politics"
+      },
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "card": "warlord",
+      "deck": "progress-politics",
+      "kind": "system",
+      "seat": 3,
+      "slotId": "progress:38",
+      "type": "CARD_DEALT"
+    },
+    {
+      "card": "intrigue",
+      "deck": "progress-politics",
+      "kind": "system",
+      "seat": 4,
+      "slotId": "progress:39",
+      "type": "CARD_DEALT"
+    },
+    {
+      "card": "diplomat",
+      "deck": "progress-politics",
+      "kind": "system",
+      "seat": 2,
+      "slotId": "progress:40",
+      "type": "DEAL_KNOWN"
+    },
+    {
+      "command": {
+        "card": "warlord",
+        "slotId": "progress:38",
+        "type": "PLAY_PROGRESS_CARD"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "ACTIVATE_KNIGHT",
+        "vertex": "v:-2,0,N"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "PROMOTE_KNIGHT",
+        "vertex": "v:-2,0,N"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "dice": [
+        1,
+        6
+      ],
+      "extra": {
+        "event": "trade"
+      },
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "card": "merchant",
+      "deck": "progress-trade",
+      "kind": "system",
+      "seat": 0,
+      "slotId": "progress:41",
+      "type": "CARD_DEALT"
+    },
+    {
+      "card": "commercialHarbor",
+      "deck": "progress-trade",
+      "kind": "system",
+      "seat": 1,
+      "slotId": "progress:42",
+      "type": "CARD_DEALT"
+    },
+    {
+      "card": "merchantFleet",
+      "deck": "progress-trade",
+      "kind": "system",
+      "seat": 2,
+      "slotId": "progress:43",
+      "type": "CARD_DEALT"
+    },
+    {
+      "card": "merchant",
+      "deck": "progress-trade",
+      "kind": "system",
+      "seat": 3,
+      "slotId": "progress:44",
+      "type": "CARD_DEALT"
+    },
+    {
+      "command": {
+        "cards": [
+          {
+            "card": "merchantFleet",
+            "slotId": "progress:43"
+          }
+        ],
+        "type": "DISCARD_PROGRESS"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "cards": {
+          "brick": 1,
+          "cloth": 0,
+          "coin": 0,
+          "grain": 0,
+          "lumber": 3,
+          "ore": 2,
+          "paper": 0,
+          "wool": 0
+        },
+        "type": "DISCARD"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "cards": {
+          "brick": 1,
+          "cloth": 1,
+          "coin": 0,
+          "grain": 0,
+          "lumber": 0,
+          "ore": 1,
+          "paper": 0,
+          "wool": 2
+        },
+        "type": "DISCARD"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "hex": "h:1,-1",
+        "type": "MOVE_ROBBER"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "STEAL",
+        "victim": 3
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "kind": "system",
+      "resource": "brick",
+      "thief": 4,
+      "type": "STEAL_RESULT",
+      "victim": 3
+    },
+    {
+      "command": {
+        "card": "roadBuilding",
+        "slotId": "progress:36",
+        "type": "PLAY_PROGRESS_CARD"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "SKIP"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "edge": "e:-1,-1,NW",
+        "type": "BUILD_ROAD"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "dice": [
+        2,
+        4
+      ],
+      "extra": {
+        "event": "ship"
+      },
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "dice": [
+        2,
+        3
+      ],
+      "extra": {
+        "event": "trade"
+      },
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "card": "merchant",
+      "deck": "progress-trade",
+      "kind": "system",
+      "seat": 1,
+      "slotId": "progress:45",
+      "type": "CARD_DEALT"
+    },
+    {
+      "card": "masterMerchant",
+      "deck": "progress-trade",
+      "kind": "system",
+      "seat": 2,
+      "slotId": "progress:46",
+      "type": "CARD_DEALT"
+    },
+    {
+      "card": "resourceMonopoly",
+      "deck": "progress-trade",
+      "kind": "system",
+      "seat": 3,
+      "slotId": "progress:47",
+      "type": "CARD_DEALT"
+    },
+    {
+      "card": "resourceMonopoly",
+      "deck": "progress-trade",
+      "kind": "system",
+      "seat": 0,
+      "slotId": "progress:48",
+      "type": "CARD_DEALT"
+    },
+    {
+      "command": {
+        "cards": [
+          {
+            "card": "medicine",
+            "slotId": "progress:11"
+          }
+        ],
+        "type": "DISCARD_PROGRESS"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "card": "merchant",
+        "params": {
+          "hex": "h:2,-1"
+        },
+        "slotId": "progress:45",
+        "type": "PLAY_PROGRESS_CARD"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "edge": "e:0,-1,NE",
+        "type": "BUILD_ROAD"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "give": {
+          "wool": 2
+        },
+        "type": "OFFER_TRADE",
+        "want": {
+          "ore": 1
+        }
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "accept": false,
+        "offerId": 10,
+        "type": "RESPOND_TRADE"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "dice": [
+        6,
+        1
+      ],
+      "extra": {
+        "event": "ship"
+      },
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "cards": {
+          "brick": 0,
+          "cloth": 0,
+          "coin": 0,
+          "grain": 0,
+          "lumber": 4,
+          "ore": 1,
+          "paper": 0,
+          "wool": 0
+        },
+        "type": "DISCARD"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "cards": {
+          "brick": 4,
+          "cloth": 0,
+          "coin": 0,
+          "grain": 0,
+          "lumber": 0,
+          "ore": 0,
+          "paper": 0,
+          "wool": 0
+        },
+        "type": "DISCARD"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "cards": {
+          "brick": 0,
+          "cloth": 2,
+          "coin": 1,
+          "grain": 0,
+          "lumber": 1,
+          "ore": 0,
+          "paper": 0,
+          "wool": 1
+        },
+        "type": "DISCARD"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "hex": "h:0,1",
+        "type": "MOVE_ROBBER"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "card": "diplomat",
+        "params": {
+          "build": null,
+          "edge": "e:1,-2,NW"
+        },
+        "slotId": "progress:40",
+        "type": "PLAY_PROGRESS_CARD"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "card": "irrigation",
+        "slotId": "progress:35",
+        "type": "PLAY_PROGRESS_CARD"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "edge": "e:1,1,NW",
+        "type": "BUILD_ROAD"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "dice": [
+        6,
+        1
+      ],
+      "extra": {
+        "event": "trade"
+      },
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "hex": "h:-1,3",
+        "type": "MOVE_ROBBER"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "card": "merchant",
+        "params": {
+          "hex": "h:0,0"
+        },
+        "slotId": "progress:44",
+        "type": "PLAY_PROGRESS_CARD"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "dice": [
+        2,
+        3
+      ],
+      "extra": {
+        "event": "ship"
+      },
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "track": "science",
+        "type": "BUILD_IMPROVEMENT"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "get": {
+          "brick": 1
+        },
+        "give": {
+          "lumber": 4
+        },
+        "type": "MARITIME_TRADE"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "dice": [
+        4,
+        2
+      ],
+      "extra": {
+        "event": "politics"
+      },
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "card": "bishop",
+      "deck": "progress-politics",
+      "kind": "system",
+      "seat": 2,
+      "slotId": "progress:49",
+      "type": "DEAL_KNOWN"
+    },
+    {
+      "command": {
+        "resource": "wool",
+        "type": "CHOOSE_AQUEDUCT"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "card": "resourceMonopoly",
+        "params": {
+          "kind": "ore"
+        },
+        "slotId": "progress:48",
+        "type": "PLAY_PROGRESS_CARD"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "count": 2,
+      "kind": "system",
+      "resource": "ore",
+      "seat": 2,
+      "type": "REVEAL_COUNT"
+    },
+    {
+      "count": 1,
+      "kind": "system",
+      "resource": "ore",
+      "seat": 3,
+      "type": "REVEAL_COUNT"
+    },
+    {
+      "count": 2,
+      "kind": "system",
+      "resource": "ore",
+      "seat": 4,
+      "type": "REVEAL_COUNT"
+    },
+    {
+      "command": {
+        "card": "merchant",
+        "params": {
+          "hex": "h:1,-3"
+        },
+        "slotId": "progress:41",
+        "type": "PLAY_PROGRESS_CARD"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "card": "irrigation",
+        "slotId": "progress:37",
+        "type": "PLAY_PROGRESS_CARD"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "BUILD_CITY",
+        "vertex": "v:2,-4,S"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "get": {
+          "grain": 1
+        },
+        "give": {
+          "brick": 2
+        },
+        "type": "MARITIME_TRADE"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "ACTIVATE_KNIGHT",
+        "vertex": "v:1,-2,N"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "edge": "e:1,-2,W",
+        "type": "BUILD_ROAD"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "dice": [
+        3,
+        6
+      ],
+      "extra": {
+        "event": "ship"
+      },
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "card": "commercialHarbor",
+        "slotId": "progress:42",
+        "type": "PLAY_PROGRESS_CARD"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "BUILD_KNIGHT",
+        "vertex": "v:-1,-2,S"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "dice": [
+        5,
+        4
+      ],
+      "extra": {
+        "event": "ship"
+      },
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "card": "bishop",
+        "params": {
+          "hex": "h:3,-3"
+        },
+        "slotId": "progress:49",
+        "type": "PLAY_PROGRESS_CARD"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "kind": "system",
+      "resource": "brick",
+      "thief": 2,
+      "type": "STEAL_RESULT",
+      "victim": 1
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "dice": [
+        3,
+        5
+      ],
+      "extra": {
+        "event": "trade"
+      },
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "card": "commercialHarbor",
+      "deck": "progress-trade",
+      "kind": "system",
+      "seat": 3,
+      "slotId": "progress:50",
+      "type": "CARD_DEALT"
+    },
+    {
+      "card": "resourceMonopoly",
+      "deck": "progress-trade",
+      "kind": "system",
+      "seat": 0,
+      "slotId": "progress:51",
+      "type": "CARD_DEALT"
+    },
+    {
+      "card": "tradeMonopoly",
+      "deck": "progress-trade",
+      "kind": "system",
+      "seat": 2,
+      "slotId": "progress:52",
+      "type": "CARD_DEALT"
+    },
+    {
+      "command": {
+        "card": "resourceMonopoly",
+        "params": {
+          "kind": "lumber"
+        },
+        "slotId": "progress:47",
+        "type": "PLAY_PROGRESS_CARD"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "count": 2,
+      "kind": "system",
+      "resource": "lumber",
+      "seat": 0,
+      "type": "REVEAL_COUNT"
+    },
+    {
+      "count": 1,
+      "kind": "system",
+      "resource": "lumber",
+      "seat": 2,
+      "type": "REVEAL_COUNT"
+    },
+    {
+      "count": 1,
+      "kind": "system",
+      "resource": "lumber",
+      "seat": 4,
+      "type": "REVEAL_COUNT"
+    },
+    {
+      "command": {
+        "card": "commercialHarbor",
+        "slotId": "progress:50",
+        "type": "PLAY_PROGRESS_CARD"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "track": "politics",
+        "type": "BUILD_IMPROVEMENT"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "dice": [
+        4,
+        1
+      ],
+      "extra": {
+        "event": "ship"
+      },
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "dice": [
+        1,
+        6
+      ],
+      "extra": {
+        "event": "politics"
+      },
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "card": "bishop",
+      "deck": "progress-politics",
+      "kind": "system",
+      "seat": 2,
+      "slotId": "progress:53",
+      "type": "DEAL_KNOWN"
+    },
+    {
+      "card": "deserter",
+      "deck": "progress-politics",
+      "kind": "system",
+      "seat": 3,
+      "slotId": "progress:54",
+      "type": "DEAL_KNOWN"
+    },
+    {
+      "card": "saboteur",
+      "deck": "progress-politics",
+      "kind": "system",
+      "seat": 4,
+      "slotId": "progress:55",
+      "type": "DEAL_KNOWN"
+    },
+    {
+      "command": {
+        "cards": {
+          "brick": 0,
+          "cloth": 0,
+          "coin": 0,
+          "grain": 0,
+          "lumber": 0,
+          "ore": 0,
+          "paper": 0,
+          "wool": 6
+        },
+        "type": "DISCARD"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "cards": {
+          "brick": 0,
+          "cloth": 1,
+          "coin": 4,
+          "grain": 3,
+          "lumber": 0,
+          "ore": 0,
+          "paper": 0,
+          "wool": 1
+        },
+        "type": "DISCARD"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "cards": {
+          "brick": 1,
+          "cloth": 1,
+          "coin": 0,
+          "grain": 0,
+          "lumber": 2,
+          "ore": 1,
+          "paper": 0,
+          "wool": 2
+        },
+        "type": "DISCARD"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "cards": {
+          "brick": 0,
+          "cloth": 0,
+          "coin": 0,
+          "grain": 0,
+          "lumber": 1,
+          "ore": 1,
+          "paper": 2,
+          "wool": 0
+        },
+        "type": "DISCARD"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "hex": "h:1,-2",
+        "type": "MOVE_ROBBER"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "STEAL",
+        "victim": 1
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "kind": "system",
+      "resource": "lumber",
+      "thief": 0,
+      "type": "STEAL_RESULT",
+      "victim": 1
+    },
+    {
+      "command": {
+        "card": "resourceMonopoly",
+        "params": {
+          "kind": "ore"
+        },
+        "slotId": "progress:51",
+        "type": "PLAY_PROGRESS_CARD"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "count": 3,
+      "kind": "system",
+      "resource": "ore",
+      "seat": 2,
+      "type": "REVEAL_COUNT"
+    },
+    {
+      "count": 1,
+      "kind": "system",
+      "resource": "ore",
+      "seat": 4,
+      "type": "REVEAL_COUNT"
+    },
+    {
+      "command": {
+        "give": {
+          "ore": 1
+        },
+        "type": "OFFER_TRADE",
+        "want": {
+          "grain": 1
+        }
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "accept": false,
+        "offerId": 11,
+        "type": "RESPOND_TRADE"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "get": {
+          "grain": 1
+        },
+        "give": {
+          "ore": 4
+        },
+        "type": "MARITIME_TRADE"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "accept": false,
+        "offerId": 11,
+        "type": "RESPOND_TRADE"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "ACTIVATE_KNIGHT",
+        "vertex": "v:1,1,N"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "accept": false,
+        "offerId": 11,
+        "type": "RESPOND_TRADE"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "dice": [
+        4,
+        2
+      ],
+      "extra": {
+        "event": "ship"
+      },
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "resource": "brick",
+        "type": "CHOOSE_AQUEDUCT"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "ACTIVATE_KNIGHT",
+        "vertex": "v:-1,-1,S"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "ACTIVATE_KNIGHT",
+        "vertex": "v:-2,0,N"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "dice": [
+        6,
+        6
+      ],
+      "extra": {
+        "event": "science"
+      },
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "resource": "grain",
+        "type": "CHOOSE_AQUEDUCT"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "resource": "wool",
+        "type": "CHOOSE_AQUEDUCT"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "card": "bishop",
+        "params": {
+          "hex": "h:2,-1"
+        },
+        "slotId": "progress:53",
+        "type": "PLAY_PROGRESS_CARD"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "kind": "system",
+      "resource": "brick",
+      "thief": 2,
+      "type": "STEAL_RESULT",
+      "victim": 0
+    },
+    {
+      "kind": "system",
+      "resource": "wool",
+      "thief": 2,
+      "type": "STEAL_RESULT",
+      "victim": 1
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "BUILD_KNIGHT",
+        "vertex": "v:1,0,S"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "dice": [
+        6,
+        5
+      ],
+      "extra": {
+        "event": "science"
+      },
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "resource": "brick",
+        "type": "CHOOSE_AQUEDUCT"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "card": "deserter",
+        "params": {
+          "target": 2
+        },
+        "slotId": "progress:54",
+        "type": "PLAY_PROGRESS_CARD"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "DESERTER_REMOVE",
+        "vertex": "v:-2,0,N"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "give": {
+          "wool": 1
+        },
+        "type": "OFFER_TRADE",
+        "want": {
+          "grain": 1
+        }
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "accept": false,
+        "offerId": 12,
+        "type": "RESPOND_TRADE"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "accept": false,
+        "offerId": 12,
+        "type": "RESPOND_TRADE"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "accept": false,
+        "offerId": 12,
+        "type": "RESPOND_TRADE"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "accept": false,
+        "offerId": 12,
+        "type": "RESPOND_TRADE"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "BUILD_CITY_WALL",
+        "vertex": "v:0,-2,S"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "dice": [
+        1,
+        2
+      ],
+      "extra": {
+        "event": "ship"
+      },
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "resource": "wool",
+        "type": "CHOOSE_AQUEDUCT"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "ACTIVATE_KNIGHT",
+        "vertex": "v:-1,-2,S"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "card": "saboteur",
+        "slotId": "progress:55",
+        "type": "PLAY_PROGRESS_CARD"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "cards": {
+          "brick": 0,
+          "cloth": 0,
+          "coin": 0,
+          "grain": 0,
+          "lumber": 0,
+          "ore": 5,
+          "paper": 0,
+          "wool": 0
+        },
+        "type": "SABOTEUR_DISCARD"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "cards": {
+          "brick": 1,
+          "cloth": 0,
+          "coin": 0,
+          "grain": 0,
+          "lumber": 0,
+          "ore": 0,
+          "paper": 0,
+          "wool": 2
+        },
+        "type": "SABOTEUR_DISCARD"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "cards": {
+          "brick": 2,
+          "cloth": 1,
+          "coin": 0,
+          "grain": 3,
+          "lumber": 0,
+          "ore": 0,
+          "paper": 0,
+          "wool": 1
+        },
+        "type": "SABOTEUR_DISCARD"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "BUILD_KNIGHT",
+        "vertex": "v:-2,0,N"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "ACTIVATE_KNIGHT",
+        "vertex": "v:-2,0,N"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "dice": [
+        2,
+        5
+      ],
+      "extra": {
+        "event": "science"
+      },
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "card": "mining",
+      "deck": "progress-science",
+      "kind": "system",
+      "seat": 0,
+      "slotId": "progress:56",
+      "type": "DEAL_KNOWN"
+    },
+    {
+      "card": "inventor",
+      "deck": "progress-science",
+      "kind": "system",
+      "seat": 1,
+      "slotId": "progress:57",
+      "type": "DEAL_KNOWN"
+    },
+    {
+      "card": "alchemist",
+      "deck": "progress-science",
+      "kind": "system",
+      "seat": 2,
+      "slotId": "progress:58",
+      "type": "DEAL_KNOWN"
+    },
+    {
+      "card": "engineer",
+      "deck": "progress-science",
+      "kind": "system",
+      "seat": 4,
+      "slotId": "progress:59",
+      "type": "DEAL_KNOWN"
+    },
+    {
+      "command": {
+        "cards": {
+          "brick": 0,
+          "cloth": 2,
+          "coin": 1,
+          "grain": 0,
+          "lumber": 2,
+          "ore": 0,
+          "paper": 0,
+          "wool": 1
+        },
+        "type": "DISCARD"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "hex": "h:1,2",
+        "type": "MOVE_ROBBER"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "STEAL",
+        "victim": 3
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "kind": "system",
+      "resource": "brick",
+      "thief": 0,
+      "type": "STEAL_RESULT",
+      "victim": 3
+    },
+    {
+      "command": {
+        "card": "mining",
+        "slotId": "progress:56",
+        "type": "PLAY_PROGRESS_CARD"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "dice": [
+        1,
+        5
+      ],
+      "extra": {
+        "event": "ship"
+      },
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "resource": "grain",
+        "type": "CHOOSE_AQUEDUCT"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "give": {
+          "brick": 1
+        },
+        "type": "OFFER_TRADE",
+        "want": {
+          "grain": 1
+        }
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "accept": false,
+        "offerId": 13,
+        "type": "RESPOND_TRADE"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "accept": true,
+        "offerId": 13,
+        "type": "RESPOND_TRADE"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "accept": false,
+        "offerId": 13,
+        "type": "RESPOND_TRADE"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "track": "science",
+        "type": "BUILD_IMPROVEMENT"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "BUILD_CITY_WALL",
+        "vertex": "v:2,-4,S"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "card": "alchemist",
+        "params": {
+          "dice": [
+            2,
+            3
+          ]
+        },
+        "slotId": "progress:58",
+        "type": "PLAY_PROGRESS_CARD"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "dice": [
+        2,
+        3
+      ],
+      "extra": {
+        "event": "ship"
+      },
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "type": "PROMOTE_KNIGHT",
+        "vertex": "v:-2,0,N"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "card": "tradeMonopoly",
+        "params": {
+          "kind": "paper"
+        },
+        "slotId": "progress:52",
+        "type": "PLAY_PROGRESS_CARD"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "count": 3,
+      "kind": "system",
+      "resource": "paper",
+      "seat": 4,
+      "type": "REVEAL_COUNT"
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "dice": [
+        3,
+        4
+      ],
+      "extra": {
+        "event": "ship"
+      },
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "cards": {
+          "brick": 2,
+          "cloth": 0,
+          "coin": 0,
+          "grain": 0,
+          "lumber": 3,
+          "ore": 0,
+          "paper": 0,
+          "wool": 0
+        },
+        "type": "DISCARD"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "cards": {
+          "brick": 0,
+          "cloth": 0,
+          "coin": 0,
+          "grain": 0,
+          "lumber": 1,
+          "ore": 0,
+          "paper": 0,
+          "wool": 3
+        },
+        "type": "DISCARD"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "hex": "h:0,1",
+        "type": "MOVE_ROBBER"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "dice": [
+        4,
+        6
+      ],
+      "extra": {
+        "event": "politics"
+      },
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "card": "spy",
+      "deck": "progress-politics",
+      "kind": "system",
+      "seat": 4,
+      "slotId": "progress:60",
+      "type": "DEAL_KNOWN"
+    },
+    {
+      "card": "spy",
+      "deck": "progress-politics",
+      "kind": "system",
+      "seat": 2,
+      "slotId": "progress:61",
+      "type": "DEAL_KNOWN"
+    },
+    {
+      "command": {
+        "resource": "wool",
+        "type": "CHOOSE_AQUEDUCT"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "resource": "ore",
+        "type": "CHOOSE_AQUEDUCT"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "card": "engineer",
+        "params": {
+          "vertex": "v:0,-1,S"
+        },
+        "slotId": "progress:59",
+        "type": "PLAY_PROGRESS_CARD"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "BUILD_KNIGHT",
+        "vertex": "v:2,-2,S"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "PROMOTE_KNIGHT",
+        "vertex": "v:-2,0,N"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "dice": [
+        3,
+        1
+      ],
+      "extra": {
+        "event": "politics"
+      },
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "card": "saboteur",
+      "deck": "progress-politics",
+      "kind": "system",
+      "seat": 2,
+      "slotId": "progress:62",
+      "type": "DEAL_KNOWN"
+    },
+    {
+      "card": "wedding",
+      "deck": "progress-politics",
+      "kind": "system",
+      "seat": 4,
+      "slotId": "progress:63",
+      "type": "DEAL_KNOWN"
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "dice": [
+        2,
+        5
+      ],
+      "extra": {
+        "event": "trade"
+      },
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "card": "merchant",
+      "deck": "progress-trade",
+      "kind": "system",
+      "seat": 1,
+      "slotId": "progress:64",
+      "type": "CARD_DEALT"
+    },
+    {
+      "card": "tradeMonopoly",
+      "deck": "progress-trade",
+      "kind": "system",
+      "seat": 2,
+      "slotId": "progress:65",
+      "type": "CARD_DEALT"
+    },
+    {
+      "card": "merchant",
+      "deck": "progress-trade",
+      "kind": "system",
+      "seat": 3,
+      "slotId": "progress:66",
+      "type": "CARD_DEALT"
+    },
+    {
+      "card": "masterMerchant",
+      "deck": "progress-trade",
+      "kind": "system",
+      "seat": 0,
+      "slotId": "progress:67",
+      "type": "CARD_DEALT"
+    },
+    {
+      "command": {
+        "cards": [
+          {
+            "card": "wedding",
+            "slotId": "progress:28"
+          }
+        ],
+        "type": "DISCARD_PROGRESS"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "cards": {
+          "brick": 0,
+          "cloth": 0,
+          "coin": 0,
+          "grain": 3,
+          "lumber": 0,
+          "ore": 0,
+          "paper": 2,
+          "wool": 1
+        },
+        "type": "DISCARD"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "hex": "h:2,-2",
+        "type": "MOVE_ROBBER"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "STEAL",
+        "victim": 0
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "kind": "system",
+      "resource": "lumber",
+      "thief": 1,
+      "type": "STEAL_RESULT",
+      "victim": 0
+    },
+    {
+      "command": {
+        "card": "inventor",
+        "params": {
+          "hexes": [
+            "h:-2,1",
+            "h:3,-2"
+          ]
+        },
+        "slotId": "progress:57",
+        "type": "PLAY_PROGRESS_CARD"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "card": "merchant",
+        "params": {
+          "hex": "h:3,-3"
+        },
+        "slotId": "progress:64",
+        "type": "PLAY_PROGRESS_CARD"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "PROMOTE_KNIGHT",
+        "vertex": "v:1,1,N"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "dice": [
+        5,
+        4
+      ],
+      "extra": {
+        "event": "ship"
+      },
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "BUILD_KNIGHT",
+        "vertex": "v:-1,-1,N"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "ACTIVATE_KNIGHT",
+        "vertex": "v:-1,-1,N"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "dice": [
+        6,
+        4
+      ],
+      "extra": {
+        "event": "politics"
+      },
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "resource": "ore",
+        "type": "CHOOSE_AQUEDUCT"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "resource": "brick",
+        "type": "CHOOSE_AQUEDUCT"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "card": "merchant",
+        "params": {
+          "hex": "h:0,0"
+        },
+        "slotId": "progress:66",
+        "type": "PLAY_PROGRESS_CARD"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "dice": [
+        4,
+        5
+      ],
+      "extra": {
+        "event": "science"
+      },
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "card": "roadBuilding",
+      "deck": "progress-science",
+      "kind": "system",
+      "seat": 4,
+      "slotId": "progress:68",
+      "type": "DEAL_KNOWN"
+    },
+    {
+      "card": "smith",
+      "deck": "progress-science",
+      "kind": "system",
+      "seat": 2,
+      "slotId": "progress:69",
+      "type": "DEAL_KNOWN"
+    },
+    {
+      "command": {
+        "cards": [
+          {
+            "card": "tradeMonopoly",
+            "slotId": "progress:65"
+          }
+        ],
+        "type": "DISCARD_PROGRESS"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "cards": [
+          {
+            "card": "warlord",
+            "slotId": "progress:30"
+          }
+        ],
+        "type": "DISCARD_PROGRESS"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "card": "spy",
+        "params": {
+          "target": 0
+        },
+        "slotId": "progress:60",
+        "type": "PLAY_PROGRESS_CARD"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "kind": "system",
+      "seat": 0,
+      "to": 4,
+      "type": "SHOW_HAND",
+      "what": "progress"
+    },
+    {
+      "from": 0,
+      "kind": "system",
+      "seat": 4,
+      "slotId": null,
+      "type": "TAKE_PROGRESS"
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "PROMOTE_KNIGHT",
+        "vertex": "v:3,-2,S"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "dice": [
+        5,
+        5
+      ],
+      "extra": {
+        "event": "ship"
+      },
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "resource": "wool",
+        "type": "CHOOSE_AQUEDUCT"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "resource": "lumber",
+        "type": "CHOOSE_AQUEDUCT"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "card": "masterMerchant",
+        "params": {
+          "target": 2
+        },
+        "slotId": "progress:67",
+        "type": "PLAY_PROGRESS_CARD"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "kind": "system",
+      "seat": 2,
+      "to": 0,
+      "type": "SHOW_HAND",
+      "what": "cards"
+    },
+    {
+      "cards": {
+        "brick": 1,
+        "coin": 1
+      },
+      "from": 2,
+      "kind": "system",
+      "seat": 0,
+      "type": "TAKE_CARDS"
+    },
+    {
+      "command": {
+        "track": "politics",
+        "type": "BUILD_IMPROVEMENT"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "BUILD_KNIGHT",
+        "vertex": "v:3,-3,S"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "dice": [
+        3,
+        5
+      ],
+      "extra": {
+        "event": "ship"
+      },
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "give": {
+          "brick": 1
+        },
+        "type": "OFFER_TRADE",
+        "want": {
+          "grain": 1
+        }
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "accept": false,
+        "offerId": 14,
+        "type": "RESPOND_TRADE"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "accept": false,
+        "offerId": 14,
+        "type": "RESPOND_TRADE"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "accept": false,
+        "offerId": 14,
+        "type": "RESPOND_TRADE"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "offerId": 14,
+        "type": "CANCEL_TRADE"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "dice": [
+        1,
+        6
+      ],
+      "extra": {
+        "event": "ship"
+      },
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "cards": {
+          "brick": 0,
+          "cloth": 1,
+          "coin": 2,
+          "grain": 1,
+          "lumber": 0,
+          "ore": 1,
+          "paper": 1,
+          "wool": 1
+        },
+        "type": "DISCARD"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "cards": {
+          "brick": 7,
+          "cloth": 1,
+          "coin": 0,
+          "grain": 0,
+          "lumber": 0,
+          "ore": 0,
+          "paper": 0,
+          "wool": 0
+        },
+        "type": "DISCARD"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "hex": "h:0,3",
+        "type": "MOVE_ROBBER"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "ACTIVATE_KNIGHT",
+        "vertex": "v:-1,-1,S"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "dice": [
+        2,
+        4
+      ],
+      "extra": {
+        "event": "ship"
+      },
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "resource": "wool",
+        "type": "CHOOSE_AQUEDUCT"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "PROMOTE_KNIGHT",
+        "vertex": "v:-1,-2,S"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "ACTIVATE_KNIGHT",
+        "vertex": "v:-2,0,N"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "dice": [
+        6,
+        6
+      ],
+      "extra": {
+        "event": "ship"
+      },
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "resource": "wool",
+        "type": "CHOOSE_AQUEDUCT"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "resource": "wool",
+        "type": "CHOOSE_AQUEDUCT"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "card": "roadBuilding",
+        "slotId": "progress:68",
+        "type": "PLAY_PROGRESS_CARD"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "edge": "e:0,-2,W",
+        "type": "PLACE_FREE_ROAD"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "SKIP"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "BUILD_KNIGHT",
+        "vertex": "v:0,-3,S"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "card": "wedding",
+        "slotId": "progress:63",
+        "type": "PLAY_PROGRESS_CARD"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "cards": {
+          "brick": 0,
+          "cloth": 1,
+          "coin": 0,
+          "grain": 0,
+          "lumber": 0,
+          "ore": 0,
+          "paper": 1,
+          "wool": 0
+        },
+        "type": "WEDDING_GIVE"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "track": "trade",
+        "type": "BUILD_IMPROVEMENT"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "dice": [
+        6,
+        4
+      ],
+      "extra": {
+        "event": "ship"
+      },
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "resource": "lumber",
+        "type": "CHOOSE_AQUEDUCT"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "resource": "ore",
+        "type": "CHOOSE_AQUEDUCT"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "dice": [
+        1,
+        3
+      ],
+      "extra": {
+        "event": "ship"
+      },
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "ACTIVATE_KNIGHT",
+        "vertex": "v:0,-3,S"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "ACTIVATE_KNIGHT",
+        "vertex": "v:-1,-1,N"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "dice": [
+        6,
+        2
+      ],
+      "extra": {
+        "event": "science"
+      },
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "card": "spy",
+        "params": {
+          "target": 4
+        },
+        "slotId": "progress:61",
+        "type": "PLAY_PROGRESS_CARD"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "kind": "system",
+      "seat": 4,
+      "to": 2,
+      "type": "SHOW_HAND",
+      "what": "progress"
+    },
+    {
+      "from": 4,
+      "kind": "system",
+      "seat": 2,
+      "slotId": null,
+      "type": "TAKE_PROGRESS"
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "track": "politics",
+        "type": "BUILD_IMPROVEMENT"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "dice": [
+        3,
+        4
+      ],
+      "extra": {
+        "event": "politics"
+      },
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "card": "diplomat",
+      "deck": "progress-politics",
+      "kind": "system",
+      "seat": 4,
+      "slotId": "progress:70",
+      "type": "DEAL_KNOWN"
+    },
+    {
+      "card": "deserter",
+      "deck": "progress-politics",
+      "kind": "system",
+      "seat": 2,
+      "slotId": "progress:71",
+      "type": "DEAL_KNOWN"
+    },
+    {
+      "command": {
+        "cards": {
+          "brick": 1,
+          "cloth": 0,
+          "coin": 0,
+          "grain": 0,
+          "lumber": 0,
+          "ore": 2,
+          "paper": 1,
+          "wool": 2
+        },
+        "type": "DISCARD"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "cards": {
+          "brick": 3,
+          "cloth": 0,
+          "coin": 0,
+          "grain": 0,
+          "lumber": 0,
+          "ore": 1,
+          "paper": 0,
+          "wool": 1
+        },
+        "type": "DISCARD"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "cards": {
+          "brick": 0,
+          "cloth": 0,
+          "coin": 0,
+          "grain": 1,
+          "lumber": 1,
+          "ore": 1,
+          "paper": 0,
+          "wool": 2
+        },
+        "type": "DISCARD"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "cards": {
+          "brick": 2,
+          "cloth": 1,
+          "coin": 0,
+          "grain": 0,
+          "lumber": 0,
+          "ore": 0,
+          "paper": 0,
+          "wool": 4
+        },
+        "type": "DISCARD"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "hex": "h:-2,1",
+        "type": "MOVE_ROBBER"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "STEAL",
+        "victim": 2
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "kind": "system",
+      "resource": "wool",
+      "thief": 3,
+      "type": "STEAL_RESULT",
+      "victim": 2
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "dice": [
+        3,
+        3
+      ],
+      "extra": {
+        "event": "science"
+      },
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "card": "inventor",
+      "deck": "progress-science",
+      "kind": "system",
+      "seat": 4,
+      "slotId": "progress:72",
+      "type": "DEAL_KNOWN"
+    },
+    {
+      "card": "alchemist",
+      "deck": "progress-science",
+      "kind": "system",
+      "seat": 0,
+      "slotId": "progress:73",
+      "type": "DEAL_KNOWN"
+    },
+    {
+      "card": "smith",
+      "deck": "progress-science",
+      "kind": "system",
+      "seat": 1,
+      "slotId": "progress:74",
+      "type": "DEAL_KNOWN"
+    },
+    {
+      "card": "mining",
+      "deck": "progress-science",
+      "kind": "system",
+      "seat": 2,
+      "slotId": "progress:75",
+      "type": "DEAL_KNOWN"
+    },
+    {
+      "command": {
+        "cards": [
+          {
+            "card": "deserter",
+            "slotId": "progress:71"
+          }
+        ],
+        "type": "DISCARD_PROGRESS"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "resource": "brick",
+        "type": "CHOOSE_AQUEDUCT"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "card": "inventor",
+        "params": {
+          "hexes": [
+            "h:1,-3",
+            "h:3,-2"
+          ]
+        },
+        "slotId": "progress:72",
+        "type": "PLAY_PROGRESS_CARD"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "card": "diplomat",
+        "params": {
+          "build": null,
+          "edge": "e:1,-2,W"
+        },
+        "slotId": "progress:70",
+        "type": "PLAY_PROGRESS_CARD"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "edge": "e:1,-2,W",
+        "type": "BUILD_ROAD"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "dice": [
+        4,
+        1
+      ],
+      "extra": {
+        "event": "ship"
+      },
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "dice": [
+        4,
+        6
+      ],
+      "extra": {
+        "event": "politics"
+      },
+      "kind": "system",
+      "type": "DICE_RESULT"
+    },
+    {
+      "card": "spy",
+      "deck": "progress-politics",
+      "kind": "system",
+      "seat": 2,
+      "slotId": "progress:76",
+      "type": "DEAL_KNOWN"
+    },
+    {
+      "card": "warlord",
+      "deck": "progress-politics",
+      "kind": "system",
+      "seat": 4,
+      "slotId": "progress:77",
+      "type": "DEAL_KNOWN"
+    },
+    {
+      "command": {
+        "cards": [
+          {
+            "card": "mining",
+            "slotId": "progress:75"
+          }
+        ],
+        "type": "DISCARD_PROGRESS"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "resource": "wool",
+        "type": "CHOOSE_AQUEDUCT"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "resource": "ore",
+        "type": "CHOOSE_AQUEDUCT"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "END_TURN"
+      },
+      "kind": "command",
+      "seat": 1
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 3
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 4
+    },
+    {
+      "command": {
+        "type": "END_SBP"
+      },
+      "kind": "command",
+      "seat": 0
+    },
+    {
+      "command": {
+        "type": "ROLL_DICE"
+      },
+      "kind": "command",
+      "seat": 2
+    },
+    {
+      "dice": [
+        5,
+        2
+      ],
+      "extra": {
+        "event": "ship"
+      },
+      "kind": "system",
+      "type": "DICE_RESULT"
+    }
+  ],
+  "checkpoints": [
+    {
+      "index": 0,
+      "stateHash": "24fb3902dbd534e4d181107a933d943f4ee5aad7bffdf2139dfffac99ee8716d"
+    },
+    {
+      "index": 25,
+      "stateHash": "6693458d97a4a8593131f161bda63648a0db177b08e4c86cbee576da4f9ab591"
+    },
+    {
+      "index": 50,
+      "stateHash": "bd2bf3e31ca0b56d8f7136c3dc40b3e32f84193e4344cea283afbb65f7a27e02"
+    },
+    {
+      "index": 75,
+      "stateHash": "5170bc15d50b99412db17d70d2a85f141b1b924123e0155fe66194f299d63653"
+    },
+    {
+      "index": 100,
+      "stateHash": "b2c06d372fba17439eb7dd830b7f877d854da20f493c02cd154a13704f28b3b0"
+    },
+    {
+      "index": 125,
+      "stateHash": "ab45de4445072de0df743e7d33aca18bf5da46a1c1314b6ae92b603f6d50237b"
+    },
+    {
+      "index": 150,
+      "stateHash": "759b45134bb88583d86a2f6437dde40374b563d4394e9a4d81ee8138db2bd94a"
+    },
+    {
+      "index": 175,
+      "stateHash": "0e0ef8155ca2e1748c0cb1c25fe58b719f4c24db0187143728320f088e411043"
+    },
+    {
+      "index": 200,
+      "stateHash": "1e252fec3ac7d44cf95792d9a87e19597513c27cb98bce85dcca7f5fb85fe163"
+    },
+    {
+      "index": 225,
+      "stateHash": "38d30314e067022f12b07fc55d357c44125dfbdcf1ddc7aa84f33ce16e150057"
+    },
+    {
+      "index": 250,
+      "stateHash": "4a01ee0776857ba847936edb6b1b9f8e041c44240ef2d4f74626e9c28c74abc8"
+    },
+    {
+      "index": 275,
+      "stateHash": "e05760b1ffe1556be21e5969fe1c4a0ce39a070bcaa9def37e81c576a997dda2"
+    },
+    {
+      "index": 300,
+      "stateHash": "d895a73f44bc03ce63a4aeccf05b1f61b2b715dd7dd4d71b157503a778fcd4aa"
+    },
+    {
+      "index": 325,
+      "stateHash": "5cbd23628328b90a9f563aee3be658327ad962329e1e36b829024a92d80f07d7"
+    },
+    {
+      "index": 350,
+      "stateHash": "67156fd3742d442c7d0c324cf169240e115dfcb3db27d9e2d5e02c9aaa1792d1"
+    },
+    {
+      "index": 375,
+      "stateHash": "574d7d7e92ec1e26121fb470f3a84de3cf901d03f11683682adca75a8fad1515"
+    },
+    {
+      "index": 400,
+      "stateHash": "de47761ca5742fd39e0d784bed2c6cb738ba1ba75a3d3675f5537676ca505667"
+    },
+    {
+      "index": 425,
+      "stateHash": "65dac4c9c07d3416b22a7a6fec302859b3a1106432713b08c61ae05a59f77102"
+    },
+    {
+      "index": 450,
+      "stateHash": "b0516344cfc571a3e19be1880a93325815e09fa3f8af1fdd6bd46ba26d1d17cc"
+    },
+    {
+      "index": 475,
+      "stateHash": "fecf33e20d44d7204a2dbd61d22b6568599d5de6e87ec5ba5b62ea70d97a5087"
+    },
+    {
+      "index": 500,
+      "stateHash": "4f80ba9495e94f44e127f4ea5fe2b6f47a3874cb04124012ddc33a72a85483e6"
+    },
+    {
+      "index": 525,
+      "stateHash": "76e69606f5cc4f95f761bff4f4924139d41816c90df30b44df154a6728547f24"
+    },
+    {
+      "index": 550,
+      "stateHash": "8e931f9c0deac8788cc235df5bc7a4b46efcf6b31dc97af31f93550f32f05c6e"
+    },
+    {
+      "index": 575,
+      "stateHash": "945dd0bc101843a96be92fb66815dd88b70a993eac246457305b1e5413d3ec4a"
+    },
+    {
+      "index": 600,
+      "stateHash": "8dd8406b2f6a6dd74a546634818b8fc454d6f8300cbf43e985590aa81fb8e0c5"
+    },
+    {
+      "index": 625,
+      "stateHash": "c4615e0d058e595c13c2f3836dae10383ad0c8474f7b30104ddae135a4184bff"
+    },
+    {
+      "index": 650,
+      "stateHash": "b0e7bf76baba7114addc92a87201eae3d07b718bd8ab1f853e81bac7db5451e8"
+    },
+    {
+      "index": 675,
+      "stateHash": "208484724931c8dadc9b3ab73ed9409b54d070218da8a4d27b777219a816aed3"
+    },
+    {
+      "index": 700,
+      "stateHash": "f439b86a7c1b16d34b2aff17b8ed2e56c10b0a2c5b30e7895e93ccc4f19d83fd"
+    },
+    {
+      "index": 725,
+      "stateHash": "98f56c6140928f8b2649a0ff1e4696801391b4d3e7e4a2605ae8aa9d13dbf455"
+    },
+    {
+      "index": 750,
+      "stateHash": "e241f6a3620a78d2541404e52a4364f5b894e329a8d73882c1c2eb5d53e3bac9"
+    },
+    {
+      "index": 775,
+      "stateHash": "a457cf8575b925be73b75f08ee255fcc0e338bfa329b61f521ae30bfb81590ea"
+    },
+    {
+      "index": 800,
+      "stateHash": "5f83876eacb3a56ac3fa2c829c2f4a2877f92667c8604d0b732a0cfcf4172b9c"
+    },
+    {
+      "index": 825,
+      "stateHash": "dffa001e4483b20ad178109a91101ede4ca28f216bf66d05d6bfe58a2bd56a35"
+    },
+    {
+      "index": 850,
+      "stateHash": "eb621bb50a0c12cd95826d15b672d5e48023b9d087d4fb90b688d47993664393"
+    },
+    {
+      "index": 875,
+      "stateHash": "165b288e5c02c356101db0db11f5188346846f026604c355fff1cbaafaf5e811"
+    },
+    {
+      "index": 900,
+      "stateHash": "73a90074110d9ee9bdd40d9a586c238bda9b6421cf6ec1a2657cab5227fc5145"
+    },
+    {
+      "index": 925,
+      "stateHash": "64f567ad50b20af3f87701b1d3b7f7229b77470c16588c73319d01e7ef042450"
+    },
+    {
+      "index": 950,
+      "stateHash": "f058b7e016b18e6e90d8c6afbc4bef10c6d59f0f161ec08df00f300905ab48d8"
+    },
+    {
+      "index": 975,
+      "stateHash": "c05f7fd322e4f39b33620a0311efe2c807b2ac34a227f91157db8a949a6ea07f"
+    },
+    {
+      "index": 1000,
+      "stateHash": "830543bdd8d81c4e21b4b3164e0d355b4ccadb5fe727606ae7d088a5e04e7eff"
+    },
+    {
+      "index": 1025,
+      "stateHash": "0615fcd90247c1c311028ea9ea9ec1ec8566cf47edc550193bcb88b58c2241e7"
+    },
+    {
+      "index": 1050,
+      "stateHash": "cc90f67d6d54b2c7f2027eb5cf7f14179c869a42a3f0d7cfc7fb1ed8f218d1f2"
+    },
+    {
+      "index": 1075,
+      "stateHash": "a0272640a2f6b489b9e52e2166a8981b4b177b138329c2cd35c6db32b314f12f"
+    },
+    {
+      "index": 1100,
+      "stateHash": "8c3089bc3247d3523cc5252ebd4ac9d0fd1db3daa3a528d62e35b132e13c517a"
+    },
+    {
+      "index": 1125,
+      "stateHash": "36977477269a1bbd58e0518425c8d991dc15daf628073020a3b5624c4e14b188"
+    },
+    {
+      "index": 1150,
+      "stateHash": "131dd4a622df87c18d4a0bccb32509a151672574c69a18f376e6d1d22202f36c"
+    },
+    {
+      "index": 1175,
+      "stateHash": "a9b94d1f8c88c78bb5ee71c33149d0fc298b632bdfe625b919e10c90e76a93ad"
+    },
+    {
+      "index": 1200,
+      "stateHash": "186fe6886c515c828f67329fa3a837d22891e3c2fcc0dd2cf21c51bb961ccc51"
+    },
+    {
+      "index": 1225,
+      "stateHash": "458e6e15908c934963bf89e02eefc5c52543933cb92b62dbf8708669a905c4a6"
+    },
+    {
+      "index": 1226,
+      "stateHash": "3110550f9005cd5e17653f2203f6ef66bbb59a4db61c02556268e7e91d1bf4d8"
+    }
+  ]
+}

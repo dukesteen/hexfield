@@ -1,0 +1,4 @@
+knights-3p-1k exit=0 seconds=60 peakRSS_MB=943
+knights-4p-1k exit=0 seconds=91 peakRSS_MB=920
+knights-56-5p-1k exit=0 seconds=171 peakRSS_MB=906
+knights-56-6p-1k exit=0 seconds=227 peakRSS_MB=886

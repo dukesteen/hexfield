@@ -1,0 +1,105 @@
+{
+  "format": "cp2p-golden-manifest",
+  "version": 1,
+  "fixtures": [
+    {
+      "name": "knights-3p",
+      "file": "knights-3p.replay.json",
+      "scenario": "knights",
+      "seats": 3,
+      "seed": 1300,
+      "gameIndex": 3,
+      "features": [
+        "barbarian-attack",
+        "chase-robber",
+        "defender-card",
+        "metropolis",
+        "normal-completion",
+        "pillage"
+      ],
+      "progressPlays": 37,
+      "inputs": 754,
+      "winner": 2,
+      "engineVersion": "0.1.0"
+    },
+    {
+      "name": "knights-4p",
+      "file": "knights-4p.replay.json",
+      "scenario": "knights",
+      "seats": 4,
+      "seed": 1300,
+      "gameIndex": 1,
+      "features": [
+        "barbarian-attack",
+        "defender-card",
+        "metropolis",
+        "normal-completion",
+        "pillage"
+      ],
+      "progressPlays": 20,
+      "inputs": 601,
+      "winner": 2,
+      "engineVersion": "0.1.0"
+    },
+    {
+      "name": "knights-4p-progress",
+      "file": "knights-4p-progress.replay.json",
+      "scenario": "knights",
+      "seats": 4,
+      "seed": 1310,
+      "gameIndex": 21,
+      "features": [
+        "barbarian-attack",
+        "chase-robber",
+        "defender-card",
+        "metropolis",
+        "normal-completion",
+        "pillage",
+        "progress-heavy"
+      ],
+      "progressPlays": 157,
+      "inputs": 1676,
+      "winner": 0,
+      "engineVersion": "0.1.0"
+    },
+    {
+      "name": "knights-56-5p",
+      "file": "knights-56-5p.replay.json",
+      "scenario": "knights-56",
+      "seats": 5,
+      "seed": 1300,
+      "gameIndex": 2,
+      "features": [
+        "barbarian-attack",
+        "defender-card",
+        "metropolis",
+        "normal-completion",
+        "pillage"
+      ],
+      "progressPlays": 58,
+      "inputs": 1226,
+      "winner": 2,
+      "engineVersion": "0.1.0"
+    },
+    {
+      "name": "knights-56-6p",
+      "file": "knights-56-6p.replay.json",
+      "scenario": "knights-56",
+      "seats": 6,
+      "seed": 1300,
+      "gameIndex": 4,
+      "features": [
+        "barbarian-attack",
+        "defender-card",
+        "knight-displace",
+        "metropolis",
+        "normal-completion",
+        "pillage"
+      ],
+      "progressPlays": 97,
+      "inputs": 1875,
+      "winner": 4,
+      "engineVersion": "0.1.0"
+    }
+  ]
+}

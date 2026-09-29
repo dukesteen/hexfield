@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
-import type { GameState } from '../../core/state/index.js';
+import type { GameState, PrivateState } from '../../core/state/index.js';
+import type { Seat } from '../../core/types/index.js';
 import { knightsEngine } from './testing.js';
 import { updateKnights } from './types.js';
 import { newGame, ringLayout, withBuildings, withKnights } from './support.js';
@@ -136,6 +137,26 @@ describe('knights invariants', () => {
     );
     expect(errors(updateKnights(base, (old) => ({ ...old, barbarians: { step: 7 } })))).toContain(
       'invalid barbarian step',
+    );
+  });
+});
+
+describe('commodity conservation', () => {
+  test('a commodity out of thin air, or missing, is reported by the private audit', () => {
+    const state = newGame(engine, { seats: 3 });
+    const privates = new Map<Seat, PrivateState>(
+      state.config.seats.map((seat) => [seat, engine.createPrivateState(seat, state.config)]),
+    );
+    expect(engine.checkPrivateInvariants(state, privates)).toEqual([]);
+    const first = privates.get(0);
+    if (!first) throw new Error('No private state');
+    privates.set(0, { ...first, hand: { ...first.hand, paper: 1 } });
+    expect(engine.checkPrivateInvariants(state, privates)).toContain(
+      'paper bank and private hands total 13, expected 12',
+    );
+    privates.set(0, { ...first, hand: { ...first.hand, coin: -1 } });
+    expect(engine.checkPrivateInvariants(state, privates)).toContain(
+      'coin bank and private hands total 11, expected 12',
     );
   });
 });

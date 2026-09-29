@@ -20,6 +20,7 @@
     "docs/verification/stage10/return-prefix-followup-raw.md",
     "apps/signaling/worker/worker-configuration.d.ts",
     "docs/verification/cloudflare/deployment-review-input.md",
-    "packages/engine/test/golden/seafaring/*.replay.json"
+    "packages/engine/test/golden/seafaring/*.replay.json",
+    "packages/engine/test/golden/knights/*.replay.json"
   ]
 }

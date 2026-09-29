@@ -10,6 +10,7 @@ import type { BatchOptions, BatchResult } from './batch.js';
 import { runGame, SimulationFailure } from './run-game.js';
 import { fuzz } from './fuzz.js';
 import { updateGoldens } from './golden.js';
+import { updateKnightsGoldens } from './knights-golden.js';
 import { updateSeafaringGoldens } from './seafaring-golden.js';
 import { readReplay, verifyReplay } from './replay.js';
 import type { ReplayFile } from './replay.js';
@@ -465,14 +466,18 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     if (
       rest[0] !== '--update' ||
       rest.length > 2 ||
-      (rest.length === 2 && rest[1] !== '--seafaring')
+      (rest.length === 2 && rest[1] !== '--seafaring' && rest[1] !== '--knights')
     )
-      throw new Error('Golden fixtures can only be regenerated with --update [--seafaring]');
+      throw new Error(
+        'Golden fixtures can only be regenerated with --update [--seafaring|--knights]',
+      );
     console.log(
       JSON.stringify(
         rest[1] === '--seafaring'
           ? updateSeafaringGoldens({ update: true })
-          : updateGoldens({ update: true }),
+          : rest[1] === '--knights'
+            ? updateKnightsGoldens({ update: true })
+            : updateGoldens({ update: true }),
       ),
     );
     return;
