@@ -1,5 +1,6 @@
 import { LocalSession } from '../../session';
 import type { LocalSessionRuntime } from '../../session';
+import { defaultBotRunner } from '../../session/bot-runner.js';
 
 interface Entry {
   session: LocalSession;
@@ -18,8 +19,13 @@ export function acquireLocalSession(
 ): LocalSession {
   let entry = sessions.get(gameId);
   if (!entry) {
-    const restored = LocalSession.restore(save, runtime);
-    if (!restored.ok) throw new Error(restored.error.message);
+    // The session's bots think in their own worker (inline where there is none).
+    const botRunner = runtime.botRunner ?? defaultBotRunner();
+    const restored = LocalSession.restore(save, { ...runtime, botRunner });
+    if (!restored.ok) {
+      botRunner.dispose();
+      throw new Error(restored.error.message);
+    }
     const validated = restored.value.exportSave();
     const revision =
       validated.genesis.length +

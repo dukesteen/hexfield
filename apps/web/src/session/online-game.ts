@@ -9,7 +9,7 @@ import {
 } from '@cp2p/crypto';
 import { createBotRng, humanlikeDelay } from '@cp2p/bots';
 import type { BotLevel } from '@cp2p/bots';
-import { defaultBotRunner } from './bot-runner.js';
+import { defaultBotRunner, hardBudgetMs } from './bot-runner.js';
 import type { BotRunner } from './bot-runner.js';
 import { success } from '@cp2p/engine';
 import type { Engine, Seat } from '@cp2p/engine';
@@ -123,9 +123,6 @@ const ONLINE_LEVEL: Readonly<Record<'easy' | 'medium' | 'hard', BotLevel>> = {
   medium: 'normal',
   hard: 'hard',
 };
-
-/** Thinking time for a searching (Hard) bot, per decision. */
-const HARD_BUDGET_MS = 300;
 
 export async function openOnlineGame(
   supplied: OnlineGameInput,
@@ -554,7 +551,7 @@ export async function openOnlineGame(
             seat: view.seat,
             pending,
             hosted: true,
-            timeBudgetMs: HARD_BUDGET_MS,
+            timeBudgetMs: hardBudgetMs(),
           }),
           extra > 0
             ? new Promise<void>((resolve) => input.clock.setTimeout(resolve, extra))

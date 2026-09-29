@@ -51,3 +51,10 @@ export function workerBotRunner(): BotRunner {
 export function defaultBotRunner(engine?: Engine): BotRunner {
   return typeof Worker === 'undefined' ? inlineBotRunner(engine) : workerBotRunner();
 }
+
+/** A Hard bot's thinking time per decision: 300 ms on a desktop, 150 ms on a phone or tablet. */
+export function hardBudgetMs(
+  userAgent: string = typeof navigator === 'undefined' ? '' : navigator.userAgent,
+): number {
+  return /Mobi|Android|iPhone|iPad/i.test(userAgent) ? 150 : 300;
+}

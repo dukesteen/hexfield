@@ -1,6 +1,6 @@
 import { createBotRng, humanlikeDelay } from '@cp2p/bots';
 import type { BotLevel, BotRng, Decision } from '@cp2p/bots';
-import { inlineBotRunner } from './bot-runner.js';
+import { hardBudgetMs, inlineBotRunner } from './bot-runner.js';
 import type { BotRunner } from './bot-runner.js';
 import { fromBase64Url, toBase64Url } from '@cp2p/codec';
 import { engineForConfig, ENGINE_VERSION, failure, LocalGame, success } from '@cp2p/engine';
@@ -104,9 +104,6 @@ function botDelay(value: LocalSessionRuntime['botDelayMs']): { min: number; max:
     throw new Error('Bot delay must be a nonnegative millisecond range');
   return range;
 }
-
-/** Thinking time for a searching (Hard) bot, per decision. */
-const HARD_BUDGET_MS = 300;
 
 /** Browser-local game authority. Public updates contain no other seat's secret state. */
 export class LocalSession implements GameSession<LocalSessionSave> {
@@ -656,7 +653,7 @@ export class LocalSession implements GameSession<LocalSessionSave> {
           seat: selected.seat,
           pending: selected,
           hosted: true,
-          timeBudgetMs: HARD_BUDGET_MS,
+          timeBudgetMs: hardBudgetMs(),
         });
         if (decided instanceof Promise) decided.then(play).catch(failed);
         else play(decided);

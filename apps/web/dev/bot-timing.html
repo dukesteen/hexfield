@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Bot decision timing</title>
+  </head>
+  <body>
+    <h1>Bot decision timing</h1>
+    <p>
+      Four bots play a base game; every decision runs in the bot worker with the time budget from
+      the URL (<code>?level=hard&amp;budget=150</code>). Worker time per decision kind is reported.
+    </p>
+    <button id="run" type="button">Play one game</button>
+    <pre id="result" aria-live="polite">Ready.</pre>
+    <script type="module" src="/src/dev/bot-timing.ts"></script>
+  </body>
+</html>
