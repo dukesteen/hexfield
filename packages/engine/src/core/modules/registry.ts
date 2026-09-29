@@ -260,6 +260,9 @@ function composeHooks(modules: readonly GameModule[]): HookPipeline {
     (hooks) => hooks.stealTargets,
   );
   const handLimit = foldAcc<[GameState, Seat], number>(modules, (hooks) => hooks.handLimit);
+  const afterDrawChain = modules.flatMap((module) =>
+    module.hooks?.afterDraw ? [module.hooks.afterDraw] : [],
+  );
   const bankRate = foldAcc<[GameState, Seat, string], number>(modules, (hooks) => hooks.bankRate);
   const turnFlow = foldAcc<[GameState], readonly PhaseFrame[]>(modules, (hooks) => hooks.turnFlow);
   const pending = foldAcc<[GameState], readonly Pending[]>(modules, (hooks) => hooks.pending);
@@ -321,6 +324,8 @@ function composeHooks(modules: readonly GameModule[]): HookPipeline {
       stealTargets([state, seat, blocker, hex], targets),
     handLimit: (state, seat, limit) => handLimit([state, seat], limit),
     bankRate: (state, seat, kind, rate) => bankRate([state, seat, kind], rate),
+    afterDraw: (draw, acc, ctx) =>
+      afterDrawChain.reduce((next, hook) => hook(draw, next, ctx), acc),
     afterBuild: foldState<[Seat, string, string]>(modules, (hooks) => hooks.afterBuild),
     afterInput: foldState<[]>(modules, (hooks) => hooks.afterInput),
     onTurnStart: foldState<[Seat]>(modules, (hooks) => hooks.onTurnStart),

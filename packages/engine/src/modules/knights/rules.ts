@@ -1,4 +1,10 @@
-import type { Blocker, DiceSpec, Production, VpContribution } from '../../core/modules/index.js';
+import type {
+  Blocker,
+  Cost,
+  DiceSpec,
+  Production,
+  VpContribution,
+} from '../../core/modules/index.js';
 import type { GameState } from '../../core/state/index.js';
 import type { Seat } from '../../core/types/index.js';
 import { verticesForHex } from '../base/board/index.js';
@@ -11,10 +17,13 @@ import {
   COMMODITY_BANK_FIVE_SIX,
   EVENT_DIE,
   KNIGHTS_VP_TARGET,
+  KNIGHT_COSTS,
   METROPOLIS_VP,
   TRACKS,
   WALL_HAND_BONUS,
 } from './config.js';
+import { advanceBarbarians } from './barbarians.js';
+import { beginGateDraws } from './progress/draw.js';
 import { knightsExt, updateKnights } from './types.js';
 
 /** The `bankInit` hook: 12 of each commodity, or 18 with five-six. */
@@ -56,18 +65,44 @@ export function cityProduction(state: GameState, roll: number, acc: Production):
   return next;
 }
 
-/** The `diceSpec` hook: the event die rides along with the two production dice. */
-export function withEventDie(_state: GameState, acc: DiceSpec): DiceSpec {
-  return { ...acc, extra: [...acc.extra, { id: EVENT_DIE.id, faces: [...EVENT_DIE.faces] }] };
+/**
+ * The `diceSpec` hook: the event die rides along with the two production dice, and an Alchemist
+ * sets the production dice so that only the event die is rolled.
+ */
+export function withEventDie(state: GameState, acc: DiceSpec): DiceSpec {
+  const alchemist = knightsExt(state).alchemist;
+  return {
+    ...acc,
+    extra: [...acc.extra, { id: EVENT_DIE.id, faces: [...EVENT_DIE.faces] }],
+    ...(alchemist ? { fixed: alchemist } : {}),
+  };
 }
 
-/** The `onDiceResult` hook: K1 only records the event die. K4 and K5 resolve it from here. */
+/**
+ * The `onDiceResult` hook: record the event die, move the barbarians on a ship, and start the
+ * progress card draws on a gate face. This runs before production and before a 7, so an attack
+ * lands first and its pillage takes effect on the same roll. Draws and pillage choices hold the
+ * roll back in their own frames; whichever closes last calls `resolveRoll`.
+ */
 export function recordEventDie(
   state: GameState,
-  _dice: readonly [number, number],
+  dice: readonly [number, number],
   extra: Readonly<Record<string, string>>,
 ): GameState {
-  return updateKnights(state, (old) => ({ ...old, eventDie: extra[EVENT_DIE.id] ?? null }));
+  const face = extra[EVENT_DIE.id] ?? null;
+  const recorded = updateKnights(state, (old) => ({ ...old, eventDie: face, alchemist: null }));
+  const roll = dice[0] + dice[1];
+  if (face === 'ship') return advanceBarbarians(recorded, roll);
+  const track = TRACKS.find((item) => item === face);
+  return track === undefined ? recorded : beginGateDraws(recorded, track, dice[0], roll);
+}
+
+/** The `costs` hook: knights, promotions, activations and city walls. */
+export function knightCosts(
+  _config: GameState['config'],
+  acc: Readonly<Record<string, Cost>>,
+): Record<string, Cost> {
+  return { ...acc, ...KNIGHT_COSTS };
 }
 
 /** The `handLimit` hook: 7, plus 2 for each city wall the seat has on the board. */
@@ -94,21 +129,25 @@ export function knightsTarget(acc: number): number {
   return Math.max(acc, KNIGHTS_VP_TARGET);
 }
 
-/** The `victoryPoints` hook: a metropolis is worth two points, public and stored. */
+/** The `victoryPoints` hook: metropolises (two each) and Defender of Catan cards (one each). */
 export function metropolisPoints(
   state: GameState,
   seat: Seat,
   acc: readonly VpContribution[],
 ): readonly VpContribution[] {
-  const held = knightsExt(state).metropolises;
+  const ext = knightsExt(state);
+  const defenders = ext.defenders[seat] ?? 0;
   return [
     ...acc,
-    ...TRACKS.filter((track) => held[track]?.seat === seat).map((track) => ({
+    ...TRACKS.filter((track) => ext.metropolises[track]?.seat === seat).map((track) => ({
       source: `metropolis:${track}`,
       points: METROPOLIS_VP,
       public: true,
       stored: true,
     })),
+    ...(defenders > 0
+      ? [{ source: 'defender', points: defenders, public: true, stored: true }]
+      : []),
   ];
 }
 

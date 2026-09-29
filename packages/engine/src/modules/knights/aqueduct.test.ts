@@ -107,7 +107,7 @@ describe('Aqueduct', () => {
     expect(top(roll(engine, state, EIGHT))?.id).toBe('main');
     // Other tracks at level 3 do not count.
     const wrong = withLevels(withLevels(state, 1, { trade: 3 }), 2, { politics: 3 });
-    expect(top(roll(engine, wrong, EIGHT))?.id).toBe('main');
+    expect(top(roll(engine, wrong, EIGHT, 'ship'))?.id).toBe('main');
   });
 
   test('an empty resource bank opens nothing, and a bank running dry ends the queue', () => {

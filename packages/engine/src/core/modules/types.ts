@@ -97,6 +97,18 @@ export interface DiceSpec {
   count: number;
   sides: number;
   extra: readonly { id: string; faces: readonly string[] }[];
+  /**
+   * The production dice are set, not rolled (knights' Alchemist). The request then has mode
+   * `fixed` and carries the faces; `DICE_RESULT` must repeat them. Extra dice are still rolled.
+   */
+  fixed?: readonly [number, number];
+}
+
+/** A finished private draw, as `afterDraw` sees it. */
+export interface DrawInfo {
+  seat: Seat;
+  deck: string;
+  slotId: string;
 }
 
 /** A movable blocker such as the robber or a pirate, with the hexes it may move to. */
@@ -196,6 +208,11 @@ export interface Hooks {
     targets: readonly Seat[],
   ): readonly Seat[];
   handLimit(state: GameState, seat: Seat, limit: number): number;
+  /**
+   * After a `CARD_DEALT` deal and the popping of its draw frame. `acc` starts as the deal's own
+   * transition; a module may push frames, or resolve a roll it held back (its effects are added).
+   */
+  afterDraw(draw: DrawInfo, acc: Transition, ctx: HandlerContext): Transition;
   /** The bank-trade rate (cards given per card received) for one kind; `rate` is the harbor rate. */
   bankRate(state: GameState, seat: Seat, kind: string, rate: number): number;
   afterBuild(state: GameState, seat: Seat, buildType: string, loc: string): GameState;

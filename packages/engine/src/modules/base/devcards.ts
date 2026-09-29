@@ -196,29 +196,50 @@ export const cardDealt: SystemInputHandler = {
     };
     // A draw frame may also sit above a turn-end marker, where leaving it starts the next turn.
     const left = finishTurnFlowFrame(next, ctx);
-    return {
-      state: left.state,
-      events: [
-        deckId === 'dev'
-          ? { type: 'devCardDealt', seat: data.seat, slotId: data.slotId }
-          : { type: 'cardDealt', deck: deckId, seat: data.seat, slotId: data.slotId },
-        ...left.events,
-      ],
-      effects: [
-        { type: 'card-slot-dealt', seat: data.seat, deck: deckId, slotId: data.slotId },
-        ...left.effects,
-      ],
-    };
+    // A module may continue what the draw belonged to (more draws, or a roll held back for them).
+    const followed = ctx.hooks.afterDraw(
+      { seat: data.seat, deck: deckId, slotId: data.slotId },
+      {
+        state: left.state,
+        events: [
+          deckId === 'dev'
+            ? { type: 'devCardDealt', seat: data.seat, slotId: data.slotId }
+            : { type: 'cardDealt', deck: deckId, seat: data.seat, slotId: data.slotId },
+          ...left.events,
+        ],
+        effects: [
+          { type: 'card-slot-dealt', seat: data.seat, deck: deckId, slotId: data.slotId },
+          ...left.effects,
+        ],
+      },
+      ctx,
+    );
+    return followed;
   },
   applyPrivate: (priv, before, input, data, ctx) => {
     const pending = drawData(before);
-    if (priv.seat !== pending.seat) return success(priv);
-    const card = input.card ?? data?.card;
-    if (typeof card !== 'string' || !declaresCard(before, ctx, drawDeck(before), card))
-      return failure('missing-private-card', 'Owner must receive the dealt card identity');
-    if (input.card !== undefined && data?.card !== undefined && data.card !== input.card)
-      return failure('card-identity-mismatch', 'Private card identity disagrees with local deal');
-    return success({ ...priv, slots: { ...priv.slots, [pending.slotId]: card } });
+    let next: PrivateState = priv;
+    if (priv.seat === pending.seat) {
+      const card = input.card ?? data?.card;
+      if (typeof card !== 'string' || !declaresCard(before, ctx, drawDeck(before), card))
+        return failure('missing-private-card', 'Owner must receive the dealt card identity');
+      if (input.card !== undefined && data?.card !== undefined && data.card !== input.card)
+        return failure('card-identity-mismatch', 'Private card identity disagrees with local deal');
+      next = { ...priv, slots: { ...priv.slots, [pending.slotId]: card } };
+    }
+    // A module's follow-up on a module deck (a held-back roll's production) may pay any seat
+    // known cards. Development draws never have one, so they skip the recomputation.
+    if (drawDeck(before) === 'dev') return success(next);
+    for (const effect of cardDealt.apply(before, input, ctx).effects) {
+      if (effect.type !== 'resource-transfer') continue;
+      const gained = effect.to.kind === 'seat' && effect.to.seat === priv.seat;
+      const lost = effect.from.kind === 'seat' && effect.from.seat === priv.seat;
+      if (!gained && !lost) continue;
+      const credited = privateExchange(next, { [effect.resource]: effect.count }, gained);
+      if (!credited.ok) return credited;
+      next = credited.value;
+    }
+    return success(next);
   },
 };
 
@@ -256,7 +277,7 @@ export const playDevCard: CommandHandler = {
     if (!isDevCard(card) || card === 'victoryPoint')
       return failure('invalid-dev-card', 'This card cannot be played');
     const owned = slot(state, input.seat, input.command.slotId);
-    if (!owned || owned.revealed)
+    if (!owned || owned.revealed || owned.deck !== 'dev')
       return failure('invalid-dev-slot', 'Card slot is missing, foreign or spent');
     if (owned.acquiredTurn === state.turn.number)
       return failure('new-dev-card', 'Card cannot be played on the turn acquired');
@@ -437,6 +458,11 @@ export const monopolyPhase: PhaseHandler = {
   },
 };
 
+/** Cards a monopoly takes from a seat that holds `count` of the kind: all, or up to the frame's limit. */
+function moved(data: MonopolyData, count: number): number {
+  return data.limit === undefined ? count : Math.min(count, data.limit);
+}
+
 export const revealCount: SystemInputHandler = {
   validate: (state, input) => {
     const data = monopolyData(state);
@@ -456,7 +482,7 @@ export const revealCount: SystemInputHandler = {
     if (!exact.ok) return exact;
     const paid = loseKnown(
       exact.value,
-      { ...fillCounts({}, kinds), [data.resource]: input.count },
+      { ...fillCounts({}, kinds), [data.resource]: moved(data, input.count) },
       kinds,
     );
     return paid.ok ? success(undefined) : paid;
@@ -467,7 +493,7 @@ export const revealCount: SystemInputHandler = {
     if (victim === undefined || typeof input.count !== 'number')
       throw new Error('Validated reveal missing');
     const kinds = cardKindsOf(state);
-    const counts = { ...fillCounts({}, kinds), [data.resource]: input.count };
+    const counts = { ...fillCounts({}, kinds), [data.resource]: moved(data, input.count) };
     const exact = revealExact(
       kindBounds(ownSeat(state, victim).resources),
       data.resource,
@@ -492,7 +518,7 @@ export const revealCount: SystemInputHandler = {
           seat: data.seat,
           from: victim,
           resource: data.resource,
-          count: input.count,
+          count: moved(data, input.count),
         },
       ],
       effects: [
@@ -520,7 +546,7 @@ export const revealCount: SystemInputHandler = {
       return failure('private-reveal-mismatch', 'Revealed count differs from the owner hand');
     return privateExchange(
       priv,
-      { ...emptyResources(), [data.resource]: input.count },
+      { [data.resource]: moved(data, input.count) },
       priv.seat === data.seat,
     );
   },

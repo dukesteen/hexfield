@@ -40,6 +40,7 @@ function wholeHand(priv: PrivateState, kinds: readonly string[]): MutableCounts 
 }
 
 function discardOptions(
+  type: string,
   hand: CardCounts,
   kinds: readonly string[],
   count: number,
@@ -95,7 +96,7 @@ function discardOptions(
     }
     return result;
   }
-  return selected.map((rank) => ({ type: 'DISCARD', cards: unrank(rank) }));
+  return selected.map((rank) => ({ type, cards: unrank(rank) }));
 }
 
 function pair(first: string, second: string): CardCounts {
@@ -122,10 +123,21 @@ export function enumerateCommands(
   const candidates: CommandShape[] = [];
   for (const template of legal.templates) {
     switch (template.type) {
-      case 'DISCARD': {
+      // A choice of `count` cards from the hand: a discard on a 7, and the module choices that read
+      // the same (a Saboteur discard, a Wedding gift).
+      case 'DISCARD':
+      case 'SABOTEUR_DISCARD':
+      case 'WEDDING_GIVE': {
         if (typeof template.count === 'number')
           candidates.push(
-            ...discardOptions(hand, kinds, template.count, maxDiscardOptions, opts.sampleIndex),
+            ...discardOptions(
+              template.type,
+              hand,
+              kinds,
+              template.count,
+              maxDiscardOptions,
+              opts.sampleIndex,
+            ),
           );
         break;
       }

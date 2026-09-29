@@ -54,8 +54,11 @@ export interface RoadBuildingData {
 }
 export interface MonopolyData {
   seat: Seat;
+  /** The card kind named: a base resource, or a module's kind such as a commodity. */
   resource: Resource;
   remaining: Seat[];
+  /** Most cards taken from each seat (a progress card monopoly); absent takes all of them. */
+  limit?: number;
 }
 
 export function baseOptions(value: unknown): BaseOptions {

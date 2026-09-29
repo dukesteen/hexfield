@@ -6,6 +6,7 @@ import type {
   SystemInputHandler,
   Transition,
 } from '../../../core/modules/index.js';
+import type { EngineEffect } from '../../../core/effects/index.js';
 import type { RandomRequest, SystemInput } from '../../../core/pipeline/index.js';
 import type { GameEvent } from '../../../core/events/index.js';
 import type { GameState, PrivateState } from '../../../core/state/index.js';
@@ -96,6 +97,11 @@ function checkExtraDice(state: GameState, input: SystemInput, ctx: HandlerContex
     : failure('invalid-dice', 'An extra die shows a face it does not have');
 }
 
+/** The production dice a module set instead of rolling (the Alchemist), if any. */
+function fixedDice(state: GameState, ctx: HandlerContext): readonly [number, number] | undefined {
+  return ctx.hooks.diceSpec(state, BASE_DICE).fixed;
+}
+
 function validDice(value: unknown): value is [number, number] {
   return (
     Array.isArray(value) &&
@@ -113,7 +119,7 @@ function diceForIndex(index: number): readonly [number, number] {
 function preparedDiceState(state: GameState, input: SystemInput, ctx: HandlerContext): GameState {
   if (!validDice(input.dice)) throw new Error('Validated dice missing');
   let next = ctx.hooks.onDiceResult(state, input.dice, extraFaces(input));
-  if (baseOptions(next.config.options.base).diceMode === 'balanced') {
+  if (baseOptions(next.config.options.base).diceMode === 'balanced' && !fixedDice(state, ctx)) {
     const index = input.index;
     if (typeof index !== 'number') throw new Error('Validated index missing');
     next = updateBase(next, (old) => ({
@@ -142,6 +148,14 @@ function extraRequest(spec: DiceSpec): { extra?: { id: string; faces: string[] }
 }
 
 function diceRequest(state: GameState, ctx: HandlerContext): RandomRequest {
+  const fixed = fixedDice(state, ctx);
+  if (fixed)
+    return {
+      type: 'dice',
+      mode: 'fixed',
+      dice: [...fixed],
+      ...extraRequest(ctx.hooks.diceSpec(state, BASE_DICE)),
+    };
   if (baseOptions(state.config.options.base).diceMode === 'balanced')
     return {
       type: 'dice',
@@ -206,12 +220,68 @@ export const rollDice: CommandHandler = {
   },
 };
 
+/** True when a module pushed a frame over the dice frame while resolving the roll. */
+function interrupted(before: GameState, prepared: GameState): boolean {
+  return prepared.turn.phase.length > before.turn.phase.length;
+}
+
+/**
+ * Resolve a roll whose dice frame is on top: pay production and open the `main` phase, or start
+ * the 7's discards and robber step. `DICE_RESULT` calls it at once; a module that held the roll
+ * back with its own frame calls it after popping that frame. The `diceRolled` event is not part
+ * of it.
+ */
+export function resolveRoll(
+  state: GameState,
+  roll: number,
+  ctx: HandlerContext,
+): { state: GameState; events: GameEvent[]; effects: EngineEffect[] } {
+  let next = state;
+  let events: GameEvent[] = [];
+  let effects: EngineEffect[] = [];
+  if (roll !== 7) {
+    const production = applyProduction(next, roll, ctx);
+    next = production.state;
+    effects = production.effects;
+    events = [{ type: 'resourcesProduced', bySeat: production.bySeat }];
+    for (const seat of next.config.seats)
+      if (!Object.hasOwn(production.bySeat, seat)) next = ctx.hooks.onNoProduction(next, seat);
+    next = replaceTop(next, frame('main'));
+    next = ctx.hooks.afterProduction(next, roll);
+  } else {
+    const limit = baseOptions(next.config.options.base).discardLimit;
+    const remaining = next.config.seats.filter((seat) => {
+      const holder = next.seats.find((item) => item.seat === seat);
+      return (
+        holder &&
+        holder.resources.total > ctx.hooks.handLimit(next, seat, limit) &&
+        Math.floor(holder.resources.total / 2) > 0
+      );
+    });
+    next = replaceTop(
+      next,
+      remaining.length ? frame('discard', { remaining }) : robberStepFrame(next, ctx),
+    );
+  }
+  return { state: next, events, effects };
+}
+
 export const diceResult: SystemInputHandler = {
   validate: (state, input, ctx) => {
     if (!validDice(input.dice))
       return failure('invalid-dice', 'Dice must contain two faces from 1 to 6');
     const extra = checkExtraDice(state, input, ctx);
     if (!extra.ok) return extra;
+    const fixed = fixedDice(state, ctx);
+    if (fixed)
+      return input.dice[0] === fixed[0] &&
+        input.dice[1] === fixed[1] &&
+        !Object.hasOwn(input, 'index')
+        ? success(undefined)
+        : failure(
+            'fixed-dice-mismatch',
+            'The production dice were set and must repeat their faces',
+          );
     if (baseOptions(state.config.options.base).diceMode !== 'balanced')
       return Object.hasOwn(input, 'index')
         ? failure('unknown-field', 'Random dice results cannot include an index')
@@ -229,54 +299,32 @@ export const diceResult: SystemInputHandler = {
   apply: (state, input, ctx) => {
     if (!validDice(input.dice)) throw new Error('Validated dice missing');
     const roll = input.dice[0] + input.dice[1];
-    let next = preparedDiceState(state, input, ctx);
-    let productionEvent: GameEvent | null = null;
-    let effects: ReturnType<typeof applyProduction>['effects'] = [];
-    if (roll !== 7) {
-      const production = applyProduction(next, roll, ctx);
-      next = production.state;
-      effects = production.effects;
-      productionEvent = { type: 'resourcesProduced', bySeat: production.bySeat };
-      for (const seat of next.config.seats)
-        if (!Object.hasOwn(production.bySeat, seat)) next = ctx.hooks.onNoProduction(next, seat);
-      next = replaceTop(next, frame('main'));
-      next = ctx.hooks.afterProduction(next, roll);
-    } else {
-      const limit = baseOptions(next.config.options.base).discardLimit;
-      const remaining = next.config.seats.filter((seat) => {
-        const holder = next.seats.find((item) => item.seat === seat);
-        return (
-          holder &&
-          holder.resources.total > ctx.hooks.handLimit(next, seat, limit) &&
-          Math.floor(holder.resources.total / 2) > 0
-        );
-      });
-      next = replaceTop(
-        next,
-        remaining.length ? frame('discard', { remaining }) : robberStepFrame(next, ctx),
-      );
-    }
+    const prepared = preparedDiceState(state, input, ctx);
     const extra = extraFaces(input);
+    const rolled: GameEvent = {
+      type: 'diceRolled',
+      dice: input.dice,
+      roll,
+      ...(Object.keys(extra).length ? { extra } : {}),
+    };
+    // A module that opened a choice from `onDiceResult` (a barbarian attack that needs a seat's
+    // decision) holds the roll back: it calls `resolveRoll` when its frame closes.
+    if (interrupted(state, prepared)) return { state: prepared, events: [rolled], effects: [] };
+    const resolved = resolveRoll(prepared, roll, ctx);
     return {
-      state: next,
-      events: [
-        {
-          type: 'diceRolled',
-          dice: input.dice,
-          roll,
-          ...(Object.keys(extra).length ? { extra } : {}),
-        },
-        ...(productionEvent ? [productionEvent] : []),
-      ],
-      effects,
+      state: resolved.state,
+      events: [rolled, ...resolved.events],
+      effects: resolved.effects,
     };
   },
   applyPrivate: (priv, before, input, _data, ctx): Result<PrivateState> => {
     if (!validDice(input.dice)) return failure('invalid-dice', 'Dice missing');
     const roll = input.dice[0] + input.dice[1];
-    return roll === 7
+    if (roll === 7) return success(priv);
+    const prepared = preparedDiceState(before, input, ctx);
+    return interrupted(before, prepared)
       ? success(priv)
-      : applyPrivateProduction(priv, preparedDiceState(before, input, ctx), roll, ctx);
+      : applyPrivateProduction(priv, prepared, roll, ctx);
   },
 };
 
