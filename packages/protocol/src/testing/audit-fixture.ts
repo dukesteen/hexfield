@@ -118,6 +118,8 @@ export async function createTerminalAuditFixture(
     simulationSeed?: number;
     /** Stop after this many commands without a result; `terminal` is then false and no audit runs. */
     stopAfterSteps?: number;
+    /** Stop as soon as this holds of the certified state, like `stopAfterSteps`. */
+    stopWhen?: (state: GameState) => boolean;
     /** Includes automatic-input waits; short audit fixtures keep the default 500 steps. */
     maxSteps?: number;
     onProgress?: (step: number, state: GameState) => void;
@@ -318,6 +320,7 @@ export async function createTerminalAuditFixture(
       options.onStep?.(sessions, state, step);
       if (
         state.result ||
+        options.stopWhen?.(state) === true ||
         (options.stopAfterSteps !== undefined && step >= options.stopAfterSteps)
       ) {
         const entries = current.exportSave().entries.slice();

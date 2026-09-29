@@ -249,7 +249,7 @@ describe('certified deck ledger', () => {
           body: { ...signed.body, command: { ...command, card: 'monopoly' } },
         },
         0,
-        [{ ...reveals[0], card: 'monopoly' }],
+        [{ seat: 0, deck: 'dev', slotId: 'dev:0', card: 'monopoly' }],
       ).ok,
     ).toBe(false);
     expect(
@@ -326,7 +326,7 @@ describe('certified deck ledger', () => {
           body: { ...signed.body, command: { ...command, slotIds: ['other'] } },
         },
         0,
-        [{ ...held[0], slotId: 'other' }],
+        [{ seat: 0, deck: 'dev', slotId: 'other', card: 'victoryPoint' }],
       ).ok,
     ).toBe(false);
   });

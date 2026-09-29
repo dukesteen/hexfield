@@ -21,6 +21,7 @@ import { deckPassHash } from './deck-genesis.js';
 import { applyDeckPass, deckPassOperationId } from './deck-setup.js';
 import { entryHash, genesisDigest } from './genesis.js';
 import { planNeedsProofs, readCommandProofs } from './command-proofs.js';
+import { lookStep, stepHasEvidence } from './look-flow.js';
 import { validateCommandForEntry, validateCommandStatement } from './command-validation.js';
 import type { LogContext } from './log-types.js';
 import type { Genesis } from './types.js';
@@ -73,8 +74,17 @@ const PROOF_FAILURES = new Set([
   'hand-proof-invalid',
   'deck-reveal-proof',
   'deck-reveal-kind',
+  'deck-reveal-order',
+  'deck-reveal-slots',
   'deck-denial-proof',
   'deck-denial-context',
+  'spy-request-proof',
+  'spy-request-slots',
+  'spy-request-slot',
+  'spy-unlock-proof',
+  'spy-unlock-slots',
+  'spy-unlock-slot',
+  'preproof-invalid',
 ]);
 
 function unproven(): Result<never> {
@@ -164,8 +174,10 @@ function badCommandProof(artifact: RawSignedArtifact, context: LogContext): Resu
   if (!statement.ok || !statement.value.plan) return unproven();
   const { body } = statement.value.signed;
   const plan = statement.value.plan;
-  if (!planNeedsProofs(plan)) return unproven();
-  const sections = readCommandProofs(body.evidence, plan);
+  const step = lookStep(plan.input, statement.value.applied.state);
+  const looks = stepHasEvidence(step, context.state, plan.input);
+  if (!planNeedsProofs(plan) && !looks) return unproven();
+  const sections = readCommandProofs(body.evidence, plan, looks);
   if (!sections.ok)
     return PROOF_FAILURES.has(sections.error.code) ? success(body.seat) : unproven();
   const checked = validateCommandForEntry(artifact, context, {});

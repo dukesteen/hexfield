@@ -1389,6 +1389,16 @@ export class VerifiedSessionDriver implements SessionDriver {
       this.owned.add(seat);
       this.privates.set(seat, copied.state);
       this.blindings.set(seat, copied.blindings);
+      // A look that was open when the seat changed hands stays usable to its new controller.
+      const known = donor.spyKnowledge.get(seat);
+      if (known) this.spyKnowledge.set(seat, new Map(known));
+      const shown = donor.handLooks.get(seat);
+      if (shown)
+        this.handLooks.set(seat, {
+          target: shown.target,
+          counts: { ...shown.counts },
+          blindings: { ...shown.blindings },
+        });
       this.deckRoutes.set(seat, donor.deckRoutes.get(seat) ?? donor.createDeckSource);
       this.handRoutes.set(seat, donor.handRoutes.get(seat) ?? donor.createHandSource);
       this.stealRoutes.set(seat, donor.stealRoutes.get(seat) ?? donor.createStealSource);
@@ -1408,6 +1418,8 @@ export class VerifiedSessionDriver implements SessionDriver {
       }
       this.privates.delete(seat);
       this.blindings.delete(seat);
+      this.spyKnowledge.delete(seat);
+      this.handLooks.delete(seat);
       this.deckRoutes.delete(seat);
       this.handRoutes.delete(seat);
       this.stealRoutes.delete(seat);
