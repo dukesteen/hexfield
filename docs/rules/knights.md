@@ -407,6 +407,7 @@ Only the choices the module made beyond the rules above:
 - **Target.** `vpTarget` is at least 13; a larger base target is kept.
 - **Special build phase.** `BUILD_IMPROVEMENT` is allowed there (five-six), as the rules list improvements among the builds.
 - **Lobby.** The `knights` and `knights-56` scenarios exist before the UI (K6) does.
+- **P2P (K1 and K2).** Knights is playable over the verified protocol. Hand commitments, range and count proofs, hidden steals and accounting cover all eight card kinds (the five resources, then `cloth`, `coin`, `paper`); base games still commit exactly five. The development deck is empty, so a knights game has no deck ceremony. K1 and K2 games have no steals (the robber is locked); the steal path is tested with the robber unlocked. See the decisions log entry "Verified P2P hand machinery over the game's card kinds".
 
 ## As implemented in K3 and K4
 
@@ -482,4 +483,3 @@ Only the choices the module made beyond the rules above:
 - A `progress` frame asks all draws first, then the victory checks, then the off-turn discards, in parallel within each step and always before production. Checking after all draws instead of after each is not observable.
 - A seat's progress card count is public (the size of a physical hand), which the Spy's legality uses.
 - A draw from a deck with no card left is dropped; a deck whose hidden positions are used up deals its returned cards in the order they came back.
-- **P2P.** Knights is playable over the verified protocol. Hand commitments, range and count proofs, hidden steals and accounting cover all eight card kinds (the five resources, then `cloth`, `coin`, `paper`); base games still commit exactly five. The development deck is empty, so a knights game has no deck ceremony. K1 and K2 games have no steals (the robber is locked); the steal path is tested with the robber unlocked. See the decisions log entry "Verified P2P hand machinery over the game's card kinds".

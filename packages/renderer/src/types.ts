@@ -187,7 +187,13 @@ export type BoardEffect =
       readonly fromEdge: EdgeId;
       readonly toEdge: EdgeId;
     }
-  | { readonly id: string; readonly kind: 'fog-reveal'; readonly hex: HexId };
+  | {
+      readonly id: string;
+      readonly kind: 'fog-reveal';
+      readonly hex: HexId;
+      /** Position in a batch of reveals: later ones start later, so each is seen on its own. */
+      readonly order?: number;
+    };
 
 export interface BoardRenderer {
   render(model: RenderModel): void;
