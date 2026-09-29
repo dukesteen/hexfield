@@ -6,54 +6,76 @@ import {
   seafaringExt,
   strandsKnight,
 } from '@cp2p/engine';
+import type { Engine, GameState, Seat } from '@cp2p/engine';
 import { SCENARIOS, scenarioConfig } from '@cp2p/maps';
 import { runGame } from './run-game.js';
+import type { RunGameResult } from './run-game.js';
+
+/**
+ * The regular run plays one game per seat count and scenario. `CP2P_HEAVY_TESTS=1` plays three per
+ * seat count and both seat counts of each scenario, and requires the rarer flows to appear.
+ */
+const HEAVY = process.env.CP2P_HEAVY_TESTS === '1';
+
+/** A macrotask between games keeps the test worker responsive during long synchronous sweeps. */
+const yieldTask = () => new Promise<void>((resolve) => setImmediate(resolve));
+
+async function sweep(
+  games: readonly Parameters<typeof runGame>[0][],
+  each: (result: RunGameResult) => void,
+): Promise<void> {
+  for (const options of games) {
+    each(runGame(options));
+    // oxlint-disable-next-line no-await-in-loop -- Games run one at a time, yielding in between.
+    await yieldTask();
+  }
+}
 
 const COMBINED = SCENARIOS.filter(
   (scenario) => scenario.modules.includes('seafaring') && scenario.modules.includes('knights'),
 );
 
+/** Flows every sweep shows; the heavy sweep also needs the rarer ones. */
+const COMMON = [
+  'BUILD_SHIP',
+  'MOVE_SHIP',
+  'MOVE_PIRATE',
+  'BUILD_KNIGHT',
+  'BUILD_IMPROVEMENT',
+  'PLAY_PROGRESS_CARD',
+  'END_SBP',
+];
+const RARE = ['PLACE_SETUP_SHIP', 'CHOOSE_GOLD', 'MOVE_KNIGHT', 'CHASE_ROBBER', 'PLACE_FREE_SHIP'];
+
 describe('seafaring with knights simulation', () => {
-  test('random bots finish games on the test archipelago at three to six seats', () => {
+  test('random bots finish games on the test archipelago at three to six seats', async () => {
     const totals: Record<string, number> = {};
     let stranding = 0;
-    for (const seats of [3, 4, 5, 6])
-      for (let gameIndex = 0; gameIndex < 3; gameIndex++) {
-        const result = runGame({
-          seed: 5,
-          gameIndex,
-          config: seafarersKnightsConfig({ seats, fiveSix: seats > 4, base: { vpTarget: 15 } }),
-          // Rule 6 (combos.md): no legal ship move may cut a knight off its settlements.
-          onPlayerStep: (engine, state, seat) => {
-            if (gameIndex > 0) return;
-            for (const command of engine.getLegalCommands(state, seat).commands)
-              if (command.type === 'MOVE_SHIP' && strandsKnight(state, seat, String(command.from)))
-                stranding++;
-          },
-        });
-        expect(result.state.result).not.toBeNull();
-        // The pirate is on the board exactly when the barbarians have attacked.
-        const attacked = knightsExt(result.state).lastAttack !== null;
-        expect(comboExt(result.state).pirateEntered).toBe(attacked);
-        expect(attacked || seafaringExt(result.state).pirateHex === null).toBe(true);
-        for (const [type, count] of Object.entries(result.stats.commands))
-          totals[type] = (totals[type] ?? 0) + count;
-      }
+    // Rule 6 (combos.md): no legal ship move may cut a knight off its settlements.
+    const checkShipMoves = (engine: Engine, state: GameState, seat: Seat): void => {
+      for (const command of engine.getLegalCommands(state, seat).commands)
+        if (command.type === 'MOVE_SHIP' && strandsKnight(state, seat, String(command.from)))
+          stranding++;
+    };
+    const games = [3, 4, 5, 6].flatMap((seats) =>
+      Array.from({ length: HEAVY ? 3 : 1 }, (_, gameIndex) => ({
+        seed: 5,
+        gameIndex,
+        config: seafarersKnightsConfig({ seats, fiveSix: seats > 4, base: { vpTarget: 15 } }),
+        ...(gameIndex === 0 ? { onPlayerStep: checkShipMoves } : {}),
+      })),
+    );
+    await sweep(games, (result) => {
+      expect(result.state.result).not.toBeNull();
+      // The pirate is on the board exactly when the barbarians have attacked.
+      const attacked = knightsExt(result.state).lastAttack !== null;
+      expect(comboExt(result.state).pirateEntered).toBe(attacked);
+      expect(attacked || seafaringExt(result.state).pirateHex === null).toBe(true);
+      for (const [type, count] of Object.entries(result.stats.commands))
+        totals[type] = (totals[type] ?? 0) + count;
+    });
     expect(stranding).toBe(0);
-    for (const type of [
-      'PLACE_SETUP_SHIP',
-      'BUILD_SHIP',
-      'MOVE_SHIP',
-      'MOVE_PIRATE',
-      'CHOOSE_GOLD',
-      'BUILD_KNIGHT',
-      'MOVE_KNIGHT',
-      'CHASE_ROBBER',
-      'BUILD_IMPROVEMENT',
-      'PLAY_PROGRESS_CARD',
-      'PLACE_FREE_SHIP',
-      'END_SBP',
-    ])
+    for (const type of HEAVY ? [...COMMON, ...RARE] : COMMON)
       expect({ type, count: totals[type] ?? 0 }).not.toEqual({ type, count: 0 });
   }, 300_000);
 
@@ -62,22 +84,24 @@ describe('seafaring with knights simulation', () => {
     expect(runGame(options).inputs).toEqual(runGame(options).inputs);
   }, 120_000);
 
-  // Random bots on each combined scenario, at its fewest and most seats, with the public
-  // invariants of all modules, private hand checks and card conservation on.
+  // Random bots on each combined scenario, with the public invariants of all modules, private hand
+  // checks and card conservation on.
   describe.each(COMBINED.map((scenario) => [scenario.id, scenario] as const))(
     'scenario %s',
     (_id, scenario) => {
-      test('random bots finish games with invariants on', () => {
-        for (const seats of new Set([scenario.seats.min, scenario.seats.max]))
-          for (let gameIndex = 0; gameIndex < 2; gameIndex++) {
-            const result = runGame({
-              seed: 29,
-              gameIndex,
-              config: scenarioConfig(scenario, seats),
-            });
-            expect(result.state.result).not.toBeNull();
-            expect(result.state.board.fixtures).toHaveLength(1);
-          }
+      test('random bots finish games with invariants on', async () => {
+        const seatCounts = HEAVY ? [scenario.seats.min, scenario.seats.max] : [scenario.seats.min];
+        const games = [...new Set(seatCounts)].flatMap((seats) =>
+          Array.from({ length: HEAVY ? 2 : 1 }, (_, gameIndex) => ({
+            seed: 29,
+            gameIndex,
+            config: scenarioConfig(scenario, seats),
+          })),
+        );
+        await sweep(games, (result) => {
+          expect(result.state.result).not.toBeNull();
+          expect(result.state.board.fixtures).toHaveLength(1);
+        });
       }, 300_000);
     },
   );
