@@ -3,7 +3,10 @@ import { seafaringConfig } from '@cp2p/engine';
 import { SCENARIOS, scenarioConfig } from '@cp2p/maps';
 import { runGame } from './run-game.js';
 
-const SEAFARING_SCENARIOS = SCENARIOS.filter((scenario) => scenario.modules.includes('seafaring'));
+// Seafaring with knights has its own smoke run (seafarers-knights.test.ts).
+const SEAFARING_SCENARIOS = SCENARIOS.filter(
+  (scenario) => scenario.modules.includes('seafaring') && !scenario.modules.includes('knights'),
+);
 
 describe('seafaring simulation', () => {
   test('random bots finish games on the test archipelago at every seat count with invariants on', () => {

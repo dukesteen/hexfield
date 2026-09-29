@@ -114,6 +114,7 @@ export {
   seafarersKnightsEngine,
 } from './modules/seafarers-knights/testing.js';
 export type { SeafarersKnightsConfigOptions } from './modules/seafarers-knights/testing.js';
+export { strandsKnight } from './modules/knights/pieces.js';
 
 export { finishTurnFlowFrame } from './modules/base/phases/turn.js';
 export { STANDARD_BOARD, STANDARD_HEXES } from './modules/base/board/shapes.js';

@@ -48,6 +48,11 @@ export function isSeafaringScenario(scenario: Scenario): boolean {
   return scenario.modules.includes('seafaring');
 }
 
+/** Seafaring with Cities & Knights: only through its combined scenarios (docs/rules/combos.md). */
+export function isSeafaringKnightsScenario(scenario: Scenario): boolean {
+  return isSeafaringScenario(scenario) && scenario.modules.includes('knights');
+}
+
 /** A scenario that brings an expansion module of its own (seafaring, or knights and commerce). */
 export function isExpansionScenario(scenario: Scenario): boolean {
   return isSeafaringScenario(scenario) || scenario.modules.includes('knights');
@@ -70,7 +75,10 @@ export function ScenarioPicker({
       !(online && isLocalOnlyScenario(scenario)),
   );
   const classic = choices.filter((scenario) => !isSeafaringScenario(scenario));
-  const seafaring = choices.filter(isSeafaringScenario);
+  const seafaring = choices.filter(
+    (scenario) => isSeafaringScenario(scenario) && !isSeafaringKnightsScenario(scenario),
+  );
+  const combined = choices.filter(isSeafaringKnightsScenario);
   const current = choices.find((scenario) => scenario.id === scenarioId) ?? choices[0];
   const selected = current?.modules ?? ['base'];
   return (
@@ -85,7 +93,7 @@ export function ScenarioPicker({
             if (next) onScenario(next);
           }}
         >
-          {seafaring.length === 0
+          {seafaring.length === 0 && combined.length === 0
             ? classic.map((scenario) => (
                 <option key={scenario.id} value={scenario.id}>
                   {t(`lobby:${scenario.titleKey}`)}
@@ -94,6 +102,11 @@ export function ScenarioPicker({
             : [
                 { key: 'classic', label: t('lobby:scenarioGroupClassic'), items: classic },
                 { key: 'seafaring', label: t('lobby:scenarioGroupSeafaring'), items: seafaring },
+                {
+                  key: 'seafaring-knights',
+                  label: t('lobby:scenarioGroupSeafaringKnights'),
+                  items: combined,
+                },
               ]
                 .filter((group) => group.items.length > 0)
                 .map((group) => (

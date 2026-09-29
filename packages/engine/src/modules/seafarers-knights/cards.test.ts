@@ -3,6 +3,7 @@ import type { GameState } from '../../core/state/index.js';
 import { knightAt } from '../knights/pieces.js';
 import { isOpenShip } from '../knights/progress/diplomat.js';
 import { play, refusal, withCards } from '../knights/progress/testing.js';
+import { seafaringExt } from '../seafaring/types.js';
 import {
   COAST,
   FAR,
@@ -25,6 +26,7 @@ import {
   submit,
   top,
   withBuildings,
+  withHand,
   withKnights,
   withRoads,
   withShips,
@@ -109,6 +111,18 @@ describe('Diplomat', () => {
     expect(legal(state, 0, 'MOVE_SHIP')).toEqual([]);
     const after = play(state, 0, 'diplomat', { edge: S3, build: null }, engine);
     expect(shipsOf(after, 0)).toEqual([S1, S2]);
+  });
+});
+
+describe('Diplomat and ships built this turn', () => {
+  test('an own ship built this turn and removed is forgotten, so invariants hold', () => {
+    const state = withCards(fleet([S1, S2]), 0, 'diplomat');
+    const rich = withHand(state, 0, { lumber: 1, wool: 1 });
+    const built = submit(rich, 0, { type: 'BUILD_SHIP', edge: S3 });
+    expect(seafaringExt(built).builtThisTurn).toEqual([S3]);
+    const after = play(built, 0, 'diplomat', { edge: S3, build: null }, engine);
+    expect(seafaringExt(after).builtThisTurn).toEqual([]);
+    expect(engine.checkInvariants(after)).toEqual([]);
   });
 });
 

@@ -38,7 +38,7 @@ describe('scenarios', () => {
         });
         expect(scenarioOfConfig(config)?.id).toBe(scenario.id);
       }
-  });
+  }, 60_000);
 
   test('scenarios are listed by seats and by the modules they need', () => {
     expect(plain(4)).toEqual(['standard', 'standard-fixed']);

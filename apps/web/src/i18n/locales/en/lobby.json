@@ -458,6 +458,12 @@
   "scenarioFogboundAbout": "Two islands face each other across a bank of fog. A road or ship that touches the fog uncovers what hides there: forest, hills, gold or empty sea. There are no island points here, the discoveries are the prize. First to 12.",
   "scenarioDesertCrossing": "Desert Crossing",
   "scenarioDesertCrossingAbout": "One island cut in two by a strip of desert. Everyone starts on the west side. Cross the sands or sail round them to claim the east side and four corner islets, 2 points for each. First to 13.",
+  "scenarioNewHorizonsKnights": "New Horizons with Cities & Knights",
+  "scenarioNewHorizonsKnightsAbout": "The New Horizons voyage with commodities, city improvements, knights and the barbarians. Ships count as roads for your knights, who can stand guard at sea. The pirate only sails in after the first barbarian attack. First to 16.",
+  "scenarioNewHorizonsKnightsLarge": "New Horizons with Cities & Knights (5–6 players)",
+  "scenarioNewHorizonsKnightsLargeAbout": "The wider New Horizons sea with the full Cities & Knights rules and a special build phase after every turn. First to 18.",
+  "scenarioDesertCrossingKnights": "Desert Crossing with Cities & Knights",
+  "scenarioDesertCrossingKnightsAbout": "Cross the desert strip or sail round it while the barbarians close in on every island at once. Commodities, improvements and knights as in Cities & Knights. First to 15.",
   "scenarioOpenSea": "Open Sea",
   "scenarioOpenSeaAbout": "A fresh archipelago every game: one home island and a scatter of small ones, some rich in gold. Each new island you reach scores 1 extra point. First to 12.",
   "scenarioOpenSeaLarge": "Open Sea (5–6 players)",
@@ -477,5 +483,6 @@
   "expansionFiveSixSeats": "turned on automatically for five or six players",
   "scenarioGroupClassic": "Classic",
   "scenarioGroupSeafaring": "Seafaring",
+  "scenarioGroupSeafaringKnights": "Seafaring with Cities & Knights",
   "expansionViaScenario": "choose a scenario above"
 }

@@ -1,4 +1,5 @@
 import {
+  COMBO_ID,
   FIVE_SIX_BOARD,
   MODULE_CATALOGUE,
   STANDARD_BOARD,
@@ -160,6 +161,42 @@ export const SCENARIOS: readonly Scenario[] = Object.freeze([
     board: { kind: 'fixed', shape: DESERT_CROSSING.id, board: DESERT_CROSSING.board },
     options: { seafaring: DESERT_CROSSING.options },
     vpTarget: 13,
+  },
+  // Seafaring with Cities & Knights (docs/rules/combos.md): Seafarers layouts with few islands,
+  // the knights rules and a barbarian track outside the board; the target is the Seafarers
+  // scenario's plus 2.
+  {
+    id: 'new-horizons-knights',
+    titleKey: 'scenarioNewHorizonsKnights',
+    aboutKey: 'scenarioNewHorizonsKnightsAbout',
+    modules: ['base', 'seafaring', 'knights'],
+    rulesModule: COMBO_ID,
+    seats: { min: 3, max: 4 },
+    board: { kind: 'fixed', shape: NEW_HORIZONS.id, board: NEW_HORIZONS.board },
+    options: { seafaring: NEW_HORIZONS.options },
+    vpTarget: 16,
+  },
+  {
+    id: 'new-horizons-knights-56',
+    titleKey: 'scenarioNewHorizonsKnightsLarge',
+    aboutKey: 'scenarioNewHorizonsKnightsLargeAbout',
+    modules: ['base', 'five-six', 'seafaring', 'knights'],
+    rulesModule: COMBO_ID,
+    seats: { min: 5, max: 6 },
+    board: { kind: 'fixed', shape: NEW_HORIZONS_56.id, board: NEW_HORIZONS_56.board },
+    options: { seafaring: NEW_HORIZONS_56.options },
+    vpTarget: 18,
+  },
+  {
+    id: 'desert-crossing-knights',
+    titleKey: 'scenarioDesertCrossingKnights',
+    aboutKey: 'scenarioDesertCrossingKnightsAbout',
+    modules: ['base', 'seafaring', 'knights'],
+    rulesModule: COMBO_ID,
+    seats: { min: 3, max: 4 },
+    board: { kind: 'fixed', shape: DESERT_CROSSING.id, board: DESERT_CROSSING.board },
+    options: { seafaring: DESERT_CROSSING.options },
+    vpTarget: 15,
   },
   {
     id: 'open-sea',
