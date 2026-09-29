@@ -1,0 +1,112 @@
+{
+ "test": "4 mixed-engine contexts finish a signaling full-mesh game with matching audits",
+ "scenario": "fogbound",
+ "browsers": [
+  "chromium-a",
+  "chromium-b",
+  "firefox-a",
+  "firefox-b"
+ ],
+ "env": {
+  "CP2P_MIXED_ENGINE_SEATS": "4",
+  "CP2P_MIXED_ENGINE_MODE": "signaling",
+  "CP2P_MIXED_ENGINE_NO_WEBKIT": "1",
+  "CP2P_MIXED_ENGINE_SCENARIO": "fogbound",
+  "victoryPoints": "8 (seafaring test default)"
+ },
+ "result": "passed",
+ "durationMinutes": 5.9,
+ "phases": [
+  "lobby",
+  "setup",
+  "play-and-audit",
+  "audit",
+  "complete"
+ ],
+ "driverMoves": 225,
+ "driverMovesByType": {
+  "END_TURN": 60,
+  "ROLL_DICE": 60,
+  "MOVE_PIRATE": 5,
+  "OFFER_TRADE": 13,
+  "RESPOND_TRADE": 39,
+  "BUILD_ROAD": 3,
+  "DISCARD": 13,
+  "BUILD_SETTLEMENT": 2,
+  "MARITIME_TRADE": 6,
+  "CANCEL_TRADE": 4,
+  "BUILD_CITY": 6,
+  "MOVE_ROBBER": 2,
+  "CONFIRM_TRADE": 2,
+  "BUILD_SHIP": 6,
+  "STEAL": 1,
+  "CHOOSE_GOLD": 1,
+  "BUY_DEV_CARD": 2
+ },
+ "fogHexesRevealed": 1,
+ "auditProblems": [
+  null,
+  null,
+  null,
+  null
+ ],
+ "finish": {
+  "commands": 225,
+  "accepted": {
+   "END_TURN": 60,
+   "ROLL_DICE": 60,
+   "MOVE_PIRATE": 5,
+   "OFFER_TRADE": 13,
+   "RESPOND_TRADE": 39,
+   "BUILD_ROAD": 3,
+   "DISCARD": 13,
+   "BUILD_SETTLEMENT": 2,
+   "MARITIME_TRADE": 6,
+   "CANCEL_TRADE": 4,
+   "BUILD_CITY": 6,
+   "MOVE_ROBBER": 2,
+   "CONFIRM_TRADE": 2,
+   "BUILD_SHIP": 6,
+   "STEAL": 1,
+   "CHOOSE_GOLD": 1,
+   "BUY_DEV_CARD": 2
+  },
+  "refusedCommands": {},
+  "peers": [
+   {
+    "head": {
+     "hash": "dd99163437140238d9974f3614345ddaf0db873859acdf66f7fc50bc51248e7d",
+     "seq": 335
+    },
+    "resultPresent": true,
+    "audit": "complete"
+   },
+   {
+    "head": {
+     "hash": "dd99163437140238d9974f3614345ddaf0db873859acdf66f7fc50bc51248e7d",
+     "seq": 335
+    },
+    "resultPresent": true,
+    "audit": "complete"
+   },
+   {
+    "head": {
+     "hash": "dd99163437140238d9974f3614345ddaf0db873859acdf66f7fc50bc51248e7d",
+     "seq": 335
+    },
+    "resultPresent": true,
+    "audit": "complete"
+   },
+   {
+    "head": {
+     "hash": "dd99163437140238d9974f3614345ddaf0db873859acdf66f7fc50bc51248e7d",
+     "seq": 335
+    },
+    "resultPresent": true,
+    "audit": "complete"
+   }
+  ],
+  "playElapsedMs": 233981,
+  "auditElapsedMs": 44472
+ }
+}
