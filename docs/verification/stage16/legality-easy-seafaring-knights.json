@@ -1,0 +1,36 @@
+{
+  "mode": "tournament",
+  "bots": [
+    "easy",
+    "easy",
+    "easy",
+    "easy"
+  ],
+  "seed": 1601,
+  "seatsRotation": false,
+  "scenario": "four-isles-knights",
+  "iterationBudget": 6,
+  "verifyInvariants": true,
+  "parallel": 2,
+  "games": 200,
+  "finishedGames": 200,
+  "failedGames": 0,
+  "averageTurns": 113.905,
+  "results": [
+    {
+      "level": "easy",
+      "seats": 800,
+      "games": 200,
+      "wins": 200,
+      "winShare": 1,
+      "winRatePerSeat": 0.25,
+      "averageVp": 9.725,
+      "elo": 1000
+    }
+  ],
+  "fallbackWarnings": {},
+  "failures": [],
+  "elapsedMilliseconds": 90513.925,
+  "sourceFingerprint": "3b903b087066a81f71465b4df86733f3481d6fed2ecbc2ff3eeb0620c1b5266a",
+  "sourceUnchanged": true
+}

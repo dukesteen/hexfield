@@ -1,0 +1,265 @@
+{
+  "measuredAt": "2026-09-29T18:13:54.443Z",
+  "budgetMs": 150,
+  "note": "Chromium CPU throttling as a mid-range phone proxy; no physical phone was measured.",
+  "results": [
+    {
+      "cpuThrottlingRate": 1,
+      "game": 0,
+      "level": "hard",
+      "budgetMs": 150,
+      "runner": "inline",
+      "finished": true,
+      "turns": 71,
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36",
+      "hardwareConcurrency": 12,
+      "workerMs": {
+        "setup-settlement": {
+          "n": 8,
+          "medianMs": 101.5,
+          "p95Ms": 122,
+          "maxMs": 122
+        },
+        "other": {
+          "n": 122,
+          "medianMs": 0,
+          "p95Ms": 0.19999980926513672,
+          "maxMs": 0.3000001907348633
+        },
+        "main": {
+          "n": 173,
+          "medianMs": 0.09999990463256836,
+          "p95Ms": 0.20000028610229492,
+          "maxMs": 0.3000001907348633
+        },
+        "robber": {
+          "n": 25,
+          "medianMs": 122.5,
+          "p95Ms": 127.5,
+          "maxMs": 127.5
+        }
+      },
+      "roundTripMs": {
+        "n": 328,
+        "medianMs": 0.09999990463256836,
+        "p95Ms": 121,
+        "maxMs": 127.5
+      }
+    },
+    {
+      "cpuThrottlingRate": 1,
+      "game": 1,
+      "level": "hard",
+      "budgetMs": 150,
+      "runner": "inline",
+      "finished": true,
+      "turns": 68,
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36",
+      "hardwareConcurrency": 12,
+      "workerMs": {
+        "setup-settlement": {
+          "n": 8,
+          "medianMs": 108.69999980926514,
+          "p95Ms": 124.30000019073486,
+          "maxMs": 124.30000019073486
+        },
+        "other": {
+          "n": 109,
+          "medianMs": 0,
+          "p95Ms": 0.20000028610229492,
+          "maxMs": 0.40000009536743164
+        },
+        "main": {
+          "n": 155,
+          "medianMs": 0.09999990463256836,
+          "p95Ms": 0.20000028610229492,
+          "maxMs": 0.3000001907348633
+        },
+        "robber": {
+          "n": 21,
+          "medianMs": 123.2000002861023,
+          "p95Ms": 126.5,
+          "maxMs": 127.59999990463257
+        }
+      },
+      "roundTripMs": {
+        "n": 293,
+        "medianMs": 0.09999990463256836,
+        "p95Ms": 121.90000009536743,
+        "maxMs": 127.59999990463257
+      }
+    },
+    {
+      "cpuThrottlingRate": 4,
+      "game": 0,
+      "level": "hard",
+      "budgetMs": 150,
+      "runner": "inline",
+      "finished": true,
+      "turns": 58,
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36",
+      "hardwareConcurrency": 12,
+      "workerMs": {
+        "setup-settlement": {
+          "n": 8,
+          "medianMs": 112,
+          "p95Ms": 124.5,
+          "maxMs": 124.5
+        },
+        "other": {
+          "n": 82,
+          "medianMs": 0,
+          "p95Ms": 1.0999999046325684,
+          "maxMs": 2.4000000953674316
+        },
+        "main": {
+          "n": 147,
+          "medianMs": 0.20000028610229492,
+          "p95Ms": 1.0999999046325684,
+          "maxMs": 1.5999999046325684
+        },
+        "robber": {
+          "n": 10,
+          "medianMs": 108,
+          "p95Ms": 125.19999980926514,
+          "maxMs": 125.19999980926514
+        }
+      },
+      "roundTripMs": {
+        "n": 247,
+        "medianMs": 0.10000038146972656,
+        "p95Ms": 103,
+        "maxMs": 125.19999980926514
+      }
+    },
+    {
+      "cpuThrottlingRate": 4,
+      "game": 1,
+      "level": "hard",
+      "budgetMs": 150,
+      "runner": "inline",
+      "finished": true,
+      "turns": 97,
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36",
+      "hardwareConcurrency": 12,
+      "workerMs": {
+        "setup-settlement": {
+          "n": 8,
+          "medianMs": 109.40000009536743,
+          "p95Ms": 126,
+          "maxMs": 126
+        },
+        "other": {
+          "n": 149,
+          "medianMs": 0,
+          "p95Ms": 0.9000000953674316,
+          "maxMs": 2.0999999046325684
+        },
+        "main": {
+          "n": 221,
+          "medianMs": 0.20000028610229492,
+          "p95Ms": 1.1999998092651367,
+          "maxMs": 1.9000000953674316
+        },
+        "robber": {
+          "n": 28,
+          "medianMs": 103.90000009536743,
+          "p95Ms": 118.09999990463257,
+          "maxMs": 118.2999997138977
+        }
+      },
+      "roundTripMs": {
+        "n": 406,
+        "medianMs": 0.10000038146972656,
+        "p95Ms": 103.90000009536743,
+        "maxMs": 126
+      }
+    },
+    {
+      "cpuThrottlingRate": 6,
+      "game": 0,
+      "level": "hard",
+      "budgetMs": 150,
+      "runner": "inline",
+      "finished": true,
+      "turns": 90,
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36",
+      "hardwareConcurrency": 12,
+      "workerMs": {
+        "setup-settlement": {
+          "n": 8,
+          "medianMs": 91.60000038146973,
+          "p95Ms": 139.2000002861023,
+          "maxMs": 139.2000002861023
+        },
+        "other": {
+          "n": 133,
+          "medianMs": 0,
+          "p95Ms": 1.6999998092651367,
+          "maxMs": 4.199999809265137
+        },
+        "robber": {
+          "n": 25,
+          "medianMs": 76.69999980926514,
+          "p95Ms": 124.40000009536743,
+          "maxMs": 125.09999990463257
+        },
+        "main": {
+          "n": 262,
+          "medianMs": 0.3000001907348633,
+          "p95Ms": 1.9000000953674316,
+          "maxMs": 4
+        }
+      },
+      "roundTripMs": {
+        "n": 428,
+        "medianMs": 0.20000028610229492,
+        "p95Ms": 71.5,
+        "maxMs": 140.7000002861023
+      }
+    },
+    {
+      "cpuThrottlingRate": 6,
+      "game": 1,
+      "level": "hard",
+      "budgetMs": 150,
+      "runner": "inline",
+      "finished": true,
+      "turns": 35,
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36",
+      "hardwareConcurrency": 12,
+      "workerMs": {
+        "setup-settlement": {
+          "n": 8,
+          "medianMs": 74.80000019073486,
+          "p95Ms": 139.5,
+          "maxMs": 139.5
+        },
+        "other": {
+          "n": 57,
+          "medianMs": 0,
+          "p95Ms": 2.0999999046325684,
+          "maxMs": 2.4000000953674316
+        },
+        "robber": {
+          "n": 10,
+          "medianMs": 100.5,
+          "p95Ms": 119.2000002861023,
+          "maxMs": 119.2000002861023
+        },
+        "main": {
+          "n": 80,
+          "medianMs": 1,
+          "p95Ms": 2.1999998092651367,
+          "maxMs": 2.4000000953674316
+        }
+      },
+      "roundTripMs": {
+        "n": 155,
+        "medianMs": 0.9000000953674316,
+        "p95Ms": 99,
+        "maxMs": 141.09999990463257
+      }
+    }
+  ]
+}
