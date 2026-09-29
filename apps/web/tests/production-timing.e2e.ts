@@ -13,6 +13,8 @@ const shots = process.env.CP2P_ANIM_SHOTS ?? join(repoRoot, 'reports/production-
 
 interface Timeline {
   rolls: number[];
+  /** Production cards still in the air when each roll arrived. */
+  inFlightAtRoll: number[];
   firstFlight: number | null;
   lastFlightGone: number | null;
   /** The most effects of one kind seen running at once on the board. */
@@ -36,6 +38,7 @@ function watch(page: Page) {
   return page.addInitScript(() => {
     const recorded: Timeline = {
       rolls: [],
+      inFlightAtRoll: [],
       firstFlight: null,
       lastFlightGone: null,
       peak: {},
@@ -49,8 +52,11 @@ function watch(page: Page) {
       set: (value: DevHook) => {
         hook = value;
         value.session.subscribe((update) => {
-          if (update.events.some((event) => event.type === 'diceRolled'))
+          if (update.events.some((event) => event.type === 'diceRolled')) {
             recorded.rolls.push(performance.now());
+            // This listener runs before the page's own, so the last roll's cards are still shown.
+            recorded.inFlightAtRoll.push(document.querySelectorAll('.resource-flight').length);
+          }
         });
       },
     });
@@ -99,6 +105,19 @@ function totals(page: Page, seats: readonly Seat[]) {
   }, seats);
 }
 
+/** Force the next roll to the fixture's best total, then roll. */
+async function rollBest(page: Page, total: number) {
+  const first = Math.min(6, total - 1);
+  await page.getByLabel('Open game menu').click();
+  const drawer = page.getByTestId('dev-drawer');
+  await drawer.locator('summary').first().click();
+  await drawer.getByLabel('First die').selectOption(String(first));
+  await drawer.getByLabel('Second die').selectOption(String(total - first));
+  await drawer.getByRole('button', { name: 'Force next dice' }).click();
+  await page.getByLabel('Open game menu').click();
+  await page.getByRole('button', { name: 'Roll dice' }).click();
+}
+
 test('production cards fly as the dice settle, alongside the token pulse', async ({
   page,
   browserName,
@@ -108,26 +127,20 @@ test('production cards fly as the dice settle, alongside the token pulse', async
   await page.setViewportSize({ width: 1280, height: 720 });
   await watch(page);
   const { roll } = await openBeforeRoll(page, 'production-timing');
-  const first = Math.min(6, roll.total - 1);
-  await page.getByLabel('Open game menu').click();
-  const drawer = page.getByTestId('dev-drawer');
-  await drawer.locator('summary').first().click();
-  await drawer.getByLabel('First die').selectOption(String(first));
-  await drawer.getByLabel('Second die').selectOption(String(roll.total - first));
-  await drawer.getByRole('button', { name: 'Force next dice' }).click();
-  await page.getByLabel('Open game menu').click();
-  await page.getByRole('button', { name: 'Roll dice' }).click();
+  await rollBest(page, roll.total);
 
   await expect(page.locator('.resource-flight').first()).toBeVisible({ timeout: 3_000 });
   await writeFile(
     join(shots, 'roll-cards-in-flight.png'),
     await page.screenshot({ animations: 'allow' }),
   );
-  await page.waitForTimeout(150);
-  await writeFile(
-    join(shots, 'roll-cards-in-flight-2.png'),
-    await page.screenshot({ animations: 'allow' }),
-  );
+  for (const [index, wait] of [250, 250, 300, 400].entries()) {
+    await page.waitForTimeout(wait);
+    await writeFile(
+      join(shots, `roll-cards-in-flight-${index + 2}.png`),
+      await page.screenshot({ animations: 'allow' }),
+    );
+  }
   await expect(page.locator('.resource-flight')).toHaveCount(0, { timeout: 5_000 });
   await expect.poll(async () => (await timeline(page)).lastFlightGone).not.toBeNull();
   const seen = await timeline(page);
@@ -138,11 +151,12 @@ test('production cards fly as the dice settle, alongside the token pulse', async
     type: 'timing',
     description: `first card ${Math.round(launched)} ms, last card gone ${Math.round(done)} ms`,
   });
-  // The cards take off as the dice settle (600 ms), not after the pulse.
-  expect(launched).toBeGreaterThan(500);
+  // The cards take off as the dice settle (450 ms; a cold first frame can add a little).
+  expect(launched).toBeGreaterThan(350);
   expect(launched).toBeLessThan(900);
-  // The last card lands (and fades) within about 1.2 s of the dice settling.
-  expect(done - 600).toBeLessThan(1_500);
+  // Slow enough to follow, yet finished before a bot at the default pace can roll again (2 s).
+  expect(done).toBeGreaterThan(1_300);
+  expect(done).toBeLessThan(2_300);
   expect(seen.overlap, 'cards fly while the tokens pulse').toBeGreaterThan(0);
   expect(seen.peak['dice-roll'] ?? 0).toBeLessThanOrEqual(1);
 });
@@ -158,15 +172,7 @@ test('rapid bot rolls never stack effects and the counts catch up', async ({
   await watch(page);
   // The human rolls and ends the turn at once; three bots with no delay then roll in a row.
   const { state, human, roll } = await openBeforeRoll(page, 'production-rapid', { botDelayMs: 0 });
-  const first = Math.min(6, roll.total - 1);
-  await page.getByLabel('Open game menu').click();
-  const drawer = page.getByTestId('dev-drawer');
-  await drawer.locator('summary').first().click();
-  await drawer.getByLabel('First die').selectOption(String(first));
-  await drawer.getByLabel('Second die').selectOption(String(roll.total - first));
-  await drawer.getByRole('button', { name: 'Force next dice' }).click();
-  await page.getByLabel('Open game menu').click();
-  await page.getByRole('button', { name: 'Roll dice' }).click();
+  await rollBest(page, roll.total);
   await page.getByRole('button', { name: 'End turn' }).click();
   for (let index = 0; index < 8; index += 1) {
     await writeFile(
@@ -199,10 +205,42 @@ test('rapid bot rolls never stack effects and the counts catch up', async ({
         (await totals(page, state.config.seats)).every(
           ({ state: count, shown }) => shown === null || shown === count,
         ),
-      { timeout: 2_000 },
+      { timeout: 3_000 },
     )
     .toBe(true);
   await expect(page.locator('.resource-flight')).toHaveCount(0);
   await writeFile(join(shots, 'rapid-bots-settled.png'), await page.screenshot());
   expect(human).toBeGreaterThanOrEqual(0);
+});
+
+test('at the default bot pace each roll plays out before the next one', async ({
+  page,
+  browserName,
+}) => {
+  test.skip(browserName !== 'chromium', 'Effect timing is checked in Chromium');
+  test.setTimeout(90_000);
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await watch(page);
+  const { roll } = await openBeforeRoll(page, 'production-paced', { botDelayMs: 1_000 });
+  await rollBest(page, roll.total);
+  await expect(page.locator('.resource-flight').first()).toBeVisible({ timeout: 3_000 });
+  await expect(page.locator('.resource-flight')).toHaveCount(0, { timeout: 5_000 });
+  await page.getByRole('button', { name: 'End turn' }).click();
+  // Watch the three bots take their turns, declining their offers to the human.
+  const rollButton = page.getByRole('button', { name: 'Roll dice' });
+  const decline = page.getByRole('button', { name: 'Decline' });
+  const deadline = Date.now() + 70_000;
+  while (!(await rollButton.isVisible())) {
+    if (Date.now() > deadline) throw new Error('the bots never reached the human turn');
+    if (await decline.isVisible()) await decline.click().catch(() => undefined);
+    await page.waitForTimeout(100);
+  }
+  const seen = await timeline(page);
+  test.info().annotations.push({
+    type: 'effects',
+    description: `rolls ${seen.rolls.length}, cards in the air at each roll ${JSON.stringify(seen.inFlightAtRoll)}`,
+  });
+  expect(seen.rolls.length).toBeGreaterThanOrEqual(4);
+  // No roll ever fast-forwards the cards of the one before.
+  expect(seen.inFlightAtRoll.every((count) => count === 0)).toBe(true);
 });

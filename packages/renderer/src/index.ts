@@ -4,6 +4,7 @@ export { PixiBoardRenderer, createBoardRenderer } from './BoardRenderer.js';
 export {
   DICE_ROLL_DURATION_MS,
   DICE_SETTLE_MS,
+  PRODUCTION_PULSE_START_MS,
   PRODUCTION_TOKEN_PULSE_MS,
 } from './effectMotion.js';
 export { hitTestBoard } from './input/hitTest.js';

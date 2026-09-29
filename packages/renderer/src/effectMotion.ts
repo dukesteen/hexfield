@@ -2,14 +2,16 @@ import type { Point } from '@cp2p/engine/geometry';
 import type { BoardEffect } from './types.js';
 
 export const DICE_ROLL_DURATION_MS = 1400;
-/** The dice stop tumbling and show their final faces: production starts here. */
-export const DICE_SETTLE_MS = 600;
-export const PRODUCTION_TOKEN_PULSE_MS = 700;
+/** The dice stop tumbling and show their final faces: the production cards take off here. */
+export const DICE_SETTLE_MS = 450;
+/** The producing number tokens start to grow during the last tumble, so nothing waits on the dice. */
+export const PRODUCTION_PULSE_START_MS = 300;
+export const PRODUCTION_TOKEN_PULSE_MS = 1200;
 
-/** Pulse progress begins when the dice settle, alongside the production cards. */
+/** Pulse progress, from the last tumble of the dice; null before it starts. */
 export function productionPulseProgress(elapsedMs: number): number | null {
-  if (elapsedMs < DICE_SETTLE_MS) return null;
-  return Math.min(1, (elapsedMs - DICE_SETTLE_MS) / PRODUCTION_TOKEN_PULSE_MS);
+  if (elapsedMs < PRODUCTION_PULSE_START_MS) return null;
+  return Math.min(1, (elapsedMs - PRODUCTION_PULSE_START_MS) / PRODUCTION_TOKEN_PULSE_MS);
 }
 
 export interface DiceMotion {
@@ -25,7 +27,9 @@ export function diceMotion(progress: number): DiceMotion {
   const t = Math.max(0, Math.min(1, progress));
   const fadeIn = Math.min(1, t / 0.12);
   const fadeOut = Math.min(1, (1 - t) / 0.12);
-  const tumble = t < DICE_SETTLE ? Math.sin(t * 9 * Math.PI) * (1 - t / DICE_SETTLE) : 0;
+  // A wobble and a half that die away as the dice settle.
+  const tumble =
+    t < DICE_SETTLE ? Math.sin((t / DICE_SETTLE) * 3 * Math.PI) * (1 - t / DICE_SETTLE) : 0;
   return {
     alpha: Math.min(fadeIn, fadeOut),
     rotation: tumble * 0.2,

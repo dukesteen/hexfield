@@ -31,14 +31,15 @@ interface CardFlightView {
   dy: number;
 }
 
-/** Flight timings, matching the CSS animations: a card counts as landed when it reaches its slot. */
-export const PRODUCTION_LANDS_MS = 700;
-const PRODUCTION_FLIGHT_MS = 850;
+/**
+ * Flight timings, matching the CSS animations: every card (production, trade, steal) flies for
+ * 1.15 s with an ease-out and counts as landed when it reaches its slot, at 80% of the flight.
+ */
+export const CARD_FLIGHT_MS = 1150;
+export const CARD_LANDS_MS = 920;
 /** The gap between production cards taking off, and the most the whole batch may spread over. */
-export const PRODUCTION_STAGGER_MS = 70;
-export const PRODUCTION_SPREAD_MS = 350;
-const CARD_LANDS_MS = 520;
-const CARD_FLIGHT_MS = 650;
+export const PRODUCTION_STAGGER_MS = 130;
+export const PRODUCTION_SPREAD_MS = 450;
 const SCROLL_SETTLE_MS = 350;
 /** How long past its flight a hold may live if its flight never reports back. */
 const HOLD_SLACK_MS = 2000;
@@ -446,8 +447,7 @@ export function useVisualEffects(
             seat: flight.seat,
             kind: flight.resource,
             delta: flight.count,
-            expiresAt:
-              now + launchAt(index) + SCROLL_SETTLE_MS + PRODUCTION_FLIGHT_MS + HOLD_SLACK_MS,
+            expiresAt: now + launchAt(index) + SCROLL_SETTLE_MS + CARD_FLIGHT_MS + HOLD_SLACK_MS,
           })),
         );
       hold(
@@ -482,7 +482,7 @@ export function useVisualEffects(
                 dy: to.y - from.y,
               },
             ]);
-            schedule(() => release(`${flight.id}:in`), PRODUCTION_LANDS_MS);
+            schedule(() => release(`${flight.id}:in`), CARD_LANDS_MS);
           };
           schedule(() => {
             const clipped = clippedSlot(handSlot(flight.seat, flight.resource));
