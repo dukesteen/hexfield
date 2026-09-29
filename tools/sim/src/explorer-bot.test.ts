@@ -9,11 +9,7 @@ import { createLocalRandomSource, deriveSeed } from './random-source.js';
 test('an explorer bot sails toward the fog, so a Fogbound game reveals tiles', () => {
   const scenario = scenarioById('fogbound');
   if (!scenario) throw new Error('Missing fogbound');
-  const base = scenarioConfig(scenario, 4);
-  const config = {
-    ...base,
-    options: { ...base.options, base: { ...(base.options.base ?? {}), vpTarget: 8 } },
-  };
+  const config = scenarioConfig(scenario, 4, { base: { vpTarget: 8 } });
   const engine = engineForConfig(config);
   const created = LocalGame.create(
     engine,
