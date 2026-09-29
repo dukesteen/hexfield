@@ -53,10 +53,11 @@ test('verified replay opens a public board and roster without session controls',
       <RouterProvider router={router} />
     </QueryClientProvider>,
   );
-  expect(await screen.findByText('Avery')).toBeTruthy();
+  // The route verifies and loads the engine lazily, which can take a few seconds under load.
+  expect(await screen.findByText('Avery', undefined, { timeout: 10_000 })).toBeTruthy();
   expect(screen.getByText('Blair')).toBeTruthy();
   expect(screen.getByText('lobby:publicReplayReadOnly')).toBeTruthy();
   expect(screen.getByRole('group', { name: 'public board' })).toBeTruthy();
   expect(screen.queryByRole('button')).toBeNull();
   queryClient.clear();
-});
+}, 20_000);

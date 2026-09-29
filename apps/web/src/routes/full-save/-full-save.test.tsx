@@ -51,7 +51,10 @@ test('imported save displays a paused board and does not expose game controls', 
       <RouterProvider router={router} />
     </QueryClientProvider>,
   );
-  expect(await screen.findByText('lobby:fullSavePausedTitle')).toBeTruthy();
+  // The route loads the engine lazily, which can take a few seconds under load.
+  expect(
+    await screen.findByText('lobby:fullSavePausedTitle', undefined, { timeout: 10_000 }),
+  ).toBeTruthy();
   expect(screen.getByText('lobby:fullSavePrivateLocked')).toBeTruthy();
   expect(screen.getByText('lobby:publicReplayHead')).toBeTruthy();
   expect(screen.getByRole('group', { name: 'full-save board' })).toBeTruthy();
@@ -59,4 +62,4 @@ test('imported save displays a paused board and does not expose game controls', 
   expect(continuation.hasAttribute('disabled')).toBe(true);
   expect(screen.getAllByRole('button')).toEqual([continuation]);
   queryClient.clear();
-});
+}, 20_000);
