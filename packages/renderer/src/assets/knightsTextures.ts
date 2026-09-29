@@ -57,12 +57,16 @@ export async function loadKnightsTextures(
   for (const face of [1, 2, 3, 4, 5, 6]) {
     const key = redDieKey(face);
     const resolution = rasterResolution(devicePixelRatio, maxPixelRatio, 1, 64, 64, 60, 60);
-    requests.push(loadTexture(key, DIE_ART.width, DIE_ART.height, resolution).then((t) => [key, t]));
+    requests.push(
+      loadTexture(key, DIE_ART.width, DIE_ART.height, resolution).then((t) => [key, t]),
+    );
   }
   for (const face of EVENT_FACES) {
     const key = eventDieKey(face);
     const resolution = rasterResolution(devicePixelRatio, maxPixelRatio, 1, 64, 64, 60, 60);
-    requests.push(loadTexture(key, DIE_ART.width, DIE_ART.height, resolution).then((t) => [key, t]));
+    requests.push(
+      loadTexture(key, DIE_ART.width, DIE_ART.height, resolution).then((t) => [key, t]),
+    );
   }
   for (const color of ART_COLOR_NAMES) {
     add(walledCityArtKey(color), WALLED_CITY_ART);

@@ -756,8 +756,7 @@ export class PixiBoardRenderer implements BoardRenderer {
           ? (this.knightsArt?.get(redDieKey(face)) ?? this.textures.dice[face - 1])
           : this.textures.dice[face - 1],
       );
-      if (effect.event !== undefined)
-        faces.push(this.knightsArt?.get(eventDieKey(effect.event)));
+      if (effect.event !== undefined) faces.push(this.knightsArt?.get(eventDieKey(effect.event)));
       const shown = faces.filter((texture): texture is Texture => texture !== undefined);
       if (shown.length !== faces.length) return null;
       for (const [index, faceTexture] of shown.entries()) {
