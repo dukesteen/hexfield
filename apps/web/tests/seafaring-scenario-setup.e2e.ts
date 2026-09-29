@@ -60,6 +60,19 @@ test.describe('every seafaring scenario starts and plays locally', () => {
       expect(state.board.hexes.some((hex) => hex.terrain === 'fog')).toBe(
         scenario.id.startsWith('fogbound'),
       );
+      // A random seat starts, so bots placing first answer from their worker before the human.
+      await expect
+        .poll(() =>
+          page.evaluate(() =>
+            (window['__cp2p']?.session.getPending() ?? []).some(
+              (item) =>
+                item.kind === 'player' &&
+                item.seat === 0 &&
+                item.allowed.includes('PLACE_SETTLEMENT'),
+            ),
+          ),
+        )
+        .toBe(true);
       // The human places a settlement and its road (or ship), and the bots then place theirs.
       expect(await submitFirst(page, ['PLACE_SETTLEMENT'])).toBe('PLACE_SETTLEMENT');
       expect(await submitFirst(page, ['PLACE_ROAD', 'PLACE_SETUP_SHIP'])).toMatch(/^PLACE_/);
