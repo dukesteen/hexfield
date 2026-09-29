@@ -11,6 +11,7 @@ import { runGame, SimulationFailure } from './run-game.js';
 import { fuzz } from './fuzz.js';
 import { updateGoldens } from './golden.js';
 import { updateKnightsGoldens } from './knights-golden.js';
+import { updateSeafarersKnightsGoldens } from './seafarers-knights-golden.js';
 import { updateSeafaringGoldens } from './seafaring-golden.js';
 import { readReplay, verifyReplay } from './replay.js';
 import type { ReplayFile } from './replay.js';
@@ -466,10 +467,13 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     if (
       rest[0] !== '--update' ||
       rest.length > 2 ||
-      (rest.length === 2 && rest[1] !== '--seafaring' && rest[1] !== '--knights')
+      (rest.length === 2 &&
+        rest[1] !== '--seafaring' &&
+        rest[1] !== '--knights' &&
+        rest[1] !== '--seafarers-knights')
     )
       throw new Error(
-        'Golden fixtures can only be regenerated with --update [--seafaring|--knights]',
+        'Golden fixtures can only be regenerated with --update [--seafaring|--knights|--seafarers-knights]',
       );
     console.log(
       JSON.stringify(
@@ -477,7 +481,9 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
           ? updateSeafaringGoldens({ update: true })
           : rest[1] === '--knights'
             ? updateKnightsGoldens({ update: true })
-            : updateGoldens({ update: true }),
+            : rest[1] === '--seafarers-knights'
+              ? updateSeafarersKnightsGoldens({ update: true })
+              : updateGoldens({ update: true }),
       ),
     );
     return;

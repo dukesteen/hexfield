@@ -1,0 +1,76 @@
+{
+  "format": "cp2p-golden-manifest",
+  "version": 1,
+  "fixtures": [
+    {
+      "name": "new-horizons-knights",
+      "file": "new-horizons-knights.replay.json",
+      "scenario": "new-horizons-knights",
+      "seats": 4,
+      "seed": 1400,
+      "gameIndex": 0,
+      "features": [
+        "barbarian-attack",
+        "free-ship",
+        "gold-choice",
+        "island-bonus",
+        "knight-build",
+        "knight-move",
+        "normal-completion",
+        "pirate-entered",
+        "pirate-move",
+        "setup-ship",
+        "ship-build",
+        "ship-move"
+      ],
+      "inputs": 1477,
+      "winner": 2,
+      "engineVersion": "0.1.0"
+    },
+    {
+      "name": "new-horizons-knights-56",
+      "file": "new-horizons-knights-56.replay.json",
+      "scenario": "new-horizons-knights-56",
+      "seats": 6,
+      "seed": 1400,
+      "gameIndex": 0,
+      "features": [
+        "barbarian-attack",
+        "island-bonus",
+        "knight-build",
+        "knight-move",
+        "normal-completion",
+        "pirate-entered",
+        "pirate-move",
+        "ship-build",
+        "ship-move"
+      ],
+      "inputs": 2701,
+      "winner": 1,
+      "engineVersion": "0.1.0"
+    },
+    {
+      "name": "desert-crossing-knights",
+      "file": "desert-crossing-knights.replay.json",
+      "scenario": "desert-crossing-knights",
+      "seats": 4,
+      "seed": 1400,
+      "gameIndex": 0,
+      "features": [
+        "barbarian-attack",
+        "island-bonus",
+        "knight-build",
+        "knight-move",
+        "normal-completion",
+        "pirate-entered",
+        "pirate-move",
+        "setup-ship",
+        "ship-build",
+        "ship-move"
+      ],
+      "inputs": 1052,
+      "winner": 1,
+      "engineVersion": "0.1.0"
+    }
+  ]
+}
