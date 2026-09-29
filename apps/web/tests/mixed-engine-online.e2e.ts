@@ -836,7 +836,7 @@ async function inspectPublicGame(page: Page, gameId: string) {
         fogAtGenesis: state.config.board?.hexes.filter((hex) => hex.terrain === 'fog').length ?? 0,
         turn: { activeSeat: state.turn.activeSeat },
         seats,
-        audit: audit?.kind ?? null,
+        audit: audit?.kind === 'error' ? `error:${audit.code}` : (audit?.kind ?? null),
         auditOk: audit?.kind === 'complete' && audit.report.ok,
         auditComplete: audit?.kind === 'complete' && audit.report.complete,
         // Public, sanitized failure codes only: no hands, keys or secrets.
