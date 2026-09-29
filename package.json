@@ -23,7 +23,7 @@
     "check:full": "pnpm check:static && pnpm build && pnpm test --maxWorkers=4 && pnpm test:coverage:engine",
     "ci": "pnpm check:static && pnpm build && pnpm test && pnpm test:coverage:engine && pnpm test:e2e",
     "sim": "tsc -b tools/sim && node tools/sim/dist/index.js",
-    "build:cloudflare": "pnpm --filter @cp2p/signaling... build && VITE_SIGNALING_URL=wss://hexfield.steenbakkers.cc VITE_TURN_CREDENTIALS_URL= pnpm --filter @cp2p/web build",
+    "build:cloudflare": "pnpm --filter @cp2p/signaling... build && VITE_SIGNALING_URL=wss://playhexfield.com VITE_TURN_CREDENTIALS_URL= pnpm --filter @cp2p/web build",
     "deploy:cloudflare": "pnpm build:cloudflare && pnpm --filter @cp2p/signaling worker:check && pnpm --filter @cp2p/signaling worker:deploy"
   },
   "devDependencies": {

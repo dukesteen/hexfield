@@ -25,7 +25,7 @@ Production home, create, lobby invitation generation and join-route refresh
 checks pass. External-network connectivity remains unverified, and the full
 milestone acceptance items below remain open.
 
-The current app is [Hexfield on Cloudflare](https://hexfield.steenbakkers.cc/).
+The current app is [Hexfield on Cloudflare](https://playhexfield.com/) (moved from hexfield.steenbakkers.cc on 2026-09-29; the old domain was removed).
 The [protocol v6 release](verification/cloudflare/protocol-v6-release.md) is deployed
 from `9652085` and includes the merged artwork, encrypted saves, certified transfer
 and recovery, and the reviewed protocol fixes. Published assets match the build

@@ -17,7 +17,7 @@ it.each(['GET', 'POST', 'OPTIONS'])(
     // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Deliberately absent bindings prove this route cannot use a secret or service.
     const absentBindings = undefined as unknown as Cloudflare.Env;
     const response = await worker.fetch(
-      new Request('https://hexfield.steenbakkers.cc/api/turn', { method }),
+      new Request('https://playhexfield.com/api/turn', { method }),
       absentBindings,
     );
     expect(response.status).toBe(503);

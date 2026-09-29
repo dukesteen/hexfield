@@ -4,7 +4,7 @@ The user narrowed the immediate release goal on 2026-09-27 to playing with frien
 
 ## What ships
 
-- The app at [hexfield.steenbakkers.cc](https://hexfield.steenbakkers.cc/) creates rooms with hosted WebSocket signaling by default. Friends join through the invitation link. The GitHub Pages build retains manual invitation and answer codes. Public STUN services help discover direct routes.
+- The app at [playhexfield.com](https://playhexfield.com/) creates rooms with hosted WebSocket signaling by default. Friends join through the invitation link. The GitHub Pages build retains manual invitation and answer codes. Public STUN services help discover direct routes.
 - Two to four human players can play the base game, with existing hosted bots filling seats when wanted.
 - Players can finish a game and inspect the result and audit.
 - Closing and reopening the same browser profile restores the existing seat. Reconnecting can require another exchange of connection codes.

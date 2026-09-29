@@ -76,11 +76,11 @@ test('validates ICE URLs and requires usable TURN settings for relay-only mode',
 
 test('deployment URLs are validated and empty saved defaults inherit them without replacing custom settings', () => {
   const deployed = deploymentNetworkDefaults({
-    VITE_SIGNALING_URL: 'wss://hexfield.steenbakkers.cc',
-    VITE_TURN_CREDENTIALS_URL: 'https://hexfield.steenbakkers.cc/api/turn',
+    VITE_SIGNALING_URL: 'wss://playhexfield.com',
+    VITE_TURN_CREDENTIALS_URL: 'https://playhexfield.com/api/turn',
   });
-  expect(deployed.signalingUrl).toBe('wss://hexfield.steenbakkers.cc');
-  expect(deployed.turnCredentialsUrl).toBe('https://hexfield.steenbakkers.cc/api/turn');
+  expect(deployed.signalingUrl).toBe('wss://playhexfield.com');
+  expect(deployed.turnCredentialsUrl).toBe('https://playhexfield.com/api/turn');
   expect(deployed.stunUrls).toContain('stun:stun.cloudflare.com:3478');
   expect(() =>
     deploymentNetworkDefaults({ VITE_SIGNALING_URL: 'https://not-a-websocket.example' }),

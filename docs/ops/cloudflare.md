@@ -1,6 +1,6 @@
 # Cloudflare hosting
 
-`hexfield.steenbakkers.cc` serves the SPA and WebSocket signaling from the
+`playhexfield.com` (with `www.playhexfield.com` redirecting to it) serves the SPA and WebSocket signaling from the
 `hexfield` Worker. Each signaling room uses its own SQLite
 Durable Object with hibernating WebSockets. Browsers still execute and verify the
 game. Signaling relays opaque connection envelopes. Cloudflare STUN helps peers
@@ -57,7 +57,7 @@ Game invitations and the peer protocol provide their own authorization.
 the SPA. The bounded WebSocket check uses fresh test identities and a random room:
 
 ```sh
-SIGNALING_ORIGIN=https://hexfield.steenbakkers.cc \
+SIGNALING_ORIGIN=https://playhexfield.com \
   pnpm --filter @cp2p/signaling exec node tests/worker-smoke.mjs
 ```
 
