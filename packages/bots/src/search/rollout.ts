@@ -130,7 +130,7 @@ function nextPlayer(pending: readonly Pending[], active: Seat): PlayerPending | 
 
 /**
  * Play a sampled world forward with a fast policy until `turns` more turns have started, the game
- * ends, or a chance event the sampler does not model comes up. `first` is the searched command,
+ * ends, a chance event the sampler does not model comes up, or `outOfTime` says to stop. `first` is the searched command,
  * applied for `seat` before the policy takes over.
  */
 export function rollout(
@@ -141,7 +141,9 @@ export function rollout(
   policy: (seat: Seat) => Bot,
   rng: BotRng,
   turns: number,
-): RolloutEnd | null {
+  /** Stops the rollout (returning 'timeout') once this reports the time is up. */
+  outOfTime: () => boolean = () => false,
+): RolloutEnd | 'timeout' | null {
   let state = world.state;
   let privates = world.privates;
   const apply = (input: Input, privateData?: Partial<Record<Seat, PrivateInputData>>): boolean => {
@@ -156,6 +158,7 @@ export function rollout(
   if (!apply({ kind: 'command', seat, command: first })) return null;
   const stopAt = state.turn.number + turns;
   for (let step = 0; step < 2_000 && !state.result && state.turn.number < stopAt; step++) {
+    if (outOfTime()) return 'timeout';
     const automatic = engine.getAutomaticInput(state, privates);
     if (automatic) {
       if (!apply(automatic)) break;

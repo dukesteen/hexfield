@@ -44,6 +44,9 @@ export const DEFAULT_SEARCH: SearchSettings = {
   searched: { setup: true, main: false, robber: true },
 };
 
+/** Share of the time budget the search may use before it stops starting work. */
+const SEARCH_SHARE = 0.85;
+
 function now(): number {
   return typeof performance === 'undefined' ? 0 : performance.now();
 }
@@ -102,13 +105,17 @@ export class HardBot extends HeuristicBot {
   }
 
   protected override choose(context: TurnContext, options: DecideContext): CommandShape | null {
+    // The budget covers the whole decision, the heuristic's own work included. The search stops at
+    // 85% of it: a rollout step already under way (one fast-policy move) still has to finish.
+    const deadline =
+      options.timeBudgetMs === undefined ? null : now() + options.timeBudgetMs * SEARCH_SHARE;
     const heuristic = super.choose(context, options);
     if (!heuristic) return heuristic;
     const modules = context.view.state.config.modules;
     if (!modules.every((module) => SEARCHABLE.has(module.id))) return heuristic;
     const plan = this.candidates(context, heuristic);
     if (!plan || plan.candidates.length < 2) return heuristic;
-    return this.search(context, heuristic, plan.candidates, plan.horizon, options);
+    return this.search(context, heuristic, plan.candidates, plan.horizon, options, deadline);
   }
 
   /** The moves worth comparing at this decision, the heuristic's own among them. */
@@ -179,15 +186,23 @@ export class HardBot extends HeuristicBot {
     candidates: readonly CommandShape[],
     horizon: number,
     options: DecideContext,
+    deadline: number | null,
   ): CommandShape {
     const { view, engine, rng } = context;
     const totals = candidates.map(() => 0);
     const counts = candidates.map(() => 0);
-    const deadline = options.timeBudgetMs === undefined ? null : now() + options.timeBudgetMs;
     const iterations =
       options.iterationBudget ?? (deadline === null ? this.settings.iterations : Infinity);
-    const late = (): boolean => deadline !== null && now() >= deadline;
-    for (let iteration = 0; iteration < iterations && !late(); iteration++) {
+    // Rollout cost so far, so no rollout (or iteration) starts that would end past the deadline.
+    let spent = 0;
+    let rollouts = 0;
+    const average = (): number => (rollouts ? spent / rollouts : 0);
+    const late = (work: number): boolean => deadline !== null && now() + work >= deadline;
+    for (
+      let iteration = 0;
+      iteration < iterations && !late(average() * candidates.length);
+      iteration++
+    ) {
       // One sampled world and one dice stream per iteration, shared by every candidate.
       const world = determinize(view, engine, rng);
       const seed = seedFrom(rng);
@@ -195,7 +210,8 @@ export class HardBot extends HeuristicBot {
       for (const candidate of candidates) {
         // Out of time mid-iteration: drop the partial iteration, so every candidate keeps the
         // same samples (a paired comparison).
-        if (late()) break;
+        if (late(average())) break;
+        const started = now();
         const end = rollout(
           engine,
           { ...world, devDeck: [...world.devDeck] },
@@ -204,8 +220,12 @@ export class HardBot extends HeuristicBot {
           (seat) => this.rolloutPolicy(seat, engine),
           createRng(seed),
           horizon,
+          () => late(0),
         );
+        if (end === 'timeout') break;
         values.push(end ? leafValue(engine, end.state, end.privates, view.seat) : -10);
+        spent += now() - started;
+        rollouts++;
       }
       if (values.length < candidates.length) break;
       values.forEach((value, index) => {

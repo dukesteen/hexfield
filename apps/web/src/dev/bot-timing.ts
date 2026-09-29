@@ -2,7 +2,7 @@ import { isBotLevel } from '@cp2p/bots';
 import type { BotLevel } from '@cp2p/bots';
 import { LocalGame, engineForConfig, moduleSelection } from '@cp2p/engine';
 import type { GameConfig, Pending, Seat } from '@cp2p/engine';
-import { workerBotRunner } from '../session/bot-runner.js';
+import { inlineBotRunner, workerBotRunner } from '../session/bot-runner.js';
 import { browserEntropy, createBrowserRandomSource, randomSeed } from '../session/random.js';
 
 /**
@@ -29,7 +29,7 @@ function stats(values: number[]) {
   return { n: sorted.length, medianMs: at(0.5), p95Ms: at(0.95), maxMs: sorted.at(-1) ?? 0 };
 }
 
-async function play(level: BotLevel, budgetMs: number) {
+async function play(level: BotLevel, budgetMs: number, inline: boolean) {
   const config: GameConfig = {
     modules: moduleSelection(['base']),
     seats: [0, 1, 2, 3],
@@ -44,7 +44,8 @@ async function play(level: BotLevel, budgetMs: number) {
   );
   if (!created.ok) throw new Error(created.error.message);
   const game = created.value;
-  const runner = workerBotRunner();
+  // Inline runs the same host on this thread, where DevTools CPU throttling certainly applies.
+  const runner = inline ? inlineBotRunner(engine) : workerBotRunner();
   const seeds = new Map<Seat, Uint8Array>(
     config.seats.map((seat) => [seat, randomSeed(browserEntropy)]),
   );
@@ -86,6 +87,7 @@ async function play(level: BotLevel, budgetMs: number) {
   return {
     level,
     budgetMs,
+    runner: inline ? 'inline' : 'worker',
     finished: game.state.result !== null,
     turns: game.state.turn.number,
     userAgent: navigator.userAgent,
@@ -107,7 +109,7 @@ button.addEventListener('click', () => {
   }
   button.disabled = true;
   output.textContent = 'Playing…';
-  play(level, budget)
+  play(level, budget, params.get('inline') === '1')
     .then((result) => {
       output.textContent = JSON.stringify(result, null, 2);
       output.dataset.done = 'true';
