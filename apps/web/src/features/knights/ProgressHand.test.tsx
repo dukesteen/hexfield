@@ -64,8 +64,14 @@ function controller(playable: readonly string[]): KnightsController & {
   };
 }
 
-function show(cards: readonly string[], control: KnightsController | null) {
-  const { state, priv } = holding(cards);
+function show(
+  cards: readonly string[],
+  control: KnightsController | null,
+  turn: Partial<GameState['turn']> = {},
+) {
+  const held = holding(cards);
+  const state: GameState = { ...held.state, turn: { ...held.state.turn, ...turn } };
+  const priv = held.priv;
   return render(
     <I18nextProvider i18n={i18n}>
       <ProgressHand state={state} seat={0} priv={priv} controller={control} />
@@ -78,15 +84,45 @@ test('a seat with no progress cards shows no hand', () => {
   expect(page.container.textContent).toBe('');
 });
 
-test('each card is a face, and only a card the engine lets it play can be played', () => {
+test('a playable card opens its play; any other card opens its view with the reason', () => {
   const control = controller(['progress:0']);
-  show(['irrigation', 'mining'], control);
+  show(['irrigation', 'mining'], control, {
+    activeSeat: 0,
+    phase: [{ module: 'base', id: 'main', data: null }],
+  });
   const irrigation = screen.getByTestId('progress-card-irrigation');
   const mining = screen.getByTestId('progress-card-mining');
-  expect(irrigation.hasAttribute('disabled')).toBe(false);
-  expect(mining.hasAttribute('disabled')).toBe(true);
+  expect(irrigation.getAttribute('data-playable')).toBe('true');
+  expect(mining.getAttribute('data-playable')).toBe('false');
+  // A card that cannot be played is still a button: tapping it shows it, never plays it.
+  expect(mining.hasAttribute('disabled')).toBe(false);
   fireEvent.click(irrigation);
   expect(control.playCard).toHaveBeenCalledWith('progress:0', 'irrigation');
+  fireEvent.click(mining);
+  expect(control.playCard).toHaveBeenCalledOnce();
+  const view = screen.getByRole('dialog');
+  expect(view.textContent).toContain(knights.cards.mining.text);
+  expect(screen.getByRole('status').textContent).toBe(knights.card.reason.noTarget);
+  expect(screen.queryByRole('button', { name: knights.card.play })).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: knights.close }));
+  expect(screen.queryByRole('dialog')).toBeNull();
+});
+
+test("on another seat's turn every card opens read-only and says it is not your turn", () => {
+  const control = controller([]);
+  show(['irrigation'], control, {
+    activeSeat: 1,
+    phase: [{ module: 'base', id: 'main', data: null }],
+  });
+  fireEvent.click(screen.getByTestId('progress-card-irrigation'));
+  expect(screen.getByRole('status').textContent).toBe(knights.card.reason.notYourTurn);
+  expect(control.playCard).not.toHaveBeenCalled();
+});
+
+test('without a controller (a watcher) a card still opens its view', () => {
+  show(['mining'], null, { activeSeat: 0, phase: [{ module: 'base', id: 'preRoll', data: null }] });
+  fireEvent.click(screen.getByTestId('progress-card-mining'));
+  expect(screen.getByRole('status').textContent).toBe(knights.card.reason.afterRoll);
 });
 
 test('a hand over the limit offers the discard', () => {

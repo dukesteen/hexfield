@@ -23,6 +23,21 @@ import ckIconPaperUrl from './redesign/ck-icon-paper.svg?no-inline';
 import ckIconPoliticsUrl from './redesign/ck-icon-politics.svg?no-inline';
 import ckIconScienceUrl from './redesign/ck-icon-science.svg?no-inline';
 import ckIconTradeUrl from './redesign/ck-icon-trade.svg?no-inline';
+import ckImproveDonePolitics1Url from './redesign/ck-improve-done-politics-1.svg?no-inline';
+import ckImproveDonePolitics2Url from './redesign/ck-improve-done-politics-2.svg?no-inline';
+import ckImproveDonePolitics3Url from './redesign/ck-improve-done-politics-3.svg?no-inline';
+import ckImproveDonePolitics4Url from './redesign/ck-improve-done-politics-4.svg?no-inline';
+import ckImproveDonePolitics5Url from './redesign/ck-improve-done-politics-5.svg?no-inline';
+import ckImproveDoneScience1Url from './redesign/ck-improve-done-science-1.svg?no-inline';
+import ckImproveDoneScience2Url from './redesign/ck-improve-done-science-2.svg?no-inline';
+import ckImproveDoneScience3Url from './redesign/ck-improve-done-science-3.svg?no-inline';
+import ckImproveDoneScience4Url from './redesign/ck-improve-done-science-4.svg?no-inline';
+import ckImproveDoneScience5Url from './redesign/ck-improve-done-science-5.svg?no-inline';
+import ckImproveDoneTrade1Url from './redesign/ck-improve-done-trade-1.svg?no-inline';
+import ckImproveDoneTrade2Url from './redesign/ck-improve-done-trade-2.svg?no-inline';
+import ckImproveDoneTrade3Url from './redesign/ck-improve-done-trade-3.svg?no-inline';
+import ckImproveDoneTrade4Url from './redesign/ck-improve-done-trade-4.svg?no-inline';
+import ckImproveDoneTrade5Url from './redesign/ck-improve-done-trade-5.svg?no-inline';
 import ckImprovePoliticsUrl from './redesign/ck-improve-politics.svg?no-inline';
 import ckImproveScienceUrl from './redesign/ck-improve-science.svg?no-inline';
 import ckImproveTradeUrl from './redesign/ck-improve-trade.svg?no-inline';
@@ -148,6 +163,21 @@ export const KNIGHTS_ART: Readonly<Record<string, string>> = {
   'ck-icon-politics': ckIconPoliticsUrl,
   'ck-icon-science': ckIconScienceUrl,
   'ck-icon-trade': ckIconTradeUrl,
+  'ck-improve-done-politics-1': ckImproveDonePolitics1Url,
+  'ck-improve-done-politics-2': ckImproveDonePolitics2Url,
+  'ck-improve-done-politics-3': ckImproveDonePolitics3Url,
+  'ck-improve-done-politics-4': ckImproveDonePolitics4Url,
+  'ck-improve-done-politics-5': ckImproveDonePolitics5Url,
+  'ck-improve-done-science-1': ckImproveDoneScience1Url,
+  'ck-improve-done-science-2': ckImproveDoneScience2Url,
+  'ck-improve-done-science-3': ckImproveDoneScience3Url,
+  'ck-improve-done-science-4': ckImproveDoneScience4Url,
+  'ck-improve-done-science-5': ckImproveDoneScience5Url,
+  'ck-improve-done-trade-1': ckImproveDoneTrade1Url,
+  'ck-improve-done-trade-2': ckImproveDoneTrade2Url,
+  'ck-improve-done-trade-3': ckImproveDoneTrade3Url,
+  'ck-improve-done-trade-4': ckImproveDoneTrade4Url,
+  'ck-improve-done-trade-5': ckImproveDoneTrade5Url,
   'ck-improve-politics': ckImprovePoliticsUrl,
   'ck-improve-science': ckImproveScienceUrl,
   'ck-improve-trade': ckImproveTradeUrl,

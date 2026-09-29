@@ -78,18 +78,22 @@
 /* ---- City improvements ------------------------------------------------------------------ */
 .improvements-board {
   display: grid;
-  gap: 10px;
+  gap: 12px;
 }
 .improve-track {
   display: grid;
-  gap: 2px;
+  gap: 3px;
+  min-width: 0;
 }
+/* The printed banner at its own aspect; everything on it is placed in banner units and sized from
+   the banner's width (cqi), so a cell and its stamp line up at every size. */
 .improve-banner {
   position: relative;
   width: 100%;
   aspect-ratio: 322 / 82;
+  container-type: inline-size;
 }
-.improve-banner > img:first-child {
+.improve-banner-art {
   display: block;
   width: 100%;
   height: 100%;
@@ -97,64 +101,124 @@
 }
 .improve-cell {
   position: absolute;
-  display: grid;
-  place-items: center;
+  display: block;
+  box-sizing: border-box;
+  margin: 0;
   padding: 0;
-  border-radius: 9px;
-  font-family: 'Young Serif', Georgia, serif;
+  border: 0;
+  background: none;
+  font: inherit;
 }
-.improve-cell.is-reached {
-  background: color-mix(in srgb, var(--player-color, #4f7fbf) 72%, transparent);
-  box-shadow: inset 0 0 0 2px rgb(255 255 255 / 55%);
-  color: #fff;
-  text-shadow: 0 1px 1px rgb(0 0 0 / 45%);
-  font-size: clamp(11px, 3.6vw, 17px);
+/* The printed cell inside a cell box (the box has a 2 unit margin for the stamps). */
+.improve-cell.is-next::before,
+.improve-cell.is-locked::before {
+  position: absolute;
+  inset: 3.45% 4.55%;
+  border-radius: 20% / 14.8%;
+  content: '';
 }
-.improve-cell.is-reached b {
-  font-weight: 400;
+.improve-cell.is-reached img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  user-select: none;
+  pointer-events: none;
 }
-.improve-cell.is-reached[data-ability='true'] {
-  box-shadow:
-    inset 0 0 0 2px #ffe08a,
-    0 0 8px 1px #ffe08a99;
+.improve-cell.is-locked::before {
+  background: rgb(251 244 228 / 62%);
+  -webkit-backdrop-filter: grayscale(0.7);
+  backdrop-filter: grayscale(0.7);
 }
-.improve-cell.is-next {
-  border: 2px dashed color-mix(in srgb, var(--track) 80%, #000 20%);
-  background: rgb(255 255 255 / 30%);
-  color: var(--track);
+.improve-cell.is-next,
+.improve-cell.is-next:disabled {
   cursor: default;
-  font-size: clamp(14px, 5vw, 22px);
-  font-weight: 700;
+  opacity: 1;
+}
+.improve-cell.is-next::before {
+  border: max(1.5px, 0.6cqi) dashed color-mix(in srgb, var(--track) 70%, #3b2a2e);
+  background: rgb(255 255 255 / 25%);
 }
 .improve-cell.is-next:not(:disabled) {
   cursor: pointer;
+}
+.improve-cell.is-next:not(:disabled)::before {
   border-style: solid;
-  background: rgb(255 255 255 / 55%);
+  background: rgb(255 255 255 / 45%);
+  box-shadow: 0 0 0 max(1.5px, 0.5cqi) color-mix(in srgb, var(--track) 40%, transparent);
   animation: improve-pulse 1.6s ease-in-out infinite;
 }
-.improve-cell.is-next:not(:disabled):hover {
-  background: rgb(255 255 255 / 80%);
+.improve-cell.is-next:not(:disabled):hover::before {
+  background: rgb(255 255 255 / 70%);
 }
-.improve-cell.is-next:disabled {
-  opacity: 0.55;
+.improve-cell.is-next:focus-visible {
+  outline: 2px solid var(--focus, #1f6feb);
+  outline-offset: 1px;
+  border-radius: 6px;
+}
+.improve-plus {
+  position: absolute;
+  top: -4%;
+  right: -4%;
+  display: grid;
+  place-items: center;
+  width: max(16px, 5.4cqi);
+  aspect-ratio: 1;
+  border: 1.5px solid #fbf4e4;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--track) 80%, #3b2a2e);
+  color: #fff;
+  font-size: max(12px, 4.2cqi);
+  font-weight: 700;
+  line-height: 1;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 35%);
+}
+.improve-cost {
+  position: absolute;
+  bottom: -7%;
+  left: 50%;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15em;
+  padding: 0.1em 0.4em 0.1em 0.5em;
+  border: 1.5px solid color-mix(in srgb, var(--track) 70%, #3b2a2e);
+  border-radius: 999px;
+  background: #fbf4e4;
+  color: #3b2a2e;
+  font-size: clamp(10px, 3.6cqi, 16px);
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+  transform: translateX(-50%);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 30%);
+}
+.improve-cost img {
+  width: 1.25em;
+  height: 1.25em;
+  object-fit: contain;
+}
+.improve-cell.is-next:disabled .improve-cost {
+  border-style: dashed;
+  color: #6b5a55;
 }
 @keyframes improve-pulse {
   50% {
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--track) 45%, transparent);
+    box-shadow: 0 0 0 max(3px, 1.2cqi) color-mix(in srgb, var(--track) 50%, transparent);
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .improve-cell.is-next:not(:disabled) {
+  .improve-cell.is-next:not(:disabled)::before {
     animation: none;
   }
 }
+/* The holder's metropolis stands on the track's emblem. */
 .improve-metropolis {
   position: absolute;
-  top: -12%;
-  left: 5%;
-  width: 11%;
+  top: 30%;
+  left: 14.5%;
+  width: 8.5%;
   height: auto;
-  filter: drop-shadow(0 1px 1px rgb(0 0 0 / 35%));
+  pointer-events: none;
+  filter: drop-shadow(0 1px 1px rgb(0 0 0 / 40%));
 }
 .improve-caption {
   display: flex;
@@ -162,25 +226,36 @@
   gap: 6px;
   margin: 2px 0 0;
   color: var(--muted);
-  font-size: 10px;
-  line-height: 1.35;
+  font-size: 11px;
+  line-height: 1.4;
 }
 .improve-caption img {
   flex: none;
-  width: 14px;
-  height: 14px;
+  width: 15px;
+  height: 15px;
   object-fit: contain;
 }
 .improve-caption[data-unlocked='true'] {
   color: var(--text);
 }
 .improve-next {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
   margin: 0;
   color: var(--muted);
-  font-size: 10px;
+  font-size: 11px;
+  line-height: 1.4;
 }
-.improve-track-icon {
-  display: none;
+.improve-badge {
+  padding: 0 7px;
+  border-radius: 999px;
+  background: var(--track);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
 }
 .knights-sidebar {
   padding: 12px 16px;
@@ -334,6 +409,16 @@
   filter: saturate(0.55);
   opacity: 0.85;
 }
+/* The deck's band and its label: the trade yellow takes dark ink; blue and green are deepened under
+   cream text. Each pair clears 4.5:1 (trade 7.1, politics 5.9, science 5.0). */
+.progress-face {
+  --band: color-mix(in srgb, var(--track) 70%, #2a1f24);
+  --band-ink: #fff8ec;
+}
+.progress-face[data-track='trade'] {
+  --band: var(--track);
+  --band-ink: #2a1f24;
+}
 .progress-face-band {
   display: flex;
   align-items: center;
@@ -341,8 +426,9 @@
   gap: 3px;
   width: 100%;
   padding: 2px 3px;
-  background: var(--track);
-  color: #fff;
+  background: var(--band);
+  color: var(--band-ink);
+  font-weight: 700;
   font-size: calc(var(--w) * 0.11);
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -353,14 +439,15 @@
   object-fit: contain;
 }
 .progress-face-band small {
+  color: inherit;
   font-size: inherit;
 }
 .progress-face-vp {
   margin-left: auto;
   padding: 0 4px;
   border-radius: 6px;
-  background: #fff8ec;
-  color: var(--track);
+  background: var(--band-ink);
+  color: var(--band);
   font-size: 0.95em;
 }
 .progress-face-emblem {
@@ -473,6 +560,54 @@
   color: #f7d77a;
   font-size: 9px;
   font-style: normal;
+}
+.progress-view-reason {
+  align-self: center;
+  margin: 0;
+  max-width: 34ch;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.4;
+  text-align: center;
+}
+/* The sheet a tap on a knight opens. */
+.knight-sheet-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.knight-sheet-head img {
+  flex: none;
+  width: 64px;
+  height: auto;
+}
+.knight-sheet-owner {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+.knight-sheet-state {
+  margin: 2px 0 0;
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 700;
+}
+.knight-sheet-reason {
+  margin: 12px 0 0;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.4;
+}
+.knight-sheet-actions {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
 }
 .progress-hand-discard,
 .progress-hand-harbor {
@@ -844,8 +979,9 @@
   .mobile-bottom-controls > .improvements-strip {
     margin: 0 0 6px;
   }
+  /* The scrolling row clips on both axes: room on every side for the playable ring and the lift. */
   .progress-hand {
-    padding: 4px 0 0;
+    padding: 6px 4px;
     border-left: 0;
     overflow-x: auto;
   }
@@ -1019,7 +1155,7 @@
 }
 .game-page[data-compact='true'] .hand-cards .progress-hand {
   width: 100%;
-  padding-top: 6px;
+  padding: 8px 4px 6px;
   border-top: 1px solid var(--border);
 }
 

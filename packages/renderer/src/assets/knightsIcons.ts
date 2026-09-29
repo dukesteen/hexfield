@@ -24,6 +24,11 @@ export function getImprovementBannerUrl(track: KnightsTrack): string {
   return artUrl(`ck-improve-${track}`);
 }
 
+/** The stamp that covers a reached level cell on a track's banner, drawn for that level. */
+export function getImprovementStampUrl(track: KnightsTrack, level: number): string {
+  return artUrl(`ck-improve-done-${track}-${Math.min(5, Math.max(1, Math.trunc(level) || 1))}`);
+}
+
 /** The back of a progress card of a deck. */
 export function getProgressBackUrl(track: KnightsTrack): string {
   return artUrl(`ck-progress-back-${track}`);
