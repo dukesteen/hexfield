@@ -136,6 +136,33 @@ function byCityValue(context: TurnContext, type: string, sign: 1 | -1): CommandS
   );
 }
 
+/** The Deserter: give up the weakest knight; place a gained knight as strong and rich as allowed. */
+function deserter(context: TurnContext): CommandShape | null {
+  const { state } = context.view;
+  const levelAt = (vertex: unknown): number =>
+    knightsExt(state).knights.find((knight) => knight.vertex === vertex)?.level ?? 0;
+  const removes = context.ofType('DESERTER_REMOVE');
+  if (removes.length) return best(removes, (command) => -levelAt(command.vertex), context);
+  const places = context.ofType('DESERTER_PLACE');
+  if (places.length)
+    return best(
+      places,
+      (command) =>
+        Number(command.level) * 100 + rawPips(state, String(command.vertex), context.info),
+      context,
+    );
+  return context.ofType('DESERTER_SKIP')[0] ?? null;
+}
+
+/** A displaced knight moves to the richest free spot it may take. */
+function relocate(context: TurnContext): CommandShape | null {
+  return best(
+    context.ofType('RELOCATE_KNIGHT'),
+    (command) => rawPips(context.view.state, String(command.to), context.info),
+    context,
+  );
+}
+
 export const knightsPlugin: BotPlugin = {
   module: 'knights',
   decide(context) {
@@ -144,6 +171,9 @@ export const knightsPlugin: BotPlugin = {
     if (types.has('CHOOSE_AQUEDUCT')) return aqueduct(context);
     if (types.has('PLACE_METROPOLIS')) return byCityValue(context, 'PLACE_METROPOLIS', 1);
     if (types.has('CHOOSE_PILLAGE')) return byCityValue(context, 'CHOOSE_PILLAGE', -1);
+    if (types.has('DESERTER_REMOVE') || types.has('DESERTER_PLACE') || types.has('DESERTER_SKIP'))
+      return deserter(context);
+    if (types.has('RELOCATE_KNIGHT')) return relocate(context);
     if (types.has('WEDDING_GIVE')) return discard(context, 'WEDDING_GIVE');
     if (types.has('SABOTEUR_DISCARD')) return discard(context, 'SABOTEUR_DISCARD');
     // Over the progress-card limit a turn cannot end until one is discarded.
