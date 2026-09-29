@@ -12,7 +12,7 @@
   justify-items: center;
   gap: 3px;
   transform-origin: center;
-  animation: trade-card-flight 650ms cubic-bezier(0.22, 0.68, 0.24, 1) forwards;
+  animation: trade-card-flight 1150ms cubic-bezier(0.22, 0.68, 0.24, 1) forwards;
   filter: drop-shadow(0 3px 7px #091d1740);
 }
 

@@ -115,9 +115,15 @@ async function expectVisibleReceipts(
       const name = resource[0]?.toUpperCase() + resource.slice(1);
       await expect(receipt.getByLabel(`+${count} ${name}`)).toBeVisible();
     }
+    // The receipt fits its panel; a phone's player strip scrolls sideways, so a later seat's panel
+    // may start out of view and is brought into view before the receipt is measured on screen.
+    await receipt.scrollIntoViewIfNeeded();
     const box = await receipt.boundingBox();
+    const panelBox = await panel.boundingBox();
     const viewport = page.viewportSize();
-    if (!box || !viewport) throw new Error('Receipt is not in a visible viewport');
+    if (!box || !panelBox || !viewport) throw new Error('Receipt is not in a visible viewport');
+    expect(box.x).toBeGreaterThanOrEqual(panelBox.x - 1);
+    expect(box.x + box.width).toBeLessThanOrEqual(panelBox.x + panelBox.width + 1);
     expect(box.x).toBeGreaterThanOrEqual(0);
     expect(box.x + box.width).toBeLessThanOrEqual(viewport.width + 1);
   }
@@ -180,14 +186,25 @@ test('a real production roll flies public gains from hexes to player panels', as
           const from = hook?.pixelPosition({ kind: 'hex', id: flight.fromHex }) ?? null;
           const panel = document.querySelector(`[data-seat-panel="${flight.seat}"]`);
           const box = panel?.getBoundingClientRect();
+          // A panel scrolled out of the player rail is reached at the rail's nearest edge.
+          let [clipLeft, clipTop, clipRight, clipBottom] = [0, 0, innerWidth, innerHeight];
+          for (let parent = panel?.parentElement; parent; parent = parent.parentElement) {
+            const style = getComputedStyle(parent);
+            if (style.overflowX === 'visible' && style.overflowY === 'visible') continue;
+            const clip = parent.getBoundingClientRect();
+            clipLeft = Math.max(clipLeft, clip.left);
+            clipTop = Math.max(clipTop, clip.top);
+            clipRight = Math.min(clipRight, clip.right);
+            clipBottom = Math.min(clipBottom, clip.bottom);
+          }
           return {
             from,
             to: box
               ? {
-                  left: box.left,
-                  right: box.right,
-                  top: box.top,
-                  bottom: box.bottom,
+                  left: Math.min(clipRight, Math.max(clipLeft, box.left)),
+                  right: Math.min(clipRight, Math.max(clipLeft, box.right)),
+                  top: Math.min(clipBottom, Math.max(clipTop, box.top)),
+                  bottom: Math.min(clipBottom, Math.max(clipTop, box.bottom)),
                 }
               : null,
           };
@@ -246,7 +263,8 @@ test('a real production roll flies public gains from hexes to player panels', as
         expect(drawn.count).toBe(`+${cue.count}`);
         expect(drawn.imageLoaded).toBe(true);
         expect(new URL(drawn.icon ?? '', page.url()).pathname).toMatch(
-          new RegExp(`/${cue.resource}(?:-[^/]+)?\\.svg$`),
+          // The flight shows the resource's card art (`card-<resource>.svg`).
+          new RegExp(`/(?:card-)?${cue.resource}(?:-[^/]+)?\\.svg$`),
         );
       }
       if (device.name === 'desktop') {

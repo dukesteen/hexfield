@@ -55,7 +55,7 @@ import type { BoardTextures, SeafaringTextures } from './assets/terrainTextures.
 import { sameAppearance } from './appearance.js';
 import {
   DICE_ROLL_DURATION_MS,
-  DICE_SETTLE_MS,
+  PRODUCTION_PULSE_START_MS,
   PRODUCTION_TOKEN_PULSE_MS,
   type EffectChannel,
   diceMotion,
@@ -123,7 +123,8 @@ const SEA_FIT_MARGIN = 0.25;
 const FIT_FLOOR_ZOOM = 0.1;
 const SHIP_MOVE_MS = 700;
 /** The barbarian ship sailing one step, and a whole attack: landing, the blow and the return. */
-const BARBARIAN_SAIL_MS = 900;
+/** As long as a card's flight, so the ship moves at the same pace. */
+const BARBARIAN_SAIL_MS = 1150;
 const BARBARIAN_ATTACK_MS = 3200;
 const KNIGHT_MOVE_MS = 520;
 const BURST_MS = 1100;
@@ -756,7 +757,7 @@ export class PixiBoardRenderer implements BoardRenderer {
       effect.kind === 'dice-roll'
         ? DICE_ROLL_DURATION_MS
         : effect.kind === 'production-pulse'
-          ? DICE_SETTLE_MS + PRODUCTION_TOKEN_PULSE_MS
+          ? PRODUCTION_PULSE_START_MS + PRODUCTION_TOKEN_PULSE_MS
           : effect.kind === 'ship-move'
             ? SHIP_MOVE_MS
             : effect.kind === 'barbarian-sail'

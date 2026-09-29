@@ -108,7 +108,7 @@ export type { TransferOwnedMaterial, TransferOwnedSeat } from './transfer-materi
 export type { SafetyStore, StoredSafety } from './safety-store.js';
 export { MemoryProtocolJournal, journalSafetyStore } from './journal.js';
 export type { JournalRecord, ProtocolJournal } from './journal.js';
-export { P2PSession } from './p2p-session.js';
+export { DEFAULT_BOT_DELAY_MS, P2PSession } from './p2p-session.js';
 export { VerifiedSessionDriver } from './verified-session-driver.js';
 export type { CertifiedHistory, P2PSessionOptions, SessionDriver } from './p2p-session.js';
 export { ReplicatedLog } from './replicated-log.js';

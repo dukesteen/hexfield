@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { LOBBY_COLOURS } from '@cp2p/protocol';
+import { DEFAULT_BOT_DELAY_MS, LOBBY_COLOURS } from '@cp2p/protocol';
 import * as v from 'valibot';
 import { PLAYER_COLORS, PLAYER_SEATS, PLAYER_SHAPES } from '../features/players/identity';
 import type { Seat } from '@cp2p/engine';
@@ -193,7 +193,7 @@ export function useImportLocalSave(playerName: (seat: Seat) => string) {
               shape: PLAYER_SHAPES[index] ?? 'circle',
             };
           }),
-          botDelayMs: 500,
+          botDelayMs: DEFAULT_BOT_DELAY_MS,
         };
         const revision =
           save.genesis.length +

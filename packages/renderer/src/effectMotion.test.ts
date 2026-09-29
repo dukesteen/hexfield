@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   DICE_ROLL_DURATION_MS,
   DICE_SETTLE_MS,
+  PRODUCTION_PULSE_START_MS,
   PRODUCTION_TOKEN_PULSE_MS,
   diceMotion,
   effectChannel,
@@ -37,13 +38,19 @@ describe('board effect motion', () => {
     expect(productionTokenMotion(1)).toBe(0);
   });
 
-  it('starts the token pulse as the dice settle and keeps it short', () => {
+  it('starts the token pulse during the last tumble and lets it read', () => {
+    expect(PRODUCTION_PULSE_START_MS).toBeLessThan(DICE_SETTLE_MS);
     expect(productionPulseProgress(0)).toBeNull();
-    expect(productionPulseProgress(DICE_SETTLE_MS - 1)).toBeNull();
-    expect(productionPulseProgress(DICE_SETTLE_MS)).toBe(0);
-    expect(productionPulseProgress(DICE_SETTLE_MS + PRODUCTION_TOKEN_PULSE_MS / 2)).toBe(0.5);
-    expect(productionPulseProgress(DICE_SETTLE_MS + PRODUCTION_TOKEN_PULSE_MS)).toBe(1);
-    expect(DICE_SETTLE_MS + PRODUCTION_TOKEN_PULSE_MS).toBeLessThanOrEqual(DICE_ROLL_DURATION_MS);
+    expect(productionPulseProgress(PRODUCTION_PULSE_START_MS - 1)).toBeNull();
+    expect(productionPulseProgress(PRODUCTION_PULSE_START_MS)).toBe(0);
+    expect(productionPulseProgress(PRODUCTION_PULSE_START_MS + PRODUCTION_TOKEN_PULSE_MS / 2)).toBe(
+      0.5,
+    );
+    expect(productionPulseProgress(PRODUCTION_PULSE_START_MS + PRODUCTION_TOKEN_PULSE_MS)).toBe(1);
+    // The tokens are at their largest a little after the dice settle, as the cards take off.
+    const peak = PRODUCTION_PULSE_START_MS + PRODUCTION_TOKEN_PULSE_MS * 0.25;
+    expect(peak).toBeGreaterThan(DICE_SETTLE_MS);
+    expect(PRODUCTION_TOKEN_PULSE_MS).toBeGreaterThanOrEqual(1000);
   });
 
   it('shows the final faces, still, from the settle point on', () => {

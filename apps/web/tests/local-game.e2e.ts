@@ -141,6 +141,8 @@ async function createGame(page: Page, options: NewGameOptions): Promise<void> {
   }
   if (options.fixedBoard) await page.getByLabel('Map layout').selectOption('standard-fixed');
   await page.getByText('Advanced rules').click();
+  // New games default to one second per bot action; these tests run the bots at once.
+  await expect(page.getByLabel('Bot pace, milliseconds')).toHaveValue('1000');
   await page.getByLabel('Bot pace, milliseconds').fill('0');
   await page.getByRole('button', { name: 'Create game' }).click();
   await expect(page).toHaveURL(/#\/local\/[^/]+$/);

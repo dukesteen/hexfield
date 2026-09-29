@@ -31,14 +31,15 @@ interface CardFlightView {
   dy: number;
 }
 
-/** Flight timings, matching the CSS animations: a card counts as landed when it reaches its slot. */
-export const PRODUCTION_LANDS_MS = 700;
-const PRODUCTION_FLIGHT_MS = 850;
+/**
+ * Flight timings, matching the CSS animations: every card (production, trade, steal) flies for
+ * 1.15 s with an ease-out and counts as landed when it reaches its slot, at 80% of the flight.
+ */
+export const CARD_FLIGHT_MS = 1150;
+export const CARD_LANDS_MS = 920;
 /** The gap between production cards taking off, and the most the whole batch may spread over. */
-export const PRODUCTION_STAGGER_MS = 70;
-export const PRODUCTION_SPREAD_MS = 350;
-const CARD_LANDS_MS = 520;
-const CARD_FLIGHT_MS = 650;
+export const PRODUCTION_STAGGER_MS = 130;
+export const PRODUCTION_SPREAD_MS = 450;
 const SCROLL_SETTLE_MS = 350;
 /** How long past its flight a hold may live if its flight never reports back. */
 const HOLD_SLACK_MS = 2000;
@@ -124,6 +125,9 @@ export function useProductionReceipts(session: object | null): {
   return { receipts, add };
 }
 
+/** Overflow values that clip a scrolled child. */
+const CLIPPING = new Set(['auto', 'clip', 'hidden', 'scroll']);
+
 function visibleCenter(element: HTMLElement): { x: number; y: number } | null {
   const rect = element.getBoundingClientRect();
   if (rect.width <= 0 || rect.height <= 0) return null;
@@ -133,8 +137,8 @@ function visibleCenter(element: HTMLElement): { x: number; y: number } | null {
   for (let parent = element.parentElement; parent; parent = parent.parentElement) {
     const style = getComputedStyle(parent);
     const parentRect = parent.getBoundingClientRect();
-    const clipsX = ['auto', 'clip', 'hidden', 'scroll'].includes(style.overflowX);
-    const clipsY = ['auto', 'clip', 'hidden', 'scroll'].includes(style.overflowY);
+    const clipsX = CLIPPING.has(style.overflowX);
+    const clipsY = CLIPPING.has(style.overflowY);
     if (
       (clipsX &&
         (point.x < parentRect.left + parent.clientLeft ||
@@ -206,7 +210,7 @@ function edgeOfView(element: HTMLElement): Point | null {
   let bottom = window.innerHeight;
   for (let parent = element.parentElement; parent; parent = parent.parentElement) {
     const style = getComputedStyle(parent);
-    if (![style.overflowX, style.overflowY].some((value) => value !== 'visible')) continue;
+    if (![style.overflowX, style.overflowY].some((value) => CLIPPING.has(value))) continue;
     const box = parent.getBoundingClientRect();
     left = Math.max(left, box.left + parent.clientLeft);
     top = Math.max(top, box.top + parent.clientTop);
@@ -443,8 +447,7 @@ export function useVisualEffects(
             seat: flight.seat,
             kind: flight.resource,
             delta: flight.count,
-            expiresAt:
-              now + launchAt(index) + SCROLL_SETTLE_MS + PRODUCTION_FLIGHT_MS + HOLD_SLACK_MS,
+            expiresAt: now + launchAt(index) + SCROLL_SETTLE_MS + CARD_FLIGHT_MS + HOLD_SLACK_MS,
           })),
         );
       hold(
@@ -455,9 +458,8 @@ export function useVisualEffects(
       if (renderer) {
         cues.flights.forEach((flight, index) => {
           const launch = () => {
-            const card = handSlot(flight.seat, flight.resource);
-            const panel = seatPanel(flight.seat);
-            const to = (card && visibleCenter(card)) || (panel && visibleCenter(panel));
+            // Like any card: the hand slot, else the hand, else the panel (or the rail's edge).
+            const to = cardEndPoint(flight.seat, flight.resource);
             if (!to) {
               release(`${flight.id}:in`);
               return;
@@ -480,7 +482,7 @@ export function useVisualEffects(
                 dy: to.y - from.y,
               },
             ]);
-            schedule(() => release(`${flight.id}:in`), PRODUCTION_LANDS_MS);
+            schedule(() => release(`${flight.id}:in`), CARD_LANDS_MS);
           };
           schedule(() => {
             const clipped = clippedSlot(handSlot(flight.seat, flight.resource));

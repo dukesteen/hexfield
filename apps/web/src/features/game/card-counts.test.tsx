@@ -5,7 +5,7 @@ import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import type { CardFlight } from './card-flights';
 import { heldHand, heldTotal, useCardHolds } from './card-holds';
 import type { VisualEffects } from './visual-effects';
-import { useVisualEffects } from './use-visual-effects.js';
+import { CARD_FLIGHT_MS, CARD_LANDS_MS, useVisualEffects } from './use-visual-effects.js';
 
 const mock = vi.hoisted(() => ({
   session: null as unknown,
@@ -159,7 +159,7 @@ test('a card flying into the hand shows the old count until it lands', async () 
   await frame();
   expect(document.querySelector('.trade-card-flight[data-card="grain"]')).not.toBeNull();
   expect(shown()).toMatchObject({ grain: 1, total: 2 });
-  await act(() => vi.advanceTimersByTime(519));
+  await act(() => vi.advanceTimersByTime(CARD_LANDS_MS - 1));
   expect(shown().grain).toBe(1);
   await act(() => vi.advanceTimersByTime(1));
   expect(shown()).toMatchObject({ grain: 2, total: 3 });
@@ -199,7 +199,7 @@ test('a new update lands the cards still in the air at once, then settles on the
   expect(document.querySelector('.trade-card-flight')).toBeNull();
   await frame();
   expect(document.querySelectorAll('.trade-card-flight')).toHaveLength(2);
-  await act(() => vi.advanceTimersByTime(520));
+  await act(() => vi.advanceTimersByTime(CARD_LANDS_MS));
   expect(shown()).toMatchObject({ grain: 3, ore: 1, total: 5 });
   await act(() => vi.runAllTimers());
   expect(useCardHolds.getState().holds).toEqual([]);
@@ -226,6 +226,7 @@ test('a hold never outlives its deadline even if its flight never launches', asy
   render(<View />);
   emit({ wool: 1, grain: 2, ore: 0 }, [card('stuck', {})]);
   expect(shown().grain).toBe(1);
-  await act(() => vi.advanceTimersByTime(3_000));
+  // The deadline: scrolling, the whole flight, and two seconds of slack.
+  await act(() => vi.advanceTimersByTime(350 + CARD_FLIGHT_MS + 2_000));
   expect(shown().grain).toBe(2);
 });

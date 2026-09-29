@@ -1,5 +1,6 @@
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
 import type { BaseOptions } from '@cp2p/engine';
+import { DEFAULT_BOT_DELAY_MS } from '@cp2p/protocol';
 import {
   defaultScenario,
   scenarioAtSeats,
@@ -103,7 +104,7 @@ function NewLocalGame() {
     const next = scenarioAtSeats(scenario, count) ?? defaultScenario(count);
     if (next !== scenario) chooseScenario(next);
   };
-  const [botDelayMs, setBotDelayMs] = useState(450);
+  const [botDelayMs, setBotDelayMs] = useState(DEFAULT_BOT_DELAY_MS);
   const [error, setError] = useState(false);
   const [invalidNames, setInvalidNames] = useState<number[]>([]);
 

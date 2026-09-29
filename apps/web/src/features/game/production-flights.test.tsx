@@ -17,9 +17,12 @@ import {
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { useCardHolds } from './card-holds';
 import type { ProductionGain, ResourceFlight, VisualEffects } from './visual-effects';
+import { DEFAULT_BOT_DELAY_MS } from '@cp2p/protocol';
 import {
-  PRODUCTION_LANDS_MS,
+  CARD_FLIGHT_MS,
+  CARD_LANDS_MS,
   PRODUCTION_SPREAD_MS,
+  PRODUCTION_STAGGER_MS,
   productionLaunchAt,
   useVisualEffects,
 } from './use-visual-effects.js';
@@ -47,7 +50,9 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
-  document.querySelectorAll('.hand-dock, [data-seat-panel]').forEach((element) => element.remove());
+  document
+    .querySelectorAll('.hand-dock, .player-rail, [data-seat-panel]')
+    .forEach((element) => element.remove());
   sessionMock.current = null;
   effectsMock.current = null;
   useCardHolds.getState().clear();
@@ -229,7 +234,7 @@ test('flies each card to its matching destination as the dice settle', async () 
   expect(localFlight?.style.getPropertyValue('--flight-dy')).toBe('118px');
   expect(handImage.isConnected).toBe(true);
 
-  await act(() => vi.advanceTimersByTime(69));
+  await act(() => vi.advanceTimersByTime(PRODUCTION_STAGGER_MS - 1));
   expect(document.querySelectorAll('.resource-flight')).toHaveLength(1);
   await act(() => vi.advanceTimersByTime(1));
   const otherFlight = [...document.querySelectorAll<HTMLElement>('.resource-flight')].find(
@@ -265,6 +270,30 @@ test('scrolls a clipped revealed hand card into view before falling back to its 
   expect(launchedFlight?.style.getPropertyValue('--flight-dy')).toBe('95px');
 });
 
+test('flies toward the rail edge for a panel scrolled out of the player rail', async () => {
+  const rail = document.createElement('div');
+  rail.className = 'player-rail';
+  rail.style.overflowY = 'auto';
+  setRect(rail, rect(400, 0, 100, 200));
+  Object.defineProperty(rail, 'clientWidth', { configurable: true, value: 100 });
+  Object.defineProperty(rail, 'clientHeight', { configurable: true, value: 200 });
+  const panel = document.createElement('aside');
+  panel.dataset.seatPanel = '1';
+  setRect(panel, rect(400, 300, 100, 50));
+  rail.append(panel);
+  document.body.append(rail);
+  setEffects([flight('hidden-seat-grain', 1, 'grain')]);
+  const { emit } = setupSession();
+  render(<EffectsView />);
+
+  emit();
+  await act(() => vi.advanceTimersByTime(DICE_SETTLE_MS));
+  const launched = document.querySelector<HTMLElement>('.resource-flight');
+  expect(launched?.style.getPropertyValue('--flight-dx')).toBe('440px');
+  expect(launched?.style.getPropertyValue('--flight-dy')).toBe('180px');
+  expect(useCardHolds.getState().holds.map((hold) => hold.id)).toEqual(['hidden-seat-grain:in']);
+});
+
 test.each(['skip', 'reduced motion', 'session replacement', 'unmount'] as const)(
   'cancels queued production flights on %s',
   async (reason) => {
@@ -289,13 +318,20 @@ test.each(['skip', 'reduced motion', 'session replacement', 'unmount'] as const)
   },
 );
 
-test('a roll pays out within 1.2 s of the dice settling, however many cards fly', () => {
+test('a roll pays out soon after the dice settle, before a default-paced bot rolls again', () => {
   for (const total of [1, 2, 5, 12, 30]) {
     const last = productionLaunchAt(total - 1, total, true);
     expect(productionLaunchAt(0, total, true)).toBe(DICE_SETTLE_MS);
     expect(last - DICE_SETTLE_MS).toBeLessThanOrEqual(PRODUCTION_SPREAD_MS);
-    expect(last - DICE_SETTLE_MS + PRODUCTION_LANDS_MS).toBeLessThanOrEqual(1200);
+    // Every count has ticked within 1.4 s of the dice settling.
+    expect(last - DICE_SETTLE_MS + CARD_LANDS_MS).toBeLessThanOrEqual(1400);
   }
+  // Cards leave a clear beat apart; a four-card roll has finished flying before the next roll a
+  // bot at the default pace can make (it ends its turn, then the next bot rolls).
+  expect(productionLaunchAt(1, 4, true) - productionLaunchAt(0, 4, true)).toBe(130);
+  expect(productionLaunchAt(3, 4, true) + CARD_FLIGHT_MS).toBeLessThanOrEqual(
+    2 * DEFAULT_BOT_DELAY_MS,
+  );
   // Cards that come without a roll (a setup payout) fly at once.
   expect(productionLaunchAt(0, 1, false)).toBe(0);
 });
@@ -308,7 +344,7 @@ test('a new roll lands the cards still in the air at once and starts its own', a
   render(<EffectsView />);
 
   emit();
-  await act(() => vi.advanceTimersByTime(DICE_SETTLE_MS + 100));
+  await act(() => vi.advanceTimersByTime(DICE_SETTLE_MS + PRODUCTION_STAGGER_MS));
   expect(document.querySelectorAll('.resource-flight')).toHaveLength(2);
   expect(useCardHolds.getState().holds.map((hold) => hold.id)).toEqual([
     'first-grain:in',
@@ -322,7 +358,7 @@ test('a new roll lands the cards still in the air at once and starts its own', a
   expect(useCardHolds.getState().holds.map((hold) => hold.id)).toEqual(['second-ore:in']);
   await act(() => vi.advanceTimersByTime(DICE_SETTLE_MS));
   expect(document.querySelectorAll('.resource-flight')).toHaveLength(1);
-  await act(() => vi.advanceTimersByTime(PRODUCTION_LANDS_MS));
+  await act(() => vi.advanceTimersByTime(CARD_LANDS_MS));
   // Every count has converged on the state.
   expect(useCardHolds.getState().holds).toEqual([]);
   await act(() => vi.runAllTimers());

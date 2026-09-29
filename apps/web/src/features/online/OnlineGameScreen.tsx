@@ -1,5 +1,6 @@
 import type { Seat } from '@cp2p/engine';
 import { failure } from '@cp2p/engine';
+import { DEFAULT_BOT_DELAY_MS } from '@cp2p/protocol';
 import type { GameSession, LobbyFreezeAgreement } from '@cp2p/protocol';
 import { getGameArtUrl } from '@cp2p/renderer';
 import { useBlocker, useNavigate } from '@tanstack/react-router';
@@ -291,7 +292,7 @@ function OnlineGameInstance({
         const index = seat.seat;
         return { seat: index, name: seat.name, color: seat.colour, shape: SHAPES[index] };
       }),
-      botDelayMs: 800,
+      botDelayMs: DEFAULT_BOT_DELAY_MS,
     }),
     [agreement],
   );
