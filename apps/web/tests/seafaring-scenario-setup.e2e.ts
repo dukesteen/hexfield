@@ -3,6 +3,7 @@ import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { SCENARIOS } from '@cp2p/maps';
 import type { DevHook } from '../src/features/devtools/hook.js';
+import { waitForRenderer } from './helpers/renderer-ready.js';
 
 declare global {
   interface Window {
@@ -21,7 +22,7 @@ async function newGame(page: Page, scenario: string, seats: number): Promise<voi
   await page.getByLabel('Bot pace, milliseconds').fill('0');
   await page.getByRole('button', { name: 'Create game' }).click();
   await expect(page).toHaveURL(/#\/local\/[^/]+$/);
-  await expect.poll(() => page.evaluate(() => Boolean(window['__cp2p']?.renderer))).toBe(true);
+  await waitForRenderer(page);
 }
 
 /** Submit the first legal command of a type for the human seat, through the session. */
@@ -55,8 +56,9 @@ test.describe('every seafaring scenario starts and plays locally', () => {
       expect(state.config.modules.map((module) => module.id)).toContain('seafaring');
       expect(state.config.seats).toHaveLength(seats);
       expect(state.board.hexes.some((hex) => hex.terrain === 'sea')).toBe(true);
+      // Every Fogbound map, at either seat count and with knights, hides hexes under fog.
       expect(state.board.hexes.some((hex) => hex.terrain === 'fog')).toBe(
-        scenario.id === 'fogbound',
+        scenario.id.startsWith('fogbound'),
       );
       // The human places a settlement and its road (or ship), and the bots then place theirs.
       expect(await submitFirst(page, ['PLACE_SETTLEMENT'])).toBe('PLACE_SETTLEMENT');

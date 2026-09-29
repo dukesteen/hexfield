@@ -118,7 +118,8 @@ async function expectSettledPrimaryColors(button: Locator): Promise<void> {
         const probe = document.createElement('span');
         probe.style.backgroundColor = 'var(--accent)';
         probe.style.color = 'var(--accent-text)';
-        document.body.append(probe);
+        // The game page themes its own accent, so resolve the tokens beside the button.
+        (element.parentElement ?? document.body).append(probe);
         const actual = getComputedStyle(element);
         const target = getComputedStyle(probe);
         const settled =
@@ -139,7 +140,10 @@ async function createGame(page: Page, options: NewGameOptions): Promise<void> {
       .getByLabel(`Player ${seat + 1} control`)
       .selectOption(options.humans.includes(seat) ? 'human' : 'bot');
   }
-  if (options.fixedBoard) await page.getByLabel('Map layout').selectOption('standard-fixed');
+  if (options.fixedBoard)
+    await page
+      .getByRole('combobox', { name: 'Scenario', exact: true })
+      .selectOption('standard-fixed');
   await page.getByText('Advanced rules').click();
   // New games default to one second per bot action; these tests run the bots at once.
   await expect(page.getByLabel('Bot pace, milliseconds')).toHaveValue('1000');
@@ -405,9 +409,7 @@ test('a replay-backed bank trade uses the visible multi-resource form', async ({
   await page.emulateMedia({ colorScheme: 'dark' });
   await openGoldenPrefix(page, 102);
   const before = await observedRevision(page);
-  await page.getByRole('button', { name: 'Bank trade' }).click();
-  const dialog = page.getByRole('dialog', { name: 'Bank trade' });
-  await expect(dialog).toBeVisible();
+  const dialog = await openTradeForm(page, 'Bank', 'mouse');
   await dialog.getByRole('button', { name: 'Add Brick to You give' }).click();
   await dialog.getByRole('button', { name: 'Add Grain to Bank gives' }).click();
   await capturePreview(page, testInfo, 'bank-card-trade-selection');
@@ -423,9 +425,7 @@ test('a replay-backed trade offer and named confirmations use visible controls',
   await page.emulateMedia({ colorScheme: 'dark' });
   await openGoldenPrefix(page, 22);
   const before = await observedRevision(page);
-  await page.getByRole('button', { name: 'Offer trade' }).click();
-  const dialog = page.getByRole('dialog', { name: 'Player trade' });
-  await expect(dialog).toBeVisible();
+  const dialog = await openTradeForm(page, 'Players', 'mouse');
   await dialog.getByRole('button', { name: 'Add Lumber to You give' }).click();
   await dialog.getByRole('button', { name: 'Add Ore to You get' }).click();
   await expect(dialog.getByRole('heading', { name: 'Player trade' })).toBeInViewport();
@@ -464,14 +464,14 @@ test('a replay-backed trade offer and named confirmations use visible controls',
   }
 });
 
-test('mobile Actions hands off bank and player trades to one visible dialog', async ({
+test('mobile Trade sheet hands off bank and player trades to one visible dialog', async ({
   browser,
   browserName,
 }) => {
   test.skip(browserName !== 'chromium', 'Touch trade handoff runs in Chromium');
   for (const trade of [
-    { prefix: 102, action: 'Bank trade', dialog: 'Bank trade' },
-    { prefix: 22, action: 'Offer trade', dialog: 'Player trade' },
+    { prefix: 102, action: 'Bank', dialog: 'Bank trade' },
+    { prefix: 22, action: 'Players', dialog: 'Player trade' },
   ]) {
     const context = await browser.newContext({
       viewport: { width: 390, height: 844 },
@@ -482,11 +482,13 @@ test('mobile Actions hands off bank and player trades to one visible dialog', as
       const page = await context.newPage();
       await openGoldenPrefix(page, trade.prefix);
       const revision = await observedRevision(page);
-      const trigger = page.locator('.next-step-actions');
+      const trigger = page
+        .getByRole('navigation', { name: 'Actions' })
+        .getByRole('button', { name: 'Trade' });
       await trigger.tap();
-      const actions = page.getByRole('dialog', { name: 'Actions' });
+      const actions = page.getByRole('dialog', { name: 'Trade', exact: true });
       await expect(actions).toBeVisible();
-      await actions.getByRole('button', { name: trade.action }).tap();
+      await actions.getByRole('button', { name: trade.action, exact: true }).tap();
       await expect(actions).toBeHidden();
       const form = page.getByRole('dialog', { name: trade.dialog });
       await expect(form).toBeVisible();
@@ -546,14 +548,7 @@ test('trade recipients remain above the modal footer at desktop and phone sizes'
     try {
       const page = await context.newPage();
       await openGoldenPrefix(page, 22);
-      const offerTrade = await revealActionButton(
-        page,
-        'Offer trade',
-        device.mobile ? 'touch' : 'mouse',
-      );
-      if (device.mobile) await offerTrade.tap();
-      else await offerTrade.click();
-      const dialog = page.getByRole('dialog', { name: 'Player trade' });
+      const dialog = await openTradeForm(page, 'Players', device.mobile ? 'touch' : 'mouse');
       await dialog.getByRole('button', { name: 'Add Lumber to You give' }).click();
       await dialog.getByRole('button', { name: 'Add Ore to You get' }).click();
       const brickCard = dialog.getByRole('button', { name: 'Add Brick to You get' });
@@ -621,8 +616,7 @@ test('card picker keeps keyboard focus after removing the final card or clearing
 }) => {
   test.skip(test.info().project.name !== 'chromium', 'Card picker keyboard focus runs in Chromium');
   await openGoldenPrefix(page, 22);
-  await page.getByRole('button', { name: 'Offer trade' }).click();
-  const dialog = page.getByRole('dialog', { name: 'Player trade' });
+  const dialog = await openTradeForm(page, 'Players', 'mouse');
   const addBrick = dialog.getByRole('button', { name: 'Add Brick to You get' });
   await addBrick.click();
   const removeBrick = dialog.getByRole('button', { name: 'Remove Brick from You get' });
@@ -660,9 +654,11 @@ test('a replay-backed development card enters the visible robber flow', async ({
   });
   expect(before).not.toBeNull();
   if (!before) throw new Error('Knight fixture has no active game');
-  const action = page.locator('.action-dock').getByRole('button', { name: 'Play Knight' });
+  const action = page
+    .getByRole('group', { name: 'Other actions' })
+    .getByRole('button', { name: 'Play Knight' });
   const knight = page
-    .locator('.hand-dock > .development-hand .development-card')
+    .locator('.hand-dock .hand-cards > .development-hand .development-card')
     .filter({ hasText: 'Knight' });
   const cardAction = knight.getByRole('button', { name: 'Knight', exact: true });
   const confirmation = knight.getByRole('group', { name: 'Play Knight?' });
@@ -671,7 +667,8 @@ test('a replay-backed development card enters the visible robber flow', async ({
       const art = element.querySelector('.development-card-art');
       const image = art?.querySelector('img');
       const label = element.querySelector('strong');
-      const hand = element.closest('.development-hand');
+      // The hand row clips its cards on desktop; the drawer's card list clips them on phones.
+      const hand = element.closest('.hand-cards') ?? element.closest('.development-hand');
       const controls = [...element.querySelectorAll('.knight-card-choice')];
       if (!art || !image || !label || !hand || controls.length !== 2) return null;
       const artRect = art.getBoundingClientRect();
@@ -833,7 +830,7 @@ test('a replay-backed development card enters the visible robber flow', async ({
       ).toBe(initial.hash);
     };
     await tapPhoneKnight();
-    await expect(phone.getByRole('dialog', { name: 'Actions' })).toBeHidden();
+    await expect(phone.getByRole('dialog', { name: 'Build', exact: true })).toBeHidden();
     await expect(phoneDialog).toBeVisible();
     await expect(phoneConfirmation).toBeVisible();
     await assertIntentFits(phone, phoneKnight, 'phone-knight-intent');
@@ -851,15 +848,19 @@ test('a replay-backed development card enters the visible robber flow', async ({
     await phoneDialog.getByRole('button', { name: 'Close cards' }).tap();
     await expect(phoneDialog).toBeHidden();
     await assertPhoneUncommitted();
-    await phone.getByRole('button', { name: 'Development cards: 1' }).tap();
-    await phoneKnight.getByRole('button', { name: 'Knight', exact: true }).tap();
+    // The phone hand strip shows the card too; choosing it opens the same card drawer.
+    await phone
+      .locator('.hand-dock .hand-cards .development-card')
+      .filter({ hasText: 'Knight' })
+      .getByRole('button', { name: 'Knight', exact: true })
+      .tap();
+    await expect(phoneDialog).toBeVisible();
     await expect(phoneConfirmation).toBeVisible();
     await assertPhoneUncommitted();
     await phoneKnight.getByRole('button', { name: 'Knight', exact: true }).tap();
     await expect(phoneConfirmation).toBeHidden();
-    await assertPhoneUncommitted();
-    await phoneDialog.getByRole('button', { name: 'Close cards' }).tap();
     await expect(phoneDialog).toBeHidden();
+    await assertPhoneUncommitted();
     await tapPhoneKnight();
     await phoneConfirmation.getByRole('button', { name: 'Play Knight' }).tap();
     await expect.poll(() => observedRevision(phone)).toBeGreaterThan(initial.revision);
@@ -989,9 +990,10 @@ test('a replay-backed city upgrade previews a legal site before spending resourc
     .click();
   await expect(page.getByRole('button', { name: 'Confirm city' })).toBeHidden();
   expect(await observedRevision(page)).toBe(city.revision);
+  // With no site chosen, the board status offers to put the chosen action down again.
   await page
-    .getByRole('group', { name: 'Choose a board action' })
-    .getByRole('button', { name: 'Cancel' })
+    .getByRole('region', { name: 'Game board' })
+    .getByRole('button', { name: 'Cancel', exact: true })
     .click();
   await expect(cityAction).toHaveAttribute('aria-pressed', 'false');
   expect(await observedRevision(page)).toBe(city.revision);
@@ -1114,9 +1116,16 @@ test('game cockpit fits desktop, compact, and phone viewports without document s
       await openGoldenPrefix(page, 42);
       await expect(page.getByRole('region', { name: 'Your hand' })).toBeVisible();
       await expect(page.locator('.resource-hand-card')).toHaveCount(5);
-      if (device.mobile) await expect(page.locator('.next-step-actions')).toBeVisible();
-      else await expect(page.getByRole('region', { name: 'Actions' })).toBeVisible();
-      if (!device.mobile) {
+      if (device.mobile) {
+        const tabs = page.getByRole('navigation', { name: 'Actions' });
+        for (const tab of ['Build', 'Trade', 'Players', 'Log'])
+          await expect(tabs.getByRole('button', { name: tab })).toBeInViewport({ ratio: 1 });
+      } else {
+        for (const region of ['Build', 'Trade'])
+          await expect(page.getByRole('region', { name: region, exact: true })).toBeVisible();
+        await expect(
+          page.getByRole('button', { name: /^(Roll dice|End turn) [RE]$/ }),
+        ).toBeVisible();
         for (const player of ['Player 1', 'Player 2', 'Player 3', 'Player 4']) {
           const panel = page.locator('.player-panel').filter({ hasText: player });
           await expect(panel).toBeVisible();
@@ -1132,9 +1141,9 @@ test('game cockpit fits desktop, compact, and phone viewports without document s
       const dimensions = await page.evaluate(() => {
         const board = document.querySelector('.game-board')?.getBoundingClientRect();
         const hand = document.querySelector('.hand-dock')?.getBoundingClientRect();
-        const dock = document.querySelector('.action-dock')?.getBoundingClientRect();
+        const bottom = document.querySelector('.game-bottom')?.getBoundingClientRect();
         const costsTrigger = document
-          .querySelector('.action-costs-trigger')
+          .querySelector('.desktop-build-costs')
           ?.getBoundingClientRect();
         // Playwright serializes this callback; helpers outside it are unavailable in the page.
         // eslint-disable-next-line unicorn/consistent-function-scoping
@@ -1158,40 +1167,35 @@ test('game cockpit fits desktop, compact, and phone viewports without document s
             badgeRight: count?.right ?? Infinity,
           };
         });
+        const panels = [
+          ...document.querySelectorAll(
+            '.game-bottom > .desktop-build-panel, .game-bottom > .hand-dock, .game-bottom > .desktop-trade-panel, .game-bottom > .desktop-turn-control',
+          ),
+        ].map((panel) => ({
+          name: panel.className,
+          fits: inside(panel.getBoundingClientRect(), viewport),
+        }));
         const visibleActions = [
-          ...document.querySelectorAll('.action-dock button:not([disabled])'),
+          ...document.querySelectorAll('.game-bottom button:not([disabled])'),
         ].filter((button) => inside(button.getBoundingClientRect(), viewport)).length;
-        const contextual = document.querySelector('.action-context')?.getBoundingClientRect();
-        const normal = document.querySelector('.action-normal-buttons')?.getBoundingClientRect();
-        const normalElements = [
-          ...document.querySelectorAll('.action-normal-buttons .action-control'),
-        ];
-        const normalButtons = normalElements.map((button) => button.getBoundingClientRect());
-        const normalContentFits = normalElements.map((button) => {
-          const tile = button.getBoundingClientRect();
-          const art = button.querySelector('img, svg')?.getBoundingClientRect();
-          const caption = button.querySelector('span')?.getBoundingClientRect();
-          return Boolean(
-            art &&
-            caption &&
-            art.top >= tile.top + 3 &&
-            caption.bottom <= tile.bottom - 3 &&
-            Math.abs((art.left + art.right - tile.left - tile.right) / 2) <= 2 &&
-            Math.abs((caption.left + caption.right - tile.left - tile.right) / 2) <= 2,
-          );
-        });
-        const contextualButtons = [
-          ...document.querySelectorAll('.action-context-buttons .action-control:not([disabled])'),
-        ].map((button) => button.getBoundingClientRect());
-        const illustratedActions = [...document.querySelectorAll('.action-control')]
+        const illustratedActions = [
+          ...document.querySelectorAll('.desktop-build-button, .desktop-trade-button'),
+        ]
           .filter((button) => inside(button.getBoundingClientRect(), viewport))
           .map((button) => {
-            const art = button.querySelector('img, svg')?.getBoundingClientRect();
+            const art = button.querySelector('img')?.getBoundingClientRect();
             return {
-              label: button.textContent?.trim() ?? '',
+              label: button.getAttribute('aria-label') ?? button.textContent?.trim() ?? '',
               artVisible: art ? inside(art, button.getBoundingClientRect()) : false,
             };
           });
+        const buildTiles = [...document.querySelectorAll('.desktop-build-button')].map((button) => {
+          const rect = button.getBoundingClientRect();
+          return { width: rect.width, height: rect.height };
+        });
+        const tradeTops = [...document.querySelectorAll('.desktop-trade-button')].map(
+          (button) => button.getBoundingClientRect().top,
+        );
         return {
           viewportWidth: window.innerWidth,
           viewportHeight: window.innerHeight,
@@ -1200,28 +1204,14 @@ test('game cockpit fits desktop, compact, and phone viewports without document s
           bodyHeight: document.body.scrollHeight,
           boardTop: board?.top ?? -1,
           boardBottom: board?.bottom ?? Infinity,
-          dockHeight: dock?.height ?? Infinity,
+          bottomHeight: bottom?.height ?? Infinity,
           costsTriggerVisible: costsTrigger ? inside(costsTrigger, viewport) : false,
           cards,
+          panels,
           visibleActions,
-          actionGroups:
-            contextual && normal
-              ? {
-                  contextRight: contextual.right,
-                  normalLeft: normal.left,
-                  normalButtonTops: normalButtons.map((button) => button.top),
-                  normalButtonSizes: normalButtons.map((button) => ({
-                    width: button.width,
-                    height: button.height,
-                  })),
-                  normalContentFits,
-                }
-              : null,
-          contextualActions: {
-            available: contextualButtons.length,
-            visible: contextualButtons.filter((button) => inside(button, viewport)).length,
-          },
           illustratedActions,
+          buildTiles,
+          tradeTops,
         };
       });
       expect(
@@ -1237,15 +1227,6 @@ test('game cockpit fits desktop, compact, and phone viewports without document s
       );
       expect(dimensions.boardTop).toBeGreaterThanOrEqual(0);
       expect(dimensions.boardBottom).toBeLessThanOrEqual(dimensions.viewportHeight + 2);
-      if (!device.mobile)
-        expect(
-          dimensions.costsTriggerVisible,
-          `${device.name} Build costs control is clipped`,
-        ).toBe(true);
-      if (!device.mobile)
-        expect(dimensions.dockHeight, `${device.name} action dock is too tall`).toBeLessThanOrEqual(
-          205,
-        );
       expect(dimensions.cards).toHaveLength(5);
       for (const card of dimensions.cards) {
         expect(card.inViewport, `${device.name} ${card.resource} card is clipped`).toBe(true);
@@ -1263,6 +1244,17 @@ test('game cockpit fits desktop, compact, and phone viewports without document s
           ).toBeLessThanOrEqual((dimensions.cards[index + 1]?.faceLeft ?? -1) + 1);
       if (!device.mobile) {
         expect(
+          dimensions.costsTriggerVisible,
+          `${device.name} Build costs control is clipped`,
+        ).toBe(true);
+        expect(
+          dimensions.bottomHeight,
+          `${device.name} bottom controls are too tall`,
+        ).toBeLessThanOrEqual(220);
+        expect(dimensions.panels, `${device.name} is missing a bottom panel`).toHaveLength(4);
+        for (const panel of dimensions.panels)
+          expect(panel.fits, `${device.name} ${panel.name} is clipped`).toBe(true);
+        expect(
           dimensions.visibleActions,
           `${device.name} has no visible next action`,
         ).toBeGreaterThan(0);
@@ -1270,87 +1262,91 @@ test('game cockpit fits desktop, compact, and phone viewports without document s
           dimensions.illustratedActions.length,
           `${device.name} has no visible illustrated action`,
         ).toBeGreaterThan(0);
-      }
-      for (const action of dimensions.illustratedActions) {
-        expect(action.label, `${device.name} action has no readable label`).not.toBe('');
-        expect(action.artVisible, `${device.name} ${action.label} art is clipped`).toBe(true);
-      }
-      if (dimensions.contextualActions.available > 0)
-        expect(
-          dimensions.contextualActions.visible,
-          `${device.name} hides all contextual actions below the viewport`,
-        ).toBeGreaterThan(0);
-      if (!device.mobile) {
-        expect(dimensions.actionGroups, `${device.name} is missing a dock group`).not.toBeNull();
-        if (dimensions.actionGroups) {
-          expect(dimensions.actionGroups.contextRight).toBeLessThanOrEqual(
-            dimensions.actionGroups.normalLeft + 2,
-          );
-          const tops = dimensions.actionGroups.normalButtonTops;
-          for (let index = 1; index < tops.length; index++)
-            expect(tops[index], `${device.name} normal actions should stack`).toBeGreaterThan(
-              tops[index - 1] ?? Infinity,
-            );
-          for (const tile of dimensions.actionGroups.normalButtonSizes)
-            expect(
-              Math.abs(tile.width - tile.height),
-              `${device.name} normal action tile is not square`,
-            ).toBeLessThanOrEqual(2);
-          expect(
-            dimensions.actionGroups.normalContentFits,
-            `${device.name} normal action art or caption touches the tile edge`,
-          ).toEqual(Array(dimensions.actionGroups.normalContentFits.length).fill(true));
+        for (const action of dimensions.illustratedActions) {
+          expect(action.label, `${device.name} action has no readable label`).not.toBe('');
+          expect(action.artVisible, `${device.name} ${action.label} art is clipped`).toBe(true);
         }
+        for (const tile of dimensions.buildTiles)
+          expect(
+            Math.abs(tile.width - tile.height),
+            `${device.name} build tile is not square`,
+          ).toBeLessThanOrEqual(2);
+        for (let index = 1; index < dimensions.tradeTops.length; index++)
+          expect(
+            dimensions.tradeTops[index],
+            `${device.name} trade actions should stack`,
+          ).toBeGreaterThan(dimensions.tradeTops[index - 1] ?? Infinity);
       }
       await page.evaluate(() => window.scrollTo(0, 10_000));
       expect(await page.evaluate(() => window.scrollY)).toBe(0);
       await capturePreview(page, testInfo, `${device.name}-cockpit`);
       const revision = await observedRevision(page);
-      if (device.mobile) await page.locator('.next-step-actions').tap();
-      await page.getByRole('button', { name: 'Build costs' }).click();
-      const costs = page.getByRole('dialog', { name: 'Build costs' });
-      await expect(costs).toBeVisible();
-      const costRows = costs.locator('.build-cost-row');
-      await expect(costRows).toHaveCount(4);
-      for (const [index, label] of ['Road', 'Settlement', 'City', 'Development card'].entries()) {
-        const row = costRows.nth(index);
-        await row.scrollIntoViewIfNeeded();
-        await expect(row).toBeVisible();
-        await expect(row.locator('dt')).toHaveText(label);
-        expect(await row.locator('.build-cost-resource').count()).toBeGreaterThan(0);
-        const bounds = await row.boundingBox();
-        if (!bounds) throw new Error(`${label} cost row has no visible bounds`);
-        expect(bounds.x).toBeGreaterThanOrEqual(0);
-        expect(bounds.y).toBeGreaterThanOrEqual(0);
-        expect(bounds.x + bounds.width).toBeLessThanOrEqual(device.width + 2);
-        expect(bounds.y + bounds.height).toBeLessThanOrEqual(device.height + 2);
+      if (device.mobile) {
+        // Phones list every build choice with its cost in the Build sheet.
+        const build = await openMobileSheet(page, 'Build', 'touch');
+        const rows = build.locator('.mobile-build-row');
+        await expect(rows).toHaveCount(4);
+        for (const [index, label] of [
+          'Build road',
+          'Build settlement',
+          'Upgrade city',
+          'Buy development card',
+        ].entries()) {
+          const row = rows.nth(index);
+          await row.scrollIntoViewIfNeeded();
+          await expect(row).toHaveAccessibleName(label);
+          await expect(row).toBeInViewport({ ratio: 1 });
+          await expect(row.locator('.mobile-build-cost')).toHaveAccessibleName(/\d \w+/);
+        }
+        await capturePreview(page, testInfo, `${device.name}-build-costs`);
+        await build.getByRole('button', { name: 'Close' }).tap();
+        await expect(build).toBeHidden();
+      } else {
+        await page.getByRole('button', { name: 'Build costs' }).click();
+        const costs = page.getByRole('dialog', { name: 'Build costs' });
+        await expect(costs).toBeVisible();
+        const costRows = costs.locator('.build-cost-row');
+        await expect(costRows).toHaveCount(4);
+        for (const [index, label] of ['Road', 'Settlement', 'City', 'Development card'].entries()) {
+          const row = costRows.nth(index);
+          await row.scrollIntoViewIfNeeded();
+          await expect(row).toBeVisible();
+          await expect(row.locator('dt')).toHaveText(label);
+          expect(await row.locator('.build-cost-resource').count()).toBeGreaterThan(0);
+          const bounds = await row.boundingBox();
+          if (!bounds) throw new Error(`${label} cost row has no visible bounds`);
+          expect(bounds.x).toBeGreaterThanOrEqual(0);
+          expect(bounds.y).toBeGreaterThanOrEqual(0);
+          expect(bounds.x + bounds.width).toBeLessThanOrEqual(device.width + 2);
+          expect(bounds.y + bounds.height).toBeLessThanOrEqual(device.height + 2);
+        }
+        const dialogBounds = await costs.boundingBox();
+        const closeBounds = await costs.getByRole('button', { name: 'Close' }).boundingBox();
+        if (!dialogBounds || !closeBounds)
+          throw new Error('Build costs close control has no bounds');
+        expect(closeBounds.x).toBeGreaterThanOrEqual(dialogBounds.x);
+        expect(closeBounds.y).toBeGreaterThanOrEqual(dialogBounds.y);
+        expect(closeBounds.x + closeBounds.width).toBeLessThanOrEqual(
+          dialogBounds.x + dialogBounds.width,
+        );
+        expect(closeBounds.y + closeBounds.height).toBeLessThanOrEqual(
+          dialogBounds.y + dialogBounds.height,
+        );
+        expect(closeBounds.y + closeBounds.height).toBeLessThanOrEqual(device.height + 2);
+        await capturePreview(page, testInfo, `${device.name}-build-costs`);
+        await costs.getByRole('button', { name: 'Close' }).click();
+        await expect(costs).toBeHidden();
       }
-      const dialogBounds = await costs.boundingBox();
-      const closeBounds = await costs.getByRole('button', { name: 'Close' }).boundingBox();
-      if (!dialogBounds || !closeBounds) throw new Error('Build costs close control has no bounds');
-      expect(closeBounds.x).toBeGreaterThanOrEqual(dialogBounds.x);
-      expect(closeBounds.y).toBeGreaterThanOrEqual(dialogBounds.y);
-      expect(closeBounds.x + closeBounds.width).toBeLessThanOrEqual(
-        dialogBounds.x + dialogBounds.width,
-      );
-      expect(closeBounds.y + closeBounds.height).toBeLessThanOrEqual(
-        dialogBounds.y + dialogBounds.height,
-      );
-      expect(closeBounds.y + closeBounds.height).toBeLessThanOrEqual(device.height + 2);
-      await capturePreview(page, testInfo, `${device.name}-build-costs`);
       expect(await observedRevision(page)).toBe(revision);
-      await costs.getByRole('button', { name: 'Close' }).click();
-      await expect(costs).toBeHidden();
-      const gameInfo = page.locator('.game-info');
-      if (
-        !(await gameInfo.evaluate(
-          (element) => element instanceof HTMLDetailsElement && element.open,
-        ))
-      )
-        await gameInfo.locator('summary').first().click();
-      await expect(gameInfo.locator('.bank-card')).toHaveCount(5);
-      const bankCardsVisible = await gameInfo.locator('.bank-card').evaluateAll((cards) =>
+      // Desktop keeps the bank in the sidebar; phones show it in the Trade sheet.
+      const bank = device.mobile
+        ? await openMobileSheet(page, 'Trade', 'touch')
+        : page.locator('.game-sidebar');
+      // Five resource stacks and the development deck.
+      await expect(bank.locator('.bank-card')).toHaveCount(6);
+      const bankCardsVisible = await bank.locator('.bank-card').evaluateAll((cards) =>
         cards.map((card) => {
+          card.scrollIntoView({ block: 'nearest' });
           const rect = card.getBoundingClientRect();
           return (
             rect.left >= -2 &&
@@ -1361,7 +1357,7 @@ test('game cockpit fits desktop, compact, and phone viewports without document s
         }),
       );
       expect(bankCardsVisible, `${device.name} bank card row is clipped`).toEqual(
-        Array(5).fill(true),
+        Array(6).fill(true),
       );
       expect(pageErrors.get(page)).toEqual([]);
     } finally {
@@ -1397,15 +1393,19 @@ test('compact phone cockpit exposes public player details and reachable Actions 
       if (device.name === 'phone') await page.emulateMedia({ colorScheme: 'dark' });
       await openGoldenPrefix(page, 496, 'hidden-vp-win.replay.json');
       const hand = page.getByRole('region', { name: 'Your hand' });
-      const trigger = page.locator('.next-step-actions');
+      const trigger = page
+        .getByRole('navigation', { name: 'Actions' })
+        .getByRole('button', { name: 'Build', exact: true });
       await expect(hand).toBeVisible();
       await expect(hand.locator('.resource-hand-card')).toHaveCount(5);
       await expect(trigger).toBeVisible();
-      await expect(trigger).toHaveAccessibleName(/^Actions, \d+ available$/);
+      await expect(trigger).toBeEnabled();
       const geometry = await page.evaluate(() => {
         const board = document.querySelector('.game-board')?.getBoundingClientRect();
         const handBounds = document.querySelector('.hand-dock')?.getBoundingClientRect();
-        const triggerBounds = document.querySelector('.next-step-actions')?.getBoundingClientRect();
+        const triggerBounds = document
+          .querySelector('.mobile-control-row')
+          ?.getBoundingClientRect();
         const cards = [...document.querySelectorAll('.resource-hand-card')].map((card) => {
           const rect = card.getBoundingClientRect();
           return (
@@ -1463,7 +1463,7 @@ test('compact phone cockpit exposes public player details and reachable Actions 
       await capturePreview(page, testInfo, `${device.name}-compact-cockpit`);
 
       await trigger.tap();
-      const actionsSheet = page.getByRole('dialog', { name: 'Actions' });
+      const actionsSheet = page.getByRole('dialog', { name: 'Build', exact: true });
       await expect(actionsSheet).toBeVisible();
       await capturePreview(page, testInfo, `${device.name}-actions-sheet`);
       await actionsSheet.getByRole('button', { name: 'Close' }).tap();
@@ -1521,13 +1521,13 @@ test('compact phone cockpit exposes public player details and reachable Actions 
         await expect(tile).toBeFocused();
       }
 
+      // The Build sheet lists each build choice with its cost.
       await trigger.tap();
-      await actionsSheet.getByRole('button', { name: 'Build costs' }).tap();
+      const costs = actionsSheet.locator('.mobile-build-cost');
+      await expect(costs).toHaveCount(4);
+      for (const cost of await costs.all()) await expect(cost).toHaveAccessibleName(/\d \w+/);
+      await actionsSheet.getByRole('button', { name: 'Close' }).tap();
       await expect(actionsSheet).toBeHidden();
-      const costs = page.getByRole('dialog', { name: 'Build costs' });
-      await expect(costs).toBeVisible();
-      await costs.getByRole('button', { name: 'Close' }).tap();
-      await expect(costs).toBeHidden();
       await expect(trigger).toBeFocused();
       expect(pageErrors.get(page)).toEqual([]);
     } finally {
@@ -1555,8 +1555,22 @@ test('two replay-backed development cards stay readable on desktop and phone', a
       const page = await context.newPage();
       await openGoldenPrefix(page, 365, 'normal-game-05.replay.json');
       const openCards = page.getByRole('button', { name: /Development cards:/ });
-      if (await openCards.isVisible()) await openCards.click();
-      const cards = page.locator('.development-card:visible');
+      const drawer = page.getByRole('dialog', { name: 'Development cards: 2' });
+      let scope = page.locator('.hand-dock .hand-cards');
+      if (await openCards.isVisible()) {
+        await openCards.click();
+        scope = drawer;
+      } else if (device.mobile) {
+        // The phone hand strip shows card art only; choosing the Knight opens the named drawer.
+        await expect(scope.locator('.development-card')).toHaveCount(2);
+        await scope
+          .locator('.development-card')
+          .filter({ hasText: 'Knight' })
+          .getByRole('button', { name: 'Knight', exact: true })
+          .tap();
+        scope = drawer;
+      }
+      const cards = scope.locator('.development-card');
       await expect(cards).toHaveCount(2);
       for (const label of ['Knight', 'Road building']) {
         const card = cards.filter({ hasText: label });
@@ -1584,11 +1598,12 @@ test('two replay-backed development cards stay readable on desktop and phone', a
         });
         expect(labelFits, `${label} is clipped`).toBe(true);
       }
-      if (!device.mobile) {
-        const hand = page.locator('.hand-dock > .development-hand');
-        await expect(hand).toBeVisible();
+      if (!device.mobile && !(await openCards.isVisible())) {
+        const hand = page.locator('.hand-dock .hand-cards');
+        await expect(hand.locator('.development-hand')).toBeVisible();
         expect(
           await hand.evaluate((element) => element.scrollWidth <= element.clientWidth + 1),
+          'Development cards overflow the hand row',
         ).toBe(true);
       }
       await capturePreview(page, testInfo, `${device.name}-two-development-cards`);
@@ -1608,7 +1623,6 @@ test('three held development cards fan on desktop and keep the phone drawer', as
   for (const device of [
     { name: 'desktop', width: 1280, height: 720 },
     { name: 'compact-desktop', width: 1024, height: 768 },
-    { name: 'narrow-desktop', width: 900, height: 768 },
   ]) {
     const context = await browser.newContext({ viewport: device });
     try {
@@ -1761,7 +1775,7 @@ test('three held development cards fan on desktop and keep the phone drawer', as
       await sweep();
       if (device.name === 'desktop') {
         const dockKnight = page
-          .locator('.action-dock')
+          .getByRole('group', { name: 'Other actions' })
           .getByRole('button', { name: 'Play Knight', exact: true });
         await expect(dockKnight).toHaveCount(1);
         await last.getByRole('button', { name: 'Knight', exact: true }).click({
@@ -1776,14 +1790,6 @@ test('three held development cards fan on desktop and keep the phone drawer', as
         await expect(dockKnight).toHaveAttribute('aria-pressed', 'false');
         expect(await observedRevision(page)).toBe(revision);
       }
-      await page.emulateMedia({ reducedMotion: 'reduce' });
-      await first.hover({ position: { x: 4, y: 12 } });
-      await expect(first.locator('strong')).toBeVisible();
-      const duration = await first.evaluate(
-        (element) => getComputedStyle(element).transitionDuration,
-      );
-      expect(Number.parseFloat(duration)).toBeLessThan(0.001);
-
       if (device.width > 1000) {
         // Layout probe only: the saved game still owns exactly three cards. These inert clones
         // exercise the wider five-card CSS without inventing a private hand or game authority.
@@ -1829,6 +1835,14 @@ test('three held development cards fan on desktop and keep the phone drawer', as
         });
         await expect(fan.locator('.development-card')).toHaveCount(3);
       }
+      await page.emulateMedia({ reducedMotion: 'reduce' });
+      await first.hover({ position: { x: 4, y: 12 } });
+      await expect(first.locator('strong')).toBeVisible();
+      const duration = await first.evaluate(
+        (element) => getComputedStyle(element).transitionDuration,
+      );
+      expect(Number.parseFloat(duration)).toBeLessThan(0.001);
+
       expect(pageErrors.get(page)).toEqual([]);
     } finally {
       await context.close();
@@ -1843,10 +1857,17 @@ test('three held development cards fan on desktop and keep the phone drawer', as
   try {
     const page = await context.newPage();
     await openGoldenPrefix(page, 460, 'hidden-vp-win.replay.json');
-    await expect(page.locator('.hand-dock .development-hand.is-fanned')).toHaveCount(0);
-    await page.getByRole('button', { name: 'Development cards: 3' }).tap();
+    // The phone hand strip lists every card's art after the resources and scrolls sideways.
+    const strip = page.locator('.hand-dock .hand-cards .development-card');
+    await expect(strip).toHaveCount(3);
+    for (const card of await strip.all()) {
+      await card.scrollIntoViewIfNeeded();
+      await expect(card.locator('img')).toBeInViewport();
+    }
+    await strip.filter({ hasText: 'Knight' }).first().getByRole('button').tap();
     const drawer = page.getByRole('dialog', { name: 'Development cards: 3' });
     await expect(drawer.locator('.development-card')).toHaveCount(3);
+    await expect(drawer.getByRole('group', { name: 'Play Knight?' })).toBeVisible();
     await capturePreview(page, testInfo, 'phone-three-dev-drawer');
     expect(pageErrors.get(page)).toEqual([]);
   } finally {
@@ -1871,6 +1892,26 @@ test('three held development cards fan on desktop and keep the phone drawer', as
   } finally {
     await tablet.close();
   }
+
+  // A narrow desktop's hand row holds only the resources, so the cards move to the drawer.
+  const narrow = await browser.newContext({ viewport: { width: 900, height: 768 } });
+  try {
+    const page = await narrow.newPage();
+    await openGoldenPrefix(page, 460, 'hidden-vp-win.replay.json');
+    await expect(page.locator('.hand-dock .hand-cards .development-card')).toHaveCount(0);
+    const hand = page.locator('.hand-dock .hand-cards');
+    expect(await hand.evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(
+      true,
+    );
+    await page.getByRole('button', { name: 'Development cards: 3' }).click();
+    const drawer = page.getByRole('dialog', { name: 'Development cards: 3' });
+    await expect(drawer.locator('.development-card')).toHaveCount(3);
+    for (const caption of await drawer.locator('.development-card strong').all())
+      await expect(caption).toBeInViewport();
+    expect(pageErrors.get(page)).toEqual([]);
+  } finally {
+    await narrow.close();
+  }
 });
 
 test('phone development drawer closes after committing a Knight with other cards held', async ({
@@ -1888,11 +1929,16 @@ test('phone development drawer closes after committing a Knight with other cards
     page.setDefaultTimeout(10_000);
     await openGoldenPrefix(page, 460, 'hidden-vp-win.replay.json');
     const before = await observedRevision(page);
-    await page.getByRole('button', { name: 'Development cards: 3' }).tap();
+    // Choosing a Knight in the phone hand strip opens the drawer with the Knight selected.
+    await page
+      .locator('.hand-dock .hand-cards .development-card')
+      .filter({ hasText: 'Knight' })
+      .first()
+      .getByRole('button', { name: 'Knight', exact: true })
+      .tap();
     const drawer = page.getByRole('dialog', { name: 'Development cards: 3' });
     await expect(drawer).toBeVisible();
-    const knight = drawer.locator('.development-card').filter({ hasText: 'Knight' }).first();
-    await knight.getByRole('button', { name: 'Knight', exact: true }).tap();
+    const knight = drawer.locator('.development-card.has-knight-intent');
     await expect(knight.getByRole('group', { name: 'Play Knight?' })).toBeVisible();
     expect(await observedRevision(page)).toBe(before);
     await knight.getByRole('button', { name: 'Play Knight' }).tap();
@@ -1914,7 +1960,8 @@ test('phone development drawer closes after committing a Knight with other cards
       canonicalBoardHit('hex', target),
     );
     expect(targetPoint).not.toBeNull();
-    await expect(page.getByRole('button', { name: 'Development cards: 2' })).toBeVisible();
+    await expect(page.locator('.hand-dock .hand-cards .development-card')).toHaveCount(2);
+    await expect(page.getByRole('region', { name: 'Your hand' })).toContainText('2 dev');
     expect(pageErrors.get(page)).toEqual([]);
   } finally {
     await context.close();
@@ -2300,7 +2347,7 @@ async function completeSetup(
         await expect(requiredAction).toHaveAttribute('aria-pressed', 'true');
         await page.mouse.click(point.x, point.y);
       } else {
-        await expect(page.locator('.next-step-message')).toContainText('Confirm on the board');
+        await expect(page.locator('.mobile-next-step')).toContainText('Confirm on the board');
       }
       const cancel = page
         .getByRole('region', { name: 'Game board' })
@@ -2390,16 +2437,11 @@ async function rollAndBuildRoad(
     } else await page.waitForTimeout(20);
   }
   expect(reachedMain, 'Roll and any robber interruption must reach the main phase').toBe(true);
-  // The ordinary action dock must offer an affordable road after this setup.
-  const roadAction = page
-    .getByRole('group', { name: 'Choose a board action' })
-    .getByRole('button', { name: 'Build road' });
-  if (input === 'touch' && !(await roadAction.isVisible()))
-    await revealActionButton(page, 'Build road', input);
-  if (await roadAction.isVisible()) {
-    if (input === 'touch') await roadAction.tap();
-    else await roadAction.click();
-  }
+  // The Build panel, or the phone Build sheet, must offer an affordable road after this setup.
+  const roadAction = await revealActionButton(page, 'Build road', input);
+  await expect(roadAction).toBeEnabled();
+  if (input === 'touch') await roadAction.tap();
+  else await roadAction.click();
   const target = await readPresent(page, 'Legal road coordinate', () =>
     page.evaluate((knownEdges) => {
       const hook: DevHook | undefined = Reflect.get(window, '__cp2p');
@@ -2476,12 +2518,25 @@ async function assertRoadConfirmationTracksBoard(
       canonicalBoardHit('edge', edge),
     );
   await expect.poll(async () => (await position())?.gap ?? Infinity).toBeLessThan(80);
-  const before = await position();
+  const fitted = await position();
   const canvas = page.locator('.board-view-canvas canvas');
   const box = await canvas.boundingBox();
-  if (!box || !before) throw new Error('Road preview has no board anchor');
+  if (!box || !fitted) throw new Error('Road preview has no board anchor');
   const start = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+  // A fitted board is centred and cannot pan, so zoom in first; the preview follows the zoom.
   await page.mouse.move(start.x, start.y);
+  await page.mouse.wheel(0, -400);
+  await expect
+    .poll(async () => {
+      const zoomed = await position();
+      return zoomed
+        ? Math.hypot(zoomed.point.x - fitted.point.x, zoomed.point.y - fitted.point.y)
+        : 0;
+    })
+    .toBeGreaterThan(10);
+  await expect.poll(async () => (await position())?.gap ?? Infinity).toBeLessThan(80);
+  const before = await position();
+  if (!before) throw new Error('Road preview lost its board anchor');
   await page.mouse.down();
   await page.mouse.move(start.x + 60, start.y + 20, { steps: 8 });
   await page.mouse.up();
@@ -2587,22 +2642,56 @@ async function clickLegalPlacement(
     .toBeGreaterThan(revision);
 }
 
+/** Desktop turn buttons append their keyboard shortcut to the label. */
+function actionName(name: string): RegExp {
+  const escaped = name.replaceAll(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`^${escaped}(?: [A-Z])?$`);
+}
+
+/** Phone controls keep build and card plays in the Build sheet and trades in the Trade sheet. */
+async function openMobileSheet(
+  page: Page,
+  sheet: 'Build' | 'Trade',
+  input: 'mouse' | 'touch',
+): Promise<Locator> {
+  const tab = page
+    .getByRole('navigation', { name: 'Actions' })
+    .getByRole('button', { name: sheet });
+  if (input === 'touch') await tab.tap();
+  else await tab.click();
+  const dialog = page.getByRole('dialog', { name: sheet, exact: true });
+  await expect(dialog).toBeVisible();
+  return dialog;
+}
+
 async function revealActionButton(
   page: Page,
   name: string,
   input: 'mouse' | 'touch',
 ): Promise<Locator> {
-  const button = page.getByRole('button', { name, exact: true }).first();
-  if (!(await button.isVisible())) {
-    const trigger = page.locator('.next-step-actions');
-    if (await trigger.isVisible()) {
-      if (input === 'touch') await trigger.tap();
-      else await trigger.click();
-      await expect(page.getByRole('dialog', { name: 'Actions' })).toBeVisible();
-    }
+  const button = page.getByRole('button', { name: actionName(name) }).filter({ visible: true });
+  if (!(await button.first().isVisible())) {
+    const tabs = page.getByRole('navigation', { name: 'Actions' });
+    if (await tabs.isVisible()) await openMobileSheet(page, 'Build', input);
   }
-  await expect(button).toBeVisible();
-  return button;
+  await expect(button.first()).toBeVisible();
+  return button.first();
+}
+
+/** Opens the bank or player trade form from the visible Trade panel or phone Trade sheet. */
+async function openTradeForm(
+  page: Page,
+  kind: 'Bank' | 'Players',
+  input: 'mouse' | 'touch',
+): Promise<Locator> {
+  const panel = page.getByRole('region', { name: 'Trade', exact: true });
+  const scope = (await panel.isVisible()) ? panel : await openMobileSheet(page, 'Trade', input);
+  const button = scope.getByRole('button', { name: kind, exact: true });
+  if (input === 'touch') await button.tap();
+  else await button.click();
+  const form = page.getByRole('dialog', { name: kind === 'Bank' ? 'Bank trade' : 'Player trade' });
+  await expect(form).toBeVisible();
+  return form;
 }
 
 async function clickAction(
@@ -2782,7 +2871,16 @@ async function playVisibleHumanStep(
     return 'acted';
   }
   if (actions.primary.some((group) => group.type === 'RESPOND_TRADE')) {
-    await clickAction(page, 'Decline', view.revision, input);
+    // The offering bot settles its offer after a while, and a reply can lose that race.
+    const decline = page.locator('.board-offers').getByRole('button', { name: 'Decline' });
+    try {
+      if (input === 'touch') await decline.first().tap({ timeout: 2_000 });
+      else await decline.first().click({ timeout: 2_000 });
+    } catch {
+      // Look again at the game; the stall guard fails the run if the offer never resolves.
+      return 'waiting';
+    }
+    await expect.poll(() => observedRevision(page)).toBeGreaterThan(view.revision);
     return 'acted';
   }
   if (actions.primary.some((group) => group.type === 'ROLL_DICE')) {
@@ -2796,14 +2894,9 @@ async function playVisibleHumanStep(
     ] as const) {
       const choice = actions.placements[kind][0];
       if (!choice) continue;
-      const chooser = page
-        .getByRole('group', { name: 'Choose a board action' })
-        .getByRole('button', { name: label });
-      if (!(await chooser.isVisible())) await revealActionButton(page, label, input);
-      if (await chooser.isVisible()) {
-        if (input === 'touch') await chooser.tap();
-        else await chooser.click();
-      }
+      const chooser = await revealActionButton(page, label, input);
+      if (input === 'touch') await chooser.tap();
+      else await chooser.click();
       await chooseBoardPlacement(page, 'vertex', choice.id, view.revision, input, kind);
       return 'acted';
     }

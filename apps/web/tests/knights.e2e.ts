@@ -32,38 +32,47 @@ import {
 
 /** The pixels of the board around a vertex, to tell whether what is drawn there changed. */
 async function cityPicture(page: Page, vertex: string): Promise<Buffer> {
+  // The board reports page coordinates, so the clip needs no canvas offset.
   const at = await vertexPoint(page, vertex);
-  const box = await page.locator('.board-view-canvas canvas').boundingBox();
-  if (!at || !box) throw new Error('The board is not on screen');
+  if (!at) throw new Error('The board is not on screen');
   return page.screenshot({
-    clip: { x: box.x + at.x - 40, y: box.y + at.y - 40, width: 80, height: 80 },
+    clip: { x: at.x - 40, y: at.y - 40, width: 80, height: 80 },
     animations: 'disabled',
   });
 }
 
 /**
  * Tap the first spot the game marks for a board choice, the way a player does, and return its id.
- * The game names the spot in its list of actions; the tap goes through the canvas.
+ * The game names the spot in its list of actions; the tap goes through the canvas, at a marked
+ * spot that no board overlay covers and that the board itself resolves to that spot.
  */
 async function tapMarked(page: Page, kind: 'relocate' | 'pillage'): Promise<string> {
+  const found: { spot: { id: string; x: number; y: number } | null } = { spot: null };
   await expect
-    .poll(() =>
-      page.evaluate(
-        (which) => window['__cp2p']?.diagnostics().actions?.placements[which].length ?? 0,
-        kind,
-      ),
-    )
-    .toBeGreaterThan(0);
-  const id = await page.evaluate(
-    (which) => window['__cp2p']?.diagnostics().actions?.placements[which][0]?.id ?? null,
-    kind,
-  );
-  if (!id) throw new Error(`Nothing is marked for ${kind}`);
-  const at = await vertexPoint(page, id);
-  const box = await page.locator('.board-view-canvas canvas').boundingBox();
-  if (!at || !box) throw new Error('The board is not on screen');
-  await page.mouse.click(box.x + at.x, box.y + at.y);
-  return id;
+    .poll(async () => {
+      found.spot = await page.evaluate((which) => {
+        const hook = window['__cp2p'];
+        const canvas = document.querySelector('.board-view-canvas canvas');
+        // Playwright serializes this callback; helpers outside it are unavailable in the page.
+        // eslint-disable-next-line unicorn/consistent-function-scoping
+        const vertex = (
+          value: string,
+        ): value is `v:${number},${number},N` | `v:${number},${number},S` =>
+          /^v:-?\d+,-?\d+,[NS]$/.test(value);
+        for (const { id } of hook?.diagnostics().actions?.placements[which] ?? []) {
+          if (!vertex(id)) continue;
+          const point = hook?.pixelPosition({ kind: 'vertex', id });
+          if (!point || document.elementFromPoint(point.x, point.y) !== canvas) continue;
+          if (hook?.renderer?.hitTest(point)?.id === id) return { id, ...point };
+        }
+        return null;
+      }, kind);
+      return found.spot !== null;
+    }, `an uncovered spot is marked for ${kind}`)
+    .toBe(true);
+  if (!found.spot) throw new Error(`Nothing is marked for ${kind}`);
+  await page.mouse.click(found.spot.x, found.spot.y);
+  return found.spot.id;
 }
 
 /** Where screenshots go: `KNIGHTS_SHOTS` when set, otherwise the test's own output folder. */
@@ -122,6 +131,8 @@ async function playRounds(page: Page, rounds: number, ships: number): Promise<Ta
       if (!outcome.startsWith('ok:')) break;
     }
     tally.rounds += 1;
+    // A build can open a choice of its own first, such as where a first metropolis stands.
+    if (!(await untilHumanTurn(page, 'main'))) break;
     await endTurn(page);
   }
   const state = await gameState(page);

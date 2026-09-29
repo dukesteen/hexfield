@@ -649,3 +649,55 @@
     border-radius: 22px 0 0 22px;
   }
 }
+
+/* Short phones tighten the hand and controls so the board keeps over half the screen. */
+@media (max-width: 767px) and (max-height: 640px) {
+  .game-page[data-compact='true'] .game-menu {
+    top: calc(8px + env(safe-area-inset-top));
+  }
+  .mobile-topbar {
+    padding-top: calc(8px + env(safe-area-inset-top));
+    padding-bottom: 4px;
+  }
+  .game-page[data-compact='true'] .game-bottom {
+    padding: 6px 12px max(8px, env(safe-area-inset-bottom));
+  }
+  .mobile-bottom-controls {
+    gap: 6px;
+  }
+  .game-page[data-compact='true'] .hand-dock {
+    gap: 2px;
+  }
+  .game-page[data-compact='true'] .hand-hide-control {
+    min-width: 28px;
+    min-height: 28px;
+  }
+  .game-page[data-compact='true'] .hand-cards {
+    padding: 7px 12px 2px;
+  }
+  .game-page[data-compact='true'] .resource-hand-card,
+  .game-page[data-compact='true'] .hand-cards .development-card {
+    flex-basis: 44px;
+  }
+  .game-page[data-compact='true'] .hand-dock .resource-card {
+    --card-w: 44px;
+  }
+  .game-page[data-compact='true'] .hand-dock .resource-card img,
+  .game-page[data-compact='true'] .hand-cards .development-card,
+  .game-page[data-compact='true'] .hand-cards .development-card-main,
+  .game-page[data-compact='true'] .hand-cards .development-card-art,
+  .game-page[data-compact='true'] .hand-cards .development-card img {
+    width: 44px;
+    height: 63px;
+  }
+  .mobile-tab {
+    height: 46px;
+  }
+  .mobile-tab img {
+    width: 24px;
+    height: 24px;
+  }
+  .mobile-step > button {
+    min-height: 46px;
+  }
+}

@@ -1386,14 +1386,14 @@ input[type='checkbox'] {
     padding-block: 16px;
   }
   .results-layout {
-    gap: 16px 24px;
+    gap: 12px 24px;
   }
   .results-hero {
     padding: 16px;
   }
   .results-standing {
-    min-height: 56px;
-    padding-block: 8px;
+    min-height: 52px;
+    padding-block: 6px;
   }
 }
 @media (max-width: 767px) {
@@ -1425,7 +1425,8 @@ input[type='checkbox'] {
   .results-footer > button:first-of-type {
     margin-right: 0;
   }
-  .results-footer > button:last-of-type,
+  /* Buttons pair up; only a last button left alone in its row spans it. */
+  .results-footer > button:last-of-type:nth-of-type(odd),
   .results-footer > [role='alert'] {
     grid-column: 1 / -1;
   }

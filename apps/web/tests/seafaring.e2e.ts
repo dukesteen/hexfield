@@ -11,6 +11,7 @@ import type { BoardHit } from '@cp2p/renderer';
 import type { DevHook } from '../src/features/devtools/hook.js';
 import { LocalSession } from '../src/session/local-session.js';
 import { hexCornersOutside } from './helpers/seafaring-board.js';
+import { waitForRenderer } from './helpers/renderer-ready.js';
 
 declare global {
   interface Window {
@@ -46,7 +47,7 @@ async function newGame(page: Page, scenario: string): Promise<void> {
   await page.getByLabel('Bot pace, milliseconds').fill('0');
   await page.getByRole('button', { name: 'Create game' }).click();
   await expect(page).toHaveURL(/#\/local\/[^/]+$/);
-  await expect.poll(() => page.evaluate(() => Boolean(window['__cp2p']?.renderer))).toBe(true);
+  await waitForRenderer(page);
 }
 
 /** Open a game built from an arbitrary config, the way a saved game is opened. */
@@ -89,7 +90,7 @@ async function openConfigured(
     value: JSON.stringify(record),
   });
   await page.goto(`/#/local/${id}`);
-  await expect.poll(() => page.evaluate(() => Boolean(window['__cp2p']?.renderer))).toBe(true);
+  await waitForRenderer(page);
 }
 
 function gameState(page: Page): Promise<GameState> {
@@ -128,25 +129,47 @@ function turnButton(page: Page): Locator {
   return page.locator('.desktop-turn-button:visible, .mobile-turn-button:visible').first();
 }
 
-/** Wait for the human's roll, turning down any trade a bot offers on the way. */
-async function waitForMyRoll(page: Page): Promise<void> {
-  for (let step = 0; step < 600; step++) {
-    if ((await allowedNow(page)).includes('ROLL_DICE')) return;
-    const decline = page.locator('.board-offers').getByRole('button', { name: 'Decline' });
-    if (await decline.isVisible()) await decline.click();
-    await page.waitForTimeout(50);
-  }
-  throw new Error('The human never got a turn');
+/** Take whatever a gold field offers during another player's turn, so their turn can end. */
+async function takeGold(page: Page): Promise<void> {
+  const dialog = page.getByRole('dialog', { name: 'Gold field' });
+  await expect(dialog).toBeVisible();
+  const need = Number(/Take (\d+) cards?/.exec((await dialog.textContent()) ?? '')?.[1]);
+  for (let card = 0; card < need; card++)
+    await dialog.getByRole('button', { name: 'Add Ore to Cards to take' }).click();
+  await dialog.getByRole('button', { name: 'Confirm' }).click();
+  await expect(dialog).toBeHidden();
 }
 
-/** Set the next roll, then press the roll button. */
-async function rollWith(page: Page, dice: readonly [number, number]): Promise<void> {
-  await waitForMyRoll(page);
+/**
+ * Wait for the human's roll, answering what other players' turns ask of the human on the way:
+ * a bot's trade offer is declined and a gold field the bot's roll paid is taken.
+ */
+async function waitForMyRoll(page: Page): Promise<void> {
+  const deadline = Date.now() + 60_000;
+  while (Date.now() < deadline) {
+    const allowed = await allowedNow(page);
+    if (allowed.includes('ROLL_DICE')) return;
+    if (allowed.includes('CHOOSE_GOLD')) await takeGold(page);
+    const decline = page.locator('.board-offers').getByRole('button', { name: 'Decline' });
+    if (allowed.includes('RESPOND_TRADE') && (await decline.isVisible())) await decline.click();
+    await page.waitForTimeout(50);
+  }
+  throw new Error(`The human never got a turn: ${JSON.stringify(await pendingOf(page))}`);
+}
+
+/** Fix the next roll, whoever makes it. */
+async function forceNextRoll(page: Page, dice: readonly [number, number]): Promise<void> {
   await page.evaluate((faces) => {
     const session = window['__cp2p']?.session;
     if (session && 'forceDice' in session && typeof session.forceDice === 'function')
       Reflect.apply(session.forceDice, session, [faces]);
   }, dice);
+}
+
+/** Set the next roll, then press the roll button. */
+async function rollWith(page: Page, dice: readonly [number, number]): Promise<void> {
+  await waitForMyRoll(page);
+  await forceNextRoll(page, dice);
   await turnButton(page).click();
 }
 
@@ -484,6 +507,8 @@ test.describe('seafaring on the game screen', () => {
           seafaring: { setupAreas: [...ARCHIPELAGO_MAIN] },
         });
         await openConfigured(page, config);
+        // If the bot rolls first, its roll pays neither gold field and robs no one.
+        await forceNextRoll(page, [1, 2]);
         await playSetup(page, testInfo, { firstShip: false, wanted: ['gold'], prefix: name });
         const state = await gameState(page);
         const graph = buildBoardGraph(state.board.hexes);

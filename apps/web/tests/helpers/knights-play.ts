@@ -4,6 +4,7 @@ import type { Page } from '@playwright/test';
 import { knightsExt } from '@cp2p/engine';
 import type { CommandShape, GameState, KnightsExt, Seat } from '@cp2p/engine';
 import type { DevHook } from '../../src/features/devtools/hook.js';
+import { waitForRenderer } from './renderer-ready.js';
 
 declare global {
   interface Window {
@@ -18,11 +19,30 @@ export function knightsOf(state: GameState): KnightsExt {
   return knightsExt(state);
 }
 
+/**
+ * Leave a game this page still shows through its own menu. The game screen guards in-app
+ * navigation with a leave prompt, so a plain hash change to the lobby would stop at the prompt.
+ */
+async function leaveOpenGame(page: Page): Promise<void> {
+  if (!/#\/local\/(?!new\b)[^/]+$/.test(page.url())) return;
+  const menu = page.locator('.game-menu');
+  if (!(await menu.evaluate((element) => element instanceof HTMLDetailsElement && element.open)))
+    await menu.locator(':scope > summary').click();
+  await page.locator('.game-menu-panel').getByRole('button', { name: 'Leave game' }).click();
+  const prompt = page.getByRole('dialog').filter({
+    has: page.getByRole('heading', { name: 'Leave this game?' }),
+  });
+  await prompt.getByRole('button', { name: 'Save and leave' }).click();
+  // The save finishes before the screen moves home; wait for home itself, not just its URL.
+  await expect(page.getByRole('link', { name: 'New local game' })).toBeVisible();
+}
+
 /** Start a local Cities and Knights game from the lobby form, the human at seat 0. */
 export async function startKnightsGame(
   page: Page,
   options: { scenario?: string; seats?: number } = {},
 ): Promise<void> {
+  await leaveOpenGame(page);
   await page.goto('/#/local/new');
   await page.locator('#player-count').selectOption(String(options.seats ?? 4));
   await page.locator('.scenario-picker select').selectOption(options.scenario ?? 'knights');
@@ -30,7 +50,7 @@ export async function startKnightsGame(
   await page.getByLabel('Bot pace, milliseconds').fill('0');
   await page.getByRole('button', { name: 'Create game' }).click();
   await expect(page).toHaveURL(/#\/local\/[^/]+$/);
-  await expect.poll(() => page.evaluate(() => Boolean(window['__cp2p']?.renderer))).toBe(true);
+  await waitForRenderer(page);
 }
 
 export function gameState(page: Page): Promise<GameState> {

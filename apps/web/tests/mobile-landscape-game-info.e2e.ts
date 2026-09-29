@@ -1,9 +1,27 @@
 import { expect, test } from '@playwright/test';
+import type { CDPSession, Locator } from '@playwright/test';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const reportDirectory = fileURLToPath(new URL('../../../reports/stage05/', import.meta.url));
+
+/** Waits for a sheet's slide-in animation so its measured bounds are final. */
+async function settled(sheet: Locator): Promise<void> {
+  await expect(sheet).toBeVisible();
+  await expect
+    .poll(() => sheet.evaluate((element) => element.getAnimations({ subtree: true }).length))
+    .toBe(0);
+}
+
+/** Taps the centre of a control with a real touch sequence. */
+async function touch(cdp: CDPSession, target: Locator, label: string): Promise<void> {
+  const bounds = await target.boundingBox();
+  if (!bounds) throw new Error(`${label} is not measurable`);
+  const point = { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 };
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [point] });
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+}
 
 test('game info stays wide and interactive in mobile landscape', async ({ page, browserName }) => {
   test.skip(
@@ -27,19 +45,15 @@ test('game info stays wide and interactive in mobile landscape', async ({ page, 
   await page.getByRole('button', { name: 'Create game' }).click();
   await expect(page.getByRole('region', { name: 'Game board' })).toBeVisible();
 
-  const info = page.locator('.game-info');
-  const summaryBounds = await info.locator(':scope > summary').boundingBox();
-  if (!summaryBounds) throw new Error('Game info summary is not measurable');
-  const tap = {
-    x: summaryBounds.x + summaryBounds.width / 2,
-    y: summaryBounds.y + summaryBounds.height / 2,
-  };
-  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [tap] });
-  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
-  await expect(info).toHaveAttribute('open', '');
-  await expect(info.locator('.bank-card')).toHaveCount(5);
-  const bounds = await info.boundingBox();
-  if (!bounds) throw new Error('Open game info panel is not measurable');
+  // The compact cockpit keeps the bank in the Trade sheet and the event log in the Log sheet.
+  const tabs = page.getByRole('navigation', { name: 'Actions' });
+  await touch(cdp, tabs.getByRole('button', { name: 'Trade' }), 'Trade tab');
+  const trade = page.getByRole('dialog', { name: 'Trade', exact: true });
+  await settled(trade);
+  const bank = trade.getByRole('region', { name: 'Bank' });
+  await expect(bank.locator('.bank-card')).toHaveCount(6);
+  const bounds = await trade.boundingBox();
+  if (!bounds) throw new Error('Open Trade sheet is not measurable');
   await mkdir(reportDirectory, { recursive: true });
   await writeFile(
     join(reportDirectory, 'mobile-landscape-game-info.png'),
@@ -50,28 +64,25 @@ test('game info stays wide and interactive in mobile landscape', async ({ page, 
   expect(bounds.y).toBeGreaterThanOrEqual(-1);
   expect(bounds.x + bounds.width).toBeLessThanOrEqual(845);
   expect(bounds.y + bounds.height).toBeLessThanOrEqual(391);
-  await expect(info.locator('.bank-card').first()).toBeVisible();
-  const eventLog = info.locator('.event-log');
-  const eventSummaryBounds = await eventLog.locator('summary').boundingBox();
-  if (!eventSummaryBounds) throw new Error('Event log summary is not measurable');
-  const eventTap = {
-    x: eventSummaryBounds.x + eventSummaryBounds.width / 2,
-    y: eventSummaryBounds.y + eventSummaryBounds.height / 2,
-  };
-  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [eventTap] });
-  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await bank.locator('.bank-card').first().scrollIntoViewIfNeeded();
+  await expect(bank.locator('.bank-card').first()).toBeInViewport();
+  await touch(cdp, trade.getByRole('button', { name: 'Close' }), 'Trade sheet close');
+  await expect(trade).toBeHidden();
+
+  await touch(cdp, tabs.getByRole('button', { name: 'Log' }), 'Log tab');
+  const log = page.getByRole('dialog', { name: 'Event log' });
+  await settled(log);
+  const eventLog = log.locator('.event-log');
   await expect(eventLog).toHaveAttribute('open', '');
-  const closeBounds = await info.locator(':scope > summary').boundingBox();
-  if (!closeBounds) throw new Error('Open game info summary is not measurable');
-  const closeTap = {
-    x: closeBounds.x + closeBounds.width / 2,
-    y: closeBounds.y + closeBounds.height / 2,
-  };
-  await cdp.send('Input.dispatchTouchEvent', {
-    type: 'touchStart',
-    touchPoints: [closeTap],
-  });
-  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
-  await expect(info).not.toHaveAttribute('open', '');
+  const logBounds = await log.boundingBox();
+  if (!logBounds) throw new Error('Open event log is not measurable');
+  expect(logBounds.width).toBeGreaterThanOrEqual(260);
+  expect(logBounds.y + logBounds.height).toBeLessThanOrEqual(391);
+  // The sheet title names the log, so its entries show without a disclosure summary.
+  await expect(eventLog.locator('summary')).toBeHidden();
+  // A fresh game has no entries yet, so the log shows its empty message.
+  await expect(eventLog.locator('ol, p.muted').first()).toBeInViewport();
+  await touch(cdp, log.getByRole('button', { name: 'Close' }), 'Event log close');
+  await expect(log).toBeHidden();
   await cdp.detach();
 });

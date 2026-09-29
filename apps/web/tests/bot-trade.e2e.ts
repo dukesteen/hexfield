@@ -4,6 +4,7 @@ import type { CommandShape, Seat } from '@cp2p/engine';
 import { SEAT, untilHumanTurn } from './helpers/knights-play.js';
 import { inMain, snapshot, withHand } from './helpers/knights-scenes.js';
 import type { Snapshot } from './helpers/knights-scenes.js';
+import { waitForRenderer } from './helpers/renderer-ready.js';
 
 /** A three-seat base game against two bots that answer at once. */
 async function startBotGame(page: Page): Promise<void> {
@@ -17,7 +18,7 @@ async function startBotGame(page: Page): Promise<void> {
   await page.getByLabel('Bot pace, milliseconds').fill('0');
   await page.getByRole('button', { name: 'Create game' }).click();
   await expect(page).toHaveURL(/#\/local\/[^/]+$/);
-  await expect.poll(() => page.evaluate(() => Boolean(window['__cp2p']?.renderer))).toBe(true);
+  await waitForRenderer(page);
 }
 
 /**
@@ -54,8 +55,28 @@ async function stage(page: Page, snap: Snapshot, then?: { seat: Seat; command: C
   expect(outcome).toBe('ok');
 }
 
-function humanHand(page: Page): Promise<Record<string, number>> {
-  return page.evaluate((seat) => ({ ...window['__cp2p']?.session.getPrivate(seat)?.hand }), SEAT);
+/**
+ * Record the player's hand as the next trade is confirmed. Bots play on at once, and a later roll
+ * can pay the player, so the live hand is only the trade's result for a moment.
+ */
+async function recordHandAtTrade(page: Page): Promise<void> {
+  await page.evaluate((seat) => {
+    const session = window['__cp2p']?.session;
+    if (!session) throw new Error('No dev hook');
+    Reflect.deleteProperty(window, '__handAtTrade');
+    const stop = session.subscribe((update) => {
+      if (!update.events.some((event) => event.type === 'tradeConfirmed')) return;
+      Reflect.set(window, '__handAtTrade', { ...session.getPrivate(seat)?.hand });
+      stop();
+    });
+  }, SEAT);
+}
+
+function handAtTrade(page: Page): Promise<Record<string, number> | null> {
+  return page.evaluate(() => {
+    const hand: unknown = Reflect.get(window, '__handAtTrade');
+    return typeof hand === 'object' && hand !== null ? { ...hand } : null;
+  });
 }
 
 test.describe('trading with bots', () => {
@@ -79,9 +100,10 @@ test.describe('trading with bots', () => {
     });
     const offers = page.getByRole('region', { name: 'Trade offers' });
     await expect(offers.getByText(/^Offer from /)).toBeVisible();
+    await recordHandAtTrade(page);
     await offers.getByRole('button', { name: 'Accept' }).click();
     await expect(page.locator('.trade-notice')).toHaveText(/^Trade with .+ completed\.$/);
-    await expect.poll(() => humanHand(page)).toMatchObject({ brick: 1, lumber: 1 });
+    await expect.poll(() => handAtTrade(page)).toMatchObject({ brick: 1, lumber: 1 });
 
     // The player offers a brick for a lumber. Seat 1 has lumber to spare and accepts, seat 2 has
     // none and declines; the player then confirms with seat 1.
@@ -99,9 +121,10 @@ test.describe('trading with bots', () => {
     await expect(responses.locator('li[data-status="accepted"]')).toHaveCount(1);
     await expect(responses.locator('li[data-status="declined"]')).toHaveCount(1);
     await expect(offers.getByRole('status')).toHaveText(/ accepted\. Trade to complete it\.$/);
+    await recordHandAtTrade(page);
     await offers.getByRole('button', { name: /^Trade with / }).click();
     await expect(page.locator('.trade-notice')).toHaveText(/^Trade with .+ completed\.$/);
-    await expect.poll(() => humanHand(page)).toMatchObject({ brick: 1, lumber: 1 });
+    await expect.poll(() => handAtTrade(page)).toMatchObject({ brick: 1, lumber: 1 });
     expect(errors).toEqual([]);
   });
 });
