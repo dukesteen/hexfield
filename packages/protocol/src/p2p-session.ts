@@ -114,11 +114,14 @@ export interface P2PSessionOptions extends Omit<
     pending: Extract<Pending, { kind: 'player' }>,
     level: 'easy' | 'medium' | 'hard',
   ) => CommandShape | null;
-  /** Delay between committed state and a bot choice. Defaults to 350 ms. */
+  /** Delay between committed state and a bot choice. Defaults to `DEFAULT_BOT_DELAY_MS`. */
   botDelayMs?: number;
   /** How long an offering bot waits for replies it cannot make. Defaults to BOT_TRADE_PATIENCE_MS. */
   botTradePatienceMs?: number;
 }
+
+/** A bot's pace unless a game sets its own: slow enough that a roll's cards land before it acts. */
+export const DEFAULT_BOT_DELAY_MS = 1000;
 
 /** Certified history is useful for replay, but does not authorize importing a voting key. */
 export interface CertifiedHistory {
@@ -1850,7 +1853,7 @@ export class P2PSession implements GameSession<CertifiedHistory> {
     if (this.botParent === parent || this.automaticParent === parent) return;
     const chosen = chooseBotPending(this.context.log.state, this.getPending(), this.hostedBots());
     if (!chosen || this.inflight.has(chosen.seat)) return;
-    const delay = this.options.botDelayMs ?? 350;
+    const delay = this.options.botDelayMs ?? DEFAULT_BOT_DELAY_MS;
     const waiting = botAwaitsTradeReplies(
       this.context.log.state,
       this.getPending(),

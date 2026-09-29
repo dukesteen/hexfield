@@ -16,6 +16,7 @@ import {
   replayCertifiedPrefix,
   transferChangeSchema,
   validateTransferOwnedMaterial,
+  DEFAULT_BOT_DELAY_MS,
   P2PSession,
   prepareOnlineDisclosureGuard,
   validateDeckCeremony,
@@ -492,7 +493,7 @@ export async function openOnlineGame(
         return retired ? success(undefined) : routed;
       },
       botKeys,
-      botDelayMs: input.botDelayMs ?? 800,
+      botDelayMs: input.botDelayMs ?? DEFAULT_BOT_DELAY_MS,
       decideBot: (
         view: Parameters<RandomBot['decide']>[0],
         pending: Parameters<RandomBot['decide']>[1],

@@ -1,5 +1,6 @@
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
 import type { BaseOptions } from '@cp2p/engine';
+import { DEFAULT_BOT_DELAY_MS } from '@cp2p/protocol';
 import { defaultScenario, scenarioById, scenarioConfig, type Scenario } from '@cp2p/maps';
 import { useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -96,7 +97,7 @@ function NewLocalGame() {
     if (count < scenario.seats.min || count > scenario.seats.max)
       chooseScenario(defaultScenario(count));
   };
-  const [botDelayMs, setBotDelayMs] = useState(450);
+  const [botDelayMs, setBotDelayMs] = useState(DEFAULT_BOT_DELAY_MS);
   const [error, setError] = useState(false);
   const [invalidNames, setInvalidNames] = useState<number[]>([]);
 
