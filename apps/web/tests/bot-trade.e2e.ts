@@ -24,7 +24,13 @@ async function stage(page: Page, snap: Snapshot, then?: { seat: Seat; command: C
   const outcome = await page.evaluate(
     ({ next, first }) => {
       const session = window['__cp2p']?.session;
-      if (!session || !('devReplace' in session) || !('devApply' in session))
+      if (
+        !session ||
+        !('devReplace' in session) ||
+        typeof session.devReplace !== 'function' ||
+        !('devApply' in session) ||
+        typeof session.devApply !== 'function'
+      )
         return 'No scene control';
       const replaced: { ok: boolean } = Reflect.apply(session.devReplace, session, [
         next.state,
