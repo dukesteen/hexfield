@@ -10,14 +10,15 @@ import {
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 
-type ModeId = 'classic' | 'five-six' | 'seafaring' | 'knights';
+type ModeId = 'classic' | 'five-six' | 'seafaring' | 'knights' | 'seafaring-knights';
 
 /** Each home card groups the playable scenarios that share its modules. */
 const MODE_SCENARIOS: Record<ModeId, (scenario: Scenario) => boolean> = {
   classic: (s) => s.modules.length === 1,
   'five-six': (s) => s.modules.length === 2 && s.modules.includes('five-six'),
-  seafaring: (s) => s.modules.includes('seafaring'),
-  knights: (s) => s.modules.includes('knights'),
+  seafaring: (s) => s.modules.includes('seafaring') && !s.modules.includes('knights'),
+  knights: (s) => s.modules.includes('knights') && !s.modules.includes('seafaring'),
+  'seafaring-knights': (s) => s.modules.includes('seafaring') && s.modules.includes('knights'),
 };
 
 const SEATS_COLORS = ['red', 'blue', 'orange', 'green', 'white', 'black'] as const;
@@ -74,6 +75,13 @@ const MODE_ART: Record<ModeId, () => ReactNode> = {
       <img className="home-mode-piece is-knight" src={getKnightIconUrl('red', 3)} alt="" />
     </>
   ),
+  'seafaring-knights': () => (
+    <>
+      <img className="home-mode-piece is-large" src={getShipIconUrl('green', 3)} alt="" />
+      <img className="home-mode-piece is-knight" src={getKnightIconUrl('blue', 2)} alt="" />
+      <img className="home-mode-piece" src={getSeafaringIconUrl('gold')} alt="" />
+    </>
+  ),
 };
 
 /** A short tour of what the lobby offers: the scenario groups and their expansion modules. */
@@ -83,6 +91,7 @@ export function HomeModes() {
   const fiveSix = scenariosFor('five-six');
   const seafaring = scenariosFor('seafaring');
   const knights = scenariosFor('knights');
+  const combined = scenariosFor('seafaring-knights');
   const cards: {
     id: ModeId;
     title: string;
@@ -118,6 +127,15 @@ export function HomeModes() {
       about: t('lobby:scenarioKnightsAbout'),
       scenarios: knights,
     },
+    {
+      id: 'seafaring-knights',
+      title: t('lobby:scenarioGroupSeafaringKnights'),
+      about: t('lobby:homeModeSeafaringKnightsAbout'),
+      scenarios: combined,
+      names: combined
+        .filter((scenario) => !scenario.modules.includes('five-six'))
+        .map((scenario) => t(`lobby:${scenario.titleKey}`)),
+    },
   ];
   return (
     <section className="home-modes" aria-labelledby="home-modes-title">
@@ -142,7 +160,10 @@ export function HomeModes() {
                   <h3>{card.title}</h3>
                   <p className="home-mode-about">{card.about}</p>
                   {card.names && (
-                    <ul className="home-mode-scenarios" aria-label={t('lobby:homeModeScenarios')}>
+                    <ul
+                      className="home-mode-scenarios"
+                      aria-label={t('lobby:homeModeScenarios', { group: card.title })}
+                    >
                       {card.names.map((name) => (
                         <li key={name}>{name}</li>
                       ))}
@@ -153,7 +174,6 @@ export function HomeModes() {
             );
           })}
       </ul>
-      <p className="home-modes-coming">{t('lobby:homeModesComing')}</p>
     </section>
   );
 }

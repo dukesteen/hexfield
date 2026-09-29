@@ -296,10 +296,9 @@
   font-size: 0.7rem;
 }
 
-.home-modes-coming {
-  margin-top: 16px;
-  color: var(--muted);
-  font-size: 0.8rem;
+/* Both expansions together: a full-width card under the four single modes. */
+.home-mode[data-mode='seafaring-knights'] {
+  grid-column: 1 / -1;
 }
 
 @media (max-width: 1099px) {

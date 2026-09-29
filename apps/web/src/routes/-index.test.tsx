@@ -157,13 +157,16 @@ test('what you can play lists the scenario groups from the maps package', async 
     'lobby:expansion_five-six',
     'lobby:scenarioGroupSeafaring',
     'lobby:scenarioKnights',
+    'lobby:scenarioGroupSeafaringKnights',
   ]);
   expect(within(modes).getByText('lobby:homeModeSeats:2-4')).toBeTruthy();
   expect(within(modes).getByText('lobby:homeModeSeats:5-6')).toBeTruthy();
-  expect(within(modes).getAllByText('lobby:homeModeSeats:3-6')).toHaveLength(2);
-  const seafaring = within(modes).getByRole('list', { name: 'lobby:homeModeScenarios' });
-  expect(within(seafaring).getByText('lobby:scenarioFogbound')).toBeTruthy();
-  // 5–6 player variants are not listed as separate maps.
-  expect(within(seafaring).queryByText('lobby:scenarioOpenSeaLarge')).toBeNull();
-  expect(within(modes).getByText('lobby:homeModesComing')).toBeTruthy();
+  expect(within(modes).getAllByText('lobby:homeModeSeats:3-6')).toHaveLength(3);
+  const [seafaring, combined] = [...modes.querySelectorAll<HTMLElement>('.home-mode-scenarios')];
+  expect(within(seafaring!).getByText('lobby:scenarioFogbound')).toBeTruthy();
+  // 5–6 player variants are not listed as separate maps, and combined maps have their own card.
+  expect(within(seafaring!).queryByText('lobby:scenarioOpenSeaLarge')).toBeNull();
+  expect(within(seafaring!).queryByText('lobby:scenarioNewHorizonsKnights')).toBeNull();
+  expect(within(combined!).getByText('lobby:scenarioNewHorizonsKnights')).toBeTruthy();
+  expect(within(combined!).queryByText('lobby:scenarioNewHorizonsKnightsLarge')).toBeNull();
 });
