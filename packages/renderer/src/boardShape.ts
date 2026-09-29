@@ -112,3 +112,108 @@ export function hexExtents(
   }
   return { minX: minX - margin, maxX: maxX + margin, minY: minY - margin, maxY: maxY + margin };
 }
+
+/**
+ * The closed outlines of a union of hexes. Each loop lists corner points with the hexes on its
+ * right, so an outer outline runs clockwise on screen and the outline of a hole runs the other
+ * way. Hexes on a grid never touch at a lone corner, so every loop is simple.
+ */
+export function hexUnionLoops(
+  cells: readonly { readonly q: number; readonly r: number }[],
+  hexSize: number,
+): Point[][] {
+  const inside = new Set(cells.map(({ q, r }) => `${q},${r}`));
+  // Corners are keyed on the unit grid, so the float coordinates of neighbours always agree.
+  const cornerKey = (point: Point): string =>
+    `${Math.round((point.x / hexSize) * 1e4)},${Math.round((point.y / hexSize) * 1e4)}`;
+  const next = new Map<string, { readonly point: Point; readonly to: string }>();
+  for (const key of inside) {
+    const [q = 0, r = 0] = key.split(',').map(Number);
+    const corners = hexCornerPoints(hexToPixel(q, r, hexSize), hexSize);
+    for (const [index, offset] of HEX_EDGE_NEIGHBORS.entries()) {
+      if (inside.has(`${q + offset.q},${r + offset.r}`)) continue;
+      const from = corners[index];
+      const to = corners[(index + 1) % 6];
+      if (from && to) next.set(cornerKey(from), { point: from, to: cornerKey(to) });
+    }
+  }
+  const loops: Point[][] = [];
+  const seen = new Set<string>();
+  for (const start of next.keys()) {
+    if (seen.has(start)) continue;
+    const loop: Point[] = [];
+    for (let edge = next.get(start); edge && !seen.has(cornerKey(edge.point));) {
+      seen.add(cornerKey(edge.point));
+      loop.push(edge.point);
+      edge = next.get(edge.to);
+    }
+    loops.push(loop);
+  }
+  return loops;
+}
+
+/** Twice the signed area of a loop: positive for a loop that runs clockwise on screen. */
+export function loopArea(loop: readonly Point[]): number {
+  let sum = 0;
+  for (const [index, point] of loop.entries()) {
+    const following = loop[(index + 1) % loop.length] ?? point;
+    sum += point.x * following.y - following.x * point.y;
+  }
+  return sum;
+}
+
+/** The unit normal on the right of the direction from `from` to `to` (outward from the hexes). */
+function outwardNormal(from: Point, to: Point): Point {
+  const length = Math.hypot(to.x - from.x, to.y - from.y) || 1;
+  return { x: (to.y - from.y) / length, y: -(to.x - from.x) / length };
+}
+
+/**
+ * Moves every side of a `hexUnionLoops` loop `distance` away from its hexes, with mitred
+ * corners. For hex outlines that is the outline of the same hexes drawn larger.
+ */
+export function growLoop(loop: readonly Point[], distance: number): Point[] {
+  return loop.map((point, index) => {
+    const before = loop[(index + loop.length - 1) % loop.length] ?? point;
+    const after = loop[(index + 1) % loop.length] ?? point;
+    const a = outwardNormal(before, point);
+    const b = outwardNormal(point, after);
+    const scale = distance / (1 + a.x * b.x + a.y * b.y);
+    return { x: point.x + (a.x + b.x) * scale, y: point.y + (a.y + b.y) * scale };
+  });
+}
+
+/**
+ * The parts of the segment from `from` to `to` that lie inside the loops (even-odd), as pairs
+ * of points. Clips decoration to an outline without a mask.
+ */
+export function clipSegmentToLoops(
+  from: Point,
+  to: Point,
+  loops: readonly (readonly Point[])[],
+): [Point, Point][] {
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  const hits: number[] = [];
+  for (const loop of loops)
+    for (const [index, a] of loop.entries()) {
+      const b = loop[(index + 1) % loop.length] ?? a;
+      // A side of the loop crosses the line when its ends lie on different sides. Counting a
+      // corner on the line as one side keeps a touch at a corner from counting as a crossing.
+      const sideA = dx * (a.y - from.y) - dy * (a.x - from.x) > 0;
+      const sideB = dx * (b.y - from.y) - dy * (b.x - from.x) > 0;
+      if (sideA === sideB) continue;
+      const ex = b.x - a.x;
+      const ey = b.y - a.y;
+      hits.push(((a.x - from.x) * ey - (a.y - from.y) * ex) / (dx * ey - dy * ex));
+    }
+  hits.sort((a, b) => a - b);
+  const at = (t: number): Point => ({ x: from.x + dx * t, y: from.y + dy * t });
+  const pieces: [Point, Point][] = [];
+  for (let index = 0; index + 1 < hits.length; index += 2) {
+    const start = Math.max(0, hits[index] ?? 0);
+    const end = Math.min(1, hits[index + 1] ?? 0);
+    if (end > start) pieces.push([at(start), at(end)]);
+  }
+  return pieces;
+}
