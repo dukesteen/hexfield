@@ -275,6 +275,50 @@ const openCardScene = (card: string, preRoll = false): Scene => ({
   },
 });
 
+/** A knight of the human beside its city, then a tap on it with no action chosen: its sheet. */
+const knightTapScene = (name: string, knight: { active: boolean; ready: boolean }): Scene => ({
+  name,
+  ready: dialogUp,
+  run: async (page) => {
+    let snap = withCity(await snapshot(page), SEAT);
+    // The knight stands midway along a road of three: it can step back or go on.
+    const walk = withRoadPath(withHand(inMain(snap, SEAT), SEAT, RICH), SEAT, 3);
+    snap = walk.snap;
+    const spot = walk.path[2] ?? '';
+    snap = withKnights(snap, [{ seat: SEAT, vertex: spot, level: 2, ...knight }]);
+    await replace(page, snap);
+    await page.waitForTimeout(700);
+    // The renderer gives the knight's position in page coordinates.
+    const at = await vertexPoint(page, spot);
+    if (!at) throw new Error('No knight on screen');
+    await page.mouse.click(at.x, at.y);
+  },
+});
+
+/** The improvements sheet with the human's levels set and a metropolis held, opened where it lives. */
+const improvementsScene = (
+  name: string,
+  levels: Record<'trade' | 'politics' | 'science', number>,
+  metropolis: 'trade' | 'politics' | 'science',
+): Scene => ({
+  name,
+  run: async (page) => {
+    await handScene(page, [], (snap) =>
+      withMetropolis(withLevels(snap, SEAT, levels), metropolis, SEAT, cityOf(snap.state, SEAT)),
+    );
+    const strip = page.getByTestId('improvements-strip').locator('visible=true');
+    if (await strip.count()) await strip.first().click();
+    const board = page.locator('.improvements-board').locator('visible=true').first();
+    await board.scrollIntoViewIfNeeded();
+    await page.waitForTimeout(300);
+    if (SHOTS)
+      await board.screenshot({
+        path: join(SHOTS, `${name}-board-${page.viewportSize()?.width ?? 0}.png`),
+        animations: 'disabled',
+      });
+  },
+});
+
 /** The barbarians land: pictures of the attack effect through its whole length. */
 async function attackScene(page: Page, held: boolean): Promise<void> {
   let snap = withCity(await snapshot(page), SEAT);
@@ -356,6 +400,10 @@ SCENES.push(
       if (await strip.count()) await strip.first().click();
     },
   },
+  knightTapScene('knight-sheet-ready', { active: true, ready: true }),
+  knightTapScene('knight-sheet-activated', { active: true, ready: false }),
+  improvementsScene('improvements-levels-a', { trade: 3, politics: 1, science: 5 }, 'science'),
+  improvementsScene('improvements-levels-b', { trade: 0, politics: 4, science: 2 }, 'politics'),
   {
     name: 'progress-hand',
     run: (page) => handScene(page, ['deserter', 'wedding', 'saboteur', 'alchemist']),
@@ -366,6 +414,15 @@ SCENES.push(
     run: async (page) => {
       // Over the limit of four, the game asks for the discard by itself.
       await handScene(page, ['deserter', 'wedding', 'saboteur', 'alchemist', 'crane']);
+    },
+  },
+  {
+    // A card that cannot be played now still opens, read-only, with the reason.
+    name: 'card-view-not-playable',
+    ready: dialogUp,
+    run: async (page) => {
+      await handScene(page, ['alchemist']);
+      await openCard(page, 'alchemist');
     },
   },
   openCardScene('deserter'),
@@ -404,7 +461,11 @@ const SIX_SCENES: Scene[] = [
   },
 ];
 
-test.use({ deviceScaleFactor: Number(process.env.KNIGHTS_DPR ?? 1) });
+test.use({
+  deviceScaleFactor: Number(process.env.KNIGHTS_DPR ?? 1),
+  // KNIGHTS_SCHEME=dark takes the pictures in the dark theme.
+  colorScheme: process.env.KNIGHTS_SCHEME === 'dark' ? 'dark' : 'light',
+});
 
 test.describe('cities and knights visual sweep', () => {
   test.skip(!SHOTS, 'Set KNIGHTS_SHOTS to a folder to take the pictures');

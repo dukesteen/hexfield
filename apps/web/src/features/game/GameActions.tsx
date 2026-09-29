@@ -19,6 +19,7 @@ import {
   SETTLEMENT_COST,
   SHIP_COST,
   type CommandShape,
+  type GameEvent,
   type GameState,
   type Pending,
   type Resource,
@@ -37,7 +38,7 @@ import {
   YearOfPlentyDialog,
 } from '../dialogs';
 import { ActionPendingContext } from '../dialogs/DialogFrame';
-import { BankTradePicker, IncomingOffers, TradeComposer } from '../trade';
+import { BankTradePicker, IncomingOffers, TradeComposer, TradeNotice } from '../trade';
 import {
   sessionForActions,
   useSessionStore,
@@ -50,6 +51,8 @@ import { BuildCostsDialog } from './BuildCostsDialog.js';
 import { fogDrawPending, isSeafaring } from './seafaring';
 import { KnightsBuildButtons, KnightsBuildRows } from '../knights/BuildControls';
 import { KnightsForms } from '../knights/KnightsForms';
+import { KnightSheet } from '../knights/KnightSheet';
+import { knightStatus } from '../knights/knight-status';
 import {
   firstPicks,
   highlightStyle,
@@ -197,6 +200,8 @@ function placementHit(candidate: PlacementCandidate): BoardHit | null {
   return null;
 }
 
+const NO_EVENTS: readonly GameEvent[] = [];
+
 export interface GameActionController {
   actorSeat: Seat;
   availability: ReturnType<typeof deriveActionAvailability> | null;
@@ -218,6 +223,8 @@ export interface GameActionController {
   onBoardSelect(hit: BoardHit): void;
   targetLabel(hit: BoardHit): string;
   offerOverlay: React.ReactNode;
+  /** How the viewer's last open trade ended, shown briefly above the offers. */
+  tradeNotice: React.ReactNode;
   placementActive: boolean;
   knightIntent: { slotId: string; confirm: () => void; cancel: () => void } | null;
   toggleKnightIntent: (slotId: string) => void;
@@ -288,6 +295,23 @@ function knightPreview(
   return { knight: { level: 1, active: false } };
 }
 
+/**
+ * The knight a tap with no board action lands on: at the vertex hit, or, since a tap on a knight
+ * often resolves to one of the roads beside it, at an end of the edge hit.
+ */
+function knightAtHit(
+  state: GameState,
+  graph: ReturnType<typeof buildBoardGraph>,
+  hit: BoardHit,
+): string | null {
+  const standing = new Set(knightsState(state)?.knights.map((knight) => knight.vertex) ?? []);
+  if (standing.size === 0) return null;
+  if (hit.kind === 'vertex') return standing.has(hit.id) ? hit.id : null;
+  if (hit.kind !== 'edge') return null;
+  const ends = graph.edgeVertices[graph.edgeIndex[hit.id] ?? -1] ?? [];
+  return ends.find((vertex) => standing.has(vertex)) ?? null;
+}
+
 /** Let React commit pending feedback before synchronous proof work starts. */
 function afterNextPaint(): Promise<void> {
   return new Promise((resolve) => {
@@ -332,7 +356,9 @@ export function useGameActions(
   const voided = status?.kind === 'void';
   const conflicted = useSessionStore((store) => store.conflicted);
   const revision = useSessionStore((store) => store.revision);
-  const lastEvent = useSessionStore((store) => store.events)?.at(-1);
+  // Some test stores leave the log out; a shared empty list keeps the notice's input stable.
+  const events = useSessionStore((store) => store.events) ?? NO_EVENTS;
+  const lastEvent = events.at(-1);
   const boardKind = useSessionStore((store) => store.placementMode);
   const boardCancelled = useSessionStore((store) => store.placementCancelled);
   const previewPlacement = useSessionStore((store) => store.previewPlacement);
@@ -343,6 +369,8 @@ export function useGameActions(
   const optionalViewingSeat = useSessionStore((store) => store.optionalViewingSeat);
   const [error, setError] = useState<string | null>(null);
   const [buildCostsOpen, setBuildCostsOpen] = useState(false);
+  /** The knight tapped with no board action chosen: its status sheet is open. */
+  const [inspectedKnight, setInspectedKnight] = useState<string | null>(null);
   const submitting = useRef(false);
   const [submittingCommand, setSubmittingCommand] = useState<CommandShape['type'] | null>(null);
   const isSubmitting = submittingCommand !== null;
@@ -577,6 +605,12 @@ export function useGameActions(
   });
   const onBoardSelect = (hit: BoardHit) => {
     if (submitting.current) return;
+    // With no board action chosen, a tap on a knight explains what it can do now.
+    const tappedKnight = hitKind ? null : knightAtHit(state, graph, hit);
+    if (tappedKnight !== null) {
+      setInspectedKnight(tappedKnight);
+      return;
+    }
     if (hit.kind !== hitKind) return;
     const choice = choices.find((item) => item.id === hit.id);
     if (!choice) return;
@@ -1359,6 +1393,35 @@ export function useGameActions(
     </section>
   );
 
+  const inspected =
+    inspectedKnight !== null
+      ? knightStatus(state, seat, inspectedKnight, legal?.commands ?? [])
+      : null;
+  const closeKnightSheet = () => {
+    setInspectedKnight(null);
+    options.onFormClosed?.();
+  };
+  const knightSheet = inspected ? (
+    <KnightSheet
+      status={inspected}
+      owner={playerLabel(inspected.seat)}
+      color={presentation.players.find((player) => player.seat === inspected.seat)?.color ?? 'blue'}
+      disabled={isSubmitting || !actionsEnabled}
+      onChoose={(kind) => {
+        const store = useSessionStore.getState();
+        setInspectedKnight(null);
+        options.onHandOff?.();
+        store.choosePlacement(kind);
+        store.selectShipToMove(inspected.vertex);
+      }}
+      onSubmit={(command) => {
+        setInspectedKnight(null);
+        submit(command);
+      }}
+      onClose={closeKnightSheet}
+    />
+  ) : null;
+
   const forms = (
     <ActionPendingContext.Provider value={isSubmitting}>
       <div className="action-forms" aria-busy={isSubmitting}>
@@ -1399,6 +1462,7 @@ export function useGameActions(
             )}
           </>
         )}
+        {knightSheet}
         {buildCostsOpen && (
           <BuildCostsDialog
             knights={isKnights(state)}
@@ -1555,6 +1619,10 @@ export function useGameActions(
     ) ? (
       <IncomingOffers {...formProps} collapsedWhilePlacing={selectedKind !== undefined} />
     ) : null;
+  const tradeNotice =
+    seat !== null ? (
+      <TradeNotice state={state} events={events} seat={seat} playerLabel={playerLabel} />
+    ) : null;
 
   return {
     actorSeat,
@@ -1565,6 +1633,7 @@ export function useGameActions(
     onBoardSelect,
     targetLabel,
     offerOverlay,
+    tradeNotice,
     placementActive: selectedKind !== undefined,
     knightIntent:
       selectedKnight && slotId

@@ -113,6 +113,12 @@ function targetCost(view: BotView, hasSettlementSite: boolean): ResourceCounts |
     : null;
 }
 
+/** The build a bot is saving for, or null when it has nothing left to build toward. */
+export function buildTarget(view: BotView): ResourceCounts | null {
+  const graph = boardGraph(view);
+  return targetCost(view, connectedSite(view, graph, openSites(view, graph)));
+}
+
 function canSpendWithoutBreakingGoal(
   hand: Readonly<Record<string, number>>,
   spent: ResourceCounts,

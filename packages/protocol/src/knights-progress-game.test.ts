@@ -187,7 +187,14 @@ function playedIn(entries: readonly { entry: { payload: unknown } }[]): Map<stri
 
 let firstGame: Awaited<ReturnType<typeof createTerminalAuditFixture>> | undefined;
 
-describe('every progress card over the verified P2P protocol', () => {
+/**
+ * The whole progress deck over verified P2P games takes over ten minutes, so it and the cheating
+ * checks that reuse its first game are opt-in acceptance runs:
+ * `CP2P_HEAVY_TESTS=1 pnpm test packages/protocol/src/knights-progress-game.test.ts`.
+ */
+const HEAVY = process.env.CP2P_HEAVY_TESTS === '1';
+
+describe.runIf(HEAVY)('every progress card over the verified P2P protocol', () => {
   test('four-seat games play the whole deck, answer every private request and audit clean', async () => {
     const played = new Map<string, number>();
     const certified = new Map<string, number>();
@@ -358,7 +365,7 @@ function expectRejected(
 
 const G_POINT = encodePoint(scalePoint(G, 5n));
 
-describe('cheating with progress cards is caught on the move that tries it', () => {
+describe.runIf(HEAVY)('cheating with progress cards is caught on the move that tries it', () => {
   test('forged Spy request and unlock, Master Merchant take, Wedding give and hidden victory card', () => {
     const game = firstGame;
     if (!game) throw new Error('The audited game did not run');

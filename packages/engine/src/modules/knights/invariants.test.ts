@@ -129,6 +129,38 @@ describe('knights invariants', () => {
     expect(errors(stray)).toContain('a sideways piece is not a settlement of its owner');
   });
 
+  test('metropolises: one per city, on a city of a holder at level 4 or more', () => {
+    const city = at(ring, 0);
+    const built = withBuildings(base, [{ vertex: city, seat: 0, kind: 'city' }]);
+    const levels = { trade: 4, politics: 0, science: 0 };
+    const held = updateKnights(built, (old) => ({
+      ...old,
+      improvements: old.improvements.map((item, seat) => (seat === 0 ? levels : item)),
+      metropolises: { ...old.metropolises, trade: { seat: 0, vertex: city } },
+    }));
+    expect(errors(held)).toEqual([]);
+    const doubled = updateKnights(held, (old) => ({
+      ...old,
+      improvements: old.improvements.map((item, seat) =>
+        seat === 0 ? { ...levels, politics: 4 } : item,
+      ),
+      metropolises: { ...old.metropolises, politics: { seat: 0, vertex: city } },
+    }));
+    expect(errors(doubled)).toContain('two metropolises on one city');
+    const low = updateKnights(held, (old) => ({
+      ...old,
+      improvements: old.improvements.map((item, seat) =>
+        seat === 0 ? { ...levels, trade: 3 } : item,
+      ),
+    }));
+    expect(errors(low)).toContain('trade metropolis holder is below level 4');
+    const stray = updateKnights(held, (old) => ({
+      ...old,
+      metropolises: { ...old.metropolises, trade: { seat: 0, vertex: at(ring, 1) } },
+    }));
+    expect(errors(stray)).toContain('trade metropolis is not on a city of its holder');
+  });
+
   test('defender counts are per seat and never negative; the ship stays below the last step', () => {
     const broken = updateKnights(base, (old) => ({ ...old, defenders: [0, -1, 0] }));
     expect(errors(broken)).toContain('invalid defender count');

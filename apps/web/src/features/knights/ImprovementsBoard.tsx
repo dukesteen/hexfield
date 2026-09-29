@@ -3,6 +3,7 @@ import type { GameState, Seat } from '@cp2p/engine';
 import {
   getCommodityIconUrl,
   getImprovementBannerUrl,
+  getImprovementStampUrl,
   getMetropolisIconUrl,
   getTrackIconUrl,
 } from '@cp2p/renderer';
@@ -12,11 +13,39 @@ import { ABILITY_LEVEL, MAX_LEVEL, TRACKS, TRACK_COMMODITY, knightsState, levelO
 import type { Track } from './state';
 import './knights.css';
 
-/** Where the five level cells sit on the printed banner (322 by 82 units). */
-const CELL = { x0: 91, step: 46, width: 33, top: 12, height: 55, banner: 322, bannerHeight: 82 };
+/** The level from which a track's metropolis can be claimed. */
+const METROPOLIS_LEVEL = 4;
+
+/**
+ * Where a level cell sits on the printed banner (322 by 82 units). The printed cell is 40 by 54 at
+ * x = 84 + 46 per level, y = 13; the box adds the 2 unit margin the stamps are drawn with.
+ */
+const CELL = { x0: 82, step: 46, top: 11, width: 44, height: 58, banner: 322, bannerHeight: 82 };
 
 function pct(value: number, of: number): string {
   return `${(value / of) * 100}%`;
+}
+
+function cellBox(level: number) {
+  return {
+    left: pct(CELL.x0 + (level - 1) * CELL.step, CELL.banner),
+    top: pct(CELL.top, CELL.bannerHeight),
+    width: pct(CELL.width, CELL.banner),
+    height: pct(CELL.height, CELL.bannerHeight),
+  };
+}
+
+/** What a level cell shows: a stamp once reached, the buy button for the next, muted beyond. */
+export type CellState = 'reached' | 'next' | 'locked';
+
+/** The state of each level cell of a track, on a board that offers the next level or not. */
+export function cellStates(level: number, offersNext: boolean): CellState[] {
+  return Array.from({ length: MAX_LEVEL }, (_, index) => {
+    const cell = index + 1;
+    if (cell <= level) return 'reached';
+    if (cell === level + 1 && offersNext) return 'next';
+    return 'locked';
+  });
 }
 
 interface BoardProps {
@@ -36,8 +65,8 @@ interface BoardProps {
 }
 
 /**
- * A seat's city improvements: the three tracks as the printed banners, the levels reached marked in
- * the seat's colour, and, on the viewer's own board, the next level as a button with its cost.
+ * A seat's city improvements: the three tracks as the printed banners, each level reached covered
+ * by its stamp, and, on the viewer's own board, the next level as a button with its cost.
  */
 export function ImprovementsBoard({
   state,
@@ -53,13 +82,18 @@ export function ImprovementsBoard({
   if (!ext) return null;
   const color = presentation.players.find((player) => player.seat === seat)?.color ?? 'blue';
   return (
-    <div className={`improvements-board color-${color}`} data-seat={seat}>
+    <div
+      className={`improvements-board color-${color}`}
+      data-seat={seat}
+      data-readonly={buyable === undefined}
+    >
       {TRACKS.map((track) => {
         const level = levelOn(ext, seat, track);
-        const holder = ext.metropolises[track];
+        const holds = ext.metropolises[track]?.seat === seat;
         const next = level < MAX_LEVEL ? level + 1 : null;
         const canBuy = next !== null && buyable?.includes(track) === true;
         const cost = next !== null ? improvementCostOf(state, seat, track) : null;
+        const kind = commodityOf(track);
         const commodity = t(`knights:commodity.${TRACK_COMMODITY[track]}`);
         const trackName = t(`knights:track.${track}`);
         const summary =
@@ -71,49 +105,49 @@ export function ImprovementsBoard({
             className="improve-track"
             key={track}
             data-track={track}
-            aria-label={`${summary}${holder?.seat === seat ? `. ${t('knights:improve.holdsMetropolis')}` : ''}`}
+            data-level={level}
+            aria-label={`${summary}${holds ? `. ${t('knights:improve.holdsMetropolis')}` : ''}`}
           >
             <div className="improve-banner">
               <img
+                className="improve-banner-art"
                 src={getImprovementBannerUrl(track)}
                 alt=""
                 aria-hidden="true"
                 draggable={false}
               />
-              {Array.from({ length: MAX_LEVEL }, (_, index) => {
+              {cellStates(level, buyable !== undefined).map((cellState, index) => {
                 const cell = index + 1;
-                const style = {
-                  left: pct(CELL.x0 + index * CELL.step, CELL.banner),
-                  top: pct(CELL.top, CELL.bannerHeight),
-                  width: pct(CELL.width, CELL.banner),
-                  height: pct(CELL.height, CELL.bannerHeight),
+                const marks = {
+                  'data-level': cell,
+                  'data-ability': cell === ABILITY_LEVEL,
+                  'data-metropolis': cell >= METROPOLIS_LEVEL,
+                  style: cellBox(cell),
                 };
-                if (cell <= level)
+                if (cellState === 'reached')
                   return (
                     <span
                       key={cell}
+                      {...marks}
                       className="improve-cell is-reached"
-                      data-level={cell}
-                      data-ability={cell === ABILITY_LEVEL}
-                      style={style}
                       aria-hidden="true"
                       {...(cell === ABILITY_LEVEL ? { title: t(`knights:ability.${track}`) } : {})}
                     >
-                      <b>{cell}</b>
+                      <img src={getImprovementStampUrl(track, cell)} alt="" draggable={false} />
                     </span>
                   );
-                if (cell === next && buyable !== undefined)
+                if (cellState === 'next')
                   return (
                     <button
                       key={cell}
+                      {...marks}
                       type="button"
                       className="improve-cell is-next"
-                      data-level={cell}
                       data-testid={`improve-${track}`}
-                      style={style}
+                      data-affordable={canBuy}
                       disabled={disabled || !canBuy}
                       title={
-                        cost
+                        cost !== null
                           ? t('knights:improve.buyCost', {
                               track: trackName,
                               level: cell,
@@ -134,12 +168,29 @@ export function ImprovementsBoard({
                         if (canBuy) onBuy?.(track);
                       }}
                     >
-                      <span aria-hidden="true">{canBuy ? '+' : ''}</span>
+                      {canBuy && (
+                        <span className="improve-plus" aria-hidden="true">
+                          +
+                        </span>
+                      )}
+                      {cost !== null && (
+                        <span className="improve-cost" aria-hidden="true">
+                          {cost}
+                          <img src={getCommodityIconUrl(kind)} alt="" />
+                        </span>
+                      )}
                     </button>
                   );
-                return null;
+                return (
+                  <span
+                    key={cell}
+                    {...marks}
+                    className="improve-cell is-locked"
+                    aria-hidden="true"
+                  />
+                );
               })}
-              {holder?.seat === seat && (
+              {holds && (
                 <img
                   className="improve-metropolis"
                   src={getMetropolisIconUrl(track, color)}
@@ -150,23 +201,22 @@ export function ImprovementsBoard({
             </div>
             {captions === 'full' && (
               <p className="improve-caption" data-unlocked={level >= ABILITY_LEVEL}>
-                <img src={getCommodityIconUrl(commodityOf(track))} alt="" aria-hidden="true" />
+                <img src={getCommodityIconUrl(kind)} alt="" aria-hidden="true" />
                 <span>
                   <strong>{trackName}</strong> {t(`knights:ability.${track}`)}
                 </span>
               </p>
             )}
-            {captions !== 'none' && next !== null && cost !== null && (
+            {captions !== 'none' && (
               <p className="improve-next">
-                {t('knights:improve.nextCost', { level: next, cost, commodity })}
+                <span>
+                  {next !== null && cost !== null
+                    ? t('knights:improve.nextCost', { level: next, cost, commodity })
+                    : t('knights:improve.complete', { track: trackName })}
+                </span>
+                {holds && <span className="improve-badge">{t('knights:improve.metropolis')}</span>}
               </p>
             )}
-            <img
-              className="improve-track-icon"
-              src={getTrackIconUrl(track)}
-              alt=""
-              aria-hidden="true"
-            />
           </section>
         );
       })}

@@ -512,10 +512,12 @@ Golden replays for every scenario id and the P2P chaos runs with fog reveals (st
 
 Source: [13-knights-and-commerce.md](13-knights-and-commerce.md)
 
-- [ ] `docs/rules/knights.md` is complete, with all `[VERIFY]` items resolved and sourced.
-- [ ] K1–K6 are done, each with passing tests.
-- [ ] The simulation and P2P suites pass; golden replays for 5 knights games.
-- [ ] A human can play a full knights game against bots on mobile, with the barbarian track and improvements clearly visible.
+Stage 13 acceptance is recorded in [verification/stage13/acceptance.md](verification/stage13/acceptance.md): the resolved rules, per-milestone tests, simulations of both knights scenarios at every seat count, five golden replays, the [knights P2P evidence](verification/knights-p2p/acceptance.md) (certified game with every progress card, cheater suite, verified chaos suite) and the phone e2e. **The simulation ran 1,000 games per scenario and seat count, not the 20,000 / 10,000 in the stage document, at the user's direction.** Known P2P limitations: Wedding, Master Merchant and Commercial Harbor move public kinds in verified games, and a bad Master Merchant sealed hand stalls the play instead of producing a public cheat record.
+
+- [x] `docs/rules/knights.md` is complete, with all `[VERIFY]` items resolved and sourced. All 18 markers map to [sourced rows](verification/stage13/acceptance.md#docsrulesknightsmd-is-complete-every-verify-resolved-and-sourced).
+- [x] K1–K6 are done, each with passing tests. See [the tests per milestone](verification/stage13/acceptance.md#k1k6-each-with-passing-tests) and [the required tests, mapped](verification/stage13/acceptance.md#required-tests-mapped).
+- [x] The simulation and P2P suites pass; golden replays for 5 knights games. [1,000/1,000 with zero failures](verification/stage13/acceptance.md#simulation-1000-games-per-scenario-with-invariants-on) on knights (3, 4 seats) and knights-56 (5, 6 seats), invariants on (the agreed size, above); the [P2P suites](verification/stage13/acceptance.md#p2p) pass; [five goldens](verification/stage13/acceptance.md#golden-replays-five-knights-games) replay byte-exact.
+- [x] A human can play a full knights game against bots on mobile, with the barbarian track and improvements clearly visible. The [phone-viewport e2e](verification/stage13/acceptance.md#a-human-plays-knights-on-mobile-the-track-and-improvements-are-visible) shows the track at the default fit and opens the improvements (screenshots), and the user played knights on the live site on 2026-09-29 and reported it works. Not automated: a whole game to a result in a phone browser (dropped at the user's direction), and no physical-device check.
 
 ## 14 — Frontier Scenarios Module (`frontier`)
 

@@ -117,7 +117,7 @@ export type {
   ReplicatedLogStatus,
   RecoveredReplicaOwnership,
 } from './replicated-log.js';
-export { chooseBotPending } from './bot-pending.js';
+export { BOT_TRADE_PATIENCE_MS, botAwaitsTradeReplies, chooseBotPending } from './bot-pending.js';
 export {
   initialProposalContext,
   replayCertifiedPrefix,

@@ -1,4 +1,7 @@
-import type { Point } from '@cp2p/engine/geometry';
+import { hexToPixel, vertexToPixel } from '@cp2p/engine/geometry';
+import type { BoardGraph, EdgeId, Point } from '@cp2p/engine/geometry';
+import { isLandTerrain } from './boardShape.js';
+import type { RenderModel } from './types.js';
 
 export interface HarborLayout {
   readonly midpoint: Point;
@@ -43,4 +46,28 @@ export function harborPoint(layout: HarborLayout, x: number, y: number): Point {
     x: layout.midpoint.x + localX * Math.cos(layout.angle) - localY * Math.sin(layout.angle),
     y: layout.midpoint.y + localX * Math.sin(layout.angle) + localY * Math.cos(layout.angle),
   };
+}
+
+/** A harbor's jetty on the board: its layout and the land hex it serves. */
+export function harborOnBoard(
+  model: Pick<RenderModel, 'hexes'>,
+  graph: BoardGraph,
+  edge: EdgeId,
+  size: number,
+): { readonly layout: HarborLayout; readonly landCenter: Point } | null {
+  const edgeIndex = graph.edgeIndex[edge];
+  if (edgeIndex === undefined) return null;
+  const endpoints = graph.edgeVertices[edgeIndex];
+  if (!endpoints) return null;
+  const landHex = (graph.edgeHexes[edgeIndex] ?? [])
+    .map((id) => model.hexes.find((hex) => hex.id === id))
+    .find((hex) => hex !== undefined && isLandTerrain(hex.terrain));
+  if (!landHex) return null;
+  const landCenter = hexToPixel(landHex.q, landHex.r, size);
+  const layout = harborLayout(
+    vertexToPixel(endpoints[0], size),
+    vertexToPixel(endpoints[1], size),
+    landCenter,
+  );
+  return layout ? { layout, landCenter } : null;
 }

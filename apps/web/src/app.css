@@ -193,49 +193,6 @@ a {
   gap: 12px;
 }
 
-.home-content {
-  max-width: 1340px;
-  margin: auto;
-  min-height: calc(100dvh - 72px);
-  padding: clamp(32px, 6vw, 80px) 24px;
-  display: grid;
-  grid-template-columns: minmax(0, 1.15fr) minmax(320px, 0.85fr);
-  gap: clamp(32px, 7vw, 104px);
-  align-items: start;
-}
-.home-intro {
-  padding-top: clamp(12px, 5vw, 72px);
-  max-width: 590px;
-}
-.home-intro h1 {
-  max-width: 14ch;
-  font-size: clamp(2.7rem, 6vw, 5rem);
-}
-.home-intro p {
-  max-width: 42ch;
-  margin: 20px 0 28px;
-  color: var(--muted);
-  font-size: 1.1rem;
-}
-.home-online-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-}
-.home-beta-note {
-  display: block;
-  margin-top: 12px;
-  color: var(--muted);
-}
-.home-local-link {
-  display: inline-block;
-  margin-top: 28px;
-}
-.home-saved-games {
-  min-width: 0;
-  display: grid;
-  gap: 32px;
-}
 .saved-games {
   padding-top: 12px;
 }
@@ -2038,17 +1995,6 @@ button.development-card-main:focus-visible img {
   .app-header {
     min-height: 60px;
     padding: 10px 16px;
-  }
-  .home-content {
-    grid-template-columns: 1fr;
-    gap: 48px;
-    padding: 36px 16px;
-  }
-  .home-intro {
-    padding: 0;
-  }
-  .home-intro h1 {
-    font-size: clamp(2.5rem, 11vw, 4rem);
   }
   .form-page-content {
     padding: 28px 16px 64px;

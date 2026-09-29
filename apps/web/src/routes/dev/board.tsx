@@ -8,6 +8,7 @@ import * as v from 'valibot';
 import { toRenderModel } from '../../features/board/toRenderModel.js';
 import { buildBoardGraph } from '@cp2p/engine/geometry';
 import { BoardView } from '../../features/board/BoardView.js';
+import { shipsPreviewModel } from '../../features/board/shipsPreview.js';
 import type { BoardEffect, BoardHit, BoardRenderer, RenderModel } from '@cp2p/renderer';
 
 type BoardEffectInput = BoardEffect extends infer Effect
@@ -166,7 +167,7 @@ declare global {
 
 export const Route = createFileRoute('/dev/board')({
   validateSearch: v.object({
-    layout: v.optional(v.picklist(['standard', 'five-six', ...SEAFARING_LAYOUTS])),
+    layout: v.optional(v.picklist(['standard', 'five-six', 'ships', ...SEAFARING_LAYOUTS])),
   }),
   beforeLoad: () => {
     if (!import.meta.env.DEV) throw notFound();
@@ -182,7 +183,9 @@ function BoardDevelopmentPage() {
       ? fiveSixModel()
       : layout === 'standard'
         ? standardModel
-        : seafaringModel(layout),
+        : layout === 'ships'
+          ? shipsPreviewModel()
+          : seafaringModel(layout),
   );
   const [rendererError, setRendererError] = useState<string | null>(null);
   const [reducedMotion, setReducedMotion] = useState(false);

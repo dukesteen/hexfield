@@ -49,7 +49,7 @@ export function ImportedOnlineFullSaves() {
 
   return (
     <section className="saved-games imported-full-saves" aria-labelledby="full-save-list-title">
-      <h2 id="full-save-list-title">{t('lobby:fullSaveTitle')}</h2>
+      <h3 id="full-save-list-title">{t('lobby:fullSaveTitle')}</h3>
       <p className="muted">{t('lobby:fullSaveDescription')}</p>
       <label className="full-save-import-passphrase">
         {t('lobby:fullSaveImportPassphrase')}

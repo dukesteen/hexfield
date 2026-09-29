@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { RESOURCES, type GameEvent } from '@cp2p/engine';
+import type { GameEvent } from '@cp2p/engine';
 import {
   getDieUrl,
   getFactionUrl,
@@ -45,10 +45,6 @@ const tradeEvents = new Set([
   'tradeResponsesTimedOut',
 ]);
 const neutralDiceUrl = `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><g fill="none" stroke="#766657" stroke-width="2"><rect x="2" y="8" width="19" height="19" rx="3"/><rect x="11" y="3" width="19" height="19" rx="3"/></g></svg>')}`;
-
-function record(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
 
 function eventSeats(event: GameEvent): number[] {
   if (event.type === 'resourceStolen' && typeof event.thief === 'number') return [event.thief];

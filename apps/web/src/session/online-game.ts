@@ -1,6 +1,6 @@
 import { canonicalDecode, canonicalEncode, toBase64Url } from '@cp2p/codec';
 import { G, encodePoint, identityFromSecret, scalarFromBytes, scalePoint } from '@cp2p/crypto';
-import { RandomBot } from '@cp2p/bots';
+import { decideHosted, RandomBot } from '@cp2p/bots';
 import { success } from '@cp2p/engine';
 import type { Engine, Seat } from '@cp2p/engine';
 import {
@@ -496,7 +496,7 @@ export async function openOnlineGame(
       decideBot: (
         view: Parameters<RandomBot['decide']>[0],
         pending: Parameters<RandomBot['decide']>[1],
-      ) => bot.decide(view, pending, { int: (max) => randomIndex(browserEntropy, max) }),
+      ) => decideHosted(bot, view, pending, { int: (max) => randomIndex(browserEntropy, max) }),
       beaconSource: beacon.source,
       beaconSources,
       beaconContributions: input.store,
