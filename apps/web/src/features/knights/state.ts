@@ -8,6 +8,7 @@ import {
   RESOURCES,
   TRACKS,
   TRACK_COMMODITY,
+  VICTORY_CARDS,
   barbarianStrength,
   trackOfDeck,
   contributions,
@@ -53,12 +54,19 @@ export function knightsState(state: Readonly<GameState>): KnightsExt | null {
   return isKnights(state) ? knightsExt(state) : null;
 }
 
-/** The points a seat holds from metropolises (two each) and Defender of Catan cards (one each). */
+/** A seat's knights points: metropolises (two each), Defender cards, the merchant and shown Printer or Constitution cards. */
 export function knightsVictoryPoints(state: Readonly<GameState>, seat: Seat): number {
   const ext = knightsState(state);
   if (!ext) return 0;
   const metropolises = TRACKS.filter((track) => ext.metropolises[track]?.seat === seat).length;
-  return metropolises * 2 + (ext.defenders[seat] ?? 0);
+  const merchant = ext.merchant?.seat === seat ? 1 : 0;
+  const shown =
+    state.seats
+      .find((item) => item.seat === seat)
+      ?.cardSlots.filter(
+        (slot) => slot.revealed !== undefined && Object.hasOwn(VICTORY_CARDS, slot.revealed),
+      ).length ?? 0;
+  return metropolises * 2 + (ext.defenders[seat] ?? 0) + merchant + shown;
 }
 
 /** A knight's strength as one of the three levels the art has. */

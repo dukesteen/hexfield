@@ -283,5 +283,5 @@
   "islandBonusBadge_one": "{{count}} new island, +{{points}} VP",
   "islandBonusBadge_other": "{{count}} new islands, +{{points}} VP",
   "scoreIslands": "New islands",
-  "scoreKnights": "Metropolises and defenders"
+  "scoreKnights": "Cities & Knights"
 }

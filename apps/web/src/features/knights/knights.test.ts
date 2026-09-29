@@ -126,6 +126,39 @@ describe('knights points', () => {
     expect(victoryBreakdown(state, 1, 0)).toMatchObject({ knights: 4, total: 4 });
   });
 
+  test('the merchant and shown Printer or Constitution cards count as the engine counts them', () => {
+    const base = withKnights({ merchant: { seat: 2, hex: genesis.board.hexes[0]?.id ?? '' } });
+    const state: GameState = {
+      ...base,
+      seats: base.seats.map((seat) =>
+        seat.seat === 2
+          ? {
+              ...seat,
+              cardSlots: [
+                {
+                  slotId: 'progress:1',
+                  deck: 'progress-science',
+                  acquiredTurn: 1,
+                  revealed: 'printer',
+                },
+                {
+                  slotId: 'progress:2',
+                  deck: 'progress-trade',
+                  acquiredTurn: 1,
+                  revealed: 'merchant',
+                },
+              ],
+            }
+          : seat,
+      ),
+    };
+    expect(knightsVictoryPoints(state, 2)).toBe(2);
+    const engineTotal = engine.hooks
+      .victoryPoints(state, 2, undefined, [])
+      .reduce((sum, item) => sum + item.points, 0);
+    expect(knightsVictoryPoints(state, 2)).toBe(engineTotal);
+  });
+
   test('the breakdown of a game with none has no knights row', () => {
     expect(victoryBreakdown(genesis, 0, 0)).not.toHaveProperty('knights');
   });
