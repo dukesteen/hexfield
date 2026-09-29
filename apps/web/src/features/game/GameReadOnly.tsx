@@ -21,6 +21,7 @@ import { EventLog } from './EventLog';
 import { CheatFlag, FairnessStatus } from './FairnessStatus.js';
 import { useGameActions, type GameActionController } from './GameActions';
 import { GameOverPanel } from './GameOverPanel';
+import { revealPlayerPanel } from './player-rail-scroll';
 import { PlacementConfirmation } from './PlacementConfirmation';
 import { useBoardAppearance } from './use-appearance';
 import { sessionForActions } from '../../store/session-store';
@@ -137,8 +138,15 @@ function PlayerRail({
     typeof base === 'object' && base !== null && 'vpTarget' in base ? base.vpTarget : 10;
   const seafaring = isSeafaring(state);
   const knightsGame = isKnights(state);
+  const rail = useRef<HTMLElement>(null);
+  // Keep the player whose turn it is in view when the players scroll (sidebar or phone strip).
+  useEffect(() => {
+    const element = rail.current;
+    const panel = element?.querySelector<HTMLElement>(`[data-seat-panel="${activeSeat}"]`);
+    if (element && panel) revealPlayerPanel(element, panel);
+  }, [activeSeat]);
   return (
-    <aside className="player-rail" aria-label={t('game:players')}>
+    <aside className="player-rail" aria-label={t('game:players')} ref={rail}>
       <div className="player-rail-heading">
         <h2>{t('game:players')}</h2>
         {typeof target === 'number' && <span>{t('game:vpToWin', { count: target })}</span>}
