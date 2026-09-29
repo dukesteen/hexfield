@@ -739,10 +739,20 @@
 .resource-hand-card[data-commodity='true'] {
   position: relative;
 }
+/* The commodities start after a divider. It is drawn in the gap, outside the card's box, so the
+   first commodity is as wide as every other card and nothing inside it shifts. */
 .resource-hand-card[data-commodity='true']:nth-child(6) {
-  margin-left: 6px;
-  padding-left: 8px;
-  border-left: 1px solid var(--border);
+  --commodity-divider: 12px;
+  margin-left: var(--commodity-divider);
+}
+.resource-hand-card[data-commodity='true']:nth-child(6)::before {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  left: calc(-3px - var(--commodity-divider) / 2);
+  width: 1px;
+  background: var(--border);
+  content: '';
 }
 .bank-card[data-commodity='true']:nth-child(6) {
   margin-left: 4px;
@@ -992,8 +1002,7 @@
   gap: 5px;
 }
 .game-page[data-compact='true'] .resource-hand-card[data-commodity='true']:nth-child(6) {
-  margin-left: 4px;
-  padding-left: 5px;
+  --commodity-divider: 8px;
 }
 .game-page[data-compact='true'] .progress-hand {
   flex: 0 0 auto;
