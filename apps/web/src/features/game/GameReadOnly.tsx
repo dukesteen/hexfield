@@ -32,6 +32,7 @@ import { CockpitSheet } from './CockpitSheet.js';
 import { PlayerMarker } from './PlayerMarker.js';
 import { MobileGameControls, type MobileTab } from './MobileGameControls.js';
 import { useCompactCockpit } from './use-compact-cockpit.js';
+import { formReturnFocus, inlineDevelopmentCardLimit } from './cockpit-layout.js';
 import type { SaveStatus } from './save-coordinator';
 import { AwardsPanel } from './AwardsPanel';
 import { ModuleHud } from '../modules/ModuleHud';
@@ -43,9 +44,6 @@ import { ImprovementsStrip } from '../knights/ImprovementsStrip';
 import { ProgressHand } from '../knights/ProgressHand';
 import { ProgressCardBack } from '../knights/ProgressCardFace';
 import { TRACKS, cardKinds, isCommodity, isKnights, progressHeld } from '../knights/state';
-
-const MAX_INLINE_DEVELOPMENT_CARDS = 5;
-const MAX_NARROW_INLINE_DEVELOPMENT_CARDS = 3;
 
 function playerName(presentation: GamePresentation, seat: Seat): string {
   return presentation.players.find((player) => player.seat === seat)?.name ?? String(seat + 1);
@@ -659,9 +657,7 @@ function HandDock({
       </span>
     );
   });
-  const inlineCardLimit = narrowHand
-    ? MAX_NARROW_INLINE_DEVELOPMENT_CARDS
-    : MAX_INLINE_DEVELOPMENT_CARDS;
+  const inlineCardLimit = inlineDevelopmentCardLimit(narrowHand);
   const useDevelopmentDialog = compactHand || developmentCards.length > inlineCardLimit;
   const visibleDevelopmentCards = compact
     ? developmentCards
@@ -803,7 +799,7 @@ function HandDock({
                 controller={knights}
               />
             )}
-            {(compact || !compactHand) && developmentCards.length > 0 && (
+            {(compact || !compactHand) && visibleDevelopmentCards.length > 0 && (
               <div
                 className={`development-hand ${developmentCards.length > 2 ? 'is-fanned' : ''} ${knightIntent ? 'has-knight-intent' : ''}`}
                 data-card-count={visibleDevelopmentCards.length}
@@ -1068,6 +1064,7 @@ function LiveGame({
   );
   const sheetRef = useRef<HTMLDialogElement>(null);
   const sheetTrigger = useRef<HTMLButtonElement | null>(null);
+  const handOffTrigger = useRef<HTMLButtonElement | null>(null);
   const actionsButton = useRef<HTMLButtonElement>(null);
   const restoreSheetFocus = useRef(true);
   const closeSheet = (restoreFocus: boolean) => {
@@ -1106,11 +1103,16 @@ function LiveGame({
   const actions = useGameActions(state, pending, presentation, {
     compact,
     reducedMotion,
-    onHandOff: () => closeSheet(false),
+    onHandOff: () => {
+      handOffTrigger.current = sheet ? sheetTrigger.current : null;
+      closeSheet(false);
+    },
     onFormClosed: () => {
+      const trigger = formReturnFocus(handOffTrigger.current, actionsButton.current);
+      handOffTrigger.current = null;
       if (compact)
         requestAnimationFrame(() => {
-          if (!document.querySelector('dialog[open]')) actionsButton.current?.focus();
+          if (!document.querySelector('dialog[open]')) trigger?.focus();
         });
     },
   });

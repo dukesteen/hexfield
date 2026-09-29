@@ -435,18 +435,23 @@
     overflow-y: hidden;
     padding: 8px 8px 2px 0;
   }
+  .game-bottom .hand-cards {
+    --hand-card-w: 60px;
+    --hand-card-h: 86px;
+    --hand-card-gap: 10px;
+  }
   .game-bottom .resource-hand {
     display: flex;
     flex: none;
-    gap: 10px;
+    gap: var(--hand-card-gap);
     margin: 0;
   }
   .game-bottom .resource-hand-card .resource-card {
-    --card-w: 60px;
+    --card-w: var(--hand-card-w);
   }
   .game-bottom .resource-hand-card .resource-card img {
-    width: 60px;
-    height: 86px;
+    width: var(--hand-card-w);
+    height: var(--hand-card-h);
   }
   .game-bottom .resource-card-name {
     font-size: 10px;
@@ -454,61 +459,93 @@
   .game-bottom .development-hand,
   .game-bottom .development-hand.is-fanned {
     display: flex;
-    gap: 10px;
+    gap: var(--hand-card-gap);
     flex: none;
     margin: 0;
     padding: 0 0 0 14px;
     border-left: 1px solid var(--border);
     width: auto;
   }
-  .game-bottom .development-card,
-  .game-bottom .development-card:first-child,
-  .game-bottom .development-card:last-child {
-    flex: 0 0 60px;
-    width: 60px;
+  .game-bottom .development-card {
+    --dev-art-height: var(--hand-card-h);
+    padding: 0;
+  }
+  .game-bottom .development-hand:not(.is-fanned) .development-card {
+    flex: 0 0 var(--hand-card-w);
+    width: var(--hand-card-w);
     height: auto;
     margin: 0;
     transform: none;
   }
-  .game-bottom .development-card-main,
-  .game-bottom .development-hand.is-fanned .development-card-main {
+  /* Three or more cards overlap so the whole hand stays beside the resources. */
+  .game-bottom .development-hand.is-fanned {
+    --fan-card-width: var(--hand-card-w);
+    --fan-caption-width: 90px;
+    --fan-step: 28px;
+    gap: 0;
+  }
+  .game-bottom .development-hand.is-fanned[data-card-count='4'] {
+    --fan-step: 22px;
+  }
+  .game-bottom .development-hand.is-fanned[data-card-count='5'] {
+    --fan-step: 18px;
+  }
+  .game-bottom .development-hand.is-fanned .development-card {
+    flex: 0 0 var(--fan-step);
+    min-width: 0;
+    margin: 0;
+  }
+  .game-bottom .development-hand.is-fanned .development-card:last-child {
+    flex-basis: var(--fan-card-width);
+  }
+  .game-bottom .development-card-main {
     position: relative;
     inset: auto;
-    width: 60px;
     height: auto;
     min-height: 0;
     padding: 0;
     display: grid;
-    justify-items: center;
     transform: none;
+  }
+  .game-bottom .development-hand:not(.is-fanned) .development-card-main {
+    width: var(--hand-card-w);
+    justify-items: center;
   }
   .game-bottom .development-card-art {
     display: block;
-    width: 60px;
-    height: 86px;
+    width: var(--hand-card-w);
+    height: var(--hand-card-h);
     position: static;
-    transform: none;
   }
   .game-bottom .development-card img {
-    width: 60px;
-    height: 86px;
+    box-sizing: border-box;
+    width: var(--hand-card-w);
+    height: var(--hand-card-h);
     object-fit: contain;
     transform: none;
   }
-  .game-bottom .development-hand.is-fanned .development-card-main strong,
+  /* The Knight's cancel and play controls share the card's width. */
+  .game-bottom .knight-card-confirmation {
+    gap: 2px;
+  }
+  .game-bottom .knight-card-choice {
+    width: calc((var(--hand-card-w) - 2px) / 2);
+  }
+  .game-bottom .knight-card-choice::before {
+    width: calc(100% - 2px);
+  }
   .game-bottom .development-card-main strong {
-    position: static;
-    width: 60px;
-    height: auto;
     margin: 4px 0 0;
-    clip-path: none;
-    text-align: center;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    transform: none;
     font-size: 10px;
     font-weight: 400;
+  }
+  .game-bottom .development-hand:not(.is-fanned) .development-card-main strong {
+    position: static;
+    width: var(--hand-card-w);
+    height: auto;
+    clip-path: none;
+    text-align: center;
+    transform: none;
   }
   .desktop-build-panel h2,
   .desktop-trade-panel h2 {
@@ -674,7 +711,7 @@
   }
 }
 
-@media (min-width: 768px) and (max-width: 1100px) and (min-height: 501px) {
+@media (min-width: 768px) and (max-width: 1180px) and (min-height: 501px) {
   .game-page .game-grid {
     grid-template-columns: minmax(0, 1fr) 248px;
   }
@@ -717,6 +754,24 @@
   }
   .game-page .player-rail-heading > span {
     font-size: 8px;
+  }
+}
+
+/* Below this width the five resource cards and a small development hand share less room. */
+@media (min-width: 768px) and (max-width: 1239px) and (min-height: 501px) {
+  .game-bottom .hand-cards {
+    --hand-card-w: 46px;
+    --hand-card-h: 66px;
+    --hand-card-gap: 6px;
+  }
+  .game-bottom .development-hand.is-fanned {
+    --fan-step: 24px;
+  }
+  .game-bottom .development-hand.is-fanned[data-card-count='4'] {
+    --fan-step: 19px;
+  }
+  .game-bottom .development-hand.is-fanned[data-card-count='5'] {
+    --fan-step: 16px;
   }
 }
 
