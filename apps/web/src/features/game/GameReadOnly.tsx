@@ -1461,6 +1461,7 @@ function LiveGame({
           events={events}
           presentation={presentation}
           onViewBoard={viewBoard}
+          onHome={onLeave}
           {...(onRematch ? { onRematch } : {})}
           onExportReplay={onExportReplay}
           {...(resultNotice !== undefined ? { resultNotice } : {})}

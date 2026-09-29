@@ -51,6 +51,7 @@ export function GameOverPanel({
   events,
   presentation,
   onViewBoard,
+  onHome,
   onRematch,
   onExportReplay,
   resultNotice,
@@ -59,6 +60,8 @@ export function GameOverPanel({
   events: readonly GameEvent[];
   presentation: GamePresentation;
   onViewBoard: () => void;
+  /** Leave the finished game for the home screen, through the screen's own exit. */
+  onHome?: () => void;
   onRematch?: () => Promise<void>;
   onExportReplay: () => Promise<void>;
   resultNotice?: ReactNode;
@@ -239,6 +242,11 @@ export function GameOverPanel({
       </div>
       <footer className="results-footer" aria-busy={busy}>
         {error && <p role="alert">{t('game:gameOverActionFailed')}</p>}
+        {onHome && (
+          <button className="button button-quiet" type="button" disabled={busy} onClick={onHome}>
+            {t('game:goHome')}
+          </button>
+        )}
         <button className="button button-quiet" type="button" onClick={onViewBoard}>
           {t('game:viewBoard')}
         </button>
