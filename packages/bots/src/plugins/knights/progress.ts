@@ -64,11 +64,9 @@ const HOLD: Readonly<Record<string, number>> = {
 /** Cards played with a purchase (Crane, Medicine) or before the roll are handled elsewhere. */
 const ELSEWHERE = new Set(['crane', 'medicine', 'alchemist']);
 
-/** Roughly what one victory point is worth in cards. */
-const VP = 6;
-
-export function holdValue(card: string): number {
-  return HOLD[card] ?? 1;
+/** What keeping a card is worth to this bot. */
+export function holdValue(context: TurnContext, card: string): number {
+  return (HOLD[card] ?? 1) * context.config.knightsPolicy.holdScale;
 }
 
 /** One card's worth to the bot: a resource about 1, a commodity by its track plans. */
@@ -200,8 +198,9 @@ function diplomat(context: TurnContext, command: CommandShape): number {
   // The holder keeps the award while no other road is longer.
   const loses = cut < rival || cut < 5;
   const mine = baseLongestRoadLength(state, seat);
+  const vp = context.config.knightsPolicy.vp;
   const gain = loses
-    ? 2 * VP * 0.5 * threatOf(context, holder) + (mine > cut && mine >= 5 ? 2 * VP : 0)
+    ? 2 * vp * 0.5 * threatOf(context, holder) + (mine > cut && mine >= 5 ? 2 * vp : 0)
     : 0.5;
   return gain;
 }
@@ -339,7 +338,7 @@ export function playValue(context: TurnContext, command: CommandShape): number |
       const hex = String(paramOf(command, 'hex'));
       const terrain = state.board.hexes.find((item) => item.id === hex);
       const trade = pips(terrain?.token) * 0.1;
-      return held?.seat === seat ? trade - 1 : VP * 0.8 + trade;
+      return held?.seat === seat ? trade - 1 : context.config.knightsPolicy.vp * 0.8 + trade;
     }
     case 'engineer':
       return 1 + rawPips(state, String(paramOf(command, 'vertex')), context.info) * 0.01;
@@ -392,12 +391,13 @@ export function progressPlay(context: TurnContext): CommandShape | null {
   const plays = context.ofType('PLAY_PROGRESS_CARD');
   if (!plays.length) return null;
   const held = progressHeld(context.view.state, context.view.seat);
-  const slack = held >= 4 ? 0.2 : held >= 3 ? 0.6 : 1;
+  const { slack3, slack4 } = context.config.knightsPolicy;
+  const slack = held >= 4 ? slack4 : held >= 3 ? slack3 : 1;
   let top: { command: CommandShape; margin: number } | null = null;
   for (const command of plays) {
     const value = playValue(context, command);
     if (value === null || !Number.isFinite(value)) continue;
-    const margin = value - holdValue(String(command.card)) * slack;
+    const margin = value - holdValue(context, String(command.card)) * slack;
     if (margin > 0 && (!top || margin > top.margin)) top = { command, margin };
   }
   return top?.command ?? null;
@@ -422,6 +422,7 @@ export function progressDiscard(context: TurnContext): CommandShape | null {
         (sum: number, item: unknown) =>
           sum +
           holdValue(
+            context,
             typeof item === 'object' && item !== null ? String(Reflect.get(item, 'card')) : '',
           ),
         0,
@@ -437,7 +438,7 @@ export function salvagePlay(context: TurnContext): CommandShape | null {
       const value = playValue(context, command);
       return value !== null && Number.isFinite(value) && value > 0;
     }),
-    (command) => -holdValue(String(command.card)),
+    (command) => -holdValue(context, String(command.card)),
     context,
   );
 }
@@ -482,7 +483,8 @@ export function alchemist(context: TurnContext): CommandShape | null {
       bestTotal = total;
     }
   const held = progressHeld(state, seat);
-  if (bestValue - expected < holdValue('alchemist') * (held >= 4 ? 0.2 : 1)) return null;
+  const slack = held >= 4 ? context.config.knightsPolicy.slack4 : 1;
+  if (bestValue - expected < holdValue(context, 'alchemist') * slack) return null;
   const levels = knightsExt(state).improvements;
   const mine = Math.max(...Object.values(levels[seat] ?? {}).map(Number));
   const theirs = Math.max(

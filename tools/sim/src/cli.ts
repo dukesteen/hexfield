@@ -11,8 +11,8 @@ import { runGame, SimulationFailure } from './run-game.js';
 import { fuzz } from './fuzz.js';
 import { playTournamentGames, summarizeTournament } from './tournament.js';
 import type { TournamentGame, TournamentOptions } from './tournament.js';
-import { isSimBotLevel } from '@cp2p/bots';
-import type { SimBotLevel } from '@cp2p/bots';
+import { createBot, isSimBotLevel } from '@cp2p/bots';
+import type { BotOverride, SimBotLevel } from '@cp2p/bots';
 
 import { updateGoldens } from './golden.js';
 import { updateKnightsGoldens } from './knights-golden.js';
@@ -479,8 +479,35 @@ export function parseBotLevels(value: string | boolean | undefined): SimBotLevel
   const levels = value.split(',');
   const parsed = levels.filter(isSimBotLevel);
   if (parsed.length !== levels.length || parsed.length < 2 || parsed.length > 6)
-    throw new Error('--bots lists 2–6 of random, easy, normal, hard (or hard-v1, normal-v1)');
+    throw new Error(
+      '--bots lists 2–6 of random, easy, normal, hard (or a benchmark level: hard-v1, normal-v1, hard-v2, normal-v2)',
+    );
   return parsed;
+}
+
+/**
+ * `--params file.json`: parameter changes per level for a tuning run, such as
+ * `{ "hard": { "plan": { "production": 0.08 } } }`. Every listed level must be playing; unknown
+ * parameters are refused when the bots are built (checked here once).
+ */
+function botParams(
+  path: string,
+  bots: readonly SimBotLevel[],
+): Partial<Record<SimBotLevel, BotOverride>> {
+  const parsed: unknown = JSON.parse(readFileSync(path, 'utf8'));
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed))
+    throw new Error('--params must be a JSON object keyed by bot level');
+  const params: Partial<Record<SimBotLevel, BotOverride>> = {};
+  for (const [level, override] of Object.entries(parsed)) {
+    if (!isSimBotLevel(level) || !bots.includes(level))
+      throw new Error(`--params names ${level}, which is not playing`);
+    if (typeof override !== 'object' || override === null)
+      throw new Error(`--params for ${level} must be an object`);
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- checked by createBot below
+    params[level] = override as BotOverride;
+    createBot(level, undefined, params[level]);
+  }
+  return params;
 }
 
 /**
@@ -504,6 +531,7 @@ async function tournamentCommand(args: ParsedArgs): Promise<void> {
     ...(args['max-turns'] === undefined
       ? {}
       : { maxTurns: integer(args['max-turns'], 500, 'max-turns') }),
+    ...(typeof args.params === 'string' ? { params: botParams(args.params, bots) } : {}),
     ...(scenarioOptions(args.scenario, bots.length).config
       ? { config: scenarioOptions(args.scenario, bots.length).config }
       : {}),

@@ -15,9 +15,6 @@ import { rollout } from './rollout.js';
 /** Modules whose chance events the search can sample; other games play the heuristic alone. */
 const SEARCHABLE = new Set(['base', 'five-six']);
 
-/** The rollout policy: the Hard heuristic without trade offers, which rollouts cannot answer. */
-const ROLLOUT: LevelConfig = { ...HARD, offers: false };
-
 export interface SearchSettings {
   /** Rollouts per decision when no budget is given. */
   iterations: number;
@@ -43,6 +40,9 @@ export const DEFAULT_SEARCH: SearchSettings = {
   width: 5,
   searched: { setup: true, main: false, robber: true },
 };
+
+/** The search the current Hard level plays. */
+export const HARD_SEARCH: SearchSettings = DEFAULT_SEARCH;
 
 /** Share of the time budget the search may use before it stops starting work. */
 const SEARCH_SHARE = 0.85;
@@ -86,19 +86,23 @@ function top<T>(items: readonly T[], score: (item: T) => number, count: number):
  */
 export class HardBot extends HeuristicBot {
   private readonly rolloutBots = new Map<Seat, Bot>();
+  /** The rollout policy: the bot's heuristic without trade offers, which rollouts cannot answer. */
+  private readonly rolloutConfig: LevelConfig;
 
   constructor(
     plugins: readonly BotPlugin[],
     engine?: Engine,
     private readonly settings: SearchSettings = DEFAULT_SEARCH,
+    config: LevelConfig = HARD,
   ) {
-    super(HARD, plugins, engine);
+    super(config, plugins, engine);
+    this.rolloutConfig = { ...config, offers: false };
   }
 
   private rolloutPolicy(seat: Seat, engine: Engine): Bot {
     let bot = this.rolloutBots.get(seat);
     if (!bot) {
-      bot = new HeuristicBot(ROLLOUT, [], engine);
+      bot = new HeuristicBot(this.rolloutConfig, [], engine);
       this.rolloutBots.set(seat, bot);
     }
     return bot;
@@ -140,7 +144,14 @@ export class HardBot extends HeuristicBot {
       if (!searched.robber) return null;
       const options = top(
         context.ofType('MOVE_ROBBER'),
-        (command) => robberHexScore(state, seat, String(command.hex), context.target),
+        (command) =>
+          robberHexScore(
+            state,
+            seat,
+            String(command.hex),
+            context.target,
+            context.config.robberWeights,
+          ),
         width - 1,
       );
       return { candidates: distinct([heuristic, ...options]), horizon: horizon.robber };

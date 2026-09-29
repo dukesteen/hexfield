@@ -1,5 +1,5 @@
 import { RandomBot, createBot, createBotRng, createBotView } from '@cp2p/bots';
-import type { Bot, SimBotLevel as BotLevel } from '@cp2p/bots';
+import type { Bot, BotOverride, SimBotLevel as BotLevel } from '@cp2p/bots';
 import { canonicalEncode, hashValue, toHex } from '@cp2p/codec';
 import { LocalGame, devCardCountsFor, engineForConfig, moduleSelection } from '@cp2p/engine';
 import type {
@@ -34,6 +34,8 @@ export interface RunGameOptions extends LocalRandomOptions {
   bots?: readonly BotLevel[];
   /** Builds each seat's bot instead of `createBot` (in-process tuning experiments only). */
   botFactory?: (level: BotLevel, engine: Engine) => Bot;
+  /** Parameter changes per level, for tuning runs (see `BotOverride`). */
+  botOverrides?: Partial<Record<BotLevel, BotOverride>>;
   /** Search iterations per searching-bot decision (the Hard bot), so results are reproducible. */
   iterationBudget?: number;
   /** Called when a bot falls back to a random move for a decision it has no policy for. */
@@ -301,7 +303,7 @@ export function runGame(options: RunGameOptions): RunGameResult {
     if (level === undefined) return new RandomBot(underlying);
     return options.botFactory
       ? options.botFactory(level, underlying)
-      : createBot(level, underlying);
+      : createBot(level, underlying, options.botOverrides?.[level]);
   });
   const decideContext = (seat: Seat) => ({
     ...(options.iterationBudget === undefined ? {} : { iterationBudget: options.iterationBudget }),

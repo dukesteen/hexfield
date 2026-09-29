@@ -6,11 +6,6 @@ import { best } from '../../policy/setup.js';
 import { cheapestTrade } from './improvements.js';
 import { attackChance, idleStrength, plainCities, strengths } from './shared.js';
 
-/** Activate for the attack once it is at least this likely before the bot's next action phase. */
-const ACTIVATE_AT = 0.25;
-/** Recruit once the attack is this likely within three rounds, and activate within two. */
-const RECRUIT_AT = 0.3;
-
 /** What the bot's knights must reach for the coming attack. */
 export interface DefensePlan {
   /** Active strength the bot wants when the ship lands. */
@@ -85,12 +80,13 @@ export function urgentDefense(context: TurnContext): CommandShape | null {
   const plan = defensePlan(context);
   if (plan.active >= plan.target) return null;
   const state = context.view.state;
-  if (plan.chance >= ACTIVATE_AT || attackChance(state, 2) >= RECRUIT_AT) {
+  const { activateAt, recruitAt } = context.config.knightsPolicy;
+  if (plan.chance >= activateAt || attackChance(state, 2) >= recruitAt) {
     const now = activation(context) ?? promotion(context, true);
     if (now) return now;
   }
   // Three rounds ahead, recruit before the turn's builds spend the wool and ore.
-  if (plan.potential < plan.target && attackChance(state, 3) >= RECRUIT_AT) {
+  if (plan.potential < plan.target && attackChance(state, 3) >= recruitAt) {
     const recruit = recruitSite(context) ?? promotion(context, false);
     if (recruit) return recruit;
   }
@@ -115,7 +111,8 @@ export function defenseNeeds(context: TurnContext): Record<string, number> | nul
   const plan = defensePlan(context);
   if (plan.active >= plan.target) return null;
   const state = context.view.state;
-  return plan.chance >= ACTIVATE_AT || attackChance(state, 2) >= RECRUIT_AT ? { grain: 1 } : null;
+  const { activateAt, recruitAt } = context.config.knightsPolicy;
+  return plan.chance >= activateAt || attackChance(state, 2) >= recruitAt ? { grain: 1 } : null;
 }
 
 /**

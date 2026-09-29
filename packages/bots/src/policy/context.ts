@@ -90,6 +90,7 @@ export function createTurnContext(
           income: incomePerTurn(state, seat, info),
           rates: tradeRates(state, seat, info),
           otherKind: config.commodityValue,
+          weights: config.hand,
         };
       }
       return handContext;

@@ -15,7 +15,21 @@ export interface HandContext {
   safeCards?: number;
   /** Value of a card that is not a base resource (a commodity), in the same units. */
   otherKind?: number;
+  /** The score's coefficients (`DEFAULT_HAND` when absent). */
+  weights?: HandWeights;
 }
+
+/** Coefficients of `handScore` besides the expected turns. */
+export interface HandWeights {
+  /** Penalty per card still missing for the goal. */
+  shortfall: number;
+  /** Value of any card held. */
+  card: number;
+  /** Penalty per card above the safe total. */
+  risky: number;
+}
+
+export const DEFAULT_HAND: HandWeights = { shortfall: 0.35, card: 0.04, risky: 0.18 };
 
 /**
  * The value of a hand toward the goal: minus the expected turns to afford it, minus a little per
@@ -32,12 +46,13 @@ export function handScore(hand: Counts, context: HandContext): number {
     if (!(RESOURCES as readonly string[]).includes(kind)) others += count;
   }
   const risky = Math.max(0, cards - (context.safeCards ?? 7));
+  const weights = context.weights ?? DEFAULT_HAND;
   return (
     -turns -
-    0.35 * shortfall(resources, context.cost) +
-    0.04 * cards +
+    weights.shortfall * shortfall(resources, context.cost) +
+    weights.card * cards +
     (context.otherKind ?? 0.1) * others -
-    0.18 * risky
+    weights.risky * risky
   );
 }
 

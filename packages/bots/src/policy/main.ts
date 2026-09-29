@@ -228,7 +228,9 @@ function bankTrade(context: TurnContext): CommandShape | null {
         top = { command: { type: 'MARITIME_TRADE', give: gives, get: gets }, gain };
     }
   }
-  return top && top.gain > 0.15 && context.valid(top.command) ? top.command : null;
+  return top && top.gain > context.config.tradeTuning.bankGain && context.valid(top.command)
+    ? top.command
+    : null;
 }
 
 function offerTrade(context: TurnContext, memory: TurnMemory): CommandShape | null {
@@ -240,7 +242,8 @@ function offerTrade(context: TurnContext, memory: TurnMemory): CommandShape | nu
   const hand = context.view.priv.hand;
   if (!goal || shortfall(resourceHand(hand), goal.cost) > 2) return null;
   const pair = wantAndSpare(hand, context.handContext());
-  if (!pair || pair.wantValue <= pair.spareValue + 0.2) return null;
+  if (!pair || pair.wantValue <= pair.spareValue + context.config.tradeTuning.offerMargin)
+    return null;
   const command = { type: 'OFFER_TRADE', give: { [pair.spare]: 1 }, want: { [pair.want]: 1 } };
   if (!context.valid(command)) return null;
   memory.offers++;
@@ -373,7 +376,9 @@ function dumpHand(context: TurnContext): CommandShape | null {
         };
     }
   }
-  return top && top.gain > -0.6 && context.valid(top.command) ? top.command : null;
+  return top && top.gain > context.config.tradeTuning.dumpGain && context.valid(top.command)
+    ? top.command
+    : null;
 }
 
 /** The main phase (and a special build phase): settle trades, play a card, build, trade, end. */

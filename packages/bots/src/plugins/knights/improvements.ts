@@ -18,13 +18,10 @@ const ABILITY: Readonly<Record<Track, number>> = { science: 3, trade: 1.5, polit
 /** Science first (its level-3 Aqueduct pays on a dry roll), then trade, then politics. */
 const TRACK_PRIORITY: Readonly<Record<string, number>> = { science: 3, trade: 2, politics: 1 };
 
-const VP = 6;
-
-/** A purchase worth at least this takes (or locks) a metropolis. */
-export const METROPOLIS_VALUE = VP;
-
-/** Most bank trades a metropolis purchase may take in one turn. */
-const RUSH_TRADES = 2;
+/** A purchase worth at least this (one point in cards) takes (or locks) a metropolis. */
+export function metropolisValue(context: TurnContext): number {
+  return context.config.knightsPolicy.vp;
+}
 
 function asTrack(value: unknown): Track {
   return TRACKS.find((track) => track === value) ?? 'science';
@@ -73,7 +70,12 @@ export function commodityWorth(context: TurnContext, kind: string): number {
   if (!track) return 0.8;
   const level = levelOn(context.view.state, context.view.seat, track);
   if (level >= 5) return 0.5;
-  return 0.7 + raceOdds(context, track) * 0.8 + (level < 3 && track === 'science' ? 0.2 : 0);
+  const { commodityBase, commodityRace } = context.config.knightsPolicy;
+  return (
+    commodityBase +
+    raceOdds(context, track) * commodityRace +
+    (level < 3 && track === 'science' ? 0.2 : 0)
+  );
 }
 
 /** The value of buying the next level of a track now. */
@@ -81,6 +83,7 @@ export function improvementValue(context: TurnContext, track: Track): number {
   const { state, seat } = context.view;
   const next = levelOn(state, seat, track) + 1;
   const holder = knightsExt(state).metropolises[track];
+  const VP = context.config.knightsPolicy.vp;
   let value = 0.6 + (TRACK_PRIORITY[track] ?? 0) * 0.1;
   if (next === 3) value += ABILITY[track];
   if (next === 4 && !holder) value += 2 * VP;
@@ -137,7 +140,7 @@ export function metropolisRush(context: TurnContext): CommandShape | null {
     if (!wins || !plainCities(state, seat).length) continue;
     const kind = TRACK_COMMODITY[track];
     const missing = next - (cranes ? 1 : 0) - (hand[kind] ?? 0);
-    if (missing <= 0 || missing > RUSH_TRADES) continue;
+    if (missing <= 0 || missing > context.config.knightsPolicy.rushTrades) continue;
     const trade = cheapestTrade(context, kind, new Set([kind]));
     if (!trade) continue;
     // Every trade the purchase needs must be payable.

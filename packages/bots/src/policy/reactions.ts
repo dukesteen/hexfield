@@ -48,7 +48,7 @@ export function robberHex(context: TurnContext, type = 'MOVE_ROBBER'): CommandSh
       const hex = String(command.hex);
       return context.config.robber === 'simple'
         ? opponentPips(context, hex)
-        : robberHexScore(state, seat, hex, context.target);
+        : robberHexScore(state, seat, hex, context.target, context.config.robberWeights);
     },
     context,
   );
@@ -64,7 +64,7 @@ export function stealVictim(context: TurnContext, type = 'STEAL'): CommandShape 
       const victim = state.seats.find((item) => item.seat === command.victim);
       if (!victim) return -1;
       if (context.config.robber === 'simple') return victim.resources.total;
-      return stealScore(state, seat, victim.seat, context.target);
+      return stealScore(state, seat, victim.seat, context.target, context.config.robberWeights);
     },
     context,
   );

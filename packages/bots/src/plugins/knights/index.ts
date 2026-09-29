@@ -10,10 +10,10 @@ import { best, settlementValue } from '../../policy/setup.js';
 import * as v1 from '../knights-v1.js';
 import { defenseNeeds, prepareDefense, recruitSite, urgentDefense } from './barbarians.js';
 import {
-  METROPOLIS_VALUE,
   improvement,
   improvementValue,
   metropolisRush,
+  metropolisValue,
   purchaseTrack,
 } from './improvements.js';
 import {
@@ -86,7 +86,8 @@ export const knightsPlugin: BotPlugin = {
       urgentDefense(context) ?? progressPlay(context) ?? harborOffer(context) ?? medicine(context);
     if (early) return early;
     const taken = improvement(context);
-    if (taken && improvementValue(context, purchaseTrack(taken)) >= METROPOLIS_VALUE) return taken;
+    if (taken && improvementValue(context, purchaseTrack(taken)) >= metropolisValue(context))
+      return taken;
     return metropolisRush(context);
   },
   mainAction(context) {

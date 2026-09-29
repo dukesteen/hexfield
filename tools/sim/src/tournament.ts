@@ -1,4 +1,4 @@
-import type { SimBotLevel as BotLevel } from '@cp2p/bots';
+import type { BotOverride, SimBotLevel as BotLevel } from '@cp2p/bots';
 import type { GameConfig, Seat } from '@cp2p/engine';
 import { runGame, SimulationFailure } from './run-game.js';
 
@@ -14,6 +14,8 @@ export interface TournamentOptions {
   /** Scenario or module config replacing the base game for `bots.length` players. */
   config?: GameConfig;
   maxTurns?: number;
+  /** Parameter changes per level, for tuning runs (`--params file.json`). */
+  params?: Partial<Record<BotLevel, BotOverride>>;
   /** Keep the per-input invariant checks on (slower). */
   verify?: boolean;
   startIndex?: number;
@@ -62,6 +64,7 @@ export function playTournamentGames(options: TournamentOptions): TournamentGame[
           warnings[key] = (warnings[key] ?? 0) + 1;
         },
         ...(options.config ? { config: options.config } : {}),
+        ...(options.params ? { botOverrides: options.params } : {}),
         ...(options.maxTurns === undefined ? {} : { maxTurns: options.maxTurns }),
         ...(options.iterationBudget === undefined
           ? {}

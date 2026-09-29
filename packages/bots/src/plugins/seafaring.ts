@@ -43,7 +43,10 @@ function pirateHex(context: TurnContext): CommandShape | null {
       let score = 0;
       for (const ship of ships) {
         if (!edges.has(ship.edge)) continue;
-        score += ship.seat === seat ? -3 : threatWeight(state, ship.seat, seat, context.target);
+        score +=
+          ship.seat === seat
+            ? -3
+            : threatWeight(state, ship.seat, seat, context.target, context.config.robberWeights);
       }
       return score;
     },
