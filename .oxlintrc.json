@@ -58,5 +58,9 @@
       }
     }
   ],
-  "ignorePatterns": ["apps/signaling/worker/worker-configuration.d.ts", ".redesign/**", ".claude/**"]
+  "ignorePatterns": [
+    "apps/signaling/worker/worker-configuration.d.ts",
+    ".redesign/**",
+    ".claude/**"
+  ]
 }
