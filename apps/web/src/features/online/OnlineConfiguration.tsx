@@ -44,6 +44,9 @@ function seafaringIdOf(config: GameConfig): string | null {
   return scenario && isExpansionScenario(scenario) ? scenario.id : null;
 }
 
+/** A scenario id without its five-six suffix, so a scenario and its large variant match. */
+const stem = (id: string): string => id.replace(/-56$/, '');
+
 /** Keep a newer local draft when an earlier signed configuration arrives. */
 export function OnlineConfiguration({
   config,
@@ -244,7 +247,6 @@ export function OnlineConfiguration({
     const seafaring = seafaringId === null ? undefined : scenarioById(seafaringId);
     // Knights and commerce follows the seat count into its five-six scenario, and back; a
     // combined seafaring board only into its own five-six layout.
-    const stem = (id: string) => id.replace(/-56$/, '');
     const sibling = seafaring?.modules.includes('knights')
       ? scenariosForSeats(count).find(
           (scenario) =>
