@@ -16,6 +16,7 @@ import { entryHash } from '../genesis.js';
 import { MasterRevealCoordinator } from '../master-reveal.js';
 import type { ProtocolJournal } from '../journal.js';
 import { signCommand } from '../command-validation.js';
+import { SEAT_INPUT_TYPES, bodyInput, seatInputCommand } from '../seat-input.js';
 import { decodeProtocolMessage, encodeProtocolMessage } from '../messages.js';
 import type { ProtocolMessage } from '../messages.js';
 import { prepareStealContribution, prepareStealResponse } from '../steal-contributions.js';
@@ -78,6 +79,8 @@ export interface VerifiedNonVoterActor {
     expectedHead: { readonly seq: number; readonly hash: string },
   ): Promise<Result<SignedCommand>>;
   legalCommands(): LegalCommandSet;
+  /** The signed-envelope answer this seat owes to a request only it can answer, if any. */
+  revealCommand(): CommandShape | null;
   publishContributions(): Promise<Result<void>>;
   privateState(): PrivateState | null;
   head(): { readonly seq: number; readonly hash: string };
@@ -576,13 +579,14 @@ export function createVerifiedNonVoterActor(
             'non-voter-automatic',
             'The certified engine requires its automatic action first',
           );
-        const input = { kind: 'command' as const, seat, command: ownedCommand };
+        const input = bodyInput(seat, ownedCommand);
         const publicCheck = sessionOptions.engine.validate(current.log.state, input);
         if (!publicCheck.ok) return publicCheck;
         const privateCheck = sessionOptions.engine.applyPrivate(
           privateState,
           current.log.state,
           input,
+          driver.privateInputData?.(seat, input),
         );
         if (!privateCheck.ok) return privateCheck;
         const body = {
@@ -639,6 +643,20 @@ export function createVerifiedNonVoterActor(
       } finally {
         if (!retained && pendingCommand === intent) pendingCommand = null;
       }
+    },
+    revealCommand() {
+      if (disposed || !context || !driver) return null;
+      for (const pending of sessionOptions.engine.getPending(context.log.state)) {
+        if (
+          pending.kind !== 'reveal' ||
+          pending.seat !== seat ||
+          !SEAT_INPUT_TYPES.includes(pending.systemType)
+        )
+          continue;
+        const answer = driver.revealAnswer?.(seat, pending, context.log);
+        if (answer?.ok && answer.value) return seatInputCommand(answer.value);
+      }
+      return null;
     },
     legalCommands() {
       if (disposed || !context || !driver) return { commands: [], templates: [] };

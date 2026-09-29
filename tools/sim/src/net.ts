@@ -1517,6 +1517,23 @@ export async function runNetworkGame(options: NetworkGameOptions): Promise<Netwo
             nonVoterAutomatic = automatic.command;
         }
         const pending = choosePending(latest.state, pendingActions, nonVoterAutomatic ? 0 : null);
+        if (
+          options.scenario === 6 &&
+          byzantineHalted &&
+          faultRecovered &&
+          verifiedNonVoter &&
+          !pending
+        ) {
+          // The excluded seat still owes the answers to requests only it can answer (a Spy's
+          // take, a victory check); its own client sends them, as a session would.
+          const answer = verifiedNonVoter.revealCommand();
+          if (answer) {
+            const actorHead = verifiedNonVoter.head();
+            submission = { seat: 0, result: null };
+            nonVoterCommand = new NonVoterCommand(verifiedNonVoter, answer, actorHead);
+            nonVoterCommand.pump(network.clock.now(), actorHead);
+          }
+        }
         const session = pending ? sessions.get(pending.seat) : undefined;
         const owned = pending ? updates.get(pending.seat) : undefined;
         if (options.scenario === 6 && byzantineHalted && faultRecovered && pending?.seat === 0) {
