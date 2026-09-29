@@ -32,6 +32,8 @@ export interface RunGameOptions extends LocalRandomOptions {
    * goldens and every earlier simulation).
    */
   bots?: readonly BotLevel[];
+  /** Builds each seat's bot instead of `createBot` (in-process tuning experiments only). */
+  botFactory?: (level: BotLevel, engine: Engine) => Bot;
   /** Search iterations per searching-bot decision (the Hard bot), so results are reproducible. */
   iterationBudget?: number;
   /** Called when a bot falls back to a random move for a decision it has no policy for. */
@@ -296,7 +298,10 @@ export function runGame(options: RunGameOptions): RunGameResult {
     throw new RangeError('One bot level is needed per seat');
   const bots: Bot[] = config.seats.map((_, index) => {
     const level = options.bots?.[index];
-    return level === undefined ? new RandomBot(underlying) : createBot(level, underlying);
+    if (level === undefined) return new RandomBot(underlying);
+    return options.botFactory
+      ? options.botFactory(level, underlying)
+      : createBot(level, underlying);
   });
   const decideContext = (seat: Seat) => ({
     ...(options.iterationBudget === undefined ? {} : { iterationBudget: options.iterationBudget }),

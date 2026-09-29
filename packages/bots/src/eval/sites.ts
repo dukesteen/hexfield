@@ -52,16 +52,34 @@ export function networkVertices(
   return vertices;
 }
 
+const seaIds = new WeakMap<object, Set<string>>();
+function seaHexIds(state: GameState): Set<string> {
+  let ids = seaIds.get(state.board.hexes);
+  if (!ids) {
+    ids = new Set(state.board.hexes.filter((hex) => hex.terrain === 'sea').map((hex) => hex.id));
+    seaIds.set(state.board.hexes, ids);
+  }
+  return ids;
+}
+
+/** Whether a ship can ever lie on this edge: it borders at least one sea hex. */
+function seaEdge(state: GameState, info: BoardInfo, edge: number): boolean {
+  const sea = seaHexIds(state);
+  return (info.graph.edgeHexes[edge] ?? []).some((hex) => sea.has(hex));
+}
+
 /**
- * The number of new roads a seat needs to reach each vertex (0 for its own network), up to
- * `limit`. Roads cannot pass another seat's road or building.
+ * The number of new roads (or, with `medium` 'ship', ships) a seat needs to reach each vertex (0
+ * for its own network), up to `limit`. Neither can pass another seat's piece or building.
  */
 export function roadDistances(
   state: GameState,
   seat: Seat,
   limit = 3,
   info = boardInfo(state),
+  medium: 'road' | 'ship' = 'road',
 ): Map<string, number> {
+  const usable = medium === 'road' ? landEdge : seaEdge;
   const { graph } = info;
   const taken = new Set(
     [...state.board.roads, ...(state.board.ships ?? [])].map((road) => road.edge),
@@ -79,8 +97,7 @@ export function roadDistances(
       const index = graph.vertexIndex[vertex];
       for (const edge of index === undefined ? [] : (graph.vertexEdges[index] ?? [])) {
         const edgeIndex = graph.edgeIndex[edge];
-        if (edgeIndex === undefined || taken.has(edge) || !landEdge(state, info, edgeIndex))
-          continue;
+        if (edgeIndex === undefined || taken.has(edge) || !usable(state, info, edgeIndex)) continue;
         for (const other of graph.edgeVertices[edgeIndex] ?? []) {
           if (distance.has(other)) continue;
           distance.set(other, step);

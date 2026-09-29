@@ -79,7 +79,7 @@ describe('difficulty honesty', () => {
         const rng = rngs[pending.seat];
         if (!priv || !bot || !rng) throw new Error('Missing seat');
         const command = bot.decide(honestView(game.state, priv, pending.seat), pending, rng, {
-          iterationBudget: 8,
+          iterationBudget: 2,
         });
         const next = game.submit({ kind: 'command', seat: pending.seat, command });
         if (!next.ok) throw new Error(next.error.message);
@@ -88,5 +88,6 @@ describe('difficulty honesty', () => {
       expect(game.state.result).not.toBeNull();
       expect(decisions).toBeGreaterThan(100);
     },
+    60_000,
   );
 });

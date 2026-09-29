@@ -1,5 +1,5 @@
 import type { CommandShape, Resource } from '@cp2p/engine';
-import { RESOURCES } from '@cp2p/engine';
+import { RESOURCES, baseLongestRoadLength } from '@cp2p/engine';
 import {
   expectedHand,
   handBelief,
@@ -54,6 +54,10 @@ export function knightBeforeRoll(context: TurnContext): CommandShape | null {
   return context.config.devCardTactics && armyWorthIt(context) ? knight : null;
 }
 
+function eagerKnight(context: TurnContext, knight: CommandShape | undefined): boolean {
+  return knight !== undefined && context.config.knights === 'eager';
+}
+
 /** A knight that takes or defends the largest army. */
 function armyWorthIt(context: TurnContext): boolean {
   const played = knightsPlayed(context);
@@ -67,7 +71,9 @@ function devCardPlay(context: TurnContext): CommandShape | null {
   const knight = plays.find((command) => command.card === 'knight');
   if (
     knight &&
-    (robberOnOwnHex(context) || (context.config.devCardTactics && armyWorthIt(context)))
+    (robberOnOwnHex(context) ||
+      eagerKnight(context, knight) ||
+      (context.config.devCardTactics && armyWorthIt(context)))
   )
     return knight;
   if (!context.config.devCardTactics) {
@@ -275,10 +281,13 @@ function build(context: TurnContext): CommandShape | null {
     const after = addTo(hand, { wool: -1, grain: -1, ore: -1 });
     if (
       !goal ||
-      shortfall(resourceHand(after), goal.cost) <= shortfall(resourceHand(hand), goal.cost)
+      shortfall(resourceHand(after), goal.cost) <=
+        shortfall(resourceHand(hand), goal.cost) + context.config.devAppetite
     )
       return dev;
   }
+  const longest = longestRoadMove(context);
+  if (longest) return longest;
   // With no settlement in reach, a spare road still extends toward new land.
   if (!goal || goal.kind !== 'settlement') {
     const cards = Object.values(hand).reduce((sum, count) => sum + count, 0);
@@ -292,6 +301,79 @@ function build(context: TurnContext): CommandShape | null {
     }
   }
   return null;
+}
+
+/**
+ * A road that lengthens the bot's longest road, when the award is in reach (its road is at least
+ * four long and within one of the best other) and the road costs no card the goal needs.
+ */
+function longestRoadMove(context: TurnContext): CommandShape | null {
+  if (!context.config.longestRoad) return null;
+  const roads = context.ofType('BUILD_ROAD');
+  if (!roads.length) return null;
+  const { state, seat } = context.view;
+  const goal = context.goal();
+  const hand = context.view.priv.hand;
+  if (
+    goal &&
+    shortfall(resourceHand(addTo(hand, { brick: -1, lumber: -1 })), goal.cost) >
+      shortfall(resourceHand(hand), goal.cost)
+  )
+    return null;
+  const mine = baseLongestRoadLength(state, seat);
+  const others = Math.max(
+    0,
+    ...state.seats
+      .filter((holder) => holder.seat !== seat)
+      .map((holder) => baseLongestRoadLength(state, holder.seat)),
+  );
+  if (state.awards.longestRoad === seat && mine > others + 1) return null;
+  if (mine + 2 < Math.max(5, others)) return null;
+  const longer = (command: CommandShape): number => {
+    const board = {
+      ...state.board,
+      roads: [...state.board.roads, { edge: String(command.edge), seat }],
+    };
+    return baseLongestRoadLength({ ...state, board }, seat);
+  };
+  const choice = best(roads, longer, context);
+  return choice && longer(choice) > mine ? choice : null;
+}
+
+/**
+ * Above seven cards at the end of a turn a seven would cost half the hand, so spend first: a
+ * development card, a useful road, or the least harmful bank trade.
+ */
+function dumpHand(context: TurnContext): CommandShape | null {
+  if (!context.config.dumpHand || !context.types.has('END_TURN')) return null;
+  const hand = context.view.priv.hand;
+  const cards = Object.values(hand).reduce((sum, count) => sum + count, 0);
+  if (cards <= 7) return null;
+  const dev = context.ofType('BUY_DEV_CARD')[0];
+  if (dev) return dev;
+  const open = openSites(context.view.state, context.info);
+  const road = best(
+    context.ofType('BUILD_ROAD'),
+    (command) => edgeValue(context, String(command.edge), open),
+    context,
+  );
+  if (road && edgeValue(context, String(road.edge), open) > 0) return road;
+  const handContext = context.handContext();
+  let top: { command: CommandShape; gain: number } | null = null;
+  for (const give of RESOURCES) {
+    const rate = handContext.rates[give];
+    if ((hand[give] ?? 0) < rate) continue;
+    for (const get of RESOURCES) {
+      if (get === give || (context.view.state.bank[get] ?? 0) < 1) continue;
+      const gain = tradeGain(hand, { [get]: 1 }, { [give]: rate }, handContext);
+      if (gain !== null && (!top || gain > top.gain))
+        top = {
+          command: { type: 'MARITIME_TRADE', give: { [give]: rate }, get: { [get]: 1 } },
+          gain,
+        };
+    }
+  }
+  return top && top.gain > -0.6 && context.valid(top.command) ? top.command : null;
 }
 
 /** The main phase (and a special build phase): settle trades, play a card, build, trade, end. */
@@ -314,6 +396,8 @@ export function mainTurn(
   if (banked) return banked;
   const offered = offerTrade(context, memory);
   if (offered) return offered;
+  const dumped = dumpHand(context);
+  if (dumped) return dumped;
   for (const type of ['END_TURN', 'END_SBP']) {
     const end = context.ofType(type)[0];
     if (end) return end;

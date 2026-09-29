@@ -1,11 +1,220 @@
-import type { Engine } from '@cp2p/engine';
+import type { CommandShape, Engine, Seat } from '@cp2p/engine';
+import { createRng } from '@cp2p/engine/rng';
+import { openSites, robberHexScore } from '../eval/index.js';
 import { HARD } from '../policy/config.js';
+import type { LevelConfig } from '../policy/config.js';
+import type { TurnContext } from '../policy/context.js';
 import { HeuristicBot } from '../policy/heuristic-bot.js';
 import type { BotPlugin } from '../policy/heuristic-bot.js';
+import { edgeValue, settlementValue } from '../policy/setup.js';
+import type { Bot, BotRng, DecideContext } from '../types.js';
+import { determinize } from './determinize.js';
+import { leafValue } from './leaf.js';
+import { rollout } from './rollout.js';
 
-/** The searching bot; until the search lands it plays the Normal heuristic. */
+/** Modules whose chance events the search can sample; other games play the heuristic alone. */
+const SEARCHABLE = new Set(['base', 'five-six']);
+
+/** The rollout policy: the Hard heuristic without trade offers, which rollouts cannot answer. */
+const ROLLOUT: LevelConfig = { ...HARD, offers: false };
+
+export interface SearchSettings {
+  /** Rollouts per decision when no budget is given. */
+  iterations: number;
+  /** Turns a rollout plays after the searched move, by decision kind. */
+  horizon: { setup: number; main: number; robber: number };
+  /** How much better (in victory-point units) an alternative must look to overrule the heuristic. */
+  margin: number;
+  /** Most candidates searched at one decision. */
+  width: number;
+  /** Which decisions are searched. */
+  searched: { setup: boolean; main: boolean; robber: boolean };
+}
+
+/**
+ * About what 300 ms buys on a desktop (a rollout of the opening costs about 10 ms). Searching
+ * build decisions in the main phase measured weaker than the heuristic at these budgets, so only
+ * the opening settlements and the robber are searched (docs/verification/stage16).
+ */
+export const DEFAULT_SEARCH: SearchSettings = {
+  iterations: 6,
+  horizon: { setup: 24, main: 8, robber: 8 },
+  margin: 0.08,
+  width: 5,
+  searched: { setup: true, main: false, robber: true },
+};
+
+function now(): number {
+  return typeof performance === 'undefined' ? 0 : performance.now();
+}
+
+function seedFrom(rng: BotRng): Uint8Array {
+  return Uint8Array.from({ length: 32 }, () => rng.int(256));
+}
+
+function distinct(commands: readonly (CommandShape | null | undefined)[]): CommandShape[] {
+  const seen = new Set<string>();
+  const result: CommandShape[] = [];
+  for (const command of commands) {
+    if (!command) continue;
+    const key = JSON.stringify(command);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(command);
+  }
+  return result;
+}
+
+function top<T>(items: readonly T[], score: (item: T) => number, count: number): T[] {
+  return items
+    .map((item) => ({ item, value: score(item) }))
+    .toSorted((a, b) => b.value - a.value)
+    .slice(0, count)
+    .map((entry) => entry.item);
+}
+
+/**
+ * The Hard bot: the heuristic, plus a determinized Monte Carlo search at the decisions that matter
+ * most — opening settlements, robber placement, and what to build (a macro-action per build kind,
+ * or saving). Each iteration samples one world consistent with the bot's view (see
+ * `determinize`), plays every candidate in that same world with the same dice (paired
+ * comparison), rolls out a few turns with the fast heuristic, and scores the leaf. The heuristic's
+ * own choice is kept unless an alternative is clearly better. Trades use the heuristic only.
+ */
 export class HardBot extends HeuristicBot {
-  constructor(plugins: readonly BotPlugin[], engine?: Engine) {
+  private readonly rolloutBots = new Map<Seat, Bot>();
+
+  constructor(
+    plugins: readonly BotPlugin[],
+    engine?: Engine,
+    private readonly settings: SearchSettings = DEFAULT_SEARCH,
+  ) {
     super(HARD, plugins, engine);
+  }
+
+  private rolloutPolicy(seat: Seat, engine: Engine): Bot {
+    let bot = this.rolloutBots.get(seat);
+    if (!bot) {
+      bot = new HeuristicBot(ROLLOUT, [], engine);
+      this.rolloutBots.set(seat, bot);
+    }
+    return bot;
+  }
+
+  protected override choose(context: TurnContext, options: DecideContext): CommandShape | null {
+    const heuristic = super.choose(context, options);
+    if (!heuristic) return heuristic;
+    const modules = context.view.state.config.modules;
+    if (!modules.every((module) => SEARCHABLE.has(module.id))) return heuristic;
+    const plan = this.candidates(context, heuristic);
+    if (!plan || plan.candidates.length < 2) return heuristic;
+    return this.search(context, heuristic, plan.candidates, plan.horizon, options);
+  }
+
+  /** The moves worth comparing at this decision, the heuristic's own among them. */
+  private candidates(
+    context: TurnContext,
+    heuristic: CommandShape,
+  ): { candidates: CommandShape[]; horizon: number } | null {
+    const { width, horizon } = this.settings;
+    const { state, seat } = context.view;
+    const { searched } = this.settings;
+    if (heuristic.type === 'PLACE_SETTLEMENT') {
+      if (!searched.setup) return null;
+      const open = openSites(state, context.info);
+      const options = top(
+        context.ofType('PLACE_SETTLEMENT'),
+        (command) => settlementValue(context, String(command.vertex), open),
+        width,
+      );
+      return { candidates: distinct([heuristic, ...options]), horizon: horizon.setup };
+    }
+    if (heuristic.type === 'MOVE_ROBBER') {
+      if (!searched.robber) return null;
+      const options = top(
+        context.ofType('MOVE_ROBBER'),
+        (command) => robberHexScore(state, seat, String(command.hex), context.target),
+        width - 1,
+      );
+      return { candidates: distinct([heuristic, ...options]), horizon: horizon.robber };
+    }
+    const building = new Set([
+      'BUILD_CITY',
+      'BUILD_SETTLEMENT',
+      'BUILD_ROAD',
+      'BUY_DEV_CARD',
+      'PLAY_DEV_CARD',
+      'END_TURN',
+    ]);
+    if (!searched.main || !building.has(heuristic.type) || !context.types.has('END_TURN'))
+      return null;
+    const open = openSites(state, context.info);
+    const best = (
+      type: string,
+      score: (command: CommandShape) => number,
+    ): CommandShape | undefined => top(context.ofType(type), score, 1)[0];
+    const goal = context.goal();
+    const options = [
+      heuristic,
+      best('BUILD_CITY', (command) => settlementValue(context, String(command.vertex), open)),
+      best('BUILD_SETTLEMENT', (command) => settlementValue(context, String(command.vertex), open)),
+      best(
+        'BUILD_ROAD',
+        (command) =>
+          edgeValue(context, String(command.edge), open) +
+          (goal?.firstEdges?.has(String(command.edge)) ? 5 : 0),
+      ),
+      context.ofType('BUY_DEV_CARD')[0],
+      ...context
+        .ofType('PLAY_DEV_CARD')
+        .filter((command) => command.card === 'knight' || command.card === 'roadBuilding'),
+      context.ofType('END_TURN')[0],
+    ];
+    return { candidates: distinct(options).slice(0, width + 1), horizon: horizon.main };
+  }
+
+  private search(
+    context: TurnContext,
+    heuristic: CommandShape,
+    candidates: readonly CommandShape[],
+    horizon: number,
+    options: DecideContext,
+  ): CommandShape {
+    const { view, engine, rng } = context;
+    const totals = candidates.map(() => 0);
+    const counts = candidates.map(() => 0);
+    const deadline = options.timeBudgetMs === undefined ? null : now() + options.timeBudgetMs;
+    const iterations =
+      options.iterationBudget ?? (deadline === null ? this.settings.iterations : Infinity);
+    for (let iteration = 0; iteration < iterations; iteration++) {
+      if (deadline !== null && iteration > 0 && now() >= deadline) break;
+      // One sampled world and one dice stream per iteration, shared by every candidate.
+      const world = determinize(view, engine, rng);
+      const seed = seedFrom(rng);
+      candidates.forEach((candidate, index) => {
+        const end = rollout(
+          engine,
+          { ...world, devDeck: [...world.devDeck] },
+          view.seat,
+          candidate,
+          (seat) => this.rolloutPolicy(seat, engine),
+          createRng(seed),
+          horizon,
+        );
+        totals[index] =
+          (totals[index] ?? 0) +
+          (end ? leafValue(engine, end.state, end.privates, view.seat) : -10);
+        counts[index] = (counts[index] ?? 0) + 1;
+      });
+      if (deadline !== null && now() >= deadline) break;
+    }
+    const mean = (index: number): number => (totals[index] ?? 0) / Math.max(1, counts[index] ?? 0);
+    let chosen = 0;
+    for (let index = 1; index < candidates.length; index++)
+      if (mean(index) > mean(chosen)) chosen = index;
+    // Candidate 0 is the heuristic's choice: keep it unless another is clearly better.
+    return mean(chosen) - mean(0) > this.settings.margin
+      ? (candidates[chosen] ?? heuristic)
+      : heuristic;
   }
 }

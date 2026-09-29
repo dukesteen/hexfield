@@ -16,7 +16,7 @@ export function settlementValue(
   const { state, seat } = context.view;
   if (context.config.placement === 'pips')
     return rawPips(state, vertex, context.info) + 0.5 * distinctResources(context, vertex);
-  return vertexScore(state, seat, vertex, {}, context.info, open);
+  return vertexScore(state, seat, vertex, context.config.vertex, context.info, open);
 }
 
 /** Best of several scored commands; ties broken by the bot's RNG. */
