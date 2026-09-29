@@ -275,6 +275,30 @@ const openCardScene = (card: string, preRoll = false): Scene => ({
   },
 });
 
+/** The improvements sheet with the human's levels set and a metropolis held, opened where it lives. */
+const improvementsScene = (
+  name: string,
+  levels: Record<'trade' | 'politics' | 'science', number>,
+  metropolis: 'trade' | 'politics' | 'science',
+): Scene => ({
+  name,
+  run: async (page) => {
+    await handScene(page, [], (snap) =>
+      withMetropolis(withLevels(snap, SEAT, levels), metropolis, SEAT, cityOf(snap.state, SEAT)),
+    );
+    const strip = page.getByTestId('improvements-strip').locator('visible=true');
+    if (await strip.count()) await strip.first().click();
+    const board = page.locator('.improvements-board').locator('visible=true').first();
+    await board.scrollIntoViewIfNeeded();
+    await page.waitForTimeout(300);
+    if (SHOTS)
+      await board.screenshot({
+        path: join(SHOTS, `${name}-board-${page.viewportSize()?.width ?? 0}.png`),
+        animations: 'disabled',
+      });
+  },
+});
+
 /** The barbarians land: pictures of the attack effect through its whole length. */
 async function attackScene(page: Page, held: boolean): Promise<void> {
   let snap = withCity(await snapshot(page), SEAT);
@@ -356,6 +380,8 @@ SCENES.push(
       if (await strip.count()) await strip.first().click();
     },
   },
+  improvementsScene('improvements-levels-a', { trade: 3, politics: 1, science: 5 }, 'science'),
+  improvementsScene('improvements-levels-b', { trade: 0, politics: 4, science: 2 }, 'politics'),
   {
     name: 'progress-hand',
     run: (page) => handScene(page, ['deserter', 'wedding', 'saboteur', 'alchemist']),
@@ -404,7 +430,11 @@ const SIX_SCENES: Scene[] = [
   },
 ];
 
-test.use({ deviceScaleFactor: Number(process.env.KNIGHTS_DPR ?? 1) });
+test.use({
+  deviceScaleFactor: Number(process.env.KNIGHTS_DPR ?? 1),
+  // KNIGHTS_SCHEME=dark takes the pictures in the dark theme.
+  colorScheme: process.env.KNIGHTS_SCHEME === 'dark' ? 'dark' : 'light',
+});
 
 test.describe('cities and knights visual sweep', () => {
   test.skip(!SHOTS, 'Set KNIGHTS_SHOTS to a folder to take the pictures');

@@ -26,6 +26,7 @@ export {
   getEventDieUrl,
   getGlyphUrl,
   getImprovementBannerUrl,
+  getImprovementStampUrl,
   getKnightIconUrl,
   getMerchantIconUrl,
   getMetropolisIconUrl,

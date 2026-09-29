@@ -32,6 +32,7 @@
     "level": "{{track}}: level {{level}} of {{max}}",
     "complete": "{{track}}: complete",
     "holdsMetropolis": "Holds this track's metropolis",
+    "metropolis": "Metropolis",
     "buy": "Buy {{track}} level {{level}} for {{cost}}",
     "buyCost": "{{track}} level {{level}}: {{cost}}",
     "cannotBuy": "{{track}} level {{level}} is not available now",

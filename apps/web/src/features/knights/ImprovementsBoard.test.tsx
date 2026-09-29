@@ -3,7 +3,7 @@ import { afterEach, beforeAll, expect, test, vi } from 'vitest';
 import { cleanup, fireEvent, screen } from '@testing-library/react';
 import { knightsExt } from '@cp2p/engine';
 import type { GameState } from '@cp2p/engine';
-import { ImprovementsBoard, MiniTracks } from './ImprovementsBoard';
+import { ImprovementsBoard, MiniTracks, cellStates } from './ImprovementsBoard';
 import { genesis, presentation, testI18n, withI18n } from './test-support';
 
 let i18n: Awaited<ReturnType<typeof testI18n>>;
@@ -140,4 +140,86 @@ test('the mini tracks show one row per track with the metropolis marked for its 
   expect(container.querySelectorAll('[data-track="science"] i[data-filled="true"]')).toHaveLength(
     4,
   );
+});
+
+test('the cell states run reached, then the next level when offered, then locked', () => {
+  expect(cellStates(0, true)).toEqual(['next', 'locked', 'locked', 'locked', 'locked']);
+  expect(cellStates(2, true)).toEqual(['reached', 'reached', 'next', 'locked', 'locked']);
+  expect(cellStates(2, false)).toEqual(['reached', 'reached', 'locked', 'locked', 'locked']);
+  expect(cellStates(5, true)).toEqual(['reached', 'reached', 'reached', 'reached', 'reached']);
+});
+
+for (let level = 0; level <= 5; level++)
+  test(`at level ${level} each reached cell carries its own stamp and the rest are muted`, () => {
+    const { container } = withI18n(
+      i18n,
+      <ImprovementsBoard
+        state={leveled({ politics: level })}
+        seat={0}
+        presentation={presentation}
+        buyable={['politics']}
+      />,
+    );
+    const track = container.querySelector('[data-track="politics"]');
+    const reached = [...(track?.querySelectorAll('.improve-cell.is-reached') ?? [])];
+    expect(reached.map((cell) => cell.getAttribute('data-level'))).toEqual(
+      Array.from({ length: level }, (_, index) => String(index + 1)),
+    );
+    // Every level has its own stamp.
+    const stamps = reached.map((cell) => cell.querySelector('img')?.getAttribute('src'));
+    expect(new Set(stamps).size).toBe(level);
+    expect(track?.querySelectorAll('.improve-cell.is-next')).toHaveLength(level < 5 ? 1 : 0);
+    expect(track?.querySelectorAll('.improve-cell.is-locked')).toHaveLength(Math.max(0, 4 - level));
+    expect(track?.querySelectorAll('.improve-cell')).toHaveLength(5);
+  });
+
+test('the affordable next level shows a plus and its cost; an unaffordable one only its cost', () => {
+  const { container } = withI18n(
+    i18n,
+    <ImprovementsBoard
+      state={leveled({ trade: 1, science: 3 })}
+      seat={0}
+      presentation={presentation}
+      buyable={['trade']}
+    />,
+  );
+  const trade = screen.getByTestId('improve-trade');
+  expect(trade.getAttribute('data-affordable')).toBe('true');
+  expect(trade.querySelector('.improve-plus')).not.toBeNull();
+  expect(trade.querySelector('.improve-cost')?.textContent).toBe('2');
+  const science = screen.getByTestId('improve-science');
+  expect(science.getAttribute('data-affordable')).toBe('false');
+  expect(science.querySelector('.improve-plus')).toBeNull();
+  expect(science.querySelector('.improve-cost')?.textContent).toBe('4');
+  expect(container.querySelector('[data-track="science"] [data-level="4"]')).toBe(science);
+});
+
+test("another seat's board is read only: no buttons, and every unreached level is muted", () => {
+  const { container } = withI18n(
+    i18n,
+    <ImprovementsBoard state={leveled({ science: 3 })} seat={0} presentation={presentation} />,
+  );
+  expect(container.querySelector('.improvements-board')?.getAttribute('data-readonly')).toBe(
+    'true',
+  );
+  expect(screen.queryAllByRole('button')).toHaveLength(0);
+  const science = container.querySelector('[data-track="science"]');
+  expect(science?.querySelectorAll('.is-reached')).toHaveLength(3);
+  expect(science?.querySelectorAll('.is-locked')).toHaveLength(2);
+  expect(science?.querySelector('.is-reached[data-level="3"]')?.getAttribute('data-ability')).toBe(
+    'true',
+  );
+});
+
+test('a metropolis holder gets a visible badge, and a finished track says so', () => {
+  const state = leveled({ trade: 5 }, { trade: { seat: 0, vertex: 'v:0,0,N' } });
+  const { container } = withI18n(
+    i18n,
+    <ImprovementsBoard state={state} seat={0} presentation={presentation} captions="cost" />,
+  );
+  const trade = container.querySelector('[data-track="trade"]');
+  expect(trade?.querySelector('.improve-badge')?.textContent).toBe('Metropolis');
+  expect(trade?.querySelector('.improve-next')?.textContent).toContain('Trade: complete');
+  expect(trade?.querySelector('[data-level="4"]')?.getAttribute('data-metropolis')).toBe('true');
+  expect(container.querySelector('[data-track="science"] .improve-badge')).toBeNull();
 });
