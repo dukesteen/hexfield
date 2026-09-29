@@ -1,0 +1,353 @@
+/* Home page: hero first, then resumable games, what you can play, and the file tools. */
+
+.home-content {
+  max-width: 1200px;
+  margin: auto;
+  padding: 0 24px 72px;
+  display: grid;
+  gap: clamp(48px, 7vw, 88px);
+}
+
+.home-page h3 {
+  margin: 0;
+  font-family: 'Young Serif', Georgia, serif;
+  font-size: 1.15rem;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+}
+
+.home-eyebrow {
+  color: var(--muted);
+  font-size: 0.72rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+/* Hero */
+
+.home-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 0.75fr);
+  align-items: center;
+  gap: clamp(24px, 4vw, 64px);
+  padding-block: clamp(28px, 6vh, 72px) 0;
+}
+
+.home-intro {
+  min-width: 0;
+}
+
+.home-intro h1 {
+  max-width: 12ch;
+  font-size: clamp(2.6rem, 5.6vw, 4.6rem);
+  line-height: 1.04;
+  letter-spacing: -0.025em;
+}
+
+.home-intro > p {
+  max-width: 38ch;
+  margin: 20px 0 30px;
+  color: var(--muted);
+  font-size: 1rem;
+}
+
+.home-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 12px;
+}
+
+.home-actions > .button {
+  min-height: 48px;
+  padding-inline: 18px;
+}
+
+.home-beta-note {
+  display: block;
+  margin-top: 16px;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.home-hero-art {
+  position: relative;
+  justify-self: center;
+  width: min(100%, 520px);
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+  isolation: isolate;
+}
+
+/* A warm pool of light under the board, like a lamp over the table. */
+.home-hero-art::before {
+  content: '';
+  position: absolute;
+  inset: 4%;
+  z-index: -1;
+  border-radius: 50%;
+  background: radial-gradient(
+    closest-side,
+    color-mix(in srgb, var(--accent) 22%, transparent),
+    color-mix(in srgb, var(--accent) 7%, transparent) 62%,
+    transparent
+  );
+}
+
+.home-board-art {
+  display: block;
+  width: 88%;
+  max-height: calc(100dvh - 180px);
+  object-fit: contain;
+  filter: drop-shadow(0 14px 18px rgb(33 27 34 / 22%));
+}
+
+.home-hero-piece {
+  position: absolute;
+  height: auto;
+  filter: drop-shadow(0 6px 6px rgb(33 27 34 / 28%));
+}
+
+.home-hero-piece.is-ship {
+  left: 5%;
+  bottom: 17%;
+  width: 15%;
+}
+
+.home-hero-piece.is-knight {
+  right: 3%;
+  top: 20%;
+  width: 17%;
+}
+
+/* Section headings */
+
+.home-section-heading {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 24px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.home-section-heading h2 {
+  font-size: clamp(1.5rem, 2.6vw, 2rem);
+  letter-spacing: -0.015em;
+}
+
+.home-section-heading > p {
+  max-width: 72ch;
+  font-size: 0.85rem;
+}
+
+/* Panels for resumable games and file tools */
+
+.home-panels {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
+  align-items: start;
+  gap: 18px;
+}
+
+.home-panels > .saved-games {
+  display: grid;
+  gap: 12px;
+  align-content: start;
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface);
+  box-shadow: 0 4px 0 var(--panel-shadow);
+}
+
+.home-panels > .saved-games > .muted,
+.home-panels > .saved-games > [role] {
+  padding: 0;
+  font-size: 0.85rem;
+}
+
+.home-panels > .saved-games > .button {
+  justify-self: start;
+}
+
+.home-continue .home-panels > .saved-games {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+}
+
+.home-library .home-panels > .saved-games {
+  background: color-mix(in srgb, var(--surface) 55%, var(--page));
+  box-shadow: none;
+}
+
+/* What you can play */
+
+.home-mode-list {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.home-mode {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface);
+  box-shadow: 0 4px 0 var(--panel-shadow);
+}
+
+.home-mode-art {
+  --hex: color-mix(in srgb, var(--text) 7%, transparent);
+  height: 96px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 6px;
+  padding: 14px 16px 12px;
+  border-bottom: 1px solid var(--border);
+  background-color: var(--raised);
+  /* Faint hex grid, the table the pieces stand on. */
+  background-image:
+    radial-gradient(circle at 50% 50%, var(--hex) 0 2px, transparent 2.5px),
+    radial-gradient(circle at 50% 50%, var(--hex) 0 2px, transparent 2.5px);
+  background-position:
+    0 0,
+    11px 19px;
+  background-size: 22px 38px;
+}
+
+.home-mode[data-mode='seafaring'] .home-mode-art {
+  background-color: color-mix(in srgb, #4f9fc8 24%, var(--raised));
+}
+
+.home-mode[data-mode='knights'] .home-mode-art {
+  background-color: color-mix(in srgb, #6fa35a 16%, var(--raised));
+}
+
+.home-mode-piece {
+  width: 40px;
+  height: 40px;
+  object-fit: contain;
+  filter: drop-shadow(0 3px 2px rgb(33 27 34 / 25%));
+}
+
+.home-mode-piece.is-large {
+  width: 58px;
+  height: 58px;
+}
+
+.home-mode-piece.is-road {
+  width: 44px;
+  height: 44px;
+  margin-right: -10px;
+}
+
+.home-mode-piece.is-knight {
+  width: 56px;
+  height: 44px;
+}
+
+.home-mode-crowd {
+  display: flex;
+  align-items: flex-end;
+}
+
+.home-mode-crowd > .home-mode-piece {
+  width: 34px;
+  height: 34px;
+  margin-inline: -3px;
+}
+
+.home-mode-crowd > .home-mode-piece:nth-child(even) {
+  margin-bottom: 10px;
+}
+
+.home-mode-body {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  padding: 16px 18px 20px;
+}
+
+.home-mode-about {
+  color: var(--muted);
+  font-size: 0.8rem;
+  line-height: 1.55;
+}
+
+.home-mode-scenarios {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.home-mode-scenarios > li {
+  padding: 3px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--page);
+  font-size: 0.7rem;
+}
+
+.home-modes-coming {
+  margin-top: 16px;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+@media (max-width: 1099px) {
+  .home-mode-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 767px) {
+  .home-content {
+    padding: 0 16px 56px;
+    gap: 48px;
+  }
+
+  .home-hero {
+    grid-template-columns: minmax(0, 1fr);
+    min-height: 0;
+    gap: 20px;
+    padding-top: 24px;
+  }
+
+  .home-intro h1 {
+    font-size: clamp(2.3rem, 10.5vw, 3.6rem);
+  }
+
+  .home-intro > p {
+    margin: 14px 0 22px;
+  }
+
+  .home-actions > .home-action-main {
+    flex: 1 1 100%;
+  }
+
+  .home-actions > .button {
+    flex: 1 1 auto;
+  }
+
+  .home-hero-art {
+    width: min(100%, 280px);
+  }
+
+  .home-mode-art {
+    height: 80px;
+  }
+}
+
+@media (max-width: 559px) {
+  .home-mode-list {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
