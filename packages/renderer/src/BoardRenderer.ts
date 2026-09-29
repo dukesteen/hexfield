@@ -127,6 +127,7 @@ const BARBARIAN_SAIL_MS = 900;
 const BARBARIAN_ATTACK_MS = 3200;
 const KNIGHT_MOVE_MS = 520;
 const BURST_MS = 1100;
+const PILLAGE_MS = 1800;
 /** Knights draw a quarter larger than their art box, so they read beside a city. */
 const KNIGHT_SCALE = 1.25;
 const MERCHANT_OFFSET = { x: 0.36, y: 0.4 } as const;
@@ -762,14 +763,16 @@ export class PixiBoardRenderer implements BoardRenderer {
               ? BARBARIAN_SAIL_MS + (effect.delayMs ?? 0)
               : effect.kind === 'barbarian-attack'
                 ? BARBARIAN_ATTACK_MS + (effect.delayMs ?? 0)
-                : effect.kind === 'burst'
-                  ? BURST_MS
-                  : effect.kind === 'knight-move'
-                    ? KNIGHT_MOVE_MS
-                    : effect.kind === 'fog-reveal'
-                      ? FOG_REVEAL_MS +
-                        Math.min(effect.order ?? 0, FOG_MAX_STAGGERED) * FOG_STAGGER_MS
-                      : 420;
+                : effect.kind === 'pillage'
+                  ? PILLAGE_MS + (effect.delayMs ?? 0)
+                  : effect.kind === 'burst'
+                    ? BURST_MS
+                    : effect.kind === 'knight-move'
+                      ? KNIGHT_MOVE_MS
+                      : effect.kind === 'fog-reveal'
+                        ? FOG_REVEAL_MS +
+                          Math.min(effect.order ?? 0, FOG_MAX_STAGGERED) * FOG_STAGGER_MS
+                        : 420;
     if (effect.kind === 'dice-roll') {
       if (effect.dice.some((face) => !Number.isInteger(face) || face < 1 || face > 6)) return null;
       const faceSize = Math.min(64, Math.max(56, this.app.screen.width * 0.07));
@@ -1023,6 +1026,7 @@ export class PixiBoardRenderer implements BoardRenderer {
     if (effect.kind === 'barbarian-attack')
       return this.createBarbarianAttack(effect, node, duration);
     if (effect.kind === 'burst') return this.createBurst(effect, node, duration);
+    if (effect.kind === 'pillage') return this.createPillage(effect, node, duration);
     if (effect.kind === 'piece-pop') {
       const point = this.pointForHit(effect.at);
       if (!point) return null;
@@ -1181,6 +1185,85 @@ export class PixiBoardRenderer implements BoardRenderer {
           sprite.scale.x = -inbound;
           if (at) sprite.position.set(at.x, at.y);
           sprite.alpha = 1;
+        }
+        return overall >= 1;
+      },
+    };
+  }
+
+  /**
+   * A pillaged city: the old city flashes red and shakes over the settlement it became, its wall
+   * drops away, then it sinks and fades to show the settlement, with embers rising around it.
+   */
+  private createPillage(
+    effect: Extract<BoardEffect, { kind: 'pillage' }>,
+    node: Container,
+    duration: number,
+  ): {
+    readonly node: Container;
+    readonly update: (progress: number) => boolean;
+    readonly duration: number;
+    readonly cleanup?: () => void;
+  } {
+    const at = vertexToPixel(effect.at, this.hexSize);
+    const style = {
+      color: this.playerStyleMap().get(effect.seat)?.color ?? DEFAULT_PLAYER_STYLE.color,
+    };
+    const origin = { x: 0, y: 0 };
+    const walled = effect.wall ? this.buildingNode('city', style, origin, { wall: true }) : null;
+    const city = this.buildingNode('city', style, origin);
+    const glow = new Graphics();
+    const piece = new Container();
+    piece.position.set(at.x, at.y);
+    piece.addChild(city);
+    if (walled) piece.addChild(walled);
+    node.addChild(glow, piece);
+    this.layers.effects.addChild(node);
+    const hexSize = this.hexSize;
+    const wait = effect.delayMs ?? 0;
+    const showSettlement = (shown: boolean) => {
+      const settlement = this.buildingNodes.get(effect.at);
+      if (settlement) settlement.visible = shown;
+    };
+    // Until the ship lands the old city stands where it was.
+    showSettlement(false);
+    if (walled) city.alpha = 0;
+    return {
+      node,
+      duration,
+      cleanup: () => showSettlement(true),
+      update: (overall) => {
+        glow.clear();
+        if (overall * duration < wait) return false;
+        const t = Math.min(1, (overall * duration - wait) / PILLAGE_MS);
+        // 0-0.4: flash and shake; 0.4-0.55: the wall falls; 0.55-0.8: the city sinks away.
+        const shake = t < 0.4 ? Math.sin(t * 90) * hexSize * 0.04 * (1 - t / 0.4) : 0;
+        piece.position.set(at.x + shake, at.y);
+        if (walled) {
+          const fall = Math.min(1, Math.max(0, (t - 0.4) / 0.15));
+          walled.alpha = 1 - fall;
+          walled.position.y = fall * hexSize * 0.12;
+          city.alpha = fall > 0 ? 1 : 0;
+        }
+        const sink = Math.min(1, Math.max(0, (t - 0.55) / 0.25));
+        piece.alpha = 1 - sink;
+        piece.scale.set(1 - sink * 0.35);
+        if (sink > 0) showSettlement(true);
+        const flash = t < 0.4 ? 0.5 + 0.5 * Math.sin(t * 40) : Math.max(0, 1 - (t - 0.4) / 0.6);
+        glow
+          .circle(at.x, at.y, hexSize * (0.3 + t * 0.35))
+          .fill({ color: 0xd6402f, alpha: 0.35 * flash })
+          .circle(at.x, at.y, hexSize * (0.25 + t * 0.5))
+          .stroke({ color: 0xff8a3c, alpha: 1 - t, width: hexSize * 0.07 });
+        for (let ember = 0; ember < 5; ember += 1) {
+          const rise = (t * 1.6 + ember * 0.2) % 1;
+          glow
+            .circle(
+              at.x + Math.sin(ember * 2.4) * hexSize * 0.3,
+              at.y - rise * hexSize * 0.6,
+              hexSize * 0.035,
+            )
+            .fill({ color: 0xff8a3c, alpha: (1 - rise) * (1 - t) });
         }
         return overall >= 1;
       },

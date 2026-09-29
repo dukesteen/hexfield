@@ -215,7 +215,8 @@ export function formatKnightsEvent(
             return seat === null ? [] : [t('log:cityPillaged', { player: name(seat) })];
           })
         : [];
-      return [...parts, ...lost].join(' ');
+      const freed = f.robberFreed === true ? [t('log:robberFreed')] : [];
+      return [...parts, ...lost, ...freed].join(' ');
     }
     default:
       return null;
@@ -321,6 +322,7 @@ export function derivedKnightsEvents(
           defender: attack.defender,
           tied: attack.tied,
           pillaged: attack.pillaged.map((piece) => ({ seat: piece.seat })),
+          ...(was.robberLocked && !now.robberLocked ? { robberFreed: true } : {}),
         },
       },
     ];

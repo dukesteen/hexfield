@@ -425,5 +425,33 @@
     "cardInventor": "Inventor: swap",
     "cardDiplomat": "Diplomat: remove road",
     "cardSmith": "Smith: promote"
+  },
+  "attack": {
+    "title": "Barbarians attack!",
+    "strength": "Barbarians",
+    "defense": "Knights",
+    "versus": "vs",
+    "held": "The knights held the line.",
+    "fell": "The barbarians won and pillaged.",
+    "defender": "{{player}} led the defense: +1 VP (Defender of Catan).",
+    "defenderYou": "You led the defense: +1 VP (Defender of Catan).",
+    "tied": "{{players}} tied for the lead: each draws a progress card.",
+    "tiedYou": "You tied for the lead: pick a deck to draw from.",
+    "noLeader": "No knights were active, so nobody earns a Defender card.",
+    "lost": "{{player}} lost the city by {{place}}.",
+    "lostYou": "Your city by {{place}} fell and is a settlement now. Your knights gave {{mine}}, the fewest ({{defense}} vs {{strength}} in all).",
+    "onlyCity": "It was your only city, so there was nothing to choose.",
+    "choosing": "{{player}} is choosing which city to lose.",
+    "choosingYou": "Your knights gave {{mine}}, the fewest: choose which city you lose.",
+    "nothingToLose": "No player had a city the barbarians could take.",
+    "lowest_one": "The weakest defenders had {{count}} active knight level.",
+    "lowest_other": "The weakest defenders had {{count}} active knight levels.",
+    "knightsRest": "Every knight is inactive again.",
+    "robberFreed": "The robber is now active.",
+    "contributions": "Knights by player",
+    "show": "Show on board",
+    "dismiss": "Got it",
+    "more": "Details",
+    "marker": "Lost city"
   }
 }

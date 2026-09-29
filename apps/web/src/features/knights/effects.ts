@@ -18,6 +18,9 @@ function seatOf(state: GameState, value: unknown): Seat | undefined {
   return state.config.seats.find((seat) => seat === value);
 }
 
+/** How long an attack's ship takes to reach the island, before any city falls. */
+export const BARBARIAN_LANDING_MS = 900;
+
 /**
  * Motion cues for a knights update: the barbarian ship sailing or landing (read from the change
  * in the module's state, since an attack is not an event), knights arriving and moving, walls
@@ -46,8 +49,21 @@ export function deriveKnightsEffects(
         toStep: now.barbarians.step,
         ...(delayMs > 0 ? { delayMs } : {}),
       });
-    else if (now.barbarians.step < was.barbarians.step && now.lastAttack)
-      effects.push({
+    else if (now.barbarians.step < was.barbarians.step && now.lastAttack) {
+      // Cities lost at once (a seat with one city to lose) fall as the ship lands.
+      for (const piece of now.lastAttack.pillaged) {
+        const seat = seatOf(after, piece.seat);
+        if (!isVertexId(piece.vertex) || seat === undefined) continue;
+        effects.push({
+          id: `${revision}:pillage:${piece.vertex}`,
+          kind: 'pillage',
+          at: piece.vertex,
+          seat,
+          wall: was.walls.some((wall) => wall.vertex === piece.vertex),
+          delayMs: delayMs + BARBARIAN_LANDING_MS,
+        });
+      }
+      effects.unshift({
         id: `${revision}:barbarian-attack`,
         kind: 'barbarian-attack',
         fixture: fixture.id,
@@ -61,6 +77,7 @@ export function deriveKnightsEffects(
         ),
         ...(delayMs > 0 ? { delayMs } : {}),
       });
+    }
   }
   for (const [index, event] of events.entries()) {
     const id = `${revision}:knights:${index}`;
@@ -106,8 +123,14 @@ export function deriveKnightsEffects(
         fromVertex: f.from,
         toVertex: f.to,
       });
-    else if (event.type === 'cityPillaged' && isVertexId(vertex))
-      effects.push({ id, kind: 'burst', at: vertex, tone: 'fire' });
+    else if (event.type === 'cityPillaged' && seat !== undefined && isVertexId(vertex))
+      effects.push({
+        id,
+        kind: 'pillage',
+        at: vertex,
+        seat,
+        wall: was.walls.some((wall) => wall.vertex === vertex),
+      });
   }
   return effects;
 }

@@ -81,6 +81,7 @@
   "barbarianDefended": "The barbarians landed and were beaten back ({{defense}} against {{strength}}).",
   "barbarianDefender": "{{player}} led the defense and takes a Defender of Catan card.",
   "barbarianTied": "The defenders tied for the lead: each draws a progress card.",
+  "robberFreed": "The robber is active from now on.",
   "barbarianPillaged": "The barbarians landed and won ({{defense}} against {{strength}}).",
   "level": {
     "1": "a basic knight",

@@ -268,6 +268,20 @@ export type BoardEffect =
     }
   | {
       readonly id: string;
+      /**
+       * A city the barbarians pillaged: the old city (and its wall) flashes and shakes over the
+       * settlement it became, the wall falls away and the city sinks to reveal the settlement.
+       */
+      readonly kind: 'pillage';
+      readonly at: VertexId;
+      readonly seat: Seat;
+      /** The city had a wall, which is shown falling. */
+      readonly wall: boolean;
+      /** Wait this long first, so the ship can land. */
+      readonly delayMs?: number;
+    }
+  | {
+      readonly id: string;
       /** Embers over a pillaged city, or a shield ring over a knight that held. */
       readonly kind: 'burst';
       readonly at: VertexId;

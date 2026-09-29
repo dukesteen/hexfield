@@ -107,6 +107,20 @@ describe('log lines', () => {
         pillaged: [{ seat: 2 }, { seat: 7 }],
       }),
     ).toBe('The barbarians landed and won (1 against 4). Cy lost a city to the barbarians.');
+    expect(
+      line({
+        type: 'barbarianAttack',
+        outcome: 'pillaged',
+        strength: 2,
+        defense: 0,
+        defender: null,
+        tied: [],
+        pillaged: [{ seat: 2 }],
+        robberFreed: true,
+      }),
+    ).toBe(
+      'The barbarians landed and won (0 against 2). Cy lost a city to the barbarians. The robber is active from now on.',
+    );
     expect(line({ type: 'barbarianSail', step: 4, steps: 7 })).toBe(
       'The barbarian ship sails: step 4 of 7.',
     );

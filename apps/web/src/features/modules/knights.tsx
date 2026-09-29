@@ -9,6 +9,7 @@ import {
   getMetropolisIconUrl,
 } from '@cp2p/renderer';
 import { DialogFrame } from '../dialogs/DialogFrame';
+import { BarbarianAttackNotice } from '../knights/AttackNotice';
 import { MiniTracks } from '../knights/ImprovementsBoard';
 import {
   barbarianOdds,
@@ -237,7 +238,7 @@ export function KnightsPanelExtras({ state, seat, presentation }: ModulePanelPro
 
 export const knightsUi: UiModule = {
   PlayerPanelExtras: KnightsPanelExtras,
-  HudWidgets: [BarbarianCountdown],
+  HudWidgets: [BarbarianCountdown, BarbarianAttackNotice],
   Dialogs: { [BARBARIAN_FIXTURE]: BarbarianDialog },
 };
 

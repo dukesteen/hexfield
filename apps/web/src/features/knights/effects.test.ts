@@ -2,7 +2,7 @@ import { describe, expect, test } from 'vitest';
 import { createBaseEngine, knightsExt } from '@cp2p/engine';
 import type { AttackReport, GameEvent, GameState, KnightPiece, Seat } from '@cp2p/engine';
 import { DICE_SETTLE_MS } from '@cp2p/renderer';
-import { deriveKnightsEffects } from './effects';
+import { BARBARIAN_LANDING_MS, deriveKnightsEffects } from './effects';
 import { genesis } from './test-support';
 
 function change(
@@ -92,8 +92,18 @@ describe('the barbarian ship', () => {
       step: 0,
       lastAttack: report('pillaged', ['v:2,0,S', 'bad']),
     });
-    const [pillaged] = deriveKnightsEffects(before, lost, [], 21);
+    const [pillaged, fall, ...rest] = deriveKnightsEffects(before, lost, [], 21);
     expect(pillaged).toMatchObject({ outcome: 'pillaged', pillaged: ['v:2,0,S'] });
+    // The city lost at once falls as the ship lands.
+    expect(fall).toEqual({
+      id: '21:pillage:v:2,0,S',
+      kind: 'pillage',
+      at: 'v:2,0,S',
+      seat: 1,
+      wall: false,
+      delayMs: BARBARIAN_LANDING_MS,
+    });
+    expect(rest).toEqual([]);
   });
 
   test('a step back with no attack report shows nothing, and neither does a still ship', () => {
@@ -163,10 +173,10 @@ describe('pieces arriving and moving', () => {
     });
   });
 
-  test('a pillaged city burns', () => {
+  test('a city chosen for pillage falls at once', () => {
     const burned: GameEvent = { type: 'cityPillaged', seat: 2, vertex: 'v:2,1,N' };
     expect(deriveKnightsEffects(genesis, after, [burned], 8)).toEqual([
-      { id: '8:knights:0', kind: 'burst', at: 'v:2,1,N', tone: 'fire' },
+      { id: '8:knights:0', kind: 'pillage', at: 'v:2,1,N', seat: 2, wall: false },
     ]);
   });
 
