@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeAll, describe, expect, test, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { createInstance } from 'i18next';
 import { I18nextProvider } from 'react-i18next';
 import { createBaseEngine, failure, success } from '@cp2p/engine';
@@ -50,10 +50,14 @@ function goldState(bank: Record<string, number> = {}, claim = 2): GameState {
   };
 }
 
-function mount(state: GameState, onSubmit = vi.fn<(command: CommandShape) => void>()) {
+function mount(
+  state: GameState,
+  onSubmit = vi.fn<(command: CommandShape) => void>(),
+  priv: PrivateState = privateState,
+) {
   const props: CommandFormProps = {
     legal: { commands: [], templates: [] },
-    privateState,
+    privateState: priv,
     state,
     seat: 0,
     playerLabel: (seat) => (seat === 2 ? 'Nia' : `Player ${seat + 1}`),
@@ -110,6 +114,15 @@ describe('gold choice', () => {
     mount(goldState({ brick: 0, lumber: 0, wool: 0, grain: 1, ore: 0 }, 3));
     expect(screen.getByText('Selected 0 of 1')).toBeTruthy();
     expect(screen.getByText(/bank cannot pay 3 cards/)).toBeTruthy();
+  });
+
+  test('the chooser sees the cards already in their hand', () => {
+    mount(goldState(), undefined, {
+      ...privateState,
+      hand: { ...privateState.hand, ore: 3, wool: 1 },
+    });
+    const hand = screen.getByRole('group', { name: 'Your hand' });
+    expect(within(hand).getAllByRole('listitem')).toHaveLength(2);
   });
 
   test('the seats still to choose are named', () => {

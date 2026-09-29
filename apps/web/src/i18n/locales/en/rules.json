@@ -100,6 +100,7 @@
     "instruction_one": "Your gold field paid out. Take 1 card of any kind.",
     "instruction_other": "Your gold field paid out. Take {{count}} cards of any kind.",
     "cards": "Cards to take",
+    "yourHand": "Your hand",
     "bankShort": "The bank cannot pay {{claim}} cards, so you take fewer.",
     "bankHidden": "Bank counts are hidden. Choose only kinds the bank can still pay.",
     "waiting": "Then: {{players}}"
