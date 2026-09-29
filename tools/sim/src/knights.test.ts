@@ -35,7 +35,7 @@ describe('knights simulation', () => {
     let defended = 0;
     for (let gameIndex = 0; gameIndex < 40; gameIndex++) {
       const result = runGame({
-        seed: 36,
+        seed: 37,
         gameIndex,
         config: knightsConfig({ seats: 4 }),
       });
