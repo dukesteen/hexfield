@@ -167,11 +167,12 @@ function NewLocalGame() {
       localSave.genesis.length +
       localSave.batches.reduce((count, batch) => count + 1 + batch.generated.length, 0);
     const presentation: GamePresentation = {
-      players: selected.map(({ seat, name, color, shape }) => ({
+      players: selected.map(({ seat, name, color, shape, role, level }) => ({
         seat,
         name: name.trim(),
         color,
         shape,
+        ...(role === 'bot' ? { bot: level } : {}),
       })),
       botDelayMs,
     };

@@ -32,6 +32,8 @@ import { PLAYER_SHAPES } from '../players/identity';
 import './online.css';
 
 const SHAPES = PLAYER_SHAPES;
+/** The lobby's signed bot levels and the bots that play them ('medium' is Normal). */
+const ONLINE_BOT_LEVEL = { easy: 'easy', medium: 'normal', hard: 'hard' } as const;
 
 export function OnlineGameScreen({ gameId }: { gameId: string }) {
   const { t } = useTranslation('lobby');
@@ -290,7 +292,13 @@ function OnlineGameInstance({
         if (seat.kind === 'open')
           throw new Error('Online presentation has an unfilled or unsupported seat');
         const index = seat.seat;
-        return { seat: index, name: seat.name, color: seat.colour, shape: SHAPES[index] };
+        return {
+          seat: index,
+          name: seat.name,
+          color: seat.colour,
+          shape: SHAPES[index],
+          ...(seat.kind === 'bot' ? { bot: ONLINE_BOT_LEVEL[seat.botLevel] } : {}),
+        };
       }),
       botDelayMs: DEFAULT_BOT_DELAY_MS,
     }),
