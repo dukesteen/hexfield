@@ -199,8 +199,12 @@ test.describe('cities and knights, local', () => {
       }
     }
     expect(bought, 'an improvement was bought').toBe(true);
+    // The sidebar keeps a strip of the tracks; it opens the full board.
+    await page.getByTestId('improvements-strip').locator('visible=true').first().click();
     await expect(page.getByTestId('improve-science').locator('visible=true').first()).toBeVisible();
     await shot(page, testInfo, 'improvement-bought');
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('dialog')).toHaveCount(0);
     const ext = knightsOf(await gameState(page));
     expect(Object.values(ext.improvements[SEAT] ?? {}).some((level) => level > 0)).toBe(true);
     // A red die of one with the science gate draws a science card; a lit card in hand plays.
