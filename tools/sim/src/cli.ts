@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { Worker } from 'node:worker_threads';
 import { fromBase64Url, hashValue, toHex } from '@cp2p/codec';
 import { engineForConfig, kindBounds, kindsOfCounts } from '@cp2p/engine';
@@ -9,6 +9,11 @@ import { runBatch } from './batch.js';
 import type { BatchOptions, BatchResult } from './batch.js';
 import { runGame, SimulationFailure } from './run-game.js';
 import { fuzz } from './fuzz.js';
+import { playTournamentGames, summarizeTournament } from './tournament.js';
+import type { TournamentGame, TournamentOptions } from './tournament.js';
+import { isBotLevel } from '@cp2p/bots';
+import type { BotLevel } from '@cp2p/bots';
+
 import { updateGoldens } from './golden.js';
 import { updateKnightsGoldens } from './knights-golden.js';
 import { updateSeafarersKnightsGoldens } from './seafarers-knights-golden.js';
@@ -450,11 +455,96 @@ export function replayCommand(path: string): Record<string, unknown> {
   };
 }
 
+function tournamentWorker(options: TournamentOptions): Promise<TournamentGame[]> {
+  return new Promise((resolve, reject) => {
+    const worker = new Worker(new URL('./tournament-worker.js', import.meta.url), {
+      workerData: options,
+    });
+    let settled = false;
+    worker.once('message', (message: TournamentGame[]) => {
+      settled = true;
+      resolve(message);
+    });
+    worker.once('error', reject);
+    worker.once('exit', (code) => {
+      if (!settled) reject(new Error(`Tournament worker exited with code ${code}`));
+    });
+  });
+}
+
+/** Parse `--bots easy,normal,hard,random`: one level per seat, 2–6 seats. */
+export function parseBotLevels(value: string | boolean | undefined): BotLevel[] {
+  if (typeof value !== 'string')
+    throw new Error('--bots needs a list such as easy,random,random,random');
+  const levels = value.split(',');
+  const parsed = levels.filter(isBotLevel);
+  if (parsed.length !== levels.length || parsed.length < 2 || parsed.length > 6)
+    throw new Error('--bots lists 2–6 of random, easy, normal, hard');
+  return parsed;
+}
+
+/**
+ * `pnpm sim tournament --bots easy,random,random,random --games 2000 --seats-rotation`: play bot
+ * levels against each other and report win shares, average VP, game length and Elo.
+ */
+async function tournamentCommand(args: ParsedArgs): Promise<void> {
+  const bots = parseBotLevels(args.bots);
+  const games = integer(args.games, 100, 'games');
+  const parallel = integer(args.parallel, 1, 'parallel');
+  if (games < 1 || parallel < 1) throw new Error('--games and --parallel must be positive');
+  const options: TournamentOptions = {
+    bots,
+    games,
+    seed: integer(args.seed, 42, 'seed'),
+    rotation: args['seats-rotation'] === true,
+    verify: args['no-verify'] !== true,
+    ...(args['iterations'] === undefined
+      ? {}
+      : { iterationBudget: integer(args.iterations, 0, 'iterations') }),
+    ...(args['max-turns'] === undefined
+      ? {}
+      : { maxTurns: integer(args['max-turns'], 500, 'max-turns') }),
+    ...(scenarioOptions(args.scenario, bots.length).config
+      ? { config: scenarioOptions(args.scenario, bots.length).config }
+      : {}),
+  };
+  const fingerprint = sourceFingerprint();
+  const started = performance.now();
+  const workers = Math.min(parallel, games);
+  const parts =
+    workers === 1
+      ? [playTournamentGames(options)]
+      : await Promise.all(
+          Array.from({ length: workers }, (_, index) =>
+            tournamentWorker({ ...options, startIndex: index, stride: workers }),
+          ),
+        );
+  const played = parts.flat().toSorted((a, b) => a.gameIndex - b.gameIndex);
+  const output = {
+    mode: 'tournament',
+    bots,
+    seed: options.seed,
+    seatsRotation: options.rotation,
+    ...(typeof args.scenario === 'string' ? { scenario: args.scenario } : {}),
+    iterationBudget: options.iterationBudget ?? null,
+    verifyInvariants: options.verify !== false,
+    parallel: workers,
+    ...summarizeTournament(played, bots),
+    elapsedMilliseconds: performance.now() - started,
+    sourceFingerprint: fingerprint,
+    sourceUnchanged: sourceFingerprint() === fingerprint,
+  };
+  if (typeof args.out === 'string') writeFileSync(args.out, `${JSON.stringify(output, null, 2)}\n`);
+  console.log(JSON.stringify(output));
+  if (output.failedGames) process.exitCode = 1;
+}
+
 /** Entry point for `pnpm sim`. Output is one machine-readable JSON line. */
 export async function main(argv = process.argv.slice(2)): Promise<void> {
   const [command, ...rest] = argv;
   if (command === 'run' || command === 'bench')
     return runCommand(parseArgs(rest), command === 'bench');
+  if (command === 'tournament') return tournamentCommand(parseArgs(rest));
   if (command === 'replay') {
     const path = rest[0];
     if (!path || rest.length !== 1) throw new Error('Usage: pnpm sim replay <file>');
@@ -519,5 +609,5 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     if (result.failures.length) process.exitCode = 1;
     return;
   }
-  throw new Error('Usage: pnpm sim <run|bench|net|fuzz|replay|golden> [options]');
+  throw new Error('Usage: pnpm sim <run|bench|tournament|net|fuzz|replay|golden> [options]');
 }

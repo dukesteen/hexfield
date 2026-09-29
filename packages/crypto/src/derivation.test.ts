@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { hexToBytes } from '@noble/hashes/utils.js';
-import { DERIVATION_LABELS, deriveBytes, deriveScalar } from './derivation.js';
+import { DERIVATION_LABELS, deriveBotSeed, deriveBytes, deriveScalar } from './derivation.js';
 import { SCALAR_ORDER } from './group.js';
 
 const SEED = Uint8Array.from({ length: 32 }, (_, index) => index);
@@ -13,6 +13,16 @@ describe('Stage 07 HKDF derivation', () => {
     expect(() =>
       Object.defineProperty(DERIVATION_LABELS, 'uniformInt', { value: 'beacon-seed' }),
     ).toThrow(/Cannot redefine property/);
+  });
+
+  test('derives a bot seed from a master secret under the bot label', () => {
+    const seed = deriveBotSeed(SEED, { game: 'g', seat: 2 });
+    expect(seed).toHaveLength(32);
+    expect(seed).toEqual(deriveBytes(SEED, DERIVATION_LABELS.bot, { game: 'g', seat: 2 }, 32));
+    expect(deriveBotSeed(SEED, { game: 'g', seat: 3 })).not.toEqual(seed);
+    expect(
+      deriveBytes(SEED, DERIVATION_LABELS.genesisSeed, { game: 'g', seat: 2 }, 32),
+    ).not.toEqual(seed);
   });
 
   test('derives deterministic, detached bytes bound to label and canonical context', () => {

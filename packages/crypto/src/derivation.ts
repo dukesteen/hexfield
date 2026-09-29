@@ -19,6 +19,7 @@ export const DERIVATION_LABELS = Object.freeze({
   sealEphemeral: 'seal-ephemeral',
   escrowCoefficient: 'escrow-coefficient',
   escrowDistributionEntropy: 'escrow-distribution-entropy',
+  bot: 'bot',
 } as const);
 
 export type DerivationLabel = (typeof DERIVATION_LABELS)[keyof typeof DERIVATION_LABELS];
@@ -61,4 +62,13 @@ export function deriveScalar(seed: Uint8Array, label: DerivationLabel, context: 
     if (scalar !== 0n) return scalar;
   }
   throw new Error('Could not derive a nonzero scalar after 256 attempts.');
+}
+
+/**
+ * A hosted bot's RNG seed, derived from its seat's master secret under the `bot` label, so its
+ * play is reproducible for audits and debugging without revealing the secret. `context` binds the
+ * game (for example its id and the seat).
+ */
+export function deriveBotSeed(masterSecret: Uint8Array, context: unknown): Uint8Array {
+  return deriveBytes(masterSecret, DERIVATION_LABELS.bot, context, 32);
 }

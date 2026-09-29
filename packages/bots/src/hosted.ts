@@ -1,22 +1,10 @@
 import { engineForConfig } from '@cp2p/engine';
-import type { CommandShape, Engine, Pending, TradeOffer } from '@cp2p/engine';
+import type { CommandShape, Engine, Pending, Seat } from '@cp2p/engine';
+import { openOffers } from './offers.js';
 import { buildTarget } from './random-bot.js';
-import type { Bot, BotRng, BotView } from './types.js';
+import type { Bot, BotRng, BotView, DecideContext } from './types.js';
 
 type Counts = Readonly<Record<string, number>>;
-
-function record(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function openOffers(view: BotView): TradeOffer[] {
-  const base = view.state.ext.base;
-  const offers = record(base) ? base.offers : undefined;
-  // The engine owns this shape; the reader only skips what it cannot use.
-  return Array.isArray(offers)
-    ? offers.filter((offer): offer is TradeOffer => record(offer) && typeof offer.id === 'number')
-    : [];
-}
 
 function total(counts: Counts): number {
   return Object.values(counts).reduce((sum, count) => sum + count, 0);
@@ -55,9 +43,11 @@ export function hostedTradeCommand(
   view: BotView,
   pending: Pending,
   engine: Engine = engineForConfig(view.state.config),
+  wants: (gets: Counts, gives: Counts, partner: Seat) => boolean = (gets, gives) =>
+    wantsTrade(view, gets, gives),
 ): CommandShape | null {
   if (pending.kind !== 'player' || pending.seat !== view.seat) return null;
-  const offers = openOffers(view);
+  const offers = openOffers(view.state);
   const active = view.state.turn.activeSeat === view.seat;
   if (!active) {
     if (!pending.allowed.includes('RESPOND_TRADE')) return null;
@@ -72,7 +62,7 @@ export function hostedTradeCommand(
     const command = {
       type: 'RESPOND_TRADE',
       offerId: offer.id,
-      accept: wantsTrade(view, offer.give, offer.want),
+      accept: wants(offer.give, offer.want, offer.proposer),
     };
     return valid(engine, view, command) ? command : null;
   }
@@ -80,7 +70,7 @@ export function hostedTradeCommand(
     const own = offer.proposer === view.seat;
     if (!own && !offer.to.includes(view.seat)) continue;
     const partners = own ? offer.acceptedBy : [offer.proposer];
-    const takes = own || wantsTrade(view, offer.give, offer.want);
+    const takes = own || wants(offer.give, offer.want, offer.proposer);
     if (takes && pending.allowed.includes('CONFIRM_TRADE'))
       for (const withSeat of partners) {
         const confirm = { type: 'CONFIRM_TRADE', offerId: offer.id, withSeat };
@@ -92,13 +82,24 @@ export function hostedTradeCommand(
   return null;
 }
 
-/** A hosted bot's move: settle trades first (see `hostedTradeCommand`), else its own policy. */
+/**
+ * A hosted bot's move: settle trades first (see `hostedTradeCommand`, judged by the bot's own
+ * trade evaluation when it has one), else its own policy.
+ */
 export function decideHosted(
   bot: Bot,
   view: BotView,
   pending: Pending,
   rng: BotRng,
   engine?: Engine,
+  context?: DecideContext,
 ): CommandShape {
-  return hostedTradeCommand(view, pending, engine) ?? bot.decide(view, pending, rng);
+  const judge = bot.wantsTrade?.bind(bot);
+  const settled = hostedTradeCommand(
+    view,
+    pending,
+    engine,
+    judge ? (gets, gives, partner) => judge(view, gets, gives, partner) : undefined,
+  );
+  return settled ?? bot.decide(view, pending, rng, context);
 }

@@ -1,4 +1,5 @@
-import { RandomBot, createBotRng } from '@cp2p/bots';
+import { RandomBot, createBot, createBotRng, createBotView } from '@cp2p/bots';
+import type { Bot, BotLevel } from '@cp2p/bots';
 import { canonicalEncode, hashValue, toHex } from '@cp2p/codec';
 import { LocalGame, devCardCountsFor, engineForConfig, moduleSelection } from '@cp2p/engine';
 import type {
@@ -26,6 +27,15 @@ export interface RunGameOptions extends LocalRandomOptions {
   verify?: boolean;
   maxTurns?: number;
   maxInputsWithoutTurn?: number;
+  /**
+   * The bot level at each seat, in seat order; every seat plays RandomBot when absent (the
+   * goldens and every earlier simulation).
+   */
+  bots?: readonly BotLevel[];
+  /** Search iterations per searching-bot decision (the Hard bot), so results are reproducible. */
+  iterationBudget?: number;
+  /** Called when a bot falls back to a random move for a decision it has no policy for. */
+  onBotWarning?: (seat: Seat, message: string) => void;
   /** Optional test observer, called with only the acting seat's private state. */
   onPlayerStep?: (engine: Engine, state: GameState, seat: Seat, priv: PrivateState) => void;
 }
@@ -41,6 +51,8 @@ export interface GameStats {
   applyNanoseconds: number;
   applyDurationsNanoseconds: number[];
   elapsedNanoseconds: number;
+  /** Each seat's final victory points, hidden cards included, in seat order. */
+  vp: number[];
 }
 
 export interface RunGameResult {
@@ -280,7 +292,16 @@ export function runGame(options: RunGameOptions): RunGameResult {
       'driver-failure',
     );
   const game = created.value;
-  const bots = config.seats.map(() => new RandomBot(underlying));
+  if (options.bots && options.bots.length !== config.seats.length)
+    throw new RangeError('One bot level is needed per seat');
+  const bots: Bot[] = config.seats.map((_, index) => {
+    const level = options.bots?.[index];
+    return level === undefined ? new RandomBot(underlying) : createBot(level, underlying);
+  });
+  const decideContext = (seat: Seat) => ({
+    ...(options.iterationBudget === undefined ? {} : { iterationBudget: options.iterationBudget }),
+    warn: (message: string) => options.onBotWarning?.(seat, message),
+  });
   const botRngs = config.seats.map((seat) =>
     createBotRng(deriveSeed(options.seed, options.gameIndex, 'bot', seat)),
   );
@@ -299,7 +320,9 @@ export function runGame(options: RunGameOptions): RunGameResult {
       if (!priv || !bot || !botRng)
         throw new Error(`Missing bot or private state for seat ${seat}`);
       options.onPlayerStep?.(underlying, state, seat, priv);
-      const command = bot.decide({ state, priv, seat }, pending, botRng);
+      const command = options.bots
+        ? bot.decide(createBotView(state, priv, seat), pending, botRng, decideContext(seat))
+        : bot.decide({ state, priv, seat }, pending, botRng);
       input = { kind: 'command', seat, command };
       const next = game.submit(input);
       if (!next.ok)
@@ -354,6 +377,11 @@ export function runGame(options: RunGameOptions): RunGameResult {
       applyNanoseconds,
       applyDurationsNanoseconds,
       elapsedNanoseconds: Number(process.hrtime.bigint() - gameStarted),
+      vp: config.seats.map((seat) => {
+        const priv = game.privateView(seat);
+        const points = underlying.computeVictoryPoints(state, seat, priv);
+        return points.total ?? points.public;
+      }),
     },
   };
 }

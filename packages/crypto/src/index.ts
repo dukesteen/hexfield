@@ -29,7 +29,7 @@ export {
   scalePoint,
 } from './group.js';
 export type { RistrettoPoint } from './group.js';
-export { DERIVATION_LABELS, deriveBytes, deriveScalar } from './derivation.js';
+export { DERIVATION_LABELS, deriveBotSeed, deriveBytes, deriveScalar } from './derivation.js';
 export type { DerivationLabel } from './derivation.js';
 export { createHashChain, verifyHashChainLink } from './hash-chain.js';
 export { uniformInt } from './uniform.js';
