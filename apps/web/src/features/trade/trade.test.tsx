@@ -6,16 +6,20 @@ import { I18nextProvider } from 'react-i18next';
 import { createBaseEngine, failure, success } from '@cp2p/engine';
 import type {
   CommandShape,
+  GameEvent,
+  GameState,
   LegalCommandSet,
   PrivateState,
   ResourceCounts,
   Result,
+  Seat,
 } from '@cp2p/engine';
 import rules from '../../i18n/locales/en/rules.json';
 import type { CommandFormProps } from '../dialogs/types.js';
 import { BankTradePicker } from './BankTradePicker.js';
 import { IncomingOffers } from './IncomingOffers.js';
 import { TradeComposer } from './TradeComposer.js';
+import { TradeNotice } from './TradeNotice.js';
 
 const i18n = createInstance();
 beforeAll(async () => {
@@ -48,7 +52,7 @@ function props(
     privateState,
     state,
     seat: 0,
-    playerLabel: (seat) => (seat === 2 ? 'Bea' : seat === 1 ? 'Ari' : 'You'),
+    playerLabel: label,
     validate,
     onSubmit,
   };
@@ -90,6 +94,44 @@ function validateBank(command: CommandShape): Result<void> {
       Reflect.get(get, 'grain') === 1)
     ? success(undefined)
     : failure('terms', 'Invalid bank trade');
+}
+
+/** The base state with one open offer; unspecified terms are one brick for one ore. */
+function withOffer(offer: Record<string, unknown>, activeSeat: Seat = 0): GameState {
+  return {
+    ...state,
+    turn: { ...state.turn, activeSeat },
+    ext: {
+      ...state.ext,
+      base: {
+        offers: [
+          { id: 5, give: { brick: 1 }, want: { ore: 1 }, declinedBy: [], valid: true, ...offer },
+        ],
+      },
+    },
+  };
+}
+
+const label = (seat: Seat) => (seat === 2 ? 'Bea' : seat === 1 ? 'Ari' : 'You');
+
+function noticeView(current: GameState, log: GameEvent[]) {
+  return (
+    <I18nextProvider i18n={i18n}>
+      <TradeNotice state={current} events={log} seat={0} playerLabel={label} />
+    </I18nextProvider>
+  );
+}
+
+/** The status line an offer shows the viewer (seat 0). */
+function hintFor(offer: Record<string, unknown>, commands: CommandShape[], activeSeat: Seat = 0) {
+  cleanup();
+  mount(
+    <IncomingOffers
+      {...props({ commands, templates: [] }, () => success(undefined))}
+      state={withOffer(offer, activeSeat)}
+    />,
+  );
+  return screen.queryByRole('status')?.textContent ?? null;
 }
 
 describe('controlled trade forms', () => {
@@ -345,5 +387,69 @@ describe('controlled trade forms', () => {
       </I18nextProvider>,
     );
     expect(details?.open).toBe(false);
+  });
+
+  test('says what an answered offer waits for, on both sides of the trade', () => {
+    const cancel = { type: 'CANCEL_TRADE', offerId: 5 };
+    const confirm = { type: 'CONFIRM_TRADE', offerId: 5, withSeat: 2 };
+    // A bot's offer the viewer accepted: the viewer waits for the bot to confirm.
+    expect(hintFor({ proposer: 1, to: [0, 2], acceptedBy: [0] }, [cancel], 1)).toBe(
+      'You accepted. Waiting for Ari to confirm.',
+    );
+    // The viewer's own offer, before, after and without acceptance.
+    expect(hintFor({ proposer: 0, to: [1, 2], acceptedBy: [] }, [cancel])).toBe(
+      'Waiting for replies…',
+    );
+    expect(hintFor({ proposer: 0, to: [1, 2], acceptedBy: [2] }, [cancel, confirm])).toBe(
+      'Bea accepted. Trade to complete it.',
+    );
+    expect(hintFor({ proposer: 0, to: [1, 2], acceptedBy: [], declinedBy: [1, 2] }, [cancel])).toBe(
+      'Everyone declined. Withdraw the offer or send a new one.',
+    );
+    // A counter-offer the viewer made to the active player.
+    expect(hintFor({ proposer: 0, to: [1], acceptedBy: [] }, [cancel], 1)).toBe(
+      'Waiting for Ari to answer your offer.',
+    );
+  });
+
+  test('announces how the viewer’s open trade ended instead of letting it vanish', () => {
+    vi.useFakeTimers();
+    try {
+      const open = (offer: Record<string, unknown>) => withOffer({ id: 3, ...offer });
+      const closed: GameState = { ...state, ext: { ...state.ext, base: { offers: [] } } };
+      const outcome = (before: GameState, events: GameEvent[]) => {
+        cleanup();
+        const { rerender } = render(noticeView(before, []));
+        rerender(noticeView(closed, events));
+        return screen.queryByRole('status')?.textContent ?? null;
+      };
+      const botOffer = open({ proposer: 1, to: [0, 2], acceptedBy: [0] });
+      expect(outcome(botOffer, [{ type: 'tradeConfirmed', offerId: 3, withSeat: 0 }])).toBe(
+        'Trade with Ari completed.',
+      );
+      expect(outcome(botOffer, [{ type: 'tradeConfirmed', offerId: 3, withSeat: 2 }])).toBe(
+        'Ari traded with Bea instead.',
+      );
+      expect(outcome(botOffer, [{ type: 'tradeCancelled', offerId: 3, seat: 1 }])).toBe(
+        'Ari withdrew the offer.',
+      );
+      expect(outcome(botOffer, [{ type: 'turnEnded' }])).toBe(
+        'The offer expired when the turn ended.',
+      );
+      const counter = open({ proposer: 0, to: [1], acceptedBy: [] });
+      expect(outcome(counter, [{ type: 'tradeCancelled', offerId: 3, seat: 1 }])).toBe(
+        'Ari turned down your offer.',
+      );
+      // The viewer's own withdrawal needs no word.
+      expect(outcome(counter, [{ type: 'tradeCancelled', offerId: 3, seat: 0 }])).toBeNull();
+      // The notice clears itself.
+      expect(outcome(botOffer, [{ type: 'tradeCancelled', offerId: 3, seat: 1 }])).not.toBeNull();
+      act(() => {
+        vi.advanceTimersByTime(6_000);
+      });
+      expect(screen.queryByRole('status')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

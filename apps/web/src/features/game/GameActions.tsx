@@ -19,6 +19,7 @@ import {
   SETTLEMENT_COST,
   SHIP_COST,
   type CommandShape,
+  type GameEvent,
   type GameState,
   type Pending,
   type Resource,
@@ -37,7 +38,7 @@ import {
   YearOfPlentyDialog,
 } from '../dialogs';
 import { ActionPendingContext } from '../dialogs/DialogFrame';
-import { BankTradePicker, IncomingOffers, TradeComposer } from '../trade';
+import { BankTradePicker, IncomingOffers, TradeComposer, TradeNotice } from '../trade';
 import {
   sessionForActions,
   useSessionStore,
@@ -197,6 +198,8 @@ function placementHit(candidate: PlacementCandidate): BoardHit | null {
   return null;
 }
 
+const NO_EVENTS: readonly GameEvent[] = [];
+
 export interface GameActionController {
   actorSeat: Seat;
   availability: ReturnType<typeof deriveActionAvailability> | null;
@@ -218,6 +221,8 @@ export interface GameActionController {
   onBoardSelect(hit: BoardHit): void;
   targetLabel(hit: BoardHit): string;
   offerOverlay: React.ReactNode;
+  /** How the viewer's last open trade ended, shown briefly above the offers. */
+  tradeNotice: React.ReactNode;
   placementActive: boolean;
   knightIntent: { slotId: string; confirm: () => void; cancel: () => void } | null;
   toggleKnightIntent: (slotId: string) => void;
@@ -332,7 +337,9 @@ export function useGameActions(
   const voided = status?.kind === 'void';
   const conflicted = useSessionStore((store) => store.conflicted);
   const revision = useSessionStore((store) => store.revision);
-  const lastEvent = useSessionStore((store) => store.events)?.at(-1);
+  // Some test stores leave the log out; a shared empty list keeps the notice's input stable.
+  const events = useSessionStore((store) => store.events) ?? NO_EVENTS;
+  const lastEvent = events.at(-1);
   const boardKind = useSessionStore((store) => store.placementMode);
   const boardCancelled = useSessionStore((store) => store.placementCancelled);
   const previewPlacement = useSessionStore((store) => store.previewPlacement);
@@ -1555,6 +1562,10 @@ export function useGameActions(
     ) ? (
       <IncomingOffers {...formProps} collapsedWhilePlacing={selectedKind !== undefined} />
     ) : null;
+  const tradeNotice =
+    seat !== null ? (
+      <TradeNotice state={state} events={events} seat={seat} playerLabel={playerLabel} />
+    ) : null;
 
   return {
     actorSeat,
@@ -1565,6 +1576,7 @@ export function useGameActions(
     onBoardSelect,
     targetLabel,
     offerOverlay,
+    tradeNotice,
     placementActive: selectedKind !== undefined,
     knightIntent:
       selectedKnight && slotId
