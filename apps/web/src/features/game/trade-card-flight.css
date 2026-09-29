@@ -12,7 +12,7 @@
   justify-items: center;
   gap: 3px;
   transform-origin: center;
-  animation: trade-card-flight 400ms cubic-bezier(0.2, 0.75, 0.25, 1) forwards;
+  animation: trade-card-flight 650ms cubic-bezier(0.22, 0.68, 0.24, 1) forwards;
   filter: drop-shadow(0 3px 7px #091d1740);
 }
 
@@ -33,13 +33,18 @@
   line-height: 1.2;
 }
 
+/* The card reaches its slot at 80% (when the count ticks), then fades. */
 @keyframes trade-card-flight {
-  from {
-    transform: translate(-50%, -50%) scale(0.94);
+  0% {
+    transform: translate(-50%, -50%) scale(1);
     opacity: 1;
   }
-  to {
-    transform: translate(calc(-50% + var(--flight-dx)), calc(-50% + var(--flight-dy))) scale(0.82);
+  80% {
+    transform: translate(calc(-50% + var(--flight-dx)), calc(-50% + var(--flight-dy))) scale(0.9);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(calc(-50% + var(--flight-dx)), calc(-50% + var(--flight-dy))) scale(0.9);
     opacity: 0;
   }
 }

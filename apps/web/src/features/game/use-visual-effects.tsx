@@ -1,12 +1,16 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
-import { RESOURCES, type Resource, type Seat } from '@cp2p/engine';
+import { RESOURCES, isBaseResource, type GameState, type Resource, type Seat } from '@cp2p/engine';
+import type { GameSession } from '@cp2p/protocol';
 import type { BoardRenderer } from '@cp2p/renderer';
 import {
   DICE_ROLL_DURATION_MS,
   PRODUCTION_TOKEN_PULSE_MS,
+  getCommodityCardUrl,
   getResourceCardUrl,
 } from '@cp2p/renderer';
 import { sessionForActions, useSessionStore } from '../../store/session-store';
+import type { CardEnd, CardFlight, HandView } from './card-flights';
+import { useCardHolds, type CountHold } from './card-holds';
 import { deriveVisualEffects, type ProductionGain } from './visual-effects';
 import './trade-card-flight.css';
 import './steal-card-flight.css';
@@ -21,9 +25,10 @@ interface FlightView {
   dy: number;
 }
 
-interface TradeFlightView {
+interface CardFlightView {
   id: string;
-  resource: Resource;
+  /** The face to draw, or null for a card back. */
+  face: string | null;
   count: number;
   x: number;
   y: number;
@@ -31,13 +36,14 @@ interface TradeFlightView {
   dy: number;
 }
 
-interface StealFlightView {
-  id: string;
-  x: number;
-  y: number;
-  dx: number;
-  dy: number;
-}
+/** Flight timings, matching the CSS animations: a card counts as landed when it reaches its slot. */
+const PRODUCTION_LANDS_MS = 1150;
+const PRODUCTION_FLIGHT_MS = 1400;
+const CARD_LANDS_MS = 520;
+const CARD_FLIGHT_MS = 650;
+const SCROLL_SETTLE_MS = 350;
+/** How long past its flight a hold may live if its flight never reports back. */
+const HOLD_SLACK_MS = 2000;
 
 interface TimedProductionGain extends ProductionGain {
   readonly expiresAt: number;
@@ -144,63 +150,302 @@ function visibleCenter(element: HTMLElement): { x: number; y: number } | null {
   return point;
 }
 
-function receivingHandCard(seat: Seat, resource: Resource): HTMLElement | null {
-  if (useSessionStore.getState().revealedSeat !== seat) return null;
-  return document.querySelector<HTMLElement>(`.hand-dock [data-resource="${resource}"] img`);
+type Point = { x: number; y: number };
+
+/** When the nth production card of an update takes off: after the dice and the token pulse. */
+function launchAt(index: number): number {
+  return DICE_ROLL_DURATION_MS + PRODUCTION_TOKEN_PULSE_MS + index * 140;
 }
 
-/** Visual effects are observed after accepted updates and never feed back into rules. */
-export function useVisualEffects(renderer: BoardRenderer | null, reducedMotion: boolean) {
+function flightStyle(flight: { x: number; y: number; dx: number; dy: number }) {
+  return {
+    left: flight.x,
+    top: flight.y,
+    '--flight-dx': `${flight.dx}px`,
+    '--flight-dy': `${flight.dy}px`,
+  } satisfies CSSProperties & { '--flight-dx': string; '--flight-dy': string };
+}
+
+function cardFaceUrl(kind: string): string {
+  if (isBaseResource(kind)) return getResourceCardUrl(kind);
+  return getCommodityCardUrl(kind === 'paper' || kind === 'cloth' ? kind : 'coin');
+}
+
+/** The revealed seat's slot for a card kind in the hand dock. */
+function handSlot(seat: Seat, kind: string): HTMLElement | null {
+  if (useSessionStore.getState().revealedSeat !== seat) return null;
+  return document.querySelector<HTMLElement>(`.hand-dock [data-resource="${kind}"] img`);
+}
+
+function seatPanel(seat: Seat): HTMLElement | null {
+  return document.querySelector<HTMLElement>(`[data-seat-panel="${seat}"]`);
+}
+
+function centerOf(selector: string): Point | null {
+  const element = document.querySelector<HTMLElement>(selector);
+  return element ? visibleCenter(element) : null;
+}
+
+function clamp(value: number, low: number, high: number): number {
+  return Math.min(high, Math.max(low, value));
+}
+
+/**
+ * The nearest visible point to an element scrolled out of its container (a panel further down a
+ * player rail), so a card still flies toward it.
+ */
+function edgeOfView(element: HTMLElement): Point | null {
+  const rect = element.getBoundingClientRect();
+  if (rect.width <= 0 || rect.height <= 0) return null;
+  let left = 0;
+  let top = 0;
+  let right = window.innerWidth;
+  let bottom = window.innerHeight;
+  for (let parent = element.parentElement; parent; parent = parent.parentElement) {
+    const style = getComputedStyle(parent);
+    if (![style.overflowX, style.overflowY].some((value) => value !== 'visible')) continue;
+    const box = parent.getBoundingClientRect();
+    left = Math.max(left, box.left + parent.clientLeft);
+    top = Math.max(top, box.top + parent.clientTop);
+    right = Math.min(right, box.left + parent.clientLeft + parent.clientWidth);
+    bottom = Math.min(bottom, box.top + parent.clientTop + parent.clientHeight);
+  }
+  if (right <= left || bottom <= top) return null;
+  return {
+    x: clamp(rect.left + rect.width / 2, left, right),
+    y: clamp(rect.top + rect.height / 2, top, bottom),
+  };
+}
+
+/** A slot that exists but is scrolled out of its hand; it can be brought into view first. */
+function clippedSlot(slot: HTMLElement | null): HTMLElement | null {
+  return slot && slot.getBoundingClientRect().width > 0 && !visibleCenter(slot) ? slot : null;
+}
+
+/**
+ * Where a card leaves or lands: the kind's slot in the revealed hand, else the hand, else the
+ * seat's panel; for the bank, that kind's bank card, else the bank, else the board.
+ */
+function cardEndPoint(end: CardEnd, face: string | null): Point | null {
+  if (end === 'bank')
+    return (
+      (face ? centerOf(`.bank-panel [data-resource="${face}"]`) : null) ??
+      centerOf('.bank-panel') ??
+      centerOf('.board-view-canvas')
+    );
+  const slot = face ? handSlot(end, face) : null;
+  const shown = useSessionStore.getState().revealedSeat === end;
+  const panel = seatPanel(end);
+  return (
+    (slot && visibleCenter(slot)) ??
+    (shown ? centerOf('.hand-dock .hand-cards') : null) ??
+    (panel && (visibleCenter(panel) ?? edgeOfView(panel)))
+  );
+}
+
+/** The true hands this client may read, by seat. */
+function knownHands(session: GameSession, state: GameState): Map<Seat, Record<string, number>> {
+  const hands = new Map<Seat, Record<string, number>>();
+  for (const seat of state.config.seats) {
+    const hand = session.getPrivate(seat)?.hand;
+    if (hand) hands.set(seat, { ...hand });
+  }
+  return hands;
+}
+
+function sameHands(
+  a: ReadonlyMap<Seat, Readonly<Record<string, number>>>,
+  b: ReadonlyMap<Seat, Readonly<Record<string, number>>>,
+): boolean {
+  if (a.size !== b.size) return false;
+  for (const [seat, hand] of a) {
+    const other = b.get(seat);
+    if (!other) return false;
+    const kinds = new Set([...Object.keys(hand), ...Object.keys(other)]);
+    for (const kind of kinds) if ((hand[kind] ?? 0) !== (other[kind] ?? 0)) return false;
+  }
+  return true;
+}
+
+/** Holds for a card flight: its cards land in the receiver and leave the giver. */
+function cardFlightHolds(flight: CardFlight, expiresAt: number): CountHold[] {
+  const holds: CountHold[] = [];
+  if (flight.to !== 'bank')
+    holds.push({
+      id: `${flight.id}:in`,
+      seat: flight.to,
+      kind: flight.face,
+      delta: flight.count,
+      expiresAt,
+    });
+  if (flight.from !== 'bank')
+    holds.push({
+      id: `${flight.id}:out`,
+      seat: flight.from,
+      kind: flight.face,
+      delta: -flight.count,
+      expiresAt,
+    });
+  return holds;
+}
+
+/**
+ * Visual effects are observed after accepted updates and never feed back into rules. While a
+ * card is in the air the hand and panel counts it touches hold their old value (see card-holds):
+ * a receiver's count ticks up when the card lands, a giver's drops as it takes off.
+ */
+export function useVisualEffects(
+  renderer: Pick<BoardRenderer, 'playEffects' | 'skipAnimations' | 'getPixelPosition'> | null,
+  reducedMotion: boolean,
+) {
   const [flights, setFlights] = useState<FlightView[]>([]);
-  const [tradeFlights, setTradeFlights] = useState<TradeFlightView[]>([]);
-  const [stealFlights, setStealFlights] = useState<StealFlightView[]>([]);
-  const pendingStealFrames = useRef<Set<number>>(new Set());
-  const pendingProductionTimers = useRef<Set<number>>(new Set());
+  const [cardFlights, setCardFlights] = useState<CardFlightView[]>([]);
+  const pendingFrames = useRef<Set<number>>(new Set());
+  const pendingTimers = useRef<Set<number>>(new Set());
   const cancelPendingFlights = useCallback(() => {
-    for (const frame of pendingStealFrames.current) window.cancelAnimationFrame(frame);
-    pendingStealFrames.current.clear();
-    for (const timer of pendingProductionTimers.current) window.clearTimeout(timer);
-    pendingProductionTimers.current.clear();
+    for (const frame of pendingFrames.current) window.cancelAnimationFrame(frame);
+    pendingFrames.current.clear();
+    for (const timer of pendingTimers.current) window.clearTimeout(timer);
+    pendingTimers.current.clear();
+    useCardHolds.getState().clear();
   }, []);
   const session = sessionForActions();
   const { receipts, add: addProductionGains } = useProductionReceipts(session);
   useEffect(() => {
     setFlights([]);
-    setTradeFlights([]);
-    setStealFlights([]);
+    setCardFlights([]);
     return cancelPendingFlights;
   }, [cancelPendingFlights, session]);
   useEffect(() => {
     if (reducedMotion) {
       cancelPendingFlights();
       setFlights([]);
-      setTradeFlights([]);
-      setStealFlights([]);
+      setCardFlights([]);
     }
   }, [cancelPendingFlights, reducedMotion]);
   useEffect(() => {
     if (!session) return undefined;
-    const scheduleProduction = (run: () => void, delay: number) => {
+    const schedule = (run: () => void, delay: number) => {
       const timer = window.setTimeout(() => {
-        pendingProductionTimers.current.delete(timer);
+        pendingTimers.current.delete(timer);
         run();
       }, delay);
-      pendingProductionTimers.current.add(timer);
+      pendingTimers.current.add(timer);
+    };
+    const nextFrame = (run: () => void) => {
+      const frame = window.requestAnimationFrame(() => {
+        pendingFrames.current.delete(frame);
+        run();
+      });
+      pendingFrames.current.add(frame);
+    };
+    const release = (...ids: string[]) => useCardHolds.getState().release(ids);
+    const hold = (holds: readonly CountHold[]) => {
+      if (holds.length === 0) return;
+      useCardHolds.getState().add(holds);
+      const now = Date.now();
+      for (const expiresAt of new Set(holds.map((item) => item.expiresAt)))
+        schedule(() => useCardHolds.getState().prune(Date.now()), expiresAt - now);
+    };
+    const launchCard = (flight: CardFlight, retried: boolean) => {
+      const revealed = useSessionStore.getState().revealedSeat;
+      // A private face shows only while its own seat's hand is on screen.
+      const face =
+        flight.private && revealed !== flight.from && revealed !== flight.to ? null : flight.face;
+      if (!retried && face) {
+        const clipped =
+          clippedSlot(flight.from === 'bank' ? null : handSlot(flight.from, face)) ??
+          clippedSlot(flight.to === 'bank' ? null : handSlot(flight.to, face));
+        if (clipped) {
+          clipped.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+          schedule(() => launchCard(flight, true), SCROLL_SETTLE_MS);
+          return;
+        }
+      }
+      const from = cardEndPoint(flight.from, face);
+      const to = cardEndPoint(flight.to, face);
+      if (!from || !to) {
+        release(`${flight.id}:in`, `${flight.id}:out`);
+        return;
+      }
+      release(`${flight.id}:out`);
+      setCardFlights((current) => [
+        ...current.filter((item) => item.id !== flight.id),
+        {
+          id: flight.id,
+          face,
+          count: flight.count,
+          x: from.x,
+          y: from.y,
+          dx: to.x - from.x,
+          dy: to.y - from.y,
+        },
+      ]);
+      schedule(() => release(`${flight.id}:in`), CARD_LANDS_MS);
     };
     let before = session.getState();
+    let hands = knownHands(session, before);
+    let revision = -Infinity;
     const unsubscribe = session.subscribe((update) => {
-      const cues = deriveVisualEffects(before, update.state, update.events, update.revision);
+      const nextHands = knownHands(session, update.state);
+      const jump =
+        update.revision < revision ||
+        (update.events.length === 0 && (update.state !== before || !sameHands(hands, nextHands)));
+      const viewerSeat = useSessionStore.getState().revealedSeat;
+      const beforeHand = viewerSeat === null ? undefined : hands.get(viewerSeat);
+      const afterHand = viewerSeat === null ? undefined : nextHands.get(viewerSeat);
+      const viewer: HandView | null =
+        viewerSeat !== null && beforeHand && afterHand
+          ? { seat: viewerSeat, before: beforeHand, after: afterHand }
+          : null;
+      const previous = before;
       before = update.state;
+      hands = nextHands;
+      revision = update.revision;
+      if (jump) {
+        // Undo, restore or a resync: show the new state as it is, with nothing in the air.
+        cancelPendingFlights();
+        setFlights([]);
+        setCardFlights([]);
+        return;
+      }
+      const cues = deriveVisualEffects(
+        previous,
+        update.state,
+        update.events,
+        update.revision,
+        viewer,
+      );
       if (cues.productionGains.length) addProductionGains(cues.productionGains);
       if (renderer && cues.board.length) renderer.playEffects(cues.board);
       if (reducedMotion) return;
+      const now = Date.now();
+      if (renderer)
+        hold(
+          cues.flights.map((flight, index) => ({
+            id: `${flight.id}:in`,
+            seat: flight.seat,
+            kind: flight.resource,
+            delta: flight.count,
+            expiresAt:
+              now + launchAt(index) + SCROLL_SETTLE_MS + PRODUCTION_FLIGHT_MS + HOLD_SLACK_MS,
+          })),
+        );
+      hold(
+        cues.cardFlights.flatMap((flight) =>
+          cardFlightHolds(flight, now + SCROLL_SETTLE_MS + CARD_FLIGHT_MS + HOLD_SLACK_MS),
+        ),
+      );
       if (renderer) {
         cues.flights.forEach((flight, index) => {
           const launch = () => {
-            const card = receivingHandCard(flight.seat, flight.resource);
-            const panel = document.querySelector<HTMLElement>(`[data-seat-panel="${flight.seat}"]`);
+            const card = handSlot(flight.seat, flight.resource);
+            const panel = seatPanel(flight.seat);
             const to = (card && visibleCenter(card)) || (panel && visibleCenter(panel));
-            if (!to) return;
+            if (!to) {
+              release(`${flight.id}:in`);
+              return;
+            }
             const from = renderer.getPixelPosition({ kind: 'hex', id: flight.fromHex });
             setFlights((current) => [
               ...current,
@@ -214,77 +459,23 @@ export function useVisualEffects(renderer: BoardRenderer | null, reducedMotion: 
                 dy: to.y - from.y,
               },
             ]);
+            schedule(() => release(`${flight.id}:in`), PRODUCTION_LANDS_MS);
           };
-          scheduleProduction(
-            () => {
-              const card = receivingHandCard(flight.seat, flight.resource);
-              if (card && card.getBoundingClientRect().width > 0 && !visibleCenter(card)) {
-                card.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
-                scheduleProduction(launch, 350);
-              } else {
-                launch();
-              }
-            },
-            DICE_ROLL_DURATION_MS + PRODUCTION_TOKEN_PULSE_MS + index * 140,
-          );
-        });
-      }
-      const nextTrade = cues.tradeFlights.flatMap((flight) => {
-        const fromPanel = document.querySelector<HTMLElement>(`[data-seat-panel="${flight.from}"]`);
-        const toPanel = document.querySelector<HTMLElement>(`[data-seat-panel="${flight.to}"]`);
-        if (!fromPanel || !toPanel) return [];
-        const from = visibleCenter(fromPanel);
-        const to = visibleCenter(toPanel);
-        if (!from || !to) return [];
-        return [
-          {
-            id: flight.id,
-            resource: flight.resource,
-            count: flight.count,
-            x: from.x,
-            y: from.y,
-            dx: to.x - from.x,
-            dy: to.y - from.y,
-          },
-        ];
-      });
-      if (nextTrade.length) {
-        setTradeFlights((current) => [...current, ...nextTrade].slice(-16));
-      }
-      if (cues.stealFlights.length) {
-        const frame = window.requestAnimationFrame(() => {
-          pendingStealFrames.current.delete(frame);
-          const revealedSeat = useSessionStore.getState().revealedSeat;
-          const hand =
-            revealedSeat === null
-              ? null
-              : document.querySelector<HTMLElement>('.hand-dock .hand-cards');
-          const centerForSeat = (seat: Seat) => {
-            if (seat === revealedSeat && hand) {
-              const center = visibleCenter(hand);
-              if (center) return center;
+          schedule(() => {
+            const clipped = clippedSlot(handSlot(flight.seat, flight.resource));
+            if (clipped) {
+              clipped.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+              schedule(launch, SCROLL_SETTLE_MS);
+            } else {
+              launch();
             }
-            const panel = document.querySelector<HTMLElement>(`[data-seat-panel="${seat}"]`);
-            return panel ? visibleCenter(panel) : null;
-          };
-          const nextSteal = cues.stealFlights.flatMap((flight) => {
-            const from = centerForSeat(flight.from);
-            const to = centerForSeat(flight.to);
-            if (!from || !to) return [];
-            return [
-              {
-                id: flight.id,
-                x: from.x,
-                y: from.y,
-                dx: to.x - from.x,
-                dy: to.y - from.y,
-              },
-            ];
-          });
-          if (nextSteal.length) setStealFlights((current) => [...current, ...nextSteal].slice(-16));
+          }, launchAt(index));
         });
-        pendingStealFrames.current.add(frame);
       }
+      if (cues.cardFlights.length)
+        nextFrame(() => {
+          for (const flight of cues.cardFlights) launchCard(flight, false);
+        });
     });
     return () => {
       unsubscribe();
@@ -296,83 +487,66 @@ export function useVisualEffects(renderer: BoardRenderer | null, reducedMotion: 
     renderer?.skipAnimations();
     cancelPendingFlights();
     setFlights([]);
-    setTradeFlights([]);
-    setStealFlights([]);
+    setCardFlights([]);
   }, [cancelPendingFlights, renderer]);
+  const dropCard = (id: string) =>
+    setCardFlights((current) => current.filter((item) => item.id !== id));
   const overlay = (
     <>
       <div className="resource-flight-overlay" aria-hidden="true">
-        {flights.map((flight) => {
-          const style: CSSProperties & { '--flight-dx': string; '--flight-dy': string } = {
-            left: flight.x,
-            top: flight.y,
-            '--flight-dx': `${flight.dx}px`,
-            '--flight-dy': `${flight.dy}px`,
-          };
-          return (
-            <span
-              className="resource-flight"
-              key={flight.id}
-              style={style}
-              onAnimationEnd={() =>
-                setFlights((current) => current.filter((item) => item.id !== flight.id))
-              }
-            >
-              <img src={getResourceCardUrl(flight.resource)} alt="" />
-              <b>+{flight.count}</b>
-            </span>
-          );
-        })}
+        {flights.map((flight) => (
+          <span
+            className="resource-flight"
+            key={flight.id}
+            style={flightStyle(flight)}
+            onAnimationEnd={() =>
+              setFlights((current) => current.filter((item) => item.id !== flight.id))
+            }
+          >
+            <img src={getResourceCardUrl(flight.resource)} alt="" />
+            <b>+{flight.count}</b>
+          </span>
+        ))}
       </div>
       <div className="trade-card-flight-overlay" aria-hidden="true">
-        {tradeFlights.map((flight) => {
-          const style: CSSProperties & { '--flight-dx': string; '--flight-dy': string } = {
-            left: flight.x,
-            top: flight.y,
-            '--flight-dx': `${flight.dx}px`,
-            '--flight-dy': `${flight.dy}px`,
-          };
-          return (
-            <span
-              className="trade-card-flight"
-              key={flight.id}
-              style={style}
-              onAnimationEnd={() =>
-                setTradeFlights((current) => current.filter((item) => item.id !== flight.id))
-              }
-            >
-              <img src={getResourceCardUrl(flight.resource)} alt="" />
-              {flight.count > 1 && <b>×{flight.count}</b>}
-            </span>
-          );
-        })}
+        {cardFlights.flatMap((flight) =>
+          flight.face === null
+            ? []
+            : [
+                <span
+                  className="trade-card-flight"
+                  key={flight.id}
+                  data-card={flight.face}
+                  style={flightStyle(flight)}
+                  onAnimationEnd={() => dropCard(flight.id)}
+                >
+                  <img src={cardFaceUrl(flight.face)} alt="" />
+                  {flight.count > 1 && <b>×{flight.count}</b>}
+                </span>,
+              ],
+        )}
       </div>
       <div className="steal-card-flight-overlay" aria-hidden="true">
-        {stealFlights.map((flight) => {
-          const style: CSSProperties & { '--flight-dx': string; '--flight-dy': string } = {
-            left: flight.x,
-            top: flight.y,
-            '--flight-dx': `${flight.dx}px`,
-            '--flight-dy': `${flight.dy}px`,
-          };
-          return (
-            <span
-              className="steal-card-flight"
-              key={flight.id}
-              style={style}
-              onAnimationEnd={() =>
-                setStealFlights((current) => current.filter((item) => item.id !== flight.id))
-              }
-            >
-              <svg viewBox="0 0 38 53" fill="none" focusable="false">
-                <rect x="1" y="1" width="36" height="51" rx="5" className="steal-card-shell" />
-                <rect x="5" y="5" width="28" height="43" rx="3" className="steal-card-inset" />
-                <path d="m19 14 10 12.5L19 39 9 26.5 19 14Z" className="steal-card-mark" />
-                <path d="M13 26.5h12M19 20v13" className="steal-card-lines" />
-              </svg>
-            </span>
-          );
-        })}
+        {cardFlights.flatMap((flight) =>
+          flight.face !== null
+            ? []
+            : [
+                <span
+                  className="steal-card-flight"
+                  key={flight.id}
+                  style={flightStyle(flight)}
+                  onAnimationEnd={() => dropCard(flight.id)}
+                >
+                  <svg viewBox="0 0 38 53" fill="none" focusable="false">
+                    <rect x="1" y="1" width="36" height="51" rx="5" className="steal-card-shell" />
+                    <rect x="5" y="5" width="28" height="43" rx="3" className="steal-card-inset" />
+                    <path d="m19 14 10 12.5L19 39 9 26.5 19 14Z" className="steal-card-mark" />
+                    <path d="M13 26.5h12M19 20v13" className="steal-card-lines" />
+                  </svg>
+                  {flight.count > 1 && <b>×{flight.count}</b>}
+                </span>,
+              ],
+        )}
       </div>
     </>
   );

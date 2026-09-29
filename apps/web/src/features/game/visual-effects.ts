@@ -9,6 +9,12 @@ import {
 import { buildBoardGraph, type EdgeId, type HexId, type VertexId } from '@cp2p/engine/geometry';
 import type { BoardEffect } from '@cp2p/renderer';
 import { deriveKnightsEffects } from '../knights/effects';
+import {
+  assignCardFlights,
+  type CardFlight,
+  type CardTransfer,
+  type HandView,
+} from './card-flights';
 
 const terrainResource: Readonly<Record<string, Resource | null>> = {
   hills: 'brick',
@@ -27,20 +33,6 @@ export interface ResourceFlight {
   readonly fromHex: HexId;
 }
 
-export interface TradeCardFlight {
-  readonly id: string;
-  readonly from: Seat;
-  readonly to: Seat;
-  readonly resource: Resource;
-  readonly count: number;
-}
-
-export interface StealCardFlight {
-  readonly id: string;
-  readonly from: Seat;
-  readonly to: Seat;
-}
-
 export interface ProductionGain {
   readonly id: string;
   readonly seat: Seat;
@@ -57,8 +49,8 @@ interface PublicTradeTerms {
 export interface VisualEffects {
   readonly board: readonly BoardEffect[];
   readonly flights: readonly ResourceFlight[];
-  readonly tradeFlights: readonly TradeCardFlight[];
-  readonly stealFlights: readonly StealCardFlight[];
+  /** Cards moving between hands, panels and the bank, as this viewer may see them. */
+  readonly cardFlights: readonly CardFlight[];
   readonly productionGains: readonly ProductionGain[];
 }
 
@@ -138,21 +130,36 @@ function revealedHexes(before: GameState, after: GameState): HexId[] {
   );
 }
 
-/** Translate an accepted public event batch into rule-neutral, deduplicated motion cues. */
+function cardCount(value: unknown): number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value > 0 ? value : 0;
+}
+
+function positive(counts: Readonly<Record<string, number>>): Record<string, number> {
+  return Object.fromEntries(Object.entries(counts).filter(([, value]) => value > 0));
+}
+
+function sum(counts: Readonly<Record<string, number>>): number {
+  return Object.values(counts).reduce((total, value) => total + value, 0);
+}
+
+/**
+ * Translate an accepted public event batch into rule-neutral, deduplicated motion cues. `viewer`
+ * is the revealed seat's own hand around the update; only its kinds may show on card faces.
+ */
 export function deriveVisualEffects(
   before: GameState,
   after: GameState,
   events: readonly GameEvent[],
   revision: number,
+  viewer: HandView | null = null,
 ): VisualEffects {
   const reveals = revealedHexes(before, after);
   const knightsCues = deriveKnightsEffects(before, after, events, revision);
   if (events.length === 0 && reveals.length === 0 && knightsCues.length === 0)
-    return { board: [], flights: [], tradeFlights: [], stealFlights: [], productionGains: [] };
+    return { board: [], flights: [], cardFlights: [], productionGains: [] };
   const board: BoardEffect[] = [];
   const flights: ResourceFlight[] = [];
-  const tradeFlights: TradeCardFlight[] = [];
-  const stealFlights: StealCardFlight[] = [];
+  const transfers: CardTransfer[] = [];
   const productionGains: ProductionGain[] = [];
   const rolled = events.find((event) => event.type === 'diceRolled');
   const roll = rolled && 'roll' in rolled && typeof rolled.roll === 'number' ? rolled.roll : null;
@@ -236,18 +243,15 @@ export function deriveVisualEffects(
         [offer.proposer, event.withSeat, offer.give, 'give'],
         [event.withSeat, offer.proposer, offer.want, 'want'],
       ] as const) {
-        for (const resource of RESOURCES) {
-          const count = counts[resource];
-          if (count > 0) {
-            tradeFlights.push({
-              id: `${id}:trade:${offer.id}:${direction}:${resource}`,
-              from,
-              to,
-              resource,
-              count,
-            });
-          }
-        }
+        const cards = positive(counts);
+        if (sum(cards) > 0)
+          transfers.push({
+            id: `${id}:trade:${offer.id}:${direction}`,
+            from,
+            to,
+            cards,
+            count: sum(cards),
+          });
       }
     } else if (
       event.type === 'resourceStolen' &&
@@ -255,7 +259,54 @@ export function deriveVisualEffects(
       isSeat(after, event.thief) &&
       event.victim !== event.thief
     ) {
-      stealFlights.push({ id: `${id}:steal`, from: event.victim, to: event.thief });
+      transfers.push({
+        id: `${id}:steal`,
+        from: event.victim,
+        to: event.thief,
+        cards: null,
+        count: 1,
+      });
+    } else if (
+      (event.type === 'cardsTaken' || event.type === 'monopolyCollected') &&
+      isSeat(after, event.seat) &&
+      isSeat(after, event.from) &&
+      event.seat !== event.from &&
+      cardCount(event.count) > 0
+    ) {
+      const resource = event.type === 'monopolyCollected' ? event.resource : undefined;
+      transfers.push({
+        id: `${id}:take`,
+        from: event.from,
+        to: event.seat,
+        cards: typeof resource === 'string' ? { [resource]: cardCount(event.count) } : null,
+        count: cardCount(event.count),
+      });
+    } else if (
+      event.type === 'weddingGift' &&
+      isSeat(after, event.seat) &&
+      isSeat(after, event.to) &&
+      event.seat !== event.to &&
+      cardCount(event.count) > 0
+    ) {
+      transfers.push({
+        id: `${id}:gift`,
+        from: event.seat,
+        to: event.to,
+        cards: null,
+        count: cardCount(event.count),
+      });
+    } else if (
+      event.type === 'resourcesDiscarded' &&
+      isSeat(after, event.seat) &&
+      cardCount(event.count) > 0
+    ) {
+      transfers.push({
+        id: `${id}:discard`,
+        from: event.seat,
+        to: 'bank',
+        cards: null,
+        count: cardCount(event.count),
+      });
     } else if (
       event.type === 'goldChosen' &&
       isSeat(after, event.seat) &&
@@ -266,8 +317,16 @@ export function deriveVisualEffects(
       const resources: Partial<Record<Resource, number>> = {};
       for (const resource of RESOURCES)
         if (gold[resource] > 0) resources[resource] = gold[resource];
-      if (Object.keys(resources).length > 0)
+      if (Object.keys(resources).length > 0) {
         productionGains.push({ id: `${id}:gold`, seat: event.seat, resources });
+        transfers.push({
+          id: `${id}:gold`,
+          from: 'bank',
+          to: event.seat,
+          cards: resources,
+          count: sum(resources),
+        });
+      }
     } else if (event.type === 'resourcesProduced' && record(event.bySeat)) {
       for (const seat of after.config.seats) {
         const gains = event.bySeat[String(seat)];
@@ -338,5 +397,11 @@ export function deriveVisualEffects(
       board.push({ id: `${revision}:production`, kind: 'production-pulse', hexes });
     }
   }
-  return { board, flights, tradeFlights, stealFlights, productionGains };
+  const claimed: Record<string, number> = {};
+  if (viewer)
+    for (const flight of flights)
+      if (flight.seat === viewer.seat)
+        claimed[flight.resource] = (claimed[flight.resource] ?? 0) + flight.count;
+  const cardFlights = assignCardFlights(transfers, viewer, claimed, revision);
+  return { board, flights, cardFlights, productionGains };
 }

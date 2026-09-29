@@ -9,6 +9,7 @@ import { useProductionReceipts, useVisualEffects } from './use-visual-effects';
 const sessionStub = vi.hoisted(() => ({ current: null as unknown }));
 vi.mock('../../store/session-store', () => ({
   sessionForActions: () => sessionStub.current,
+  useSessionStore: { getState: () => ({ revealedSeat: null }) },
 }));
 
 beforeEach(() => {
@@ -82,6 +83,7 @@ test('useVisualEffects subscribes without a renderer and Skip does not clear pub
   let listener: ((update: SessionUpdate) => void) | null = null;
   sessionStub.current = {
     getState: () => state,
+    getPrivate: () => null,
     subscribe: (next: (update: SessionUpdate) => void) => {
       listener = next;
       return () => {

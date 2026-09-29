@@ -55,8 +55,7 @@ function setEffects(
   effectsMock.current = {
     board: [],
     flights,
-    tradeFlights: [],
-    stealFlights: [],
+    cardFlights: [],
     productionGains,
   } satisfies VisualEffects;
 }
@@ -110,7 +109,8 @@ function addSeatPanel(seat: Seat, bounds: DOMRect) {
 function setupSession() {
   let publish: ((update: unknown) => void) | null = null;
   const makeSession = () => ({
-    getState: () => ({}),
+    getState: () => ({ config: { seats: [] } }),
+    getPrivate: () => null,
     subscribe: (listener: (update: unknown) => void) => {
       publish = listener;
       return () => {
@@ -124,8 +124,8 @@ function setupSession() {
     act(() =>
       publish?.({
         revision: 1,
-        state: {},
-        events: [],
+        state: { config: { seats: [] } },
+        events: [{ type: 'diceRolled' }],
         pending: [],
         timers: [],
         status: { kind: 'running' },
@@ -250,7 +250,8 @@ test.each(['skip', 'reduced motion', 'session replacement', 'unmount'] as const)
     const { emit, makeSession } = setupSession();
     const view = render(<EffectsView />);
     emit();
-    expect(vi.getTimerCount()).toBe(1);
+    // The launch and the safety deadline of the count it holds back.
+    expect(vi.getTimerCount()).toBe(2);
 
     if (reason === 'skip') fireEvent.click(screen.getByRole('button', { name: 'Skip' }));
     if (reason === 'reduced motion') view.rerender(<EffectsView reducedMotion />);

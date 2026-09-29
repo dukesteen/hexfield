@@ -190,19 +190,20 @@ test('only confirmed trades create grouped public card flights to the chosen rec
       state,
       [{ type: 'tradeConfirmed', offerId: 17, withSeat: 2 }],
       31,
-    ).tradeFlights;
+    ).cardFlights;
+    const face = { private: false };
     expect(after).toEqual([
-      { id: '31:0:trade:17:give:brick', from: 0, to: 2, resource: 'brick', count: 2 },
-      { id: '31:0:trade:17:give:grain', from: 0, to: 2, resource: 'grain', count: 1 },
-      { id: '31:0:trade:17:want:lumber', from: 2, to: 0, resource: 'lumber', count: 1 },
+      { id: '31:0:trade:17:give:brick', from: 0, to: 2, face: 'brick', count: 2, ...face },
+      { id: '31:0:trade:17:give:grain', from: 0, to: 2, face: 'grain', count: 1, ...face },
+      { id: '31:0:trade:17:want:lumber', from: 2, to: 0, face: 'lumber', count: 1, ...face },
     ]);
     expect(
       deriveVisualEffects(before, state, [{ type: 'tradeOffered', offerId: 17, withSeat: 2 }], 32)
-        .tradeFlights,
+        .cardFlights,
     ).toEqual([]);
     expect(
       deriveVisualEffects(before, state, [{ type: 'tradeConfirmed', offerId: 17, withSeat: 9 }], 33)
-        .tradeFlights,
+        .cardFlights,
     ).toEqual([]);
     const counterOffer = {
       ...before,
@@ -230,10 +231,10 @@ test('only confirmed trades create grouped public card flights to the chosen rec
         state,
         [{ type: 'tradeConfirmed', offerId: 18, withSeat: 0 }],
         34,
-      ).tradeFlights,
+      ).cardFlights,
     ).toEqual([
-      { id: '34:0:trade:18:give:wool', from: 1, to: 0, resource: 'wool', count: 1 },
-      { id: '34:0:trade:18:want:ore', from: 0, to: 1, resource: 'ore', count: 2 },
+      { id: '34:0:trade:18:give:wool', from: 1, to: 0, face: 'wool', count: 1, private: false },
+      { id: '34:0:trade:18:want:ore', from: 0, to: 1, face: 'ore', count: 2, private: false },
     ]);
   } finally {
     made.value.dispose();
@@ -261,13 +262,15 @@ test('a steal creates only a public victim-to-thief card-back cue', () => {
       [{ type: 'resourceStolen', thief: 0, victim: 1, known: false, resource: 'ore' }],
       40,
     );
-    expect(effects.stealFlights).toEqual([{ id: '40:0:steal', from: 1, to: 0 }]);
-    expect(JSON.stringify(effects.stealFlights)).not.toContain('ore');
+    expect(effects.cardFlights).toEqual([
+      { id: '40:0:steal', from: 1, to: 0, face: null, count: 1, private: false },
+    ]);
+    expect(JSON.stringify(effects.cardFlights)).not.toContain('ore');
     expect(
       deriveVisualEffects(state, state, [{ type: 'resourceStolen', thief: 0, victim: 9 }], 41)
-        .stealFlights,
+        .cardFlights,
     ).toEqual([]);
-    expect(deriveVisualEffects(state, state, [], 42).stealFlights).toEqual([]);
+    expect(deriveVisualEffects(state, state, [], 42).cardFlights).toEqual([]);
   } finally {
     made.value.dispose();
   }

@@ -1919,7 +1919,7 @@ test('phone development drawer closes after committing a Knight with other cards
   }
 });
 
-test('real steals show only a neutral public card cue in both directions', async ({
+test('real steals fly the stolen card between its hand slot and the other panel', async ({
   browser,
   browserName,
 }, testInfo) => {
@@ -1943,7 +1943,7 @@ test('real steals show only a neutral public card cue in both directions', async
       from: 0,
       to: 2,
       mobile: false,
-      pauseForCapture: false,
+      pauseForCapture: true,
       reducedMotion: false,
     },
     {
@@ -1963,7 +1963,7 @@ test('real steals show only a neutral public card cue in both directions', async
       from: 0,
       to: 2,
       mobile: true,
-      pauseForCapture: false,
+      pauseForCapture: true,
       reducedMotion: false,
     },
     {
@@ -1984,7 +1984,7 @@ test('real steals show only a neutral public card cue in both directions', async
     if (!baseline.ok) throw new Error(`Steal prefix failed to restore: ${baseline.error.code}`);
     const baselineHand = baseline.value.getPrivate(0)?.hand;
     if (!baselineHand) throw new Error('Steal fixture has no human private hand');
-    const beforeCount = Object.values(baselineHand).reduce((sum, count) => sum + count, 0);
+    const beforeHand = { ...baselineHand };
     const beforeEvents = baseline.value
       .getEvents()
       .filter((event) => event.type === 'resourceStolen').length;
@@ -2000,44 +2000,62 @@ test('real steals show only a neutral public card cue in both directions', async
       page.setDefaultTimeout(10_000);
       if (scenario.reducedMotion) await page.emulateMedia({ reducedMotion: 'reduce' });
       await page.addInitScript(
-        ({ from, to, pause }) => {
+        ({ other, pause }) => {
           const records: {
             html: string;
+            card: string | null;
             x: number;
             y: number;
             dx: number;
             dy: number;
-            source: { x: number; y: number } | null;
-            target: { x: number; y: number } | null;
+            slot: { x: number; y: number } | null;
+            panel: { x: number; y: number } | null;
+            shown: string | null;
           }[] = [];
           Reflect.set(window, '__stealCueRecords', records);
           const seen = new WeakSet<Element>();
           // This callback is serialized into the browser, where its DOM globals exist.
           // eslint-disable-next-line unicorn/consistent-function-scoping
-          const center = (seat: number) => {
-            const hand = seat === 0 ? document.querySelector('.hand-dock .resource-hand') : null;
-            const panel = document.querySelector(`[data-seat-panel="${seat}"]`);
-            const element = hand ?? panel;
+          const center = (element: Element | null) => {
             if (!element) return null;
             const rect = element.getBoundingClientRect();
             return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
           };
+          // A panel scrolled out of the player rail is reached at the rail's nearest edge.
+          // eslint-disable-next-line unicorn/consistent-function-scoping
+          const railPoint = (element: Element | null) => {
+            const point = center(element);
+            const rail = element?.closest('.player-rail')?.getBoundingClientRect();
+            if (!point || !rail) return point;
+            return {
+              x: Math.min(rail.right, Math.max(rail.left, point.x)),
+              y: Math.min(rail.bottom, Math.max(rail.top, point.y)),
+            };
+          };
           const observe = () => {
-            for (const node of document.querySelectorAll<HTMLElement>('.steal-card-flight')) {
+            for (const node of document.querySelectorAll<HTMLElement>(
+              '.steal-card-flight, .trade-card-flight',
+            )) {
               if (seen.has(node)) continue;
               seen.add(node);
               if (pause) {
                 node.style.animationDelay = '-200ms';
                 node.style.animationPlayState = 'paused';
               }
+              const card = node.dataset.card ?? null;
+              const slot = card
+                ? document.querySelector(`.hand-dock [data-resource="${card}"]`)
+                : null;
               records.push({
                 html: node.outerHTML,
+                card,
                 x: Number.parseFloat(node.style.left),
                 y: Number.parseFloat(node.style.top),
                 dx: Number.parseFloat(node.style.getPropertyValue('--flight-dx')),
                 dy: Number.parseFloat(node.style.getPropertyValue('--flight-dy')),
-                source: center(from),
-                target: center(to),
+                slot: center(slot?.querySelector('img') ?? null),
+                panel: railPoint(document.querySelector(`[data-seat-panel="${other}"]`)),
+                shown: slot?.querySelector('.resource-card-count')?.textContent ?? null,
               });
             }
           };
@@ -2052,7 +2070,7 @@ test('real steals show only a neutral public card cue in both directions', async
             document.addEventListener('DOMContentLoaded', start, { once: true });
           else start();
         },
-        { from: scenario.from, to: scenario.to, pause: scenario.pauseForCapture },
+        { other: scenario.to === 0 ? scenario.from : scenario.to, pause: scenario.pauseForCapture },
       );
       await openGoldenPrefix(page, scenario.prefix, scenario.file, {
         humanSeats: [0],
@@ -2092,70 +2110,48 @@ test('real steals show only a neutral public card cue in both directions', async
           }),
         )
         .toBe(scenario.reducedMotion ? 0 : 1);
-      const afterCount = await page.evaluate(() => {
+      const afterHand = await page.evaluate(() => {
         const hook: DevHook | undefined = Reflect.get(window, '__cp2p');
-        const hand = hook?.session.getPrivate(0)?.hand;
-        return hand ? Object.values(hand).reduce((sum, count) => sum + count, 0) : null;
+        return hook?.session.getPrivate(0)?.hand ?? null;
       });
-      expect(afterCount).toBe(beforeCount + (scenario.to === 0 ? 1 : -1));
+      if (!afterHand) throw new Error('The human hand is missing after the steal');
+      const moved = Object.keys(afterHand).filter(
+        (kind) => (afterHand[kind] ?? 0) !== (beforeHand[kind] ?? 0),
+      );
+      expect(moved).toHaveLength(1);
+      const stolen = moved[0] ?? '';
+      expect((afterHand[stolen] ?? 0) - (beforeHand[stolen] ?? 0)).toBe(scenario.to === 0 ? 1 : -1);
       if (!scenario.reducedMotion) {
         const record = await page.evaluate(() => {
           const values: unknown = Reflect.get(window, '__stealCueRecords');
-          if (!Array.isArray(values)) return null;
-          const first: unknown = values[0];
-          if (typeof first !== 'object' || first === null) return null;
-          const html: unknown = Reflect.get(first, 'html');
-          const x: unknown = Reflect.get(first, 'x');
-          const y: unknown = Reflect.get(first, 'y');
-          const dx: unknown = Reflect.get(first, 'dx');
-          const dy: unknown = Reflect.get(first, 'dy');
-          const source: unknown = Reflect.get(first, 'source');
-          const target: unknown = Reflect.get(first, 'target');
-          if (
-            typeof html !== 'string' ||
-            typeof x !== 'number' ||
-            typeof y !== 'number' ||
-            typeof dx !== 'number' ||
-            typeof dy !== 'number' ||
-            typeof source !== 'object' ||
-            source === null ||
-            typeof target !== 'object' ||
-            target === null
-          )
-            return null;
-          const sourceX: unknown = Reflect.get(source, 'x');
-          const sourceY: unknown = Reflect.get(source, 'y');
-          const targetX: unknown = Reflect.get(target, 'x');
-          const targetY: unknown = Reflect.get(target, 'y');
-          if (
-            typeof sourceX !== 'number' ||
-            typeof sourceY !== 'number' ||
-            typeof targetX !== 'number' ||
-            typeof targetY !== 'number'
-          )
-            return null;
-          return {
-            html,
-            x,
-            y,
-            dx,
-            dy,
-            source: { x: sourceX, y: sourceY },
-            target: { x: targetX, y: targetY },
-          };
+          return Array.isArray(values) ? JSON.stringify(values[0]) : null;
         });
         if (!record) throw new Error(`${scenario.name} has no steal cue`);
-        expect(record.html).toContain('<svg');
-        expect(record.html).not.toMatch(/<img|data-resource|brick|lumber|wool|grain|ore/i);
-        expect(Math.hypot(record.x - record.source.x, record.y - record.source.y)).toBeLessThan(30);
-        expect(
-          Math.hypot(
-            record.x + record.dx - record.target.x,
-            record.y + record.dy - record.target.y,
-          ),
-        ).toBeLessThan(30);
+        const cue: {
+          html: string;
+          card: string | null;
+          x: number;
+          y: number;
+          dx: number;
+          dy: number;
+          slot: { x: number; y: number } | null;
+          panel: { x: number; y: number } | null;
+          shown: string | null;
+        } = JSON.parse(record);
+        // The human is a party: the face is the kind that actually moved, and only that kind.
+        expect(cue.html).toContain('trade-card-flight');
+        expect(cue.card).toBe(stolen);
+        if (!cue.slot || !cue.panel) throw new Error(`${scenario.name} cue has no endpoints`);
+        const [source, target] = scenario.to === 0 ? [cue.panel, cue.slot] : [cue.slot, cue.panel];
+        expect(Math.hypot(cue.x - source.x, cue.y - source.y)).toBeLessThan(30);
+        expect(Math.hypot(cue.x + cue.dx - target.x, cue.y + cue.dy - target.y)).toBeLessThan(30);
+        // As the card takes off, a thief's slot still shows the old count; a victim's has dropped.
+        expect(cue.shown).toBe(String(scenario.to === 0 ? beforeHand[stolen] : afterHand[stolen]));
+        const slotCount = page.locator(
+          `.hand-dock [data-resource="${stolen}"] .resource-card-count`,
+        );
         if (scenario.pauseForCapture) {
-          await expect(page.locator('.steal-card-flight')).toBeVisible();
+          await expect(page.locator('.trade-card-flight')).toBeVisible();
           const screenshot = await page.screenshot({ animations: 'allow' });
           await testInfo.attach(`${scenario.name}-steal-card`, {
             body: screenshot,
@@ -2167,8 +2163,9 @@ test('real steals show only a neutral public card cue in both directions', async
           await openGameMenu(page);
           await page.getByRole('button', { name: 'Skip animations' }).click();
         }
-        await expect(page.locator('.steal-card-flight')).toHaveCount(0);
-      } else await expect(page.locator('.steal-card-flight')).toHaveCount(0);
+        await expect(page.locator('.trade-card-flight, .steal-card-flight')).toHaveCount(0);
+        await expect(slotCount).toHaveText(String(afterHand[stolen]));
+      } else await expect(page.locator('.trade-card-flight, .steal-card-flight')).toHaveCount(0);
       expect(pageErrors.get(page)).toEqual([]);
     } finally {
       await context.close();

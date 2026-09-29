@@ -25,6 +25,7 @@ import { PlacementConfirmation } from './PlacementConfirmation';
 import { useBoardAppearance } from './use-appearance';
 import { sessionForActions } from '../../store/session-store';
 import { useVisualEffects, type ProductionReceipt } from './use-visual-effects';
+import { heldTotal, useCardHolds, useHeldHand, useHeldTotal } from './card-holds';
 import { DiceRollReadout, latestDiceRoll } from './DiceRollReadout.js';
 import { CockpitSheet } from './CockpitSheet.js';
 import { PlayerMarker } from './PlayerMarker.js';
@@ -132,6 +133,7 @@ function PlayerRail({
 }) {
   const { t } = useTranslation('game');
   const revealedSeat = useSessionStore((store) => store.revealedSeat);
+  const holds = useCardHolds((store) => store.holds);
   const base = state.config.options.base;
   const target =
     typeof base === 'object' && base !== null && 'vpTarget' in base ? base.vpTarget : 10;
@@ -257,9 +259,13 @@ function PlayerRail({
                 )}
               </div>
               <dl className="player-panel-stats">
-                <div title={t('game:resourceCards', { count: seatState.resources.total })}>
+                <div
+                  title={t('game:resourceCards', {
+                    count: heldTotal(seatState.resources.total, holds, seatState.seat),
+                  })}
+                >
                   <dt>{t('game:statCards')}</dt>
-                  <dd>{seatState.resources.total}</dd>
+                  <dd>{heldTotal(seatState.resources.total, holds, seatState.seat)}</dd>
                 </div>
                 {!knightsGame && (
                   <>
@@ -359,6 +365,7 @@ function PlayerDetails({
 }) {
   const { t } = useTranslation('game');
   const publicSeat = state.seats.find((item) => item.seat === seat);
+  const cardTotal = useHeldTotal(seat, publicSeat?.resources.total ?? 0);
   if (!publicSeat) return null;
   const identity = presentation.players.find((player) => player.seat === seat);
   const gains = RESOURCES.flatMap((resource) => {
@@ -391,7 +398,7 @@ function PlayerDetails({
       <dl className="player-details-stats">
         <div>
           <dt>{t(summary ? 'game:statCards' : 'game:cockpit.resourceCards')}</dt>
-          <dd>{publicSeat.resources.total}</dd>
+          <dd>{cardTotal}</dd>
         </div>
         {!isKnights(state) && (
           <>
@@ -491,6 +498,8 @@ function HandDock({
   const { t } = useTranslation('game');
   const revealedSeat = useSessionStore((store) => store.revealedSeat);
   const privateState = useSessionStore((store) => store.privateState);
+  // Counts lag the state while cards are still flying into or out of the hand.
+  const hand = useHeldHand(revealedSeat, privateState?.hand) ?? {};
   const optionalViewingSeat = useSessionStore((store) => store.optionalViewingSeat);
   const allowManualHide = (sessionForActions()?.controllableSeats().length ?? 0) > 1;
   const developmentDialog = useRef<HTMLDialogElement>(null);
@@ -676,7 +685,7 @@ function HandDock({
         {privateState && (
           <span className="hand-total">
             {t('game:handCardCount', {
-              count: Object.values(privateState.hand).reduce((sum, count) => sum + count, 0),
+              count: cardKinds(state).reduce((sum, kind) => sum + (hand[kind] ?? 0), 0),
             })}
             {compact && (
               <span className="hand-dev-total">
@@ -764,19 +773,19 @@ function HandDock({
                 <div
                   className="resource-hand-card"
                   key={resource}
-                  data-empty={(privateState.hand[resource] ?? 0) === 0}
+                  data-empty={(hand[resource] ?? 0) === 0}
                   data-commodity={isCommodity(resource)}
                   tabIndex={0}
                   title={t('game:resourceInHand', {
                     resource: kindLabel(t, resource),
-                    count: privateState.hand[resource] ?? 0,
+                    count: hand[resource] ?? 0,
                   })}
                   aria-label={t('game:resourceInHand', {
                     resource: kindLabel(t, resource),
-                    count: privateState.hand[resource] ?? 0,
+                    count: hand[resource] ?? 0,
                   })}
                 >
-                  <ResourceCard resource={resource} count={privateState.hand[resource] ?? 0} />
+                  <ResourceCard resource={resource} count={hand[resource] ?? 0} />
                 </div>
               ))}
             </div>
