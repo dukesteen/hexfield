@@ -50,7 +50,12 @@ export function isKnights(state: Readonly<GameState>): boolean {
 /** The module's public state, or null in a game without it. */
 export function knightsState(state: Readonly<GameState>): KnightsExt | null {
   // The engine reads its own slot; the copy is never written through.
-  return isKnights(state) ? knightsExt(state as GameState) : null;
+  return isKnights(state) ? knightsExt(state) : null;
+}
+
+/** A knight's strength as one of the three levels the art has. */
+export function knightLevel(value: number): 1 | 2 | 3 {
+  return value >= 3 ? 3 : value === 2 ? 2 : 1;
 }
 
 /** Every card kind a seat may hold: the five resources, plus the commodities in a knights game. */

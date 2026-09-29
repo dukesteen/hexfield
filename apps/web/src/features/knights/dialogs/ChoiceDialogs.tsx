@@ -14,6 +14,10 @@ import { TRACKS, isCommodity } from '../state.js';
 import type { Track } from '../state.js';
 import '../knights.css';
 
+function trackOfCommand(command: CommandShape): Track | null {
+  return TRACKS.find((track) => track === command.deck) ?? null;
+}
+
 /** The card kind an icon button shows. */
 export function KindIcon({ kind }: { kind: string }) {
   return (
@@ -66,14 +70,12 @@ export function DeckChoiceDialog({ legal, onSubmit }: CommandFormProps) {
   const { t } = useTranslation('knights');
   const choices = legal.commands.filter((command) => command.type === 'CHOOSE_PROGRESS_DECK');
   if (choices.length === 0) return null;
-  const byTrack = (command: CommandShape): Track | null =>
-    TRACKS.find((track) => track === command.deck) ?? null;
   return (
     <DialogFrame title={t('knights:deck.title')} variant="trade">
       <p>{t('knights:deck.instruction')}</p>
       <div className="kind-choices" role="group" aria-label={t('knights:deck.title')}>
         {choices.map((command) => {
-          const track = byTrack(command);
+          const track = trackOfCommand(command);
           if (track === null) return null;
           return (
             <button

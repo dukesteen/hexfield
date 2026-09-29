@@ -64,7 +64,7 @@ import type { KnightsController } from '../knights/controller';
 import { cardInfo } from '../knights/catalogue';
 import { improvableTracks } from '../knights/improve';
 import { CARD_KINDS, KNIGHTS_PLACEMENT_KINDS } from '../knights/placements';
-import { isKnights, knightsState } from '../knights/state';
+import { isKnights, knightLevel, knightsState } from '../knights/state';
 
 const boardOrder: readonly PlacementKind[] = [
   'settlement',
@@ -266,12 +266,11 @@ function knightPreview(
   moveFrom: string | null,
   choice: PlacementChoice | undefined,
 ): { knight?: { level: 1 | 2 | 3; active: boolean } } {
-  const level = (value: number): 1 | 2 | 3 => (value >= 3 ? 3 : value === 2 ? 2 : 1);
   const ext = knightsState(state);
   if (!ext || kind === undefined || previewOfKind(kind) !== 'knight') return {};
   if (kind === 'moveKnight' || kind === 'displaceKnight') {
     const moving = ext.knights.find((knight) => knight.vertex === moveFrom);
-    return moving ? { knight: { level: level(moving.level), active: false } } : {};
+    return moving ? { knight: { level: knightLevel(moving.level), active: false } } : {};
   }
   if (kind === 'relocate') {
     const frame = state.turn.phase.at(-1);
@@ -281,11 +280,11 @@ function knightPreview(
         ? { level: Reflect.get(data, 'level'), active: Reflect.get(data, 'active') }
         : null;
     return stored && typeof stored.level === 'number'
-      ? { knight: { level: level(stored.level), active: stored.active === true } }
+      ? { knight: { level: knightLevel(stored.level), active: stored.active === true } }
       : { knight: { level: 1, active: false } };
   }
   if (kind === 'deserterPlace')
-    return { knight: { level: level(Number(choice?.command.level) || 1), active: false } };
+    return { knight: { level: knightLevel(Number(choice?.command.level) || 1), active: false } };
   return { knight: { level: 1, active: false } };
 }
 
@@ -435,6 +434,9 @@ export function useGameActions(
       },
     };
   }, [choices, hitKind, selectedKind, twoStep, movingShip, moveFrom]);
+  /** The name of a board action: a build for the base kinds, its own short label for a knights kind. */
+  const actionLabel = (kind: PlacementKind): string =>
+    kindInfo(kind) ? t(`knights:action.${kind}`) : t(`game:buildAction.${kind}`);
   const playerLabel = (candidate: Seat) =>
     presentation.players.find((player) => player.seat === candidate)?.name ??
     t('game:playerFallback', { number: candidate + 1 });
@@ -934,7 +936,7 @@ export function useGameActions(
                       onClick={() => chooseBoardAction(kind)}
                     >
                       <ActionIcon kind={kind} color={playerColor} />
-                      <span>{t(`game:buildAction.${kind}`)}</span>
+                      <span>{actionLabel(kind)}</span>
                     </button>
                   ))}
                   {selectedKind && !mandatoryPlacement && !selectedPlacement && (
@@ -1154,7 +1156,7 @@ export function useGameActions(
               onClick={() => chooseBoardAction(kind)}
             >
               <ActionIcon kind={kind} color={playerColor} />
-              <span>{t(`game:buildAction.${kind}`)}</span>
+              <span>{actionLabel(kind)}</span>
             </button>
           ))}
           {actionButtons(contextualGroups.filter((group) => group.type !== 'BUY_DEV_CARD'))}

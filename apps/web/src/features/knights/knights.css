@@ -32,7 +32,7 @@
   position: relative;
 }
 .desktop-build-grid[data-knights='true'] {
-  grid-template-columns: repeat(4, 40px);
+  grid-template-columns: repeat(5, 40px);
   gap: 6px;
 }
 .desktop-build-grid[data-knights='true'] .desktop-build-button {
@@ -194,7 +194,7 @@
 .mini-tracks {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px 8px;
+  gap: 4px 10px;
   margin: 6px 0 0;
   padding: 0;
   list-style: none;
@@ -214,7 +214,7 @@
   gap: 2px;
 }
 .mini-pips i {
-  width: 7px;
+  width: 6px;
   height: 9px;
   border: 1px solid color-mix(in srgb, var(--track) 70%, #000 30%);
   border-radius: 3px;
@@ -465,7 +465,7 @@
 }
 .progress-hand-aim {
   position: absolute;
-  top: 4px;
+  bottom: 4px;
   right: 4px;
   padding: 0 4px;
   border-radius: 6px;
@@ -777,8 +777,8 @@
   .game-bottom .hand-dock:has(.resource-hand-card[data-commodity='true']) .hand-cards {
     gap: 8px;
   }
-  .game-bottom:has(.desktop-build-grid[data-knights='true']) {
-    grid-template-columns: 218px minmax(0, 1fr) 116px 96px;
+  .game-page .game-bottom:has(.desktop-build-grid[data-knights='true']) {
+    grid-template-columns: 250px minmax(0, 1fr) 116px 96px;
   }
 }
 @media (min-width: 768px) and (max-width: 1100px) and (min-height: 501px) {
@@ -810,14 +810,35 @@
 .knights-strip-overlay {
   display: none;
 }
-@media (min-width: 1200px) and (min-height: 501px) {
+@media (min-width: 1280px) and (min-height: 501px) {
   .game-page .game-grid[data-knights='true'] {
-    grid-template-columns: minmax(0, 1fr) 500px;
+    grid-template-columns: minmax(0, 1fr) 556px;
+  }
+  .game-page .game-grid[data-knights='true'] .game-bottom {
+    grid-column: 1 / -1;
   }
   .game-page .game-grid[data-knights='true'] .game-sidebar {
+    grid-row: 1;
     display: grid;
-    grid-template-columns: 232px minmax(0, 1fr);
+    grid-template-columns: 288px minmax(0, 1fr);
     grid-template-rows: minmax(0, 1fr) auto;
+  }
+  /* With the whole width under it, the hand keeps full-size cards. */
+  .game-page
+    .game-bottom
+    .hand-dock:has(.resource-hand-card[data-commodity='true'])
+    .resource-hand-card
+    .resource-card {
+    --card-w: 54px;
+  }
+  .game-page
+    .game-bottom
+    .hand-dock:has(.resource-hand-card[data-commodity='true'])
+    .resource-hand-card
+    .resource-card
+    img {
+    width: 54px;
+    height: 77px;
   }
   .game-page .game-grid[data-knights='true'] .game-sidebar > [role='status'] {
     grid-column: 1 / -1;
@@ -847,6 +868,20 @@
   .game-page .game-grid[data-knights='true'] .game-sidebar .awards-panel {
     padding: 10px 14px;
   }
+  /* Four players and the improvements share the sidebar, so its panels give up their spare rows. */
+  .game-page .game-grid[data-knights='true'] .player-piece-counts,
+  .game-page .game-grid[data-knights='true'] .player-panel-status .connection-status {
+    display: none;
+  }
+  .game-page .game-grid[data-knights='true'] .player-panel-status {
+    margin: 4px 0;
+  }
+  .game-page .game-grid[data-knights='true'] .awards-panel {
+    padding: 8px 14px;
+  }
+  .game-page .game-grid[data-knights='true'] .awards-panel h2 {
+    display: none;
+  }
   .game-page .game-grid[data-knights='true'] .bank-cards {
     grid-template-columns: repeat(auto-fill, minmax(34px, 1fr));
   }
@@ -854,7 +889,7 @@
     max-height: 120px;
   }
 }
-@media (min-width: 768px) and (max-width: 1199px) and (min-height: 501px) {
+@media (min-width: 768px) and (max-width: 1279px) and (min-height: 501px) {
   .knights-sidebar {
     display: none;
   }
@@ -919,7 +954,7 @@
 .game-page[data-compact='true'] .progress-hand {
   flex: 0 0 auto;
 }
-.game-page[data-compact='true'] .progress-face {
+.game-page[data-compact='true'] .progress-hand .progress-face {
   --w: 62px;
 }
 .game-page[data-compact='true'] .hand-cards:has(.progress-hand) {
@@ -933,4 +968,19 @@
   width: 100%;
   padding-top: 6px;
   border-top: 1px solid var(--border);
+}
+
+/* Long lists of gains and chips wrap inside a panel instead of pushing its points out of view. */
+.game-page .player-panel {
+  min-width: 0;
+}
+.game-page .player-panel-status,
+.game-page .production-receipt {
+  flex-wrap: wrap;
+  max-width: 100%;
+}
+@media (min-width: 768px) and (min-height: 501px) {
+  .game-bottom .progress-hand .progress-face {
+    --w: 76px;
+  }
 }

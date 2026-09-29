@@ -28,8 +28,11 @@ interface BoardProps {
   onBuy?: (track: Track) => void;
   /** Buying is blocked while a move is being sent. */
   disabled?: boolean;
-  /** Show the ability text under each track. */
-  captions?: boolean;
+  /**
+   * What to write under each track: everything (the ability and the next cost), just the next
+   * cost, or nothing. The abilities are also on the level 3 cell's tooltip.
+   */
+  captions?: 'full' | 'cost' | 'none';
 }
 
 /**
@@ -43,7 +46,7 @@ export function ImprovementsBoard({
   buyable,
   onBuy,
   disabled = false,
-  captions = true,
+  captions = 'full',
 }: BoardProps) {
   const { t } = useTranslation('knights');
   const ext = knightsState(state);
@@ -94,6 +97,7 @@ export function ImprovementsBoard({
                       data-ability={cell === ABILITY_LEVEL}
                       style={style}
                       aria-hidden="true"
+                      {...(cell === ABILITY_LEVEL ? { title: t(`knights:ability.${track}`) } : {})}
                     >
                       <b>{cell}</b>
                     </span>
@@ -144,7 +148,7 @@ export function ImprovementsBoard({
                 />
               )}
             </div>
-            {captions && (
+            {captions === 'full' && (
               <p className="improve-caption" data-unlocked={level >= ABILITY_LEVEL}>
                 <img src={getCommodityIconUrl(commodityOf(track))} alt="" aria-hidden="true" />
                 <span>
@@ -152,7 +156,7 @@ export function ImprovementsBoard({
                 </span>
               </p>
             )}
-            {captions && next !== null && cost !== null && (
+            {captions !== 'none' && next !== null && cost !== null && (
               <p className="improve-next">
                 {t('knights:improve.nextCost', { level: next, cost, commodity })}
               </p>

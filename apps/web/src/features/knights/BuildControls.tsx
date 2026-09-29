@@ -50,24 +50,19 @@ function Glyph({ kind }: { kind: BuildKind }) {
   );
 }
 
+const ART: Readonly<Record<BuildKind, (color: string) => string>> = {
+  knight: (color) => getKnightIconUrl(color, 1, false),
+  wall: (color) => getWallIconUrl(color),
+  sideways: (color) => getPieceIconUrl('city', color),
+  activate: (color) => getKnightIconUrl(color, 2, true),
+  promote: (color) => getKnightIconUrl(color, 2, true),
+  moveKnight: (color) => getKnightIconUrl(color, 2, false),
+  displaceKnight: (color) => getKnightIconUrl(color, 3, true),
+  chase: (color) => getKnightIconUrl(color, 1, true),
+};
+
 function art(kind: BuildKind, color: string | undefined): string {
-  const seat = color ?? 'blue';
-  switch (kind) {
-    case 'wall':
-      return getWallIconUrl(seat);
-    case 'sideways':
-      return getPieceIconUrl('city', seat);
-    case 'knight':
-      return getKnightIconUrl(seat, 1, false);
-    case 'promote':
-      return getKnightIconUrl(seat, 2, true);
-    case 'chase':
-      return getKnightIconUrl(seat, 1, true);
-    case 'displaceKnight':
-      return getKnightIconUrl(seat, 3, true);
-    default:
-      return getKnightIconUrl(seat, 2, kind !== 'activate');
-  }
+  return ART[kind](color ?? 'blue');
 }
 
 /** A cost as small resource and commodity icons with counts. */

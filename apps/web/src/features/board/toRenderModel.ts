@@ -4,7 +4,7 @@ import { buildBoardGraph } from '@cp2p/engine/geometry';
 import type { HexId, VertexId } from '@cp2p/engine/geometry';
 import type { RenderModel } from '@cp2p/renderer';
 import { BARBARIAN_FIXTURE, BARBARIAN_STEPS, TRACKS } from '@cp2p/engine';
-import { knightsState } from '../knights/state';
+import { knightLevel, knightsState } from '../knights/state';
 import { uiModulesFor } from '../modules';
 
 export type BoardViewer = Seat | 'spectator';
@@ -82,7 +82,6 @@ function knightsSlice(
   const ext = knightsState(state);
   if (!ext) return {};
   const vertex = (id: string): VertexId | undefined => vertexIds.find((item) => item === id);
-  const level = (value: number): 1 | 2 | 3 => (value >= 3 ? 3 : value === 2 ? 2 : 1);
   const merchantHex = ext.merchant ? hexIds.find((id) => id === ext.merchant?.hex) : undefined;
   const track = state.board.fixtures?.find((fixture) => fixture.id === BARBARIAN_FIXTURE);
   return {
@@ -94,7 +93,7 @@ function knightsSlice(
               {
                 vertex: at,
                 seat: knight.seat,
-                level: level(knight.level),
+                level: knightLevel(knight.level),
                 active: knight.active,
                 ready: knight.ready,
               },

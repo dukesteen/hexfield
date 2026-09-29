@@ -1,5 +1,4 @@
 import {
-  RESOURCES,
   decksFor,
   devCardCountsFor,
   isPublicDraw,
@@ -14,7 +13,6 @@ import type {
   LocalRandomSource,
   Pending,
   PrivateState,
-  Resource,
   Seat,
 } from '@cp2p/engine';
 
@@ -60,12 +58,6 @@ function privateFor(privates: ReadonlyMap<Seat, PrivateState>, seat: Seat): Priv
   const value = privates.get(seat);
   if (!value) throw new Error(`Missing private state for seat ${seat}`);
   return value;
-}
-
-function resourceFrom(value: unknown): Resource {
-  const resource = RESOURCES.find((item) => item === value);
-  if (!resource) throw new Error('Random request has an unknown resource');
-  return resource;
 }
 
 /** A card kind of any deck of cards: a resource, or a commodity in a knights game. */
@@ -349,7 +341,7 @@ export function createBrowserRandomSource(entropy: Entropy = browserEntropy): Br
           if (pending.kind !== 'reveal') throw new Error('Malformed hand reveal');
           const actor = seatFrom(state, pending.request.to);
           const target = privateFor(privates, pending.seat);
-          const shown =
+          const revealed =
             pending.request.what === 'progress'
               ? { progress: { ...target.slots } }
               : { hand: { ...target.hand } };
@@ -361,7 +353,7 @@ export function createBrowserRandomSource(entropy: Entropy = browserEntropy): Br
               to: actor,
               what: pending.request.what,
             },
-            privateData: { [actor]: shown },
+            privateData: { [actor]: revealed },
           };
         }
         case 'TAKE_CARDS': {

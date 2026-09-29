@@ -124,8 +124,15 @@ test('a local game offers Cities & Knights, and an online game does not yet', ()
       .getAllByRole('option')
       .map((option) => option.textContent),
   ).not.toContain('Cities & Knights (5–6 players)');
-  expect(isLocalOnlyScenario(scenarioById('knights') ?? SCENARIOS[0]!)).toBe(true);
-  expect(isLocalOnlyScenario(scenarioById('standard') ?? SCENARIOS[0]!)).toBe(false);
+  for (const [id, localOnly] of [
+    ['knights', true],
+    ['knights-56', true],
+    ['standard', false],
+    ['new-horizons', false],
+  ] as const) {
+    const scenario = scenarioById(id);
+    expect(scenario && isLocalOnlyScenario(scenario)).toBe(localOnly);
+  }
 });
 
 test('every offered seafaring scenario starts with its own victory target', () => {

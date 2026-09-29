@@ -42,6 +42,7 @@ import { ImprovementsStrip } from '../knights/ImprovementsStrip';
 import { ProgressHand } from '../knights/ProgressHand';
 import { ProgressCardBack } from '../knights/ProgressCardFace';
 import { TRACKS, cardKinds, isCommodity, isKnights, progressHeld } from '../knights/state';
+import type { Track } from '../knights/state';
 
 const MAX_INLINE_DEVELOPMENT_CARDS = 5;
 const MAX_NARROW_INLINE_DEVELOPMENT_CARDS = 3;
@@ -1299,10 +1300,11 @@ function LiveGame({
                   state={state}
                   seat={revealedSeat ?? actions.actorSeat}
                   presentation={presentation}
+                  captions="cost"
                   {...(revealedSeat !== null && actions.knights
                     ? {
                         buyable: actions.knights.improvable,
-                        onBuy: actions.knights.improve,
+                        onBuy: (track: Track) => actions.knights?.improve(track),
                         disabled: actions.knights.disabled,
                       }
                     : {})}

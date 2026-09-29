@@ -39,23 +39,20 @@ export function previewOfKind(kind: PlacementKind): PreviewPiece | null {
   return kindInfo(kind)?.preview ?? null;
 }
 
+const STYLES: Readonly<Record<TargetStyle, BoardHighlights['style']>> = {
+  site: { vertexTarget: 'site' },
+  upgrade: { vertexTarget: 'upgrade' },
+  piece: { vertexTarget: 'piece' },
+  ring: { edgeTarget: 'ring' },
+  hex: {},
+  lane: {},
+};
+
 /** How the marked targets of a knights kind are drawn: the highlight style for one pick. */
 export function highlightStyle(kind: PlacementKind, firstPick: boolean): BoardHighlights['style'] {
   const info = kindInfo(kind);
   if (!info) return {};
-  const style: TargetStyle = firstPick ? (info.firstStyle ?? info.style) : info.style;
-  switch (style) {
-    case 'site':
-      return { vertexTarget: 'site' };
-    case 'upgrade':
-      return { vertexTarget: 'upgrade' };
-    case 'piece':
-      return { vertexTarget: 'piece' };
-    case 'ring':
-      return { edgeTarget: 'ring' };
-    default:
-      return {};
-  }
+  return STYLES[firstPick ? (info.firstStyle ?? info.style) : info.style];
 }
 
 /** The first picks of a two-pick kind, one target for each distinct thing that can be picked first. */

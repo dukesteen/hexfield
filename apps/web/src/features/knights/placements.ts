@@ -141,55 +141,52 @@ function params(command: CommandShape): Record<string, unknown> {
     : {};
 }
 
+function vertexOnly(kind: KnightsPlacementKind, p: Record<string, unknown>): ParsedPlacement[] {
+  const vertex = str(p.vertex);
+  return vertex === null ? [] : [{ kind, id: vertex }];
+}
+
+function hexOnly(kind: KnightsPlacementKind, p: Record<string, unknown>): ParsedPlacement[] {
+  const hex = str(p.hex);
+  return hex === null ? [] : [{ kind, id: hex }];
+}
+
 function cardPlacements(command: CommandShape): ParsedPlacement[] {
   const kind = typeof command.card === 'string' ? CARD_KINDS[command.card] : undefined;
   if (kind === undefined) return [];
   const p = params(command);
-  switch (kind) {
-    case 'cardWall':
-    case 'cardCity':
-    case 'cardIntrigue': {
-      const vertex = str(p.vertex);
-      return vertex === null ? [] : [{ kind, id: vertex }];
-    }
-    case 'cardMerchant':
-    case 'cardBishop': {
-      const hex = str(p.hex);
-      return hex === null ? [] : [{ kind, id: hex }];
-    }
-    case 'cardInventor': {
-      const hexes = Array.isArray(p.hexes) ? p.hexes.map(str) : [];
-      const [a, b] = hexes;
-      return typeof a === 'string' && typeof b === 'string' && hexes.length === 2
-        ? [
-            { kind, id: b, from: a },
-            { kind, id: a, from: b },
-          ]
-        : [];
-    }
-    case 'cardDiplomat': {
-      const edge = str(p.edge);
-      if (edge === null) return [];
-      const build = str(p.build);
-      return build === null
-        ? [{ kind, id: edge, from: edge, finish: true }]
-        : [{ kind, id: build, from: edge }];
-    }
-    case 'cardSmith': {
-      const vertices = Array.isArray(p.vertices) ? p.vertices.map(str) : [];
-      const [a, b] = vertices;
-      if (typeof a !== 'string') return [];
-      if (vertices.length === 1) return [{ kind, id: a, from: a, finish: true }];
-      return typeof b === 'string' && vertices.length === 2
-        ? [
-            { kind, id: b, from: a },
-            { kind, id: a, from: b },
-          ]
-        : [];
-    }
-    default:
-      return [];
+  if (kind === 'cardWall' || kind === 'cardCity' || kind === 'cardIntrigue')
+    return vertexOnly(kind, p);
+  if (kind === 'cardMerchant' || kind === 'cardBishop') return hexOnly(kind, p);
+  if (kind === 'cardInventor') return swaps(kind, p.hexes);
+  if (kind === 'cardDiplomat') {
+    const edge = str(p.edge);
+    if (edge === null) return [];
+    const build = str(p.build);
+    return build === null
+      ? [{ kind, id: edge, from: edge, finish: true }]
+      : [{ kind, id: build, from: edge }];
   }
+  if (kind === 'cardSmith') {
+    const vertices = Array.isArray(p.vertices) ? p.vertices.map(str) : [];
+    const [a] = vertices;
+    if (typeof a !== 'string') return [];
+    if (vertices.length === 1) return [{ kind, id: a, from: a, finish: true }];
+    return swaps(kind, vertices);
+  }
+  return [];
+}
+
+/** Two picks in either order: each of the pair may be chosen first. */
+function swaps(kind: KnightsPlacementKind, list: unknown): ParsedPlacement[] {
+  const items = Array.isArray(list) ? list.map(str) : [];
+  const [a, b] = items;
+  return typeof a === 'string' && typeof b === 'string' && items.length === 2
+    ? [
+        { kind, id: b, from: a },
+        { kind, id: a, from: b },
+      ]
+    : [];
 }
 
 /** The board taps a legal knights command stands for (a card can stand for several), or none. */

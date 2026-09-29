@@ -361,5 +361,28 @@
       "name": "Wedding",
       "text": "Every rival with more points than you gives you 2 cards."
     }
+  },
+  "action": {
+    "knight": "Recruit knight",
+    "wall": "Build city wall",
+    "sideways": "Upgrade fallen city",
+    "activate": "Activate knight",
+    "promote": "Promote knight",
+    "moveKnight": "Move knight",
+    "displaceKnight": "Displace knight",
+    "chase": "Chase robber",
+    "relocate": "Place displaced knight",
+    "pillage": "Choose city to lose",
+    "metropolis": "Place metropolis",
+    "deserterRemove": "Give up a knight",
+    "deserterPlace": "Place new knight",
+    "cardWall": "Engineer: place wall",
+    "cardCity": "Medicine: upgrade",
+    "cardIntrigue": "Intrigue: drive off",
+    "cardMerchant": "Merchant: place",
+    "cardBishop": "Bishop: move robber",
+    "cardInventor": "Inventor: swap",
+    "cardDiplomat": "Diplomat: remove road",
+    "cardSmith": "Smith: promote"
   }
 }

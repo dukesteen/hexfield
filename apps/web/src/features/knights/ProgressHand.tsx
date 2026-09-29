@@ -74,7 +74,7 @@ export function ProgressHand({
         <button
           type="button"
           className="button button-quiet progress-hand-harbor"
-          onClick={controller.openHarbor}
+          onClick={() => controller.openHarbor()}
         >
           {t('knights:harbor.reopen')}
         </button>
@@ -83,7 +83,7 @@ export function ProgressHand({
         <button
           type="button"
           className="button button-primary progress-hand-discard"
-          onClick={controller.openDiscard}
+          onClick={() => controller.openDiscard()}
         >
           {t('knights:discardProgress.button', { count: surplus })}
         </button>

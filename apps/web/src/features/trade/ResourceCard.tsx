@@ -58,16 +58,8 @@ export function ResourceCard({
 }
 
 /** Card taps add a configured unit; separate remove controls keep touch and keyboard use explicit. */
-export function ResourceCardPicker({
-  label,
-  values,
-  kinds = RESOURCES,
-  stock,
-  selectable,
-  steps,
-  onChange,
-  onClear,
-}: CardPickerProps) {
+export function ResourceCardPicker(props: CardPickerProps) {
+  const { label, values, kinds = RESOURCES, stock, selectable, steps, onClear } = props;
   const { t } = useTranslation('rules');
   const id = useId();
   const addButtons = useRef(new Map<string, HTMLButtonElement>());
@@ -145,7 +137,7 @@ export function ResourceCardPicker({
                 {...(describedBy ? { 'aria-describedby': describedBy } : {})}
                 aria-disabled={atCap || unavailable}
                 onClick={() => {
-                  if (!atCap && !unavailable) onChange(resource, count + step);
+                  if (!atCap && !unavailable) props.onChange(resource, count + step);
                 }}
               >
                 <ResourceCard
@@ -176,7 +168,7 @@ export function ResourceCardPicker({
                 hidden={count === 0}
                 onClick={() => {
                   const nextCount = Math.max(0, count - step);
-                  onChange(resource, nextCount);
+                  props.onChange(resource, nextCount);
                   if (nextCount === 0) addButtons.current.get(resource)?.focus();
                 }}
               >
