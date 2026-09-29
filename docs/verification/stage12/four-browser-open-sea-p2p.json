@@ -1,121 +1,105 @@
 {
- "test": "4 mixed-engine contexts finish a signaling full-mesh game with matching audits",
- "scenario": "open-sea",
- "browsers": [
-  "chromium-a",
-  "chromium-b",
-  "firefox-a",
-  "firefox-b"
- ],
- "env": {
-  "CP2P_MIXED_ENGINE_SEATS": "4",
-  "CP2P_MIXED_ENGINE_MODE": "signaling",
-  "CP2P_MIXED_ENGINE_NO_WEBKIT": "1",
-  "CP2P_MIXED_ENGINE_SCENARIO": "open-sea",
-  "victoryPoints": "7"
- },
- "result": "passed",
- "durationMinutes": 8.1,
- "phases": [
-  "lobby",
-  "setup",
-  "play-and-audit",
-  "audit",
-  "complete"
- ],
- "driverMoves": 332,
- "driverMovesByType": {
-  "END_TURN": 85,
-  "ROLL_DICE": 85,
-  "MOVE_PIRATE": 15,
-  "OFFER_TRADE": 13,
-  "RESPOND_TRADE": 36,
-  "BUILD_ROAD": 6,
-  "DISCARD": 23,
-  "BUILD_CITY": 7,
-  "MOVE_ROBBER": 11,
-  "STEAL": 9,
-  "BUILD_SETTLEMENT": 3,
-  "MARITIME_TRADE": 7,
-  "BUY_DEV_CARD": 9,
-  "CANCEL_TRADE": 2,
-  "PLAY_DEV_CARD": 8,
-  "PLACE_FREE_ROAD": 1,
-  "SKIP": 1,
-  "BUILD_SHIP": 7,
-  "CONFIRM_TRADE": 1,
-  "MOVE_SHIP": 1,
-  "CLAIM_VICTORY": 2
- },
- "fogHexesRevealed": 0,
- "auditProblems": [
-  null,
-  null,
-  null,
-  null
- ],
- "finish": {
-  "commands": 329,
-  "accepted": {
-   "END_TURN": 85,
-   "ROLL_DICE": 85,
-   "MOVE_PIRATE": 15,
-   "OFFER_TRADE": 12,
-   "RESPOND_TRADE": 36,
-   "BUILD_ROAD": 6,
-   "DISCARD": 23,
-   "BUILD_CITY": 7,
-   "MOVE_ROBBER": 11,
-   "STEAL": 9,
-   "BUILD_SETTLEMENT": 3,
-   "MARITIME_TRADE": 7,
-   "BUY_DEV_CARD": 9,
-   "CANCEL_TRADE": 2,
-   "PLAY_DEV_CARD": 8,
-   "PLACE_FREE_ROAD": 1,
-   "SKIP": 1,
-   "BUILD_SHIP": 7,
-   "CONFIRM_TRADE": 1,
-   "MOVE_SHIP": 1
+  "test": "4 mixed-engine contexts finish a signaling full-mesh game with matching audits",
+  "scenario": "open-sea",
+  "browsers": ["chromium-a", "chromium-b", "firefox-a", "firefox-b"],
+  "env": {
+    "CP2P_MIXED_ENGINE_SEATS": "4",
+    "CP2P_MIXED_ENGINE_MODE": "signaling",
+    "CP2P_MIXED_ENGINE_NO_WEBKIT": "1",
+    "CP2P_MIXED_ENGINE_SCENARIO": "open-sea",
+    "victoryPoints": "7"
   },
-  "refusedCommands": {
-   "command-pending": 3
+  "result": "passed",
+  "durationMinutes": 8.1,
+  "phases": ["lobby", "setup", "play-and-audit", "audit", "complete"],
+  "driverMoves": 332,
+  "driverMovesByType": {
+    "END_TURN": 85,
+    "ROLL_DICE": 85,
+    "MOVE_PIRATE": 15,
+    "OFFER_TRADE": 13,
+    "RESPOND_TRADE": 36,
+    "BUILD_ROAD": 6,
+    "DISCARD": 23,
+    "BUILD_CITY": 7,
+    "MOVE_ROBBER": 11,
+    "STEAL": 9,
+    "BUILD_SETTLEMENT": 3,
+    "MARITIME_TRADE": 7,
+    "BUY_DEV_CARD": 9,
+    "CANCEL_TRADE": 2,
+    "PLAY_DEV_CARD": 8,
+    "PLACE_FREE_ROAD": 1,
+    "SKIP": 1,
+    "BUILD_SHIP": 7,
+    "CONFIRM_TRADE": 1,
+    "MOVE_SHIP": 1,
+    "CLAIM_VICTORY": 2
   },
-  "peers": [
-   {
-    "head": {
-     "hash": "0778ee5ec9d768b31c94502043c56843d1c42b2a563e723a168bbe44c665f3ed",
-     "seq": 483
+  "fogHexesRevealed": 0,
+  "auditProblems": [null, null, null, null],
+  "finish": {
+    "commands": 329,
+    "accepted": {
+      "END_TURN": 85,
+      "ROLL_DICE": 85,
+      "MOVE_PIRATE": 15,
+      "OFFER_TRADE": 12,
+      "RESPOND_TRADE": 36,
+      "BUILD_ROAD": 6,
+      "DISCARD": 23,
+      "BUILD_CITY": 7,
+      "MOVE_ROBBER": 11,
+      "STEAL": 9,
+      "BUILD_SETTLEMENT": 3,
+      "MARITIME_TRADE": 7,
+      "BUY_DEV_CARD": 9,
+      "CANCEL_TRADE": 2,
+      "PLAY_DEV_CARD": 8,
+      "PLACE_FREE_ROAD": 1,
+      "SKIP": 1,
+      "BUILD_SHIP": 7,
+      "CONFIRM_TRADE": 1,
+      "MOVE_SHIP": 1
     },
-    "resultPresent": true,
-    "audit": "complete"
-   },
-   {
-    "head": {
-     "hash": "0778ee5ec9d768b31c94502043c56843d1c42b2a563e723a168bbe44c665f3ed",
-     "seq": 483
+    "refusedCommands": {
+      "command-pending": 3
     },
-    "resultPresent": true,
-    "audit": "complete"
-   },
-   {
-    "head": {
-     "hash": "0778ee5ec9d768b31c94502043c56843d1c42b2a563e723a168bbe44c665f3ed",
-     "seq": 483
-    },
-    "resultPresent": true,
-    "audit": "complete"
-   },
-   {
-    "head": {
-     "hash": "0778ee5ec9d768b31c94502043c56843d1c42b2a563e723a168bbe44c665f3ed",
-     "seq": 483
-    },
-    "resultPresent": true,
-    "audit": "complete"
-   }
-  ],
-  "playElapsedMs": 373648,
-  "auditElapsedMs": 48670
- }
+    "peers": [
+      {
+        "head": {
+          "hash": "0778ee5ec9d768b31c94502043c56843d1c42b2a563e723a168bbe44c665f3ed",
+          "seq": 483
+        },
+        "resultPresent": true,
+        "audit": "complete"
+      },
+      {
+        "head": {
+          "hash": "0778ee5ec9d768b31c94502043c56843d1c42b2a563e723a168bbe44c665f3ed",
+          "seq": 483
+        },
+        "resultPresent": true,
+        "audit": "complete"
+      },
+      {
+        "head": {
+          "hash": "0778ee5ec9d768b31c94502043c56843d1c42b2a563e723a168bbe44c665f3ed",
+          "seq": 483
+        },
+        "resultPresent": true,
+        "audit": "complete"
+      },
+      {
+        "head": {
+          "hash": "0778ee5ec9d768b31c94502043c56843d1c42b2a563e723a168bbe44c665f3ed",
+          "seq": 483
+        },
+        "resultPresent": true,
+        "audit": "complete"
+      }
+    ],
+    "playElapsedMs": 373648,
+    "auditElapsedMs": 48670
+  }
 }

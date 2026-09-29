@@ -1,1 +1,112 @@
-{"mode":"net","options":{"scenario":5,"seeds":1,"startIndex":0,"seed":42,"parallel":1,"players":4,"map":"fogbound"},"requestedSeeds":1,"completedGames":1,"averageTurns":179,"averageInputs":1040,"averageVirtualMilliseconds":33684,"averageElapsedMilliseconds":150912.373916,"results":[{"map":{"id":"fogbound","inputCounts":{"START_SEAT":1,"PLACE_SETTLEMENT":8,"PLACE_ROAD":8,"ROLL_DICE":179,"DICE_RESULT":179,"MOVE_ROBBER":21,"STEAL":19,"STEAL_RESULT":19,"END_TURN":178,"DISCARD":54,"MOVE_PIRATE":20,"BUILD_CITY":11,"OFFER_TRADE":29,"RESPOND_TRADE":87,"CANCEL_TRADE":10,"MARITIME_TRADE":33,"BUILD_ROAD":14,"BUILD_SETTLEMENT":8,"BUY_DEV_CARD":21,"CARD_DEALT":21,"PLAY_DEV_CARD":16,"REVEAL_COUNT":3,"BUILD_SHIP":47,"CONFIRM_TRADE":9,"MOVE_SHIP":21,"FOG_REVEALED":19,"CHOOSE_GOLD":2,"PLACE_FREE_SHIP":2,"CLAIM_VICTORY":1}},"security":"stub","protocolVersion":6,"seed":42,"gameIndex":0,"scenario":5,"turns":179,"inputs":1040,"virtualMilliseconds":33684,"elapsedMilliseconds":150912.373916,"operationTimings":{"sessionFlush":{"calls":44015,"totalMilliseconds":147629.495192,"maximumMilliseconds":3096.456666000013},"networkDelivery":{"calls":43177,"totalMilliseconds":1575.2648870012779,"maximumMilliseconds":3.0384159999957774},"botDecide":{"calls":837,"totalMilliseconds":822.7982379999112,"maximumMilliseconds":7.651541999992332}},"finalStateHash":"521395a1fca7f4d39c6bb915a82a96f6cd1ff700dd240191da6e7b848bd29f82","finalLogHash":"14e70e50b3a315743a2398bbfbbc5542078341464a5cd1447688cab5d82b8894","audits":[],"faultInjected":true,"faultRecovered":true,"faultEvidence":{"injectedAtRevision":23,"majorityCommitsDuringPartition":9,"isolatedCommitsDuringPartition":0,"pausedPeersDuringPartition":0,"replacementTerm":null,"censoredCommandCommitted":false,"snapshotRequests":0,"snapshotResponses":0,"derivedContextDiagnostic":null,"snapshotRepairAdopted":false,"repairSnapshotParentSeq":null,"repairSnapshotHash":null,"continuationCommandHash":null,"duplicateDeliveries":0,"certifiedExclusionPeers":0,"byzantineCommandCommits":0,"rejectedProposalHash":null,"nonVoterMessageTypes":[],"nonVoterPublishedMaster":false}}],"failures":[],"parallel":1,"sourceFingerprint":"62d9b050632ea8fa462788d04095e7d1c2a9020cca81df03125f2eaaab617c33","sourceUnchanged":true}
+{
+  "mode": "net",
+  "options": {
+    "scenario": 5,
+    "seeds": 1,
+    "startIndex": 0,
+    "seed": 42,
+    "parallel": 1,
+    "players": 4,
+    "map": "fogbound"
+  },
+  "requestedSeeds": 1,
+  "completedGames": 1,
+  "averageTurns": 179,
+  "averageInputs": 1040,
+  "averageVirtualMilliseconds": 33684,
+  "averageElapsedMilliseconds": 150912.373916,
+  "results": [
+    {
+      "map": {
+        "id": "fogbound",
+        "inputCounts": {
+          "START_SEAT": 1,
+          "PLACE_SETTLEMENT": 8,
+          "PLACE_ROAD": 8,
+          "ROLL_DICE": 179,
+          "DICE_RESULT": 179,
+          "MOVE_ROBBER": 21,
+          "STEAL": 19,
+          "STEAL_RESULT": 19,
+          "END_TURN": 178,
+          "DISCARD": 54,
+          "MOVE_PIRATE": 20,
+          "BUILD_CITY": 11,
+          "OFFER_TRADE": 29,
+          "RESPOND_TRADE": 87,
+          "CANCEL_TRADE": 10,
+          "MARITIME_TRADE": 33,
+          "BUILD_ROAD": 14,
+          "BUILD_SETTLEMENT": 8,
+          "BUY_DEV_CARD": 21,
+          "CARD_DEALT": 21,
+          "PLAY_DEV_CARD": 16,
+          "REVEAL_COUNT": 3,
+          "BUILD_SHIP": 47,
+          "CONFIRM_TRADE": 9,
+          "MOVE_SHIP": 21,
+          "FOG_REVEALED": 19,
+          "CHOOSE_GOLD": 2,
+          "PLACE_FREE_SHIP": 2,
+          "CLAIM_VICTORY": 1
+        }
+      },
+      "security": "stub",
+      "protocolVersion": 6,
+      "seed": 42,
+      "gameIndex": 0,
+      "scenario": 5,
+      "turns": 179,
+      "inputs": 1040,
+      "virtualMilliseconds": 33684,
+      "elapsedMilliseconds": 150912.373916,
+      "operationTimings": {
+        "sessionFlush": {
+          "calls": 44015,
+          "totalMilliseconds": 147629.495192,
+          "maximumMilliseconds": 3096.456666000013
+        },
+        "networkDelivery": {
+          "calls": 43177,
+          "totalMilliseconds": 1575.2648870012779,
+          "maximumMilliseconds": 3.0384159999957774
+        },
+        "botDecide": {
+          "calls": 837,
+          "totalMilliseconds": 822.7982379999112,
+          "maximumMilliseconds": 7.651541999992332
+        }
+      },
+      "finalStateHash": "521395a1fca7f4d39c6bb915a82a96f6cd1ff700dd240191da6e7b848bd29f82",
+      "finalLogHash": "14e70e50b3a315743a2398bbfbbc5542078341464a5cd1447688cab5d82b8894",
+      "audits": [],
+      "faultInjected": true,
+      "faultRecovered": true,
+      "faultEvidence": {
+        "injectedAtRevision": 23,
+        "majorityCommitsDuringPartition": 9,
+        "isolatedCommitsDuringPartition": 0,
+        "pausedPeersDuringPartition": 0,
+        "replacementTerm": null,
+        "censoredCommandCommitted": false,
+        "snapshotRequests": 0,
+        "snapshotResponses": 0,
+        "derivedContextDiagnostic": null,
+        "snapshotRepairAdopted": false,
+        "repairSnapshotParentSeq": null,
+        "repairSnapshotHash": null,
+        "continuationCommandHash": null,
+        "duplicateDeliveries": 0,
+        "certifiedExclusionPeers": 0,
+        "byzantineCommandCommits": 0,
+        "rejectedProposalHash": null,
+        "nonVoterMessageTypes": [],
+        "nonVoterPublishedMaster": false
+      }
+    }
+  ],
+  "failures": [],
+  "parallel": 1,
+  "sourceFingerprint": "62d9b050632ea8fa462788d04095e7d1c2a9020cca81df03125f2eaaab617c33",
+  "sourceUnchanged": true
+}
