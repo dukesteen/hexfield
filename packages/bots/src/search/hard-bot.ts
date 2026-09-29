@@ -186,12 +186,16 @@ export class HardBot extends HeuristicBot {
     const deadline = options.timeBudgetMs === undefined ? null : now() + options.timeBudgetMs;
     const iterations =
       options.iterationBudget ?? (deadline === null ? this.settings.iterations : Infinity);
-    for (let iteration = 0; iteration < iterations; iteration++) {
-      if (deadline !== null && iteration > 0 && now() >= deadline) break;
+    const late = (): boolean => deadline !== null && now() >= deadline;
+    for (let iteration = 0; iteration < iterations && !late(); iteration++) {
       // One sampled world and one dice stream per iteration, shared by every candidate.
       const world = determinize(view, engine, rng);
       const seed = seedFrom(rng);
-      candidates.forEach((candidate, index) => {
+      const values: number[] = [];
+      for (const candidate of candidates) {
+        // Out of time mid-iteration: drop the partial iteration, so every candidate keeps the
+        // same samples (a paired comparison).
+        if (late()) break;
         const end = rollout(
           engine,
           { ...world, devDeck: [...world.devDeck] },
@@ -201,13 +205,16 @@ export class HardBot extends HeuristicBot {
           createRng(seed),
           horizon,
         );
-        totals[index] =
-          (totals[index] ?? 0) +
-          (end ? leafValue(engine, end.state, end.privates, view.seat) : -10);
+        values.push(end ? leafValue(engine, end.state, end.privates, view.seat) : -10);
+      }
+      if (values.length < candidates.length) break;
+      values.forEach((value, index) => {
+        totals[index] = (totals[index] ?? 0) + value;
         counts[index] = (counts[index] ?? 0) + 1;
       });
-      if (deadline !== null && now() >= deadline) break;
     }
+    // Not one full iteration fitted in the budget: the heuristic decides alone.
+    if (!counts[0]) return heuristic;
     const mean = (index: number): number => (totals[index] ?? 0) / Math.max(1, counts[index] ?? 0);
     let chosen = 0;
     for (let index = 1; index < candidates.length; index++)
