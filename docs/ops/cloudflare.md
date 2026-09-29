@@ -65,6 +65,13 @@ Also verify two independent browser profiles can join a room and begin play.
 Verify `/api/turn` refuses issuance and the deployed client has no default TURN
 endpoint. Do not create a TURN key as part of smoke testing.
 
+Link previews: `https://playhexfield.com/og.png` and the favicons are static files
+from `apps/web/public/` (regenerate with `node tools/generate-og-image.mjs`), served
+by the assets binding before the SPA fallback. After a deploy, check that
+`curl -I https://playhexfield.com/og.png` answers `200 image/png` and preview the
+home page in an Open Graph checker (for example opengraph.xyz) or a chat app. Chat
+apps cache previews, so a changed image may need their cache refresh.
+
 Worker invocation logs are disabled to avoid recording room URLs. Application
 errors omit provider bodies and credentials. Use deployment versions for code
 rollbacks; Durable Object migrations and data do not roll back with code.
