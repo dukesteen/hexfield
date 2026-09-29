@@ -53,6 +53,14 @@ export function knightsState(state: Readonly<GameState>): KnightsExt | null {
   return isKnights(state) ? knightsExt(state) : null;
 }
 
+/** The points a seat holds from metropolises (two each) and Defender of Catan cards (one each). */
+export function knightsVictoryPoints(state: Readonly<GameState>, seat: Seat): number {
+  const ext = knightsState(state);
+  if (!ext) return 0;
+  const metropolises = TRACKS.filter((track) => ext.metropolises[track]?.seat === seat).length;
+  return metropolises * 2 + (ext.defenders[seat] ?? 0);
+}
+
 /** A knight's strength as one of the three levels the art has. */
 export function knightLevel(value: number): 1 | 2 | 3 {
   return value >= 3 ? 3 : value === 2 ? 2 : 1;

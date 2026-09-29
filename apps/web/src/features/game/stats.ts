@@ -1,4 +1,5 @@
 import { RESOURCES, type GameEvent, type GameState, type Seat } from '@cp2p/engine';
+import { knightsVictoryPoints } from '../knights/state';
 import { islandBonusOf } from './seafaring';
 
 function record(value: unknown): value is Record<string, unknown> {
@@ -44,13 +45,16 @@ export function victoryBreakdown(state: GameState, seat: Seat, hidden: number | 
     publicSeat?.cardSlots.filter((slot) => slot.revealed === 'victoryPoint').length ?? 0;
   // Present only when the new-island bonus scored, so other games' breakdowns are unchanged.
   const islands = islandBonusOf(state, seat).points;
+  // Metropolises and Defender of Catan cards; present only when they scored.
+  const knights = knightsVictoryPoints(state, seat);
   return {
     buildings,
     awards,
     ...(islands > 0 ? { islands } : {}),
+    ...(knights > 0 ? { knights } : {}),
     revealed,
     hidden,
     vpCards: hidden === null ? null : revealed + hidden,
-    total: hidden === null ? null : buildings + awards + islands + revealed + hidden,
+    total: hidden === null ? null : buildings + awards + islands + knights + revealed + hidden,
   };
 }
