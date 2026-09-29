@@ -28,7 +28,18 @@ interface Entry {
 }
 
 const directory = join(dirname(fileURLToPath(import.meta.url)), 'golden', 'seafarers-knights');
-const SCENARIOS = ['new-horizons-knights', 'new-horizons-knights-56', 'desert-crossing-knights'];
+const SCENARIOS = [
+  'new-horizons-knights',
+  'new-horizons-knights-56',
+  'four-isles-knights',
+  'four-isles-knights-56',
+  'fogbound-knights',
+  'fogbound-knights-56',
+  'desert-crossing-knights',
+  'desert-crossing-knights-56',
+  'open-sea-knights',
+  'open-sea-knights-56',
+];
 
 // The fixtures are written by `pnpm sim golden --update --seafarers-knights`, which validated them.
 function read(file: string): unknown {
@@ -47,7 +58,7 @@ describe('seafaring with knights golden replays', () => {
     expect(new Set(entries.map((entry) => entry.file)).size).toBe(entries.length);
   });
 
-  test('together they cover ships, the pirate, gold, the barbarians and knights', () => {
+  test('together they cover ships, fog, the pirate, gold, the barbarians and knights', () => {
     const features = new Set(entries.flatMap((entry) => entry.features));
     for (const feature of [
       'normal-completion',
@@ -56,6 +67,7 @@ describe('seafaring with knights golden replays', () => {
       'pirate-move',
       'gold-choice',
       'island-bonus',
+      'fog-reveal',
       'barbarian-attack',
       'pirate-entered',
       'knight-build',
@@ -64,6 +76,10 @@ describe('seafaring with knights golden replays', () => {
       expect(features.has(feature), `missing ${feature}`).toBe(true);
     // Every game had its first attack, so the pirate entered in each of them.
     for (const entry of entries) expect(entry.features).toContain('pirate-entered');
+    // Fog belongs to the Fogbound maps, and both their goldens show it.
+    expect(
+      entries.filter((entry) => entry.features.includes('fog-reveal')).map((entry) => entry.name),
+    ).toEqual(['fogbound-knights', 'fogbound-knights-56']);
   });
 
   test.each(entries)(
@@ -121,6 +137,10 @@ function assertFeatures(entry: Entry, replay: Replay, state: GameState): void {
   const checks: [string, boolean][] = [
     ['ship-build', commands.has('BUILD_SHIP')],
     ['setup-ship', commands.has('PLACE_SETUP_SHIP')],
+    [
+      'fog-reveal',
+      replay.inputs.some((input) => input.kind === 'system' && input.type === 'FOG_REVEALED'),
+    ],
     ['ship-move', commands.has('MOVE_SHIP')],
     ['pirate-move', commands.has('MOVE_PIRATE')],
     ['gold-choice', commands.has('CHOOSE_GOLD')],
@@ -135,6 +155,9 @@ function assertFeatures(entry: Entry, replay: Replay, state: GameState): void {
   ];
   for (const [feature, happened] of checks)
     expect({ feature, shown: shown.has(feature) }).toEqual({ feature, shown: happened });
-  // The barbarian track stands outside the explicit board all game long.
+  // The barbarian track stands outside the board all game long, a generated one included.
   expect(state.board.fixtures).toHaveLength(1);
+  const onBoard = new Set(state.board.hexes.map((hex) => hex.id));
+  for (const { q, r } of state.board.fixtures?.[0]?.footprint ?? [])
+    expect(onBoard.has(`h:${q},${r}`)).toBe(false);
 }

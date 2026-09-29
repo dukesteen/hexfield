@@ -20,7 +20,9 @@ describe('seafaring golden replays', () => {
       'four-isles',
       'four-isles-56',
       'fogbound',
+      'fogbound-56',
       'desert-crossing',
+      'desert-crossing-56',
       'open-sea',
       'open-sea-56',
     ]);

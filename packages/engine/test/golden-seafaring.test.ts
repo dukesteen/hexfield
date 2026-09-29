@@ -34,7 +34,9 @@ const SCENARIOS = [
   'four-isles',
   'four-isles-56',
   'fogbound',
+  'fogbound-56',
   'desert-crossing',
+  'desert-crossing-56',
   'open-sea',
   'open-sea-56',
 ];
@@ -69,9 +71,10 @@ describe('seafaring golden replays', () => {
       'fog-reveal',
     ])
       expect(features.has(feature), `missing ${feature}`).toBe(true);
-    // Fog belongs to Fogbound alone, and its golden shows it.
+    // Fog belongs to Fogbound alone, and both its goldens show it.
     expect(entries.filter((entry) => entry.features.includes('fog-reveal'))).toMatchObject([
       { scenario: 'fogbound' },
+      { scenario: 'fogbound-56' },
     ]);
   });
 

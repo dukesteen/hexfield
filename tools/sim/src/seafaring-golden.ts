@@ -86,11 +86,25 @@ export const SEAFARING_GOLDEN_CASES: readonly SeafaringGoldenCase[] = [
     require: [...CORE, 'fog-reveal', 'ship-move', 'pirate-move', 'gold-choice'],
   },
   {
+    name: 'fogbound-56',
+    scenario: 'fogbound-56',
+    seats: 6,
+    seed: 1200,
+    require: [...CORE, 'fog-reveal', 'ship-move'],
+  },
+  {
     name: 'desert-crossing',
     scenario: 'desert-crossing',
     seats: 4,
     seed: 1200,
     require: [...CORE, 'ship-move', 'island-bonus'],
+  },
+  {
+    name: 'desert-crossing-56',
+    scenario: 'desert-crossing-56',
+    seats: 6,
+    seed: 1200,
+    require: [...CORE, 'island-bonus'],
   },
   {
     name: 'open-sea',
