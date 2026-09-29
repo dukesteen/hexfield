@@ -41,10 +41,13 @@ import {
   sailPosition,
   walledCityArtKey,
 } from './knightsLayout.js';
-import { hexExtents, isLandTerrain, islandBoundarySegments } from './boardShape.js';
+import { hexExtents, islandBoundarySegments } from './boardShape.js';
 import { fogRevealShape } from './fogReveal.js';
 import { roadVariantForEdge } from './roadVariant.js';
-import { shipVariantForEdge } from './shipVariant.js';
+import { shipHeadings, shipVariantAmong, shipVariantForEdge } from './shipVariant.js';
+import { shipAnchor } from './shipLayout.js';
+import type { ShipVariant } from './shipVariant.js';
+import type { Seat } from '@cp2p/engine';
 import type { BoardTextures, SeafaringTextures } from './assets/terrainTextures.js';
 import { sameAppearance } from './appearance.js';
 import {
@@ -55,7 +58,8 @@ import {
   productionTokenMotion,
   robberPosition,
 } from './effectMotion.js';
-import { harborLayout } from './harborLayout.js';
+import { harborOnBoard } from './harborLayout.js';
+import { BONUS_CHIT_SIZE, islandBonusPoints } from './bonusLayout.js';
 import type {
   BoardAppearance,
   BoardRendererDiagnostics,
@@ -103,13 +107,10 @@ const BRACKET_HALF = 0.46;
 const BRACKET_ARM = 0.16;
 const BADGE_RADIUS = 0.13;
 const PREVIEW_CORNER = 0.12;
-/** Ship art width in hex sizes, and where its waterline center sits in the art. */
-const SHIP_WIDTH = 0.95;
-const SHIP_ANCHOR = { x: 0.53, y: 0.66 } as const;
+/** Ship art width in hex sizes: small enough that a hull fits between the buildings at its ends. */
+const SHIP_WIDTH = 0.56;
 const PIRATE_WIDTH = 1.2;
 const PIRATE_ANCHOR_Y = 0.8;
-const BONUS_CHIT_SIZE = 0.46;
-const BONUS_CHIT_OFFSET = { x: 0.3, y: -0.32 } as const;
 /** Extra water kept around an explicit-sea board and its scenery ring when fitting the camera. */
 const SEA_FIT_MARGIN = 0.1;
 /** The smallest zoom a fit may pick, below the pinch floor, so a large board still fits whole. */
@@ -240,6 +241,8 @@ export class PixiBoardRenderer implements BoardRenderer {
   private pirateSprite: Sprite | null = null;
   private pirateMoveActive = false;
   private readonly shipNodes = new Map<EdgeId, Sprite>();
+  /** Each drawn ship's hull, following its owner's route. */
+  private shipVariants = new Map<EdgeId, ShipVariant>();
   private readonly hiddenShips = new Set<EdgeId>();
   private seafaring: SeafaringTextures | null = null;
   private seafaringLoading: Promise<void> | null = null;
@@ -466,11 +469,7 @@ export class PixiBoardRenderer implements BoardRenderer {
     ]);
     this.drawChanged('tokens', [model.hexes.map(({ id, q, r, token }) => ({ id, q, r, token }))]);
     this.drawChanged('roads', [model.roads, this.appearance.players]);
-    this.drawChanged('ships', [
-      model.ships ?? [],
-      this.appearance.players,
-      this.seafaring !== null,
-    ]);
+    this.drawShips();
     this.drawChanged('buildings', [
       model.buildings,
       this.appearance.players,
@@ -483,7 +482,20 @@ export class PixiBoardRenderer implements BoardRenderer {
       this.knightsArt !== null,
       this.seafaring !== null,
     ]);
-    this.drawChanged('bonus', [model.islandBonuses ?? [], this.seafaring !== null]);
+    this.drawChanged('bonus', [
+      model.islandBonuses ?? [],
+      (model.islandBonuses?.length ?? 0) > 0
+        ? [
+            model.hexes.map(({ id, terrain, token }) => [id, terrain, token]),
+            model.harbors,
+            model.roads,
+            model.ships,
+            model.buildings,
+            model.knights?.pieces,
+          ]
+        : null,
+      this.seafaring !== null,
+    ]);
     this.drawChanged('robber', [model.robberHex, model.pirateHex, this.seafaring !== null]);
     this.drawChanged('debug', [
       this.debugIslands,
@@ -825,6 +837,7 @@ export class PixiBoardRenderer implements BoardRenderer {
       const sprite = this.shipSprite(
         effect.at.id,
         this.playerStyleMap().get(effect.seat)?.color ?? DEFAULT_PLAYER_STYLE.color,
+        effect.seat,
       );
       const point = this.pointForHit(effect.at);
       if (!sprite || !point) return null;
@@ -846,6 +859,7 @@ export class PixiBoardRenderer implements BoardRenderer {
       const sprite = this.shipSprite(
         effect.toEdge,
         this.playerStyleMap().get(effect.seat)?.color ?? DEFAULT_PLAYER_STYLE.color,
+        effect.seat,
       );
       if (!sprite) return null;
       const start = edgeToPixel(effect.fromEdge, this.hexSize).midpoint;
@@ -1328,14 +1342,22 @@ export class PixiBoardRenderer implements BoardRenderer {
     return sprite;
   }
 
-  /** A ship at the edge midpoint, or null while the seafaring art is not loaded. */
-  private shipSprite(id: EdgeId, color: number): Sprite | null {
+  /**
+   * A ship centred on its edge, its hull along the edge and heading out along its owner's route,
+   * or null while the seafaring art is not loaded. Without a seat it keeps a stable heading.
+   */
+  private shipSprite(id: EdgeId, color: number, seat?: Seat): Sprite | null {
     const textures = this.seafaring?.ships[artColorFromNumber(color)];
-    const texture = textures?.[shipVariantForEdge(id) - 1];
+    const variant: ShipVariant =
+      seat === undefined || !this.model
+        ? shipVariantForEdge(id)
+        : (this.shipVariants.get(id) ?? shipVariantAmong(this.model, id, seat));
+    const texture = textures?.[variant - 1];
     if (!texture) return null;
     const sprite = new Sprite(texture);
     const midpoint = edgeToPixel(id, this.hexSize).midpoint;
-    sprite.anchor.set(SHIP_ANCHOR.x, SHIP_ANCHOR.y);
+    const anchor = shipAnchor(variant);
+    sprite.anchor.set(anchor.x, anchor.y);
     sprite.position.set(midpoint.x, midpoint.y);
     sprite.width = this.hexSize * SHIP_WIDTH;
     sprite.height = (sprite.width * SHIP_ART_SIZE.height) / SHIP_ART_SIZE.width;
@@ -1508,6 +1530,7 @@ export class PixiBoardRenderer implements BoardRenderer {
     if (!this.model) return;
     this.drawChanged('background', [appearance.theme]);
     this.drawChanged('roads', [this.model.roads, this.appearance.players]);
+    this.drawShips();
     this.drawChanged('buildings', [
       this.model.buildings,
       this.appearance.players,
@@ -1699,6 +1722,18 @@ export class PixiBoardRenderer implements BoardRenderer {
     this.destroyDetachedChildren();
   }
 
+  /** Redraw the ships when they, their owners' routes (which set headings) or colours change. */
+  private drawShips(): void {
+    if (!this.model) return;
+    this.shipVariants = this.model.ships ? shipHeadings(this.model) : new Map();
+    this.drawChanged('ships', [
+      this.model.ships ?? [],
+      [...this.shipVariants],
+      this.appearance.players,
+      this.seafaring !== null,
+    ]);
+  }
+
   private drawChanged(name: LayerName, value: unknown): void {
     const signature = JSON.stringify(value);
     if (this.signatures.get(name) === signature) return;
@@ -1845,7 +1880,12 @@ export class PixiBoardRenderer implements BoardRenderer {
         if (this.focusPreview) {
           const preview =
             this.focusPreview.piece === 'ship'
-              ? this.shipSprite(hit.id, this.focusPreview.color)
+              ? this.shipSprite(
+                  hit.id,
+                  this.focusPreview.color,
+                  this.appearance.players.find((style) => style.color === this.focusPreview?.color)
+                    ?.seat,
+                )
               : this.roadSprite(hit.id, this.focusPreview.color);
           if (preview) this.layers.edgeFocus.addChild(preview);
         }
@@ -1910,7 +1950,11 @@ export class PixiBoardRenderer implements BoardRenderer {
         .map((ship) => ({ ship, y: edgeToPixel(ship.edge, this.hexSize).midpoint.y }))
         .toSorted((a, b) => a.y - b.y);
       for (const { ship } of ships) {
-        const sprite = this.shipSprite(ship.edge, styles.get(ship.seat)?.color ?? 0x49665b);
+        const sprite = this.shipSprite(
+          ship.edge,
+          styles.get(ship.seat)?.color ?? 0x49665b,
+          ship.seat,
+        );
         if (!sprite) continue;
         sprite.visible = !this.hiddenShips.has(ship.edge);
         this.shipNodes.set(ship.edge, sprite);
@@ -1918,16 +1962,14 @@ export class PixiBoardRenderer implements BoardRenderer {
       }
     } else if (name === 'bonus') {
       const chits = this.seafaring?.chits;
+      const points = this.graph ? islandBonusPoints(model, this.graph, this.hexSize) : new Map();
       for (const bonus of model.islandBonuses ?? []) {
         const texture = chits?.[bonus.vp <= 1 ? 1 : 2];
-        if (!texture) continue;
-        const point = vertexToPixel(bonus.vertex, this.hexSize);
+        const point = points.get(bonus.vertex);
+        if (!texture || !point) continue;
         const sprite = new Sprite(texture);
         sprite.anchor.set(0.5);
-        sprite.position.set(
-          point.x + this.hexSize * BONUS_CHIT_OFFSET.x,
-          point.y + this.hexSize * BONUS_CHIT_OFFSET.y,
-        );
+        sprite.position.set(point.x, point.y);
         sprite.width = this.hexSize * BONUS_CHIT_SIZE;
         sprite.height = this.hexSize * BONUS_CHIT_SIZE;
         layer.addChild(sprite);
@@ -2089,24 +2131,10 @@ export class PixiBoardRenderer implements BoardRenderer {
   }
 
   private drawHarbor(layer: Container, edgeId: EdgeId, kind: string): void {
-    const model = this.model;
-    const graph = this.graph;
-    const edgeIndex = graph?.edgeIndex[edgeId];
-    if (!model || !graph || edgeIndex === undefined) return;
-    const endpoints = graph.edgeVertices[edgeIndex];
-    if (!endpoints) return;
-    const first = vertexToPixel(endpoints[0], this.hexSize);
-    const second = vertexToPixel(endpoints[1], this.hexSize);
-    const landHexId = graph.edgeHexes[edgeIndex]?.find((id) => {
-      const hex = model.hexes.find((candidate) => candidate.id === id);
-      return hex !== undefined && isLandTerrain(hex.terrain);
-    });
-    const landHex = model.hexes.find((hex) => hex.id === landHexId);
-    if (!landHex) return;
-
-    const landCenter = hexToPixel(landHex.q, landHex.r, this.hexSize);
-    const layout = harborLayout(first, second, landCenter);
-    if (!layout) return;
+    if (!this.model || !this.graph) return;
+    const placed = harborOnBoard(this.model, this.graph, edgeId, this.hexSize);
+    if (!placed) return;
+    const { layout, landCenter } = placed;
 
     const texture = this.textures.harbors[kind === 'generic' ? '3to1' : kind];
     if (!texture) return;
@@ -2301,22 +2329,9 @@ export class PixiBoardRenderer implements BoardRenderer {
     }
     const badgeRadius = this.hexSize * 0.8;
     for (const harbor of this.model.harbors) {
-      const edgeIndex = this.graph?.edgeIndex[harbor.edge];
-      const endpoints = edgeIndex === undefined ? undefined : this.graph?.edgeVertices[edgeIndex];
-      const landHexId =
-        edgeIndex === undefined
-          ? undefined
-          : this.graph?.edgeHexes[edgeIndex]?.find((id) => {
-              const hex = this.model?.hexes.find((candidate) => candidate.id === id);
-              return hex !== undefined && isLandTerrain(hex.terrain);
-            });
-      const landHex = this.model.hexes.find((hex) => hex.id === landHexId);
-      if (!endpoints || !landHex) continue;
-      const layout = harborLayout(
-        vertexToPixel(endpoints[0], this.hexSize),
-        vertexToPixel(endpoints[1], this.hexSize),
-        hexToPixel(landHex.q, landHex.r, this.hexSize),
-      );
+      const layout = this.graph
+        ? harborOnBoard(this.model, this.graph, harbor.edge, this.hexSize)?.layout
+        : undefined;
       if (!layout) continue;
       minX = Math.min(minX, layout.hub.x - badgeRadius);
       maxX = Math.max(maxX, layout.hub.x + badgeRadius);
