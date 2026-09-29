@@ -3,6 +3,7 @@ import type { CommandShape } from '../../core/pipeline/index.js';
 import type { GameState, PhaseFrame } from '../../core/state/index.js';
 import { RESOURCES, failure, isBaseResource, success } from '../../core/types/index.js';
 import type { Resource, Seat } from '../../core/types/index.js';
+import { verticesForHex } from '../base/board/index.js';
 import { claimCommands } from '../base/legal.js';
 import {
   exchangeBank,
@@ -54,12 +55,29 @@ function headSeat(state: GameState): Seat {
 }
 
 /**
+ * Whether the seat has a gold claim on the roll (Seafarers gold fields). Gold pays cards of the
+ * seat's choice, so a seat with a claim received production and does not qualify (our choice).
+ */
+function goldEntitled(state: GameState, seat: Seat, roll: number): boolean {
+  const own = new Set(
+    state.board.buildings.filter((piece) => piece.seat === seat).map((piece) => piece.vertex),
+  );
+  return state.board.hexes.some(
+    (hex) =>
+      hex.terrain === 'gold' &&
+      hex.token === roll &&
+      hex.id !== state.board.robberHex &&
+      verticesForHex(state, hex.id).some((vertex) => own.has(vertex)),
+  );
+}
+
+/**
  * The `afterProduction` hook: open the Aqueduct choices, one per qualifying seat in turn order
  * from the active seat, when the bank still holds a resource. It runs only on a non-7 roll.
  */
 export function openAqueductChoices(state: GameState, roll: number): GameState {
-  const noted = knightsExt(state).noProduction;
-  if (noted.length === 0) return state;
+  const noted = knightsExt(state).noProduction.filter((seat) => !goldEntitled(state, seat, roll));
+  if (knightsExt(state).noProduction.length === 0) return state;
   const cleared = updateKnights(state, (old) => ({ ...old, noProduction: [] }));
   if (roll === 7 || bankResources(cleared).length === 0) return cleared;
   const seats = cleared.config.seats;

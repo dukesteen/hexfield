@@ -8,7 +8,8 @@ export type ExpansionId = (typeof EXPANSION_IDS)[number];
 /**
  * `yes`: allowed and tested. `later`: allowed by the rules but disabled until the combined rules
  * are implemented and written in docs/rules/combos.md. `scenario`: allowed only through a scenario
- * that declares both modules. `no`: never allowed.
+ * that declares both modules (seafaring with knights: `scenario:seafarers-knights`, see
+ * docs/rules/combos.md). `no`: never allowed.
  */
 export type Compatibility = 'yes' | 'later' | 'scenario' | 'no';
 
@@ -26,13 +27,13 @@ export const MODULE_COMPAT: Matrix = Object.freeze({
   seafaring: {
     'five-six': 'yes',
     seafaring: 'yes',
-    knights: 'later',
+    knights: 'scenario',
     frontier: 'no',
     explorers: 'no',
   },
   knights: {
     'five-six': 'yes',
-    seafaring: 'later',
+    seafaring: 'scenario',
     knights: 'yes',
     frontier: 'scenario',
     explorers: 'no',

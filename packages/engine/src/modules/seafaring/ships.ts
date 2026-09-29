@@ -1,7 +1,9 @@
+import type { HandlerContext } from '../../core/modules/index.js';
 import type { GameState } from '../../core/state/index.js';
 import type { Seat } from '../../core/types/index.js';
 import { boardGraph, edgeEndpoints, edgeHasSeaSide, edgeOccupied } from '../base/board/index.js';
-import { seafaringExt } from './types.js';
+import { openShipEdges } from '../base/board/shipRoutes.js';
+import { seafaringExt, updateSeafaring } from './types.js';
 
 /** A seat's ship edges, in placement order. */
 export function shipEdges(state: GameState, seat: Seat): string[] {
@@ -17,19 +19,43 @@ export function pirateEdges(state: GameState): ReadonlySet<string> {
   return new Set(index === undefined ? [] : (graph.hexEdges[index] ?? []));
 }
 
+/**
+ * What other modules say about vertices for one seat's ships, from the `routeGraph` hook: `stops`
+ * are vertices where another seat's pieces (knights) stop the seat's routes, `anchors` are the
+ * seat's own pieces that close a route like a building does (its knights).
+ */
+export interface ShipContext {
+  stops: ReadonlySet<string>;
+  anchors: ReadonlySet<string>;
+}
+
+const NO_CONTEXT: ShipContext = { stops: new Set(), anchors: new Set() };
+
+/** The seat's ship context. Without the engine context (seafaring alone, tests) it is empty. */
+export function shipContext(state: GameState, seat: Seat, ctx?: HandlerContext): ShipContext {
+  if (!ctx) return NO_CONTEXT;
+  const route = ctx.hooks.routeGraph(state, seat, { edges: [], blocked: [] });
+  const anchors = route.anchors ?? [];
+  return route.blocked.length === 0 && anchors.length === 0
+    ? NO_CONTEXT
+    : { stops: new Set(route.blocked), anchors: new Set(anchors) };
+}
+
 function buildingAt(state: GameState, vertex: string): Seat | undefined {
   return state.board.buildings.find((piece) => piece.vertex === vertex)?.seat;
 }
 
 /**
  * True when a ship on these vertices would touch the seat's own building, or an own ship
- * (ignoring `ignore`) at a vertex that holds no opponent building. Roads never connect a ship.
+ * (ignoring `ignore`) at a vertex that holds no opponent building or stopping piece. Roads never
+ * connect a ship.
  */
 function shipConnects(
   state: GameState,
   seat: Seat,
   vertices: readonly [string, string],
   ignore: string | undefined,
+  stops: ReadonlySet<string>,
 ): boolean {
   const own = (state.board.ships ?? []).filter(
     (ship) => ship.seat === seat && ship.edge !== ignore,
@@ -38,7 +64,7 @@ function shipConnects(
   return vertices.some((vertex) => {
     const holder = buildingAt(state, vertex);
     if (holder === seat) return true;
-    if (holder !== undefined) return false;
+    if (holder !== undefined || stops.has(vertex)) return false;
     const index = graph.vertexIndex[vertex];
     const around: readonly string[] = index === undefined ? [] : (graph.vertexEdges[index] ?? []);
     return own.some((ship) => around.includes(ship.edge));
@@ -50,6 +76,10 @@ export interface ShipOptions {
   ignore?: string;
   /** A setup ship must touch this vertex, which holds the seat's new settlement. */
   setupVertex?: string;
+  /** The seat's ship context, computed once for many edges. */
+  context?: ShipContext;
+  /** The engine context, from which the ship context is computed when none is given. */
+  ctx?: HandlerContext | undefined;
 }
 
 /** Whether the seat may put a ship on the edge now. Supply and cost are checked elsewhere. */
@@ -67,107 +97,55 @@ export function canPlaceShip(
       endpoints.some((vertex) => vertex === options.setupVertex) &&
       buildingAt(state, options.setupVertex) === seat
     );
-  return shipConnects(state, seat, endpoints, options.ignore);
+  const context = options.context ?? shipContext(state, seat, options.ctx);
+  return shipConnects(state, seat, endpoints, options.ignore, context.stops);
 }
 
 /** Every edge where the seat could place a ship, in id order. */
 export function legalShipEdges(state: GameState, seat: Seat, options: ShipOptions = {}): string[] {
-  return boardGraph(state).edgeIds.filter((edge) => canPlaceShip(state, seat, edge, options));
+  const context = options.context ?? shipContext(state, seat, options.ctx);
+  const withContext = { ...options, context };
+  return boardGraph(state).edgeIds.filter((edge) => canPlaceShip(state, seat, edge, withContext));
 }
 
-/** Ship edges of the seat that may be moved now, ignoring the once-per-turn limit. */
-export function movableShips(state: GameState, seat: Seat): string[] {
-  const graph = boardGraph(state);
-  const ships = shipEdges(state, seat);
-  const ends = new Map<string, readonly [string, string]>();
-  for (const edge of ships) {
-    const endpoints = edgeEndpoints(graph, edge);
-    if (endpoints) ends.set(edge, endpoints);
-  }
-  const buildings = new Set(
-    state.board.buildings.filter((piece) => piece.seat === seat).map((piece) => piece.vertex),
-  );
-  const shipsAt = new Map<string, string[]>();
-  for (const [edge, endpoints] of ends)
-    for (const vertex of endpoints) shipsAt.set(vertex, [...(shipsAt.get(vertex) ?? []), edge]);
-
-  // A route is a chain of ships joined at shared vertices that hold no own building.
-  const parent = new Map<string, string>(ships.map((edge) => [edge, edge]));
-  const find = (edge: string): string => {
-    let root = edge;
-    while (parent.get(root) !== root) root = parent.get(root) ?? root;
-    return root;
-  };
-  for (const [vertex, group] of shipsAt) {
-    if (buildings.has(vertex)) continue;
-    const first = group[0];
-    if (first === undefined) continue;
-    for (const other of group.slice(1)) parent.set(find(other), find(first));
-  }
-  const routes = new Map<string, string[]>();
-  for (const edge of ships) routes.set(find(edge), [...(routes.get(find(edge)) ?? []), edge]);
-
+/**
+ * Ship edges of the seat that may be moved now, ignoring the once-per-turn limit. A route closes
+ * at the seat's buildings and at the anchors of its ship context (knights), so a ship whose move
+ * would leave a knight without a route to a building never moves.
+ */
+export function movableShips(
+  state: GameState,
+  seat: Seat,
+  context: ShipContext = NO_CONTEXT,
+): string[] {
+  const anchors = new Set([
+    ...state.board.buildings.filter((piece) => piece.seat === seat).map((piece) => piece.vertex),
+    ...context.anchors,
+  ]);
   const built = new Set(seafaringExt(state).builtThisTurn);
   const blocked = pirateEdges(state);
-  const movable: string[] = [];
-  for (const route of routes.values()) {
-    const touched = new Set(
-      route.flatMap((edge) => (ends.get(edge) ?? []).filter((vertex) => buildings.has(vertex))),
-    );
-    // A route joining two different own buildings is closed, even if it were cut.
-    if (touched.size >= 2) continue;
-    for (const edge of route) {
-      if (built.has(edge) || blocked.has(edge)) continue;
-      const endpoints = ends.get(edge);
-      if (!endpoints) continue;
-      const open = endpoints.some(
-        (vertex) => !buildings.has(vertex) && (shipsAt.get(vertex)?.length ?? 0) === 1,
-      );
-      // A circle has no open end: with no building every ship on it may move, and a circle
-      // through one building lets the ships that touch that building move.
-      const circle =
-        !open &&
-        onCycle(route, ends, edge) &&
-        (touched.size === 0 || endpoints.some((vertex) => touched.has(vertex)));
-      if (open || circle) movable.push(edge);
-    }
-  }
-  return movable.toSorted();
-}
-
-/** True when the ship's endpoints stay connected through the route's other ships. */
-function onCycle(
-  route: readonly string[],
-  ends: ReadonlyMap<string, readonly [string, string]>,
-  edge: string,
-): boolean {
-  const target = ends.get(edge);
-  if (!target) return false;
-  const seen = new Set<string>([target[0]]);
-  const queue = [target[0]];
-  for (let head = 0; head < queue.length; head++) {
-    const vertex = queue[head];
-    for (const other of route) {
-      if (other === edge) continue;
-      const endpoints = ends.get(other);
-      if (!endpoints || !endpoints.includes(vertex ?? '')) continue;
-      const next = endpoints[0] === vertex ? endpoints[1] : endpoints[0];
-      if (next === target[1]) return true;
-      if (!seen.has(next)) {
-        seen.add(next);
-        queue.push(next);
-      }
-    }
-  }
-  return false;
+  return openShipEdges(state, seat, anchors).filter(
+    (edge) => !built.has(edge) && !blocked.has(edge),
+  );
 }
 
 /** Every legal `MOVE_SHIP` as `{ from, to }`, computed with the moved ship removed. */
 export function legalShipMoves(
   state: GameState,
   seat: Seat,
+  ctx?: HandlerContext,
 ): readonly { from: string; to: string }[] {
-  return movableShips(state, seat).flatMap((from) =>
-    legalShipEdges(state, seat, { ignore: from }).map((to) => ({ from, to })),
+  const context = shipContext(state, seat, ctx);
+  return movableShips(state, seat, context).flatMap((from) =>
+    legalShipEdges(state, seat, { ignore: from, context }).map((to) => ({ from, to })),
   );
+}
+
+/**
+ * Part of the `afterBuild` hook: a ship placed, moved or built by a card this turn cannot be moved
+ * this turn. Idempotent, so a placing command and a card may both report it.
+ */
+export function noteBuiltShip(state: GameState, type: string, edge: string): GameState {
+  if (type !== 'ship' || seafaringExt(state).builtThisTurn.includes(edge)) return state;
+  return updateSeafaring(state, (old) => ({ ...old, builtThisTurn: [...old.builtThisTurn, edge] }));
 }

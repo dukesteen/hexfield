@@ -128,6 +128,11 @@ export interface RouteGraph {
   edges: readonly { id: string; vertices: readonly [string, string]; kind?: string }[];
   blocked: readonly string[];
   transitions?: readonly string[];
+  /**
+   * Vertices holding the seat's own non-building pieces (knights). They close a shipping route like
+   * a building does. Rules for longest routes never read them.
+   */
+  anchors?: readonly string[];
 }
 
 /** The public request that a TIMEOUT answers. */
@@ -197,7 +202,13 @@ export interface Hooks {
   };
   connectivity(state: GameState, seat: Seat, acc: readonly string[]): readonly string[];
   /** Free placements (Road Building) that are legal now. Base starts with the free-road commands. */
-  freePieces(state: GameState, seat: Seat, acc: readonly CommandShape[]): readonly CommandShape[];
+  freePieces(
+    state: GameState,
+    seat: Seat,
+    acc: readonly CommandShape[],
+    /** Supplied by the engine, so a hook can read the other hooks (route stops of knights). */
+    ctx?: HandlerContext,
+  ): readonly CommandShape[];
   routeGraph(state: GameState, seat: Seat, acc: RouteGraph): RouteGraph;
   robberLike(state: GameState, acc: readonly Blocker[]): readonly Blocker[];
   stealTargets(

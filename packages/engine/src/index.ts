@@ -102,6 +102,18 @@ export type {
 } from './modules/knights/index.js';
 export { knightsConfig, knightsEngine } from './modules/knights/testing.js';
 export type { KnightsConfigOptions } from './modules/knights/testing.js';
+export {
+  COMBO_ID,
+  COMBO_VERSION,
+  comboExt,
+  seafarersKnightsModule,
+} from './modules/seafarers-knights/index.js';
+export type { ComboExt } from './modules/seafarers-knights/index.js';
+export {
+  seafarersKnightsConfig,
+  seafarersKnightsEngine,
+} from './modules/seafarers-knights/testing.js';
+export type { SeafarersKnightsConfigOptions } from './modules/seafarers-knights/testing.js';
 
 export { finishTurnFlowFrame } from './modules/base/phases/turn.js';
 export { STANDARD_BOARD, STANDARD_HEXES } from './modules/base/board/shapes.js';

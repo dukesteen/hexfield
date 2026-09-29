@@ -16,7 +16,7 @@ import {
   replaceTop,
   updateSeat,
 } from '../base/shared.js';
-import { canPlaceShip, movableShips } from './ships.js';
+import { canPlaceShip, movableShips, shipContext } from './ships.js';
 import { seafaringExt, updateSeafaring } from './types.js';
 
 function edgeOf(value: unknown): string | null {
@@ -41,7 +41,6 @@ function placeShip(state: GameState, seat: Seat, edge: string, ctx: HandlerConte
     ...old,
     piecesLeft: { ...old.piecesLeft, ship: (old.piecesLeft.ship ?? 0) - 1 },
   }));
-  next = updateSeafaring(next, (old) => ({ ...old, builtThisTurn: [...old.builtThisTurn, edge] }));
   next = ctx.hooks.afterBuild(next, seat, 'ship', edge);
   return recomputeLongestRoadAward(next, ctx);
 }
@@ -52,7 +51,7 @@ export const buildShip: CommandHandler = {
   validate: (state, input, ctx) => {
     const edge = edgeOf(input.command.edge);
     if (edge === null) return failure('invalid-edge', 'Edge id is required');
-    if (!canPlaceShip(state, input.seat, edge))
+    if (!canPlaceShip(state, input.seat, edge, { ctx }))
       return failure('illegal-ship', 'Ship location is illegal');
     if (!hasShipPiece(state, input.seat)) return failure('no-ships', 'No ship pieces remain');
     const cost = buildCost(state, 'ship', ctx);
@@ -105,12 +104,12 @@ export const placeSetupShip: CommandHandler = {
 /** One of the two free pieces of a Road Building card. */
 export const placeFreeShip: CommandHandler = {
   keys: { allowed: ['edge'] },
-  validate: (state, input) => {
+  validate: (state, input, ctx) => {
     const top = topFrame(state);
     if (top?.module !== 'base' || top.id !== 'roadBuilding' || input.seat !== state.turn.activeSeat)
       return failure('not-road-building', 'No free pieces are pending');
     const edge = edgeOf(input.command.edge);
-    if (edge === null || !canPlaceShip(state, input.seat, edge))
+    if (edge === null || !canPlaceShip(state, input.seat, edge, { ctx }))
       return failure('illegal-ship', 'Free ship location is illegal');
     return hasShipPiece(state, input.seat)
       ? success(undefined)
@@ -135,7 +134,13 @@ export const placeFreeShip: CommandHandler = {
   },
 };
 
-function moveProblem(state: GameState, seat: Seat, from: unknown, to: unknown): Result<void> {
+function moveProblem(
+  state: GameState,
+  seat: Seat,
+  from: unknown,
+  to: unknown,
+  ctx: HandlerContext,
+): Result<void> {
   const top = topFrame(state);
   if (top?.module !== 'base' || top.id !== 'main' || seat !== state.turn.activeSeat)
     return failure('not-main', 'Ships move only in the active seat’s main phase');
@@ -143,9 +148,10 @@ function moveProblem(state: GameState, seat: Seat, from: unknown, to: unknown): 
     return failure('ship-already-moved', 'Only one ship may move per turn');
   if (typeof from !== 'string' || typeof to !== 'string')
     return failure('invalid-edge', 'Both edges are required');
-  if (!movableShips(state, seat).includes(from))
+  const context = shipContext(state, seat, ctx);
+  if (!movableShips(state, seat, context).includes(from))
     return failure('ship-cannot-move', 'That ship is not at the open end of an open route');
-  return to !== from && canPlaceShip(state, seat, to, { ignore: from })
+  return to !== from && canPlaceShip(state, seat, to, { ignore: from, context })
     ? success(undefined)
     : failure('illegal-ship', 'The ship cannot go there');
 }
@@ -153,7 +159,8 @@ function moveProblem(state: GameState, seat: Seat, from: unknown, to: unknown): 
 /** Move one ship for free, once per turn. */
 export const moveShip: CommandHandler = {
   keys: { allowed: ['from', 'to'] },
-  validate: (state, input) => moveProblem(state, input.seat, input.command.from, input.command.to),
+  validate: (state, input, ctx) =>
+    moveProblem(state, input.seat, input.command.from, input.command.to, ctx),
   apply: (state, input, ctx) => {
     const { from, to } = input.command;
     if (typeof from !== 'string' || typeof to !== 'string')
@@ -167,11 +174,7 @@ export const moveShip: CommandHandler = {
         ),
       },
     };
-    next = updateSeafaring(next, (old) => ({
-      ...old,
-      builtThisTurn: [...old.builtThisTurn, to],
-      shipMovedTurn: state.turn.number,
-    }));
+    next = updateSeafaring(next, (old) => ({ ...old, shipMovedTurn: state.turn.number }));
     next = ctx.hooks.afterBuild(next, input.seat, 'ship', to);
     next = recomputeLongestRoadAward(next, ctx);
     return {

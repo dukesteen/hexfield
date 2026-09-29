@@ -245,9 +245,8 @@ function composeHooks(modules: readonly GameModule[]): HookPipeline {
     modules,
     (hooks) => hooks.placement?.city,
   );
-  const freePieces = foldAcc<[GameState, Seat], readonly CommandShape[]>(
-    modules,
-    (hooks) => hooks.freePieces,
+  const freeChain = modules.flatMap((module) =>
+    module.hooks?.freePieces ? [module.hooks.freePieces] : [],
   );
   const connectivity = foldAcc<[GameState, Seat], readonly string[]>(
     modules,
@@ -317,7 +316,8 @@ function composeHooks(modules: readonly GameModule[]): HookPipeline {
         city([state, seat, loc], verdict),
     }),
     connectivity: (state, seat, acc) => connectivity([state, seat], acc),
-    freePieces: (state, seat, acc) => freePieces([state, seat], acc),
+    freePieces: (state, seat, acc, ctx) =>
+      freeChain.reduce((next, hook) => hook(state, seat, next, ctx), acc),
     routeGraph: (state, seat, acc) => routeGraph([state, seat], acc),
     robberLike: (state, acc) => robberLike([state], acc),
     stealTargets: (state, seat, blocker, hex, targets) =>

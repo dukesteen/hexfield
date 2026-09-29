@@ -12,6 +12,11 @@ import { checkModuleCombination } from './compat.js';
 import { FIVE_SIX_VERSION, fiveSixModule } from './five-six/index.js';
 import { KNIGHTS_VERSION, knightsModule } from './knights/index.js';
 import { SEAFARING_VERSION, seafaringModule } from './seafaring/index.js';
+import {
+  COMBO_ID,
+  COMBO_VERSION,
+  seafarersKnightsModule,
+} from './seafarers-knights/index.js';
 
 /** Every rules module a game can select, with the version genesis must name. */
 export const MODULE_CATALOGUE: Readonly<
@@ -21,6 +26,7 @@ export const MODULE_CATALOGUE: Readonly<
   'five-six': { version: FIVE_SIX_VERSION, create: fiveSixModule },
   knights: { version: KNIGHTS_VERSION, create: knightsModule },
   seafaring: { version: SEAFARING_VERSION, create: seafaringModule },
+  [COMBO_ID]: { version: COMBO_VERSION, create: seafarersKnightsModule },
 });
 
 const engines = new Map<string, Engine>();
@@ -74,6 +80,15 @@ export function checkModuleSelection(selection: readonly ModuleSelection[]): Res
     if (entry.version !== module.version)
       return failure('module-version', `No ${module.id} rules for version ${module.version}`);
   }
+  // The pair plays only with its rules module, and that module only with the pair.
+  const pair = ids.includes('seafaring') && ids.includes('knights');
+  if (pair !== ids.includes(COMBO_ID))
+    return failure(
+      'module-incompatible',
+      pair
+        ? 'seafaring with knights needs the scenario:seafarers-knights rules module'
+        : `${COMBO_ID} needs both seafaring and knights`,
+    );
   return checkModuleCombination(ids, {
     viaScenario: ids.some((id) => id.startsWith('scenario:')),
   });

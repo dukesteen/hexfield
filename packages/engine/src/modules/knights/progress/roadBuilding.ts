@@ -7,7 +7,8 @@ import type { CardModule } from './card.js';
 /**
  * Road Building: build two roads for free, one after another, by the base road rules. The player
  * may stop after the first. It uses base's `roadBuilding` frame, which ends by itself when no legal
- * road is left. Roads only: ships come with the seafaring combination.
+ * piece is left. With seafaring the `freePieces` hook adds ships, so the two pieces may be roads,
+ * ships or one of each (docs/rules/combos.md).
  */
 export const roadBuilding: CardModule = {
   card: plainCard({

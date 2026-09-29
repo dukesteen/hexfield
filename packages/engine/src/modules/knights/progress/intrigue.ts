@@ -4,7 +4,8 @@ import type { Result, Seat } from '../../../core/types/index.js';
 import { recomputeLongestRoadAward } from '../../base/awards/index.js';
 import { pushPhase } from '../../base/shared.js';
 import { displacedFrame, relocationSpots } from '../actions.js';
-import { knightAt, roadEndsAt, setKnights } from '../pieces.js';
+import { routeEndsAt } from '../network.js';
+import { knightAt, setKnights } from '../pieces.js';
 import { knightsExt } from '../types.js';
 import type { DisplacedFrameData } from '../types.js';
 import { paramsObject, stringOf } from './card.js';
@@ -19,15 +20,15 @@ function vertexOf(params: unknown): Result<string> {
     : success(vertex);
 }
 
-/** Opposing knights standing where one of the seat's roads ends, by vertex id. */
+/** Opposing knights standing where one of the seat's roads or ships ends, by vertex id. */
 function targets(state: GameState, seat: Seat): string[] {
   return knightsExt(state)
-    .knights.filter((knight) => knight.seat !== seat && roadEndsAt(state, seat, knight.vertex))
+    .knights.filter((knight) => knight.seat !== seat && routeEndsAt(state, seat, knight.vertex))
     .map((knight) => knight.vertex);
 }
 
 /**
- * Intrigue: displace an opposing knight that stands where one of your roads ends. No knight of
+ * Intrigue: displace an opposing knight that stands where one of your roads or ships ends. No knight of
  * yours moves and no strengths are compared. The owner relocates the knight as after any
  * displacement (a `displaced` frame), and loses it when it has nowhere to go.
  */

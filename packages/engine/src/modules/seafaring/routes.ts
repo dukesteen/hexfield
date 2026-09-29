@@ -13,6 +13,7 @@ export function tradeRoute(state: GameState, seat: Seat, acc: RouteGraph): Route
   if (ships.length === 0) return acc;
   const graph = boardGraph(state);
   return {
+    ...acc,
     edges: [
       ...acc.edges.map((edge) => ({ ...edge, kind: 'road' })),
       ...ships.flatMap((edge) => {
@@ -20,7 +21,6 @@ export function tradeRoute(state: GameState, seat: Seat, acc: RouteGraph): Route
         return vertices ? [{ id: edge, vertices, kind: 'ship' }] : [];
       }),
     ],
-    blocked: acc.blocked,
     transitions: [
       ...(acc.transitions ?? []),
       ...state.board.buildings.filter((piece) => piece.seat === seat).map((piece) => piece.vertex),

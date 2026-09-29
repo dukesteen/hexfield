@@ -212,7 +212,8 @@ export function fixtureSlotProblem(spec: BoardShapeSpec, slot: FixtureSlot): str
 
 /**
  * A seafaring shape lists every board hex including sea, so coast and fixture geometry depend on the
- * fixed board and are checked against it. Only the bags are checked here.
+ * fixed board and are checked against it. The bags are checked here, and any fixture slot the
+ * module derived from the board (it lies just outside the perimeter).
  */
 function seafaringShapeProblems(spec: BoardShapeSpec): string[] {
   const problems: string[] = [];
@@ -221,8 +222,10 @@ function seafaringShapeProblems(spec: BoardShapeSpec): string[] {
   const tokenless = spec.terrains.filter((terrain) => isTokenlessTerrain(terrain)).length;
   if (spec.tokens.length !== spec.hexes.length - tokenless)
     problems.push(`${spec.id}: token bag does not match productive hexes`);
-  if (spec.fixtureSlots.length > 0)
-    problems.push(`${spec.id}: seafaring shapes take no fixture slots`);
+  for (const slot of spec.fixtureSlots) {
+    const problem = fixtureSlotProblem(spec, slot);
+    if (problem) problems.push(`${spec.id}: ${problem}`);
+  }
   return problems;
 }
 

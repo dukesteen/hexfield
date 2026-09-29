@@ -14,14 +14,17 @@ function hexOf(params: unknown): Result<string> {
   return hex === undefined ? failure('invalid-hex', 'Choose a land hex') : success(hex);
 }
 
-/** Land hexes that touch one of the seat's settlements or cities, by id. */
+/** Land hexes that touch one of the seat's settlements or cities, by id. Never a gold hex. */
 export function hexesNextToSeat(state: GameState, seat: Seat): string[] {
   const own = new Set(
     state.board.buildings.filter((piece) => piece.seat === seat).map((piece) => piece.vertex),
   );
   return state.board.hexes
     .filter(
-      (hex) => isLandHex(state, hex.id) && verticesForHex(state, hex.id).some((v) => own.has(v)),
+      (hex) =>
+        hex.terrain !== 'gold' &&
+        isLandHex(state, hex.id) &&
+        verticesForHex(state, hex.id).some((v) => own.has(v)),
     )
     .map((hex) => hex.id)
     .toSorted();
@@ -39,7 +42,8 @@ export function merchantKind(state: GameState, hex: string): string | null {
 /**
  * Merchant: take the merchant piece, wherever it is, and put it on a land hex next to one of your
  * settlements or cities. You control it, earn 1 point and trade its hex's resource 2:1, until any
- * Merchant card moves it. A desert is a land hex: it gives the point and no rate.
+ * Merchant card moves it. A desert is a land hex: it gives the point and no rate. A gold hex is
+ * refused (Cities and Knights with Seafarers).
  */
 export const merchant: CardModule = {
   card: {

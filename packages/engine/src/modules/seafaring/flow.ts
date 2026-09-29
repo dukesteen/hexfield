@@ -84,21 +84,25 @@ export function addShipCommands(
   const commands: CommandShape[] = [];
   if (slot === 'main' && seat === state.turn.activeSeat) {
     if (canPayShip(state, seat, ctx, priv))
-      commands.push(...legalShipEdges(state, seat).map((edge) => ({ type: 'BUILD_SHIP', edge })));
+      commands.push(
+        ...legalShipEdges(state, seat, { ctx }).map((edge) => ({ type: 'BUILD_SHIP', edge })),
+      );
     if (seafaringExt(state).shipMovedTurn !== state.turn.number)
       commands.push(
-        ...legalShipMoves(state, seat).map(({ from, to }) => ({ type: 'MOVE_SHIP', from, to })),
+        ...legalShipMoves(state, seat, ctx).map(({ from, to }) => ({ type: 'MOVE_SHIP', from, to })),
       );
   } else if (slot === 'sbp' && top && sbpSeat(state, top) === seat) {
     if (canPayShip(state, seat, ctx, priv))
-      commands.push(...legalShipEdges(state, seat).map((edge) => ({ type: 'BUILD_SHIP', edge })));
+      commands.push(
+        ...legalShipEdges(state, seat, { ctx }).map((edge) => ({ type: 'BUILD_SHIP', edge })),
+      );
   } else if (slot === 'moveRobber' && seat === state.turn.activeSeat) {
     commands.push(...pirateHexes(state, ctx).map((hex) => ({ type: 'MOVE_PIRATE', hex })));
   } else if (slot === 'setupRoad') {
     const data = setup(state);
     if (data.lastVertex && data.order[data.index] === seat)
       commands.push(
-        ...legalShipEdges(state, seat, { setupVertex: data.lastVertex }).map((edge) => ({
+        ...legalShipEdges(state, seat, { setupVertex: data.lastVertex, ctx }).map((edge) => ({
           type: 'PLACE_SETUP_SHIP',
           edge,
         })),
@@ -114,10 +118,11 @@ export function addFreeShips(
   state: GameState,
   seat: Seat,
   acc: readonly CommandShape[],
+  ctx?: HandlerContext,
 ): readonly CommandShape[] {
   if ((ownSeat(state, seat).piecesLeft.ship ?? 0) <= 0) return acc;
   return [
     ...acc,
-    ...legalShipEdges(state, seat).map((edge) => ({ type: 'PLACE_FREE_SHIP', edge })),
+    ...legalShipEdges(state, seat, { ctx }).map((edge) => ({ type: 'PLACE_FREE_SHIP', edge })),
   ];
 }

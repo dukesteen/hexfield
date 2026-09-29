@@ -2,9 +2,8 @@ import type { HandlerContext } from '../../core/modules/index.js';
 import type { CommandShape, LegalCommandSet, Pending } from '../../core/pipeline/index.js';
 import type { GameState, PrivateState } from '../../core/state/index.js';
 import type { Seat } from '../../core/types/index.js';
-import { verticesForHex } from '../base/board/index.js';
 import { TRACKS } from './config.js';
-import { chaseProblem, displaceProblem, moveProblem } from './actions.js';
+import { chaseProblem, chaseVertices, displaceProblem, moveProblem } from './actions.js';
 import { improvementLegal, improvementProblem, privateCanImprove } from './improvements.js';
 import { knightReach, knightsOf, recruitSites } from './pieces.js';
 import { privateCanPay, purchaseCost, purchaseProblem } from './recruit.js';
@@ -129,9 +128,8 @@ function actions(state: GameState, seat: Seat, ctx: HandlerContext): CommandShap
       if (displaceProblem(state, seat, knight.vertex, to).ok)
         commands.push({ type: 'DISPLACE_KNIGHT', from: knight.vertex, to });
   }
-  const hex = state.board.robberHex;
-  if (hex !== null && !knightsExt(state).robberLocked)
-    for (const vertex of verticesForHex(state, hex).toSorted())
+  if (!knightsExt(state).robberLocked)
+    for (const vertex of chaseVertices(state, ctx))
       if (chaseProblem(state, seat, vertex, ctx).ok)
         commands.push({ type: 'CHASE_ROBBER', vertex });
   return commands;

@@ -18,6 +18,7 @@ import {
   recordSettlement,
 } from './islands.js';
 import { generateArchipelagoLayout, archipelagoParamsFor, pirateStartHex } from './archipelago.js';
+import { perimeterFixtureSlot } from './fixture.js';
 import {
   FOG_FRAME,
   FOG_REVEALED,
@@ -31,7 +32,7 @@ import {
 import { seafaringInvariants } from './invariants.js';
 import { movePirate, pirateBlocker } from './pirate.js';
 import { tradeRoute } from './routes.js';
-import { shipEdges } from './ships.js';
+import { noteBuiltShip, shipEdges } from './ships.js';
 import {
   SEAFARING_ID,
   SEAFARING_OPTIONS,
@@ -87,7 +88,7 @@ const specs = new WeakMap<BoardState, BoardShapeSpec>();
 function shapeOf(board: BoardState): BoardShapeSpec {
   let spec = specs.get(board);
   if (!spec) {
-    spec = {
+    const bare: BoardShapeSpec = {
       id: 'seafaring',
       hexes: board.hexes.map(({ q, r }) => ({ q, r })),
       terrains: board.hexes.map((hex) => hex.terrain),
@@ -98,6 +99,9 @@ function shapeOf(board: BoardState): BoardShapeSpec {
       pipCaps: {},
       seafaring: true,
     };
+    // An explicit board has no frame, so a fixture (the barbarian track) goes outside the perimeter.
+    const slot = perimeterFixtureSlot(bare);
+    spec = slot ? { ...bare, fixtureSlots: [slot] } : bare;
     specs.set(board, spec);
   }
   return spec;
@@ -188,7 +192,7 @@ export function seafaringModule(): GameModule {
       afterBuild: (state, seat, type, loc) =>
         type === 'settlement'
           ? recordSettlement(state, seat, loc)
-          : queueFogReveals(state, seat, type, loc),
+          : queueFogReveals(noteBuiltShip(state, type, loc), seat, type, loc),
       onTurnStart: (state) => updateSeafaring(state, (old) => ({ ...old, builtThisTurn: [] })),
       victoryPoints: (state, seat, _priv, acc) => islandBonusPoints(state, seat, acc),
       timeoutAction: (state, request, acc) =>

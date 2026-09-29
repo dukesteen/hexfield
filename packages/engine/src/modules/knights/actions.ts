@@ -1,4 +1,9 @@
-import type { CommandHandler, HandlerContext, PhaseHandler } from '../../core/modules/index.js';
+import type {
+  Blocker,
+  CommandHandler,
+  HandlerContext,
+  PhaseHandler,
+} from '../../core/modules/index.js';
 import type { CommandShape } from '../../core/pipeline/index.js';
 import type { GameState, PhaseFrame } from '../../core/state/index.js';
 import { failure, success } from '../../core/types/index.js';
@@ -6,7 +11,7 @@ import type { Result, Seat } from '../../core/types/index.js';
 import { recomputeLongestRoadAward } from '../base/awards/index.js';
 import { claimCommands } from '../base/legal.js';
 import { verticesForHex } from '../base/board/index.js';
-import { robberHexes } from '../base/robber.js';
+import { legalRobberHexes } from '../base/robber.js';
 import { frame, playerPending, popPhase, pushPhase, topFrame, withClaim } from '../base/shared.js';
 import { KNIGHTS_ID } from './config.js';
 import { knightAt, knightReach, setKnights } from './pieces.js';
@@ -62,7 +67,32 @@ export function displaceProblem(
     : failure('unreachable', 'The knight cannot reach that vertex along your roads');
 }
 
-/** Chasing the robber: after the first attack, from a vertex of the robber's hex. */
+/** The robber and any other blocker a module adds (the pirate), with their legal hexes. */
+function blockersOf(state: GameState, ctx: HandlerContext): readonly Blocker[] {
+  return ctx.hooks.robberLike(state, [
+    { id: 'robber', hex: state.board.robberHex, legalHexes: legalRobberHexes(state) },
+  ]);
+}
+
+/** Blockers whose hex the vertex belongs to, whether or not they can move now. */
+function blockersAt(state: GameState, vertex: string, blockers: readonly Blocker[]): Blocker[] {
+  return blockers.filter(
+    (blocker) => blocker.hex !== null && verticesForHex(state, blocker.hex).includes(vertex),
+  );
+}
+
+/** Vertices a knight may chase from: the corners of the robber's hex and of any other blocker's. */
+export function chaseVertices(state: GameState, ctx: HandlerContext): string[] {
+  const hexes = blockersOf(state, ctx).flatMap((blocker) =>
+    blocker.hex === null ? [] : [blocker.hex],
+  );
+  return [...new Set(hexes.flatMap((hex) => verticesForHex(state, hex)))].toSorted();
+}
+
+/**
+ * Chasing the robber (or the pirate, which the seafaring combination adds): after the first attack,
+ * from a vertex of the blocker's hex, whatever kind of vertex it is.
+ */
 export function chaseProblem(
   state: GameState,
   seat: Seat,
@@ -71,12 +101,11 @@ export function chaseProblem(
 ): Result<void> {
   if (knightsExt(state).robberLocked)
     return failure('robber-locked', 'The robber cannot be chased before the first attack');
-  const hex = state.board.robberHex;
-  if (hex === null || !verticesForHex(state, hex).includes(vertex))
-    return failure('not-at-robber', 'The knight must stand beside the robber');
+  const beside = blockersAt(state, vertex, blockersOf(state, ctx));
+  if (beside.length === 0) return failure('not-at-robber', 'The knight must stand beside the robber');
   const knight = readyKnight(state, seat, vertex);
   if (!knight.ok) return knight;
-  return robberHexes(state, ctx).length > 0
+  return beside.some((blocker) => blocker.legalHexes.length > 0)
     ? success(undefined)
     : failure('no-robber-hex', 'The robber has nowhere to go');
 }
@@ -182,14 +211,22 @@ export const chaseRobber: CommandHandler = {
     const slot = actionSlot(state, input.seat);
     return slot.ok ? chaseProblem(state, input.seat, vertex, ctx) : slot;
   },
-  apply: (state, input) => {
+  apply: (state, input, ctx) => {
     const vertex = vertexOf(input.command.vertex);
     if (vertex === null) throw new Error('Validated vertex missing');
     const next = setKnights(state, (list) =>
       list.map((knight) => (knight.vertex === vertex ? spent(knight) : knight)),
     );
+    // With a second blocker (the pirate) only the pieces beside the knight may move.
+    const blockers = blockersOf(state, ctx);
+    const only = blockersAt(state, vertex, blockers)
+      .filter((blocker) => blocker.legalHexes.length > 0)
+      .map((blocker) => blocker.id);
     return {
-      state: pushPhase(next, frame('moveRobber', { returnTo: 'pop' })),
+      state: pushPhase(
+        next,
+        frame('moveRobber', blockers.length > 1 ? { returnTo: 'pop', only } : { returnTo: 'pop' }),
+      ),
       events: [{ type: 'robberChased', seat: input.seat, vertex }],
       effects: [],
     };

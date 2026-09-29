@@ -371,7 +371,7 @@ export function freePlacements(
     (ownSeat(state, seat).piecesLeft.road ?? 0) > 0
       ? legalRoadEdges(state, seat, {}, ctx).map((edge) => ({ type: 'PLACE_FREE_ROAD', edge }))
       : [];
-  return ctx.hooks.freePieces(state, seat, roads);
+  return ctx.hooks.freePieces(state, seat, roads, ctx);
 }
 
 export const roadBuildingPhase: PhaseHandler = {

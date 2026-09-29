@@ -3,6 +3,7 @@ import type { GameState } from '../../core/state/index.js';
 import type { Seat } from '../../core/types/index.js';
 import { boardGraph, edgeEndpoints, vertexOnLand } from '../base/board/index.js';
 import { KNIGHTS_PER_LEVEL } from './config.js';
+import { networkReach } from './network.js';
 import { knightsExt, updateKnights } from './types.js';
 import type { KnightPiece } from './types.js';
 
@@ -55,20 +56,23 @@ export function roadEndsAt(state: GameState, seat: Seat, vertex: string): boolea
   return (graph.vertexEdges[index] ?? []).some((edge) => own.has(edge));
 }
 
-/** An empty land vertex where one of the seat's roads ends: where a knight can be recruited. */
+/**
+ * An empty land vertex where one of the seat's roads or ships ends: where a knight can be recruited
+ * (never a sea vertex, even at the end of a ship).
+ */
 export function recruitSites(state: GameState, seat: Seat): string[] {
   const graph = boardGraph(state);
   const ends = new Set<string>();
-  for (const road of state.board.roads) {
-    if (road.seat !== seat) continue;
-    for (const vertex of edgeEndpoints(graph, road.edge) ?? []) ends.add(vertex);
+  for (const piece of [...state.board.roads, ...(state.board.ships ?? [])]) {
+    if (piece.seat !== seat) continue;
+    for (const vertex of edgeEndpoints(graph, piece.edge) ?? []) ends.add(vertex);
   }
   return [...ends]
     .filter((vertex) => vertexOnLand(state, vertex) && vertexEmpty(state, vertex))
     .toSorted();
 }
 
-/** Where a knight of the seat can go from a vertex along the seat's own roads. */
+/** Where a knight of the seat can go from a vertex along the seat's own network. */
 export interface KnightReach {
   /** Empty vertices, by id. */
   empty: string[];
@@ -77,55 +81,49 @@ export interface KnightReach {
 }
 
 /**
- * A knight walks along its owner's roads. It may pass vertices holding the owner's buildings and
- * knights, may not enter a vertex with another seat's building, and stops at another seat's knight
- * (which it may only displace). The start is never a destination.
+ * A knight walks along its owner's roads and ships (see `networkReach`). It may pass vertices
+ * holding the owner's buildings and knights, may not enter a vertex with another seat's building,
+ * and stops at another seat's knight (which it may only displace). The start is never a destination.
  */
 export function knightReach(state: GameState, seat: Seat, from: string): KnightReach {
-  const graph = boardGraph(state);
-  const next = new Map<string, string[]>();
-  for (const road of state.board.roads) {
-    if (road.seat !== seat) continue;
-    const ends = edgeEndpoints(graph, road.edge);
-    if (!ends) continue;
-    for (const [a, b] of [
-      [ends[0], ends[1]],
-      [ends[1], ends[0]],
-    ] as const)
-      next.set(a, [...(next.get(a) ?? []), b]);
-  }
-  const buildings = new Map(state.board.buildings.map((piece) => [piece.vertex, piece.seat]));
-  const knights = new Map(knightsExt(state).knights.map((knight) => [knight.vertex, knight.seat]));
-  const seen = new Set([from]);
-  const queue = [from];
-  const empty: string[] = [];
-  const foes: string[] = [];
-  for (let head = 0; head < queue.length; head++) {
-    const vertex = queue[head];
-    if (vertex === undefined) break;
-    for (const other of next.get(vertex) ?? []) {
-      if (seen.has(other)) continue;
-      const building = buildings.get(other);
-      if (building !== undefined && building !== seat) continue;
-      seen.add(other);
-      const knight = knights.get(other);
-      if (knight !== undefined && knight !== seat) {
-        foes.push(other);
-        continue;
-      }
-      if (building === undefined && knight === undefined) empty.push(other);
-      queue.push(other);
-    }
-  }
-  return { empty: empty.toSorted(), foes: foes.toSorted() };
+  const { empty, foes } = networkReach(state, seat, from);
+  return { empty, foes };
 }
 
-/** The `routeGraph` hook: every knight interrupts other seats' routes like a building. */
+/**
+ * The `routeGraph` hook: every knight interrupts other seats' routes like a building, and closes
+ * its owner's shipping routes like a building does (`anchors`).
+ */
 export function knightRoutes(state: GameState, seat: Seat, acc: RouteGraph): RouteGraph {
-  const foes = knightsExt(state)
-    .knights.filter((knight) => knight.seat !== seat)
-    .map((knight) => knight.vertex);
-  return foes.length ? { ...acc, blocked: [...acc.blocked, ...foes] } : acc;
+  const knights = knightsExt(state).knights;
+  const foes = knights.filter((knight) => knight.seat !== seat).map((knight) => knight.vertex);
+  const own = knights.filter((knight) => knight.seat === seat).map((knight) => knight.vertex);
+  if (foes.length === 0 && own.length === 0) return acc;
+  return {
+    ...acc,
+    blocked: [...acc.blocked, ...foes],
+    ...(own.length ? { anchors: [...(acc.anchors ?? []), ...own] } : {}),
+  };
+}
+
+/**
+ * Whether taking the edge (a road or a ship) away would cut a knight of the seat off from all of
+ * its settlements and cities. A knight that has no route already (another seat's knight may sit on
+ * it) is not counted.
+ */
+export function strandsKnight(state: GameState, seat: Seat, edge: string): boolean {
+  return knightsOf(state, seat).some(
+    (knight) =>
+      networkReach(state, seat, knight.vertex).home &&
+      !networkReach(state, seat, knight.vertex, edge).home,
+  );
+}
+
+/** Whether every knight of the seat still reaches one of its own settlements or cities. */
+export function knightsConnected(state: GameState, seat: Seat, without?: string): boolean {
+  return knightsOf(state, seat).every(
+    (knight) => networkReach(state, seat, knight.vertex, without).home,
+  );
 }
 
 /** The `placement.settlement` hook: a knight blocks the site for everyone, its owner included. */
