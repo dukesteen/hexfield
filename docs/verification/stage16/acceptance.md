@@ -82,7 +82,7 @@ Every decision stayed within the 150 ms budget (largest 140 ms at 6×). The sear
 
 ## Bots support every shipped module
 
-Base, five-six, seafaring and knights and the seafaring+knights combination (frontier and explorers do not exist yet) are covered by the legality runs above: 3,000 games across the five module sets with **zero fallback warnings**, so every decision those games raised had a policy. Plugins: `packages/bots/src/plugins/seafaring.ts` (ship expansion toward ship-reachable sites, gold choice, pirate, setup road or ship, free ships) and `packages/bots/src/plugins/knights.ts` (improvements with science first, knight recruiting and activation against the estimated barbarian arrival, walls, progress cards and deck choices, aqueduct, metropolis, pillage, Deserter, relocation, Wedding and Saboteur discards, Harbor replies). Any decision without a policy falls back to a random legal move and is reported through `DecideContext.warn`; the tournament output counts these per level (an earlier run surfaced the Deserter and knight relocation, which then got policies). `tools/sim/src/bot-modules.test.ts` plays each level on every module set in the unit suite.
+Base, five-six, seafaring and knights and the seafaring+knights combination (frontier and explorers do not exist yet) are covered by the legality runs above: 3,000 games across the five module sets with **zero fallback warnings**, so every decision those games raised had a policy. Plugins: `packages/bots/src/plugins/seafaring.ts` (ship expansion toward ship-reachable sites, gold choice, pirate, setup road or ship, free ships) and `packages/bots/src/plugins/knights.ts` (now `plugins/knights-v1.ts`, kept frozen; see [Follow-up A](#follow-up-a-cities--knights)) (improvements with science first, knight recruiting and activation against the estimated barbarian arrival, walls, progress cards and deck choices, aqueduct, metropolis, pillage, Deserter, relocation, Wedding and Saboteur discards, Harbor replies). Any decision without a policy falls back to a random legal move and is reported through `DecideContext.warn`; the tournament output counts these per level (an earlier run surfaced the Deserter and knight relocation, which then got policies). `tools/sim/src/bot-modules.test.ts` plays each level on every module set in the unit suite.
 
 ## Other stage requirements
 
@@ -92,3 +92,67 @@ Base, five-six, seafaring and knights and the seafaring+knights combination (fro
 - **Evaluation library**: `packages/bots/src/eval/` with `eval.test.ts` (pips, the known-board fixture where the obviously best vertex wins, complementing a first settlement, harbors, road distances, hand inference from bounds, turns-to-afford, trade values and a dangerous partner, robber targeting, discards).
 - **Humanlike behaviour**: delays scaled by decision importance on top of the table's pace, trade replies in 1–3 s (`runtime/pace.ts`), Normal and Hard offer occasional 1:1 trades, settled by the existing hosted-bot trade flow.
 - **UI**: difficulty per bot seat in the local setup (saved with the game) and in the online lobby (Easy, Normal, Hard; a bot's level can be changed); the player rail shows each bot's level and "Thinking" while it owes a move. `apps/web/tests/bot-difficulty.e2e.ts` (Chromium, one worker) picks Easy and Hard, sees the levels and the indicator, and sees the worker-hosted bots place their settlements; `bot-trade.e2e.ts` passes with random bots.
+
+## Follow-up A: Cities & Knights
+
+Dates are local time, 2026-09-29 to 2026-09-30. The plan is [16-bots.md, "Follow-up: stronger bots"](../../16-bots.md#follow-up-stronger-bots-planned-2026-09-29), part A. Decisions are in [DECISIONS](../../DECISIONS.md) ("Stage 16 follow-up A — …"). Every run below used the source at commit f38ecc8 (fingerprint `a62745ab0759…`, `sourceUnchanged: true`), invariants on, `--iterations 6`, at most five worker processes while the load average stayed below 8 (two otherwise), one run at a time.
+
+The stage 16 knights policy is kept frozen as `packages/bots/src/plugins/knights-v1.ts`. The simulator's benchmark levels `hard-v1` and `normal-v1` play it (they are never offered in a game). Easy plays it too. Normal and Hard play the new policy in `packages/bots/src/plugins/knights/`.
+
+### How each item was measured
+
+Each item was switched on alone and played in one seat against three bots with the policy before it (seats rotated), 400 games per seed, two seeds on `knights` and two on `four-isles-knights` (the seafaring + knights scenario), without invariant checks. An item was kept when it gained clearly more than the noise (a win share of 25% means no change; the standard error over 3,200 games is 0.8 points). Tuning seeds were 3001–3062; the final runs below use seeds never used for tuning (1701–1704).
+
+| Item                  | Against             | Games | Win share | Kept |
+| --------------------- | ------------------- | ----: | --------: | ---- |
+| 1. Progress cards     | stage 16 Hard       | 1,600 |     32.6% | yes  |
+| 2. Barbarian planning | Hard with item 1    | 3,200 |     27.3% | yes  |
+| 3. Metropolis race    | Hard with items 1–2 | 3,200 |     27.8% | yes  |
+| 4. Active knights     | Hard with items 1–3 | 3,200 |     25.3% | no   |
+| 5. City walls by hand | Hard with items 1–3 | 3,200 |     26.2% | no   |
+
+Variants that were tried and dropped along the way: activating only when the attack is likely next round (22.7%), also keeping wool and ore for a recruit (fewer cities lost, 0.83 against 1.09 per game, and more Defender points, but fewer cities and improvements overall: 23.5% of 200 games), per-kind commodity values in the hand score (neutral), up to three bank trades for a metropolis (neutral).
+
+### Final comparison (2,000 games each)
+
+`pnpm sim tournament --bots hard,hard-v1,hard-v1,hard-v1 --games 2000 --seats-rotation --iterations 6 --scenario <id>`; with one seat of the new level the even-field baseline is 25%.
+
+| Tournament                                                                                | Games     | Level     | Seats | Wins | Win share | Avg VP |  Elo | Avg turns |
+| ----------------------------------------------------------------------------------------- | --------- | --------- | ----: | ---: | --------: | -----: | ---: | --------: |
+| [hard vs hard-v1, knights](followup-a-hard-vs-hard-v1-knights.json)                       | 2000/2000 | hard      |  2000 |  789 | **39.5%** |   9.91 | 1000 |      99.6 |
+| [hard vs hard-v1, knights](followup-a-hard-vs-hard-v1-knights.json)                       | 2000/2000 | hard-v1   |  6000 | 1211 |     60.6% |   8.53 |  884 |      99.6 |
+| [hard vs hard-v1, four-isles-knights](followup-a-hard-vs-hard-v1-four-isles-knights.json) | 2000/2000 | hard      |  2000 |  765 | **38.3%** |  10.76 | 1000 |      99.4 |
+| [hard vs hard-v1, four-isles-knights](followup-a-hard-vs-hard-v1-four-isles-knights.json) | 2000/2000 | hard-v1   |  6000 | 1235 |     61.8% |   9.38 |  892 |      99.4 |
+| [normal vs normal-v1, knights](followup-a-normal-vs-normal-v1-knights.json)               | 2000/2000 | normal    |  2000 |  755 | **37.8%** |   9.73 | 1000 |      99.6 |
+| [normal vs normal-v1, knights](followup-a-normal-vs-normal-v1-knights.json)               | 2000/2000 | normal-v1 |  6000 | 1245 |     62.3% |   8.47 |  896 |      99.6 |
+
+The new Hard wins 39.5% and 38.3% (standard error 1.1) where the stage 16 Hard would win 25%; Normal gains about as much. Games between four new Hard bots are shorter (94.7 turns on knights in the legality run below, 104.7 in stage 16).
+
+### Nothing regressed in the base game
+
+The knights policy runs only in knights games, and base and seafaring games take no path it changed. The three threshold tournaments rerun on the stage 16 seed (1600) reproduce the recorded results exactly:
+
+| Threshold (stage 16)           | Rerun                                                             | Result                     |
+| ------------------------------ | ----------------------------------------------------------------- | -------------------------- |
+| Easy beats Random ≥ 60%        | [85.5%](followup-a-recheck-easy-vs-random.json), 1,711/2,000 wins | met, identical to stage 16 |
+| Normal ≥ 40% win share vs Easy | [42.5%](followup-a-recheck-normal-vs-easy.json), 850/2,000 wins   | met, identical to stage 16 |
+| Hard ≥ 35% win share vs Normal | [43.2%](followup-a-recheck-hard-vs-normal.json), 864/2,000 wins   | met, identical to stage 16 |
+
+Average VP and turns also match the stage 16 tables (9.69/4.76 and 86.5; 8.04/6.70 and 76.3; 8.28/7.04 and 72.4).
+
+### Legality on knights and seafaring + knights (200 games per level)
+
+Four bots of one level, invariants on, seed 1704.
+
+| Run                                                                                      | Level  | Scenario           | Games finished | Failed | Fallback warnings | Avg turns |
+| ---------------------------------------------------------------------------------------- | ------ | ------------------ | -------------: | -----: | ----------------: | --------: |
+| [legality-easy-knights](followup-a-legality-easy-knights.json)                           | easy   | knights            |        200/200 |      0 |                 0 |     113.1 |
+| [legality-easy-four-isles-knights](followup-a-legality-easy-four-isles-knights.json)     | easy   | four-isles-knights |        200/200 |      0 |                 0 |     114.3 |
+| [legality-normal-knights](followup-a-legality-normal-knights.json)                       | normal | knights            |        200/200 |      0 |                 0 |      98.0 |
+| [legality-normal-four-isles-knights](followup-a-legality-normal-four-isles-knights.json) | normal | four-isles-knights |        200/200 |      0 |                 0 |      97.1 |
+| [legality-hard-knights](followup-a-legality-hard-knights.json)                           | hard   | knights            |        200/200 |      0 |                 0 |      94.7 |
+| [legality-hard-four-isles-knights](followup-a-legality-hard-four-isles-knights.json)     | hard   | four-isles-knights |        200/200 |      0 |                 0 |      92.5 |
+
+No rejected command, no failure and no fallback warning; the final comparisons add 6,000 more knights games without one. A tuning run surfaced a free-road frame that offers only `SKIP` (a Road Building card with no road left to place); the policy now answers it.
+
+Unit tests: `packages/bots/src/plugins/knights/knights-policy.test.ts` (the attack chance, activating a turn ahead, the metropolis purchase before a city and the bank trade for a missing commodity, the Alchemist on the best number, the progress discard, the Merchant).

@@ -1,0 +1,41 @@
+{
+  "mode": "tournament",
+  "bots": ["hard", "hard-v1", "hard-v1", "hard-v1"],
+  "seed": 1701,
+  "seatsRotation": true,
+  "scenario": "knights",
+  "iterationBudget": 6,
+  "verifyInvariants": true,
+  "parallel": 2,
+  "games": 2000,
+  "finishedGames": 2000,
+  "failedGames": 0,
+  "averageTurns": 99.5555,
+  "results": [
+    {
+      "level": "hard",
+      "seats": 2000,
+      "games": 2000,
+      "wins": 789,
+      "winShare": 0.3945,
+      "winRatePerSeat": 0.3945,
+      "averageVp": 9.9125,
+      "elo": 1000
+    },
+    {
+      "level": "hard-v1",
+      "seats": 6000,
+      "games": 2000,
+      "wins": 1211,
+      "winShare": 0.6055,
+      "winRatePerSeat": 0.20183333333333334,
+      "averageVp": 8.5265,
+      "elo": 884
+    }
+  ],
+  "fallbackWarnings": {},
+  "failures": [],
+  "elapsedMilliseconds": 270655.63625000004,
+  "sourceFingerprint": "a62745ab0759317926d4caab2a60d755aad2e296b6dca5d0e08ac5a29725cf74",
+  "sourceUnchanged": true
+}

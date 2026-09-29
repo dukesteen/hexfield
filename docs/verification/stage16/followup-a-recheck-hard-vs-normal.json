@@ -1,0 +1,40 @@
+{
+  "mode": "tournament",
+  "bots": ["hard", "normal", "normal", "normal"],
+  "seed": 1600,
+  "seatsRotation": true,
+  "iterationBudget": 6,
+  "verifyInvariants": true,
+  "parallel": 2,
+  "games": 2000,
+  "finishedGames": 2000,
+  "failedGames": 0,
+  "averageTurns": 72.3785,
+  "results": [
+    {
+      "level": "hard",
+      "seats": 2000,
+      "games": 2000,
+      "wins": 864,
+      "winShare": 0.432,
+      "winRatePerSeat": 0.432,
+      "averageVp": 8.2825,
+      "elo": 1000
+    },
+    {
+      "level": "normal",
+      "seats": 6000,
+      "games": 2000,
+      "wins": 1136,
+      "winShare": 0.568,
+      "winRatePerSeat": 0.18933333333333333,
+      "averageVp": 7.035,
+      "elo": 857
+    }
+  ],
+  "fallbackWarnings": {},
+  "failures": [],
+  "elapsedMilliseconds": 801255.6563749999,
+  "sourceFingerprint": "a62745ab0759317926d4caab2a60d755aad2e296b6dca5d0e08ac5a29725cf74",
+  "sourceUnchanged": true
+}

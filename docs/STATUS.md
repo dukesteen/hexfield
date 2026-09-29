@@ -548,6 +548,8 @@ Stage 16 evidence is in [verification/stage16/acceptance.md](verification/stage1
 
 Tournament results for this version (commit 7366281, 2026-09-29), all levels together (`pnpm sim tournament --bots easy,normal,hard,random --games 2000 --seats-rotation --iterations 6`): Hard 49.0% of wins (Elo 1815), Normal 32.1% (1742), Easy 18.4% (1644), Random 0.4% (1000); games average 73 turns ([JSON](verification/stage16/tournament-all-levels.json)).
 
+Follow-up A (Cities & Knights, 2026-09-30): a policy per progress card, barbarian planning and the metropolis race were kept; active knight actions and walls by hand size measured neutral and were not. The new Hard wins [39.5%](verification/stage16/followup-a-hard-vs-hard-v1-knights.json) of 2,000 knights games and [38.3%](verification/stage16/followup-a-hard-vs-hard-v1-four-isles-knights.json) of 2,000 four-isles-knights games against three stage 16 Hard bots (25% = no change); Normal [37.8%](verification/stage16/followup-a-normal-vs-normal-v1-knights.json) against three stage 16 Normal. The base threshold tournaments reproduce exactly, and 1,200 knights and seafaring + knights legality games had no rejected command or fallback warning ([evidence](verification/stage16/acceptance.md#follow-up-a-cities--knights)).
+
 ## 17 — Spectators, Replays & Map Editor
 
 Source: [17-spectators-replays-map-editor.md](17-spectators-replays-map-editor.md)
