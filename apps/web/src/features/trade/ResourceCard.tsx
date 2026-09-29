@@ -1,19 +1,33 @@
 import { useId, useRef } from 'react';
-import { RESOURCES } from '@cp2p/engine';
-import type { Resource, ResourceCounts } from '@cp2p/engine';
-import { getResourceCardUrl } from '@cp2p/renderer';
+import { RESOURCES, isBaseResource } from '@cp2p/engine';
+import { getCommodityCardUrl, getResourceCardUrl } from '@cp2p/renderer';
 import { useTranslation } from 'react-i18next';
-import { resourceLabel } from '../dialogs/resources.js';
+import { ALL_CARD_KINDS, resourceLabel } from '../dialogs/resources.js';
 import './trade.css';
+
+/** Counts of card kinds; a kind may be missing, which reads as none. */
+type Counts = Readonly<Record<string, number | undefined>>;
 
 interface CardPickerProps {
   label: string;
-  values: ResourceCounts;
-  stock?: { source: 'hand' | 'bank'; counts: Partial<ResourceCounts> };
-  selectable?: readonly Resource[];
-  steps?: Partial<ResourceCounts>;
-  onChange: (resource: Resource, count: number) => void;
+  values: Counts;
+  /** The card kinds on offer, in order. Defaults to the five resources. */
+  kinds?: readonly string[];
+  stock?: { source: 'hand' | 'bank'; counts: Counts };
+  selectable?: readonly string[];
+  steps?: Counts;
+  // A method, so a handler written for the five resources still fits.
+  onChange(kind: string, count: number): void;
   onClear: () => void;
+}
+
+/** The art of a card face: a resource card, or a commodity card. */
+function cardFace(kind: string): string {
+  return isBaseResource(kind) ? getResourceCardUrl(kind) : getCommodityCardUrl(commodity(kind));
+}
+
+function commodity(kind: string): 'paper' | 'cloth' | 'coin' {
+  return kind === 'paper' || kind === 'cloth' ? kind : 'coin';
 }
 
 /** The card face is decorative; nearby text and controls carry the accessible meaning. */
@@ -23,7 +37,7 @@ export function ResourceCard({
   stock,
   size = 'md',
 }: {
-  resource: Resource;
+  resource: string;
   count?: number;
   stock?: number;
   size?: 'sm' | 'md';
@@ -31,7 +45,7 @@ export function ResourceCard({
   const { t } = useTranslation('rules');
   return (
     <span className="resource-card" data-resource={resource} data-size={size}>
-      <img src={getResourceCardUrl(resource)} alt="" aria-hidden="true" draggable={false} />
+      <img src={cardFace(resource)} alt="" aria-hidden="true" draggable={false} />
       {count !== undefined && <b className="resource-card-count">{count}</b>}
       {stock !== undefined && (
         <span className="resource-card-stock" aria-hidden="true">
@@ -44,21 +58,14 @@ export function ResourceCard({
 }
 
 /** Card taps add a configured unit; separate remove controls keep touch and keyboard use explicit. */
-export function ResourceCardPicker({
-  label,
-  values,
-  stock,
-  selectable,
-  steps,
-  onChange,
-  onClear,
-}: CardPickerProps) {
+export function ResourceCardPicker(props: CardPickerProps) {
+  const { label, values, kinds = RESOURCES, stock, selectable, steps, onClear } = props;
   const { t } = useTranslation('rules');
   const id = useId();
-  const addButtons = useRef(new Map<Resource, HTMLButtonElement>());
-  const selected = RESOURCES.reduce((total, resource) => total + (values[resource] ?? 0), 0);
+  const addButtons = useRef(new Map<string, HTMLButtonElement>());
+  const selected = kinds.reduce((total, resource) => total + (values[resource] ?? 0), 0);
   const stockTotal = stock
-    ? RESOURCES.reduce((total, resource) => total + (stock.counts[resource] ?? 0), 0)
+    ? kinds.reduce((total, resource) => total + (stock.counts[resource] ?? 0), 0)
     : 0;
   return (
     <fieldset className="trade-card-picker">
@@ -89,7 +96,7 @@ export function ResourceCardPicker({
           disabled={selected === 0}
           onClick={() => {
             onClear();
-            for (const resource of RESOURCES) {
+            for (const resource of kinds) {
               const button = addButtons.current.get(resource);
               if (button) {
                 button.focus();
@@ -102,7 +109,7 @@ export function ResourceCardPicker({
         </button>
       </div>
       <div className="trade-card-grid">
-        {RESOURCES.map((resource) => {
+        {kinds.map((resource) => {
           const count = values[resource] ?? 0;
           const stockCount = stock?.counts[resource];
           const step = steps?.[resource] ?? 1;
@@ -130,7 +137,7 @@ export function ResourceCardPicker({
                 {...(describedBy ? { 'aria-describedby': describedBy } : {})}
                 aria-disabled={atCap || unavailable}
                 onClick={() => {
-                  if (!atCap && !unavailable) onChange(resource, count + step);
+                  if (!atCap && !unavailable) props.onChange(resource, count + step);
                 }}
               >
                 <ResourceCard
@@ -161,7 +168,7 @@ export function ResourceCardPicker({
                 hidden={count === 0}
                 onClick={() => {
                   const nextCount = Math.max(0, count - step);
-                  onChange(resource, nextCount);
+                  props.onChange(resource, nextCount);
                   if (nextCount === 0) addButtons.current.get(resource)?.focus();
                 }}
               >
@@ -179,14 +186,14 @@ export function ResourceCardPicker({
 
 interface CardSummaryProps {
   label: string;
-  values: Partial<ResourceCounts>;
+  values: Counts;
 }
 
 /** Offer terms are already public; this component never reads a private hand. */
 export function ResourceCardSummary({ label, values }: CardSummaryProps) {
   const { t } = useTranslation('rules');
   const labelId = useId();
-  const shown = RESOURCES.filter((resource) => (values[resource] ?? 0) > 0);
+  const shown = ALL_CARD_KINDS.filter((resource) => (values[resource] ?? 0) > 0);
   return (
     <div className="trade-card-summary" role="group" aria-labelledby={labelId}>
       <span className="trade-card-summary-label" id={labelId}>

@@ -1,10 +1,10 @@
 import { useEffect, useId, useRef, useState } from 'react';
-import { RESOURCES } from '@cp2p/engine';
-import type { CommandShape, ResourceCounts, Seat } from '@cp2p/engine';
+import type { CommandShape, Seat } from '@cp2p/engine';
 import { useTranslation } from 'react-i18next';
 import type { CommandFormProps } from '../dialogs/types.js';
 import { useCommandValidations } from '../dialogs/use-command-validation.js';
 import { ValidationChecking } from '../dialogs/ValidationChecking.js';
+import { ALL_CARD_KINDS } from '../dialogs/resources.js';
 import { TradeExchange } from './ResourceCard.js';
 
 type ResponseStatus = 'accepted' | 'declined' | 'waiting';
@@ -13,10 +13,10 @@ function record(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function counts(value: unknown): Partial<ResourceCounts> {
+function counts(value: unknown): Record<string, number> {
   if (!record(value)) return {};
-  const result: Partial<Record<keyof ResourceCounts, number>> = {};
-  for (const resource of RESOURCES) {
+  const result: Record<string, number> = {};
+  for (const resource of ALL_CARD_KINDS) {
     const count = value[resource];
     if (typeof count === 'number' && Number.isSafeInteger(count) && count > 0)
       result[resource] = count;

@@ -16,7 +16,7 @@ import type {
   Seat,
 } from '@cp2p/engine';
 import { browserEntropy, createBrowserRandomSource, randomIndex, randomSeed } from './random.js';
-import type { BrowserRandomSource, Entropy } from './random.js';
+import type { BrowserRandomSource, Entropy, TakePreference } from './random.js';
 import { chooseBotPending, timerKey } from './scheduling.js';
 import { owned, parseSave, ReplayRandomSource, sameCanonical, stateHash } from './save.js';
 import type {
@@ -270,7 +270,10 @@ export class LocalSession implements GameSession<LocalSessionSave> {
   }
 
   /** Development-only one-shot dice control; balanced mode remains untouched. */
-  forceDice(dice: readonly [number, number]): Result<void> {
+  forceDice(
+    dice: readonly [number, number],
+    extra?: Readonly<Record<string, string>>,
+  ): Result<void> {
     if (!import.meta.env.DEV) return failure('unavailable', 'Dice control is development-only');
     if (this.status.kind !== 'running')
       return failure('session-inactive', 'Local session is not running');
@@ -278,11 +281,83 @@ export class LocalSession implements GameSession<LocalSessionSave> {
     if (typeof base === 'object' && base !== null && Reflect.get(base, 'diceMode') === 'balanced')
       return failure('balanced-dice', 'Balanced dice cannot be forced');
     try {
-      this.source.forceNextDice(dice);
+      this.source.forceNextDice(dice, extra);
       return success(undefined);
     } catch (error) {
       return failure('invalid-dice', String(error));
     }
+  }
+
+  /**
+   * Development-only scenario control: replace the whole game (public state and every seat's
+   * hand) so a screenshot or a test can start from a hand-built position. The input log no longer
+   * replays the result, so an exported save of such a game is not valid.
+   */
+  devReplace(state: GameState, privates: Readonly<Record<string, PrivateState>>): Result<void> {
+    if (!import.meta.env.DEV) return failure('unavailable', 'Scenario control is development-only');
+    if (this.status.kind !== 'running')
+      return failure('session-inactive', 'Local session is not running');
+    const map = new Map<Seat, PrivateState>(
+      state.config.seats.flatMap((seat) => {
+        const value = privates[String(seat)];
+        return value ? [[seat, value] as const] : [];
+      }),
+    );
+    Reflect.set(this.game, 'current', state);
+    Reflect.set(this.game, 'privateBySeat', map);
+    // One placeholder entry moves the revision, so every subscriber sees a new update.
+    const entries: unknown = Reflect.get(this.game, 'entries');
+    if (Array.isArray(entries)) entries.push({ kind: 'system', type: 'DEV_REPLACE' });
+    this.reconcile();
+    this.emit([]);
+    return success(undefined);
+  }
+
+  /** Development-only: submit a command as any seat, a bot's included. */
+  devApply(seat: Seat, command: CommandShape): Result<void> {
+    if (!import.meta.env.DEV) return failure('unavailable', 'Scenario control is development-only');
+    const input: Input = { kind: 'command', seat, command };
+    const valid = this.engine.validate(this.game.state, input);
+    return valid.ok ? this.accept(input) : valid;
+  }
+
+  /** Development-only: what any seat could do right now. */
+  devLegal(seat: Seat): LegalCommandSet {
+    if (!import.meta.env.DEV) return { commands: [], templates: [] };
+    return this.engine.getLegalCommands(this.game.state, seat, this.game.privateView(seat));
+  }
+
+  /**
+   * Local play only: the choice a human makes when Master Merchant or the Spy takes cards. The
+   * take resolves in the same step as the play, so the choice is stated before it.
+   */
+  preferTake(preference: TakePreference | null): void {
+    this.source.preferTake(preference);
+  }
+
+  /**
+   * Local play only: what a seat shows a human actor when a card lets them look (Master Merchant
+   * shows the hand, the Spy the progress cards). `null` for a seat that is not a human's opponent.
+   */
+  peekHand(
+    actor: Seat,
+    target: Seat,
+    what: 'hand' | 'progress',
+  ): { hand: Record<string, number> } | { progress: Record<string, string> } | null {
+    if (this.status.kind !== 'running' || !this.humans.has(actor) || actor === target) return null;
+    const priv = this.game.privateState(target);
+    if (!priv) return null;
+    if (what === 'hand') return { hand: { ...priv.hand } };
+    const visible = new Set(
+      (this.game.state.seats.find((seat) => seat.seat === target)?.cardSlots ?? [])
+        .filter((slot) => slot.revealed === undefined && slot.deck.startsWith('progress-'))
+        .map((slot) => slot.slotId),
+    );
+    return {
+      progress: Object.fromEntries(
+        Object.entries(priv.slots).filter(([slotId]) => visible.has(slotId)),
+      ),
+    };
   }
 
   subscribe(listener: (update: SessionUpdate) => void): Unsubscribe {

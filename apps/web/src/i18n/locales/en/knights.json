@@ -1,0 +1,395 @@
+{
+  "close": "Close",
+  "free": "Free",
+  "costs": {
+    "knightsHeading": "Knights and walls",
+    "improvementsHeading": "City improvements",
+    "improvementsNote": "Level 1 to 5 of each track costs that many of its commodity: 1, then 2, up to 5.",
+    "levelCost": "Level {{level}}: {{cost}}"
+  },
+  "countdown_one": "Barbarians: {{count}} step",
+  "countdown_other": "Barbarians: {{count}} steps",
+  "deckCount_one": "{{track}} deck: {{count}} card left",
+  "deckCount_other": "{{track}} deck: {{count}} cards left",
+  "commodity": {
+    "paper": "Paper",
+    "cloth": "Cloth",
+    "coin": "Coin"
+  },
+  "track": {
+    "trade": "Trade",
+    "politics": "Politics",
+    "science": "Science"
+  },
+  "ability": {
+    "trade": "Level 3: trade commodities 2 for 1 with the bank on your turn.",
+    "politics": "Level 3 (Fortress): strong knights can be promoted to mighty.",
+    "science": "Level 3 (Aqueduct): a roll that gives you nothing pays a resource of your choice."
+  },
+  "improve": {
+    "title": "City improvements",
+    "intro": "Buy levels with commodities. A metropolis goes on one of your cities at level 4.",
+    "level": "{{track}}: level {{level}} of {{max}}",
+    "complete": "{{track}}: complete",
+    "holdsMetropolis": "Holds this track's metropolis",
+    "buy": "Buy {{track}} level {{level}} for {{cost}}",
+    "buyCost": "{{track}} level {{level}}: {{cost}}",
+    "cannotBuy": "{{track}} level {{level}} is not available now",
+    "nextCost": "Next: level {{level}} costs {{cost}} {{commodity}}",
+    "open": "Open city improvements"
+  },
+  "build": {
+    "knight": "Recruit knight",
+    "wall": "Build city wall",
+    "sideways": "Upgrade the fallen city",
+    "activate": "Activate knight",
+    "promote": "Promote knight",
+    "moveKnight": "Move knight",
+    "displaceKnight": "Displace a weaker knight",
+    "chase": "Chase away the robber"
+  },
+  "buildHint": {
+    "knight": "Placed inactive on your roads",
+    "wall": "+2 hand limit, under a city",
+    "sideways": "Upgrade it before any other settlement",
+    "activate": "A knight must be active to act",
+    "promote": "Basic to strong to mighty",
+    "moveKnight": "Along your roads, once per turn",
+    "displaceKnight": "Push a weaker rival knight aside",
+    "chase": "From beside the robber"
+  },
+  "placement": {
+    "knight": "knight site",
+    "wall": "city to wall",
+    "activate": "knight to activate",
+    "promote": "knight to promote",
+    "moveKnight": "knight to move",
+    "moveKnightTarget": "site to move to",
+    "displaceKnight": "knight to send",
+    "displaceKnightTarget": "rival knight to displace",
+    "chase": "knight beside the robber",
+    "sideways": "fallen city to upgrade",
+    "relocate": "site for your displaced knight",
+    "pillage": "city to lose",
+    "metropolis": "city for the metropolis",
+    "deserterRemove": "knight to give up",
+    "deserterPlace": "site for the new knight",
+    "cardWall": "city to wall",
+    "cardCity": "settlement to upgrade",
+    "cardIntrigue": "rival knight to drive off",
+    "cardMerchant": "hex for the merchant",
+    "cardBishop": "hex for the robber",
+    "cardInventor": "number token to swap",
+    "cardInventorTarget": "token to swap it with",
+    "cardDiplomat": "open road to remove",
+    "cardDiplomatTarget": "edge for your free road",
+    "cardSmith": "knight to promote",
+    "cardSmithTarget": "second knight to promote"
+  },
+  "instruction": {
+    "confirm": "Confirm on the board, or choose another marked spot.",
+    "knight": "Choose a marked site for the new knight, then confirm it.",
+    "wall": "Choose a city for the wall, then confirm it.",
+    "activate": "Choose an inactive knight to activate, then confirm it.",
+    "promote": "Choose a knight to promote, then confirm it.",
+    "moveKnight": "Choose the knight that will move.",
+    "moveKnightTarget": "Choose a marked site to move to, then confirm it.",
+    "displaceKnight": "Choose the knight that will push a weaker rival knight aside.",
+    "displaceKnightTarget": "Choose the rival knight to displace, then confirm it.",
+    "chase": "Choose the knight beside the robber. It becomes inactive.",
+    "sideways": "Choose the fallen city to upgrade, then confirm it.",
+    "relocate": "Your knight was displaced. Choose a site for it, then confirm it.",
+    "pillage": "The barbarians won. Choose which of your cities is lost.",
+    "metropolis": "You reached level 4 first. Choose the city that gets the metropolis.",
+    "deserterRemove": "A Deserter was played against you. Choose the knight you give up.",
+    "deserterPlace": "Place your new knight on a marked site, then confirm it.",
+    "cardWall": "Engineer: choose a city for the free wall.",
+    "cardCity": "Medicine: choose the settlement to upgrade.",
+    "cardIntrigue": "Intrigue: choose a rival knight beside your roads to drive off.",
+    "cardMerchant": "Merchant: choose a hex beside one of your buildings.",
+    "cardBishop": "Bishop: choose the hex for the robber.",
+    "cardInventor": "Inventor: choose the first number token to swap.",
+    "cardInventorTarget": "Choose the token to swap it with, then confirm it.",
+    "cardDiplomat": "Diplomat: choose an open road to remove.",
+    "cardDiplomatTarget": "Choose an edge for your free road, or remove without building.",
+    "cardSmith": "Smith: choose a knight to promote for free.",
+    "cardSmithTarget": "Choose a second knight to promote, or promote just the first."
+  },
+  "finish": {
+    "cardDiplomat": "Remove without building",
+    "cardSmith": "Promote just this one"
+  },
+  "confirmTitle": {
+    "knight": "Recruit a knight here?",
+    "wall": "Build a city wall here?",
+    "activate": "Activate this knight?",
+    "promote": "Promote this knight?",
+    "moveKnight": "Move the knight here?",
+    "displaceKnight": "Displace this knight?",
+    "chase": "Chase the robber with this knight?",
+    "sideways": "Upgrade this city?",
+    "relocate": "Place the knight here?",
+    "pillage": "Lose this city?",
+    "metropolis": "Put the metropolis here?",
+    "deserterRemove": "Give up this knight?",
+    "deserterPlace": "Place the knight here?",
+    "cardWall": "Wall this city?",
+    "cardCity": "Upgrade this settlement?",
+    "cardIntrigue": "Drive this knight off?",
+    "cardMerchant": "Place the merchant here?",
+    "cardBishop": "Move the robber here?",
+    "cardInventor": "Swap these number tokens?",
+    "cardDiplomat": "Remove this road?",
+    "cardSmith": "Promote these knights?"
+  },
+  "alchemist": {
+    "instruction": "Choose both production dice. Only the event die is rolled.",
+    "red": "Red die",
+    "yellow": "Yellow die",
+    "total": "Total: {{count}}"
+  },
+  "aqueduct": {
+    "title": "Aqueduct",
+    "instruction": "The roll gave you nothing. Take one resource of your choice."
+  },
+  "barbarians": {
+    "title": "Barbarians",
+    "track": "Barbarian track",
+    "steps_one": "Landing in {{count}} step.",
+    "steps_other": "Landing in {{count}} steps.",
+    "landing": "Land",
+    "strength": "Barbarian strength (cities)",
+    "defense": "Defense (active knights)",
+    "holds": "The knights would hold the line.",
+    "falls": "The barbarians would win, and the weakest defender loses a city.",
+    "contributions": "Active knights by player",
+    "activeLevels_one": "{{count}} active level",
+    "activeLevels_other": "{{count}} active levels",
+    "knightsOnBoard_one": "{{count}} knight on the board",
+    "knightsOnBoard_other": "{{count}} knights on the board",
+    "last": "Last attack: {{outcome}} (strength {{strength}}, defense {{defense}}).",
+    "outcome": {
+      "defended": "the defenders won",
+      "pillaged": "the barbarians pillaged"
+    }
+  },
+  "card": {
+    "aim": "Aim",
+    "beforeRoll": "Before rolling",
+    "hidden": "{{track}} progress card",
+    "play": "Play card",
+    "vp": "VP",
+    "waiting": "Not playable right now"
+  },
+  "crane": {
+    "next": "to level {{level}}",
+    "choose": "Choose the improvement to buy with the Crane"
+  },
+  "deck": {
+    "title": "Draw a progress card",
+    "instruction": "You tied for the strongest defense. Choose the deck to draw from."
+  },
+  "discardProgress": {
+    "title": "Too many progress cards",
+    "instruction": "You may hold four progress cards. Choose {{count}} to discard.",
+    "cards": "Progress cards",
+    "confirm": "Discard",
+    "button": "Discard {{count}}"
+  },
+  "harbor": {
+    "replyTitle": "Commercial Harbor",
+    "replyInstruction": "{{player}} offers you a card face down. Give back a commodity.",
+    "replyAnonymous": "A card is offered face down. Give back a commodity.",
+    "returnOffer": "Return the offer (you hold no commodity)",
+    "giveBack": "Give 1 {{commodity}}",
+    "offerTitle": "Commercial Harbor offers",
+    "offerInstruction": "Offer a resource face down to each rival. They must give back a commodity.",
+    "offerOne": "Offer {{resource}} to {{player}}",
+    "nobody": "No rival can take an offer now.",
+    "done": "Done",
+    "reopen": "Harbor offers"
+  },
+  "kind": {
+    "choose": "Choose a card kind"
+  },
+  "look": {
+    "start": "Look at their cards"
+  },
+  "seat": {
+    "choose": "Choose a player"
+  },
+  "masterMerchant": {
+    "title": "Master Merchant: {{player}}'s hand",
+    "instruction": "Take {{count}} of their cards.",
+    "cards": "{{player}}'s cards",
+    "take": "Take these cards"
+  },
+  "spy": {
+    "title": "Spy: {{player}}'s progress cards",
+    "instruction": "Take one of these cards, or none.",
+    "empty": "They hold no progress cards.",
+    "take": "Take this card",
+    "takeNothing": "Take nothing"
+  },
+  "panel": {
+    "knights": "Knights: {{active}} active of {{total}}, active strength {{strength}}",
+    "progress_one": "{{count}} progress card",
+    "progress_other": "{{count}} progress cards",
+    "defender_one": "Defender of Catan: {{count}} VP",
+    "defender_other": "Defender of Catan: {{count}} VP",
+    "metropolis": "Holds the {{track}} metropolis",
+    "merchant": "Controls the merchant"
+  },
+  "progress": {
+    "hand_one": "Progress cards: {{count}}",
+    "hand_other": "Progress cards: {{count}}",
+    "count_one": "{{count}} progress card",
+    "count_other": "{{count}} progress cards"
+  },
+  "saboteur": {
+    "title": "Sabotage",
+    "instruction": "A Saboteur strikes. Discard {{count}} cards to the bank.",
+    "cards": "Cards to discard"
+  },
+  "wedding": {
+    "title": "Wedding",
+    "instruction": "A wedding for {{player}}. Give {{count}} cards.",
+    "cards": "Cards to give"
+  },
+  "dice": {
+    "red": "Red die {{value}}",
+    "yellow": "Yellow die {{value}}",
+    "event": "Event die: {{face}}",
+    "face": {
+      "ship": "Barbarian ship",
+      "trade": "Trade gate",
+      "politics": "Politics gate",
+      "science": "Science gate"
+    }
+  },
+  "cards": {
+    "alchemist": {
+      "name": "Alchemist",
+      "text": "Before you roll, choose both production dice. Only the event die is rolled."
+    },
+    "crane": {
+      "name": "Crane",
+      "text": "Buy a city improvement for one commodity less. Level 1 is free."
+    },
+    "engineer": {
+      "name": "Engineer",
+      "text": "Build a city wall for free."
+    },
+    "inventor": {
+      "name": "Inventor",
+      "text": "Swap two number tokens. Not the 2, 6, 8 or 12."
+    },
+    "irrigation": {
+      "name": "Irrigation",
+      "text": "Take 2 grain for every fields hex beside your buildings."
+    },
+    "medicine": {
+      "name": "Medicine",
+      "text": "Upgrade a settlement to a city for 1 grain and 2 ore."
+    },
+    "mining": {
+      "name": "Mining",
+      "text": "Take 2 ore for every mountains hex beside your buildings."
+    },
+    "printer": {
+      "name": "Printer",
+      "text": "One victory point, kept face up."
+    },
+    "roadBuilding": {
+      "name": "Road Building",
+      "text": "Build two roads for free."
+    },
+    "smith": {
+      "name": "Smith",
+      "text": "Promote up to two of your knights one level, for free."
+    },
+    "commercialHarbor": {
+      "name": "Commercial Harbor",
+      "text": "Offer each rival a resource. Each answers with a commodity."
+    },
+    "masterMerchant": {
+      "name": "Master Merchant",
+      "text": "Look at the hand of a rival who leads you, and take 2 cards."
+    },
+    "merchant": {
+      "name": "Merchant",
+      "text": "Place the merchant by your building: 2 for 1 trades there, and 1 VP while it is yours."
+    },
+    "merchantFleet": {
+      "name": "Merchant Fleet",
+      "text": "This turn, trade one kind of card 2 for 1 with the bank."
+    },
+    "resourceMonopoly": {
+      "name": "Resource Monopoly",
+      "text": "Name a resource. Every rival gives you up to 2."
+    },
+    "tradeMonopoly": {
+      "name": "Trade Monopoly",
+      "text": "Name a commodity. Every rival gives you 1."
+    },
+    "bishop": {
+      "name": "Bishop",
+      "text": "Move the robber and take a card from every rival beside it."
+    },
+    "constitution": {
+      "name": "Constitution",
+      "text": "One victory point, kept face up."
+    },
+    "deserter": {
+      "name": "Deserter",
+      "text": "A rival gives up a knight. You place a knight of your own for free."
+    },
+    "diplomat": {
+      "name": "Diplomat",
+      "text": "Remove an open road. If it was yours, you may build a road for free."
+    },
+    "intrigue": {
+      "name": "Intrigue",
+      "text": "Drive a rival knight off a site your roads reach, without a knight."
+    },
+    "saboteur": {
+      "name": "Saboteur",
+      "text": "Every rival with as many points as you, or more, discards half its hand."
+    },
+    "spy": {
+      "name": "Spy",
+      "text": "Look at a rival's progress cards and take one."
+    },
+    "warlord": {
+      "name": "Warlord",
+      "text": "Activate all your knights for free."
+    },
+    "wedding": {
+      "name": "Wedding",
+      "text": "Every rival with more points than you gives you 2 cards."
+    }
+  },
+  "action": {
+    "knight": "Recruit knight",
+    "wall": "Build city wall",
+    "sideways": "Upgrade fallen city",
+    "activate": "Activate knight",
+    "promote": "Promote knight",
+    "moveKnight": "Move knight",
+    "displaceKnight": "Displace knight",
+    "chase": "Chase robber",
+    "relocate": "Place displaced knight",
+    "pillage": "Choose city to lose",
+    "metropolis": "Place metropolis",
+    "deserterRemove": "Give up a knight",
+    "deserterPlace": "Place new knight",
+    "cardWall": "Engineer: place wall",
+    "cardCity": "Medicine: upgrade",
+    "cardIntrigue": "Intrigue: drive off",
+    "cardMerchant": "Merchant: place",
+    "cardBishop": "Bishop: move robber",
+    "cardInventor": "Inventor: swap",
+    "cardDiplomat": "Diplomat: remove road",
+    "cardSmith": "Smith: promote"
+  }
+}

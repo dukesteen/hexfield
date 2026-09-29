@@ -36,12 +36,24 @@ import { ModuleHud } from '../modules/ModuleHud';
 import { ModulePanelExtras } from '../modules/ModulePanelExtras';
 import { isSeafaring, routeLength } from './seafaring';
 import { FixtureDialog } from '../modules/FixtureDialog';
+import type { KnightsController } from '../knights/controller';
+import { ImprovementsBoard } from '../knights/ImprovementsBoard';
+import { ImprovementsStrip } from '../knights/ImprovementsStrip';
+import { ProgressHand } from '../knights/ProgressHand';
+import { ProgressCardBack } from '../knights/ProgressCardFace';
+import { TRACKS, cardKinds, isCommodity, isKnights, progressHeld } from '../knights/state';
+import type { Track } from '../knights/state';
 
 const MAX_INLINE_DEVELOPMENT_CARDS = 5;
 const MAX_NARROW_INLINE_DEVELOPMENT_CARDS = 3;
 
 function playerName(presentation: GamePresentation, seat: Seat): string {
   return presentation.players.find((player) => player.seat === seat)?.name ?? String(seat + 1);
+}
+
+/** The name of a card kind: a resource, or a commodity in a knights game. */
+function kindLabel(t: (key: string) => string, kind: string): string {
+  return isCommodity(kind) ? t(`knights:commodity.${kind}`) : t(`game:${kind}`);
 }
 
 function knightsPlayed(state: GameState, seat: Seat): number {
@@ -124,6 +136,7 @@ function PlayerRail({
   const target =
     typeof base === 'object' && base !== null && 'vpTarget' in base ? base.vpTarget : 10;
   const seafaring = isSeafaring(state);
+  const knightsGame = isKnights(state);
   return (
     <aside className="player-rail" aria-label={t('game:players')}>
       <div className="player-rail-heading">
@@ -248,20 +261,26 @@ function PlayerRail({
                   <dt>{t('game:statCards')}</dt>
                   <dd>{seatState.resources.total}</dd>
                 </div>
-                <div
-                  title={t('game:developmentCards', {
-                    count: seatState.cardSlots.filter((slot) => !slot.revealed).length,
-                  })}
-                >
-                  <dt>{t('game:statDev')}</dt>
-                  <dd>{seatState.cardSlots.filter((slot) => !slot.revealed).length}</dd>
-                </div>
-                <div
-                  title={t('game:knightsPlayed', { count: knightsPlayed(state, seatState.seat) })}
-                >
-                  <dt>{t('game:statKnights')}</dt>
-                  <dd>{knightsPlayed(state, seatState.seat)}</dd>
-                </div>
+                {!knightsGame && (
+                  <>
+                    <div
+                      title={t('game:developmentCards', {
+                        count: seatState.cardSlots.filter((slot) => !slot.revealed).length,
+                      })}
+                    >
+                      <dt>{t('game:statDev')}</dt>
+                      <dd>{seatState.cardSlots.filter((slot) => !slot.revealed).length}</dd>
+                    </div>
+                    <div
+                      title={t('game:knightsPlayed', {
+                        count: knightsPlayed(state, seatState.seat),
+                      })}
+                    >
+                      <dt>{t('game:statKnights')}</dt>
+                      <dd>{knightsPlayed(state, seatState.seat)}</dd>
+                    </div>
+                  </>
+                )}
                 <div
                   title={t('game:roadLength', {
                     count: routeLength(state, seatState.seat),
@@ -374,14 +393,18 @@ function PlayerDetails({
           <dt>{t(summary ? 'game:statCards' : 'game:cockpit.resourceCards')}</dt>
           <dd>{publicSeat.resources.total}</dd>
         </div>
-        <div>
-          <dt>{t(summary ? 'game:statDev' : 'game:cockpit.developmentCards')}</dt>
-          <dd>{publicSeat.cardSlots.filter((slot) => !slot.revealed).length}</dd>
-        </div>
-        <div>
-          <dt>{t(summary ? 'game:statKnights' : 'game:cockpit.knightsPlayed')}</dt>
-          <dd>{knightsPlayed(state, seat)}</dd>
-        </div>
+        {!isKnights(state) && (
+          <>
+            <div>
+              <dt>{t(summary ? 'game:statDev' : 'game:cockpit.developmentCards')}</dt>
+              <dd>{publicSeat.cardSlots.filter((slot) => !slot.revealed).length}</dd>
+            </div>
+            <div>
+              <dt>{t(summary ? 'game:statKnights' : 'game:cockpit.knightsPlayed')}</dt>
+              <dd>{knightsPlayed(state, seat)}</dd>
+            </div>
+          </>
+        )}
         <div>
           <dt>
             {t(
@@ -456,8 +479,10 @@ function HandDock({
   toggleKnightIntent,
   compact,
   submitting,
+  knights,
 }: {
   state: GameState;
+  knights: KnightsController | null;
   knightIntent: GameActionController['knightIntent'];
   toggleKnightIntent: GameActionController['toggleKnightIntent'];
   compact: boolean;
@@ -493,7 +518,9 @@ function HandDock({
     developmentDialog.current?.close();
   }, [revealedSeat]);
   const seatState = state.seats.find((seat) => seat.seat === revealedSeat);
-  const unrevealedSlots = seatState?.cardSlots.filter((slot) => !slot.revealed) ?? [];
+  const unrevealedSlots =
+    seatState?.cardSlots.filter((slot) => !slot.revealed && !slot.deck.startsWith('progress-')) ??
+    [];
   const cardReason = (slotId: string, card: string, acquiredTurn: number): string | null => {
     if (card === 'Hidden') return t('game:cardUnavailable');
     if (acquiredTurn === state.turn.number && card !== 'victoryPoint') return t('game:newCard');
@@ -654,7 +681,10 @@ function HandDock({
             {compact && (
               <span className="hand-dev-total">
                 {' '}
-                · {t('game:mobileDevCount', { count: developmentCards.length })}
+                ·{' '}
+                {isKnights(state)
+                  ? t('knights:progress.count', { count: progressHeld(state, revealedSeat ?? 0) })
+                  : t('game:mobileDevCount', { count: developmentCards.length })}
               </span>
             )}
           </span>
@@ -730,18 +760,19 @@ function HandDock({
         <>
           <div className="hand-cards">
             <div className="resource-hand">
-              {RESOURCES.map((resource) => (
+              {cardKinds(state).map((resource) => (
                 <div
                   className="resource-hand-card"
                   key={resource}
                   data-empty={(privateState.hand[resource] ?? 0) === 0}
+                  data-commodity={isCommodity(resource)}
                   tabIndex={0}
                   title={t('game:resourceInHand', {
-                    resource: t(`game:${resource}`),
+                    resource: kindLabel(t, resource),
                     count: privateState.hand[resource] ?? 0,
                   })}
                   aria-label={t('game:resourceInHand', {
-                    resource: t(`game:${resource}`),
+                    resource: kindLabel(t, resource),
                     count: privateState.hand[resource] ?? 0,
                   })}
                 >
@@ -749,6 +780,14 @@ function HandDock({
                 </div>
               ))}
             </div>
+            {isKnights(state) && revealedSeat !== null && (
+              <ProgressHand
+                state={state}
+                seat={revealedSeat}
+                priv={privateState}
+                controller={knights}
+              />
+            )}
             {(compact || !compactHand) && developmentCards.length > 0 && (
               <div
                 className={`development-hand ${developmentCards.length > 2 ? 'is-fanned' : ''} ${knightIntent ? 'has-knight-intent' : ''}`}
@@ -929,32 +968,52 @@ function BankPanel({ state, hidden }: { state: GameState; hidden: boolean }) {
     <section className="bank-panel" aria-label={t('game:bank')}>
       <h2>{t('game:bank')}</h2>
       <div className="bank-cards">
-        {RESOURCES.map((resource) => (
+        {cardKinds(state).map((resource) => (
           <span
             className="bank-card"
             key={resource}
+            data-commodity={isCommodity(resource)}
             tabIndex={0}
             aria-label={t('game:resourceInBank', {
-              resource: t(`game:${resource}`),
+              resource: kindLabel(t, resource),
               count: state.bank[resource] ?? 0,
             })}
           >
             <ResourceCard resource={resource} count={state.bank[resource] ?? 0} size="sm" />
           </span>
         ))}
-        <span
-          className="bank-card bank-development"
-          tabIndex={0}
-          aria-label={t('game:developmentInBank', {
-            count: state.decks.dev?.remaining ?? 0,
-          })}
-        >
-          <span className="resource-card" data-size="sm">
-            <img src={getGameArtUrl('cardBack')} alt="" aria-hidden="true" />
-            <b className="resource-card-count">{state.decks.dev?.remaining ?? 0}</b>
-            <span className="resource-card-name">{t('game:cockpit.devTile')}</span>
+        {isKnights(state) ? (
+          TRACKS.map((track) => (
+            <span
+              className="bank-card bank-progress"
+              key={track}
+              tabIndex={0}
+              aria-label={t('knights:deckCount', {
+                count: state.decks[`progress-${track}`]?.remaining ?? 0,
+                track: t(`knights:track.${track}`),
+              })}
+            >
+              <ProgressCardBack
+                track={track}
+                count={state.decks[`progress-${track}`]?.remaining ?? 0}
+              />
+            </span>
+          ))
+        ) : (
+          <span
+            className="bank-card bank-development"
+            tabIndex={0}
+            aria-label={t('game:developmentInBank', {
+              count: state.decks.dev?.remaining ?? 0,
+            })}
+          >
+            <span className="resource-card" data-size="sm">
+              <img src={getGameArtUrl('cardBack')} alt="" aria-hidden="true" />
+              <b className="resource-card-count">{state.decks.dev?.remaining ?? 0}</b>
+              <span className="resource-card-name">{t('game:cockpit.devTile')}</span>
+            </span>
           </span>
-        </span>
+        )}
       </div>
     </section>
   );
@@ -978,6 +1037,7 @@ function LiveGame({
 }: GameScreenProps & { state: GameState }) {
   const { t } = useTranslation('game');
   const events = useSessionStore((store) => store.events);
+  const derivedLog = useSessionStore((store) => store.derivedLog);
   const revision = useSessionStore((store) => store.revision);
   const pending = useSessionStore((store) => store.pending);
   const waitingSeat = useSessionStore((store) => store.waitingSeat);
@@ -1130,7 +1190,7 @@ function LiveGame({
           {sessionNotice}
         </div>
       )}
-      <div className="game-grid">
+      <div className="game-grid" data-knights={isKnights(state)}>
         <section ref={boardRef} className="game-board" aria-label={t('game:board')}>
           <BoardView
             model={model}
@@ -1146,6 +1206,9 @@ function LiveGame({
                     piece: actions.placementConfirmation.piece,
                     color: previewPlayer.color,
                     marker: previewPlayer.marker,
+                    ...(actions.placementConfirmation.knight
+                      ? { knight: actions.placementConfirmation.knight }
+                      : {}),
                   },
                 })}
             onSelect={(hit) => {
@@ -1160,7 +1223,22 @@ function LiveGame({
             }}
           />
           <DiceRollReadout dice={lastRoll} />
-          <ModuleHud state={state} presentation={presentation} />
+          {isKnights(state) && !compact && !finished && (
+            <div className="knights-strip-overlay">
+              <ImprovementsStrip
+                state={state}
+                seat={revealedSeat ?? actions.actorSeat}
+                improvable={actions.knights?.improvable ?? []}
+                onOpen={() => actions.knights?.openImprovements()}
+              />
+            </div>
+          )}
+          <ModuleHud
+            state={state}
+            presentation={presentation}
+            renderer={renderer}
+            openFixture={setFixtureDialog}
+          />
           {fixtureDialog !== null && (
             <FixtureDialog
               fixtureId={fixtureDialog}
@@ -1181,6 +1259,7 @@ function LiveGame({
               renderer={renderer}
               hit={actions.placementConfirmation.hit}
               piece={actions.placementConfirmation.piece}
+              kind={actions.placementConfirmation.kind}
               move={actions.placementConfirmation.move}
               label={actions.placementConfirmation.label}
               onConfirm={actions.placementConfirmation.confirm}
@@ -1210,6 +1289,28 @@ function LiveGame({
               {...(connectionLabels !== undefined ? { connectionLabels } : {})}
               onOpenPlayer={(seat, trigger) => openSheet({ kind: 'player', seat }, trigger)}
             />
+            {isKnights(state) && (
+              <section
+                className="knights-sidebar"
+                aria-label={t('knights:improve.title')}
+                data-testid="improvements-panel"
+              >
+                <h2>{t('knights:improve.title')}</h2>
+                <ImprovementsBoard
+                  state={state}
+                  seat={revealedSeat ?? actions.actorSeat}
+                  presentation={presentation}
+                  captions="cost"
+                  {...(revealedSeat !== null && actions.knights
+                    ? {
+                        buyable: actions.knights.improvable,
+                        onBuy: (track: Track) => actions.knights?.improve(track),
+                        disabled: actions.knights.disabled,
+                      }
+                    : {})}
+                />
+              </section>
+            )}
             <details
               className="game-info"
               open={gameInfoOpen}
@@ -1218,19 +1319,28 @@ function LiveGame({
               <summary>{t('game:gameInfo')}</summary>
               <AwardsPanel state={state} presentation={presentation} />
               <BankPanel state={state} hidden={hideBankCounts} />
-              <EventLog events={events} presentation={presentation} />
+              <EventLog events={events} presentation={presentation} derived={derivedLog} />
             </details>
           </aside>
         )}
         <div className="game-bottom">
           {compact ? (
             <div className="mobile-bottom-controls">
+              {isKnights(state) && !finished && (
+                <ImprovementsStrip
+                  state={state}
+                  seat={revealedSeat ?? actions.actorSeat}
+                  improvable={actions.knights?.improvable ?? []}
+                  onOpen={() => actions.knights?.openImprovements()}
+                />
+              )}
               <HandDock
                 state={state}
                 knightIntent={finished ? null : actions.knightIntent}
                 toggleKnightIntent={actions.toggleKnightIntent}
                 compact
                 submitting={actions.submitting}
+                knights={finished ? null : actions.knights}
               />
               <MobileGameControls
                 step={finished ? null : actions.nextStep}
@@ -1254,6 +1364,7 @@ function LiveGame({
                 toggleKnightIntent={actions.toggleKnightIntent}
                 compact={false}
                 submitting={actions.submitting}
+                knights={finished ? null : actions.knights}
               />
               {winner ? (
                 <section className="action-dock finished-dock" aria-label={t('game:actions')}>
@@ -1325,7 +1436,12 @@ function LiveGame({
               <AwardsPanel state={state} presentation={presentation} />
             </div>
           ) : sheet.kind === 'log' ? (
-            <EventLog events={events} presentation={presentation} initiallyOpen />
+            <EventLog
+              events={events}
+              presentation={presentation}
+              derived={derivedLog}
+              initiallyOpen
+            />
           ) : sheet.kind === 'player' ? (
             <PlayerDetails
               state={state}

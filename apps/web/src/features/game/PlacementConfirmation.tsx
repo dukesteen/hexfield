@@ -1,13 +1,16 @@
 import { useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { BoardHit, BoardRenderer } from '@cp2p/renderer';
+import { isKnightsKind } from '../knights/placements';
 import { placePlacementConfirmation } from './placement-confirmation-layout';
 
 interface Props {
   boardRef: RefObject<HTMLElement | null>;
   renderer: BoardRenderer | null;
   hit: BoardHit;
-  piece: 'road' | 'ship' | 'settlement' | 'city';
+  piece: 'road' | 'ship' | 'settlement' | 'city' | 'knight' | 'wall' | 'mark';
+  /** The choice being confirmed; a knights choice names its own action. */
+  kind?: string;
   /** A ship that already exists sails here, so nothing is built. */
   move?: boolean;
   label: string;
@@ -22,13 +25,14 @@ export function PlacementConfirmation({
   renderer,
   hit,
   piece,
+  kind,
   move = false,
   label,
   onConfirm,
   onCancel,
   submitting,
 }: Props) {
-  const { t } = useTranslation('game');
+  const { t } = useTranslation(['game', 'knights']);
   const popupRef = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState<{ x: number; y: number } | null>(null);
 
@@ -72,9 +76,12 @@ export function PlacementConfirmation({
       window.removeEventListener('scroll', place, true);
     };
   }, [boardRef, hit, piece, renderer]);
-  const title = move
-    ? t('game:movePreviewTitle')
-    : t('game:placementPreviewTitle', { piece: t(`game:piece.${piece}`) });
+  const knightsKind = kind !== undefined && isKnightsKind(kind);
+  const title = knightsKind
+    ? t(`knights:confirmTitle.${kind}`)
+    : move
+      ? t('game:movePreviewTitle')
+      : t('game:placementPreviewTitle', { piece: t(`game:piece.${piece}`) });
 
   return (
     <div
@@ -94,7 +101,13 @@ export function PlacementConfirmation({
         <button
           className="button button-primary"
           type="button"
-          aria-label={move ? t('game:confirm.moveShip') : t(`game:confirm.${piece}`)}
+          aria-label={
+            knightsKind
+              ? t(`knights:confirmTitle.${kind}`)
+              : move
+                ? t('game:confirm.moveShip')
+                : t(`game:confirm.${piece}`)
+          }
           onClick={onConfirm}
           disabled={submitting}
         >

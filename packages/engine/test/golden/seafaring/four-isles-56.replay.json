@@ -672,14 +672,7 @@
         ]
       }
     },
-    "seats": [
-      0,
-      1,
-      2,
-      3,
-      4,
-      5
-    ]
+    "seats": [0, 1, 2, 3, 4, 5]
   },
   "genesisSeed": "cRpgTvGfBVVjViUU7p17-QgdQRYyyIgpk5l1bNFUI-Q",
   "inputs": [
@@ -888,10 +881,7 @@
       "seat": 4
     },
     {
-      "dice": [
-        3,
-        3
-      ],
+      "dice": [3, 3],
       "kind": "system",
       "type": "DICE_RESULT"
     },
@@ -975,10 +965,7 @@
       "seat": 5
     },
     {
-      "dice": [
-        3,
-        4
-      ],
+      "dice": [3, 4],
       "kind": "system",
       "type": "DICE_RESULT"
     },
@@ -1076,10 +1063,7 @@
       "seat": 0
     },
     {
-      "dice": [
-        3,
-        6
-      ],
+      "dice": [3, 6],
       "kind": "system",
       "type": "DICE_RESULT"
     },
@@ -1147,10 +1131,7 @@
       "seat": 1
     },
     {
-      "dice": [
-        4,
-        5
-      ],
+      "dice": [4, 5],
       "kind": "system",
       "type": "DICE_RESULT"
     },
@@ -1240,10 +1221,7 @@
       "seat": 2
     },
     {
-      "dice": [
-        1,
-        1
-      ],
+      "dice": [1, 1],
       "kind": "system",
       "type": "DICE_RESULT"
     },
@@ -1305,10 +1283,7 @@
       "seat": 3
     },
     {
-      "dice": [
-        2,
-        3
-      ],
+      "dice": [2, 3],
       "kind": "system",
       "type": "DICE_RESULT"
     },
@@ -1384,10 +1359,7 @@
       "seat": 4
     },
     {
-      "dice": [
-        1,
-        3
-      ],
+      "dice": [1, 3],
       "kind": "system",
       "type": "DICE_RESULT"
     },
@@ -1455,10 +1427,7 @@
       "seat": 5
     },
     {
-      "dice": [
-        1,
-        4
-      ],
+      "dice": [1, 4],
       "kind": "system",
       "type": "DICE_RESULT"
     },
@@ -1520,10 +1489,7 @@
       "seat": 0
     },
     {
-      "dice": [
-        3,
-        1
-      ],
+      "dice": [3, 1],
       "kind": "system",
       "type": "DICE_RESULT"
     },
@@ -1591,10 +1557,7 @@
       "seat": 1
     },
     {
-      "dice": [
-        5,
-        2
-      ],
+      "dice": [5, 2],
       "kind": "system",
       "type": "DICE_RESULT"
     },
@@ -1670,10 +1633,7 @@
       "seat": 2
     },
     {
-      "dice": [
-        4,
-        1
-      ],
+      "dice": [4, 1],
       "kind": "system",
       "type": "DICE_RESULT"
     },
@@ -1740,10 +1700,7 @@
       "seat": 3
     },
     {
-      "dice": [
-        4,
-        5
-      ],
+      "dice": [4, 5],
       "kind": "system",
       "type": "DICE_RESULT"
     },
@@ -1819,10 +1776,7 @@
       "seat": 4
     },
     {
-      "dice": [
-        6,
-        2
-      ],
+      "dice": [6, 2],
       "kind": "system",
       "type": "DICE_RESULT"
     },
@@ -1905,10 +1859,7 @@
       "seat": 5
     },
     {
-      "dice": [
-        2,
-        1
-      ],
+      "dice": [2, 1],
       "kind": "system",
       "type": "DICE_RESULT"
     },
@@ -1962,10 +1913,7 @@
       "seat": 0
     },
     {
-      "dice": [
-        6,
-        4
-      ],
+      "dice": [6, 4],
       "kind": "system",
       "type": "DICE_RESULT"
     },
@@ -2027,10 +1975,7 @@
       "seat": 1
     },
     {
-      "dice": [
-        2,
-        5
-      ],
+      "dice": [2, 5],
       "kind": "system",
       "type": "DICE_RESULT"
     },
@@ -2135,10 +2080,7 @@
       "seat": 2
     },
     {
-      "dice": [
-        5,
-        6
-      ],
+      "dice": [5, 6],
       "kind": "system",
       "type": "DICE_RESULT"
     },
@@ -2228,10 +2170,7 @@
       "seat": 3
     },
     {
-      "dice": [
-        4,
-        4
-      ],
+      "dice": [4, 4],
       "kind": "system",
       "type": "DICE_RESULT"
     },
@@ -2285,10 +2224,7 @@
       "seat": 4
     },
     {
-      "dice": [
-        1,
-        1
-      ],
+      "dice": [1, 1],
       "kind": "system",
       "type": "DICE_RESULT"
     },
@@ -2342,10 +2278,7 @@
       "seat": 5
     },
     {
-      "dice": [
-        4,
-        4
-      ],
+      "dice": [4, 4],
       "kind": "system",
       "type": "DICE_RESULT"
     },
@@ -2399,10 +2332,7 @@
       "seat": 0
     },
     {
-      "dice": [
-        4,
-        6
-      ],
+      "dice": [4, 6],
       "kind": "system",
       "type": "DICE_RESULT"
     },
@@ -2504,10 +2434,7 @@
       "seat": 1
     },
     {
-      "dice": [
-        3,
-        6
-      ],
+      "dice": [3, 6],
       "kind": "system",
       "type": "DICE_RESULT"
     },
@@ -2596,10 +2523,7 @@
       "seat": 2
     },
     {
-      "dice": [
-        3,
-        6
-      ],
+      "dice": [3, 6],
       "kind": "system",
       "type": "DICE_RESULT"
     },
@@ -2688,10 +2612,7 @@
       "seat": 3
     },
     {
-      "dice": [
-        2,
-        3
-      ],
+      "dice": [2, 3],
       "kind": "system",
       "type": "DICE_RESULT"
     },
@@ -2775,10 +2696,7 @@
       "seat": 4
     },
     {
-      "dice": [
-        1,
-        2
-      ],
+      "dice": [1, 2],
       "kind": "system",
       "type": "DICE_RESULT"
     },
@@ -2854,10 +2772,7 @@
       "seat": 5
     },
     {
-      "dice": [
-        1,
-        2
-      ],
+      "dice": [1, 2],
       "kind": "system",
       "type": "DICE_RESULT"
     },
@@ -2919,10 +2834,7 @@
       "seat": 0
     },
     {
-      "dice": [
-        6,
-        4
-      ],
+      "dice": [6, 4],
       "kind": "system",
       "type": "DICE_RESULT"
     },
@@ -2976,10 +2888,7 @@
       "seat": 1
     },
     {
-      "dice": [
-        3,
-        5
-      ],
+      "dice": [3, 5],
       "kind": "system",
       "type": "DICE_RESULT"
     },
@@ -3033,10 +2942,7 @@
       "seat": 2
     },
     {
-      "dice": [
-        3,
-        2
-      ],
+      "dice": [3, 2],
       "kind": "system",
       "type": "DICE_RESULT"
     },
@@ -3098,10 +3004,7 @@
       "seat": 3
     },
     {
-      "dice": [
-        2,
-        4
-      ],
+      "dice": [2, 4],
       "kind": "system",
       "type": "DICE_RESULT"
     },
@@ -3208,10 +3111,7 @@
       "seat": 4
     },
     {
-      "dice": [
-        5,
-        5
-      ],
+      "dice": [5, 5],
       "kind": "system",
       "type": "DICE_RESULT"
     },
@@ -3282,10 +3182,7 @@
       "seat": 5
     },
     {
-      "dice": [
-        4,
-        4
-      ],
+      "dice": [4, 4],
       "kind": "system",
       "type": "DICE_RESULT"
     },
@@ -3381,10 +3278,7 @@
       "seat": 0
     },
     {
-      "dice": [
-        1,
-        1
-      ],
+      "dice": [1, 1],
       "kind": "system",
       "type": "DICE_RESULT"
     },
@@ -3460,10 +3354,7 @@
       "seat": 1
     },
     {
-      "dice": [
-        6,
-        3
-      ],
+      "dice": [6, 3],
       "kind": "system",
       "type": "DICE_RESULT"
     },
@@ -3531,10 +3422,7 @@
       "seat": 2
     },
     {
-      "dice": [
-        2,
-        2
-      ],
+      "dice": [2, 2],
       "kind": "system",
       "type": "DICE_RESULT"
     },
@@ -3602,10 +3490,7 @@
       "seat": 3
     },
     {
-      "dice": [
-        3,
-        3
-      ],
+      "dice": [3, 3],
       "kind": "system",
       "type": "DICE_RESULT"
     },
@@ -3705,10 +3590,7 @@
       "seat": 4
     },
     {
-      "dice": [
-        5,
-        3
-      ],
+      "dice": [5, 3],
       "kind": "system",
       "type": "DICE_RESULT"
     },
@@ -3762,10 +3644,7 @@
       "seat": 5
     },
     {
-      "dice": [
-        4,
-        3
-      ],
+      "dice": [4, 3],
       "kind": "system",
       "type": "DICE_RESULT"
     },
@@ -3883,10 +3762,7 @@
       "seat": 0
     },
     {
-      "dice": [
-        5,
-        3
-      ],
+      "dice": [5, 3],
       "kind": "system",
       "type": "DICE_RESULT"
     },
@@ -3940,10 +3816,7 @@
       "seat": 1
     },
     {
-      "dice": [
-        6,
-        4
-      ],
+      "dice": [6, 4],
       "kind": "system",
       "type": "DICE_RESULT"
     },
@@ -3997,10 +3870,7 @@
       "seat": 2
     },
     {
-      "dice": [
-        6,
-        5
-      ],
+      "dice": [6, 5],
       "kind": "system",
       "type": "DICE_RESULT"
     },
@@ -4120,10 +3990,7 @@
       "seat": 3
     },
     {
-      "dice": [
-        4,
-        2
-      ],
+      "dice": [4, 2],
       "kind": "system",
       "type": "DICE_RESULT"
     },
@@ -4207,10 +4074,7 @@
       "seat": 4
     },
     {
-      "dice": [
-        5,
-        2
-      ],
+      "dice": [5, 2],
       "kind": "system",
       "type": "DICE_RESULT"
     },
@@ -4406,10 +4270,7 @@
       "seat": 5
     },
     {
-      "dice": [
-        3,
-        3
-      ],
+      "dice": [3, 3],
       "kind": "system",
       "type": "DICE_RESULT"
     },
@@ -4484,10 +4345,7 @@
       "seat": 0
     },
     {
-      "dice": [
-        4,
-        6
-      ],
+      "dice": [4, 6],
       "kind": "system",
       "type": "DICE_RESULT"
     },
@@ -4541,10 +4399,7 @@
       "seat": 1
     },
     {
-      "dice": [
-        3,
-        4
-      ],
+      "dice": [3, 4],
       "kind": "system",
       "type": "DICE_RESULT"
     },
@@ -4647,10 +4502,7 @@
       "seat": 2
     },
     {
-      "dice": [
-        3,
-        2
-      ],
+      "dice": [3, 2],
       "kind": "system",
       "type": "DICE_RESULT"
     },
@@ -4721,10 +4573,7 @@
       "seat": 3
     },
     {
-      "dice": [
-        1,
-        1
-      ],
+      "dice": [1, 1],
       "kind": "system",
       "type": "DICE_RESULT"
     },
@@ -4795,10 +4644,7 @@
       "seat": 4
     },
     {
-      "dice": [
-        1,
-        6
-      ],
+      "dice": [1, 6],
       "kind": "system",
       "type": "DICE_RESULT"
     },
@@ -4889,10 +4735,7 @@
       "seat": 5
     },
     {
-      "dice": [
-        3,
-        1
-      ],
+      "dice": [3, 1],
       "kind": "system",
       "type": "DICE_RESULT"
     },
@@ -4976,10 +4819,7 @@
       "seat": 0
     },
     {
-      "dice": [
-        1,
-        6
-      ],
+      "dice": [1, 6],
       "kind": "system",
       "type": "DICE_RESULT"
     },
@@ -5070,10 +4910,7 @@
       "seat": 1
     },
     {
-      "dice": [
-        1,
-        1
-      ],
+      "dice": [1, 1],
       "kind": "system",
       "type": "DICE_RESULT"
     },
@@ -5127,10 +4964,7 @@
       "seat": 2
     },
     {
-      "dice": [
-        1,
-        2
-      ],
+      "dice": [1, 2],
       "kind": "system",
       "type": "DICE_RESULT"
     },
@@ -5201,10 +5035,7 @@
       "seat": 3
     },
     {
-      "dice": [
-        1,
-        1
-      ],
+      "dice": [1, 1],
       "kind": "system",
       "type": "DICE_RESULT"
     },
@@ -5258,10 +5089,7 @@
       "seat": 4
     },
     {
-      "dice": [
-        5,
-        4
-      ],
+      "dice": [5, 4],
       "kind": "system",
       "type": "DICE_RESULT"
     },
@@ -5407,10 +5235,7 @@
       "seat": 5
     },
     {
-      "dice": [
-        6,
-        1
-      ],
+      "dice": [6, 1],
       "kind": "system",
       "type": "DICE_RESULT"
     },
@@ -5501,10 +5326,7 @@
       "seat": 0
     },
     {
-      "dice": [
-        2,
-        4
-      ],
+      "dice": [2, 4],
       "kind": "system",
       "type": "DICE_RESULT"
     },
@@ -5558,10 +5380,7 @@
       "seat": 1
     },
     {
-      "dice": [
-        1,
-        2
-      ],
+      "dice": [1, 2],
       "kind": "system",
       "type": "DICE_RESULT"
     },
@@ -5615,10 +5434,7 @@
       "seat": 2
     },
     {
-      "dice": [
-        3,
-        2
-      ],
+      "dice": [3, 2],
       "kind": "system",
       "type": "DICE_RESULT"
     },
@@ -5672,10 +5488,7 @@
       "seat": 3
     },
     {
-      "dice": [
-        1,
-        4
-      ],
+      "dice": [1, 4],
       "kind": "system",
       "type": "DICE_RESULT"
     },
@@ -5754,10 +5567,7 @@
       "seat": 4
     },
     {
-      "dice": [
-        1,
-        6
-      ],
+      "dice": [1, 6],
       "kind": "system",
       "type": "DICE_RESULT"
     },
@@ -5889,10 +5699,7 @@
       "seat": 5
     },
     {
-      "dice": [
-        1,
-        4
-      ],
+      "dice": [1, 4],
       "kind": "system",
       "type": "DICE_RESULT"
     },
@@ -5993,10 +5800,7 @@
       "seat": 0
     },
     {
-      "dice": [
-        5,
-        1
-      ],
+      "dice": [5, 1],
       "kind": "system",
       "type": "DICE_RESULT"
     },
@@ -6066,10 +5870,7 @@
       "seat": 1
     },
     {
-      "dice": [
-        3,
-        3
-      ],
+      "dice": [3, 3],
       "kind": "system",
       "type": "DICE_RESULT"
     },
@@ -6131,10 +5932,7 @@
       "seat": 2
     },
     {
-      "dice": [
-        6,
-        2
-      ],
+      "dice": [6, 2],
       "kind": "system",
       "type": "DICE_RESULT"
     },
@@ -6211,10 +6009,7 @@
       "seat": 3
     },
     {
-      "dice": [
-        6,
-        1
-      ],
+      "dice": [6, 1],
       "kind": "system",
       "type": "DICE_RESULT"
     },
@@ -6351,10 +6146,7 @@
       "seat": 4
     },
     {
-      "dice": [
-        5,
-        1
-      ],
+      "dice": [5, 1],
       "kind": "system",
       "type": "DICE_RESULT"
     },
@@ -6463,10 +6255,7 @@
       "seat": 5
     },
     {
-      "dice": [
-        6,
-        3
-      ],
+      "dice": [6, 3],
       "kind": "system",
       "type": "DICE_RESULT"
     },
@@ -6579,10 +6368,7 @@
       "seat": 0
     },
     {
-      "dice": [
-        5,
-        1
-      ],
+      "dice": [5, 1],
       "kind": "system",
       "type": "DICE_RESULT"
     },
@@ -6651,10 +6437,7 @@
       "seat": 1
     },
     {
-      "dice": [
-        3,
-        1
-      ],
+      "dice": [3, 1],
       "kind": "system",
       "type": "DICE_RESULT"
     },
@@ -6784,10 +6567,7 @@
       "seat": 2
     },
     {
-      "dice": [
-        4,
-        6
-      ],
+      "dice": [4, 6],
       "kind": "system",
       "type": "DICE_RESULT"
     },
@@ -6841,10 +6621,7 @@
       "seat": 3
     },
     {
-      "dice": [
-        5,
-        4
-      ],
+      "dice": [5, 4],
       "kind": "system",
       "type": "DICE_RESULT"
     },
@@ -6920,10 +6697,7 @@
       "seat": 4
     },
     {
-      "dice": [
-        5,
-        1
-      ],
+      "dice": [5, 1],
       "kind": "system",
       "type": "DICE_RESULT"
     },
@@ -6998,10 +6772,7 @@
       "seat": 5
     },
     {
-      "dice": [
-        4,
-        2
-      ],
+      "dice": [4, 2],
       "kind": "system",
       "type": "DICE_RESULT"
     },
@@ -7136,10 +6907,7 @@
       "seat": 0
     },
     {
-      "dice": [
-        6,
-        4
-      ],
+      "dice": [6, 4],
       "kind": "system",
       "type": "DICE_RESULT"
     },
@@ -7223,10 +6991,7 @@
       "seat": 1
     },
     {
-      "dice": [
-        1,
-        4
-      ],
+      "dice": [1, 4],
       "kind": "system",
       "type": "DICE_RESULT"
     },
@@ -7295,10 +7060,7 @@
       "seat": 2
     },
     {
-      "dice": [
-        6,
-        5
-      ],
+      "dice": [6, 5],
       "kind": "system",
       "type": "DICE_RESULT"
     },
@@ -7449,10 +7211,7 @@
       "seat": 3
     },
     {
-      "dice": [
-        1,
-        1
-      ],
+      "dice": [1, 1],
       "kind": "system",
       "type": "DICE_RESULT"
     },
@@ -7553,10 +7312,7 @@
       "seat": 4
     },
     {
-      "dice": [
-        6,
-        1
-      ],
+      "dice": [6, 1],
       "kind": "system",
       "type": "DICE_RESULT"
     },
@@ -7731,10 +7487,7 @@
       "seat": 5
     },
     {
-      "dice": [
-        1,
-        1
-      ],
+      "dice": [1, 1],
       "kind": "system",
       "type": "DICE_RESULT"
     },
@@ -7788,10 +7541,7 @@
       "seat": 0
     },
     {
-      "dice": [
-        1,
-        2
-      ],
+      "dice": [1, 2],
       "kind": "system",
       "type": "DICE_RESULT"
     },
@@ -7845,10 +7595,7 @@
       "seat": 1
     },
     {
-      "dice": [
-        2,
-        5
-      ],
+      "dice": [2, 5],
       "kind": "system",
       "type": "DICE_RESULT"
     },
@@ -7952,10 +7699,7 @@
       "seat": 2
     },
     {
-      "dice": [
-        4,
-        2
-      ],
+      "dice": [4, 2],
       "kind": "system",
       "type": "DICE_RESULT"
     },
@@ -8018,10 +7762,7 @@
       "seat": 3
     },
     {
-      "dice": [
-        6,
-        1
-      ],
+      "dice": [6, 1],
       "kind": "system",
       "type": "DICE_RESULT"
     },
@@ -8128,10 +7869,7 @@
       "seat": 4
     },
     {
-      "dice": [
-        4,
-        3
-      ],
+      "dice": [4, 3],
       "kind": "system",
       "type": "DICE_RESULT"
     },
@@ -8193,10 +7931,7 @@
       "seat": 5
     },
     {
-      "dice": [
-        1,
-        4
-      ],
+      "dice": [1, 4],
       "kind": "system",
       "type": "DICE_RESULT"
     },
@@ -8267,10 +8002,7 @@
       "seat": 0
     },
     {
-      "dice": [
-        3,
-        1
-      ],
+      "dice": [3, 1],
       "kind": "system",
       "type": "DICE_RESULT"
     },
@@ -8370,10 +8102,7 @@
       "seat": 1
     },
     {
-      "dice": [
-        2,
-        5
-      ],
+      "dice": [2, 5],
       "kind": "system",
       "type": "DICE_RESULT"
     },
@@ -8475,10 +8204,7 @@
       "seat": 2
     },
     {
-      "dice": [
-        4,
-        4
-      ],
+      "dice": [4, 4],
       "kind": "system",
       "type": "DICE_RESULT"
     },
@@ -8548,10 +8274,7 @@
       "seat": 3
     },
     {
-      "dice": [
-        2,
-        2
-      ],
+      "dice": [2, 2],
       "kind": "system",
       "type": "DICE_RESULT"
     },
@@ -8689,10 +8412,7 @@
       "seat": 4
     },
     {
-      "dice": [
-        1,
-        4
-      ],
+      "dice": [1, 4],
       "kind": "system",
       "type": "DICE_RESULT"
     },
@@ -8767,10 +8487,7 @@
       "seat": 5
     },
     {
-      "dice": [
-        2,
-        1
-      ],
+      "dice": [2, 1],
       "kind": "system",
       "type": "DICE_RESULT"
     },
@@ -8832,10 +8549,7 @@
       "seat": 0
     },
     {
-      "dice": [
-        4,
-        5
-      ],
+      "dice": [4, 5],
       "kind": "system",
       "type": "DICE_RESULT"
     },
@@ -8920,10 +8634,7 @@
       "seat": 1
     },
     {
-      "dice": [
-        6,
-        3
-      ],
+      "dice": [6, 3],
       "kind": "system",
       "type": "DICE_RESULT"
     },
@@ -8999,10 +8710,7 @@
       "seat": 2
     },
     {
-      "dice": [
-        5,
-        4
-      ],
+      "dice": [5, 4],
       "kind": "system",
       "type": "DICE_RESULT"
     },
@@ -9087,10 +8795,7 @@
       "seat": 3
     },
     {
-      "dice": [
-        1,
-        6
-      ],
+      "dice": [1, 6],
       "kind": "system",
       "type": "DICE_RESULT"
     },
@@ -9217,10 +8922,7 @@
       "seat": 4
     },
     {
-      "dice": [
-        6,
-        6
-      ],
+      "dice": [6, 6],
       "kind": "system",
       "type": "DICE_RESULT"
     },
@@ -9291,10 +8993,7 @@
       "seat": 5
     },
     {
-      "dice": [
-        6,
-        3
-      ],
+      "dice": [6, 3],
       "kind": "system",
       "type": "DICE_RESULT"
     },
@@ -9410,10 +9109,7 @@
       "seat": 0
     },
     {
-      "dice": [
-        3,
-        3
-      ],
+      "dice": [3, 3],
       "kind": "system",
       "type": "DICE_RESULT"
     },
@@ -9536,10 +9232,7 @@
       "seat": 1
     },
     {
-      "dice": [
-        2,
-        5
-      ],
+      "dice": [2, 5],
       "kind": "system",
       "type": "DICE_RESULT"
     },
@@ -9630,10 +9323,7 @@
       "seat": 2
     },
     {
-      "dice": [
-        6,
-        3
-      ],
+      "dice": [6, 3],
       "kind": "system",
       "type": "DICE_RESULT"
     },
@@ -9727,10 +9417,7 @@
       "seat": 3
     },
     {
-      "dice": [
-        2,
-        2
-      ],
+      "dice": [2, 2],
       "kind": "system",
       "type": "DICE_RESULT"
     },
@@ -9831,10 +9518,7 @@
       "seat": 4
     },
     {
-      "dice": [
-        5,
-        3
-      ],
+      "dice": [5, 3],
       "kind": "system",
       "type": "DICE_RESULT"
     },
@@ -9927,10 +9611,7 @@
       "seat": 5
     },
     {
-      "dice": [
-        4,
-        5
-      ],
+      "dice": [4, 5],
       "kind": "system",
       "type": "DICE_RESULT"
     },
@@ -10006,10 +9687,7 @@
       "seat": 0
     },
     {
-      "dice": [
-        6,
-        4
-      ],
+      "dice": [6, 4],
       "kind": "system",
       "type": "DICE_RESULT"
     },

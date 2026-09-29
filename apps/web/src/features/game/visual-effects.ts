@@ -8,6 +8,7 @@ import {
 } from '@cp2p/engine';
 import { buildBoardGraph, type EdgeId, type HexId, type VertexId } from '@cp2p/engine/geometry';
 import type { BoardEffect } from '@cp2p/renderer';
+import { deriveKnightsEffects } from '../knights/effects';
 
 const terrainResource: Readonly<Record<string, Resource | null>> = {
   hills: 'brick',
@@ -145,7 +146,8 @@ export function deriveVisualEffects(
   revision: number,
 ): VisualEffects {
   const reveals = revealedHexes(before, after);
-  if (events.length === 0 && reveals.length === 0)
+  const knightsCues = deriveKnightsEffects(before, after, events, revision);
+  if (events.length === 0 && reveals.length === 0 && knightsCues.length === 0)
     return { board: [], flights: [], tradeFlights: [], stealFlights: [], productionGains: [] };
   const board: BoardEffect[] = [];
   const flights: ResourceFlight[] = [];
@@ -161,7 +163,17 @@ export function deriveVisualEffects(
   for (const [index, event] of events.entries()) {
     const id = `${revision}:${index}`;
     if (event.type === 'diceRolled' && 'dice' in event && isDice(event.dice)) {
-      board.push({ id, kind: 'dice-roll', dice: [event.dice[0], event.dice[1]] });
+      const extra = record(event.extra) ? event.extra.event : undefined;
+      const face =
+        extra === 'ship' || extra === 'trade' || extra === 'politics' || extra === 'science'
+          ? extra
+          : undefined;
+      board.push({
+        id,
+        kind: 'dice-roll',
+        dice: [event.dice[0], event.dice[1]],
+        ...(face ? { event: face } : {}),
+      });
     } else if (event.type === 'roadBuilt' && isSeat(after, event.seat) && isEdgeId(event.edge)) {
       board.push({
         id,
@@ -310,6 +322,7 @@ export function deriveVisualEffects(
       }
     }
   }
+  board.push(...knightsCues);
   for (const [order, hex] of reveals.entries())
     board.push({
       id: `${revision}:reveal:${hex}`,

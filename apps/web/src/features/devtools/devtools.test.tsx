@@ -61,6 +61,7 @@ describe('development diagnostics', () => {
       boardToScreen: (point) => point,
       screenToBoard: (point) => point,
       fitToBoard() {},
+      isFixtureInView: () => false,
       destroy() {},
     };
     const seat = session.getPending().find((item) => item.kind === 'player')?.seat;

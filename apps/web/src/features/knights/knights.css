@@ -1,0 +1,1108 @@
+/* Cities & Knights: improvements, progress cards, knight controls and the barbarian countdown. */
+
+.game-page {
+  --track-trade: #d9a531;
+  --track-politics: #4f7fbf;
+  --track-science: #5f9a4c;
+  --card-cream: #fbf3df;
+}
+[data-track='trade'] {
+  --track: var(--track-trade);
+}
+[data-track='politics'] {
+  --track: var(--track-politics);
+}
+[data-track='science'] {
+  --track: var(--track-science);
+}
+
+/* ---- Build controls --------------------------------------------------------------------- */
+.knights-glyph {
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  width: 16px;
+  height: 16px;
+  padding: 1px;
+  border-radius: 50%;
+  background: var(--text);
+  color: var(--surface);
+}
+.knights-build-button {
+  position: relative;
+}
+.desktop-build-grid[data-knights='true'] {
+  grid-template-columns: repeat(5, 40px);
+  gap: 6px;
+}
+.desktop-build-grid[data-knights='true'] .desktop-build-button {
+  width: 40px;
+  height: 40px;
+  min-height: 0;
+  padding: 3px;
+}
+.desktop-build-grid[data-knights='true'] .desktop-build-button img {
+  width: 32px;
+  height: 30px;
+}
+.knights-row-art {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+}
+.knights-row-art .knights-glyph {
+  right: -4px;
+  bottom: -2px;
+}
+.knights-cost {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.knights-cost-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  font-size: 11px;
+}
+.knights-cost-item img {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+}
+.knights-cost-free {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+/* ---- City improvements ------------------------------------------------------------------ */
+.improvements-board {
+  display: grid;
+  gap: 10px;
+}
+.improve-track {
+  display: grid;
+  gap: 2px;
+}
+.improve-banner {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 322 / 82;
+}
+.improve-banner > img:first-child {
+  display: block;
+  width: 100%;
+  height: 100%;
+  user-select: none;
+}
+.improve-cell {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border-radius: 9px;
+  font-family: 'Young Serif', Georgia, serif;
+}
+.improve-cell.is-reached {
+  background: color-mix(in srgb, var(--player-color, #4f7fbf) 72%, transparent);
+  box-shadow: inset 0 0 0 2px rgb(255 255 255 / 55%);
+  color: #fff;
+  text-shadow: 0 1px 1px rgb(0 0 0 / 45%);
+  font-size: clamp(11px, 3.6vw, 17px);
+}
+.improve-cell.is-reached b {
+  font-weight: 400;
+}
+.improve-cell.is-reached[data-ability='true'] {
+  box-shadow:
+    inset 0 0 0 2px #ffe08a,
+    0 0 8px 1px #ffe08a99;
+}
+.improve-cell.is-next {
+  border: 2px dashed color-mix(in srgb, var(--track) 80%, #000 20%);
+  background: rgb(255 255 255 / 30%);
+  color: var(--track);
+  cursor: default;
+  font-size: clamp(14px, 5vw, 22px);
+  font-weight: 700;
+}
+.improve-cell.is-next:not(:disabled) {
+  cursor: pointer;
+  border-style: solid;
+  background: rgb(255 255 255 / 55%);
+  animation: improve-pulse 1.6s ease-in-out infinite;
+}
+.improve-cell.is-next:not(:disabled):hover {
+  background: rgb(255 255 255 / 80%);
+}
+.improve-cell.is-next:disabled {
+  opacity: 0.55;
+}
+@keyframes improve-pulse {
+  50% {
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--track) 45%, transparent);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .improve-cell.is-next:not(:disabled) {
+    animation: none;
+  }
+}
+.improve-metropolis {
+  position: absolute;
+  top: -12%;
+  left: 5%;
+  width: 11%;
+  height: auto;
+  filter: drop-shadow(0 1px 1px rgb(0 0 0 / 35%));
+}
+.improve-caption {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 2px 0 0;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.35;
+}
+.improve-caption img {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  object-fit: contain;
+}
+.improve-caption[data-unlocked='true'] {
+  color: var(--text);
+}
+.improve-next {
+  margin: 0;
+  color: var(--muted);
+  font-size: 10px;
+}
+.improve-track-icon {
+  display: none;
+}
+.knights-sidebar {
+  padding: 12px 16px;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+}
+.knights-sidebar h2 {
+  margin: 0 0 8px;
+}
+
+.mini-tracks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.mini-tracks li {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+.mini-tracks img {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+}
+.mini-pips {
+  display: inline-flex;
+  gap: 2px;
+}
+.mini-pips i {
+  width: 6px;
+  height: 9px;
+  border: 1px solid color-mix(in srgb, var(--track) 70%, #000 30%);
+  border-radius: 3px;
+  background: transparent;
+}
+.mini-pips i[data-filled='true'] {
+  background: var(--track);
+}
+.mini-pips i[data-ability='true'] {
+  border-radius: 3px 3px 7px 7px;
+}
+.mini-metropolis {
+  display: inline-grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--track);
+  color: #fff;
+  font-size: 9px;
+}
+.improvements-strip {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  min-height: 40px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--panel);
+  box-shadow: 0 2px 0 var(--panel-shadow);
+  color: var(--text);
+}
+.strip-track {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.strip-track img {
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
+}
+.strip-track b {
+  font-size: 12px;
+}
+.strip-track[data-buyable='true'] {
+  animation: improve-pulse 1.6s ease-in-out infinite;
+  border-radius: 8px;
+}
+.strip-track .mini-pips i {
+  width: 9px;
+}
+
+/* ---- Player panel ------------------------------------------------------------------------ */
+.knights-panel {
+  margin-top: 4px;
+}
+.knights-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+}
+.knights-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  min-height: 22px;
+  padding: 1px 6px 1px 3px;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  background: var(--surface);
+  font-size: 10px;
+}
+.knights-chip img {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+}
+.knights-chip-card {
+  width: 12px;
+  height: 16px;
+  margin-left: 3px;
+  border-radius: 2px;
+  background: var(--track-politics);
+  box-shadow: 2px 1px 0 var(--track-trade);
+}
+
+/* ---- Progress cards ---------------------------------------------------------------------- */
+.progress-face {
+  --w: 76px;
+  position: relative;
+  display: grid;
+  grid-template-rows: auto auto auto 1fr;
+  justify-items: center;
+  gap: 2px;
+  width: var(--w);
+  height: calc(var(--w) * 1.42);
+  padding: 0 0 4px;
+  overflow: hidden;
+  border: 2px solid var(--track);
+  border-radius: 8px;
+  background: var(--card-cream);
+  color: #3d2f35;
+  box-shadow: 0 2px 0 rgb(0 0 0 / 20%);
+  text-align: center;
+}
+.progress-face[data-size='md'] {
+  --w: 120px;
+}
+.progress-face[data-size='lg'] {
+  --w: 210px;
+}
+.progress-face[data-dimmed='true'] {
+  filter: saturate(0.55);
+  opacity: 0.85;
+}
+.progress-face-band {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  width: 100%;
+  padding: 2px 3px;
+  background: var(--track);
+  color: #fff;
+  font-size: calc(var(--w) * 0.11);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.progress-face-band img {
+  width: calc(var(--w) * 0.16);
+  height: calc(var(--w) * 0.16);
+  object-fit: contain;
+}
+.progress-face-band small {
+  font-size: inherit;
+}
+.progress-face-vp {
+  margin-left: auto;
+  padding: 0 4px;
+  border-radius: 6px;
+  background: #fff8ec;
+  color: var(--track);
+  font-size: 0.95em;
+}
+.progress-face-emblem {
+  display: grid;
+  place-items: center;
+  width: calc(var(--w) * 0.5);
+  height: calc(var(--w) * 0.5);
+  margin-top: calc(var(--w) * 0.04);
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--track) 20%, #fff8ec);
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--track) 55%, transparent);
+}
+.progress-face-emblem img {
+  width: 76%;
+  height: 76%;
+  object-fit: contain;
+}
+.progress-face-name {
+  padding: 0 4px;
+  font-family: 'Young Serif', Georgia, serif;
+  font-size: calc(var(--w) * 0.115);
+  font-weight: 400;
+  line-height: 1.1;
+}
+.progress-face-text {
+  display: none;
+  padding: 0 calc(var(--w) * 0.06);
+  font-size: calc(var(--w) * 0.062);
+  line-height: 1.3;
+}
+.progress-face[data-size='md'] .progress-face-text,
+.progress-face[data-size='lg'] .progress-face-text {
+  display: block;
+}
+.progress-face-timing {
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  padding: 0 4px;
+  border-radius: 6px;
+  background: #a6362a;
+  color: #fff8ec;
+  font-size: calc(var(--w) * 0.06);
+  font-style: normal;
+}
+.progress-back {
+  --w: 56px;
+  position: relative;
+  display: inline-block;
+  width: var(--w);
+}
+.progress-back[data-size='md'] {
+  --w: 120px;
+}
+.progress-back img {
+  display: block;
+  width: var(--w);
+  height: calc(var(--w) * 1.42);
+  border-radius: 6px;
+  object-fit: contain;
+}
+.progress-back b {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border: 2px solid var(--surface);
+  border-radius: 10px;
+  background: var(--text);
+  color: var(--surface);
+  font-size: 11px;
+  line-height: 16px;
+  text-align: center;
+}
+.progress-hand {
+  display: flex;
+  flex: none;
+  align-items: flex-start;
+  gap: 6px;
+  padding-left: 12px;
+  border-left: 1px solid var(--border);
+}
+.progress-hand-card {
+  position: relative;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  transition: transform 120ms ease-out;
+}
+.progress-hand-card[data-playable='true']:not(:disabled) {
+  cursor: pointer;
+  box-shadow: 0 0 0 2px #d6a33b;
+}
+.progress-hand-card[data-playable='true']:not(:disabled):hover {
+  transform: translateY(-4px);
+}
+.progress-hand-card:disabled {
+  cursor: default;
+}
+.progress-hand-aim {
+  position: absolute;
+  bottom: 4px;
+  right: 4px;
+  padding: 0 4px;
+  border-radius: 6px;
+  background: #3d2f35;
+  color: #f7d77a;
+  font-size: 9px;
+  font-style: normal;
+}
+.progress-hand-discard,
+.progress-hand-harbor {
+  align-self: center;
+  min-height: 32px;
+  padding: 4px 8px;
+  font-size: 10px;
+}
+.progress-pick {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  margin: 0;
+  padding: 6px;
+  list-style: none;
+}
+.progress-pick-card {
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: none;
+}
+.progress-pick-card[aria-pressed='true'] {
+  outline: 3px solid #d6a33b;
+  outline-offset: 2px;
+  transform: translateY(-4px);
+}
+.play-card-body {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 16px;
+}
+.play-card-choices {
+  display: grid;
+  flex: 1 1 200px;
+  gap: 10px;
+  align-content: start;
+}
+.kind-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.kind-choice {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  min-width: 84px;
+  padding: 8px;
+  border: 2px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text);
+}
+.kind-choice img {
+  width: 56px;
+  height: 78px;
+  object-fit: contain;
+}
+.kind-choice-small img {
+  width: 28px;
+  height: 28px;
+}
+.kind-choice[aria-pressed='true'],
+.kind-choice:hover:not(:disabled) {
+  border-color: var(--track, #d6a33b);
+  background: color-mix(in srgb, var(--track, #d6a33b) 18%, var(--surface));
+}
+.dice-picker {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.dice-picker legend {
+  margin-bottom: 4px;
+  font-size: 11px;
+}
+.dice-picker > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.dice-picker-face {
+  padding: 2px;
+  border: 2px solid transparent;
+  border-radius: 10px;
+  background: none;
+}
+.dice-picker-face img {
+  display: block;
+  width: 38px;
+  height: 38px;
+}
+.dice-picker-face[aria-pressed='true'] {
+  border-color: #d6a33b;
+  background: #d6a33b22;
+}
+.harbor-offers {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.harbor-offers li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.harbor-offer-cards {
+  display: inline-flex;
+  gap: 6px;
+}
+.harbor-offer-card {
+  min-height: 40px;
+  padding: 4px 8px;
+}
+.harbor-offer-card img {
+  width: 26px;
+  height: 26px;
+}
+
+/* ---- Barbarians -------------------------------------------------------------------------- */
+.barbarian-countdown {
+  position: absolute;
+  top: 46px;
+  left: 50%;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 3px 12px 3px 6px;
+  border: 1px solid rgb(0 0 0 / 22%);
+  border-radius: 17px;
+  background: rgb(255 250 238 / 95%);
+  box-shadow: 0 4px 12px rgb(0 0 0 / 22%);
+  color: #2b2118;
+  font-size: 12px;
+  transform: translateX(-50%);
+  pointer-events: auto;
+}
+.barbarian-countdown[data-urgent='true'] {
+  border-color: #a6362a;
+  background: #fbe3dc;
+}
+.barbarian-countdown img {
+  width: 32px;
+  height: 26px;
+  object-fit: contain;
+}
+.barbarian-dialog {
+  display: grid;
+  gap: 12px;
+}
+.barbarian-steps {
+  display: flex;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.barbarian-steps li {
+  position: relative;
+  display: grid;
+  flex: 1;
+  place-items: end center;
+  min-height: 52px;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--raised);
+  font-size: 11px;
+}
+.barbarian-steps li img {
+  position: absolute;
+  top: 2px;
+  width: 28px;
+  height: 24px;
+  object-fit: contain;
+}
+.barbarian-steps li[data-here='true'] {
+  border-color: #a6362a;
+  background: #fbe3dc;
+}
+.barbarian-steps li[data-passed='true'] {
+  opacity: 0.55;
+}
+.barbarian-steps li[data-landing='true'] {
+  background: #f0deb0;
+}
+.barbarian-fight {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  text-align: center;
+}
+.barbarian-fight > div {
+  display: grid;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--raised);
+}
+.barbarian-fight strong {
+  font-family: 'Young Serif', Georgia, serif;
+  font-size: 26px;
+  font-weight: 400;
+}
+.barbarian-fight span {
+  color: var(--muted);
+  font-size: 10px;
+}
+.barbarian-fight p {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-weight: 600;
+}
+.barbarian-fight[data-holds='true'] p {
+  color: #3f7a34;
+}
+.barbarian-fight[data-holds='false'] p {
+  color: #a6362a;
+}
+.barbarian-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.barbarian-table caption {
+  padding-bottom: 4px;
+  color: var(--muted);
+  text-align: left;
+}
+.barbarian-table th,
+.barbarian-table td {
+  padding: 4px 6px;
+  border-top: 1px solid var(--border);
+  text-align: left;
+  font-weight: 400;
+}
+.barbarian-table th {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.barbarian-table img {
+  width: 26px;
+  height: 20px;
+  object-fit: contain;
+}
+
+/* ---- Hand and bank ----------------------------------------------------------------------- */
+.hand-dock .resource-hand-card[data-commodity='true']:first-of-type,
+.resource-hand-card[data-commodity='true'] + .resource-hand-card[data-commodity='true'] {
+  margin-left: 0;
+}
+.resource-hand-card[data-commodity='true'] {
+  position: relative;
+}
+.resource-hand-card[data-commodity='true']:nth-child(6) {
+  margin-left: 6px;
+  padding-left: 8px;
+  border-left: 1px solid var(--border);
+}
+.bank-card[data-commodity='true']:nth-child(6) {
+  margin-left: 4px;
+}
+.bank-progress .progress-back img {
+  height: calc(var(--w) * 1.42);
+}
+.game-page .bank-progress .progress-back {
+  --w: 32px;
+}
+
+/* Knights games have eight kinds of card and a hand of progress cards: their hand cards are smaller. */
+@media (min-width: 768px) and (min-height: 501px) {
+  .game-bottom > .hand-dock:has(.progress-hand) .resource-hand,
+  .game-bottom > .hand-dock:has(.resource-hand-card[data-commodity='true']) .resource-hand {
+    gap: 6px;
+  }
+  .game-bottom
+    .hand-dock:has(.resource-hand-card[data-commodity='true'])
+    .resource-hand-card
+    .resource-card {
+    --card-w: 46px;
+  }
+  .game-bottom
+    .hand-dock:has(.resource-hand-card[data-commodity='true'])
+    .resource-hand-card
+    .resource-card
+    img {
+    width: 46px;
+    height: 66px;
+  }
+  .game-bottom .hand-dock:has(.resource-hand-card[data-commodity='true']) .hand-cards {
+    gap: 8px;
+  }
+  .game-page .game-bottom:has(.desktop-build-grid[data-knights='true']) {
+    grid-template-columns: 250px minmax(0, 1fr) 116px 96px;
+  }
+}
+@media (min-width: 1001px) and (max-width: 1100px) and (min-height: 501px) {
+  .game-page .game-bottom:has(.desktop-build-grid[data-knights='true']) {
+    grid-template-columns: 190px minmax(0, 1fr) 90px 78px;
+  }
+  .desktop-build-grid[data-knights='true'] {
+    grid-template-columns: repeat(4, 38px);
+    gap: 4px;
+  }
+  .desktop-build-grid[data-knights='true'] .desktop-build-button {
+    width: 38px;
+    height: 38px;
+    min-height: 0;
+  }
+}
+@media (min-width: 768px) and (max-width: 1000px) and (min-height: 501px) {
+  .game-page .game-grid[data-knights='true'] {
+    grid-template-rows: minmax(0, 1fr) clamp(290px, 27dvh, 320px);
+  }
+  /* Too narrow for four columns: the build, trade and turn buttons share a row, the hand takes its own. */
+  .game-page .game-bottom:has(.desktop-build-grid[data-knights='true']) {
+    grid-template-columns: minmax(0, 1fr) 96px 84px;
+    grid-template-rows: auto auto;
+  }
+  .game-page .game-bottom:has(.desktop-build-grid[data-knights='true']) > .desktop-build-panel {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  .game-page .game-bottom:has(.desktop-build-grid[data-knights='true']) > .desktop-trade-panel {
+    grid-column: 2;
+    grid-row: 1;
+  }
+  .game-page .game-bottom:has(.desktop-build-grid[data-knights='true']) > .desktop-turn-control {
+    grid-column: 3;
+    grid-row: 1;
+  }
+  .game-page .game-bottom:has(.desktop-build-grid[data-knights='true']) > .hand-dock {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+  .desktop-build-grid[data-knights='true'] {
+    grid-template-columns: repeat(5, 38px);
+    gap: 4px;
+  }
+  .desktop-build-grid[data-knights='true'] .desktop-build-button {
+    width: 38px;
+    height: 38px;
+    min-height: 0;
+  }
+}
+@media (max-width: 767px), (max-height: 500px) {
+  .mobile-bottom-controls > .improvements-strip {
+    margin: 0 0 6px;
+  }
+  .progress-hand {
+    padding: 4px 0 0;
+    border-left: 0;
+    overflow-x: auto;
+  }
+}
+
+/* ---- Desktop layout: a wide sidebar with the players and, beside them, the improvements ---- */
+.knights-strip-overlay {
+  display: none;
+}
+@media (min-width: 1280px) and (min-height: 501px) {
+  .game-page .game-grid[data-knights='true'] {
+    grid-template-columns: minmax(0, 1fr) 556px;
+  }
+  .game-page .game-grid[data-knights='true'] .game-bottom {
+    grid-column: 1 / -1;
+  }
+  .game-page .game-grid[data-knights='true'] .game-sidebar {
+    grid-row: 1;
+    display: grid;
+    grid-template-columns: 288px minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) auto;
+  }
+  /* With the whole width under it, the hand keeps full-size cards. */
+  .game-page
+    .game-bottom
+    .hand-dock:has(.resource-hand-card[data-commodity='true'])
+    .resource-hand-card
+    .resource-card {
+    --card-w: 54px;
+  }
+  .game-page
+    .game-bottom
+    .hand-dock:has(.resource-hand-card[data-commodity='true'])
+    .resource-hand-card
+    .resource-card
+    img {
+    width: 54px;
+    height: 77px;
+  }
+  .game-page .game-grid[data-knights='true'] .game-sidebar > [role='status'] {
+    grid-column: 1 / -1;
+  }
+  .game-page .game-grid[data-knights='true'] .player-rail {
+    grid-column: 1;
+    grid-row: 1 / 3;
+    min-height: 0;
+    overflow-y: auto;
+    padding-right: 6px;
+  }
+  .game-page .game-grid[data-knights='true'] .knights-sidebar {
+    grid-column: 2;
+    grid-row: 1;
+    min-height: 0;
+    overflow-y: auto;
+    border-top: 0;
+    border-left: 1px solid var(--border);
+  }
+  .game-page .game-grid[data-knights='true'] .game-info {
+    grid-column: 2;
+    grid-row: 2;
+    max-height: 50vh;
+    border-left: 1px solid var(--border);
+  }
+  .game-page .game-grid[data-knights='true'] .game-sidebar .bank-panel,
+  .game-page .game-grid[data-knights='true'] .game-sidebar .awards-panel {
+    padding: 10px 14px;
+  }
+  /* Four players and the improvements share the sidebar, so its panels give up their spare rows. */
+  .game-page .game-grid[data-knights='true'] .player-piece-counts,
+  .game-page .game-grid[data-knights='true'] .player-panel-status .connection-status {
+    display: none;
+  }
+  .game-page .game-grid[data-knights='true'] .player-panel-status {
+    margin: 4px 0;
+  }
+  .game-page .game-grid[data-knights='true'] .awards-panel {
+    padding: 8px 14px;
+  }
+  .game-page .game-grid[data-knights='true'] .awards-panel h2 {
+    display: none;
+  }
+  .game-page .game-grid[data-knights='true'] .bank-cards {
+    grid-template-columns: repeat(auto-fill, minmax(34px, 1fr));
+  }
+  .game-page .game-grid[data-knights='true'] .game-sidebar .event-log ol {
+    max-height: 120px;
+  }
+}
+@media (min-width: 768px) and (max-width: 1279px) and (min-height: 501px) {
+  .knights-sidebar {
+    display: none;
+  }
+  .knights-strip-overlay {
+    position: absolute;
+    z-index: 3;
+    top: 14px;
+    left: 72px;
+    display: block;
+    width: min(320px, calc(100% - 340px));
+  }
+}
+/* A narrow board has no room for pips beside the roll readout: the level number stands alone. */
+@media (min-width: 768px) and (max-width: 1000px) and (min-height: 501px) {
+  .knights-strip-overlay {
+    width: auto;
+  }
+  .knights-strip-overlay .strip-track .mini-pips {
+    display: none;
+  }
+}
+.knights-strip-overlay .improvements-strip {
+  background: var(--panel);
+}
+
+/* Panels in the phone's top bar stay small; the knights details live in the player sheet. */
+.mobile-topbar .knights-panel {
+  display: none;
+}
+.player-details .knights-panel .mini-tracks {
+  gap: 6px;
+}
+.player-details .knights-panel .mini-pips i {
+  width: 22px;
+  height: 11px;
+}
+
+/* ---- Hand: eight card kinds and the progress cards ---------------------------------------- */
+.game-bottom .desktop-build-grid[data-knights='true'] + * {
+  margin: 0;
+}
+.game-page[data-compact='true'] .hand-dock:has(.resource-hand-card[data-commodity='true']) {
+  --knights-card: 40px;
+}
+.game-page[data-compact='true']
+  .hand-dock:has(.resource-hand-card[data-commodity='true'])
+  .resource-hand-card {
+  flex: 0 0 var(--knights-card);
+}
+.game-page[data-compact='true']
+  .hand-dock:has(.resource-hand-card[data-commodity='true'])
+  .resource-card {
+  --card-w: var(--knights-card);
+}
+.game-page[data-compact='true']
+  .hand-dock:has(.resource-hand-card[data-commodity='true'])
+  .resource-card
+  img {
+  width: var(--knights-card);
+  height: 57px;
+}
+.game-page[data-compact='true']
+  .hand-dock:has(.resource-hand-card[data-commodity='true'])
+  .hand-cards {
+  gap: 5px;
+}
+.game-page[data-compact='true'] .resource-hand-card[data-commodity='true']:nth-child(6) {
+  margin-left: 4px;
+  padding-left: 5px;
+}
+.game-page[data-compact='true'] .progress-hand {
+  flex: 0 0 auto;
+}
+.game-page[data-compact='true'] .progress-hand .progress-face {
+  --w: 62px;
+}
+.game-page[data-compact='true'] .hand-cards:has(.progress-hand) {
+  flex-wrap: wrap;
+  overflow-x: visible;
+  overflow-y: visible;
+  margin: 0;
+  padding: 8px 0 0;
+}
+.game-page[data-compact='true'] .hand-cards .progress-hand {
+  width: 100%;
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+}
+
+/* Long lists of gains and chips wrap inside a panel instead of pushing its points out of view. */
+.game-page .player-panel {
+  min-width: 0;
+}
+.game-page .player-panel-status,
+.game-page .production-receipt {
+  flex-wrap: wrap;
+  max-width: 100%;
+}
+@media (min-width: 768px) and (min-height: 501px) {
+  .game-bottom .progress-hand .progress-face {
+    --w: 76px;
+  }
+}
+
+/* ---- Short screens: the card in a play dialog is smaller, so its choices and buttons stay in view ---- */
+@media (max-height: 500px) {
+  .play-card-body .progress-face[data-size='lg'] {
+    --w: 132px;
+  }
+  .play-card-body {
+    flex-wrap: nowrap;
+  }
+}
+
+/* ---- Landscape phones: the players sit over the top of the right column ---- */
+@media (max-height: 500px) and (min-width: 640px) {
+  /* The cockpit is taller in a knights game (improvements, progress cards): it never runs under the players. */
+  .game-page[data-compact='true'] .game-grid[data-knights='true'] .game-bottom {
+    max-height: calc(100dvh - 124px);
+    overflow-y: auto;
+  }
+  /* Eight kinds of card share one row of this narrow column, and the turn buttons stay in reach. */
+  .game-page[data-compact='true'] .hand-dock:has(.resource-hand-card[data-commodity='true']) {
+    --knights-card: 31px;
+  }
+  .game-page[data-compact='true'] .game-grid[data-knights='true'] .progress-hand .progress-face {
+    --w: 54px;
+  }
+  .game-page[data-compact='true'] .game-grid[data-knights='true'] .mobile-control-row {
+    position: sticky;
+    bottom: -14px;
+    z-index: 2;
+    padding-top: 6px;
+    background: var(--raised);
+  }
+  /* Five or six players: three narrow columns keep the list two rows high, as it is for four. */
+  .mobile-topbar .player-list:has(.player-panel:nth-child(5)) {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 4px;
+  }
+  .mobile-topbar .player-list:has(.player-panel:nth-child(5)) .player-panel-status,
+  .mobile-topbar .player-list:has(.player-panel:nth-child(5)) .production-receipt {
+    display: none;
+  }
+}
+
+/* ---- Short screens: eight card kinds fit one row, so a picker never scrolls inside a dialog ---- */
+@media (max-height: 500px) {
+  .action-forms dialog.trade-dialog .trade-card-grid:has(> :nth-child(8)) {
+    grid-template-columns: repeat(8, minmax(0, 1fr));
+  }
+  .action-forms dialog.trade-dialog:has(.trade-card-grid > :nth-child(8)) .trade-dialog-body {
+    padding-top: 6px;
+    padding-bottom: 4px;
+  }
+  .action-forms dialog.trade-dialog:has(.trade-card-grid > :nth-child(8)) {
+    padding: 10px 16px;
+  }
+  .action-forms dialog.trade-dialog:has(.trade-card-grid > :nth-child(8)) > h2 {
+    margin: 0 0 2px;
+    font-size: 1.05rem;
+  }
+  .action-forms dialog.trade-dialog:has(.trade-card-grid > :nth-child(8)) .trade-dialog-body > p {
+    margin: 0 0 2px;
+  }
+  /* The instruction above already says what the cards are for. */
+  .action-forms dialog.trade-dialog:has(.trade-card-grid > :nth-child(8)) legend {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+  .action-forms dialog.trade-dialog:has(.trade-card-grid > :nth-child(8)) .trade-card-picker-head {
+    min-height: 30px;
+  }
+  .action-forms dialog.trade-dialog:has(.trade-card-grid > :nth-child(8)) .trade-dialog-footer {
+    margin-top: 6px;
+    padding-top: 6px;
+  }
+}

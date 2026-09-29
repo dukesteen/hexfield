@@ -4,7 +4,7 @@ import ts from 'typescript';
 
 const root = new URL('../apps/web/src/', import.meta.url);
 const locales = new URL('../apps/web/src/i18n/locales/en/', import.meta.url);
-const namespaceNames = ['common', 'game', 'lobby', 'rules', 'log', 'editor'];
+const namespaceNames = ['common', 'game', 'lobby', 'rules', 'log', 'editor', 'knights'];
 const dynamicKeys = JSON.parse(
   readFileSync(new URL('../apps/web/src/i18n/dynamic-keys.json', import.meta.url), 'utf8'),
 );

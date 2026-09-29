@@ -10,6 +10,7 @@ import {
   getShipIconUrl,
 } from '@cp2p/renderer';
 import type { GamePresentation } from '../../queries/repositories/saved-games';
+import { KNIGHTS_ACTOR_EVENTS, knightsEventArt } from '../knights/log';
 import { FOG_TERRAIN_RESOURCE, formatGameEvent } from './event-format';
 import { FairnessFindings } from './FairnessStatus.js';
 
@@ -62,12 +63,16 @@ function eventSeats(event: GameEvent): number[] {
   }
   if (event.type === 'resourceStolen' && typeof event.thief === 'number') return [event.thief];
   if (event.type === 'gameEnded' && typeof event.winner === 'number') return [event.winner];
-  return actorEvents.has(event.type) && 'seat' in event && typeof event.seat === 'number'
+  return (actorEvents.has(event.type) || KNIGHTS_ACTOR_EVENTS.has(event.type)) &&
+    'seat' in event &&
+    typeof event.seat === 'number'
     ? [event.seat]
     : [];
 }
 
 function eventArt(event: GameEvent, color?: string): string[] {
+  const knights = knightsEventArt(event, color);
+  if (knights) return knights;
   if (event.type === 'roadBuilt') return [getPieceIconUrl('road', color)];
   if (event.type === 'settlementBuilt') return [getPieceIconUrl('settlement', color)];
   if (event.type === 'cityBuilt') return [getPieceIconUrl('city', color)];
@@ -115,10 +120,13 @@ export function EventLog({
   events,
   presentation,
   initiallyOpen = false,
+  derived = [],
 }: {
   events: readonly GameEvent[];
   presentation: GamePresentation;
   initiallyOpen?: boolean;
+  /** Lines derived from state changes (the barbarian ship), placed among the events. */
+  derived?: readonly { readonly at: number; readonly event: GameEvent }[];
 }) {
   const { t } = useTranslation(['game', 'log']);
   const playerName = (seat: number) =>
@@ -132,8 +140,17 @@ export function EventLog({
         <p className="muted">{t('game:noEvents')}</p>
       ) : (
         <ol role="list">
-          {events
-            .map((event, index) => ({ event, index }))
+          {[
+            ...events.flatMap((event, index) => [
+              ...derived
+                .filter((item) => item.at === index)
+                .map((item, position) => ({ event: item.event, index: `d${index}:${position}` })),
+              { event, index },
+            ]),
+            ...derived
+              .filter((item) => item.at >= events.length)
+              .map((item, position) => ({ event: item.event, index: `t${position}` })),
+          ]
             .toReversed()
             .map(({ event, index }) => {
               const actors = eventSeats(event)

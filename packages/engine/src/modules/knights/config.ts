@@ -36,6 +36,9 @@ export const ABILITY_LEVEL = 3;
 /** A metropolis is worth two points on top of its city. */
 export const METROPOLIS_VP = 2;
 
+/** Id and art key of the two-hex barbarian track fixture. */
+export const BARBARIAN_FIXTURE = 'barbarian-track';
+
 /** Barbarian ship faces before an attack. */
 export const BARBARIAN_STEPS = 7;
 

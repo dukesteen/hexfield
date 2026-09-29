@@ -17,6 +17,10 @@ export interface RenderModel {
     readonly vertex: VertexId;
     readonly seat: Seat;
     readonly kind: 'settlement' | 'city';
+    /** A city wall stands under this city (Cities & Knights). */
+    readonly wall?: boolean;
+    /** A metropolis of this track stands on this city (Cities & Knights). */
+    readonly metropolis?: KnightsTrack;
   }[];
   readonly robberHex: HexId | null;
   /** Ships on sea edges. Present, possibly empty, on seafaring boards. */
@@ -29,10 +33,36 @@ export interface RenderModel {
     readonly seat: Seat;
     readonly vp: number;
   }[];
+  /** Cities & Knights pieces. Present, possibly empty, on knights boards. */
+  readonly knights?: KnightsRender;
   /** Non-hex board pieces such as a two-hex track. Rules ignore them; the camera fits them. */
   readonly fixtures?: readonly RenderFixture[];
   /** Per-plugin render-model slices, keyed by plugin layer id. */
   readonly layers?: Readonly<Record<string, unknown>>;
+}
+
+export type KnightsTrack = 'trade' | 'politics' | 'science';
+
+/** The Cities & Knights pieces the board draws: knights, the merchant and the barbarian ship. */
+export interface KnightsRender {
+  /** Knights on vertices. `ready` marks the active seat's knights that may still act. */
+  readonly pieces: readonly {
+    readonly vertex: VertexId;
+    readonly seat: Seat;
+    readonly level: 1 | 2 | 3;
+    readonly active: boolean;
+    readonly ready?: boolean;
+  }[];
+  /** The merchant's land hex and the seat that controls it, or null before the first is played. */
+  readonly merchant: { readonly hex: HexId; readonly seat: Seat } | null;
+  /** City pieces lying on their side: settlements that must be upgraded first. */
+  readonly sideways: readonly { readonly vertex: VertexId; readonly seat: Seat }[];
+  /** The barbarian ship on the fixture named `fixture`, at `step` of `steps`. */
+  readonly barbarians: {
+    readonly fixture: string;
+    readonly step: number;
+    readonly steps: number;
+  } | null;
 }
 
 /** A board fixture in board coordinates. The footprint lists the anchor first. */
@@ -91,8 +121,8 @@ export interface BoardHighlights {
   readonly style?: {
     readonly color?: number;
     readonly pulse?: boolean;
-    /** Empty settlement sites or existing settlements available for city upgrade. */
-    readonly vertexTarget?: 'site' | 'upgrade';
+    /** Empty settlement sites, settlements available for city upgrade, or rings on pieces. */
+    readonly vertexTarget?: 'site' | 'upgrade' | 'piece';
     /**
      * Edge targets as a dashed lane, a brighter wake for open water, or a ring around a piece
      * already there.
@@ -101,6 +131,10 @@ export interface BoardHighlights {
   };
   /** Edges of pieces marked as the chosen one, such as the ship about to move. */
   readonly selectedEdges?: readonly EdgeId[];
+  /** Vertices of pieces marked as the chosen one, such as the knight about to move. */
+  readonly selectedVertices?: readonly VertexId[];
+  /** Hexes marked as the chosen one, such as the first of two number tokens to swap. */
+  readonly selectedHexes?: readonly HexId[];
 }
 
 export interface BoardAppearance {
@@ -130,6 +164,8 @@ export interface BoardRendererOptions {
   readonly onReady?: (renderer: BoardRenderer) => void;
   /** Load the seafaring art (gold, fog, ships, pirate) before the first draw. */
   readonly seafaring?: boolean;
+  /** Load the Cities & Knights art (knights, walls, metropolises, merchant, ship) before the first draw. */
+  readonly knights?: boolean;
   /** Outline every island, for debugging generated and revealed boards. */
   readonly debugIslands?: boolean;
 }
@@ -144,7 +180,9 @@ export interface BoardRendererDiagnostics {
 
 export interface BoardFocusPreview {
   /** Temporary, uncommitted piece shown at the focused legal target. */
-  readonly piece: 'road' | 'ship' | 'settlement' | 'city';
+  readonly piece: 'road' | 'ship' | 'settlement' | 'city' | 'knight' | 'wall' | 'mark';
+  /** For a knight preview: its strength and whether it stands active. */
+  readonly knight?: { readonly level: 1 | 2 | 3; readonly active: boolean; readonly seat?: Seat };
   /** The active player's public board color. */
   readonly color: number;
   /** Player marker shape, used behind building previews. */
@@ -158,14 +196,22 @@ export interface ScreenPoint {
 
 /** A rules-neutral visual cue. IDs are stable per public event and deduplicated briefly. */
 export type BoardEffect =
-  | { readonly id: string; readonly kind: 'dice-roll'; readonly dice: readonly [number, number] }
+  | {
+      readonly id: string;
+      readonly kind: 'dice-roll';
+      readonly dice: readonly [number, number];
+      /** A knights roll: the first die is red and the event die's face is shown beside them. */
+      readonly event?: 'ship' | 'trade' | 'politics' | 'science';
+    }
   | { readonly id: string; readonly kind: 'production-pulse'; readonly hexes: readonly HexId[] }
   | {
       readonly id: string;
       readonly kind: 'piece-pop';
-      readonly piece: 'road' | 'ship' | 'settlement' | 'city';
+      readonly piece: 'road' | 'ship' | 'settlement' | 'city' | 'knight' | 'wall';
       readonly seat: Seat;
       readonly at: BoardHit;
+      /** A knight's strength, for its art. */
+      readonly level?: 1 | 2 | 3;
     }
   | {
       readonly id: string;
@@ -186,6 +232,44 @@ export type BoardEffect =
       readonly seat: Seat;
       readonly fromEdge: EdgeId;
       readonly toEdge: EdgeId;
+    }
+  | {
+      readonly id: string;
+      readonly kind: 'knight-move';
+      readonly seat: Seat;
+      readonly level: 1 | 2 | 3;
+      readonly fromVertex: VertexId;
+      readonly toVertex: VertexId;
+    }
+  | {
+      readonly id: string;
+      readonly kind: 'barbarian-sail';
+      readonly fixture: string;
+      readonly fromStep: number;
+      readonly toStep: number;
+      /** Wait this long before sailing, so the dice roll can finish first. */
+      readonly delayMs?: number;
+    }
+  | {
+      readonly id: string;
+      readonly kind: 'barbarian-attack';
+      readonly fixture: string;
+      /** The step the ship sailed from before landing. */
+      readonly fromStep: number;
+      readonly outcome: 'defended' | 'pillaged';
+      /** Vertices of the active knights that held the line. */
+      readonly defenders: readonly VertexId[];
+      /** Vertices of the cities that were pillaged. */
+      readonly pillaged: readonly VertexId[];
+      /** Wait this long before sailing, so the dice roll can finish first. */
+      readonly delayMs?: number;
+    }
+  | {
+      readonly id: string;
+      /** Embers over a pillaged city, or a shield ring over a knight that held. */
+      readonly kind: 'burst';
+      readonly at: VertexId;
+      readonly tone: 'fire' | 'shield';
     }
   | {
       readonly id: string;
@@ -221,5 +305,7 @@ export interface BoardRenderer {
   /** Converts CSS client coordinates into board-local pixels. */
   screenToBoard(clientPoint: ScreenPoint): ScreenPoint;
   fitToBoard(): void;
+  /** True while any part of the fixture is inside the visible board area. */
+  isFixtureInView(fixtureId: string): boolean;
   destroy(): void;
 }

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { baseHarborRate, RESOURCES } from '@cp2p/engine';
-import type { ResourceCounts } from '@cp2p/engine';
+import { baseHarborRate, engineForConfig } from '@cp2p/engine';
+import { cardKinds } from '../knights/state.js';
 import { DialogFrame } from '../dialogs/DialogFrame.js';
 import { emptyCounts } from '../dialogs/resources.js';
 import type { CommandFormProps } from '../dialogs/types.js';
@@ -13,8 +13,9 @@ import { ResourceCardPicker } from './ResourceCard.js';
 export function BankTradePicker(props: CommandFormProps) {
   const { legal, state, seat, privateState, onSubmit, onCancel } = props;
   const { t } = useTranslation('rules');
-  const [give, setGive] = useState<ResourceCounts>(emptyCounts);
-  const [get, setGet] = useState<ResourceCounts>(emptyCounts);
+  const kinds = cardKinds(state);
+  const [give, setGive] = useState<Record<string, number>>(() => emptyCounts(kinds));
+  const [get, setGet] = useState<Record<string, number>>(() => emptyCounts(kinds));
   const [touched, setTouched] = useState(false);
   const base = state.config.options.base;
   const hideBankCounts =
@@ -22,15 +23,16 @@ export function BankTradePicker(props: CommandFormProps) {
   const command = { type: 'MARITIME_TRADE', give, get };
   const [validation] = useCommandValidations([command], props);
   if (!legal.templates.some((item) => item.type === 'MARITIME_TRADE')) return null;
-  const rates: ResourceCounts = {
-    brick: baseHarborRate(state, seat, 'brick'),
-    lumber: baseHarborRate(state, seat, 'lumber'),
-    wool: baseHarborRate(state, seat, 'wool'),
-    grain: baseHarborRate(state, seat, 'grain'),
-    ore: baseHarborRate(state, seat, 'ore'),
-  };
-  const cards = RESOURCES.reduce((total, resource) => total + (give[resource] ?? 0), 0);
-  const units = RESOURCES.reduce((total, resource) => total + (get[resource] ?? 0), 0);
+  // Harbors set the base rate; modules (the merchant, Trade level 3, a fleet) improve it.
+  const { hooks } = engineForConfig(state.config);
+  const rates: Record<string, number> = Object.fromEntries(
+    kinds.map((kind) => [
+      kind,
+      hooks.bankRate(state, seat, kind, baseHarborRate(state, seat, kind)),
+    ]),
+  );
+  const cards = kinds.reduce((total, resource) => total + (give[resource] ?? 0), 0);
+  const units = kinds.reduce((total, resource) => total + (get[resource] ?? 0), 0);
   const footer = (
     <div className="trade-dialog-footer">
       <ValidationChecking checking={validation === 'checking' && touched} />
@@ -64,6 +66,7 @@ export function BankTradePicker(props: CommandFormProps) {
         <ResourceCardPicker
           label={t('rules:trade.give')}
           values={give}
+          kinds={kinds}
           stock={{ source: 'hand', counts: privateState.hand }}
           steps={rates}
           onChange={(resource, value) => {
@@ -73,12 +76,13 @@ export function BankTradePicker(props: CommandFormProps) {
           }}
           onClear={() => {
             setTouched(true);
-            setGive(emptyCounts());
+            setGive(emptyCounts(kinds));
           }}
         />
         <ResourceCardPicker
           label={t('rules:bank.get')}
           values={get}
+          kinds={kinds}
           {...(hideBankCounts ? {} : { stock: { source: 'bank' as const, counts: state.bank } })}
           onChange={(resource, value) => {
             setTouched(true);
@@ -86,7 +90,7 @@ export function BankTradePicker(props: CommandFormProps) {
           }}
           onClear={() => {
             setTouched(true);
-            setGet(emptyCounts());
+            setGet(emptyCounts(kinds));
           }}
         />
       </div>

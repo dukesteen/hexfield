@@ -63,6 +63,45 @@
   margin: 0;
 }
 
+.build-costs-heading {
+  margin: 0.9rem 0 0.4rem;
+  font-size: 0.95rem;
+}
+
+.build-cost-track {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.build-cost-track img {
+  width: 1.4rem;
+  height: 1.4rem;
+  object-fit: contain;
+}
+
+.build-cost-levels {
+  flex-wrap: nowrap;
+  gap: 0.35rem;
+}
+
+.build-cost-level {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.1rem;
+  font-size: 0.85rem;
+}
+
+.build-cost-level b {
+  font-weight: 700;
+}
+
+.build-cost-level img {
+  width: 1.1rem;
+  height: 1.1rem;
+  object-fit: contain;
+}
+
 .build-cost-resource {
   display: inline-flex;
   min-width: 2rem;

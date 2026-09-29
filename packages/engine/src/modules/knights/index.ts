@@ -26,7 +26,13 @@ import {
   relocateKnight,
 } from './actions.js';
 import { PILLAGE_FRAME, automaticPillage, choosePillage, pillagePhase } from './barbarians.js';
-import { COMMODITIES, KNIGHTS_ID, KNIGHTS_OPTIONS, KNIGHTS_VERSION } from './config.js';
+import {
+  BARBARIAN_FIXTURE,
+  COMMODITIES,
+  KNIGHTS_ID,
+  KNIGHTS_OPTIONS,
+  KNIGHTS_VERSION,
+} from './config.js';
 import { addKnightsCommands, addKnightsPending } from './flow.js';
 import {
   METROPOLIS_FRAME,
@@ -84,6 +90,7 @@ import { knightsExt } from './types.js';
 
 export {
   ABILITY_LEVEL,
+  BARBARIAN_FIXTURE,
   BARBARIAN_STEPS,
   COMMODITIES,
   COMMODITY_BANK,
@@ -222,6 +229,11 @@ export function knightsModule(): GameModule {
       harbor: null,
     }),
     hooks: {
+      // The barbarian track is a two-hex piece on the board frame; its ship lives in module state.
+      boardFixtures: (_config, _board, acc) => [
+        ...acc,
+        { id: BARBARIAN_FIXTURE, module: KNIGHTS_ID, size: 2, art: BARBARIAN_FIXTURE },
+      ],
       cardKinds: (acc) => [...acc, ...COMMODITIES],
       bankInit: commodityBank,
       // No development deck: it is empty, so BUY_DEV_CARD and PLAY_DEV_CARD are never legal.

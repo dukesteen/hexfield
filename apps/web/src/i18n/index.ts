@@ -15,7 +15,7 @@ void i18n
     lng: 'en',
     fallbackLng: 'en',
     supportedLngs: ['en'],
-    ns: ['common', 'game', 'lobby', 'rules', 'log', 'editor'],
+    ns: ['common', 'game', 'lobby', 'rules', 'log', 'editor', 'knights'],
     defaultNS: 'common',
     interpolation: { escapeValue: false },
   });

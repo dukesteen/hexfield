@@ -1,12 +1,16 @@
 import type { ComponentType, ReactNode } from 'react';
 import type { GameEvent, GameState, RenderHint, Seat } from '@cp2p/engine';
-import type { FixtureArt, RenderLayerPlugin } from '@cp2p/renderer';
+import type { BoardRenderer, FixtureArt, RenderLayerPlugin } from '@cp2p/renderer';
 import type { GamePresentation } from '../../queries/repositories/saved-games';
 
 export interface ModuleHudProps {
   readonly state: Readonly<GameState>;
   readonly hints: readonly RenderHint[];
   readonly presentation: GamePresentation;
+  /** The board renderer once it is ready, for widgets that follow the camera. */
+  readonly renderer: BoardRenderer | null;
+  /** Open the dialog a module registered for one of its fixtures. */
+  readonly openFixture: (fixtureId: string) => void;
 }
 
 export interface ModulePanelProps {

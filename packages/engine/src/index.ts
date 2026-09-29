@@ -44,6 +44,15 @@ export type {
 } from './modules/seafaring/index.js';
 
 export {
+  ABILITY_LEVEL,
+  BARBARIAN_FIXTURE,
+  BARBARIAN_STEPS,
+  WALLS_PER_SEAT,
+  barbarianStrength,
+  contributions,
+  knightAt,
+  knightsOf,
+  supplyOf,
   COMMODITIES,
   COMMODITY_BANK,
   COMMODITY_BANK_FIVE_SIX,
@@ -74,11 +83,16 @@ export {
 } from './modules/knights/index.js';
 export type {
   AqueductFrameData,
+  AttackReport,
   CheckEntry,
   DealFrameData,
+  DisplacedFrameData,
   DrawEntry,
+  KnightPiece,
   KnightsExt,
   LookData,
+  PillageFrameData,
+  SidewaysPiece,
   ProgressFrameData,
   MetropolisFrameData,
   MetropolisHolder,

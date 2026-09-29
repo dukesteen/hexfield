@@ -15,7 +15,10 @@
     "lumber": "Lumber",
     "wool": "Wool",
     "grain": "Grain",
-    "ore": "Ore"
+    "ore": "Ore",
+    "cloth": "Cloth",
+    "coin": "Coin",
+    "paper": "Paper"
   },
   "discard": {
     "title": "Discard cards",

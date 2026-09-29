@@ -286,9 +286,9 @@ export function OnlineConfiguration({
             </select>
           </label>
           <ScenarioPicker
+            online
             seatCount={seatCount}
             scenarioId={scenarioId}
-            allowKnights
             disabled={!editable}
             onScenario={(scenario) => {
               const wasSeafaring = seafaringId !== null;

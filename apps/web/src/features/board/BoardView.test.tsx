@@ -73,6 +73,7 @@ function prepareRenderer(): void {
     boardToScreen: vi.fn<BoardRenderer['boardToScreen']>((point) => point),
     screenToBoard: vi.fn<BoardRenderer['screenToBoard']>((point) => point),
     fitToBoard: vi.fn<BoardRenderer['fitToBoard']>(),
+    isFixtureInView: vi.fn<BoardRenderer['isFixtureInView']>(() => false),
     destroy: vi.fn<BoardRenderer['destroy']>(),
   };
   rendererForTest = renderer;

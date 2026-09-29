@@ -159,6 +159,7 @@ const renderer: BoardRenderer = {
   boardToScreen: (boardPoint: ScreenPoint) => boardPoint,
   screenToBoard: (clientPoint: ScreenPoint) => clientPoint,
   fitToBoard: () => undefined,
+  isFixtureInView: () => false,
   destroy: () => undefined,
 };
 

@@ -48,6 +48,23 @@ import type { GamePresentation } from '../../queries/repositories/saved-games';
 import { recordOrdinaryActionRejection } from './action-diagnostics';
 import { BuildCostsDialog } from './BuildCostsDialog.js';
 import { fogDrawPending, isSeafaring } from './seafaring';
+import { KnightsBuildButtons, KnightsBuildRows } from '../knights/BuildControls';
+import { KnightsForms } from '../knights/KnightsForms';
+import {
+  firstPicks,
+  highlightStyle,
+  isForcedKind,
+  isTwoStepKind,
+  kindInfo,
+  previewOfKind,
+  secondPicks,
+  targetOfKind,
+} from '../knights/board-modes';
+import type { KnightsController } from '../knights/controller';
+import { cardInfo } from '../knights/catalogue';
+import { improvableTracks } from '../knights/improve';
+import { CARD_KINDS, KNIGHTS_PLACEMENT_KINDS } from '../knights/placements';
+import { isKnights, knightLevel, knightsState } from '../knights/state';
 
 const boardOrder: readonly PlacementKind[] = [
   'settlement',
@@ -59,6 +76,7 @@ const boardOrder: readonly PlacementKind[] = [
   'robber',
   'pirate',
   'moveShip',
+  ...KNIGHTS_PLACEMENT_KINDS,
 ];
 /** Kinds that only exist while a placement is forced, so they sit beside the board. */
 const STATUS_KINDS: ReadonlySet<PlacementKind> = new Set([
@@ -66,6 +84,11 @@ const STATUS_KINDS: ReadonlySet<PlacementKind> = new Set([
   'freeShip',
   'robber',
   'pirate',
+  'relocate',
+  'pillage',
+  'metropolis',
+  'deserterRemove',
+  'deserterPlace',
 ]);
 type EdgeKind = 'road' | 'freeRoad' | 'ship' | 'freeShip' | 'moveShip';
 const EDGE_KINDS: ReadonlySet<PlacementKind> = new Set([
@@ -77,7 +100,7 @@ const EDGE_KINDS: ReadonlySet<PlacementKind> = new Set([
 ]);
 
 function isEdgeKind(kind: PlacementKind | undefined): kind is EdgeKind {
-  return kind !== undefined && EDGE_KINDS.has(kind);
+  return kind !== undefined && (EDGE_KINDS.has(kind) || targetOfKind(kind) === 'edge');
 }
 
 /** Which forced choice a kind belongs to: a route piece, a free piece or the blocker. */
@@ -89,11 +112,12 @@ function choiceFamily(kind: PlacementKind): 'route' | 'free' | 'blocker' | null 
 }
 
 /** The piece a confirmed placement puts on the board. */
-function placedPiece(kind: PlacementKind): 'road' | 'ship' | 'settlement' | 'city' | null {
+type ConfirmPiece = 'road' | 'ship' | 'settlement' | 'city' | 'knight' | 'wall' | 'mark';
+function placedPiece(kind: PlacementKind): ConfirmPiece | null {
   if (kind === 'road' || kind === 'freeRoad') return 'road';
   if (kind === 'ship' || kind === 'freeShip' || kind === 'moveShip') return 'ship';
   if (kind === 'settlement' || kind === 'city') return kind;
-  return null;
+  return previewOfKind(kind);
 }
 const normalActionOrder: Readonly<Record<string, number>> = {
   ROLL_DICE: 0,
@@ -148,6 +172,8 @@ function ActionIcon({ kind, color }: { kind: string; color?: string | undefined 
 }
 
 function boardHitKind(kind: PlacementKind): BoardHit['kind'] {
+  const knights = targetOfKind(kind);
+  if (knights !== null) return knights;
   return isEdgeKind(kind) ? 'edge' : kind === 'robber' || kind === 'pirate' ? 'hex' : 'vertex';
 }
 
@@ -163,20 +189,12 @@ function isHexId(id: string): id is HexId {
   return /^h:-?\d+,-?\d+$/.test(id);
 }
 
-function placementHit(candidate: PlacementCandidate): BoardHit {
-  switch (candidate.kind) {
-    case 'road':
-    case 'freeRoad':
-    case 'ship':
-    case 'freeShip':
-    case 'moveShip':
-      return { kind: 'edge', id: candidate.id };
-    case 'settlement':
-    case 'city':
-      return { kind: 'vertex', id: candidate.id };
-    default:
-      throw new Error('Unsupported placement candidate');
-  }
+function placementHit(candidate: PlacementCandidate): BoardHit | null {
+  const kind = boardHitKind(candidate.kind);
+  if (kind === 'edge' && isEdgeId(candidate.id)) return { kind, id: candidate.id };
+  if (kind === 'vertex' && isVertexId(candidate.id)) return { kind, id: candidate.id };
+  if (kind === 'hex' && isHexId(candidate.id)) return { kind, id: candidate.id };
+  return null;
 }
 
 export interface GameActionController {
@@ -185,11 +203,15 @@ export interface GameActionController {
   highlights: BoardHighlights;
   focusTarget: BoardHit | null;
   placementConfirmation: {
-    piece: 'road' | 'ship' | 'settlement' | 'city';
+    piece: ConfirmPiece;
     /** True when the ship already exists and only sails to the marked edge. */
     move: boolean;
     hit: BoardHit;
     label: string;
+    /** Knights placements name their own action instead of a piece. */
+    kind: PlacementKind;
+    /** For a knight preview: its strength and whether it stands active. */
+    knight?: { level: 1 | 2 | 3; active: boolean };
     confirm: () => void;
     cancel: () => void;
   } | null;
@@ -207,6 +229,8 @@ export interface GameActionController {
   mobileBuild: React.ReactNode;
   mobileTrade: React.ReactNode;
   forms: React.ReactNode;
+  /** Improvements, progress cards and the like; null in a game without knights. */
+  knights: KnightsController | null;
   nextStep: NextStep;
   actionCount: number;
   submitting: boolean;
@@ -218,6 +242,8 @@ export type NextStep =
       kind: 'board';
       text: string;
       cancel?: () => void;
+      /** Ends a two-pick action at the first pick, such as a Diplomat that builds no road. */
+      finish?: { label: string; run: () => void };
       /** Pieces the seat may pick between for one forced placement, such as robber or pirate. */
       alternatives?: readonly {
         kind: PlacementKind;
@@ -232,6 +258,35 @@ export type NextStep =
       turnAction?: { label: string; rollDice: boolean };
     }
   | { kind: 'text'; text: string; tone: 'muted' | 'alert' };
+
+/** The knight a placement puts on the board, for its preview: strength and active state. */
+function knightPreview(
+  state: GameState,
+  kind: PlacementKind | undefined,
+  moveFrom: string | null,
+  choice: PlacementChoice | undefined,
+): { knight?: { level: 1 | 2 | 3; active: boolean } } {
+  const ext = knightsState(state);
+  if (!ext || kind === undefined || previewOfKind(kind) !== 'knight') return {};
+  if (kind === 'moveKnight' || kind === 'displaceKnight') {
+    const moving = ext.knights.find((knight) => knight.vertex === moveFrom);
+    return moving ? { knight: { level: knightLevel(moving.level), active: false } } : {};
+  }
+  if (kind === 'relocate') {
+    const frame = state.turn.phase.at(-1);
+    const data: unknown = frame?.data;
+    const stored =
+      typeof data === 'object' && data !== null
+        ? { level: Reflect.get(data, 'level'), active: Reflect.get(data, 'active') }
+        : null;
+    return stored && typeof stored.level === 'number'
+      ? { knight: { level: knightLevel(stored.level), active: stored.active === true } }
+      : { knight: { level: 1, active: false } };
+  }
+  if (kind === 'deserterPlace')
+    return { knight: { level: knightLevel(Number(choice?.command.level) || 1), active: false } };
+  return { knight: { level: 1, active: false } };
+}
 
 /** Let React commit pending feedback before synchronous proof work starts. */
 function afterNextPaint(): Promise<void> {
@@ -311,7 +366,10 @@ export function useGameActions(
   const availableBoardKinds = boardOrder.filter((kind) => availability?.placements[kind].length);
   const phase = state.turn.phase.at(-1)?.id;
   const mandatoryPlacement =
-    phase === 'setup' || phase === 'roadBuilding' || phase === 'moveRobber';
+    phase === 'setup' ||
+    phase === 'roadBuilding' ||
+    phase === 'moveRobber' ||
+    availableBoardKinds.some(isForcedKind);
   const selectedKind = boardCancelled
     ? undefined
     : boardKind && availableBoardKinds.includes(boardKind)
@@ -321,24 +379,22 @@ export function useGameActions(
         : undefined;
   const rawChoices =
     selectedKind && availability ? availability.placements[selectedKind] : noChoices;
+  const twoStep = isTwoStepKind(selectedKind);
   const movingShip = selectedKind === 'moveShip';
   const moveFrom =
-    movingShip && shipMoveFrom !== null && rawChoices.some((choice) => choice.from === shipMoveFrom)
+    twoStep && shipMoveFrom !== null && rawChoices.some((choice) => choice.from === shipMoveFrom)
       ? shipMoveFrom
       : null;
+  const second = useMemo(
+    () => (twoStep && moveFrom !== null ? secondPicks(rawChoices, moveFrom) : null),
+    [twoStep, moveFrom, rawChoices],
+  );
   const choices = useMemo(() => {
-    if (!movingShip) return rawChoices;
-    if (moveFrom !== null) return rawChoices.filter((choice) => choice.from === moveFrom);
-    // Choosing the ship comes first: one target per ship that has a move.
-    const seen = new Set<string>();
-    const ships: PlacementChoice[] = [];
-    for (const choice of rawChoices)
-      if (choice.from !== undefined && !seen.has(choice.from)) {
-        seen.add(choice.from);
-        ships.push({ id: choice.from, type: choice.type, command: choice.command });
-      }
-    return ships;
-  }, [movingShip, moveFrom, rawChoices]);
+    if (!twoStep) return rawChoices;
+    if (second) return second.targets;
+    // Choosing the piece comes first: one target for each ship, knight or road that has a move.
+    return firstPicks(rawChoices);
+  }, [twoStep, second, rawChoices]);
   const selectedPlacement =
     selectedKind && previewPlacement?.kind === selectedKind
       ? choices.find((choice) => choice.id === previewPlacement.id)
@@ -348,6 +404,9 @@ export function useGameActions(
   const hitKind = selectedKind ? boardHitKind(selectedKind) : null;
   const highlights: BoardHighlights = useMemo(() => {
     if (!hitKind) return {};
+    const knightsStyle = selectedKind
+      ? highlightStyle(selectedKind, twoStep && moveFrom === null)
+      : {};
     return {
       ...(hitKind === 'edge' ? { edges: choices.map((choice) => choice.id).filter(isEdgeId) } : {}),
       ...(hitKind === 'vertex'
@@ -356,6 +415,8 @@ export function useGameActions(
       ...(hitKind === 'hex' ? { hexes: choices.map((choice) => choice.id).filter(isHexId) } : {}),
       mode: hitKind,
       ...(moveFrom !== null && isEdgeId(moveFrom) ? { selectedEdges: [moveFrom] } : {}),
+      ...(moveFrom !== null && isVertexId(moveFrom) ? { selectedVertices: [moveFrom] } : {}),
+      ...(moveFrom !== null && isHexId(moveFrom) ? { selectedHexes: [moveFrom] } : {}),
       style: {
         color: 0x61b89a,
         pulse: true,
@@ -369,9 +430,13 @@ export function useGameActions(
           : movingShip || selectedKind === 'ship' || selectedKind === 'freeShip'
             ? { edgeTarget: 'wake' as const }
             : {}),
+        ...knightsStyle,
       },
     };
-  }, [choices, hitKind, selectedKind, movingShip, moveFrom]);
+  }, [choices, hitKind, selectedKind, twoStep, movingShip, moveFrom]);
+  /** The name of a board action: a build for the base kinds, its own short label for a knights kind. */
+  const actionLabel = (kind: PlacementKind): string =>
+    kindInfo(kind) ? t(`knights:action.${kind}`) : t(`game:buildAction.${kind}`);
   const playerLabel = (candidate: Seat) =>
     presentation.players.find((player) => player.seat === candidate)?.name ??
     t('game:playerFallback', { number: candidate + 1 });
@@ -523,8 +588,12 @@ export function useGameActions(
       useSessionStore.getState().clearPlacementCandidate();
       return;
     }
-    if (selectedKind === 'moveShip' && moveFrom === null && hit.kind === 'edge') {
-      useSessionStore.getState().selectShipToMove(hit.id);
+    if (twoStep && moveFrom === null && selectedKind) {
+      // A first pick with no second step is complete: it goes straight to the confirmation.
+      const rest = secondPicks(rawChoices, hit.id);
+      if (rest.targets.length === 0 && rest.finish)
+        useSessionStore.getState().selectPlacementCandidate({ kind: selectedKind, id: hit.id });
+      else useSessionStore.getState().selectShipToMove(hit.id);
       return;
     }
     if (isEdgeKind(selectedKind) && hit.kind === 'edge') {
@@ -532,6 +601,10 @@ export function useGameActions(
       return;
     }
     if ((selectedKind === 'settlement' || selectedKind === 'city') && hit.kind === 'vertex') {
+      useSessionStore.getState().selectPlacementCandidate({ kind: selectedKind, id: hit.id });
+      return;
+    }
+    if (selectedKind && kindInfo(selectedKind)) {
       useSessionStore.getState().selectPlacementCandidate({ kind: selectedKind, id: hit.id });
       return;
     }
@@ -574,6 +647,12 @@ export function useGameActions(
           : t('game:unknownHarbor')
       : null;
     const context = harborLabel ? t('game:tileAndHarbor', { tiles, harbor: harborLabel }) : tiles;
+    if (selectedKind && kindInfo(selectedKind))
+      return t('game:targetOptionDetail', {
+        action: t(`knights:placement.${selectedKind}${moveFrom !== null ? 'Target' : ''}`),
+        number,
+        context,
+      });
     return t('game:targetOptionDetail', {
       action: t(
         `game:placement.${selectedKind === 'moveShip' && moveFrom !== null ? 'moveShipTarget' : (selectedKind ?? 'road')}`,
@@ -654,7 +733,7 @@ export function useGameActions(
     options.onHandOff?.();
     const store = useSessionStore.getState();
     if (selectedKind !== kind) store.choosePlacement(kind);
-    else if (kind === 'moveShip' && moveFrom !== null) store.selectShipToMove(null);
+    else if (isTwoStepKind(kind) && moveFrom !== null) store.selectShipToMove(null);
     else if (mandatoryPlacement) store.clearPlacementCandidate();
     else store.cancelPlacement();
   };
@@ -771,22 +850,29 @@ export function useGameActions(
         </div>
       </details>
     ) : null;
+  const knightsKind = selectedKind !== undefined && kindInfo(selectedKind) !== null;
   const placementInstruction = selectedKind
-    ? selectedPlacement
-      ? t('game:placementSelectedInstruction', {
-          piece: t(`game:piece.${placedPiece(selectedKind) ?? 'road'}`),
-        })
-      : selectedKind === 'road' || selectedKind === 'freeRoad'
-        ? t('game:roadInstruction', { count: choices.length })
-        : selectedKind === 'ship' || selectedKind === 'freeShip'
-          ? t('game:shipInstruction', { count: choices.length })
-          : selectedKind === 'moveShip'
-            ? t(moveFrom === null ? 'game:moveShipPick' : 'game:moveShipTarget', {
-                count: choices.length,
-              })
-            : selectedKind === 'settlement' || selectedKind === 'city'
-              ? t('game:buildingInstruction', { count: choices.length })
-              : t('game:boardInstruction', { action: t(`game:placement.${selectedKind}`) })
+    ? knightsKind
+      ? selectedPlacement
+        ? t('knights:instruction.confirm')
+        : t(`knights:instruction.${selectedKind}${moveFrom !== null ? 'Target' : ''}`, {
+            count: choices.length,
+          })
+      : selectedPlacement
+        ? t('game:placementSelectedInstruction', {
+            piece: t(`game:piece.${placedPiece(selectedKind) ?? 'road'}`),
+          })
+        : selectedKind === 'road' || selectedKind === 'freeRoad'
+          ? t('game:roadInstruction', { count: choices.length })
+          : selectedKind === 'ship' || selectedKind === 'freeShip'
+            ? t('game:shipInstruction', { count: choices.length })
+            : selectedKind === 'moveShip'
+              ? t(moveFrom === null ? 'game:moveShipPick' : 'game:moveShipTarget', {
+                  count: choices.length,
+                })
+              : selectedKind === 'settlement' || selectedKind === 'city'
+                ? t('game:buildingInstruction', { count: choices.length })
+                : t('game:boardInstruction', { action: t(`game:placement.${selectedKind}`) })
     : null;
   const alternativeFamily = selectedKind ? choiceFamily(selectedKind) : null;
   const alternatives =
@@ -850,7 +936,7 @@ export function useGameActions(
                       onClick={() => chooseBoardAction(kind)}
                     >
                       <ActionIcon kind={kind} color={playerColor} />
-                      <span>{t(`game:buildAction.${kind}`)}</span>
+                      <span>{actionLabel(kind)}</span>
                     </button>
                   ))}
                   {selectedKind && !mandatoryPlacement && !selectedPlacement && (
@@ -923,6 +1009,7 @@ export function useGameActions(
     </span>
   );
   const seafaring = isSeafaring(state);
+  const knights = isKnights(state);
   const shipsLeft = state.seats.find((item) => item.seat === (seat ?? actorSeat))?.piecesLeft.ship;
   const buildChoices = [
     { kind: 'road', label: t('game:buildCosts.road'), cost: ROAD_COST },
@@ -974,6 +1061,7 @@ export function useGameActions(
       <div
         className="desktop-build-grid"
         data-seafaring={seafaring}
+        data-knights={knights}
         role="group"
         aria-label={t('game:chooseBoardAction')}
       >
@@ -1020,21 +1108,31 @@ export function useGameActions(
             </b>
           </button>
         )}
-        <button
-          className="desktop-build-button"
-          type="button"
-          disabled={!actionsEnabled || !buyDevCard}
-          aria-label={t('game:command.BUY_DEV_CARD')}
-          title={`${t('game:buildCosts.developmentCard')} · ${costTitle(DEV_COST)}`}
-          onClick={() => {
-            if (buyDevCard) {
-              options.onHandOff?.();
-              submit(buyDevCard);
-            }
-          }}
-        >
-          <img src={getGameArtUrl('cardBack')} alt="" aria-hidden="true" />
-        </button>
+        {knights ? (
+          <KnightsBuildButtons
+            availability={availability}
+            selectedKind={selectedKind}
+            disabled={!actionsEnabled}
+            color={playerColor}
+            onChoose={chooseBoardAction}
+          />
+        ) : (
+          <button
+            className="desktop-build-button"
+            type="button"
+            disabled={!actionsEnabled || !buyDevCard}
+            aria-label={t('game:command.BUY_DEV_CARD')}
+            title={`${t('game:buildCosts.developmentCard')} · ${costTitle(DEV_COST)}`}
+            onClick={() => {
+              if (buyDevCard) {
+                options.onHandOff?.();
+                submit(buyDevCard);
+              }
+            }}
+          >
+            <img src={getGameArtUrl('cardBack')} alt="" aria-hidden="true" />
+          </button>
+        )}
       </div>
     </section>
   );
@@ -1058,7 +1156,7 @@ export function useGameActions(
               onClick={() => chooseBoardAction(kind)}
             >
               <ActionIcon kind={kind} color={playerColor} />
-              <span>{t(`game:buildAction.${kind}`)}</span>
+              <span>{actionLabel(kind)}</span>
             </button>
           ))}
           {actionButtons(contextualGroups.filter((group) => group.type !== 'BUY_DEV_CARD'))}
@@ -1196,30 +1294,40 @@ export function useGameActions(
             </span>
           </button>
         )}
-        <button
-          className="mobile-build-row"
-          type="button"
-          disabled={!actionsEnabled || !buyDevCard}
-          aria-label={t('game:command.BUY_DEV_CARD')}
-          title={`${t('game:buildCosts.developmentCard')} · ${costTitle(DEV_COST)}`}
-          onClick={() => {
-            if (buyDevCard) {
-              options.onHandOff?.();
-              submit(buyDevCard);
-            }
-          }}
-        >
-          <img
-            className="mobile-build-art"
-            src={getGameArtUrl('cardBack')}
-            alt=""
-            aria-hidden="true"
+        {knights ? (
+          <KnightsBuildRows
+            availability={availability}
+            selectedKind={selectedKind}
+            disabled={!actionsEnabled}
+            color={playerColor}
+            onChoose={chooseBoardAction}
           />
-          <span className="mobile-build-copy">
-            <strong>{t('game:buildCosts.developmentCard')}</strong>
-            {costIcons(DEV_COST)}
-          </span>
-        </button>
+        ) : (
+          <button
+            className="mobile-build-row"
+            type="button"
+            disabled={!actionsEnabled || !buyDevCard}
+            aria-label={t('game:command.BUY_DEV_CARD')}
+            title={`${t('game:buildCosts.developmentCard')} · ${costTitle(DEV_COST)}`}
+            onClick={() => {
+              if (buyDevCard) {
+                options.onHandOff?.();
+                submit(buyDevCard);
+              }
+            }}
+          >
+            <img
+              className="mobile-build-art"
+              src={getGameArtUrl('cardBack')}
+              alt=""
+              aria-hidden="true"
+            />
+            <span className="mobile-build-copy">
+              <strong>{t('game:buildCosts.developmentCard')}</strong>
+              {costIcons(DEV_COST)}
+            </span>
+          </button>
+        )}
       </div>
       <div className="mobile-build-context">{desktopStatus}</div>
     </section>
@@ -1279,10 +1387,21 @@ export function useGameActions(
                 {...(slotId ? { slotId } : {})}
               />
             )}
+            {knights && (
+              <KnightsForms
+                {...formProps}
+                availability={availability}
+                presentation={presentation}
+                form={form}
+                slotId={slotId}
+                onCancel={closeFormAndFocus}
+              />
+            )}
           </>
         )}
         {buildCostsOpen && (
           <BuildCostsDialog
+            knights={isKnights(state)}
             onClose={() => {
               setBuildCostsOpen(false);
               options.onFormClosed?.();
@@ -1326,10 +1445,22 @@ export function useGameActions(
       text: selectedPlacement
         ? t('game:cockpit.confirmOnBoard')
         : t('game:cockpit.tapTarget', {
-            target: t(
-              `game:placement.${selectedKind === 'moveShip' && moveFrom !== null ? 'moveShipTarget' : selectedKind}`,
-            ),
+            target: knightsKind
+              ? t(`knights:placement.${selectedKind}${moveFrom !== null ? 'Target' : ''}`)
+              : t(
+                  `game:placement.${selectedKind === 'moveShip' && moveFrom !== null ? 'moveShipTarget' : selectedKind}`,
+                ),
           }),
+      ...(second?.finish && !selectedPlacement
+        ? {
+            finish: {
+              label: t(`knights:finish.${selectedKind}`),
+              run: () => {
+                if (second.finish) submit(second.finish.command);
+              },
+            },
+          }
+        : {}),
       ...(!mandatoryPlacement && !selectedPlacement
         ? {
             cancel: () =>
@@ -1373,12 +1504,48 @@ export function useGameActions(
           move: selectedKind === 'moveShip',
           hit: focusTarget,
           label: targetLabel(focusTarget),
+          kind: selectedKind ?? 'road',
+          ...knightPreview(state, selectedKind, moveFrom, selectedPlacement),
           confirm: () => submit(selectedPlacement.command),
           cancel: () => {
             if (!submitting.current) useSessionStore.getState().clearPlacementCandidate();
           },
         }
       : null;
+  const knightsController: KnightsController | null = knights
+    ? {
+        improvable: improvableTracks(availability?.improvements ?? []),
+        improve: (track) => {
+          const command = availability?.improvements.find((item) => item.track === track);
+          if (command) submit(command);
+        },
+        playCard: (cardSlot, card) => {
+          if (submitting.current) return;
+          const info = cardInfo(card);
+          const store = useSessionStore.getState();
+          if (info.play === 'victory') return;
+          options.onHandOff?.();
+          const board = CARD_KINDS[card];
+          if (info.play === 'board' && board !== undefined) store.choosePlacement(board);
+          else store.openActionDialog('progress', cardSlot);
+        },
+        playable: (cardSlot) =>
+          availability?.progressPlays.some(
+            (item) => item.slotId === cardSlot && item.commands.length > 0,
+          ) ?? false,
+        openDiscard: () => {
+          options.onHandOff?.();
+          useSessionStore.getState().openActionDialog('discardProgress');
+        },
+        openImprovements: () => {
+          options.onHandOff?.();
+          useSessionStore.getState().openActionDialog('improve');
+        },
+        openHarbor: () => useSessionStore.getState().openActionDialog('harbor'),
+        disabled: !actionsEnabled,
+        harborOpen: availability?.availableTypes.includes('HARBOR_OFFER') ?? false,
+      }
+    : null;
   const offerOverlay =
     formProps &&
     legal?.commands.some(
@@ -1418,6 +1585,7 @@ export function useGameActions(
     mobileBuild,
     mobileTrade,
     forms,
+    knights: knightsController,
     nextStep,
     actionCount,
     submitting: isSubmitting,

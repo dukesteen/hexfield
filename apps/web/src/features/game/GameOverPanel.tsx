@@ -28,6 +28,12 @@ function ScoreParts({ score }: { score: Score }) {
           <dd>{score.islands}</dd>
         </div>
       )}
+      {score.knights !== undefined && (
+        <div>
+          <dt>{t('game:scoreKnights')}</dt>
+          <dd>{score.knights}</dd>
+        </div>
+      )}
       <div>
         <dt>{t('game:scoreVpCards')}</dt>
         <dd>
@@ -183,6 +189,8 @@ export function GameOverPanel({
                     {player.score.awards} ·{' '}
                     {player.score.islands !== undefined &&
                       `${t('game:scoreIslands')} ${player.score.islands} · `}
+                    {player.score.knights !== undefined &&
+                      `${t('game:scoreKnights')} ${player.score.knights} · `}
                     {t('game:scoreVpCards')}{' '}
                     {player.score.vpCards === null
                       ? t('game:scoreVpCardsPartial', { count: player.score.revealed })

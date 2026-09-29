@@ -196,9 +196,9 @@ export function OnlineCreate() {
               </select>
             </label>
             <ScenarioPicker
+              online
               seatCount={seatCount}
               scenarioId={scenario.id}
-              allowKnights
               onScenario={chooseScenario}
               onSeatCount={changeSeatCount}
             />

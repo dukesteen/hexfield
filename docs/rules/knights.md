@@ -496,3 +496,20 @@ Every card is playable in a verified online game; the design is recorded in the 
 - A `progress` frame asks all draws first, then the victory checks, then the off-turn discards, in parallel within each step and always before production. Checking after all draws instead of after each is not observable.
 - A seat's progress card count is public (the size of a physical hand), which the Spy's legality uses.
 - A draw from a deck with no card left is dropped; a deck whose hidden positions are used up deals its returned cards in the order they came back.
+
+## As implemented in K6 (UI)
+
+- The barbarian track is a two-hex board fixture the engine declares (`boardFixtures`, id `barbarian-track`, slot `north` on the base board and `north-west` on the five-six board), so the renderer places it and the default fit includes it. The ship piece sits on the current step and sails when a ship face is rolled. The renderer keeps knights, walls, metropolises, the merchant and sideways cities in a `knights` slice of the render model, filled by `toRenderModel` from `ext.knights`.
+- An attack emits no event, so the UI derives it from the state delta (`lastAttack` changes) for the effect and for its log lines. The attack effect is skippable and never plays with reduced motion.
+- The board taps of every knights command come from the legal command list (`knightsPlacements`), the same way the base kinds do. Two-pick commands (move, displace, Inventor, Smith, Diplomat) pick a first thing and then a target.
+- A local human who plays Master Merchant or the Spy sees the target's hand before the play commits (`session.peekHand`) and states the card taken (`preferTake`), because the take resolves in the same step as the play. Online sealed flows are out of scope and online knights stays gated in the lobby.
+- The Deserter's replacement knight is taken from the highest level the seat has in supply.
+- The final score breakdown adds a "Metropolises and defenders" row when it scored.
+
+### K6 follow-up (visual review and interaction pass)
+
+- The build-costs dialog of a knights game replaces the development card with the knights prices (recruit, promote, activate, city wall) and lists the three improvement tracks with the price of each of their five levels. The prices come from `KNIGHT_COST_TABLE` and the engine's `improvementCost` rule, so the dialog and the buttons cannot drift apart.
+- The Crane lists the level each track would reach. Master Merchant and Spy can go back from their look step to the card dialog, because nothing has been played at that point.
+- Module fixture dialogs (the barbarian track) are mounted inside the shared `.action-forms` wrapper, which is where the dialog look is defined; before, they were drawn with the browser default.
+- Layouts checked in a real browser at 1440x900, 820x1180, 390x844 and 844x390, with four and six players: the tablet portrait layout gives the hand its own row, the landscape phone keeps the players list two rows high for five and six players and keeps the turn buttons in reach with a scrolling cockpit, and pickers of eight card kinds fit one row on a short screen.
+- Positions for screenshots and tests are built with the development-only `LocalSession.devReplace`, `devApply` and `devLegal`. They exist only when `import.meta.env.DEV` is set; a session changed by `devReplace` no longer replays from its log and must not be saved.
