@@ -12,7 +12,7 @@ test('an explorer bot sails toward the fog, so a Fogbound game reveals tiles', (
   const base = scenarioConfig(scenario, 4);
   const config = {
     ...base,
-    options: { ...base.options, base: { ...base.options.base, vpTarget: 8 } },
+    options: { ...base.options, base: { ...(base.options.base ?? {}), vpTarget: 8 } },
   };
   const engine = engineForConfig(config);
   const created = LocalGame.create(
