@@ -1,4 +1,4 @@
-import { createBotRng, RandomBot } from '@cp2p/bots';
+import { createBotRng, decideHosted, RandomBot } from '@cp2p/bots';
 import type { BotRng } from '@cp2p/bots';
 import { fromBase64Url, toBase64Url } from '@cp2p/codec';
 import { engineForConfig, ENGINE_VERSION, failure, LocalGame, success } from '@cp2p/engine';
@@ -17,6 +17,7 @@ import type {
 } from '@cp2p/engine';
 import { browserEntropy, createBrowserRandomSource, randomIndex, randomSeed } from './random.js';
 import type { BrowserRandomSource, Entropy, TakePreference } from './random.js';
+import { BOT_TRADE_PATIENCE_MS, botAwaitsTradeReplies } from '@cp2p/protocol';
 import { chooseBotPending, timerKey } from './scheduling.js';
 import { owned, parseSave, ReplayRandomSource, sameCanonical, stateHash } from './save.js';
 import type {
@@ -36,6 +37,8 @@ export interface LocalSessionRuntime {
   scheduler?: SessionScheduler;
   /** Use zero only for deterministic tests; normal bots wait 300–800 ms. */
   botDelayMs?: number | { min: number; max: number };
+  /** How long an offering bot waits for a person's reply before it settles; defaults to 15 s. */
+  botTradePatienceMs?: number;
 }
 
 export interface LocalSessionCreate extends LocalSessionRuntime {
@@ -97,6 +100,7 @@ export class LocalSession implements GameSession<LocalSessionSave> {
   private readonly scheduler: SessionScheduler;
   private readonly entropy: Entropy;
   private readonly delay: { min: number; max: number };
+  private readonly tradePatienceMs: number;
   private readonly humans: Set<Seat>;
   private readonly botSeats: Set<Seat>;
   private readonly genesis: Input[];
@@ -130,6 +134,7 @@ export class LocalSession implements GameSession<LocalSessionSave> {
     this.entropy = runtime.entropy ?? browserEntropy;
     this.scheduler = runtime.scheduler ?? wallClock;
     this.delay = botDelay(runtime.botDelayMs);
+    this.tradePatienceMs = runtime.botTradePatienceMs ?? BOT_TRADE_PATIENCE_MS;
     for (const seat of botSeats)
       this.bots.set(seat, {
         bot: new RandomBot(engine),
@@ -563,7 +568,11 @@ export class LocalSession implements GameSession<LocalSessionSave> {
     const revision = this.game.log.length;
     if (this.botHandle !== null && this.botRevision === revision) return;
     this.cancelBot();
-    const delay = this.delay.min + randomIndex(this.entropy, this.delay.max - this.delay.min + 1);
+    const pace = this.delay.min + randomIndex(this.entropy, this.delay.max - this.delay.min + 1);
+    // An offering bot gives people time to answer before it settles the offer.
+    const delay = botAwaitsTradeReplies(this.game.state, this.game.getPending(), this.botSeats)
+      ? Math.max(pace, this.tradePatienceMs)
+      : pace;
     this.botRevision = revision;
     this.botHandle = this.scheduler.setTimeout(() => {
       this.botHandle = null;
@@ -578,10 +587,12 @@ export class LocalSession implements GameSession<LocalSessionSave> {
         return;
       }
       try {
-        const command = actor.bot.decide(
+        const command = decideHosted(
+          actor.bot,
           { state: this.game.state, seat: selected.seat, priv },
           selected,
           actor.rng,
+          this.engine,
         );
         const input: Input = { kind: 'command', seat: selected.seat, command };
         const valid = this.engine.validate(this.game.state, input);

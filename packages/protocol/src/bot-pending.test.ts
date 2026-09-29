@@ -1,6 +1,6 @@
 import type { Seat } from '@cp2p/engine';
 import { expect, test } from 'vitest';
-import { chooseBotPending } from './bot-pending.js';
+import { botAwaitsTradeReplies, chooseBotPending } from './bot-pending.js';
 
 const state = (activeSeat: Seat) => ({ turn: { activeSeat } });
 const player = (seat: Seat, ...allowed: string[]) => ({ kind: 'player' as const, seat, allowed });
@@ -12,12 +12,22 @@ test('waits for a mandatory human discard before choosing the active bot', () =>
   expect(chooseBotPending(state(0), [active, discard], new Set([0, 1]))).toBe(discard);
 });
 
-test('waits for mandatory human trade responses and selects a hosted bot response', () => {
-  const response = player(2, 'RESPOND_TRADE');
-  expect(chooseBotPending(state(0), [player(0, 'ROLL_DICE'), response], new Set([0]))).toBeNull();
-  expect(chooseBotPending(state(0), [player(0, 'ROLL_DICE'), response], new Set([0, 2]))).toBe(
-    response,
-  );
+test('an offering bot waits patiently for human replies, hosted bots answer at once', () => {
+  const active = player(0, 'END_TURN', 'CONFIRM_TRADE', 'CANCEL_TRADE');
+  const human = player(1, 'PROPOSE_TRADE', 'RESPOND_TRADE');
+  const bot = player(2, 'PROPOSE_TRADE', 'RESPOND_TRADE');
+  // A hosted bot's reply comes first even when a person earlier in seat order still owes one.
+  expect(chooseBotPending(state(0), [active, human, bot], new Set([0, 2]))).toBe(bot);
+  expect(botAwaitsTradeReplies(state(0), [active, human, bot], new Set([0, 2]))).toBe(false);
+  // With only the person left, the offering bot is chosen, flagged to wait before settling.
+  expect(chooseBotPending(state(0), [active, human], new Set([0, 2]))).toBe(active);
+  expect(botAwaitsTradeReplies(state(0), [active, human], new Set([0, 2]))).toBe(true);
+  // Once every reply is in it settles at the normal pace.
+  expect(botAwaitsTradeReplies(state(0), [active], new Set([0, 2]))).toBe(false);
+  // A person's offer: hosted bots answer, then the person decides; no bot acts meanwhile.
+  expect(chooseBotPending(state(1), [player(1, 'END_TURN'), bot], new Set([2]))).toBe(bot);
+  const other = player(3, 'PROPOSE_TRADE', 'RESPOND_TRADE');
+  expect(chooseBotPending(state(1), [player(1, 'END_TURN'), other], new Set([2]))).toBeNull();
 });
 
 test('ignores claim-only player pendings when selecting a normal bot action', () => {
