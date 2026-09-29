@@ -1,11 +1,6 @@
 {
   "mode": "tournament",
-  "bots": [
-    "normal",
-    "normal",
-    "normal",
-    "normal"
-  ],
+  "bots": ["normal", "normal", "normal", "normal"],
   "seed": 1601,
   "seatsRotation": false,
   "scenario": "four-isles",

@@ -1,11 +1,6 @@
 {
   "mode": "tournament",
-  "bots": [
-    "easy",
-    "normal",
-    "hard",
-    "random"
-  ],
+  "bots": ["easy", "normal", "hard", "random"],
   "seed": 1602,
   "seatsRotation": true,
   "iterationBudget": 6,
