@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { createBaseEngine, knightsExt } from '@cp2p/engine';
 import type { AttackReport, GameEvent, GameState, KnightPiece, Seat } from '@cp2p/engine';
-import { DICE_ROLL_DURATION_MS } from '@cp2p/renderer';
+import { DICE_SETTLE_MS } from '@cp2p/renderer';
 import { deriveKnightsEffects } from './effects';
 import { genesis } from './test-support';
 
@@ -65,7 +65,7 @@ describe('the barbarian ship', () => {
   test('the ship waits for the dice when the update carries a roll', () => {
     const rolled: GameEvent = { type: 'diceRolled', dice: [3, 4] };
     const [effect] = deriveKnightsEffects(genesis, change(genesis, { step: 1 }), [rolled], 3);
-    expect(effect).toMatchObject({ kind: 'barbarian-sail', delayMs: DICE_ROLL_DURATION_MS });
+    expect(effect).toMatchObject({ kind: 'barbarian-sail', delayMs: DICE_SETTLE_MS });
   });
 
   test('the landing is derived from the step falling back, with who held and what fell', () => {

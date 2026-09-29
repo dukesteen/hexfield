@@ -9,6 +9,11 @@
       "types": "./src/index.ts",
       "@cp2p/source": "./src/index.ts",
       "default": "./dist/index.js"
+    },
+    "./effectMotion": {
+      "types": "./src/effectMotion.ts",
+      "@cp2p/source": "./src/effectMotion.ts",
+      "default": "./dist/effectMotion.js"
     }
   },
   "scripts": {

@@ -1,7 +1,8 @@
 import { BARBARIAN_FIXTURE } from '@cp2p/engine';
 import type { GameEvent, GameState, Seat } from '@cp2p/engine';
 import type { VertexId } from '@cp2p/engine/geometry';
-import { DICE_ROLL_DURATION_MS } from '@cp2p/renderer';
+// The motion constants alone, so this module (and node-side checks) never loads the renderer.
+import { DICE_SETTLE_MS } from '@cp2p/renderer/effectMotion';
 import type { BoardEffect } from '@cp2p/renderer';
 import { knightsState } from './state';
 
@@ -32,8 +33,8 @@ export function deriveKnightsEffects(
   const now = knightsState(after);
   if (!was || !now) return [];
   const effects: BoardEffect[] = [];
-  // The ship waits for the dice to finish tumbling when this update carries a roll.
-  const delayMs = events.some((event) => event.type === 'diceRolled') ? DICE_ROLL_DURATION_MS : 0;
+  // The ship waits for the dice to settle when this update carries a roll.
+  const delayMs = events.some((event) => event.type === 'diceRolled') ? DICE_SETTLE_MS : 0;
   const fixture = after.board.fixtures?.find((item) => item.id === BARBARIAN_FIXTURE);
   if (fixture) {
     if (now.barbarians.step > was.barbarians.step)

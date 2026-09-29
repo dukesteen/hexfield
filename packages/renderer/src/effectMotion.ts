@@ -1,12 +1,15 @@
 import type { Point } from '@cp2p/engine/geometry';
+import type { BoardEffect } from './types.js';
 
 export const DICE_ROLL_DURATION_MS = 1400;
-export const PRODUCTION_TOKEN_PULSE_MS = 1200;
+/** The dice stop tumbling and show their final faces: production starts here. */
+export const DICE_SETTLE_MS = 600;
+export const PRODUCTION_TOKEN_PULSE_MS = 700;
 
-/** Pulse progress begins only after the dice have finished. */
+/** Pulse progress begins when the dice settle, alongside the production cards. */
 export function productionPulseProgress(elapsedMs: number): number | null {
-  if (elapsedMs < DICE_ROLL_DURATION_MS) return null;
-  return Math.min(1, (elapsedMs - DICE_ROLL_DURATION_MS) / PRODUCTION_TOKEN_PULSE_MS);
+  if (elapsedMs < DICE_SETTLE_MS) return null;
+  return Math.min(1, (elapsedMs - DICE_SETTLE_MS) / PRODUCTION_TOKEN_PULSE_MS);
 }
 
 export interface DiceMotion {
@@ -15,16 +18,18 @@ export interface DiceMotion {
   readonly scale: number;
 }
 
-/** A short settle animation with a readable final face. */
+const DICE_SETTLE = DICE_SETTLE_MS / DICE_ROLL_DURATION_MS;
+
+/** A short tumble that settles on a readable final face at `DICE_SETTLE_MS`, then fades. */
 export function diceMotion(progress: number): DiceMotion {
   const t = Math.max(0, Math.min(1, progress));
   const fadeIn = Math.min(1, t / 0.12);
   const fadeOut = Math.min(1, (1 - t) / 0.12);
-  const tumble = t < 0.55 ? Math.sin(t * 9 * Math.PI) * (1 - t / 0.55) : 0;
+  const tumble = t < DICE_SETTLE ? Math.sin(t * 9 * Math.PI) * (1 - t / DICE_SETTLE) : 0;
   return {
     alpha: Math.min(fadeIn, fadeOut),
     rotation: tumble * 0.2,
-    scale: 0.9 + t * 0.1,
+    scale: 0.9 + Math.min(1, t / DICE_SETTLE) * 0.1,
   };
 }
 
@@ -48,4 +53,16 @@ export function robberPosition(start: Point, end: Point, progress: number, arc: 
     x: start.x + (end.x - start.x) * eased,
     y: start.y + (end.y - start.y) * eased - Math.sin(Math.PI * t) * arc,
   };
+}
+
+export type EffectChannel = 'dice' | 'production' | 'robber' | 'pirate' | 'barbarian';
+
+/** Effects that show one thing on the board: only the newest of a channel runs. */
+export function effectChannel(kind: BoardEffect['kind']): EffectChannel | null {
+  if (kind === 'dice-roll') return 'dice';
+  if (kind === 'production-pulse') return 'production';
+  if (kind === 'robber-move') return 'robber';
+  if (kind === 'pirate-move') return 'pirate';
+  if (kind === 'barbarian-sail' || kind === 'barbarian-attack') return 'barbarian';
+  return null;
 }

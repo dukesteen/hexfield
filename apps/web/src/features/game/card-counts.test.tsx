@@ -187,17 +187,20 @@ test('reduced motion shows the true counts at once', () => {
   expect(vi.getTimerCount()).toBe(0);
 });
 
-test('rapid updates tick up one landing at a time and settle on the state', async () => {
+test('a new update lands the cards still in the air at once, then settles on the state', async () => {
   addTable();
   render(<View />);
   emit({ wool: 1, grain: 2, ore: 0 }, [card('first', {})]);
   await act(() => vi.advanceTimersByTime(200));
+  expect(shown()).toMatchObject({ grain: 1, total: 2 });
   emit({ wool: 1, grain: 3, ore: 1 }, [card('second', {}), card('ore', { face: 'ore' })]);
-  expect(shown()).toMatchObject({ grain: 1, ore: 0 });
-  await act(() => vi.advanceTimersByTime(336));
-  expect(shown()).toMatchObject({ grain: 2, ore: 0 });
-  await act(() => vi.advanceTimersByTime(200));
-  expect(shown()).toMatchObject({ grain: 3, ore: 1 });
+  // The first card is fast-forwarded: its count shows; the new ones are held.
+  expect(shown()).toMatchObject({ grain: 2, ore: 0, total: 3 });
+  expect(document.querySelector('.trade-card-flight')).toBeNull();
+  await frame();
+  expect(document.querySelectorAll('.trade-card-flight')).toHaveLength(2);
+  await act(() => vi.advanceTimersByTime(520));
+  expect(shown()).toMatchObject({ grain: 3, ore: 1, total: 5 });
   await act(() => vi.runAllTimers());
   expect(useCardHolds.getState().holds).toEqual([]);
 });

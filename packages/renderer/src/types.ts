@@ -175,6 +175,8 @@ export interface BoardRendererDiagnostics {
   readonly renderedFrames: number;
   readonly rebuiltLayers: number;
   readonly activeEffects: number;
+  /** The kind of each running effect, so a check can see that nothing stacks. */
+  readonly activeEffectKinds?: readonly BoardEffect['kind'][];
   readonly queuedDisposals: number;
 }
 

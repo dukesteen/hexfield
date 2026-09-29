@@ -55,8 +55,11 @@ import type { BoardTextures, SeafaringTextures } from './assets/terrainTextures.
 import { sameAppearance } from './appearance.js';
 import {
   DICE_ROLL_DURATION_MS,
+  DICE_SETTLE_MS,
   PRODUCTION_TOKEN_PULSE_MS,
+  type EffectChannel,
   diceMotion,
+  effectChannel,
   productionPulseProgress,
   productionTokenMotion,
   robberPosition,
@@ -702,9 +705,10 @@ export class PixiBoardRenderer implements BoardRenderer {
         if (oldest !== undefined) this.recentEffectIds.delete(oldest);
       }
       if (this.reducedMotion) continue;
-      if (effect.kind === 'robber-move') this.cancelRobberMove();
-      if (effect.kind === 'pirate-move') this.cancelPirateMove();
-      if (effect.kind === 'production-pulse') this.cancelProductionPulse();
+      // One of each: a newer roll, pulse, robber, pirate or barbarian move replaces the running
+      // one at once, so fast turns never stack two dice or two barbarian ships.
+      const channel = effectChannel(effect.kind);
+      if (channel) this.finishEffects(channel);
       const active = this.createEffect(effect);
       if (active)
         this.activeEffects.set(effect.id, {
@@ -735,6 +739,7 @@ export class PixiBoardRenderer implements BoardRenderer {
       renderedFrames: this.renderedFrames,
       rebuiltLayers: this.rebuiltLayers,
       activeEffects: this.activeEffects.size,
+      activeEffectKinds: [...this.activeEffects.values()].map((effect) => effect.kind),
       queuedDisposals: this.detachedChildren.length,
     };
   }
@@ -750,7 +755,7 @@ export class PixiBoardRenderer implements BoardRenderer {
       effect.kind === 'dice-roll'
         ? DICE_ROLL_DURATION_MS
         : effect.kind === 'production-pulse'
-          ? DICE_ROLL_DURATION_MS + PRODUCTION_TOKEN_PULSE_MS
+          ? DICE_SETTLE_MS + PRODUCTION_TOKEN_PULSE_MS
           : effect.kind === 'ship-move'
             ? SHIP_MOVE_MS
             : effect.kind === 'barbarian-sail'
@@ -1261,35 +1266,24 @@ export class PixiBoardRenderer implements BoardRenderer {
     if (this.pirateSprite) this.pirateSprite.visible = !active;
   }
 
-  private cancelPirateMove(): void {
-    for (const [id, effect] of this.activeEffects) {
-      if (effect.kind !== 'pirate-move') continue;
-      this.retireNode(effect.node);
-      this.activeEffects.delete(id);
-    }
-    this.setPirateMoveActive(false);
-  }
-
   private applyHiddenShips(): void {
     for (const [edge, sprite] of this.shipNodes) sprite.visible = !this.hiddenShips.has(edge);
   }
 
-  private cancelRobberMove(): void {
-    for (const [id, effect] of this.activeEffects) {
-      if (effect.kind !== 'robber-move') continue;
-      this.retireNode(effect.node);
-      this.activeEffects.delete(id);
-    }
-    this.setRobberMoveActive(false);
+  private cancelProductionPulse(): void {
+    this.finishEffects('production');
   }
 
-  private cancelProductionPulse(): void {
+  /** End every running effect on a channel at once, as if it had finished. */
+  private finishEffects(channel: EffectChannel): void {
     for (const [id, effect] of this.activeEffects) {
-      if (effect.kind !== 'production-pulse') continue;
+      if (effectChannel(effect.kind) !== channel) continue;
       effect.cleanup?.();
       this.retireNode(effect.node);
       this.activeEffects.delete(id);
     }
+    if (channel === 'robber') this.setRobberMoveActive(false);
+    if (channel === 'pirate') this.setPirateMoveActive(false);
   }
 
   private pointForHit(hit: BoardHit): Point | null {

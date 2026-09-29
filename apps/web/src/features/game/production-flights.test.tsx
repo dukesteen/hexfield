@@ -9,15 +9,20 @@ import {
   type BoardHit,
   type BoardRenderer,
   type BoardRendererDiagnostics,
-  DICE_ROLL_DURATION_MS,
-  PRODUCTION_TOKEN_PULSE_MS,
+  DICE_SETTLE_MS,
   type RenderModel,
   type ScreenPoint,
   getResourceCardUrl,
 } from '@cp2p/renderer';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
+import { useCardHolds } from './card-holds';
 import type { ProductionGain, ResourceFlight, VisualEffects } from './visual-effects';
-import { useVisualEffects } from './use-visual-effects.js';
+import {
+  PRODUCTION_LANDS_MS,
+  PRODUCTION_SPREAD_MS,
+  productionLaunchAt,
+  useVisualEffects,
+} from './use-visual-effects.js';
 
 const sessionMock = vi.hoisted(() => ({
   current: null as unknown,
@@ -45,6 +50,7 @@ afterEach(() => {
   document.querySelectorAll('.hand-dock, [data-seat-panel]').forEach((element) => element.remove());
   sessionMock.current = null;
   effectsMock.current = null;
+  useCardHolds.getState().clear();
   vi.useRealTimers();
 });
 
@@ -119,11 +125,13 @@ function setupSession() {
     },
   });
   sessionMock.current = makeSession();
+  let revision = 0;
   const emit = () => {
     if (!publish) throw new Error('Expected the visual-effects subscription');
+    revision += 1;
     act(() =>
       publish?.({
-        revision: 1,
+        revision,
         state: { config: { seats: [] } },
         events: [{ type: 'diceRolled' }],
         pending: [],
@@ -132,7 +140,21 @@ function setupSession() {
       }),
     );
   };
-  return { emit, makeSession };
+  /** An update without a roll. */
+  const publishRaw = (events: readonly unknown[]) => {
+    revision += 1;
+    act(() =>
+      publish?.({
+        revision,
+        state: { config: { seats: [] } },
+        events,
+        pending: [],
+        timers: [],
+        status: { kind: 'running' },
+      }),
+    );
+  };
+  return { emit, makeSession, publishRaw };
 }
 
 const point = { x: 10, y: 20 } satisfies ScreenPoint;
@@ -178,7 +200,7 @@ function EffectsView({ reducedMotion = false }: { reducedMotion?: boolean }) {
   );
 }
 
-test('waits for dice and production pulses, then flies each card to its matching destination', async () => {
+test('flies each card to its matching destination as the dice settle', async () => {
   const handImage = addHandCard('grain', rect(100, 120, 24, 36));
   addSeatPanel(0, rect(500, 500, 40, 40));
   addSeatPanel(1, rect(200, 240, 40, 20));
@@ -194,7 +216,7 @@ test('waits for dice and production pulses, then flies each card to its matching
   expect(screen.getByTestId('receipts').textContent).toContain('0:{"grain":1}');
   expect(document.querySelector('.resource-flight')).toBeNull();
 
-  await act(() => vi.advanceTimersByTime(DICE_ROLL_DURATION_MS + PRODUCTION_TOKEN_PULSE_MS - 1));
+  await act(() => vi.advanceTimersByTime(DICE_SETTLE_MS - 1));
   expect(document.querySelector('.resource-flight')).toBeNull();
 
   await act(() => vi.advanceTimersByTime(1));
@@ -207,7 +229,7 @@ test('waits for dice and production pulses, then flies each card to its matching
   expect(localFlight?.style.getPropertyValue('--flight-dy')).toBe('118px');
   expect(handImage.isConnected).toBe(true);
 
-  await act(() => vi.advanceTimersByTime(139));
+  await act(() => vi.advanceTimersByTime(69));
   expect(document.querySelectorAll('.resource-flight')).toHaveLength(1);
   await act(() => vi.advanceTimersByTime(1));
   const otherFlight = [...document.querySelectorAll<HTMLElement>('.resource-flight')].find(
@@ -227,7 +249,7 @@ test('scrolls a clipped revealed hand card into view before falling back to its 
   render(<EffectsView />);
 
   emit();
-  await act(() => vi.advanceTimersByTime(DICE_ROLL_DURATION_MS + PRODUCTION_TOKEN_PULSE_MS));
+  await act(() => vi.advanceTimersByTime(DICE_SETTLE_MS));
   expect(scrollIntoView).toHaveBeenCalledWith({
     behavior: 'smooth',
     block: 'nearest',
@@ -262,9 +284,60 @@ test.each(['skip', 'reduced motion', 'session replacement', 'unmount'] as const)
     if (reason === 'unmount') view.unmount();
 
     expect(vi.getTimerCount()).toBe(0);
-    await act(() =>
-      vi.advanceTimersByTime(DICE_ROLL_DURATION_MS + PRODUCTION_TOKEN_PULSE_MS + 350),
-    );
+    await act(() => vi.advanceTimersByTime(DICE_SETTLE_MS + PRODUCTION_SPREAD_MS + 350));
     expect(document.querySelector('.resource-flight')).toBeNull();
   },
 );
+
+test('a roll pays out within 1.2 s of the dice settling, however many cards fly', () => {
+  for (const total of [1, 2, 5, 12, 30]) {
+    const last = productionLaunchAt(total - 1, total, true);
+    expect(productionLaunchAt(0, total, true)).toBe(DICE_SETTLE_MS);
+    expect(last - DICE_SETTLE_MS).toBeLessThanOrEqual(PRODUCTION_SPREAD_MS);
+    expect(last - DICE_SETTLE_MS + PRODUCTION_LANDS_MS).toBeLessThanOrEqual(1200);
+  }
+  // Cards that come without a roll (a setup payout) fly at once.
+  expect(productionLaunchAt(0, 1, false)).toBe(0);
+});
+
+test('a new roll lands the cards still in the air at once and starts its own', async () => {
+  addHandCard('grain', rect(100, 120, 24, 36));
+  addSeatPanel(0, rect(500, 500, 40, 40));
+  setEffects([flight('first-grain', 0, 'grain'), flight('first-wool', 0, 'wool')]);
+  const { emit } = setupSession();
+  render(<EffectsView />);
+
+  emit();
+  await act(() => vi.advanceTimersByTime(DICE_SETTLE_MS + 100));
+  expect(document.querySelectorAll('.resource-flight')).toHaveLength(2);
+  expect(useCardHolds.getState().holds.map((hold) => hold.id)).toEqual([
+    'first-grain:in',
+    'first-wool:in',
+  ]);
+
+  // The next roll arrives mid-flight: the first cards land now, the new ones wait for its dice.
+  setEffects([flight('second-ore', 0, 'ore')]);
+  emit();
+  expect(document.querySelector('.resource-flight')).toBeNull();
+  expect(useCardHolds.getState().holds.map((hold) => hold.id)).toEqual(['second-ore:in']);
+  await act(() => vi.advanceTimersByTime(DICE_SETTLE_MS));
+  expect(document.querySelectorAll('.resource-flight')).toHaveLength(1);
+  await act(() => vi.advanceTimersByTime(PRODUCTION_LANDS_MS));
+  // Every count has converged on the state.
+  expect(useCardHolds.getState().holds).toEqual([]);
+  await act(() => vi.runAllTimers());
+  expect(vi.getTimerCount()).toBe(0);
+});
+
+test('an update with no cards leaves production in the air', async () => {
+  addHandCard('grain', rect(100, 120, 24, 36));
+  setEffects([flight('grain', 0, 'grain')]);
+  const { emit, publishRaw } = setupSession();
+  render(<EffectsView />);
+  emit();
+  await act(() => vi.advanceTimersByTime(DICE_SETTLE_MS + 100));
+  setEffects([]);
+  publishRaw([{ type: 'roadBuilt' }]);
+  expect(document.querySelectorAll('.resource-flight')).toHaveLength(1);
+  expect(useCardHolds.getState().holds).toHaveLength(1);
+});

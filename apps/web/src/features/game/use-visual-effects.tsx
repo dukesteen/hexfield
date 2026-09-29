@@ -2,12 +2,7 @@ import { useCallback, useEffect, useRef, useState, type CSSProperties } from 're
 import { RESOURCES, isBaseResource, type GameState, type Resource, type Seat } from '@cp2p/engine';
 import type { GameSession } from '@cp2p/protocol';
 import type { BoardRenderer } from '@cp2p/renderer';
-import {
-  DICE_ROLL_DURATION_MS,
-  PRODUCTION_TOKEN_PULSE_MS,
-  getCommodityCardUrl,
-  getResourceCardUrl,
-} from '@cp2p/renderer';
+import { DICE_SETTLE_MS, getCommodityCardUrl, getResourceCardUrl } from '@cp2p/renderer';
 import { sessionForActions, useSessionStore } from '../../store/session-store';
 import type { CardEnd, CardFlight, HandView } from './card-flights';
 import { useCardHolds, type CountHold } from './card-holds';
@@ -37,8 +32,11 @@ interface CardFlightView {
 }
 
 /** Flight timings, matching the CSS animations: a card counts as landed when it reaches its slot. */
-const PRODUCTION_LANDS_MS = 1150;
-const PRODUCTION_FLIGHT_MS = 1400;
+export const PRODUCTION_LANDS_MS = 700;
+const PRODUCTION_FLIGHT_MS = 850;
+/** The gap between production cards taking off, and the most the whole batch may spread over. */
+export const PRODUCTION_STAGGER_MS = 70;
+export const PRODUCTION_SPREAD_MS = 350;
 const CARD_LANDS_MS = 520;
 const CARD_FLIGHT_MS = 650;
 const SCROLL_SETTLE_MS = 350;
@@ -152,9 +150,14 @@ function visibleCenter(element: HTMLElement): { x: number; y: number } | null {
 
 type Point = { x: number; y: number };
 
-/** When the nth production card of an update takes off: after the dice and the token pulse. */
-function launchAt(index: number): number {
-  return DICE_ROLL_DURATION_MS + PRODUCTION_TOKEN_PULSE_MS + index * 140;
+/**
+ * When the nth of `total` production cards takes off: as the dice settle (with the token pulse),
+ * staggered so the last one leaves within the spread however many cards a roll pays.
+ */
+export function productionLaunchAt(index: number, total: number, rolled: boolean): number {
+  const stagger =
+    total > 1 ? Math.min(PRODUCTION_STAGGER_MS, PRODUCTION_SPREAD_MS / (total - 1)) : 0;
+  return (rolled ? DICE_SETTLE_MS : 0) + Math.round(index * stagger);
 }
 
 function flightStyle(flight: { x: number; y: number; dx: number; dy: number }) {
@@ -421,10 +424,18 @@ export function useVisualEffects(
         update.revision,
         viewer,
       );
+      const rolled = update.events.some((event) => event.type === 'diceRolled');
+      if (rolled || cues.flights.length + cues.cardFlights.length > 0) {
+        // New cards never queue behind the last ones: whatever is still in the air lands at once.
+        cancelPendingFlights();
+        setFlights([]);
+        setCardFlights([]);
+      }
       if (cues.productionGains.length) addProductionGains(cues.productionGains);
       if (renderer && cues.board.length) renderer.playEffects(cues.board);
       if (reducedMotion) return;
       const now = Date.now();
+      const launchAt = (index: number) => productionLaunchAt(index, cues.flights.length, rolled);
       if (renderer)
         hold(
           cues.flights.map((flight, index) => ({

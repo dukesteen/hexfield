@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
   DICE_ROLL_DURATION_MS,
+  DICE_SETTLE_MS,
   PRODUCTION_TOKEN_PULSE_MS,
   diceMotion,
+  effectChannel,
   productionPulseProgress,
   productionTokenMotion,
   robberPosition,
@@ -35,13 +37,30 @@ describe('board effect motion', () => {
     expect(productionTokenMotion(1)).toBe(0);
   });
 
-  it('starts the token pulse after the dice and finishes before card flights', () => {
+  it('starts the token pulse as the dice settle and keeps it short', () => {
     expect(productionPulseProgress(0)).toBeNull();
-    expect(productionPulseProgress(DICE_ROLL_DURATION_MS - 1)).toBeNull();
-    expect(productionPulseProgress(DICE_ROLL_DURATION_MS)).toBe(0);
-    expect(productionPulseProgress(DICE_ROLL_DURATION_MS + PRODUCTION_TOKEN_PULSE_MS / 2)).toBe(
-      0.5,
-    );
-    expect(productionPulseProgress(DICE_ROLL_DURATION_MS + PRODUCTION_TOKEN_PULSE_MS)).toBe(1);
+    expect(productionPulseProgress(DICE_SETTLE_MS - 1)).toBeNull();
+    expect(productionPulseProgress(DICE_SETTLE_MS)).toBe(0);
+    expect(productionPulseProgress(DICE_SETTLE_MS + PRODUCTION_TOKEN_PULSE_MS / 2)).toBe(0.5);
+    expect(productionPulseProgress(DICE_SETTLE_MS + PRODUCTION_TOKEN_PULSE_MS)).toBe(1);
+    expect(DICE_SETTLE_MS + PRODUCTION_TOKEN_PULSE_MS).toBeLessThanOrEqual(DICE_ROLL_DURATION_MS);
+  });
+
+  it('shows the final faces, still, from the settle point on', () => {
+    const settled = DICE_SETTLE_MS / DICE_ROLL_DURATION_MS;
+    expect(diceMotion(settled / 2).rotation).not.toBe(0);
+    expect(diceMotion(settled).rotation).toBe(0);
+    expect(diceMotion(settled).alpha).toBe(1);
+    expect(diceMotion(settled).scale).toBe(1);
+  });
+
+  it('runs one effect per channel: dice, pulse, robber, pirate, and the barbarian ship', () => {
+    expect(effectChannel('dice-roll')).toBe('dice');
+    expect(effectChannel('production-pulse')).toBe('production');
+    expect(effectChannel('barbarian-sail')).toBe('barbarian');
+    expect(effectChannel('barbarian-attack')).toBe('barbarian');
+    expect(effectChannel('robber-move')).toBe('robber');
+    expect(effectChannel('pirate-move')).toBe('pirate');
+    expect(effectChannel('piece-pop')).toBeNull();
   });
 });

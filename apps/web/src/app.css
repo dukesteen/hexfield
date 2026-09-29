@@ -579,7 +579,7 @@ input[type='checkbox'] {
   display: block;
   transform-origin: center;
   will-change: transform, opacity;
-  animation: resource-flight 1400ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  animation: resource-flight 850ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
   filter: drop-shadow(0 4px 8px #3d2f3540);
 }
 .resource-flight img {
