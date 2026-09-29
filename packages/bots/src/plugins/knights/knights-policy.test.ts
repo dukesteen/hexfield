@@ -101,7 +101,7 @@ describe('knights policy', () => {
     const graph = buildBoardGraph(base.board.hexes);
     const [city, knight, other] = [graph.vertexIds[0], graph.vertexIds[20], graph.vertexIds[40]];
     if (!city || !knight || !other) throw new Error('Board too small');
-    const board = {
+    const board: GameState['board'] = {
       ...base.board,
       buildings: [
         { vertex: city, seat: 0, kind: 'city' as const },
@@ -129,7 +129,7 @@ describe('knights policy', () => {
     const levels = knightsExt(base).improvements.map((item, seat) =>
       seat === 0 ? { ...item, science: 3 } : item,
     );
-    const board = {
+    const board: GameState['board'] = {
       ...base.board,
       buildings: [
         { vertex: city, seat: 0, kind: 'city' as const },
@@ -160,7 +160,7 @@ describe('knights policy', () => {
     const vertices = new Set(
       hexes.flatMap((hex) => graph.hexVertices[graph.hexIndex[hex] ?? -1] ?? []),
     );
-    const board = {
+    const board: GameState['board'] = {
       ...base.board,
       buildings: [...vertices].map((vertex) => ({ vertex, seat: 0, kind: 'city' as const })),
     };
@@ -189,7 +189,7 @@ describe('knights policy', () => {
     const graph = buildBoardGraph(base.board.hexes);
     const vertex = graph.vertexIds[30];
     if (!vertex) throw new Error('Board too small');
-    const board = {
+    const board: GameState['board'] = {
       ...base.board,
       buildings: [{ vertex, seat: 0, kind: 'settlement' as const }],
     };
