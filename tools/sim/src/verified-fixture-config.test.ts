@@ -42,7 +42,7 @@ test('a seafaring with knights scenario starts a verified game with the progress
     if (!decks.ok) throw new Error(decks.error.message);
     const ids = decks.value.map((deck) => deck.deckId);
     expect(ids.filter((id) => id.startsWith('progress')).length).toBe(3);
-    // No combined scenario has fog (C&K rule 12), so no fog stack is committed.
+    // New Horizons has no fog, so no fog stack is committed (fog-knights-decks.test.ts has both).
     expect(ids.some((id) => id.startsWith('fog-'))).toBe(false);
     expect(fixture.mastersForAudit()).toHaveLength(4);
   } finally {
