@@ -75,6 +75,8 @@ function foggyAndProgressive(engine: Engine): Engine {
 
 const master = (seat: Seat): Uint8Array => scalarToBytes(BigInt(29 + seat));
 
+const HEAVY = process.env.CP2P_HEAVY_TESTS === '1';
+
 const yieldTask = () => new Promise<void>((resolve) => setImmediate(resolve));
 
 describe('Fogbound with knights over the verified deck ceremony', () => {
@@ -96,44 +98,51 @@ describe('Fogbound with knights over the verified deck ceremony', () => {
     expect(certified.state.ext.seafaring).toMatchObject({ fog: null });
   }, 300_000);
 
-  test('one verified game draws a fog tile in public and progress cards in private', async () => {
-    const fixture = await createTerminalAuditFixture({
-      config,
-      simulationSeed: 5,
-      humanCount: 2,
-      prioritizeDevBuy: false,
-      wrapEngine: foggyAndProgressive,
-      maxElapsedMs: 1_500_000,
-      maxSteps: 600,
-      yieldTask,
-      stopWhen: (state) => drawnFrom(state, FOG_DECKS) > 0 && drawnFrom(state, PROGRESS_DECKS) > 0,
-    });
-    const payload = fixture.genesisEntry.payload;
-    if (payload.kind !== 'genesis') throw new Error('Missing genesis payload');
-    const decks = genesisDeckDefinitions(payload.genesis);
-    if (!decks.ok) throw new Error(decks.error.message);
-    expect(decks.value.map((deck) => deck.deckId).toSorted()).toEqual(
-      [...FOG_DECKS, ...PROGRESS_DECKS].toSorted(),
-    );
-    const state = fixture.finalState;
-    expect(drawnFrom(state, FOG_DECKS)).toBeGreaterThan(0);
-    expect(drawnFrom(state, PROGRESS_DECKS)).toBeGreaterThan(0);
-    // The fog tiles are public: the first fog hexes now show a tile from the stack.
-    const fog = new Set(
-      (config.board?.hexes ?? []).filter((hex) => hex.terrain === 'fog').map((hex) => hex.id),
-    );
-    const shown = state.board.hexes.filter((hex) => fog.has(hex.id) && hex.terrain !== 'fog');
-    expect(shown.length).toBeGreaterThanOrEqual(2);
-    for (const hex of shown)
-      expect(Reflect.get(FOGBOUND_FOG.terrains, hex.terrain)).toBeGreaterThan(0);
-    // Every certified entry replays under the same rules.
-    const replay = replayCertifiedPrefix(
-      fixture.genesisEntry,
-      fixture.entries,
-      fixture.engine,
-      fixture.policy,
-    );
-    if (!replay.ok) throw new Error(replay.error.message);
-    expect(replay.value.context.log.state.decks).toEqual(state.decks);
-  }, 1_800_000);
+  // A verified game through live peer sessions takes about a minute on a loaded machine, so it is an
+  // opt-in acceptance run: `CP2P_HEAVY_TESTS=1 pnpm test tools/sim/src/fog-knights-decks.test.ts`.
+  test.runIf(HEAVY)(
+    'one verified game draws a fog tile in public and progress cards in private',
+    async () => {
+      const fixture = await createTerminalAuditFixture({
+        config,
+        simulationSeed: 5,
+        humanCount: 2,
+        prioritizeDevBuy: false,
+        wrapEngine: foggyAndProgressive,
+        maxElapsedMs: 1_500_000,
+        maxSteps: 600,
+        yieldTask,
+        stopWhen: (state) =>
+          drawnFrom(state, FOG_DECKS) > 0 && drawnFrom(state, PROGRESS_DECKS) > 0,
+      });
+      const payload = fixture.genesisEntry.payload;
+      if (payload.kind !== 'genesis') throw new Error('Missing genesis payload');
+      const decks = genesisDeckDefinitions(payload.genesis);
+      if (!decks.ok) throw new Error(decks.error.message);
+      expect(decks.value.map((deck) => deck.deckId).toSorted()).toEqual(
+        [...FOG_DECKS, ...PROGRESS_DECKS].toSorted(),
+      );
+      const state = fixture.finalState;
+      expect(drawnFrom(state, FOG_DECKS)).toBeGreaterThan(0);
+      expect(drawnFrom(state, PROGRESS_DECKS)).toBeGreaterThan(0);
+      // The fog tiles are public: the first fog hexes now show a tile from the stack.
+      const fog = new Set(
+        (config.board?.hexes ?? []).filter((hex) => hex.terrain === 'fog').map((hex) => hex.id),
+      );
+      const shown = state.board.hexes.filter((hex) => fog.has(hex.id) && hex.terrain !== 'fog');
+      expect(shown.length).toBeGreaterThanOrEqual(2);
+      for (const hex of shown)
+        expect(Reflect.get(FOGBOUND_FOG.terrains, hex.terrain)).toBeGreaterThan(0);
+      // Every certified entry replays under the same rules.
+      const replay = replayCertifiedPrefix(
+        fixture.genesisEntry,
+        fixture.entries,
+        fixture.engine,
+        fixture.policy,
+      );
+      if (!replay.ok) throw new Error(replay.error.message);
+      expect(replay.value.context.log.state.decks).toEqual(state.decks);
+    },
+    1_800_000,
+  );
 });
