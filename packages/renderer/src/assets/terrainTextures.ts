@@ -116,7 +116,6 @@ import token6Url from './redesign/token-6.svg?no-inline';
 import token8Url from './redesign/token-8.svg?no-inline';
 import token9Url from './redesign/token-9.svg?no-inline';
 import turnMarkerUrl from './redesign/turn-marker.svg?no-inline';
-import fixtureBarbarianTrackUrl from './redesign/fixture-barbarian-track.svg?no-inline';
 import sfShipBlack1Url from './redesign/sf-ship-black-1.svg?no-inline';
 import sfShipBlack2Url from './redesign/sf-ship-black-2.svg?no-inline';
 import sfShipBlack3Url from './redesign/sf-ship-black-3.svg?no-inline';
@@ -169,7 +168,6 @@ const ART: Readonly<Record<string, string>> = {
   'board-background': boardBackgroundUrl,
   'board-preview': boardPreviewUrl,
   'board-underlay': boardUnderlayUrl,
-  'fixture-barbarian-track': fixtureBarbarianTrackUrl,
   'card-back': cardBackUrl,
   'card-brick': cardBrickUrl,
   'card-grain': cardGrainUrl,
@@ -364,8 +362,6 @@ export interface BoardTextures {
   readonly robber: Texture;
   readonly dice: readonly [Texture, Texture, Texture, Texture, Texture, Texture];
   readonly underlay: Texture;
-  /** Built-in fixture art keyed by `RenderFixture.art`. */
-  readonly fixtures: Readonly<Record<string, Texture>>;
 }
 
 /** Seafaring art, loaded on demand for boards that use it. Ship index 0 to 5 is variant 1 to 6. */
@@ -382,9 +378,6 @@ export const SHIP_ART_SIZE = { width: 40, height: 38 } as const;
 export const PIRATE_ART_SIZE = { width: 84, height: 80 } as const;
 export const SHIP_VARIANTS = 6;
 const ART_COLORS: readonly ArtColor[] = ['blue', 'orange', 'green', 'red', 'black', 'white'];
-
-/** Authored size of the two-hex fixture art: two pointy-top hexes joined east to west. */
-export const FIXTURE_ART_SIZE = { width: 289, height: 174 } as const;
 
 export function getResourceIconUrl(resource: Resource): string {
   return artUrl(`icon-${resource}`);
@@ -565,20 +558,6 @@ export async function loadBoardTextures(
     1120,
     1040,
   );
-  add(
-    'fixture-barbarian-track',
-    FIXTURE_ART_SIZE.width,
-    FIXTURE_ART_SIZE.height,
-    rasterResolution(
-      devicePixelRatio,
-      maxPixelRatio,
-      maxZoom,
-      hexSize * 2 * Math.sqrt(3),
-      hexSize * 2,
-      FIXTURE_ART_SIZE.width,
-      FIXTURE_ART_SIZE.height,
-    ),
-  );
   add('board-underlay', 1120, 1040, frameResolution);
   const loaded = new Map(
     await Promise.all([...requests].map(async ([key, request]) => [key, await request] as const)),
@@ -636,7 +615,6 @@ export async function loadBoardTextures(
     robber: get('robber'),
     dice: [get('die-1'), get('die-2'), get('die-3'), get('die-4'), get('die-5'), get('die-6')],
     underlay: get('board-underlay'),
-    fixtures: { 'barbarian-track': get('fixture-barbarian-track') },
   };
 }
 

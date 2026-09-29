@@ -10,6 +10,14 @@ import {
   ART_COLOR_NAMES,
   MERCHANT_ART,
   METROPOLIS_ART,
+  TRACK_AXES,
+  TRACK_LANDING_ART,
+  TRACK_LANDING_KEY,
+  TRACK_START_KEY,
+  TRACK_STEP_TOKENS,
+  TRACK_TILE_ART,
+  TRACK_TOKEN_ART,
+  TRACK_TOKEN_SCALE,
   WALLED_CITY_ART,
   WALLED_METROPOLIS_ART,
   knightArtKey,
@@ -17,6 +25,8 @@ import {
   merchantArtKey,
   metropolisArtKey,
   redDieKey,
+  trackStepKey,
+  trackTileKey,
   walledCityArtKey,
 } from '../knightsLayout.js';
 import { loadTexture, rasterResolution } from './terrainTextures.js';
@@ -29,7 +39,10 @@ export interface KnightsTextures {
 /** Display scale of every piece: art units are eighty to a hex radius. */
 const unit = (hexSize: number): number => hexSize / 80;
 
-/** Load every knight, wall, metropolis, merchant and ship texture once, for all six colours. */
+/**
+ * Load every knight, wall, metropolis, merchant and ship texture once, for all six colours, and
+ * the parts of the barbarian track.
+ */
 export async function loadKnightsTextures(
   devicePixelRatio: number,
   maxPixelRatio: number,
@@ -53,6 +66,11 @@ export async function loadKnightsTextures(
     );
   };
   add(BARBARIAN_SHIP_KEY, BARBARIAN_SHIP_ART, 0.8);
+  for (const axis of TRACK_AXES) add(trackTileKey(axis), TRACK_TILE_ART[axis]);
+  add(TRACK_START_KEY, TRACK_TOKEN_ART, TRACK_TOKEN_SCALE);
+  add(TRACK_LANDING_KEY, TRACK_LANDING_ART);
+  for (let step = 1; step <= TRACK_STEP_TOKENS; step += 1)
+    add(trackStepKey(step), TRACK_TOKEN_ART, TRACK_TOKEN_SCALE);
   // The dice pop up at screen size, not board size.
   for (const face of [1, 2, 3, 4, 5, 6]) {
     const key = redDieKey(face);

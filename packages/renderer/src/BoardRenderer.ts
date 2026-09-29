@@ -12,7 +12,6 @@ import {
 } from './fixtures.js';
 import { cameraPositionAtAnchor, clampCameraAxis, fitZoomToBounds } from './input/camera.js';
 import {
-  FIXTURE_ART_SIZE,
   PIRATE_ART_SIZE,
   SHIP_ART_SIZE,
   artColorFromNumber,
@@ -26,18 +25,21 @@ import {
   BARBARIAN_SHIP_ANCHOR,
   BARBARIAN_SHIP_ART,
   BARBARIAN_SHIP_KEY,
+  BARBARIAN_TRACK_ART,
+  DEFAULT_BARBARIAN_STEPS,
   KNIGHT_ANCHOR,
   KNIGHT_ART,
   eventDieKey,
   redDieKey,
   MERCHANT_ANCHOR,
   MERCHANT_ART,
-  TRACK_ART,
   barbarianStepPoint,
+  barbarianTrackLayout,
   decoratedCity,
   knightArtKey,
   merchantArtKey,
   metropolisArtKey,
+  routeDots,
   sailPosition,
   walledCityArtKey,
 } from './knightsLayout.js';
@@ -205,10 +207,11 @@ function needsSeafaringArt(model: RenderModel): boolean {
   );
 }
 
-/** True when a model draws knights, walls, metropolises, the merchant or the barbarian ship. */
+/** True when a model draws knights, walls, metropolises, the merchant or the barbarian track. */
 function needsKnightsArt(model: RenderModel): boolean {
   return (
     model.knights !== undefined ||
+    (model.fixtures ?? []).some((fixture) => fixture.art === BARBARIAN_TRACK_ART) ||
     model.buildings.some((building) => building.wall === true || building.metropolis !== undefined)
   );
 }
@@ -505,8 +508,10 @@ export class PixiBoardRenderer implements BoardRenderer {
     ]);
     this.drawChanged('fixtures', [
       model.fixtures ?? [],
+      model.knights?.barbarians?.steps ?? null,
       this.pluginSlices('fixtures'),
       this.appearance.theme,
+      this.knightsArt !== null,
     ]);
     this.drawChanged('modulePieces', [this.pluginSlices('pieces'), this.appearance.theme]);
     this.drawChanged('moduleOverlay', [this.pluginSlices('overlay'), this.appearance.theme]);
@@ -986,8 +991,9 @@ export class PixiBoardRenderer implements BoardRenderer {
     }
     if (effect.kind === 'barbarian-sail') {
       const fixture = this.model?.fixtures?.find((candidate) => candidate.id === effect.fixture);
-      const sprite = this.barbarianShipSprite();
+      const sprite = fixture ? this.barbarianShipSprite(fixture) : null;
       if (!fixture || !sprite) return null;
+      const steps = this.barbarianSteps(fixture);
       node.addChild(sprite);
       this.layers.effects.addChild(node);
       this.setBarbarianHidden(true);
@@ -1002,6 +1008,7 @@ export class PixiBoardRenderer implements BoardRenderer {
             effect.fromStep,
             effect.toStep,
             (progress * duration - (effect.delayMs ?? 0)) / BARBARIAN_SAIL_MS,
+            steps,
           );
           if (at) sprite.position.set(at.x, at.y);
           return progress >= 1;
@@ -1097,11 +1104,13 @@ export class PixiBoardRenderer implements BoardRenderer {
     readonly cleanup?: () => void;
   } | null {
     const fixture = this.model?.fixtures?.find((candidate) => candidate.id === effect.fixture);
-    const sprite = this.barbarianShipSprite();
+    const sprite = fixture ? this.barbarianShipSprite(fixture) : null;
     if (!fixture || !sprite) return null;
-    const landing = TRACK_ART.points.length - 1;
+    const landing = this.barbarianSteps(fixture);
     const hexSize = this.hexSize;
-    const impact = barbarianStepPoint(fixture, hexSize, landing);
+    const impact = barbarianStepPoint(fixture, hexSize, landing, landing);
+    // The ship faces the island on the way in and home on the way back.
+    const inbound = sprite.scale.x;
     if (!impact) return null;
     const pillaged = effect.outcome === 'pillaged';
     const blast = new Graphics();
@@ -1129,7 +1138,15 @@ export class PixiBoardRenderer implements BoardRenderer {
           Math.max(0, (overall * duration - (effect.delayMs ?? 0)) / BARBARIAN_ATTACK_MS),
         );
         if (progress < SAIL_END) {
-          const at = sailPosition(fixture, hexSize, effect.fromStep, landing, progress / SAIL_END);
+          const at = sailPosition(
+            fixture,
+            hexSize,
+            effect.fromStep,
+            landing,
+            progress / SAIL_END,
+            landing,
+          );
+          sprite.scale.x = inbound;
           if (at) sprite.position.set(at.x, at.y);
         } else if (progress < BLOW_END) {
           const local = (progress - SAIL_END) / (BLOW_END - SAIL_END);
@@ -1155,7 +1172,8 @@ export class PixiBoardRenderer implements BoardRenderer {
           }
         } else {
           const local = (progress - BLOW_END) / (1 - BLOW_END);
-          const at = sailPosition(fixture, hexSize, landing, 0, local);
+          const at = sailPosition(fixture, hexSize, landing, 0, local, landing);
+          sprite.scale.x = -inbound;
           if (at) sprite.position.set(at.x, at.y);
           sprite.alpha = 1;
         }
@@ -1822,15 +1840,13 @@ export class PixiBoardRenderer implements BoardRenderer {
       if (name === 'fixtures')
         for (const fixture of model.fixtures ?? []) {
           const art = this.fixtureArt[fixture.art];
-          const texture = this.textures.fixtures[fixture.art];
-          layer.addChild(
-            art
-              ? art(fixture, context)
-              : texture
-                ? this.fixtureSprite(fixture, texture)
-                : drawDefaultFixture(fixture, this.hexSize, context.theme),
-            drawFixtureOutline(fixture, this.hexSize),
-          );
+          if (art) layer.addChild(art(fixture, context));
+          else if (fixture.art === BARBARIAN_TRACK_ART) {
+            // Until the knights art is in, the cells show the sea underlay and the outline.
+            const track = this.barbarianTrack(fixture);
+            if (track) layer.addChild(track);
+          } else layer.addChild(drawDefaultFixture(fixture, this.hexSize, context.theme));
+          layer.addChild(drawFixtureOutline(fixture, this.hexSize));
         }
       const band =
         name === 'fixtures' ? 'fixtures' : name === 'modulePieces' ? 'pieces' : 'overlay';
@@ -2050,7 +2066,8 @@ export class PixiBoardRenderer implements BoardRenderer {
     return sprite;
   }
 
-  private barbarianShipSprite(): Sprite | null {
+  /** The upright barbarian ship, its bow towards the island of `fixture`. */
+  private barbarianShipSprite(fixture: RenderFixture): Sprite | null {
     const texture = this.knightsArt?.get(BARBARIAN_SHIP_KEY);
     if (!texture) return null;
     const unit = (this.hexSize / 80) * 0.8;
@@ -2058,6 +2075,8 @@ export class PixiBoardRenderer implements BoardRenderer {
     sprite.anchor.set(BARBARIAN_SHIP_ANCHOR.x, BARBARIAN_SHIP_ANCHOR.y);
     sprite.width = BARBARIAN_SHIP_ART.width * unit;
     sprite.height = BARBARIAN_SHIP_ART.height * unit;
+    const layout = barbarianTrackLayout(fixture, this.hexSize, this.barbarianSteps(fixture));
+    if (layout?.shipFacesWest) sprite.scale.x = -sprite.scale.x;
     return sprite;
   }
 
@@ -2122,8 +2141,8 @@ export class PixiBoardRenderer implements BoardRenderer {
       ? model.fixtures?.find((candidate) => candidate.id === track.fixture)
       : null;
     if (track && fixture) {
-      const at = barbarianStepPoint(fixture, this.hexSize, track.step);
-      const sprite = this.barbarianShipSprite();
+      const at = barbarianStepPoint(fixture, this.hexSize, track.step, track.steps);
+      const sprite = this.barbarianShipSprite(fixture);
       if (at && sprite) {
         sprite.position.set(at.x, at.y);
         sprite.visible = !this.barbarianHidden;
@@ -2161,22 +2180,40 @@ export class PixiBoardRenderer implements BoardRenderer {
     layer.addChild(sprite);
   }
 
+  /** Steps of the barbarian track on `fixture`, as the model gives them. */
+  private barbarianSteps(fixture: RenderFixture): number {
+    const barbarians = this.model?.knights?.barbarians;
+    return barbarians?.fixture === fixture.id ? barbarians.steps : DEFAULT_BARBARIAN_STEPS;
+  }
+
   /**
-   * Two-hex art is authored east to west with its landing end on the right. Centre it on the
-   * footprint and rotate the landing end onto the anchor, next to the island.
+   * The barbarian track composed on its footprint: the joined sea tile for the footprint's axis,
+   * the dotted route, and the start, numbered steps and island as upright sprites along it.
    */
-  private fixtureSprite(fixture: RenderFixture, texture: Texture): Sprite {
-    const [anchor, outer] = fixtureCenters(fixture, this.hexSize);
-    const sprite = new Sprite(texture);
-    sprite.anchor.set(0.5);
-    // The art's hexes have radius 80 like every tile, so its width is 289 units of hex/80.
-    sprite.width = (FIXTURE_ART_SIZE.width * this.hexSize) / 80;
-    sprite.height = (sprite.width * FIXTURE_ART_SIZE.height) / FIXTURE_ART_SIZE.width;
-    if (anchor && outer) {
-      sprite.position.set((anchor.x + outer.x) / 2, (anchor.y + outer.y) / 2);
-      sprite.rotation = Math.atan2(anchor.y - outer.y, anchor.x - outer.x);
-    }
-    return sprite;
+  private barbarianTrack(fixture: RenderFixture): Container | null {
+    const art = this.knightsArt;
+    const layout = barbarianTrackLayout(fixture, this.hexSize, this.barbarianSteps(fixture));
+    if (!art || !layout) return null;
+    const track = new Container();
+    track.label = `fixture:${fixture.id}`;
+    const place = (piece: (typeof layout)['tile']): void => {
+      const texture = art.get(piece.key);
+      if (!texture) return;
+      const sprite = new Sprite(texture);
+      sprite.anchor.set(piece.anchor.x, piece.anchor.y);
+      sprite.position.set(piece.at.x, piece.at.y);
+      sprite.width = piece.width;
+      sprite.height = piece.height;
+      sprite.rotation = piece.rotation;
+      track.addChild(sprite);
+    };
+    place(layout.tile);
+    const unit = this.hexSize / 80;
+    const dots = new Graphics();
+    for (const dot of routeDots(layout.route, 6 * unit)) dots.circle(dot.x, dot.y, 1.1 * unit);
+    track.addChild(dots.fill({ color: 0xe9f7f8, alpha: 0.95 }));
+    for (const marker of layout.markers) place(marker);
+    return track;
   }
 
   /** The fixture under a client point, when a fixture handler is registered. */

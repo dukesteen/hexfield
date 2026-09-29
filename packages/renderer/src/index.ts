@@ -37,13 +37,8 @@ export {
   getWalledCityIconUrl,
 } from './assets/knightsIcons.js';
 export type { CommodityName, EventDieFace, GlyphName } from './assets/knightsIcons.js';
-export {
-  TRACK_ART,
-  barbarianStepPoint,
-  fixtureFrame,
-  fixturePoint,
-  sailPosition,
-} from './knightsLayout.js';
+export { barbarianStepPoint, barbarianTrackLayout, sailPosition } from './knightsLayout.js';
+export type { BarbarianTrackLayout, TrackPiece } from './knightsLayout.js';
 export { hexExtents, isLandTerrain, islandBoundarySegments, landIslands } from './boardShape.js';
 export { shipVariantForEdge } from './shipVariant.js';
 export type { ShipVariant } from './shipVariant.js';
