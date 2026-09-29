@@ -11,10 +11,12 @@ export function SpecialBuildBanner({ hints, presentation }: ModuleHudProps) {
   const { t } = useTranslation('game');
   const hint = hints.find((item) => item.module === 'five-six' && item.kind === 'special-build');
   if (!hint || typeof hint.seat !== 'number') return null;
+  // Cities & Knights has no development cards: its phase builds knights, walls and improvements.
+  const knights = hints.some((item) => item.module === 'knights');
   return (
     <div className="module-banner special-build-banner" role="status" aria-live="polite">
       <strong>{t('game:specialBuild', { name: playerName(presentation, hint.seat) })}</strong>
-      <span>{t('game:specialBuildHint')}</span>
+      <span>{knights ? t('game:specialBuildHintKnights') : t('game:specialBuildHint')}</span>
     </div>
   );
 }

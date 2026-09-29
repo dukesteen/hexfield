@@ -5,6 +5,7 @@ import { engineForConfig, exactResourceBounds, moduleSelection } from '@cp2p/eng
 import type { GameConfig, GameState, Seat } from '@cp2p/engine';
 import { deriveActionAvailability } from '../actions/availability';
 import { ModuleHud } from './ModuleHud';
+import { SpecialBuildBanner } from './five-six';
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
@@ -91,6 +92,23 @@ describe('five-six special build phase UI', () => {
   test('a banner names the seat in its special build phase', () => {
     render(<ModuleHud state={specialBuildState()} presentation={presentation} />);
     expect(screen.getByRole('status').textContent).toContain('game:specialBuild:P1');
+  });
+
+  test('a knights game names its own builds, since it has no development cards', () => {
+    const hints = [
+      { module: 'five-six', kind: 'special-build', seat: 1 },
+      { module: 'knights', kind: 'barbarians', step: 0 },
+    ];
+    render(
+      <SpecialBuildBanner
+        state={specialBuildState()}
+        hints={hints}
+        presentation={presentation}
+        renderer={null}
+        openFixture={() => undefined}
+      />,
+    );
+    expect(screen.getByRole('status').textContent).toContain('game:specialBuildHintKnights');
   });
 
   test('no banner outside the special build phase', () => {

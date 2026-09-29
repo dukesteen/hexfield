@@ -260,6 +260,7 @@
   "tradePanel": "Trade",
   "specialBuild": "Special build phase: {{name}}",
   "specialBuildHint": "Build or buy a development card. Trading and playing cards wait for your turn.",
+  "specialBuildHintKnights": "Build, or recruit, activate and promote knights, walls and city improvements. Trading and playing cards wait for your turn.",
   "shipsLeft": "Ships left: {{count}}",
   "moveShipOnce": "Free, once per turn",
   "choice": {
