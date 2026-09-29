@@ -1984,7 +1984,6 @@ test('real steals fly the stolen card between its hand slot and the other panel'
     if (!baseline.ok) throw new Error(`Steal prefix failed to restore: ${baseline.error.code}`);
     const baselineHand = baseline.value.getPrivate(0)?.hand;
     if (!baselineHand) throw new Error('Steal fixture has no human private hand');
-    const beforeHand = { ...baselineHand };
     const beforeEvents = baseline.value
       .getEvents()
       .filter((event) => event.type === 'resourceStolen').length;
@@ -2069,6 +2068,22 @@ test('real steals fly the stolen card between its hand slot and the other panel'
           if (document.readyState === 'loading')
             document.addEventListener('DOMContentLoaded', start, { once: true });
           else start();
+          // Keep the human hand as the steal left it; bots may move on before the test reads it.
+          const watch = window.setInterval(() => {
+            const hook: DevHook | undefined = Reflect.get(window, '__cp2p');
+            if (!hook) return;
+            window.clearInterval(watch);
+            let last = { ...hook.session.getPrivate(0)?.hand };
+            hook.session.subscribe((update) => {
+              const now = { ...hook.session.getPrivate(0)?.hand };
+              if (
+                !Reflect.has(window, '__stealHands') &&
+                update.events.some((event) => event.type === 'resourceStolen')
+              )
+                Reflect.set(window, '__stealHands', { before: last, after: now });
+              last = now;
+            });
+          }, 5);
         },
         { other: scenario.to === 0 ? scenario.from : scenario.to, pause: scenario.pauseForCapture },
       );
@@ -2103,18 +2118,21 @@ test('real steals fly the stolen card between its hand slot and the other panel'
         );
       }
       await expect
-        .poll(() =>
-          page.evaluate(() => {
-            const values: unknown = Reflect.get(window, '__stealCueRecords');
-            return Array.isArray(values) ? values.length : 0;
-          }),
+        .poll(
+          () =>
+            page.evaluate(() => {
+              const values: unknown = Reflect.get(window, '__stealCueRecords');
+              return Array.isArray(values) ? values.length : 0;
+            }),
+          { message: `${scenario.name} records one steal cue` },
         )
         .toBe(scenario.reducedMotion ? 0 : 1);
-      const afterHand = await page.evaluate(() => {
-        const hook: DevHook | undefined = Reflect.get(window, '__cp2p');
-        return hook?.session.getPrivate(0)?.hand ?? null;
-      });
-      if (!afterHand) throw new Error('The human hand is missing after the steal');
+      const hands = await page.evaluate(() => JSON.stringify(Reflect.get(window, '__stealHands')));
+      const {
+        before: beforeHand,
+        after: afterHand,
+      }: Record<string, Record<string, number>> = JSON.parse(hands ?? '{}');
+      if (!beforeHand || !afterHand) throw new Error('The human hand is missing around the steal');
       const moved = Object.keys(afterHand).filter(
         (kind) => (afterHand[kind] ?? 0) !== (beforeHand[kind] ?? 0),
       );

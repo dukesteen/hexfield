@@ -302,6 +302,11 @@ export function useVisualEffects(
   const [cardFlights, setCardFlights] = useState<CardFlightView[]>([]);
   const pendingFrames = useRef<Set<number>>(new Set());
   const pendingTimers = useRef<Set<number>>(new Set());
+  // Queued launches read the current renderer: a board that remounts must not drop cards in flight.
+  const rendererRef = useRef(renderer);
+  useEffect(() => {
+    rendererRef.current = renderer;
+  }, [renderer]);
   const cancelPendingFlights = useCallback(() => {
     for (const frame of pendingFrames.current) window.cancelAnimationFrame(frame);
     pendingFrames.current.clear();
@@ -446,7 +451,12 @@ export function useVisualEffects(
               release(`${flight.id}:in`);
               return;
             }
-            const from = renderer.getPixelPosition({ kind: 'hex', id: flight.fromHex });
+            const board = rendererRef.current;
+            if (!board) {
+              release(`${flight.id}:in`);
+              return;
+            }
+            const from = board.getPixelPosition({ kind: 'hex', id: flight.fromHex });
             setFlights((current) => [
               ...current,
               {
@@ -477,10 +487,9 @@ export function useVisualEffects(
           for (const flight of cues.cardFlights) launchCard(flight, false);
         });
     });
-    return () => {
-      unsubscribe();
-      cancelPendingFlights();
-    };
+    // Resubscribing (a new renderer) keeps what is already in the air; a new session, reduced
+    // motion, Skip and unmounting cancel it.
+    return unsubscribe;
   }, [addProductionGains, cancelPendingFlights, renderer, reducedMotion, session]);
 
   const skip = useCallback(() => {
