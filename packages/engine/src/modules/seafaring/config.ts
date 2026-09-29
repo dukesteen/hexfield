@@ -19,7 +19,8 @@ export interface FogOption {
 }
 
 /** `fixed` builds from `config.board`; `archipelago` generates the board at genesis from the seed. */
-export type SeafaringLayout = 'fixed' | 'archipelago';
+/** `archipelago-v2` also keeps every harbor on its own water hex; `archipelago` is kept so older games replay. */
+export type SeafaringLayout = 'fixed' | 'archipelago' | 'archipelago-v2';
 
 export interface SeafaringOptions {
   /** The pirate's starting sea hex, or null to start it off the board. */
@@ -109,5 +110,10 @@ export const SEAFARING_OPTIONS: readonly OptionSpec[] = [
         isCounts(Reflect.get(value, 'terrains')) &&
         isCounts(Reflect.get(value, 'tokens'))),
   },
-  { key: 'layout', type: 'enum', values: ['fixed', 'archipelago'], default: 'fixed' },
+  {
+    key: 'layout',
+    type: 'enum',
+    values: ['fixed', 'archipelago', 'archipelago-v2'],
+    default: 'fixed',
+  },
 ];

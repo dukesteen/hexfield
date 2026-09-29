@@ -70,6 +70,7 @@
     "stockHand": "{{count}} in hand",
     "stockBank": "{{count}} in bank",
     "inHand": "in hand",
+    "yourHand": "Your hand",
     "inBank": "in bank",
     "clearSide": "Clear {{side}}",
     "youGive": "You give",

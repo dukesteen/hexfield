@@ -189,7 +189,7 @@ interface CardSummaryProps {
   values: Counts;
 }
 
-/** Offer terms are already public; this component never reads a private hand. */
+/** A read-only row of the cards in `values`: public offer terms, or the viewer's own hand. */
 export function ResourceCardSummary({ label, values }: CardSummaryProps) {
   const { t } = useTranslation('rules');
   const labelId = useId();

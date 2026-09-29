@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { RESOURCES } from '@cp2p/engine';
 import type { Resource, ResourceCounts } from '@cp2p/engine';
-import { ResourceCardPicker } from '../trade/ResourceCard.js';
+import { ResourceCardPicker, ResourceCardSummary } from '../trade/ResourceCard.js';
 import { DialogFrame } from './DialogFrame.js';
 import { emptyCounts } from './resources.js';
 import type { CommandFormProps } from './types.js';
@@ -15,7 +15,7 @@ interface Props extends CommandFormProps {
 
 /** The selected two cards are a request; a short bank may pay fewer cards. */
 export function YearOfPlentyDialog(props: Props) {
-  const { legal, state, onSubmit, onCancel, slotId } = props;
+  const { legal, state, privateState, onSubmit, onCancel, slotId } = props;
   const { t } = useTranslation('rules');
   const [resources, setResources] = useState<ResourceCounts>(emptyCounts);
   const template = legal.templates.find(
@@ -95,6 +95,8 @@ export function YearOfPlentyDialog(props: Props) {
       {selected === 2 && validation === 'invalid' && (
         <p role="alert">{t('rules:validation.plenty')}</p>
       )}
+      {/* The dialog covers the hand on phones, so show what the seat already holds. */}
+      <ResourceCardSummary label={t('rules:trade.yourHand')} values={privateState.hand} />
     </DialogFrame>
   );
 }

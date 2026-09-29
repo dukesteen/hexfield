@@ -51,16 +51,6 @@ function record(value: unknown): value is Record<string, unknown> {
 }
 
 function eventSeats(event: GameEvent): number[] {
-  if (event.type === 'resourcesProduced' && record(event.bySeat)) {
-    return Object.entries(event.bySeat).flatMap(([seat, counts]) => {
-      const number = Number(seat);
-      return Number.isInteger(number) &&
-        record(counts) &&
-        RESOURCES.some((resource) => typeof counts[resource] === 'number' && counts[resource] > 0)
-        ? [number]
-        : [];
-    });
-  }
   if (event.type === 'resourceStolen' && typeof event.thief === 'number') return [event.thief];
   if (event.type === 'gameEnded' && typeof event.winner === 'number') return [event.winner];
   return (actorEvents.has(event.type) || KNIGHTS_ACTOR_EVENTS.has(event.type)) &&
@@ -93,15 +83,8 @@ function eventArt(event: GameEvent, color?: string): string[] {
       ? dice.map((face: number) => getDieUrl(face))
       : [neutralDiceUrl];
   }
-  if (event.type === 'resourcesProduced' && record(event.bySeat)) {
-    const bySeat = event.bySeat;
-    const resources = RESOURCES.filter((resource) =>
-      Object.values(bySeat).some(
-        (counts) => record(counts) && typeof counts[resource] === 'number' && counts[resource] > 0,
-      ),
-    );
-    return resources.length ? resources.map(getResourceIconUrl) : [getGameArtUrl('cardBack')];
-  }
+  // Production shows no seats or kinds, matching its log line.
+  if (event.type === 'resourcesProduced') return [getGameArtUrl('cardBack')];
   if (event.type === 'maritimeTrade') return [getGameArtUrl('bankTrade')];
   if (tradeEvents.has(event.type)) return [getGameArtUrl('playerTrade')];
   if (

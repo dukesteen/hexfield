@@ -70,12 +70,17 @@ function finalized(entries: Record<string, CommandHandler>): Record<string, Comm
   );
 }
 
+function layoutOf(config: GameConfig): unknown {
+  const options: unknown = config.options[SEAFARING_ID];
+  return typeof options === 'object' && options !== null
+    ? Reflect.get(options, 'layout')
+    : undefined;
+}
+
 /** True when genesis builds the board itself: the archipelago layout with no explicit board. */
 function generatesBoard(config: GameConfig): boolean {
-  const options: unknown = config.options[SEAFARING_ID];
-  const layout: unknown =
-    typeof options === 'object' && options !== null ? Reflect.get(options, 'layout') : undefined;
-  return layout === 'archipelago' && !config.board;
+  const layout = layoutOf(config);
+  return (layout === 'archipelago' || layout === 'archipelago-v2') && !config.board;
 }
 
 const specs = new WeakMap<BoardState, BoardShapeSpec>();
@@ -148,7 +153,10 @@ export function seafaringModule(): GameModule {
     }),
     buildBoard: (ctx, board) => {
       const generated = generatesBoard(ctx.config)
-        ? generateArchipelagoLayout(ctx.rng, archipelagoParamsFor(ctx.config.seats.length)).board
+        ? generateArchipelagoLayout(ctx.rng, {
+            ...archipelagoParamsFor(ctx.config.seats.length),
+            distinctHarborWaters: layoutOf(ctx.config) === 'archipelago-v2',
+          }).board
         : board;
       checkGenesis(ctx.config, generated);
       return { ...generated, ships: [] };

@@ -8,7 +8,7 @@ import type { SeafaringOptions } from './types.js';
  * home islands.
  */
 export const OPEN_SEA_OPTIONS: SeafaringOptions = Object.freeze({
-  layout: 'archipelago',
+  layout: 'archipelago-v2',
   pirateHex: null,
   islandBonus: Object.freeze({ vp: 1 }),
 });

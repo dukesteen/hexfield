@@ -15,7 +15,8 @@ import type { BoardHex, BoardState } from '../../core/state/types.js';
  * - the sea is one connected body, so every island can be reached by ship;
  * - no two adjacent land hexes share a token or both carry a red number (6 or 8), and the
  *   average pips of the five resources stay within one pip of each other;
- * - harbors sit on coastal edges, never share a vertex, and the pirate starts at sea.
+ * - harbors sit on coastal edges, never share a vertex (nor, with `distinctHarborWaters`, a water hex),
+ *   and the pirate starts at sea.
  */
 export interface ArchipelagoParams {
   /** Frame width and height in hexes (odd rows sit half a hex to the right). */
@@ -35,6 +36,8 @@ export interface ArchipelagoParams {
   readonly harbors: readonly string[];
   /** Layout attempts before giving up. */
   readonly maxAttempts: number;
+  /** No two harbors face the same water hex, so their piers never overlap. Off by default for replay stability. */
+  readonly distinctHarborWaters?: boolean;
 }
 
 const HARBOR_KINDS = [
@@ -416,6 +419,17 @@ export function pirateStartHex(hexes: readonly BoardHex[]): string {
   return must(best, 'sea hex').id;
 }
 
+/** The water hex a harbor edge faces (its pier and token are drawn there), or null off the board. */
+function harborWater(
+  graph: ReturnType<typeof buildBoardGraph>,
+  hexes: readonly BoardHex[],
+  edge: string,
+): string | null {
+  const byId = new Map(hexes.map((hex) => [hex.id, hex]));
+  const owners = graph.edgeHexes[graph.edgeIndex[edge] ?? -1] ?? [];
+  return owners.find((id) => !isLandTerrain(byId.get(id)?.terrain ?? 'sea')) ?? null;
+}
+
 /** Choose harbor edges: about half at home, the rest spread over the outer islands, no shared vertex. */
 function placeHarbors(
   rng: GenesisRandom,
@@ -423,6 +437,7 @@ function placeHarbors(
   islands: readonly Island[],
   homeId: string,
   kinds: readonly string[],
+  distinct: boolean,
 ): { edge: string; kind: string }[] | null {
   const graph = buildBoardGraph(hexes);
   const coast = coastalEdges(hexes);
@@ -454,6 +469,7 @@ function placeHarbors(
     }
   if (left > 0) return null;
   const used = new Set<string>();
+  const waters = new Set<string>();
   const picked: EdgeId[] = [];
   for (const index of order) {
     const mine: EdgeId[] = [];
@@ -462,6 +478,7 @@ function placeHarbors(
       const open = edges.filter(
         (edge) =>
           !mine.includes(edge) &&
+          !(distinct && waters.has(harborWater(graph, hexes, edge) ?? '')) &&
           must(graph.edgeVertices[must(graph.edgeIndex[edge], 'edge')], 'ends').every(
             (vertex) => !used.has(vertex),
           ),
@@ -484,6 +501,8 @@ function placeHarbors(
       mine.push(choice);
       for (const vertex of must(graph.edgeVertices[must(graph.edgeIndex[choice], 'edge')], 'ends'))
         used.add(vertex);
+      const water = harborWater(graph, hexes, choice);
+      if (water !== null) waters.add(water);
     }
     picked.push(...mine);
   }
@@ -545,8 +564,13 @@ export function archipelagoProblems(board: BoardState, params: ArchipelagoParams
   const graph = buildBoardGraph(board.hexes);
   const corners = new Set<string>();
   if (board.harbors.length !== params.harbors.length) problems.push('wrong harbor count');
+  const waters = new Set<string>();
   for (const { edge } of board.harbors) {
     if (!coast.has(edge)) problems.push(`${edge}: harbor not on a coastal edge`);
+    const water = harborWater(graph, board.hexes, edge);
+    if (params.distinctHarborWaters === true && water !== null && waters.has(water))
+      problems.push(`${edge}: harbors share ${water}`);
+    if (water !== null) waters.add(water);
     for (const vertex of graph.edgeVertices[graph.edgeIndex[edge] ?? -1] ?? []) {
       if (corners.has(vertex)) problems.push(`${edge}: harbors share ${vertex}`);
       corners.add(vertex);
@@ -586,6 +610,7 @@ export function generateArchipelagoLayout(
       detectIslands(shape),
       must(homeHexes[0], 'home hex'),
       params.harbors,
+      params.distinctHarborWaters === true,
     );
     if (!harbors) continue;
     for (let roll = 0; roll < TOKEN_ROLLS; roll++) {

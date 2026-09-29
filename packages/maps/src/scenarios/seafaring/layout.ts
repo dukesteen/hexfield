@@ -140,10 +140,22 @@ export function harborProblems(board: BoardState): string[] {
   const problems: string[] = [];
   const coast = new Set<string>(coastalEdges(board.hexes));
   const graph = buildBoardGraph(board.hexes);
+  const land = new Set(
+    board.hexes.filter((hex) => isLandTerrain(hex.terrain)).map((hex) => hex.id),
+  );
   const seen = new Set<string>();
+  const waters = new Set<string>();
   for (const { edge } of board.harbors) {
     const index = graph.edgeIndex[edge];
     if (index === undefined || !coast.has(edge)) problems.push(`${edge}: not a coastal edge`);
+    // Each harbor's pier and token sit in the water hex it faces, so two harbors must not share one.
+    const water = (index === undefined ? [] : (graph.edgeHexes[index] ?? [])).find(
+      (id) => !land.has(id),
+    );
+    if (water !== undefined) {
+      if (waters.has(water)) problems.push(`${edge}: faces ${water} with another harbor`);
+      waters.add(water);
+    }
     for (const vertex of index === undefined ? [] : (graph.edgeVertices[index] ?? [])) {
       if (seen.has(vertex)) problems.push(`${edge}: shares vertex ${vertex} with another harbor`);
       seen.add(vertex);

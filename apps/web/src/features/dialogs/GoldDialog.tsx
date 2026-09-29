@@ -4,7 +4,7 @@ import { RESOURCES } from '@cp2p/engine';
 import type { Resource, ResourceCounts } from '@cp2p/engine';
 import { getSeafaringIconUrl } from '@cp2p/renderer';
 import { goldRequest } from '../game/seafaring';
-import { ResourceCardPicker } from '../trade/ResourceCard.js';
+import { ResourceCardPicker, ResourceCardSummary } from '../trade/ResourceCard.js';
 import { DialogFrame } from './DialogFrame.js';
 import { emptyCounts } from './resources.js';
 import type { CommandFormProps } from './types.js';
@@ -16,7 +16,7 @@ import { ValidationChecking } from './ValidationChecking.js';
  * holds, in any mix the bank can still pay. The count comes from the gold phase, not the client.
  */
 export function GoldDialog(props: CommandFormProps) {
-  const { state, seat, playerLabel, onSubmit } = props;
+  const { state, seat, privateState, playerLabel, onSubmit } = props;
   const { t } = useTranslation('rules');
   const [cards, setCards] = useState<ResourceCounts>(emptyCounts);
   const request = goldRequest(state, seat);
@@ -75,6 +75,8 @@ export function GoldDialog(props: CommandFormProps) {
         onClear={() => setCards(emptyCounts)}
       />
       {hiddenBank && <p>{t('rules:gold.bankHidden')}</p>}
+      {/* The dialog covers the hand on phones, so show what the seat already holds. */}
+      <ResourceCardSummary label={t('rules:trade.yourHand')} values={privateState.hand} />
       {selected === request.count && validation === 'invalid' && (
         <p role="alert">{t('rules:validation.gold')}</p>
       )}
