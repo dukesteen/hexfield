@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { hexToPixel } from '@cp2p/engine/geometry';
-import { fixtureAnchorIds, fixtureBounds, hitTestFixture } from './fixtures.js';
+import { fixtureBounds, fixtureCellIds, hitTestFixture } from './fixtures.js';
 import type { RenderFixture } from './types.js';
 
 const track: RenderFixture = {
@@ -33,7 +33,7 @@ describe('fixture geometry', () => {
     expect(hitTestFixture(hexToPixel(0, 0, 10), [track], 10)).toBeNull();
   });
 
-  test('only the anchor replaces a sea tile', () => {
-    expect([...fixtureAnchorIds([track])]).toEqual(['h:0,-3']);
+  test('both footprint cells are covered by the art', () => {
+    expect([...fixtureCellIds([track])]).toEqual(['h:0,-3', 'h:0,-4']);
   });
 });

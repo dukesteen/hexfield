@@ -1,10 +1,14 @@
 import { Graphics } from 'pixi.js';
 import type { Point } from '@cp2p/engine/geometry';
 import { hexToPixel } from '@cp2p/engine/geometry';
+import { hexUnionLoops } from './boardShape.js';
 import type { RenderFixture } from './types.js';
 
 // Pixi Graphics.fill() is a drawing method; this rule's Array.fill suggestion is a false positive.
 /* oxlint-disable unicorn/no-array-fill-with-reference-type */
+
+/** The pale edge line drawn around every board tile. */
+export const TILE_EDGE = 0xf5f8f5;
 
 /** Pixel centres of a fixture's footprint cells, anchor first. */
 export function fixtureCenters(fixture: RenderFixture, hexSize: number): Point[] {
@@ -44,14 +48,9 @@ export function hitTestFixture(
   return null;
 }
 
-/** Hex ids replaced by fixture art. The sea tile is not drawn under an anchor. */
-export function fixtureAnchorIds(fixtures: readonly RenderFixture[]): Set<string> {
-  return new Set(
-    fixtures.flatMap((fixture) => {
-      const anchor = fixture.footprint[0];
-      return anchor ? [`h:${anchor.q},${anchor.r}`] : [];
-    }),
-  );
+/** Hex ids covered by fixture art. No sea tile is drawn on them, so the art shows. */
+export function fixtureCellIds(fixtures: readonly RenderFixture[]): Set<string> {
+  return new Set(fixtures.flatMap((fixture) => fixture.footprint.map(({ q, r }) => `h:${q},${r}`)));
 }
 
 function hexCorners(center: Point, size: number): number[] {
@@ -94,4 +93,14 @@ export function drawDefaultFixture(
     }
   }
   return graphics;
+}
+
+/**
+ * The outline of a fixture's footprint in the pale line every board tile has, so the fixture
+ * reads as tiles of the board. The line runs around the whole footprint, not between its cells.
+ */
+export function drawFixtureOutline(fixture: RenderFixture, hexSize: number): Graphics {
+  const graphics = new Graphics();
+  for (const loop of hexUnionLoops(fixture.footprint, hexSize)) graphics.poly(loop, true);
+  return graphics.stroke({ color: TILE_EDGE, width: 1.5 });
 }

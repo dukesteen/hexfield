@@ -5,8 +5,8 @@ import type { BoardGraph, EdgeId, HexId, Point, VertexId } from '@cp2p/engine/ge
 import { hitTestBoard } from './input/hitTest.js';
 import {
   drawDefaultFixture,
-  fixtureAnchorIds,
-  fixtureBounds,
+  drawFixtureOutline,
+  fixtureCellIds,
   fixtureCenters,
   hitTestFixture,
 } from './fixtures.js';
@@ -42,6 +42,7 @@ import {
   walledCityArtKey,
 } from './knightsLayout.js';
 import { hexExtents, islandBoundarySegments } from './boardShape.js';
+import { FRAME_GROWTH, drawBoardFrame } from './boardFrame.js';
 import { fogRevealShape } from './fogReveal.js';
 import { roadVariantForEdge } from './roadVariant.js';
 import { shipHeadings, shipVariantAmong, shipVariantForEdge } from './shipVariant.js';
@@ -111,8 +112,8 @@ const PREVIEW_CORNER = 0.12;
 const SHIP_WIDTH = 0.56;
 const PIRATE_WIDTH = 1.2;
 const PIRATE_ANCHOR_Y = 0.8;
-/** Extra water kept around an explicit-sea board and its scenery ring when fitting the camera. */
-const SEA_FIT_MARGIN = 0.1;
+/** Room kept around an explicit-sea board, its scenery ring and its frame when fitting the camera. */
+const SEA_FIT_MARGIN = 0.25;
 /** The smallest zoom a fit may pick, below the pinch floor, so a large board still fits whole. */
 const FIT_FLOOR_ZOOM = 0.1;
 const SHIP_MOVE_MS = 700;
@@ -461,6 +462,7 @@ export class PixiBoardRenderer implements BoardRenderer {
     this.drawChanged('background', [
       this.appearance.theme,
       model.hexes.map(({ q, r, terrain }) => ({ q, r, terrain })),
+      (model.fixtures ?? []).map((fixture) => fixture.footprint),
     ]);
     this.drawChanged('terrain', [model.hexes, model.fixtures ?? [], this.seafaring !== null]);
     this.drawChanged('harbors', [
@@ -1745,16 +1747,16 @@ export class PixiBoardRenderer implements BoardRenderer {
     const model = this.model;
     if (!model) return;
     if (name === 'background') {
+      // The frame follows every hex that is drawn: the board, its sea ring and fixture cells.
+      const fixtureCells = (model.fixtures ?? []).flatMap((fixture) => fixture.footprint);
+      layer.addChild(
+        drawBoardFrame([...model.hexes, ...this.waterCells(), ...fixtureCells], this.hexSize),
+      );
       if (this.isStandardFootprint()) {
-        const frame = new Sprite(this.textures.frame);
-        frame.anchor.set(0.5);
-        frame.width = this.hexSize * 14;
-        frame.height = this.hexSize * 13;
-        layer.addChild(frame);
         const underlay = new Sprite(this.textures.underlay);
         underlay.anchor.set(0.5);
-        underlay.width = frame.width;
-        underlay.height = frame.height;
+        underlay.width = this.hexSize * 14;
+        underlay.height = this.hexSize * 13;
         layer.addChild(underlay);
       } else {
         const underlay = new Graphics();
@@ -1771,16 +1773,26 @@ export class PixiBoardRenderer implements BoardRenderer {
         }
         layer.addChild(underlay);
       }
+      // Fixture cells are water under their art, like the sea ring they extend.
+      if (fixtureCells.length > 0) {
+        const underlay = new Graphics();
+        for (const { q, r } of fixtureCells)
+          underlay
+            .poly(hexCorners(hexToPixel(q, r, this.hexSize), this.hexSize * 1.01), true)
+            .fill({ color: 0x4d97ae });
+        layer.addChild(underlay);
+      }
     } else if (name === 'terrain') {
-      const anchors = fixtureAnchorIds(model.fixtures ?? []);
+      const covered = fixtureCellIds(model.fixtures ?? []);
       for (const { q, r, center } of this.waterCells()) {
-        if (anchors.has(`h:${q},${r}`)) continue;
+        if (covered.has(`h:${q},${r}`)) continue;
         const variant = this.terrainVariants.get(`h:${q},${r}`) ?? 1;
         const texture = this.textures.terrain.sea[variant - 1] ?? this.textures.terrain.sea[0];
         if (texture) this.drawTerrainTile(layer, center, texture);
       }
 
       for (const hex of model.hexes) {
+        if (hex.terrain === 'sea' && covered.has(hex.id)) continue;
         const center = hexToPixel(hex.q, hex.r, this.hexSize);
         if (hex.terrain === 'gold' || hex.terrain === 'fog') {
           const art = this.seafaring;
@@ -1817,6 +1829,7 @@ export class PixiBoardRenderer implements BoardRenderer {
               : texture
                 ? this.fixtureSprite(fixture, texture)
                 : drawDefaultFixture(fixture, this.hexSize, context.theme),
+            drawFixtureOutline(fixture, this.hexSize),
           );
         }
       const band =
@@ -2291,24 +2304,13 @@ export class PixiBoardRenderer implements BoardRenderer {
         maxY: this.hexSize * 6.5,
       };
     }
-    // Seafaring boards list their sea hexes. The scenery water ring around them is part of the
-    // picture, so the whole thing is fitted, not only the game hexes.
-    if (this.hasSeaHexes())
-      return hexExtents(
-        [...this.model.hexes, ...this.waterCells()],
-        this.hexSize,
-        this.hexSize * SEA_FIT_MARGIN,
-      );
-    const centers = [
-      ...this.model.hexes.map((hex) => hexToPixel(hex.q, hex.r, this.hexSize)),
-      ...this.waterCenters(),
-    ];
-    return {
-      minX: Math.min(...centers.map((point) => point.x)) - this.hexSize,
-      maxX: Math.max(...centers.map((point) => point.x)) + this.hexSize,
-      minY: Math.min(...centers.map((point) => point.y)) - this.hexSize,
-      maxY: Math.max(...centers.map((point) => point.y)) + this.hexSize,
-    };
+    // The scenery water ring and the wooden frame around it are part of the picture, so the
+    // whole thing is fitted, not only the game hexes. Seafaring boards keep a little more water.
+    return hexExtents(
+      [...this.model.hexes, ...this.waterCells()],
+      this.hexSize,
+      this.hexSize * (this.hasSeaHexes() ? SEA_FIT_MARGIN : FRAME_GROWTH),
+    );
   }
 
   private fitPixelBounds(): {
@@ -2320,7 +2322,11 @@ export class PixiBoardRenderer implements BoardRenderer {
     const board = this.boardPixelBounds();
     if (!board || !this.model) return null;
     let { minX, maxX, minY, maxY } = board;
-    const fixtures = fixtureBounds(this.model.fixtures ?? [], this.hexSize);
+    const fixtures = hexExtents(
+      (this.model.fixtures ?? []).flatMap((fixture) => fixture.footprint),
+      this.hexSize,
+      this.hexSize * FRAME_GROWTH,
+    );
     if (fixtures) {
       minX = Math.min(minX, fixtures.minX);
       maxX = Math.max(maxX, fixtures.maxX);

@@ -3,7 +3,6 @@ import type { Texture } from 'pixi.js';
 import type { Resource } from '@cp2p/engine';
 import type { DevelopmentCard } from '../types.js';
 import boardBackgroundUrl from './redesign/board-background.svg?no-inline';
-import boardFrameUrl from './redesign/board-frame.svg?no-inline';
 import boardPreviewUrl from './redesign/board-preview.svg?no-inline';
 import boardUnderlayUrl from './redesign/board-underlay.svg?no-inline';
 import cardBackUrl from './redesign/card-back.svg?no-inline';
@@ -168,7 +167,6 @@ import { KNIGHTS_ART } from './knightsArt.js';
 const ART: Readonly<Record<string, string>> = {
   ...KNIGHTS_ART,
   'board-background': boardBackgroundUrl,
-  'board-frame': boardFrameUrl,
   'board-preview': boardPreviewUrl,
   'board-underlay': boardUnderlayUrl,
   'fixture-barbarian-track': fixtureBarbarianTrackUrl,
@@ -365,7 +363,6 @@ export interface BoardTextures {
   readonly cities: Readonly<Record<ArtColor, Texture>>;
   readonly robber: Texture;
   readonly dice: readonly [Texture, Texture, Texture, Texture, Texture, Texture];
-  readonly frame: Texture;
   readonly underlay: Texture;
   /** Built-in fixture art keyed by `RenderFixture.art`. */
   readonly fixtures: Readonly<Record<string, Texture>>;
@@ -568,7 +565,6 @@ export async function loadBoardTextures(
     1120,
     1040,
   );
-  add('board-frame', 1120, 1040, frameResolution);
   add(
     'fixture-barbarian-track',
     FIXTURE_ART_SIZE.width,
@@ -639,7 +635,6 @@ export async function loadBoardTextures(
     cities,
     robber: get('robber'),
     dice: [get('die-1'), get('die-2'), get('die-3'), get('die-4'), get('die-5'), get('die-6')],
-    frame: get('board-frame'),
     underlay: get('board-underlay'),
     fixtures: { 'barbarian-track': get('fixture-barbarian-track') },
   };
