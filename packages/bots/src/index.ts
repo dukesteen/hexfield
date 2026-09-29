@@ -1,7 +1,8 @@
 export const PACKAGE_NAME = '@cp2p/bots';
 export { RandomBot, createBotRng } from './random-bot.js';
 export { decideHosted, hostedTradeCommand, wantsTrade } from './hosted.js';
-export { createBot, PLUGINS } from './levels.js';
+export { BENCHMARK_LEVELS, createBot, isSimBotLevel, PLUGINS, PLUGINS_V1 } from './levels.js';
+export type { BenchmarkLevel, SimBotLevel } from './levels.js';
 export { HeuristicBot } from './policy/heuristic-bot.js';
 export type { BotPlugin } from './policy/heuristic-bot.js';
 export { EASY, HARD, NORMAL } from './policy/config.js';

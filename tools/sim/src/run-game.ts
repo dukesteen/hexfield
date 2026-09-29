@@ -1,5 +1,5 @@
 import { RandomBot, createBot, createBotRng, createBotView } from '@cp2p/bots';
-import type { Bot, BotLevel } from '@cp2p/bots';
+import type { Bot, SimBotLevel as BotLevel } from '@cp2p/bots';
 import { canonicalEncode, hashValue, toHex } from '@cp2p/codec';
 import { LocalGame, devCardCountsFor, engineForConfig, moduleSelection } from '@cp2p/engine';
 import type {

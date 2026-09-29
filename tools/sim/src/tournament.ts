@@ -1,4 +1,4 @@
-import type { BotLevel } from '@cp2p/bots';
+import type { SimBotLevel as BotLevel } from '@cp2p/bots';
 import type { GameConfig, Seat } from '@cp2p/engine';
 import { runGame, SimulationFailure } from './run-game.js';
 
