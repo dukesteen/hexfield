@@ -249,7 +249,7 @@ function NewLocalGame() {
                     </select>
                   </label>
                   {player.role === 'bot' && (
-                    <label>
+                    <label className="player-form-level">
                       {t('lobby:botLevel', { number: index + 1 })}
                       <select
                         value={player.level}
@@ -266,7 +266,7 @@ function NewLocalGame() {
                       </select>
                     </label>
                   )}
-                  <label>
+                  <label className="player-form-color">
                     {t('lobby:playerColor', { number: index + 1 })}
                     <select
                       value={player.color}

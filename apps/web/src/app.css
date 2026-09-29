@@ -336,7 +336,9 @@ input[type='checkbox'] {
 }
 .player-form-row {
   display: grid;
-  grid-template-columns: 28px minmax(160px, 1.4fr) minmax(120px, 0.8fr) minmax(120px, 0.8fr);
+  grid-template-columns:
+    28px minmax(160px, 1.4fr) minmax(110px, 0.8fr) minmax(110px, 0.8fr)
+    minmax(110px, 0.8fr);
   gap: 12px;
   align-items: end;
   padding: 12px 0;
@@ -344,6 +346,13 @@ input[type='checkbox'] {
 }
 .player-form-row label {
   min-width: 0;
+}
+/* A bot seat adds a difficulty field; the colour keeps its own last column either way. */
+.player-form-row .player-form-level {
+  grid-column: 4;
+}
+.player-form-row .player-form-color {
+  grid-column: 5;
 }
 .player-marker {
   display: inline-block;
@@ -2007,8 +2016,15 @@ button.development-card-main:focus-visible img {
   .player-form-row {
     grid-template-columns: 24px minmax(0, 1fr) minmax(100px, 0.7fr);
   }
-  .player-form-row label:last-child {
+  /* Second line on phones: difficulty (bots) and colour side by side, colour alone otherwise. */
+  .player-form-row .player-form-level {
+    grid-column: 2;
+  }
+  .player-form-row .player-form-color {
     grid-column: 2 / -1;
+  }
+  .player-form-row .player-form-level + .player-form-color {
+    grid-column: 3;
   }
   .form-grid {
     grid-template-columns: 1fr;
