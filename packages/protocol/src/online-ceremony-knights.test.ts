@@ -92,7 +92,7 @@ function room() {
   return { network, peers };
 }
 
-test('three humans complete a knights ceremony that has no deck to shuffle', async () => {
+test('three humans complete a knights ceremony that shuffles the three progress decks', async () => {
   const { network, peers } = room();
   try {
     for (const peer of peers) {
@@ -112,8 +112,12 @@ test('three humans complete a knights ceremony that has no deck to shuffle', asy
     );
     const result = required(peers[0]?.result());
     expect(result.genesis.signatures).toHaveLength(SEATS);
-    // Knights declares its development deck empty, so no cards are shuffled or locked.
-    expect(result.transcripts).toEqual([]);
+    // Knights declares an empty development deck (no ceremony) and three progress decks.
+    expect(result.transcripts.map((transcript) => transcript.deckId).toSorted()).toEqual([
+      'progress-politics',
+      'progress-science',
+      'progress-trade',
+    ]);
     expect(result.genesis.config.modules.map((module) => module.id)).toEqual(['base', 'knights']);
     for (const peer of peers) expect(peer.result()?.entry).toEqual(result.entry);
     // The ceremony's genesis is a valid verified genesis: hands start empty over eight kinds.

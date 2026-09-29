@@ -220,6 +220,53 @@ export function verifyResourceAccounting(
           owned.revealed = effect.card;
           break;
         }
+        case 'card-slot-known': {
+          // A card whose identity is public, dealt from a module's own queue: no deck position.
+          const owned = slots.get(effect.seat);
+          requireAccounting(
+            !!owned &&
+              !!decks[effect.deck] &&
+              typeof effect.slotId === 'string' &&
+              effect.slotId.length > 0 &&
+              typeof effect.card === 'string' &&
+              effect.card.length > 0 &&
+              ![...slots.values()].some((items) =>
+                items.some((slot) => slot.slotId === effect.slotId),
+              ) &&
+              !decks[effect.deck]?.drawn.some((slot) => slot.slotId === effect.slotId),
+            'Known slot must be new, with a public identity',
+          );
+          if (!owned) throw new Error('Missing known-slot accounting target');
+          owned.push({
+            slotId: effect.slotId,
+            deck: effect.deck,
+            acquiredTurn: before.turn.number,
+            known: effect.card,
+          });
+          break;
+        }
+        case 'card-slot-moved': {
+          // An unrevealed slot changes hands; its identity (hidden or known) moves with it.
+          const source = slots.get(effect.from);
+          const target = slots.get(effect.to);
+          const index =
+            source?.findIndex(
+              (slot) => slot.slotId === effect.slotId && slot.deck === effect.deck,
+            ) ?? -1;
+          const slot = source?.[index];
+          requireAccounting(
+            !!source &&
+              !!target &&
+              effect.from !== effect.to &&
+              !!slot &&
+              slot.revealed === undefined,
+            'A moved slot must be an unrevealed slot of its source',
+          );
+          if (!source || !target || !slot) throw new Error('Missing moved-slot accounting target');
+          source.splice(index, 1);
+          target.push(slot);
+          break;
+        }
         default:
           throw new Error('Unsupported engine accounting effect');
       }

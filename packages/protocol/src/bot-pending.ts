@@ -24,6 +24,16 @@ export function chooseBotPending(
   );
   if (response) return botSeats.has(response.seat) ? response : null;
 
+  // A choice another seat owes off its turn (a Wedding gift, a Saboteur discard, a Harbor reply,
+  // a surplus progress card, a displaced knight) belongs to whoever hosts that seat.
+  const owed = players.find(
+    (item) =>
+      item.seat !== state.turn.activeSeat &&
+      botSeats.has(item.seat) &&
+      item.allowed.some((type) => !OPTIONAL.has(type)),
+  );
+  if (owed) return owed;
+
   // Between turns (a special build phase) the only actionable request can belong to
   // a seat other than the active one. A lone trade-only request is optional, so it waits.
   const sole = players.length === 1 ? players[0] : undefined;

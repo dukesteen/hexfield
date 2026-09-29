@@ -25,6 +25,9 @@ const phaseDataSchema = v.strictObject({
   seat: seatSchema,
   resource: kindNameSchema,
   remaining: remainingSchema,
+  limit: v.exactOptional(
+    v.pipe(nonnegativeIntegerSchema, v.minValue(1), v.maxValue(MAX_HAND_RESOURCE_COUNT)),
+  ),
 });
 const pendingSchema = v.strictObject({
   kind: v.literal('reveal'),
@@ -40,6 +43,7 @@ const pendingSchema = v.strictObject({
 interface PendingCounts {
   monopolist: Seat;
   resource: string;
+  limit?: number;
   remaining: readonly Seat[];
 }
 
@@ -78,7 +82,12 @@ function pendingCounts(engine: Engine, state: GameState): Result<PendingCounts |
     new Set(data.value.remaining).size !== remaining.length
   )
     return failure('count-pending', 'Monopoly victims must be unique');
-  return success({ monopolist: data.value.seat, resource: data.value.resource, remaining });
+  return success({
+    monopolist: data.value.seat,
+    resource: data.value.resource,
+    ...(data.value.limit === undefined ? {} : { limit: data.value.limit }),
+    remaining,
+  });
 }
 
 /** Compare saved metadata with the current engine pending and every unconsumed commitment. */
@@ -111,6 +120,7 @@ export function validateCountState(
     !permitsFrozenOperation(authority, 'count', countOperationId(operation), operation, epoch) ||
     operation.monopolist !== requested.monopolist ||
     operation.resource !== requested.resource ||
+    operation.limit !== requested.limit ||
     !genesis.config.seats.includes(operation.monopolist) ||
     parsed.value.remaining.length !== requested.remaining.length ||
     parsed.value.remaining.some((seat, index) => seat !== requested.remaining[index])
@@ -151,7 +161,7 @@ export function captureCountPending(
   const pending = pendingCounts(engine, state);
   if (!pending.ok) return pending;
   if (!pending.value) return success(null);
-  const { monopolist, resource, remaining } = pending.value;
+  const { monopolist, resource, limit, remaining } = pending.value;
   const victims = [];
   for (const seat of remaining) {
     const owner = resolveArtifactSigner(authority, genesis, epoch, seat);
@@ -173,6 +183,7 @@ export function captureCountPending(
         anchor,
         monopolist,
         resource,
+        ...(limit === undefined ? {} : { limit }),
         victims,
       },
       remaining,

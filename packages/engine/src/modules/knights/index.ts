@@ -120,6 +120,8 @@ export {
   trackOfDeck,
 } from './progress/catalogue.js';
 export type { CheckEntry, DealFrameData, DrawEntry, ProgressFrameData } from './progress/draw.js';
+export { lookData as knightsLook } from './progress/look.js';
+export type { LookData } from './progress/look.js';
 export type {
   AqueductFrameData,
   AttackReport,

@@ -164,7 +164,13 @@ function planCurrentTradeProof(body: unknown, context: LogContext): Result<Trade
   if (!legal.ok) return legal;
   const applied = context.engine.apply(context.state, input);
   if (!applied.ok) return applied;
-  const plan = planHandTransition(context.crypto.hands, context.state, input, applied.value);
+  const plan = planHandTransition(
+    context.crypto.hands,
+    context.state,
+    input,
+    applied.value,
+    context.crypto.preproofs,
+  );
   if (!plan.ok) return plan;
   const indices = plan.value.obligations.flatMap((obligation, index) =>
     obligation.seat === owner ? [index] : [],

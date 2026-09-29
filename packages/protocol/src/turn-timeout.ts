@@ -1,4 +1,12 @@
-import { failure, kindsOfCounts, success, zeroCounts } from '@cp2p/engine';
+import {
+  COMMODITIES,
+  HAND_LIMIT,
+  failure,
+  kindsOfCounts,
+  success,
+  trackOfDeck,
+  zeroCounts,
+} from '@cp2p/engine';
 import type {
   CommandShape,
   Engine,
@@ -101,16 +109,24 @@ export function verifyTimeoutEvidence(
     : failure('turn-timeout-anchor', 'Timeout differs from the certified pending interval');
 }
 
-/** Choose a legal owner's cards without exposing their hand in public timeout evidence. */
-export function timedDiscardCommand(
+/** Private choices whose timeout only the owner's client can make: it alone knows the hand. */
+export const PRIVATE_TIMEOUT_TYPES: readonly string[] = [
+  'DISCARD',
+  'DISCARD_PROGRESS',
+  'SABOTEUR_DISCARD',
+  'WEDDING_GIVE',
+  'HARBOR_REPLY',
+];
+
+/** The `count` cards a hand gives when it gives its most plentiful kinds first. */
+function greedyCards(
   state: GameState,
   privateState: PrivateState,
-): Result<CommandShape> {
-  const publicSeat = state.seats.find((seat) => seat.seat === privateState.seat);
-  if (!publicSeat) return failure('automatic-discard-seat', 'Timed-out seat is unavailable');
+  count: number,
+): Record<string, number> | null {
   const kinds = kindsOfCounts(state.bank);
   const cards = { ...zeroCounts(kinds) };
-  let remaining = Math.floor(publicSeat.resources.total / 2);
+  let remaining = count;
   const ordered = [...kinds].toSorted(
     (a, b) =>
       (privateState.hand[b] ?? 0) - (privateState.hand[a] ?? 0) ||
@@ -121,9 +137,65 @@ export function timedDiscardCommand(
     cards[resource] = amount;
     remaining -= amount;
   }
-  return remaining === 0
+  return remaining === 0 ? cards : null;
+}
+
+/** Choose a legal owner's cards without exposing their hand in public timeout evidence. */
+export function timedDiscardCommand(
+  state: GameState,
+  privateState: PrivateState,
+): Result<CommandShape> {
+  const publicSeat = state.seats.find((seat) => seat.seat === privateState.seat);
+  if (!publicSeat) return failure('automatic-discard-seat', 'Timed-out seat is unavailable');
+  const cards = greedyCards(state, privateState, Math.floor(publicSeat.resources.total / 2));
+  return cards
     ? success({ type: 'DISCARD', cards })
     : failure('automatic-discard-hand', 'Private hand cannot satisfy the timed discard');
+}
+
+/**
+ * The command an owner's client sends when its timer for a private choice runs out. Each is a
+ * legal default that needs the private hand: the discard of half, a Saboteur's half, a Wedding's
+ * two cards, the first commodity for a Commercial Harbor (or none), the surplus progress cards.
+ */
+export function timedPrivateCommand(
+  state: GameState,
+  privateState: PrivateState,
+  allowed: readonly string[],
+): Result<CommandShape | null> {
+  const seat = state.seats.find((item) => item.seat === privateState.seat);
+  if (!seat) return failure('automatic-private-seat', 'Timed-out seat is unavailable');
+  if (allowed.includes('DISCARD')) return timedDiscardCommand(state, privateState);
+  if (allowed.includes('SABOTEUR_DISCARD') || allowed.includes('WEDDING_GIVE')) {
+    const type = allowed.includes('SABOTEUR_DISCARD') ? 'SABOTEUR_DISCARD' : 'WEDDING_GIVE';
+    const count =
+      type === 'SABOTEUR_DISCARD'
+        ? Math.floor(seat.resources.total / 2)
+        : Math.min(2, seat.resources.total);
+    const cards = greedyCards(state, privateState, count);
+    return cards
+      ? success({ type, cards })
+      : failure('automatic-private-hand', 'Private hand cannot satisfy the timed choice');
+  }
+  if (allowed.includes('HARBOR_REPLY')) {
+    const commodity = COMMODITIES.find((kind) => (privateState.hand[kind] ?? 0) > 0);
+    return success({ type: 'HARBOR_REPLY', commodity: commodity ?? 'none' });
+  }
+  if (allowed.includes('DISCARD_PROGRESS')) {
+    const held = seat.cardSlots.filter(
+      (slot) => slot.revealed === undefined && trackOfDeck(slot.deck) !== null,
+    );
+    const surplus = held.length - HAND_LIMIT;
+    if (surplus < 1) return success(null);
+    const cards = held.slice(held.length - surplus).map((slot) => ({
+      slotId: slot.slotId,
+      card: slot.known ?? privateState.slots[slot.slotId],
+    }));
+    return cards.every((item) => typeof item.card === 'string')
+      ? success({ type: 'DISCARD_PROGRESS', cards })
+      : failure('automatic-private-slots', 'A held progress card has no known identity');
+  }
+  return success(null);
 }
 
 /** Local monotonic observation; a restored process begins a full fresh interval. */

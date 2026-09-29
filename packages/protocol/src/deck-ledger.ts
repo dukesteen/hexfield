@@ -5,14 +5,19 @@ import type { GameState, Result, Seat, SystemInput } from '@cp2p/engine';
 import * as v from 'valibot';
 import {
   completeDeckDraw,
+  dealtHolder,
   decodePublicDeckCard,
   deckUnlockers,
   freezeDeckDraw,
   validateDeckDrawOperation,
+  verifyDeckDenial,
   verifyDeckReveal,
   deckUnlockSchema,
 } from './deck-draw.js';
-import type { DealtDeckCard, DeckDrawOperation } from './deck-draw.js';
+import type { DealtDeckCard, DeckDrawOperation, SlotHolder } from './deck-draw.js';
+import type { CardDenial, CardReveal } from './hand-transition.js';
+import { spyLookSchema } from './spy-look.js';
+import type { SpyLook } from './spy-look.js';
 import { ceremonyDeckIds, deckPassHash, validateDeckGenesisCommitments } from './deck-genesis.js';
 import type { DeckGenesisCommitment } from './deck-genesis.js';
 import { genesisDigest } from './genesis.js';
@@ -38,11 +43,18 @@ const commitmentSchema = v.strictObject({
   passHashes: v.pipe(v.array(hashSchema), v.maxLength(12)),
   finalStateHash: hashSchema,
 });
+const relockSchema = v.strictObject({
+  point: key32Schema,
+  lockKey: key32Schema,
+  request: entryRefSchema,
+});
 const slotSchema = v.strictObject({
   slotId: labelSchema,
   seat: seatSchema,
   receipt: v.unknown(),
   deal: entryRefSchema,
+  /** Present once a Spy's take moved the card: the new holder's lock replaces the drawer's. */
+  relock: v.exactOptional(relockSchema),
   unlockSigners: v.pipe(
     v.array(
       v.strictObject({ seat: seatSchema, publicKey: key32Schema, generation: entryRefSchema }),
@@ -61,6 +73,8 @@ const ledgerSchema = v.strictObject({
   genesisDigest: key32Schema,
   decks: v.pipe(v.array(deckSchema), v.maxLength(MAX_DECKS)),
   active: v.nullable(v.unknown()),
+  /** An open Spy look: absent in every game that never plays one. */
+  spy: v.exactOptional(v.nullable(spyLookSchema)),
 });
 const proofSchema = v.strictObject({
   commitments: v.tuple([key32Schema, key32Schema]),
@@ -117,11 +131,21 @@ const revealEvidenceSchema = v.strictObject({
 });
 const passEvidenceSchema = v.strictObject({ deckId: labelSchema, pass: v.unknown() });
 
+/** A card that changed hands: its point re-locked under the taker's own lock key. */
+export interface SlotRelock {
+  point: string;
+  lockKey: string;
+  /** The certified parent of the play that asked for the card; the taker's lock derives from it. */
+  request: EntryRef;
+}
+
 export interface LedgerSlot {
   slotId: string;
+  /** The seat that holds the card now (its drawer, unless a take moved it). */
   seat: Seat;
   receipt: DealtDeckCard;
   deal: EntryRef;
+  relock?: SlotRelock;
   /** Signers verified at the certified deal, retained across later controller changes. */
   unlockSigners: readonly ArtifactSigner[];
 }
@@ -139,6 +163,8 @@ export interface DeckLedger {
   genesisDigest: string;
   decks: readonly LedgerDeck[];
   active: DeckDrawOperation | null;
+  /** A Spy's request awaiting the target's unlock and the actor's choice. */
+  spy?: SpyLook | null;
 }
 
 function same(left: unknown, right: unknown): boolean {
@@ -207,7 +233,7 @@ export function validateDeckLedger(value: unknown): Result<DeckLedger> {
         operation.value.deckId !== definition.deckId ||
         operation.value.genesisDigest !== parsed.value.genesisDigest ||
         operation.value.slotId !== slot.slotId ||
-        operation.value.seat !== slot.seat ||
+        (slot.relock === undefined && operation.value.seat !== slot.seat) ||
         operation.value.position <= previousPosition ||
         operation.value.position >= item.nextPosition ||
         slot.deal.seq <= operation.value.anchor.seq ||
@@ -233,6 +259,7 @@ export function validateDeckLedger(value: unknown): Result<DeckLedger> {
         seat: slot.seat,
         receipt: { ...parsedReceipt.value, operation: operation.value },
         deal: slot.deal,
+        ...(slot.relock === undefined ? {} : { relock: slot.relock }),
         unlockSigners: slot.unlockSigners,
       });
     }
@@ -260,7 +287,25 @@ export function validateDeckLedger(value: unknown): Result<DeckLedger> {
       return failure('deck-ledger-active', 'Active draw differs from its locked deck');
     active = operation.value;
   }
-  return success({ genesisDigest: parsed.value.genesisDigest, decks, active });
+  let spy: SpyLook | null = null;
+  if (parsed.value.spy) {
+    const look = parsed.value.spy;
+    const seen = new Set<string>();
+    for (const item of look.slots) {
+      const deck = decks.find((candidate) => candidate.commitment.definition.deckId === item.deck);
+      const held = deck?.slots.find((slot) => slot.slotId === item.slotId);
+      if (!held || held.seat !== look.target || seen.has(item.slotId) || look.actor === look.target)
+        return failure('deck-ledger-spy', 'A Spy look names a slot its target does not hold');
+      seen.add(item.slotId);
+    }
+    spy = look;
+  }
+  return success({
+    genesisDigest: parsed.value.genesisDigest,
+    decks,
+    active,
+    ...(spy === null ? {} : { spy }),
+  });
 }
 
 /** Genesis must already be certified; this crosschecks every public deck at height zero. */
@@ -532,67 +577,99 @@ export function completeDeckDeal(
   return validateDeckLedger({ ...current.value, decks, active: null });
 }
 
-/** Caller has already validated command signature, exact parent, nonce and engine legality. */
+/** Who can open this hidden slot: its drawer, or the seat a take re-locked it for. */
+export function slotHolder(slot: LedgerSlot): SlotHolder {
+  if (slot.relock)
+    return {
+      seat: slot.seat,
+      point: slot.relock.point,
+      lockKey: slot.relock.lockKey,
+      relock: slot.relock,
+    };
+  const holder = dealtHolder(slot.receipt);
+  if (!holder) throw new RangeError('A dealt slot has no owner lock');
+  return holder;
+}
+
+interface HeldSlot {
+  deck: LedgerDeck;
+  slot: LedgerSlot;
+}
+
+/** A still-hidden slot the signer owns at the command's parent, consistent with the public state. */
+function ownedHiddenSlot(
+  ledger: DeckLedger,
+  state: GameState,
+  body: SignedCommand['body'],
+  seat: Seat,
+  slotId: string,
+): HeldSlot | null {
+  const deck = ledger.decks.find((item) => item.slots.some((slot) => slot.slotId === slotId));
+  const slot = deck?.slots.find((item) => item.slotId === slotId);
+  if (!deck || !slot) return null;
+  const publicSlot = state.seats
+    .find((item) => item.seat === body.seat)
+    ?.cardSlots.find((item) => item.slotId === slotId);
+  const drawn =
+    state.decks[deck.commitment.definition.deckId]?.drawn[slot.receipt.operation.position];
+  const sinceMove = slot.relock?.request ?? slot.deal;
+  if (
+    slot.seat !== body.seat ||
+    seat !== body.seat ||
+    !publicSlot ||
+    publicSlot.revealed ||
+    publicSlot.known !== undefined ||
+    publicSlot.deck !== deck.commitment.definition.deckId ||
+    drawn?.slotId !== slotId ||
+    // The drawer is recorded in the public deck; a taker holds the card without being its drawer.
+    (slot.relock === undefined && drawn.seat !== body.seat) ||
+    body.headSeq < sinceMove.seq ||
+    (body.headSeq === sinceMove.seq && body.headHash !== sinceMove.hash)
+  )
+    return null;
+  return { deck, slot };
+}
+
+/**
+ * The hidden slots an input shows to every seat, each proven by its owner with a DLEQ against the
+ * lock it holds. Caller has already validated signature, exact parent, nonce and engine legality;
+ * `reveals` come from the engine's own effects for that input, so the command cannot pick them.
+ */
 export function revealDeckCards(
   ledger: DeckLedger,
   state: GameState,
   signed: SignedCommand,
   epoch: number,
+  reveals: readonly CardReveal[],
 ): Result<DeckLedger> {
   const current = validateDeckLedger(ledger);
   if (!current.ok) return current;
+  if (reveals.length === 0) return current;
   const { body } = signed;
-  const command = body.command;
-  if (command.type !== 'PLAY_DEV_CARD' && command.type !== 'CLAIM_VICTORY') return current;
   if (body.genesisDigest !== current.value.genesisDigest)
     return failure('deck-reveal-context', 'Command belongs to another genesis');
   const evidence = parseCanonical(body.evidence, revealEvidenceSchema);
   if (!evidence.ok) return evidence;
-  const requested: unknown = command.type === 'PLAY_DEV_CARD' ? [command.slotId] : command.slotIds;
   if (
-    !Array.isArray(requested) ||
-    requested.length !== evidence.value.data.length ||
-    requested.length === 0 ||
-    requested.length > MAX_CARDS ||
-    requested.some((id) => typeof id !== 'string' || id.length < 1 || id.length > 64) ||
-    new Set(requested).size !== requested.length
+    reveals.length !== evidence.value.data.length ||
+    reveals.length > MAX_CARDS ||
+    new Set(reveals.map((item) => item.slotId)).size !== reveals.length
   )
     return failure('deck-reveal-slots', 'Command must reveal exactly its requested slots');
   const removed = new Set<string>();
   for (const [index, reveal] of evidence.value.data.entries()) {
-    if (requested[index] !== reveal.slotId)
+    const wanted = reveals[index];
+    if (!wanted || wanted.slotId !== reveal.slotId)
       return failure('deck-reveal-order', 'Reveal order differs from the command');
-    const deck = current.value.decks.find((item) =>
-      item.slots.some((slot) => slot.slotId === reveal.slotId),
-    );
-    const slot = deck?.slots.find((item) => item.slotId === reveal.slotId);
-    const publicSlot = state.seats
-      .find((item) => item.seat === body.seat)
-      ?.cardSlots.find((item) => item.slotId === reveal.slotId);
-    const drawn = deck?.commitment.definition.deckId
-      ? state.decks[deck.commitment.definition.deckId]?.drawn[
-          slot?.receipt.operation.position ?? -1
-        ]
-      : undefined;
-    if (
-      !deck ||
-      !slot ||
-      slot.seat !== body.seat ||
-      !publicSlot ||
-      publicSlot.revealed ||
-      publicSlot.deck !== deck.commitment.definition.deckId ||
-      drawn?.slotId !== reveal.slotId ||
-      drawn?.seat !== body.seat ||
-      body.headSeq < slot.deal.seq ||
-      (body.headSeq === slot.deal.seq && body.headHash !== slot.deal.hash)
-    )
+    const held = ownedHiddenSlot(current.value, state, body, wanted.seat, reveal.slotId);
+    if (!held || held.deck.commitment.definition.deckId !== wanted.deck)
       return failure(
         'deck-reveal-owner',
         'Revealed slot is not an owned hidden card at this parent',
       );
     const verified = verifyDeckReveal(
-      deck.setup,
-      slot.receipt,
+      held.deck.setup,
+      held.slot.receipt,
       { identity: reveal.identity, proof: reveal.proof },
       {
         genesisDigest: current.value.genesisDigest,
@@ -600,16 +677,13 @@ export function revealDeckCards(
         anchor: { seq: body.headSeq, hash: body.headHash },
         seat: body.seat,
         nonce: body.nonce,
-        command,
+        command: body.command,
       },
-      slot.unlockSigners,
+      held.slot.unlockSigners,
+      slotHolder(held.slot),
     );
     if (!verified.ok) return verified;
-    if (
-      command.type === 'PLAY_DEV_CARD'
-        ? verified.value.card !== command.card
-        : verified.value.card !== 'victoryPoint'
-    )
+    if (verified.value.card !== wanted.card)
       return failure('deck-reveal-kind', 'Proved card kind does not match the command');
     removed.add(reveal.slotId);
   }
@@ -618,4 +692,46 @@ export function revealDeckCards(
     slots: deck.slots.filter((slot) => !removed.has(slot.slotId)),
   }));
   return validateDeckLedger({ ...current.value, decks });
+}
+
+/**
+ * The hidden cards an input says are none of a set of identities (a drawn progress card that is
+ * not a victory card). Nothing changes in the ledger: the slots stay hidden.
+ */
+export function verifyDeckDenials(
+  ledger: DeckLedger,
+  state: GameState,
+  signed: SignedCommand,
+  epoch: number,
+  denials: readonly CardDenial[],
+  proofs: readonly unknown[],
+): Result<void> {
+  const current = validateDeckLedger(ledger);
+  if (!current.ok) return current;
+  const { body } = signed;
+  if (denials.length !== proofs.length)
+    return failure('deck-denial-count', 'Input must deny exactly its requested slots');
+  for (const [index, denial] of denials.entries()) {
+    const held = ownedHiddenSlot(current.value, state, body, denial.seat, denial.slotId);
+    if (!held || held.deck.commitment.definition.deckId !== denial.deck)
+      return failure('deck-denial-owner', 'Denied slot is not an owned hidden card at this parent');
+    const verified = verifyDeckDenial(
+      held.deck.setup,
+      held.slot.receipt,
+      proofs[index],
+      denial.excluded,
+      {
+        genesisDigest: current.value.genesisDigest,
+        epoch,
+        anchor: { seq: body.headSeq, hash: body.headHash },
+        seat: body.seat,
+        nonce: body.nonce,
+        command: body.command,
+      },
+      held.slot.unlockSigners,
+      slotHolder(held.slot),
+    );
+    if (!verified.ok) return verified;
+  }
+  return success(undefined);
 }

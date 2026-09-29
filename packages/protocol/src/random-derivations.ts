@@ -205,6 +205,30 @@ function validateDice(state: GameState, pending: RandomPending): Result<void> {
       ? success(undefined)
       : fail('invalid-dice-request', 'Balanced dice count must match the remaining deck');
   }
+  if (request.mode === 'fixed') {
+    // A Cities and Knights Alchemist set the two production dice; only the extra dice are random.
+    const keys = ['dice', 'mode', 'type', ...(Object.hasOwn(request, 'extra') ? ['extra'] : [])];
+    if (!exactRecord(request, keys) || request.type !== 'dice')
+      return fail('invalid-random-request', 'Fixed dice request has invalid fields');
+    if (!record(pending) || pending.kind !== 'random' || pending.systemType !== 'DICE_RESULT')
+      return fail('random-pending-mismatch', 'Fixed dice has unexpected system type');
+    const fixed = engineForConfig(state.config).hooks.diceSpec(state, {
+      count: 2,
+      sides: 6,
+      extra: [],
+    }).fixed;
+    const dice: unknown = request.dice;
+    if (
+      !fixed ||
+      !Array.isArray(dice) ||
+      dice.length !== 2 ||
+      dice[0] !== fixed[0] ||
+      dice[1] !== fixed[1]
+    )
+      return fail('invalid-dice-request', 'Fixed dice must repeat the faces the game set');
+    const extra = checkExtraDice(state, request);
+    return extra.ok ? success(undefined) : extra;
+  }
   return fail('invalid-dice-request', 'Dice mode is unsupported');
 }
 
@@ -297,6 +321,22 @@ function baseDerivation(type: string): RandomDerivation {
         type,
         validate: validateDice,
         derive(state, pending, seed, context) {
+          if (pending.request.mode === 'fixed') {
+            const dice: unknown = pending.request.dice;
+            if (!Array.isArray(dice) || dice.length !== 2)
+              return fail('invalid-dice-request', 'Fixed dice must name two faces');
+            const extra = deriveExtraDice(pending.request, seed, context);
+            if (!extra.ok) return extra;
+            return success({
+              kind: 'system',
+              input: {
+                kind: 'system',
+                type: 'DICE_RESULT',
+                dice: [...dice],
+                ...(Object.keys(extra.value).length ? { extra: extra.value } : {}),
+              },
+            });
+          }
           if (pending.request.mode === 'balanced') {
             const ids = diceIds(state);
             if (!ids) return fail('invalid-random-state', 'Balanced dice deck is invalid');

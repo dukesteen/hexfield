@@ -3,6 +3,7 @@ import { parsePeerId, verifyObject } from '@cp2p/crypto';
 import { failure, success } from '@cp2p/engine';
 import type { GameEvent, GameState, Input, Result, Seat, Transition } from '@cp2p/engine';
 import { entryBody, entryHash, genesisDigest } from './genesis.js';
+import { bodyInput } from './seat-input.js';
 import { captureCryptoPending, validateCryptoTransition } from './crypto-context.js';
 import type { CryptoContext } from './crypto-context.js';
 import { logEntrySchema } from './schemas.js';
@@ -75,11 +76,7 @@ function entryInput(
     const checked = validateCommandForEntry(payload.signed, { ...context, crypto }, policy);
     if (!checked.ok) return checked;
     return success({
-      input: {
-        kind: 'command',
-        seat: checked.value.signed.body.seat,
-        command: checked.value.signed.body.command,
-      },
+      input: bodyInput(checked.value.signed.body.seat, checked.value.signed.body.command),
       crypto: checked.value.crypto,
       applied: checked.value.applied,
     });
@@ -416,6 +413,7 @@ export function validateNextEntry(
         context.state,
         input,
         applied.value,
+        committedCrypto.preproofs,
       );
       if (!planned.ok) return planned;
       if (input.kind === 'system' && input.type === 'REVEAL_COUNT') {

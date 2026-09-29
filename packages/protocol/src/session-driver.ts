@@ -1,5 +1,14 @@
 import type { SchnorrProof } from '@cp2p/crypto';
-import type { GameState, Input, PrivateState, Result, Seat, SystemInput } from '@cp2p/engine';
+import type {
+  GameState,
+  Input,
+  Pending,
+  PrivateInputData,
+  PrivateState,
+  Result,
+  Seat,
+  SystemInput,
+} from '@cp2p/engine';
 import type { CountOperation } from './count-reveal.js';
 import type { LogContext, ValidatedEntry } from './log.js';
 import type { CertifiedEntry } from './proposal.js';
@@ -47,6 +56,17 @@ export interface SessionDriver {
   ): Result<void>;
   /** Legacy engine-input callback, used only when `committedEntry` is absent. */
   committed(before: LogContext, input: Input, after: GameState): Result<void>;
+  /**
+   * The answer an owned seat gives to a request only it can answer (a victory check, a private
+   * look, a take), or null when it has nothing to answer yet. The session signs and submits it.
+   */
+  revealAnswer?(
+    seat: Seat,
+    pending: Extract<Pending, { kind: 'reveal' }>,
+    context: LogContext,
+  ): Result<SystemInput | null>;
+  /** Secrets an owned seat needs to apply its own input to its private state. */
+  privateInputData?(seat: Seat, input: Input): PrivateInputData | undefined;
   privateState(seat: Seat): PrivateState | null;
   getTimers?(): readonly SessionTimer[];
   dispose?(): void;

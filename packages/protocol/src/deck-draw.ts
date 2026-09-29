@@ -8,12 +8,14 @@ import {
   invertScalar,
   parsePeerId,
   proveDleq,
+  proveDleqOr,
   scalePoint,
   signObject,
   verifyDleq,
+  verifyDleqOr,
   verifyObject,
 } from '@cp2p/crypto';
-import type { DleqProof } from '@cp2p/crypto';
+import type { DleqOrProof, DleqProof } from '@cp2p/crypto';
 import { failure, success } from '@cp2p/engine';
 import type { Result, Seat } from '@cp2p/engine';
 import * as v from 'valibot';
@@ -424,16 +426,18 @@ export function decodeDeckCard(
   receipt: DealtDeckCard,
   lock: bigint,
   signers?: readonly ArtifactSigner[],
+  held?: SlotHolder,
 ): Result<{ identity: string; card: string }> {
   const verified = verifiedReceipt(setup, receipt, signers);
   if (!verified.ok) return verified;
   const deck = verified.value.setup;
   const dealt = verified.value.receipt;
   try {
-    const owner = dealt.operation.participants.find((item) => item.seat === dealt.operation.seat);
+    // The holder is the drawer, or the seat a take re-locked the card for.
+    const owner = held ?? dealtHolder(dealt);
     if (!owner || encodePoint(scalePoint(G, lock)) !== owner.lockKey)
-      return failure('deck-owner-lock', "The secret is not the drawer's position lock");
-    const point = encodePoint(scalePoint(decodePoint(dealt.point), invertScalar(lock)));
+      return failure('deck-owner-lock', "The secret is not the holder's position lock");
+    const point = encodePoint(scalePoint(decodePoint(owner.point), invertScalar(lock)));
     const card = deck.definition.cards.find((item) => identityPoint(deck, item.identity) === point);
     return card
       ? success({ ...card })
@@ -468,41 +472,64 @@ export function decodePublicDeckCard(
   }
 }
 
+/**
+ * Who can open a dealt card and against which public values: the seat holding it, the point
+ * still locked by that seat alone, and the public key of that seat's lock. A card is first held
+ * by its drawer; a Spy's take re-locks it under the taker's own key.
+ */
+export interface SlotHolder {
+  seat: Seat;
+  point: string;
+  lockKey: string;
+  /** Present after a re-lock: the certified transfer this holder derives from. */
+  relock?: unknown;
+}
+
+/** The drawer's holding of its own dealt card. */
+export function dealtHolder(receipt: DealtDeckCard): SlotHolder | null {
+  const owner = receipt.operation.participants.find((item) => item.seat === receipt.operation.seat);
+  return owner
+    ? { seat: receipt.operation.seat, point: receipt.point, lockKey: owner.lockKey }
+    : null;
+}
+
 function revealStatement(
   setup: DeckSetupState,
   receipt: DealtDeckCard,
   identity: string,
   context: DeckRevealContext,
   signers?: readonly ArtifactSigner[],
+  held?: SlotHolder,
 ) {
   const verified = checked(verifiedReceipt(setup, receipt, signers));
   const deck = verified.setup;
   const checkedContext = checked(parseCanonical(context, revealContextSchema));
   const operation = verified.receipt.operation;
+  const holder = held ?? dealtHolder(verified.receipt);
+  if (!holder) throw new RangeError('The owner has no deck lock');
   if (
     checkedContext.genesisDigest !== operation.genesisDigest ||
-    checkedContext.seat !== operation.seat ||
+    checkedContext.seat !== holder.seat ||
     checkedContext.epoch < operation.epoch ||
     checkedContext.anchor.seq <= operation.anchor.seq
   )
     throw new RangeError('The reveal must belong to the owner and a later certified context');
   const card = deck.definition.cards.find((item) => item.identity === identity);
   if (!card) throw new RangeError('Unknown card identity');
-  const owner = operation.participants.find((item) => item.seat === operation.seat);
-  if (!owner) throw new RangeError('The owner has no deck lock');
   return {
     card,
     statement: {
       base1: identityPoint(deck, identity),
-      point1: verified.receipt.point,
+      point1: holder.point,
       base2: encodePoint(G),
-      point2: owner.lockKey,
+      point2: holder.lockKey,
     },
     context: {
       domain: 'cp2p/v1/deck-reveal',
       draw: deckDrawOperationId(operation),
       identity,
       action: checkedContext,
+      ...(held?.relock === undefined ? {} : { relock: held.relock }),
     },
   };
 }
@@ -515,8 +542,9 @@ export function proveDeckReveal(
   seed: Uint8Array,
   context: DeckRevealContext,
   signers?: readonly ArtifactSigner[],
+  holder?: SlotHolder,
 ): DeckCardReveal {
-  const statement = revealStatement(setup, receipt, identity, context, signers);
+  const statement = revealStatement(setup, receipt, identity, context, signers, holder);
   return { identity, proof: proveDleq(statement.statement, lock, seed, statement.context) };
 }
 
@@ -526,15 +554,118 @@ export function verifyDeckReveal(
   value: unknown,
   context: DeckRevealContext,
   signers?: readonly ArtifactSigner[],
+  holder?: SlotHolder,
 ): Result<{ identity: string; card: string }> {
   const parsed = parseCanonical(value, revealSchema);
   if (!parsed.ok) return parsed;
   try {
-    const statement = revealStatement(setup, receipt, parsed.value.identity, context, signers);
+    const statement = revealStatement(
+      setup,
+      receipt,
+      parsed.value.identity,
+      context,
+      signers,
+      holder,
+    );
     return verifyDleq(statement.statement, parsed.value.proof, statement.context)
       ? success({ ...statement.card })
       : failure('deck-reveal-proof', 'The card identity does not match the held position');
   } catch {
     return failure('deck-reveal-context', 'The reveal does not belong to this card and command');
+  }
+}
+
+const denialSchema = v.strictObject({
+  branches: v.pipe(
+    v.array(v.strictObject({ challenge: key32Schema, response: key32Schema })),
+    v.minLength(1),
+    v.maxLength(64),
+  ),
+});
+
+function denialStatement(
+  setup: DeckSetupState,
+  receipt: DealtDeckCard,
+  excluded: readonly string[],
+  context: DeckRevealContext,
+  signers?: readonly ArtifactSigner[],
+  held?: SlotHolder,
+) {
+  const verified = checked(verifiedReceipt(setup, receipt, signers));
+  const deck = verified.setup;
+  const checkedContext = checked(parseCanonical(context, revealContextSchema));
+  const operation = verified.receipt.operation;
+  const holder = held ?? dealtHolder(verified.receipt);
+  if (!holder) throw new RangeError('The owner has no deck lock');
+  if (
+    checkedContext.genesisDigest !== operation.genesisDigest ||
+    checkedContext.seat !== holder.seat ||
+    checkedContext.epoch < operation.epoch ||
+    checkedContext.anchor.seq <= operation.anchor.seq
+  )
+    throw new RangeError('The denial must belong to the owner and a later certified context');
+  // Every physical card of the deck that is not excluded is a possible identity.
+  const candidates = deck.definition.cards.filter((item) => !excluded.includes(item.card));
+  if (candidates.length === 0 || candidates.length > 64)
+    throw new RangeError('The denial has no candidate identity or too many');
+  return {
+    candidates,
+    statement: {
+      branches: candidates.map((item) => ({
+        base1: identityPoint(deck, item.identity),
+        point1: holder.point,
+        base2: encodePoint(G),
+        point2: holder.lockKey,
+      })),
+    },
+    context: {
+      domain: 'cp2p/v1/deck-denial',
+      draw: deckDrawOperationId(operation),
+      excluded: [...excluded],
+      action: checkedContext,
+      ...(held?.relock === undefined ? {} : { relock: held.relock }),
+    },
+  };
+}
+
+/**
+ * The owner proves that its hidden card is none of the `excluded` card types (for example, not a
+ * victory card) without saying which card it is. `identity` is the card's true identity.
+ */
+export function proveDeckDenial(
+  setup: DeckSetupState,
+  receipt: DealtDeckCard,
+  identity: string,
+  excluded: readonly string[],
+  lock: bigint,
+  seed: Uint8Array,
+  context: DeckRevealContext,
+  signers?: readonly ArtifactSigner[],
+  holder?: SlotHolder,
+): DleqOrProof {
+  const statement = denialStatement(setup, receipt, excluded, context, signers, holder);
+  const known = statement.candidates.findIndex((item) => item.identity === identity);
+  if (known < 0) throw new RangeError('The card is excluded, so it cannot be denied');
+  return proveDleqOr(statement.statement, known, lock, seed, statement.context);
+}
+
+export function verifyDeckDenial(
+  setup: DeckSetupState,
+  receipt: DealtDeckCard,
+  value: unknown,
+  excluded: readonly string[],
+  context: DeckRevealContext,
+  signers?: readonly ArtifactSigner[],
+  holder?: SlotHolder,
+): Result<void> {
+  const parsed = parseCanonical(value, denialSchema);
+  if (!parsed.ok) return parsed;
+  try {
+    const statement = denialStatement(setup, receipt, excluded, context, signers, holder);
+    return verifyDleqOr(statement.statement, parsed.value, statement.context)
+      ? success(undefined)
+      : failure('deck-denial-proof', 'The card may be one of the excluded identities');
+  } catch {
+    return failure('deck-denial-context', 'The denial does not belong to this card and input');
   }
 }

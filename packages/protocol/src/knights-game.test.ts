@@ -86,6 +86,13 @@ function summarize(fixture: Fixture) {
         ? `system:${entry.payload.input.type}`
         : null;
     if (type) counts[type] = (counts[type] ?? 0) + 1;
+    // Progress cards by name, and the seat-signed answers to requests by input type.
+    if (command?.type === 'PLAY_PROGRESS_CARD')
+      counts[`card:${String(command.card)}`] = (counts[`card:${String(command.card)}`] ?? 0) + 1;
+    if (command?.type === 'SEAT_INPUT' && typeof command.input === 'object' && command.input) {
+      const key = `answer:${String(Reflect.get(command.input, 'type'))}`;
+      counts[key] = (counts[key] ?? 0) + 1;
+    }
     if (command?.type === 'OFFER_TRADE') {
       const terms = [command.give, command.want];
       if (

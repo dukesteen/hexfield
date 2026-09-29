@@ -2,10 +2,13 @@ import { parsePeerId, signObject, verifyObject } from '@cp2p/crypto';
 import { failure, success } from '@cp2p/engine';
 import type { Input, Result, Transition } from '@cp2p/engine';
 import { entryHash, genesisDigest } from './genesis.js';
+import { bodyInput } from './seat-input.js';
+import { applyLook, lookStep, stepHasEvidence } from './look-flow.js';
+import { preproofNeed, verifyDebitPreproof } from './preproof.js';
 import { signedCommandSchema } from './schemas.js';
 import type { CommandBody, SignedCommand } from './types.js';
 import { parseCanonical } from './validation.js';
-import { revealDeckCards, DECK_REVEAL_PROTOCOL } from './deck-ledger.js';
+import { revealDeckCards, verifyDeckDenials, DECK_REVEAL_PROTOCOL } from './deck-ledger.js';
 import { readCommandProofs } from './command-proofs.js';
 import { planHandTransition, verifyHandProofs } from './hand-transition.js';
 import type { HandTransitionPlan } from './hand-transition.js';
@@ -48,11 +51,7 @@ export function validateSignedCommand(value: unknown, context: LogContext): Resu
       return failure('stale-head', 'Command must be confirmed again against the current state');
     if (body.headHash !== entryHash(context.head))
       return failure('command-parent', 'Command refers to a different log parent');
-    const valid = context.engine.validate(context.state, {
-      kind: 'command',
-      seat: body.seat,
-      command: body.command,
-    });
+    const valid = context.engine.validate(context.state, bodyInput(body.seat, body.command));
     return valid.ok ? success(signed) : valid;
   } catch {
     return failure('entry-verification-failed', 'Signed command validation failed');
@@ -72,11 +71,7 @@ export function validateCommandStatement(
   try {
     const command = validateSignedCommand(value, context);
     if (!command.ok) return command;
-    const input: Input = {
-      kind: 'command',
-      seat: command.value.body.seat,
-      command: command.value.body.command,
-    };
+    const input: Input = bodyInput(command.value.body.seat, command.value.body.command);
     const applied = context.engine.apply(context.state, input);
     if (!applied.ok) return applied;
     const violations = context.engine.checkInvariants(applied.value.state);
@@ -90,36 +85,23 @@ export function validateCommandStatement(
       );
     if (!crypto)
       return success({ signed: command.value, applied: applied.value, crypto, plan: null });
-    const planned = planHandTransition(crypto.hands, context.state, input, applied.value);
+    const planned = planHandTransition(
+      crypto.hands,
+      context.state,
+      input,
+      applied.value,
+      crypto.preproofs,
+    );
     if (!planned.ok) return planned;
-    const reveals = planned.value.effects.filter((effect) => effect.type === 'card-slot-revealed');
-    const requested: unknown =
-      command.value.body.command.type === 'PLAY_DEV_CARD'
-        ? [command.value.body.command.slotId]
-        : command.value.body.command.type === 'CLAIM_VICTORY'
-          ? command.value.body.command.slotIds
-          : null;
-    if (
-      (requested !== null && !Array.isArray(requested)) ||
-      reveals.length !== (Array.isArray(requested) ? requested.length : 0)
-    )
-      return failure('deck-reveal-effect', 'Card reveal effects differ from the command');
-    for (const [index, effect] of reveals.entries()) {
+    // The engine derives which hidden slots an input shows; each must be a certified slot of its
+    // signer, so the signer cannot reveal (or say anything about) another seat's card.
+    for (const reveal of [...planned.value.reveals, ...planned.value.denials]) {
       if (
-        !Array.isArray(requested) ||
-        effect.seat !== command.value.body.seat ||
-        effect.slotId !== requested[index] ||
-        effect.card !==
-          (command.value.body.command.type === 'PLAY_DEV_CARD'
-            ? command.value.body.command.card
-            : 'victoryPoint')
-      )
-        return failure('deck-reveal-effect', 'Card reveal effect differs from the signed command');
-      if (
+        reveal.seat !== command.value.body.seat ||
         !crypto.decks.decks.some(
           (deck) =>
-            deck.commitment.definition.deckId === effect.deck &&
-            deck.slots.some((slot) => slot.slotId === effect.slotId && slot.seat === effect.seat),
+            deck.commitment.definition.deckId === reveal.deck &&
+            deck.slots.some((slot) => slot.slotId === reveal.slotId && slot.seat === reveal.seat),
         )
       )
         return failure(
@@ -145,7 +127,12 @@ export function validateCommandForEntry(
     const { signed, applied, plan } = statement.value;
     let crypto = statement.value.crypto;
     if (crypto && plan) {
-      const sections = readCommandProofs(signed.body.evidence, plan);
+      const step = lookStep(plan.input, applied.state);
+      const sections = readCommandProofs(
+        signed.body.evidence,
+        plan,
+        stepHasEvidence(step, context.state, plan.input),
+      );
       if (!sections.ok) return sections;
       const { evidence: _evidence, ...bareBody } = signed.body;
       const handProofs = verifyHandProofs(plan, sections.value.hands, {
@@ -155,8 +142,16 @@ export function validateCommandForEntry(
         command: bareBody,
       });
       if (!handProofs.ok) return handProofs;
-      const reveals = plan.effects.filter((effect) => effect.type === 'card-slot-revealed');
-      if (reveals.length > 0) {
+      const denied = verifyDeckDenials(
+        crypto.decks,
+        context.state,
+        signed,
+        crypto.epoch,
+        plan.denials,
+        sections.value.denials,
+      );
+      if (!denied.ok) return denied;
+      if (plan.reveals.length > 0) {
         const revealed = revealDeckCards(
           crypto.decks,
           context.state,
@@ -168,10 +163,41 @@ export function validateCommandForEntry(
             },
           },
           crypto.epoch,
+          plan.reveals,
         );
         if (!revealed.ok) return revealed;
         crypto = { ...crypto, decks: revealed.value, hands: plan.hands };
       } else crypto = { ...crypto, hands: plan.hands };
+      const action = {
+        genesisDigest: genesisDigest(context.genesis),
+        epoch: crypto.epoch,
+        anchor: { seq: context.head.seq, hash: entryHash(context.head) },
+        seat: signed.body.seat,
+        nonce: signed.body.nonce,
+        command: signed.body.command,
+      };
+      const looked = applyLook(
+        crypto.decks,
+        step,
+        context.state,
+        applied.state,
+        plan,
+        action,
+        sections.value.look,
+      );
+      if (!looked.ok) return looked;
+      crypto = { ...crypto, decks: looked.value };
+      const need = step === 'harbor-offer' ? preproofNeed(context.state, plan.input) : null;
+      if (need) {
+        const commitment = crypto.hands.find((row) => row.seat === need.seat)?.commitments[
+          need.resource
+        ];
+        if (commitment === undefined)
+          return failure('preproof-commitment', 'The offering seat has no such commitment');
+        const proven = verifyDebitPreproof(need, commitment, sections.value.look, action);
+        if (!proven.ok) return proven;
+        crypto = { ...crypto, preproofs: [...(crypto.preproofs ?? []), proven.value] };
+      }
     }
     if (
       policy.verifyCommand &&

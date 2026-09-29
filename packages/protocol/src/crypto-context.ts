@@ -35,6 +35,10 @@ import {
 } from './steal-state.js';
 import type { StealState } from './steal-state.js';
 import type { CheatFinding } from './cheat-types.js';
+import { debitPreproofSchema, prunePreproofs } from './preproof.js';
+import type { DebitPreproof } from './preproof.js';
+import { parseCanonical } from './validation.js';
+import * as v from 'valibot';
 import { permitsFrozenOperation, resolveArtifactSigner } from './authority.js';
 import type { SeatAuthorities } from './authority-types.js';
 import { deckDrawOperationId, deckUnlockers } from './deck-draw.js';
@@ -49,6 +53,8 @@ export interface CryptoContext {
   hands: PublicHandCommitments;
   counts: CountState | null;
   steal: StealState | null;
+  /** Debits proven ahead of the input that makes them; absent when there are none. */
+  preproofs?: readonly DebitPreproof[];
   /** First certified finding per seat and evidence kind, derived from log replay. */
   cheats: readonly CheatFinding[];
 }
@@ -89,7 +95,15 @@ export function captureCryptoPending(
     authority,
   );
   if (!counts.ok) return counts;
-  const next = { ...context, decks: decks.value, counts: counts.value };
+  // A proof outlives its offer only while its seat's commitment is unchanged.
+  const { preproofs: _held, ...bare } = context;
+  const kept = prunePreproofs(context.hands, context.preproofs);
+  const next = {
+    ...bare,
+    decks: decks.value,
+    counts: counts.value,
+    ...(kept.length === 0 ? {} : { preproofs: kept }),
+  };
   const frozen = context.beacon.active?.pending ?? context.beacon.fixed?.operation.pending;
   if (frozen) {
     if (!pending || !equalValue(pending, frozen))
@@ -221,6 +235,11 @@ export function validateCryptoTransition(
     decks.value.genesisDigest !== genesisDigest(genesis)
   )
     return failure('crypto-genesis', 'Cryptographic state belongs to another genesis');
+  const preproofs = parseCanonical(
+    current.preproofs ?? [],
+    v.pipe(v.array(debitPreproofSchema), v.maxLength(64)),
+  );
+  if (!preproofs.ok) return preproofs;
   const crypto: CryptoContext = {
     epoch: current.epoch,
     beacon: beacon.value,
@@ -228,6 +247,7 @@ export function validateCryptoTransition(
     hands: hands.value,
     counts: counts.value,
     steal: steal.value,
+    ...(preproofs.value.length === 0 ? {} : { preproofs: preproofs.value }),
     cheats: current.cheats,
   };
   if (

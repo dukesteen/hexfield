@@ -131,6 +131,14 @@ function privateDataFor(
       source.dispose();
     }
   }
+  if (input.type === 'TAKE_PROGRESS') {
+    // The public input names the slot; the taker learned its card from the re-lock chain. The
+    // omniscient replay reads the same identity from the target's hand.
+    if (isSeat(input.seat) && isSeat(input.from) && typeof input.slotId === 'string') {
+      const card = game.privateView(input.from)?.slots[input.slotId];
+      return success(card === undefined ? {} : { [input.seat]: { card } });
+    }
+  }
   return success({});
 }
 

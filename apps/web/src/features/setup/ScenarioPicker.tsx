@@ -28,6 +28,8 @@ interface ScenarioPickerProps {
   readonly disabled?: boolean;
   /** Offer only the classic scenarios, for screens that cannot carry a seafaring board yet. */
   readonly classicOnly?: boolean;
+  /** Offer the knights and commerce scenarios: online games play them over the verified protocol. */
+  readonly allowKnights?: boolean;
 }
 
 /** Modules whose play screens are not built yet; their scenarios stay out of the picker. */
@@ -38,6 +40,11 @@ export function isSeafaringScenario(scenario: Scenario): boolean {
   return scenario.modules.includes('seafaring');
 }
 
+/** A scenario that brings an expansion module of its own (seafaring, or knights and commerce). */
+export function isExpansionScenario(scenario: Scenario): boolean {
+  return isSeafaringScenario(scenario) || scenario.modules.includes('knights');
+}
+
 /** Scenario choice filtered by seat count, with the expansion matrix shown alongside. */
 export function ScenarioPicker({
   seatCount,
@@ -46,12 +53,14 @@ export function ScenarioPicker({
   onSeatCount,
   disabled = false,
   classicOnly = false,
+  allowKnights = false,
 }: ScenarioPickerProps) {
   const { t } = useTranslation('lobby');
+  const unplayable = allowKnights ? new Set<string>() : UNPLAYABLE_IN_UI;
   const choices = scenariosForSeats(seatCount).filter(
     (scenario) =>
       (!classicOnly || !isSeafaringScenario(scenario)) &&
-      !scenario.modules.some((id) => UNPLAYABLE_IN_UI.has(id)),
+      !scenario.modules.some((id) => unplayable.has(id)),
   );
   const classic = choices.filter((scenario) => !isSeafaringScenario(scenario));
   const seafaring = choices.filter(isSeafaringScenario);
@@ -107,7 +116,7 @@ export function ScenarioPicker({
                 ? t('lobby:expansionFiveSixSeats')
                 : state.kind === 'available'
                   ? t(
-                      classicOnly || UNPLAYABLE_IN_UI.has(id)
+                      classicOnly || unplayable.has(id)
                         ? 'lobby:expansionLater'
                         : 'lobby:expansionViaScenario',
                     )

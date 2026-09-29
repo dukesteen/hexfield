@@ -42,6 +42,8 @@ export interface CountOperation {
   anchor: EntryRef;
   monopolist: Seat;
   resource: string;
+  /** A Cities and Knights monopoly card takes at most this many from each victim. */
+  limit?: number;
   victims: readonly { seat: Seat; publicKey: string; commitment: string }[];
 }
 
@@ -68,6 +70,9 @@ export const countOperationSchema = v.strictObject({
   anchor: v.strictObject({ seq: nonnegativeIntegerSchema, hash: hashSchema }),
   monopolist: seatSchema,
   resource: kindNameSchema,
+  limit: v.exactOptional(
+    v.pipe(nonnegativeIntegerSchema, v.minValue(1), v.maxValue(MAX_HAND_RESOURCE_COUNT)),
+  ),
   victims: v.pipe(
     v.array(v.strictObject({ seat: seatSchema, publicKey: key32Schema, commitment: key32Schema })),
     v.minLength(1),
@@ -297,9 +302,11 @@ export function completeCountHandPlan(
     obligation.commitment !== victim.commitment
   )
     return failure('count-obligation', 'Count proof does not cover the derived hand obligation');
+  const limit = current.operation.limit;
+  const moved = limit === undefined ? count : Math.min(count, limit);
   const expected = [
     { type: 'resource-count-revealed', seat, resource, count },
-    ...(count === 0
+    ...(moved === 0
       ? []
       : [
           {
@@ -307,7 +314,7 @@ export function completeCountHandPlan(
             from: { kind: 'seat', seat },
             to: { kind: 'seat', seat: current.operation.monopolist },
             resource,
-            count,
+            count: moved,
           },
         ]),
   ];

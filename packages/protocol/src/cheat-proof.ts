@@ -20,7 +20,7 @@ import {
 import { deckPassHash } from './deck-genesis.js';
 import { applyDeckPass, deckPassOperationId } from './deck-setup.js';
 import { entryHash, genesisDigest } from './genesis.js';
-import { readCommandProofs } from './command-proofs.js';
+import { planNeedsProofs, readCommandProofs } from './command-proofs.js';
 import { validateCommandForEntry, validateCommandStatement } from './command-validation.js';
 import type { LogContext } from './log-types.js';
 import type { Genesis } from './types.js';
@@ -73,6 +73,8 @@ const PROOF_FAILURES = new Set([
   'hand-proof-invalid',
   'deck-reveal-proof',
   'deck-reveal-kind',
+  'deck-denial-proof',
+  'deck-denial-context',
 ]);
 
 function unproven(): Result<never> {
@@ -162,10 +164,7 @@ function badCommandProof(artifact: RawSignedArtifact, context: LogContext): Resu
   if (!statement.ok || !statement.value.plan) return unproven();
   const { body } = statement.value.signed;
   const plan = statement.value.plan;
-  const requiresProof =
-    plan.obligations.length > 0 ||
-    plan.effects.some((effect) => effect.type === 'card-slot-revealed');
-  if (!requiresProof) return unproven();
+  if (!planNeedsProofs(plan)) return unproven();
   const sections = readCommandProofs(body.evidence, plan);
   if (!sections.ok)
     return PROOF_FAILURES.has(sections.error.code) ? success(body.seat) : unproven();

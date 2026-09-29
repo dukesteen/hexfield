@@ -35,7 +35,9 @@ describe('knights simulation', () => {
     let defended = 0;
     for (let gameIndex = 0; gameIndex < 40; gameIndex++) {
       const result = runGame({
-        seed: 36,
+        // Seed 37: with player trades of commodities working (the offer validity fix), seed 36
+        // stops producing a knight displacement in 40 games.
+        seed: 37,
         gameIndex,
         config: knightsConfig({ seats: 4 }),
       });

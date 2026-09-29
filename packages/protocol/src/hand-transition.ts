@@ -12,7 +12,7 @@ import {
   verifySchnorr,
 } from '@cp2p/crypto';
 import type { RangeProof, SchnorrProof } from '@cp2p/crypto';
-import { failure, kindBounds, kindsOfCounts, success } from '@cp2p/engine';
+import { VICTORY_CARDS, failure, kindBounds, kindsOfCounts, success } from '@cp2p/engine';
 import type { EngineEffect, GameState, Input, Result, Seat, Transition } from '@cp2p/engine';
 import * as v from 'valibot';
 import { kindRecordSchema } from './card-kinds.js';
@@ -27,6 +27,9 @@ import {
 import type { PublicHandCommitments } from './hand-commitments.js';
 import { verifyResourceAccounting } from './resource-accounting.js';
 import { hashSchema, key32Schema, nonnegativeIntegerSchema, seatSchema } from './schema-values.js';
+import { coversDebit } from './preproof.js';
+import type { DebitPreproof } from './preproof.js';
+import { bodyInput, sameInput } from './seat-input.js';
 import type { CommandBody } from './types.js';
 import { signedCommandSchema } from './schemas.js';
 import { parseCanonical } from './validation.js';
@@ -41,6 +44,33 @@ export interface HandObligation {
   effectIndices: readonly number[];
 }
 
+/** A hidden slot an input shows to every seat; the owner must prove the identity. */
+export interface CardReveal {
+  seat: Seat;
+  deck: string;
+  slotId: string;
+  card: string;
+}
+
+/**
+ * A hidden slot whose owner says its card is none of `excluded` (a drawn progress card that is
+ * not a victory card); the owner must prove that without naming the card.
+ */
+export interface CardDenial {
+  seat: Seat;
+  deck: string;
+  slotId: string;
+  excluded: readonly string[];
+}
+
+/** An unrevealed slot that changes hands (the Spy takes a progress card). */
+export interface SlotMove {
+  from: Seat;
+  to: Seat;
+  deck: string;
+  slotId: string;
+}
+
 /** Local engine-derived plan. Never deserialize a plan from a peer. */
 export interface HandTransitionPlan {
   /** The game's card kinds, derived from its public bank. */
@@ -48,6 +78,10 @@ export interface HandTransitionPlan {
   input: Input;
   effects: readonly EngineEffect[];
   obligations: readonly HandObligation[];
+  /** Hidden slots shown by the input, in effect order. Slots whose identity is public need no proof. */
+  reveals: readonly CardReveal[];
+  denials: readonly CardDenial[];
+  moves: readonly SlotMove[];
   parentHands: PublicHandCommitments;
   hands: PublicHandCommitments;
 }
@@ -105,6 +139,10 @@ function copy<T>(value: T): T {
   return canonicalDecode(canonicalEncode(value)) as T;
 }
 
+function isSeatNumber(value: unknown): value is Seat {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= 5;
+}
+
 function requireValue<T>(result: Result<T>): T {
   if (!result.ok) throw new Error(result.error.message);
   return result.value;
@@ -116,6 +154,8 @@ export function planHandTransition(
   before: GameState,
   input: Input,
   transition: Transition,
+  /** Debits their owners proved ahead of the input that makes them (see `DebitPreproof`). */
+  preproofs: readonly DebitPreproof[] = [],
 ): Result<HandTransitionPlan> {
   try {
     if (input.kind === 'system' && input.type === 'STEAL_RESULT')
@@ -229,6 +269,10 @@ export function planHandTransition(
           continue;
         }
         if (debit.count <= (kindBounds(seat.resources).min[resource] ?? 0)) continue;
+        if (
+          coversDebit(preproofs, seat.seat, resource, debit.count, commitment(seat.seat, resource))
+        )
+          continue;
         obligations.push({
           kind: 'range',
           seat: seat.seat,
@@ -238,11 +282,50 @@ export function planHandTransition(
           effectIndices: debit.indices,
         });
       }
+    const cardReveals: CardReveal[] = [];
+    for (const effect of effects) {
+      if (effect.type !== 'card-slot-revealed') continue;
+      const slot = before.seats
+        .find((seat) => seat.seat === effect.seat)
+        ?.cardSlots.find((item) => item.slotId === effect.slotId);
+      // A slot with a public identity has no hidden card to prove.
+      if (slot?.known === undefined)
+        cardReveals.push({
+          seat: effect.seat,
+          deck: effect.deck,
+          slotId: effect.slotId,
+          card: effect.card,
+        });
+    }
+    const denials: CardDenial[] = [];
+    if (input.kind === 'system' && input.type === 'REVEAL_PROGRESS' && input.card === 'none') {
+      const seat = input.seat;
+      const slotId = input.slotId;
+      const slot = before.seats
+        .find((item) => item.seat === seat)
+        ?.cardSlots.find((item) => item.slotId === slotId);
+      // A hidden card the seat says is no victory card. A known slot is public and needs no proof.
+      if (slot && slot.known === undefined && isSeatNumber(seat))
+        denials.push({
+          seat,
+          deck: slot.deck,
+          slotId: slot.slotId,
+          excluded: Object.keys(VICTORY_CARDS).toSorted(),
+        });
+    }
+    const moves: SlotMove[] = effects.flatMap((effect) =>
+      effect.type === 'card-slot-moved'
+        ? [{ from: effect.from, to: effect.to, deck: effect.deck, slotId: effect.slotId }]
+        : [],
+    );
     return success({
       kinds,
       input: copy(input),
       effects,
       obligations,
+      reveals: cardReveals,
+      denials,
+      moves,
       parentHands: parent.value,
       hands,
     });
@@ -272,7 +355,17 @@ export function handProofContext(
       toHex(hashValue(body.command)) !== toHex(hashValue(plan.input.command))
     )
       throw new Error('Hand proof command differs from its input or parent');
-  } else if (parsed.command !== null) throw new Error('System hand proof cannot carry a command');
+  } else if (parsed.command !== null) {
+    // A seat's answer to a request travels as a signed envelope around its system input.
+    const body = parsed.command;
+    if (
+      body.genesisDigest !== parsed.genesisDigest ||
+      body.headSeq !== parsed.anchor.seq ||
+      body.headHash !== parsed.anchor.hash ||
+      !sameInput(bodyInput(body.seat, body.command), plan.input)
+    )
+      throw new Error('Hand proof envelope differs from its input or parent');
+  }
   return copy({
     protocol: 'hand-obligation-v1',
     ...parsed,

@@ -42,6 +42,7 @@ import type { ConsensusEffect, ConsensusState, Equivocation, TimeoutPhase } from
 import { createConsensusState } from './consensus.js';
 import { objectiveEvidenceSeq, validateObjectiveAccusation } from './control.js';
 import { entryBody, entryHash, signEntry } from './genesis.js';
+import { bodyInput } from './seat-input.js';
 import { journalSafetyStore } from './journal.js';
 import { createRetiredSafety, restoreRetiredSafety } from './retired-safety.js';
 import type { ProtocolJournal } from './journal.js';
@@ -2897,11 +2898,7 @@ export class ReplicatedLog {
       } else if (payload.kind === 'command' || payload.kind === 'system') {
         const input =
           payload.kind === 'command'
-            ? {
-                kind: 'command' as const,
-                seat: payload.signed.body.seat,
-                command: payload.signed.body.command,
-              }
+            ? bodyInput(payload.signed.body.seat, payload.signed.body.command)
             : payload.input;
         const applied = this.context.log.engine.apply(this.context.log.state, input);
         if (!applied.ok) return applied;

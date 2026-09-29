@@ -271,7 +271,7 @@ describe('committed hand transition obligations', () => {
     expect(verifyHandProofs(plan, [], binding).ok).toBe(true);
     expect(readCommandProofs(undefined, plan)).toEqual({
       ok: true,
-      value: { deck: [], hands: [] },
+      value: { deck: [], hands: [], denials: [], look: undefined },
     });
     expect(composeCommandProofs([], [])).toBeUndefined();
     expect(
@@ -340,6 +340,7 @@ describe('committed hand transition obligations', () => {
         ...plan.effects,
         { type: 'card-slot-revealed', seat: 0, deck: 'dev', slotId: 'slot', card: 'knight' },
       ],
+      reveals: [{ seat: 0, deck: 'dev', slotId: 'slot', card: 'knight' }],
     };
     expect(readCommandProofs(composeCommandProofs([reveal], [proof]), both).ok).toBe(true);
     expect(readCommandProofs(composeCommandProofs([], [proof]), both).ok).toBe(false);

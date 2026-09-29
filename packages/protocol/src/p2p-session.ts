@@ -13,6 +13,7 @@ import type {
   Result,
   Seat,
 } from '@cp2p/engine';
+import { SEAT_INPUT_TYPES, bodyInput, seatInputCommand } from './seat-input.js';
 import { entryHash, genesisDigest } from './genesis.js';
 import { signCommand } from './log.js';
 import type { LogContext, ValidatedEntry } from './log.js';
@@ -32,7 +33,7 @@ import { quorumSize } from './votes.js';
 import { chooseBotPending } from './bot-pending.js';
 import { initialProposalContext, replayCertifiedPrefix } from './replay.js';
 import { cacheCommittedPublicSnapshot } from './public-snapshot.js';
-import { timedDiscardCommand } from './turn-timeout.js';
+import { PRIVATE_TIMEOUT_TYPES, timedPrivateCommand } from './turn-timeout.js';
 import type {
   GameSession,
   SessionStatus,
@@ -510,13 +511,14 @@ export class P2PSession implements GameSession<CertifiedHistory> {
     if (!automatic.ok) return automatic;
     if (automatic.value && !sameCommand(automatic.value, command))
       return failure('automatic-input-pending', 'An automatic action must finish first');
-    const input: Input = { kind: 'command', seat, command };
+    const input: Input = bodyInput(seat, command);
     const publicCheck = this.options.engine.validate(this.context.log.state, input);
     if (!publicCheck.ok) return publicCheck;
     const privateCheck = this.options.engine.applyPrivate(
       privateState,
       this.context.log.state,
       input,
+      this.driver.privateInputData?.(seat, input),
     );
     return privateCheck.ok ? success(undefined) : privateCheck;
   }
@@ -1670,27 +1672,49 @@ export class P2PSession implements GameSession<CertifiedHistory> {
       if (input?.kind === 'command' && input.seat === privateState.seat)
         return success(input.command);
       if (this.context.log.genesis.security !== 'verified') return success(null);
-      const expired = this.getTimers().some(
-        (timer) =>
-          timer.seat === privateState.seat &&
-          timer.phase === 'discard' &&
-          !timer.paused &&
-          timer.remainingMs === 0,
+      const expired = this.getTimers().filter(
+        (timer) => timer.seat === privateState.seat && !timer.paused && timer.remainingMs === 0,
       );
-      if (!expired) return success(null);
+      if (expired.length === 0) return success(null);
       const pending = this.options.engine
         .getPending(this.context.log.state)
-        .some(
+        .find(
           (item) =>
             item.kind === 'player' &&
             item.seat === privateState.seat &&
-            item.allowed.includes('DISCARD'),
+            item.deadline !== undefined &&
+            expired.some((timer) => timer.phase === item.deadline?.phase) &&
+            item.allowed.some((type) => PRIVATE_TIMEOUT_TYPES.includes(type)),
         );
-      if (!pending) return success(null);
-      return timedDiscardCommand(this.context.log.state, privateState);
+      if (pending?.kind !== 'player') return success(null);
+      return timedPrivateCommand(this.context.log.state, privateState, pending.allowed);
     } catch {
       return failure('automatic-input-unavailable', 'Could not determine the automatic action');
     }
+  }
+
+  /**
+   * The answer an owned seat owes to a request only it can answer: its own victory check, its
+   * show of cards to a Spy or Master Merchant, or that actor's take. The seat signs it like a move.
+   */
+  private revealAutomatic(): Extract<Input, { kind: 'command' }> | null {
+    const pendings = this.options.engine.getPending(this.context.log.state);
+    for (const pending of pendings) {
+      if (
+        pending.kind !== 'reveal' ||
+        !this.keys.has(pending.seat) ||
+        !SEAT_INPUT_TYPES.includes(pending.systemType)
+      )
+        continue;
+      const answer = this.driver.revealAnswer?.(
+        pending.seat,
+        pending,
+        detachedLogContext(this.context.log),
+      );
+      if (answer?.ok && answer.value?.kind === 'system')
+        return { kind: 'command', seat: pending.seat, command: seatInputCommand(answer.value) };
+    }
+    return null;
   }
 
   private submitAutomatic(): void {
@@ -1707,12 +1731,13 @@ export class P2PSession implements GameSession<CertifiedHistory> {
     if (!automatic) {
       for (const [seat, privateState] of privates) {
         const prepared = this.automaticCommand(privateState);
-        if (prepared.ok && prepared.value?.type === 'DISCARD') {
+        if (prepared.ok && prepared.value && PRIVATE_TIMEOUT_TYPES.includes(prepared.value.type)) {
           automatic = { kind: 'command', seat, command: prepared.value };
           break;
         }
       }
     }
+    if (!automatic) automatic = this.revealAutomatic();
     if (!automatic) return;
     this.cancelPending(automatic.seat);
     if (this.inflight.has(automatic.seat)) return;
@@ -1876,10 +1901,18 @@ export class P2PSession implements GameSession<CertifiedHistory> {
     const next = this.getTimers()
       .filter(
         (timer) =>
-          timer.phase === 'discard' &&
           this.keys.has(timer.seat) &&
           !timer.paused &&
-          timer.remainingMs > 0,
+          timer.remainingMs > 0 &&
+          this.options.engine
+            .getPending(this.context.log.state)
+            .some(
+              (item) =>
+                item.kind === 'player' &&
+                item.seat === timer.seat &&
+                item.deadline?.phase === timer.phase &&
+                item.allowed.some((type) => PRIVATE_TIMEOUT_TYPES.includes(type)),
+            ),
       )
       .toSorted((a, b) => a.remainingMs - b.remainingMs)[0];
     if (!next) return;

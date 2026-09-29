@@ -52,6 +52,8 @@ export type {
   SchnorrProof,
   SchnorrStatement,
 } from './sigma.js';
+export { MAX_DLEQ_OR_BRANCHES, proveDleqOr, verifyDleqOr } from './dleq-or.js';
+export type { DleqOrBranchProof, DleqOrProof, DleqOrStatement } from './dleq-or.js';
 export { proveCdsOr, verifyCdsOr } from './cds.js';
 export type {
   CdsOrStatement,

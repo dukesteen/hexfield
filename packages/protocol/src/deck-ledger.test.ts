@@ -235,10 +235,11 @@ describe('certified deck ledger', () => {
       },
       sig: toBase64Url(new Uint8Array(64)),
     };
-    const revealed = value(revealDeckCards(fixture.dealt, fixture.afterDeal, signed, 0));
+    const reveals = [{ seat: 0 as const, deck: 'dev', slotId: 'dev:0', card: command.card }];
+    const revealed = value(revealDeckCards(fixture.dealt, fixture.afterDeal, signed, 0, reveals));
     expect(revealed.decks[0]?.slots).toHaveLength(0);
     expect(fixture.dealt.decks[0]?.slots).toHaveLength(1);
-    expect(revealDeckCards(revealed, fixture.afterDeal, signed, 0).ok).toBe(false);
+    expect(revealDeckCards(revealed, fixture.afterDeal, signed, 0, reveals).ok).toBe(false);
     expect(
       revealDeckCards(
         fixture.dealt,
@@ -248,6 +249,7 @@ describe('certified deck ledger', () => {
           body: { ...signed.body, command: { ...command, card: 'monopoly' } },
         },
         0,
+        [{ ...reveals[0], card: 'monopoly' }],
       ).ok,
     ).toBe(false);
     expect(
@@ -259,6 +261,7 @@ describe('certified deck ledger', () => {
           body: { ...signed.body, headSeq: deal.seq - 1 },
         },
         0,
+        reveals,
       ).ok,
     ).toBe(false);
     expect(
@@ -270,6 +273,7 @@ describe('certified deck ledger', () => {
           body: { ...signed.body, seat: 1 },
         },
         0,
+        reveals,
       ).ok,
     ).toBe(false);
     expect(
@@ -278,6 +282,7 @@ describe('certified deck ledger', () => {
         fixture.afterDeal,
         { ...signed, body: { ...signed.body, genesisDigest: toBase64Url(bytes(99)) } },
         0,
+        reveals,
       ).ok,
     ).toBe(false);
   });
@@ -308,8 +313,9 @@ describe('certified deck ledger', () => {
       },
       sig: toBase64Url(new Uint8Array(64)),
     };
+    const held = [{ seat: 0 as const, deck: 'dev', slotId: 'dev:0', card: 'victoryPoint' }];
     expect(
-      value(revealDeckCards(fixture.dealt, fixture.afterDeal, signed, 0)).decks[0]?.slots,
+      value(revealDeckCards(fixture.dealt, fixture.afterDeal, signed, 0, held)).decks[0]?.slots,
     ).toHaveLength(0);
     expect(
       revealDeckCards(
@@ -320,6 +326,7 @@ describe('certified deck ledger', () => {
           body: { ...signed.body, command: { ...command, slotIds: ['other'] } },
         },
         0,
+        [{ ...held[0], slotId: 'other' }],
       ).ok,
     ).toBe(false);
   });

@@ -12,7 +12,7 @@ import type { GenesisSeedMode, TakeoverPolicy } from '@cp2p/protocol';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { MAX_PLAYERS, MIN_PLAYERS, modulesForSeatCount } from '../players/identity';
-import { ScenarioPicker, isSeafaringScenario } from '../setup/ScenarioPicker';
+import { ScenarioPicker, isExpansionScenario } from '../setup/ScenarioPicker';
 
 const rules = baseModule();
 const seats = [0, 1, 2, 3, 4, 5] as const;
@@ -34,10 +34,13 @@ function initialOptions(config: GameConfig): Record<string, unknown> {
   };
 }
 
-/** The seafaring scenario a signed configuration was built from, or null for a classic game. */
+/**
+ * The expansion scenario (seafaring, or knights and commerce) a signed configuration was built
+ * from, or null for a classic game. Such a scenario brings its own modules and options.
+ */
 function seafaringIdOf(config: GameConfig): string | null {
   const scenario = scenarioOfConfig(config);
-  return scenario && isSeafaringScenario(scenario) ? scenario.id : null;
+  return scenario && isExpansionScenario(scenario) ? scenario.id : null;
 }
 
 /** Keep a newer local draft when an earlier signed configuration arrives. */
@@ -155,7 +158,7 @@ export function OnlineConfiguration({
             : (currentConfig.current.options[id] ?? {}),
         ]),
       );
-      // A seafaring scenario brings its own modules, options and board, beside the base rules.
+      // An expansion scenario brings its own modules, options and board, beside the base rules.
       const next: GameConfig = seafaring
         ? scenarioConfig(seafaring, seatCount, { base: { ...options } })
         : {
@@ -227,6 +230,9 @@ export function OnlineConfiguration({
     changed();
   };
   const fixedScenario = options.mapLayout === 'standard-fixed' && seatCount <= 4;
+  // A seafaring board is fixed; a knights scenario keeps the classic generated map and its choice.
+  const pickedBoardFixed =
+    seafaringId !== null && scenarioById(seafaringId)?.board.kind === 'fixed';
   const scenarioId =
     seafaringId ??
     (fixedScenario
@@ -273,16 +279,20 @@ export function OnlineConfiguration({
           <ScenarioPicker
             seatCount={seatCount}
             scenarioId={scenarioId}
+            allowKnights
             disabled={!editable}
             onScenario={(scenario) => {
               const wasSeafaring = seafaringId !== null;
-              if (isSeafaringScenario(scenario)) {
+              if (isExpansionScenario(scenario)) {
                 // The scenario's own board and victory target replace the classic map choice.
                 setSeafaringId(scenario.id);
                 setOptions((current) => ({
                   ...current,
                   vpTarget: scenario.vpTarget,
-                  mapLayout: 'balanced-random',
+                  mapLayout:
+                    scenario.board.kind === 'fixed' || current.mapLayout === 'standard-fixed'
+                      ? 'balanced-random'
+                      : current.mapLayout,
                 }));
                 changed();
                 return;
@@ -296,7 +306,7 @@ export function OnlineConfiguration({
             onSeatCount={changeSeats}
           />
           {rules.optionsSchema
-            .filter((spec) => spec.key !== 'mapLayout' || (!fixedScenario && seafaringId === null))
+            .filter((spec) => spec.key !== 'mapLayout' || (!fixedScenario && !pickedBoardFixed))
             .map((spec) => (
               <RuleField
                 key={spec.key}

@@ -220,8 +220,8 @@ export async function createTerminalAuditFixture(
       ),
     ),
   };
-  // A module that declares no cards (knights has no development deck) has no deck ceremony.
-  const deckDefinition = value(genesisDeckDefinitions(genesis))[0];
+  // Every module-declared deck with cards has a ceremony (knights: three progress decks).
+  const deckDefinitions = value(genesisDeckDefinitions(genesis));
   const genesisState = engine.createGame(genesis.config, fromBase64Url(genesis.genesisSeed));
   const first = required(simulation.identities.get(0));
   const genesisEntry = signEntry(
@@ -254,8 +254,8 @@ export async function createTerminalAuditFixture(
       localMasters.push(...masters.values());
       const sourceFor = (seat: Seat) => required(masters.get(seat));
       const deckSourceFor = (deckId: string, seat: Seat) => {
-        if (!deckDefinition || deckId !== deckDefinition.deckId)
-          throw new Error('Unknown fixture deck');
+        const deckDefinition = deckDefinitions.find((item) => item.deckId === deckId);
+        if (!deckDefinition) throw new Error('Unknown fixture deck');
         return createDeckSecretSource(sourceFor(seat), deckDefinition, seat);
       };
       const sourceIndex = humans.findIndex((seat) => seat.seat === human.seat);
@@ -344,7 +344,21 @@ export async function createTerminalAuditFixture(
           finalState: state,
         };
       }
-      const players = required(current.getPending()).filter((item) => item.kind === 'player');
+      // Every peer verifies the same certified entries at its own pace; act only on a settled head.
+      if (
+        new Set(sessions.map((session) => session.getCommittedHead().seq)).size > 1 &&
+        !state.result
+      ) {
+        network.clock.advanceBy(200);
+        // oxlint-disable-next-line eslint/no-await-in-loop -- Wait for the slower peer to certify.
+        await settle(sessions, network.clock, 12);
+        continue;
+      }
+      // A lone hidden-victory claim is optional and never the next step of a scripted game.
+      const players = required(current.getPending()).filter(
+        (item): item is Extract<Pending, { kind: 'player' }> =>
+          item.kind === 'player' && item.allowed.some((type) => type !== 'CLAIM_VICTORY'),
+      );
       const pending = options.choosePending ? options.choosePending(players, state) : players[0];
       if (!pending || pending.kind !== 'player') {
         network.clock.advanceBy(2_000);
@@ -383,7 +397,14 @@ export async function createTerminalAuditFixture(
         await settle(sessions, network.clock);
       }
       if (completion === null) throw new Error(`Audit fixture command stalled at step ${step}`);
-      value(completion);
+      try {
+        value(completion);
+      } catch (error) {
+        throw new Error(
+          `Audit fixture command ${JSON.stringify(command)} failed at step ${step}: ${String(error)}`,
+          { cause: error },
+        );
+      }
     }
     throw new Error(`No terminal certified victory within ${maxSteps} steps`);
   } finally {
