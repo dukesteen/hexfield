@@ -11,8 +11,8 @@ import { runGame, SimulationFailure } from './run-game.js';
 import { fuzz } from './fuzz.js';
 import { playTournamentGames, summarizeTournament } from './tournament.js';
 import type { TournamentGame, TournamentOptions } from './tournament.js';
-import { isBotLevel } from '@cp2p/bots';
-import type { BotLevel } from '@cp2p/bots';
+import { isSimBotLevel } from '@cp2p/bots';
+import type { SimBotLevel } from '@cp2p/bots';
 
 import { updateGoldens } from './golden.js';
 import { updateKnightsGoldens } from './knights-golden.js';
@@ -473,13 +473,13 @@ function tournamentWorker(options: TournamentOptions): Promise<TournamentGame[]>
 }
 
 /** Parse `--bots easy,normal,hard,random`: one level per seat, 2–6 seats. */
-export function parseBotLevels(value: string | boolean | undefined): BotLevel[] {
+export function parseBotLevels(value: string | boolean | undefined): SimBotLevel[] {
   if (typeof value !== 'string')
     throw new Error('--bots needs a list such as easy,random,random,random');
   const levels = value.split(',');
-  const parsed = levels.filter(isBotLevel);
+  const parsed = levels.filter(isSimBotLevel);
   if (parsed.length !== levels.length || parsed.length < 2 || parsed.length > 6)
-    throw new Error('--bots lists 2–6 of random, easy, normal, hard');
+    throw new Error('--bots lists 2–6 of random, easy, normal, hard (or hard-v1, normal-v1)');
   return parsed;
 }
 
