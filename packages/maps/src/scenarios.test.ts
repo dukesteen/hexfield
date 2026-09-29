@@ -4,6 +4,7 @@ import {
   BOARD_SHAPES,
   SCENARIOS,
   defaultScenario,
+  scenarioAtSeats,
   scenarioById,
   scenarioConfig,
   scenarioIsPlayable,
@@ -19,6 +20,25 @@ const plain = (count: number): string[] =>
     .map((scenario) => scenario.id);
 
 describe('scenarios', () => {
+  test('every expansion map follows the seat count to its 3–4 or 5–6 player version', () => {
+    const expansion = SCENARIOS.filter(
+      (scenario) => scenario.modules.includes('seafaring') || scenario.modules.includes('knights'),
+    );
+    for (const scenario of expansion) {
+      const other = scenario.seats.max <= 4 ? 5 : 4;
+      const sibling = scenarioAtSeats(scenario, other);
+      expect(sibling?.id).toBe(
+        scenario.id.endsWith('-56') ? scenario.id.slice(0, -3) : `${scenario.id}-56`,
+      );
+      expect(sibling && scenarioAtSeats(sibling, scenario.seats.min)).toBe(scenario);
+      expect(scenarioAtSeats(scenario, scenario.seats.max)).toBe(scenario);
+    }
+    // The classic island has no own 5–6 version: the caller falls back to its default.
+    const standard = scenarioById('standard');
+    expect(standard && scenarioAtSeats(standard, 5)).toBeUndefined();
+    expect(standard && scenarioAtSeats(standard, 2)).toBe(standard);
+  });
+
   test('every board shape passes the fixture and harbor slot rules', () => {
     for (const shape of Object.values(BOARD_SHAPES)) expect(boardShapeProblems(shape)).toEqual([]);
   });

@@ -98,6 +98,25 @@
       "engineVersion": "0.1.0"
     },
     {
+      "name": "fogbound-56",
+      "file": "fogbound-56.replay.json",
+      "scenario": "fogbound-56",
+      "seats": 6,
+      "seed": 1200,
+      "gameIndex": 1,
+      "features": [
+        "fog-reveal",
+        "gold-choice",
+        "normal-completion",
+        "pirate-move",
+        "ship-build",
+        "ship-move"
+      ],
+      "inputs": 1341,
+      "winner": 0,
+      "engineVersion": "0.1.0"
+    },
+    {
       "name": "desert-crossing",
       "file": "desert-crossing.replay.json",
       "scenario": "desert-crossing",
@@ -114,6 +133,26 @@
       ],
       "inputs": 1049,
       "winner": 2,
+      "engineVersion": "0.1.0"
+    },
+    {
+      "name": "desert-crossing-56",
+      "file": "desert-crossing-56.replay.json",
+      "scenario": "desert-crossing-56",
+      "seats": 6,
+      "seed": 1200,
+      "gameIndex": 0,
+      "features": [
+        "gold-choice",
+        "island-bonus",
+        "normal-completion",
+        "pirate-move",
+        "setup-ship",
+        "ship-build",
+        "ship-move"
+      ],
+      "inputs": 2407,
+      "winner": 3,
       "engineVersion": "0.1.0"
     },
     {

@@ -14,6 +14,7 @@ export type SeafarersKnightsGoldenFeature =
   | 'ship-build'
   | 'ship-move'
   | 'setup-ship'
+  | 'fog-reveal'
   | 'pirate-move'
   | 'gold-choice'
   | 'island-bonus'
@@ -77,11 +78,60 @@ export const SEAFARERS_KNIGHTS_GOLDEN_CASES: readonly SeafarersKnightsGoldenCase
     require: [...CORE, 'ship-move', 'island-bonus'],
   },
   {
+    name: 'four-isles-knights',
+    scenario: 'four-isles-knights',
+    seats: 4,
+    seed: 1400,
+    require: [...CORE, 'ship-move', 'island-bonus'],
+  },
+  {
+    name: 'four-isles-knights-56',
+    scenario: 'four-isles-knights-56',
+    seats: 6,
+    seed: 1400,
+    require: [...CORE, 'island-bonus'],
+  },
+  {
+    name: 'fogbound-knights',
+    scenario: 'fogbound-knights',
+    seats: 4,
+    seed: 1400,
+    require: [...CORE, 'fog-reveal', 'ship-move'],
+  },
+  {
+    name: 'fogbound-knights-56',
+    scenario: 'fogbound-knights-56',
+    seats: 6,
+    seed: 1400,
+    require: [...CORE, 'fog-reveal'],
+  },
+  {
     name: 'desert-crossing-knights',
     scenario: 'desert-crossing-knights',
     seats: 4,
     seed: 1400,
     require: [...CORE, 'ship-move', 'pirate-move', 'island-bonus'],
+  },
+  {
+    name: 'desert-crossing-knights-56',
+    scenario: 'desert-crossing-knights-56',
+    seats: 6,
+    seed: 1400,
+    require: [...CORE, 'island-bonus'],
+  },
+  {
+    name: 'open-sea-knights',
+    scenario: 'open-sea-knights',
+    seats: 4,
+    seed: 1400,
+    require: [...CORE, 'ship-move', 'island-bonus'],
+  },
+  {
+    name: 'open-sea-knights-56',
+    scenario: 'open-sea-knights-56',
+    seats: 6,
+    seed: 1400,
+    require: [...CORE, 'island-bonus'],
   },
 ];
 
@@ -93,8 +143,7 @@ export function seafarersKnightsFeatures(
   state: GameState,
 ): Set<SeafarersKnightsGoldenFeature> {
   const features = new Set<SeafarersKnightsGoldenFeature>();
-  for (const feature of seafaringFeatures(inputs, state))
-    if (feature !== 'fog-reveal') features.add(feature);
+  for (const feature of seafaringFeatures(inputs, state)) features.add(feature);
   const commands = new Set(
     inputs.flatMap((input) => (input.kind === 'command' ? [input.command.type] : [])),
   );

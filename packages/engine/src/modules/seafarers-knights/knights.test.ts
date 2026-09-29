@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import type { GameState } from '../../core/state/index.js';
-import { vertexOnLand } from '../base/board/index.js';
+import { hexesForVertex, vertexOnLand } from '../base/board/index.js';
 import { recruitSites } from '../knights/pieces.js';
 import { knightsExt } from '../knights/types.js';
 import {
@@ -143,5 +143,24 @@ describe('displacement at sea', () => {
     const after = submit(lone, 0, { type: 'DISPLACE_KNIGHT', from: FAR, to: SEA });
     expect(knightsOf(after).filter((knight) => knight.seat === 1)).toEqual([]);
     expect(top(after)?.id).toBe('main');
+  });
+
+  test('a knight never stands beside unrevealed fog: the pair checks it as an invariant', () => {
+    const placed = withKnights(fleet(), [{ seat: 0, vertex: SEA }]);
+    expect(engine.checkInvariants(placed)).toEqual([]);
+    // Turn a sea hex at the knight's vertex back into fog, as if nothing had revealed it.
+    const [hex] = hexesForVertex(placed, SEA);
+    const fogged = {
+      ...placed,
+      board: {
+        ...placed.board,
+        hexes: placed.board.hexes.map((item) =>
+          item.id === hex ? { ...item, terrain: 'fog', token: null } : item,
+        ),
+      },
+    };
+    expect(engine.checkInvariants(fogged)).toContain(
+      `knight at ${SEA} stands beside unrevealed fog`,
+    );
   });
 });

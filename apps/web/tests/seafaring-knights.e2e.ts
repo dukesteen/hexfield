@@ -20,7 +20,14 @@ import type { ViewportName } from './helpers/seafaring-board.js';
 const SCENARIOS = [
   { id: 'new-horizons-knights', seats: 4 },
   { id: 'new-horizons-knights-56', seats: 5 },
+  { id: 'four-isles-knights', seats: 4 },
+  { id: 'four-isles-knights-56', seats: 6 },
+  { id: 'fogbound-knights', seats: 3 },
+  { id: 'fogbound-knights-56', seats: 5 },
   { id: 'desert-crossing-knights', seats: 3 },
+  { id: 'desert-crossing-knights-56', seats: 6 },
+  { id: 'open-sea-knights', seats: 4 },
+  { id: 'open-sea-knights-56', seats: 5 },
 ] as const;
 
 /** Where screenshots go: `COMBO_SHOTS` when set, otherwise the test's own output folder. */
@@ -100,8 +107,12 @@ test.describe('seafaring with knights against bots', () => {
           expect(ids).toEqual(
             expect.arrayContaining(['seafaring', 'knights', 'scenario:seafarers-knights']),
           );
-          // The barbarian track stands outside the explicit sea board, and the pirate waits.
+          // The barbarian track stands outside the sea board (a generated one too), and the
+          // pirate waits.
           expect(start.board.fixtures?.map((fixture) => fixture.id)).toEqual(['barbarian-track']);
+          const onBoard = new Set(start.board.hexes.map((hex) => hex.id));
+          for (const { q, r } of start.board.fixtures?.[0]?.footprint ?? [])
+            expect(onBoard.has(`h:${q},${r}`)).toBe(false);
           expect(seafaringExt(start).pirateHex).toBeNull();
           await expect.poll(() => hexCornersOutside(page, start)).toBe(0);
           await expect.poll(() => trackInView(page)).toBe(true);

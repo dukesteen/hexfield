@@ -4,7 +4,8 @@ import { checkModuleSelection, moduleSelection } from '../catalogue.js';
 import { checkModuleCombination } from '../compat.js';
 import { perimeterFixtureSlot } from '../seafaring/fixture.js';
 import { seafaringConfig, seafaringEngine, testArchipelago } from '../seafaring/testing.js';
-import { COMBO_ID } from './types.js';
+import { seafaringExt } from '../seafaring/types.js';
+import { COMBO_ID, comboExt } from './types.js';
 import { engine, newGame } from './support.js';
 import { seafarersKnightsConfig } from './testing.js';
 
@@ -29,14 +30,24 @@ describe('selecting the pair', () => {
     ).toBe(true);
   });
 
-  test('a generated archipelago is refused: the track needs an explicit board', () => {
+  test('a generated archipelago gets its track slot from the board built at genesis', () => {
     const { board: _board, ...config } = seafarersKnightsConfig();
-    expect(() =>
-      engine.createGame(
-        { ...config, options: { ...config.options, seafaring: { layout: 'archipelago' } } },
-        new Uint8Array(32),
-      ),
-    ).toThrow('explicit board');
+    const generated = {
+      ...config,
+      options: { ...config.options, seafaring: { layout: 'archipelago-v2', pirateHex: null } },
+    };
+    for (const seed of [0, 7, 42]) {
+      const state = engine.createGame(generated, new Uint8Array(32).fill(seed));
+      const [fixture] = state.board.fixtures ?? [];
+      expect(fixture).toMatchObject({ id: 'barbarian-track', slot: 'perimeter' });
+      const onBoard = new Set(state.board.hexes.map((hex) => hex.id));
+      for (const { q, r } of fixture?.footprint ?? [])
+        expect(onBoard.has(`h:${q},${r}`)).toBe(false);
+      // The pirate waits off the board on the generator's own start hex.
+      expect(seafaringExt(state).pirateHex).toBeNull();
+      expect(comboExt(state).pirateStart).not.toBeNull();
+      expect(engine.checkInvariants(state)).toEqual([]);
+    }
   });
 });
 

@@ -22,10 +22,20 @@ const SCENARIOS = [
   'four-isles',
   'four-isles-56',
   'fogbound',
+  'fogbound-56',
   'desert-crossing',
+  'desert-crossing-56',
   'open-sea',
   'open-sea-56',
 ] as const;
+
+/** Maps whose fit is also kept as a screenshot at every viewport. */
+const FIT_SHOTS = new Set<string>([
+  'new-horizons',
+  'open-sea-56',
+  'fogbound-56',
+  'desert-crossing-56',
+]);
 
 /** The human seat: the first one, as the lobby sets it up. */
 const SEAT: Seat = 0;
@@ -480,8 +490,7 @@ test.describe('every seafaring scenario against bots', () => {
           await newLocalGame(page, scenario);
           const state = await gameState(page);
           await expect.poll(() => hexCornersOutside(page, state)).toBe(0);
-          if (scenario === 'new-horizons' || scenario === 'open-sea-56')
-            await shot(page, testInfo, `fit-${scenario}-${name}`);
+          if (FIT_SHOTS.has(scenario)) await shot(page, testInfo, `fit-${scenario}-${name}`);
           expect(errors).toEqual([]);
         } finally {
           await context.close();

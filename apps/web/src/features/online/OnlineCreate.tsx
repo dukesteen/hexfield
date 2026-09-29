@@ -1,5 +1,5 @@
 import type { BaseOptions, GameConfig } from '@cp2p/engine';
-import { defaultScenario, scenarioConfig, type Scenario } from '@cp2p/maps';
+import { defaultScenario, scenarioAtSeats, scenarioConfig, type Scenario } from '@cp2p/maps';
 import { useNavigate } from '@tanstack/react-router';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -54,8 +54,9 @@ export function OnlineCreate() {
   };
   const changeSeatCount = (count: number) => {
     setSeatCount(count);
-    if (count < scenario.seats.min || count > scenario.seats.max)
-      chooseScenario(defaultScenario(count));
+    // An expansion map follows the seat count into its 3–4 or 5–6 player version.
+    const next = scenarioAtSeats(scenario, count) ?? defaultScenario(count);
+    if (next !== scenario) chooseScenario(next);
   };
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(false);

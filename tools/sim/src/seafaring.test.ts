@@ -48,7 +48,9 @@ describe('seafaring simulation', () => {
       'four-isles',
       'four-isles-56',
       'fogbound',
+      'fogbound-56',
       'desert-crossing',
+      'desert-crossing-56',
       'open-sea',
       'open-sea-56',
     ]);
@@ -76,7 +78,7 @@ describe('seafaring simulation', () => {
         // Only Fogbound has fog: its terrain and token stacks were both drawn from.
         const decks = new Set(revealed.map((entry) => entry.split(':')[0]));
         expect([...decks].toSorted()).toEqual(
-          scenario.id === 'fogbound' ? ['fog-terrain', 'fog-token'] : [],
+          scenario.id.startsWith('fogbound') ? ['fog-terrain', 'fog-token'] : [],
         );
       }, 240_000);
     },

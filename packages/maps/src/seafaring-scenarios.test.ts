@@ -23,6 +23,7 @@ import {
   tokenProblems,
 } from './index.js';
 import type { FixedSeafaringData } from './index.js';
+import { FOGBOUND_56_FOG, FOGBOUND_FOG } from './scenarios/seafaring/index.js';
 import { cellId, parseRows, renderRows } from './scenarios/seafaring/layout.js';
 
 interface Expectation {
@@ -101,12 +102,34 @@ const EXPECTED: Expectation[] = [
     fog: true,
   },
   {
+    data: byId('fogbound-56'),
+    hexes: 99,
+    frame: [9, 11],
+    islands: [17, 17],
+    harbors: 10,
+    seats: 6,
+    vp: 12,
+    bonus: null,
+    fog: true,
+  },
+  {
     data: byId('desert-crossing'),
     hexes: 63,
     frame: [7, 9],
     islands: [31, 2, 2, 2, 2],
     harbors: 9,
     seats: 4,
+    vp: 13,
+    bonus: 2,
+    fog: false,
+  },
+  {
+    data: byId('desert-crossing-56'),
+    hexes: 99,
+    frame: [9, 11],
+    islands: [47, 3, 3, 3, 3],
+    harbors: 10,
+    seats: 6,
     vp: 13,
     bonus: 2,
     fog: false,
@@ -262,12 +285,13 @@ describe('Four Isles', () => {
   });
 });
 
-describe('Fogbound', () => {
-  const data = byId('fogbound');
+describe.each(['fogbound', 'fogbound-56'])('Fogbound (%s)', (fogId) => {
+  const data = byId(fogId);
   const board = data.board();
   const fog = data.options.fog;
 
   test('the fog stack matches the fog hexes', () => {
+    expect(fog).toBe(fogId === 'fogbound' ? FOGBOUND_FOG : FOGBOUND_56_FOG);
     if (!fog) throw new Error('missing fog');
     const fogHexes = board.hexes.filter((hex) => hex.terrain === 'fog');
     const tiles = Object.values(fog.terrains).reduce((sum, count) => sum + count, 0);
@@ -313,8 +337,13 @@ describe('Fogbound', () => {
   });
 });
 
-describe('Desert Crossing', () => {
-  const data = byId('desert-crossing');
+const CROSSINGS = [
+  { id: 'desert-crossing', main: 31, strip: 5, side: 13, center: cellId(4, 3) },
+  { id: 'desert-crossing-56', main: 47, strip: 7, side: 20, center: cellId(5, 4) },
+];
+
+describe.each(CROSSINGS)('Desert Crossing ($id)', (crossing) => {
+  const data = byId(crossing.id);
   const board = data.board();
   const regions = data.options.bonusRegions ?? [];
   const land = new Set(
@@ -323,9 +352,9 @@ describe('Desert Crossing', () => {
 
   test('the desert strip joins both sides into one connected island', () => {
     const [big] = detectIslands(board.hexes).toSorted((a, b) => b.hexes.length - a.hexes.length);
-    expect(big?.hexes).toHaveLength(31);
+    expect(big?.hexes).toHaveLength(crossing.main);
     const strip = board.hexes.filter((hex) => hex.terrain === 'desert');
-    expect(strip).toHaveLength(5);
+    expect(strip).toHaveLength(crossing.strip);
     for (const hex of strip) expect(big?.hexes).toContain(hex.id);
   });
 
@@ -366,10 +395,10 @@ describe('Desert Crossing', () => {
 
   test('setup is on the home side only, and the home side is the first region', () => {
     expect(data.options.setupAreas).toEqual(regions[0]);
-    expect(regions[0]).toHaveLength(13);
-    expect(regions[1]).toHaveLength(13);
+    expect(regions[0]).toHaveLength(crossing.side);
+    expect(regions[1]).toHaveLength(crossing.side);
     for (const id of regions.slice(2).flat()) expect(data.options.setupAreas).not.toContain(id);
-    expect(board.robberHex).toBe(cellId(4, 3));
+    expect(board.robberHex).toBe(crossing.center);
   });
 });
 
@@ -396,7 +425,9 @@ describe('seafaring scenario registry', () => {
     ['four-isles', ['base', 'seafaring'], 3, 4, 13],
     ['four-isles-56', ['base', 'five-six', 'seafaring'], 5, 6, 13],
     ['fogbound', ['base', 'seafaring'], 3, 4, 12],
+    ['fogbound-56', ['base', 'five-six', 'seafaring'], 5, 6, 12],
     ['desert-crossing', ['base', 'seafaring'], 3, 4, 13],
+    ['desert-crossing-56', ['base', 'five-six', 'seafaring'], 5, 6, 13],
     ['open-sea', ['base', 'seafaring'], 3, 4, 12],
     ['open-sea-56', ['base', 'five-six', 'seafaring'], 5, 6, 12],
   ];

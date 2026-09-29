@@ -61,5 +61,7 @@ describe('online lobby with seafaring scenarios', () => {
         net.dispose();
       }
     },
+    // The 11x9 boards hash and sign a larger config; keep room on a loaded worker.
+    30_000,
   );
 });
