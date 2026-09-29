@@ -24,12 +24,4 @@ Open <http://127.0.0.1:5187/>. Run `pnpm check` for the repository checks or `pn
 - Simulations: `pnpm sim run --games 2000 --players 4 --seed 42 --parallel 4` and `pnpm sim fuzz --iterations 50000 --seed 42`.
 - Network acceptance: `pnpm sim net --scenario <1-9> --seeds 5 --seed 42 --parallel 1`. Add `--security verified --seeds 1 --max-elapsed-ms 900000` for a real-crypto game, or `--lifecycle persistence` for the restart check.
 
-The `main` branch deploys to GitHub Pages after CI checks and the simulation job pass. Browser tests run by default. The Pages build uses `/hexfield/` as its asset base; local development and ordinary builds use `/`.
-
-After verifying the release changes with E2E tests locally, a maintainer can skip the hosted browser run with:
-
-```sh
-gh workflow run ci.yml -f skip_e2e=true
-```
-
-Record which local browser checks passed for the release. Use `pnpm test:e2e` for the complete suite; small UI fixes can use the relevant focused tests. This manual option still runs repository checks, the build, coverage, and simulation before deployment. Pushes and ordinary manual runs keep the browser suite enabled.
+GitHub Actions runs only the fast static checks and the build; every test, simulation and browser suite runs locally, as above. The `main` branch deploys to GitHub Pages once those checks pass. The Pages build uses `/hexfield/` as its asset base; local development and ordinary builds use `/`. Record which local checks passed for a release.
