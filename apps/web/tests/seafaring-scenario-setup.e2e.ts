@@ -56,8 +56,9 @@ test.describe('every seafaring scenario starts and plays locally', () => {
       expect(state.config.modules.map((module) => module.id)).toContain('seafaring');
       expect(state.config.seats).toHaveLength(seats);
       expect(state.board.hexes.some((hex) => hex.terrain === 'sea')).toBe(true);
+      // Every Fogbound map, at either seat count and with knights, hides hexes under fog.
       expect(state.board.hexes.some((hex) => hex.terrain === 'fog')).toBe(
-        scenario.id === 'fogbound',
+        scenario.id.startsWith('fogbound'),
       );
       // The human places a settlement and its road (or ship), and the bots then place theirs.
       expect(await submitFirst(page, ['PLACE_SETTLEMENT'])).toBe('PLACE_SETTLEMENT');
