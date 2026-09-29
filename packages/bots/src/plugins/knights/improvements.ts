@@ -20,6 +20,9 @@ const TRACK_PRIORITY: Readonly<Record<string, number>> = { science: 3, trade: 2,
 
 const VP = 6;
 
+/** A purchase worth at least this takes (or locks) a metropolis. */
+export const METROPOLIS_VALUE = VP;
+
 /** Most bank trades a metropolis purchase may take in one turn. */
 const RUSH_TRADES = 2;
 
@@ -85,22 +88,6 @@ export function improvementValue(context: TurnContext, track: Track): number {
     value += 2 * VP + 2 * VP * 0.4 * threatOf(context, holder.seat);
   if (next === 5 && holder?.seat === seat) value += VP * 0.6;
   return value;
-}
-
-/** The stage 16 order: cheap early levels first, science's Aqueduct at 3 most of all. */
-export function improvementV1(context: TurnContext): CommandShape | null {
-  const { state, seat } = context.view;
-  return best(
-    context.ofType('BUILD_IMPROVEMENT'),
-    (command) => {
-      const track = asTrack(command.track);
-      const level = levelOn(state, seat, track);
-      return (
-        (TRACK_PRIORITY[track] ?? 0) - level * 0.8 + (track === 'science' && level < 3 ? 1 : 0)
-      );
-    },
-    context,
-  );
 }
 
 /** The track of an improvement purchase or a Crane. */
