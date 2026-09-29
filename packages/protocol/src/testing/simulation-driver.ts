@@ -1,9 +1,10 @@
 import { canonicalDecode, canonicalEncode, hashValue, toHex } from '@cp2p/codec';
 import {
-  RESOURCES,
   decksFor,
   failure,
   isPublicDraw,
+  kindBounds,
+  kindsOfCounts,
   publicDrawInput,
   rollExtraDice,
   success,
@@ -15,7 +16,6 @@ import type {
   LocalRandomAnswer,
   Pending,
   PrivateState,
-  Resource,
   Result,
   Seat,
 } from '@cp2p/engine';
@@ -188,10 +188,11 @@ export class SimulationDriver {
       const owned = applied.value.get(holder.seat);
       if (!owned) return failure('simulation-private', 'Private seat is missing');
       let total = 0;
-      for (const resource of RESOURCES) {
+      const bounds = kindBounds(holder.resources);
+      for (const resource of kindsOfCounts(after.bank)) {
         const count = owned.hand[resource];
-        const min = holder.resources.min[resource] ?? 0;
-        const max = holder.resources.max[resource] ?? 0;
+        const min = bounds.min[resource] ?? 0;
+        const max = bounds.max[resource] ?? 0;
         if (count === undefined || !Number.isSafeInteger(count) || count < min || count > max)
           return failure('simulation-private', 'Private resources are outside public bounds');
         total += count;
@@ -273,8 +274,8 @@ export class SimulationDriver {
         const victim = seat(pending.request.victim);
         const hand = this.privates.get(victim)?.hand;
         if (!hand) throw new Error('Victim hand missing');
-        const cards = RESOURCES.flatMap((resource) =>
-          Array<Resource>(hand[resource] ?? 0).fill(resource),
+        const cards = kindsOfCounts(hand).flatMap((resource) =>
+          Array<string>(hand[resource] ?? 0).fill(resource),
         );
         const resource = rng.pick(cards);
         return {
@@ -284,7 +285,9 @@ export class SimulationDriver {
       }
       case 'REVEAL_COUNT': {
         if (pending.kind !== 'reveal') throw new Error('Reveal has no owner');
-        const resource = RESOURCES.find((item) => item === pending.request.resource);
+        const resource = kindsOfCounts(state.bank).find(
+          (item) => item === pending.request.resource,
+        );
         const hand = this.privates.get(pending.seat)?.hand;
         if (!resource || !hand) throw new Error('Reveal hand or resource missing');
         return {

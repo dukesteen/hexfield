@@ -242,7 +242,7 @@ test('a live engine-legal overspend at a certified hidden-steal parent yields an
       const proof = proveRange(
         unshifted,
         BigInt(count),
-        decodeScalar(blindings[obligation.resource]),
+        decodeScalar(blindings[obligation.resource] ?? ''),
         seed,
         proofContext,
       );

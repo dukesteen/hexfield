@@ -407,6 +407,7 @@ Only the choices the module made beyond the rules above:
 - **Target.** `vpTarget` is at least 13; a larger base target is kept.
 - **Special build phase.** `BUILD_IMPROVEMENT` is allowed there (five-six), as the rules list improvements among the builds.
 - **Lobby.** The `knights` and `knights-56` scenarios exist before the UI (K6) does.
+- **P2P (K1 and K2).** Knights is playable over the verified protocol. Hand commitments, range and count proofs, hidden steals and accounting cover all eight card kinds (the five resources, then `cloth`, `coin`, `paper`); base games still commit exactly five. The development deck is empty, so a knights game has no deck ceremony. K1 and K2 games have no steals (the robber is locked); the steal path is tested with the robber unlocked. See the decisions log entry "Verified P2P hand machinery over the game's card kinds".
 
 ## As implemented in K3 and K4
 

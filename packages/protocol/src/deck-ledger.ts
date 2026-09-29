@@ -13,7 +13,7 @@ import {
   deckUnlockSchema,
 } from './deck-draw.js';
 import type { DealtDeckCard, DeckDrawOperation } from './deck-draw.js';
-import { deckPassHash, validateDeckGenesisCommitments } from './deck-genesis.js';
+import { ceremonyDeckIds, deckPassHash, validateDeckGenesisCommitments } from './deck-genesis.js';
 import type { DeckGenesisCommitment } from './deck-genesis.js';
 import { genesisDigest } from './genesis.js';
 import { applyDeckPass, initDeckSetup, validateDeckSetupState } from './deck-setup.js';
@@ -268,8 +268,12 @@ export function initializeDeckLedger(genesis: Genesis, state: GameState): Result
   const commitments = validateDeckGenesisCommitments(genesis);
   if (!commitments.ok) return commitments;
   const expectedIds = commitments.value.map(({ definition }) => definition.deckId);
+  // Decks a module declares empty carry no ceremony; the engine still keeps their counter.
+  const engineIds = Object.keys(state.decks).filter((id) =>
+    ceremonyDeckIds(state.config).includes(id),
+  );
   if (
-    Object.keys(state.decks).length !== expectedIds.length ||
+    engineIds.length !== expectedIds.length ||
     expectedIds.some((id) => !Object.hasOwn(state.decks, id))
   )
     return failure('deck-genesis-state', 'Engine decks differ from signed genesis');
