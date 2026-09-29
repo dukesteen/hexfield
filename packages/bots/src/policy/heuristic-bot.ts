@@ -30,7 +30,6 @@ export class HeuristicBot implements Bot {
   readonly id: string;
   private readonly fallback: RandomBot;
   private memory: TurnMemory = { turn: -1, offers: 0 };
-  private game: unknown = null;
 
   constructor(
     readonly config: LevelConfig,
@@ -63,10 +62,8 @@ export class HeuristicBot implements Bot {
   decide(view: BotView, pending: Pending, rng: BotRng, options: DecideContext = {}): CommandShape {
     if (view.priv.seat !== view.seat || pending.kind !== 'player' || pending.seat !== view.seat)
       throw new Error('Bot decision requires its own player pending');
-    if (this.game !== view.state.config) {
-      this.game = view.state.config;
-      this.memory = { turn: -1, offers: 0 };
-    }
+    // Memory lasts one turn; turn numbers (not state identity, which a worker's copies lack) say
+    // when a turn, or a game, changes.
     if (this.memory.turn !== view.state.turn.number)
       this.memory = { turn: view.state.turn.number, offers: 0 };
     const context = this.contextFor(view, pending, rng);

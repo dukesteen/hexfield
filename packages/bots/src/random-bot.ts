@@ -241,7 +241,6 @@ function weightedChoice(
 /** Small, reproducible policy for simulation and offline play. */
 export class RandomBot implements Bot {
   readonly id = 'random';
-  private gameConfig: BotView['state']['config'] | null = null;
   private turnNumber = -1;
   private offersThisTurn = 0;
   private totalOffers = 0;
@@ -260,8 +259,9 @@ export class RandomBot implements Bot {
   decide(view: BotView, pending: Pending, rng: BotRng): CommandShape {
     if (view.priv.seat !== view.seat || pending.kind !== 'player' || pending.seat !== view.seat)
       throw new Error('Bot decision requires its own player pending');
-    if (this.gameConfig !== view.state.config) {
-      this.gameConfig = view.state.config;
+    // A turn number going backwards means a new game. (Object identity would not do: a bot in a
+    // worker receives a fresh copy of the state with every request.)
+    if (view.state.turn.number < this.turnNumber) {
       this.turnNumber = -1;
       this.totalOffers = 0;
     }
