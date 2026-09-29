@@ -180,7 +180,17 @@
     "hidden": "{{track}} progress card",
     "play": "Play card",
     "vp": "VP",
-    "waiting": "Not playable right now"
+    "waiting": "Not playable right now",
+    "reason": {
+      "victory": "A victory point card counts as soon as it is drawn; there is nothing to play.",
+      "notYourTurn": "Not your turn. Progress cards are played on your own turn.",
+      "busy": "Wait for the last move to finish.",
+      "onlyBeforeRoll": "Only before rolling: play it at the start of your next turn.",
+      "afterRoll": "Play after rolling: roll the dice first.",
+      "finishStep": "Finish the current step of your turn first.",
+      "robberLocked": "Needs the robber to be active: it is locked until the barbarians first attack.",
+      "noTarget": "No legal target right now."
+    }
   },
   "crane": {
     "next": "to level {{level}}",

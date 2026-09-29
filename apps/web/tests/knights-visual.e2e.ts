@@ -394,6 +394,15 @@ SCENES.push(
       await handScene(page, ['deserter', 'wedding', 'saboteur', 'alchemist', 'crane']);
     },
   },
+  {
+    // A card that cannot be played now still opens, read-only, with the reason.
+    name: 'card-view-not-playable',
+    ready: dialogUp,
+    run: async (page) => {
+      await handScene(page, ['alchemist']);
+      await openCard(page, 'alchemist');
+    },
+  },
   openCardScene('deserter'),
   openCardScene('wedding'),
   openCardScene('saboteur'),

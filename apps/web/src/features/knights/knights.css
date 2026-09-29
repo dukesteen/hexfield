@@ -561,6 +561,18 @@
   font-size: 9px;
   font-style: normal;
 }
+.progress-view-reason {
+  align-self: center;
+  margin: 0;
+  max-width: 34ch;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.4;
+  text-align: center;
+}
 .progress-hand-discard,
 .progress-hand-harbor {
   align-self: center;
