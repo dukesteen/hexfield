@@ -41,9 +41,6 @@ function read(file: string): unknown {
 // oxlint-disable-next-line typescript/no-unsafe-type-assertion
 const entries = (read('manifest.json') as { fixtures: Entry[] }).fixtures;
 
-const commandTypes = (inputs: readonly Input[]): Set<string> =>
-  new Set(inputs.flatMap((input) => (input.kind === 'command' ? [input.command.type] : [])));
-
 const count = (inputs: readonly Input[], type: string): number =>
   inputs.filter((input) => input.kind === 'command' && input.command.type === type).length;
 

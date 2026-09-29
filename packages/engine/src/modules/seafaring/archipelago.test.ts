@@ -105,6 +105,6 @@ describe.each(PRESETS)('archipelago %s with distinct harbor waters', (_name, pre
       .find((board) =>
         archipelagoProblems(board, params).some((problem) => problem.includes('share h:')),
       );
-    if (shared) expect(archipelagoProblems(shared, preset)).toEqual([]);
+    expect(shared === undefined ? [] : archipelagoProblems(shared, preset)).toEqual([]);
   }, 120_000);
 });
