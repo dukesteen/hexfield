@@ -1,3 +1,4 @@
+import { BOT_LEVELS } from '@cp2p/bots';
 import { LOBBY_COLOURS } from '@cp2p/protocol';
 import * as v from 'valibot';
 import { PLAYER_SEATS, PLAYER_SHAPES } from '../../features/players/identity';
@@ -10,6 +11,8 @@ const playerSchema = v.strictObject({
   name: v.pipe(v.string(), v.minLength(1), v.maxLength(40)),
   color: v.picklist(LOBBY_COLOURS),
   shape: v.picklist(PLAYER_SHAPES),
+  /** The bot's difficulty when a bot plays this seat. */
+  bot: v.optional(v.picklist(BOT_LEVELS)),
 });
 
 const presentationSchema = v.strictObject({

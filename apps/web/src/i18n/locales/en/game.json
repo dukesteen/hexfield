@@ -285,5 +285,10 @@
   "islandBonusBadge_one": "{{count}} new island, +{{points}} VP",
   "islandBonusBadge_other": "{{count}} new islands, +{{points}} VP",
   "scoreIslands": "New islands",
-  "scoreKnights": "Cities & Knights"
+  "scoreKnights": "Cities & Knights",
+  "botThinking": "Thinking",
+  "botLevel_random": "Random bot",
+  "botLevel_easy": "Easy bot",
+  "botLevel_normal": "Normal bot",
+  "botLevel_hard": "Hard bot"
 }

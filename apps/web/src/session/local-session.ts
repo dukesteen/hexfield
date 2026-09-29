@@ -1,5 +1,7 @@
-import { createBotRng, decideHosted, RandomBot } from '@cp2p/bots';
-import type { BotRng } from '@cp2p/bots';
+import { createBotRng, humanlikeDelay } from '@cp2p/bots';
+import type { BotLevel, BotRng, Decision } from '@cp2p/bots';
+import { inlineBotRunner } from './bot-runner.js';
+import type { BotRunner } from './bot-runner.js';
 import { fromBase64Url, toBase64Url } from '@cp2p/codec';
 import { engineForConfig, ENGINE_VERSION, failure, LocalGame, success } from '@cp2p/engine';
 import type {
@@ -39,12 +41,16 @@ export interface LocalSessionRuntime {
   botDelayMs?: number | { min: number; max: number };
   /** How long an offering bot waits for a person's reply before it settles; defaults to 15 s. */
   botTradePatienceMs?: number;
+  /** Where the bots think: a dedicated worker in the app, inline (the default) in tests. */
+  botRunner?: BotRunner;
 }
 
 export interface LocalSessionCreate extends LocalSessionRuntime {
   config: GameConfig;
   humanSeats: readonly Seat[];
   botSeats: readonly Seat[];
+  /** Each bot seat's level; unlisted bots play the random bot. */
+  botLevels?: Partial<Record<Seat, BotLevel>>;
   genesisSeed?: Uint8Array;
 }
 
@@ -75,6 +81,17 @@ function roleSeats(config: GameConfig, humans: readonly Seat[], bots: readonly S
     throw new Error('Every game seat needs exactly one human or bot role');
 }
 
+function levelsBySeat(
+  levels: Record<string, BotLevel> | undefined,
+): Partial<Record<Seat, BotLevel>> {
+  const result: Partial<Record<Seat, BotLevel>> = {};
+  for (const seat of [0, 1, 2, 3, 4, 5] as const) {
+    const level = levels?.[String(seat)];
+    if (level) result[seat] = level;
+  }
+  return result;
+}
+
 function botDelay(value: LocalSessionRuntime['botDelayMs']): { min: number; max: number } {
   const range =
     typeof value === 'number' ? { min: value, max: value } : (value ?? { min: 300, max: 800 });
@@ -88,11 +105,15 @@ function botDelay(value: LocalSessionRuntime['botDelayMs']): { min: number; max:
   return range;
 }
 
+/** Thinking time for a searching (Hard) bot, per decision. */
+const HARD_BUDGET_MS = 300;
+
 /** Browser-local game authority. Public updates contain no other seat's secret state. */
 export class LocalSession implements GameSession<LocalSessionSave> {
   readonly mode = 'local' as const;
   private readonly engine: Engine;
-  private readonly bots = new Map<Seat, { bot: RandomBot; rng: BotRng }>();
+  private readonly bots = new Map<Seat, { level: BotLevel; seed: Uint8Array; pace: BotRng }>();
+  private readonly runner: BotRunner;
   private readonly listeners = new Set<(update: SessionUpdate) => void>();
   private readonly notifications: SessionUpdate[] = [];
   private readonly timers = new Map<string, TimerRecord>();
@@ -123,6 +144,7 @@ export class LocalSession implements GameSession<LocalSessionSave> {
     botSeats: readonly Seat[],
     genesis: readonly Input[],
     runtime: LocalSessionRuntime,
+    botLevels: Partial<Record<Seat, BotLevel>> = {},
   ) {
     this.engine = engine;
     this.source = source;
@@ -135,11 +157,19 @@ export class LocalSession implements GameSession<LocalSessionSave> {
     this.scheduler = runtime.scheduler ?? wallClock;
     this.delay = botDelay(runtime.botDelayMs);
     this.tradePatienceMs = runtime.botTradePatienceMs ?? BOT_TRADE_PATIENCE_MS;
-    for (const seat of botSeats)
+    this.runner = runtime.botRunner ?? inlineBotRunner(engine);
+    for (const seat of botSeats) {
+      const botSeed = randomSeed(this.entropy);
       this.bots.set(seat, {
-        bot: new RandomBot(engine),
-        rng: createBotRng(randomSeed(this.entropy)),
+        level: botLevels[seat] ?? 'random',
+        seed: botSeed,
+        // The pacing stream is a second stream from the bot's seed (its first byte flipped), so
+        // pacing draws no extra entropy and never disturbs the bot's own moves.
+        pace: createBotRng(
+          Uint8Array.from(botSeed, (byte, index) => (index === 0 ? byte ^ 0xff : byte)),
+        ),
       });
+    }
     if (game.state.result) this.status = { kind: 'complete' };
   }
 
@@ -163,6 +193,7 @@ export class LocalSession implements GameSession<LocalSessionSave> {
         options.botSeats,
         made.value.log,
         options,
+        options.botLevels,
       );
       session.reconcile();
       return success(session);
@@ -223,6 +254,7 @@ export class LocalSession implements GameSession<LocalSessionSave> {
         save.roles.botSeats,
         save.genesis,
         runtime,
+        levelsBySeat(save.roles.botLevels),
       );
       session.batches.push(...owned(save.batches));
       session.reconcile();
@@ -385,6 +417,14 @@ export class LocalSession implements GameSession<LocalSessionSave> {
       roles: {
         humanSeats: this.controllableSeats(),
         botSeats: [...this.botSeats].toSorted((a, b) => a - b),
+        // Random bots are the default, so saves of random-bot games stay as they were.
+        ...([...this.bots.values()].some((bot) => bot.level !== 'random')
+          ? {
+              botLevels: Object.fromEntries(
+                [...this.bots].map(([seat, bot]) => [String(seat), bot.level]),
+              ),
+            }
+          : {}),
       },
       genesis: this.genesis,
       batches: this.batches,
@@ -418,6 +458,7 @@ export class LocalSession implements GameSession<LocalSessionSave> {
   dispose(): void {
     if (this.status.kind === 'disposed') return;
     this.status = { kind: 'disposed' };
+    this.runner.dispose();
     this.source.clearForcedDice();
     this.clearTasks();
     this.emit([]);
@@ -569,10 +610,16 @@ export class LocalSession implements GameSession<LocalSessionSave> {
     if (this.botHandle !== null && this.botRevision === revision) return;
     this.cancelBot();
     const pace = this.delay.min + randomIndex(this.entropy, this.delay.max - this.delay.min + 1);
+    const actor = this.bots.get(pending.seat);
+    // Heuristic bots take a humanlike time: longer for weighty decisions, 1–3 s to answer a trade.
+    const paced =
+      actor && actor.level !== 'random'
+        ? humanlikeDelay(pace, pending, this.game.state.turn.activeSeat, actor.pace, actor.level)
+        : pace;
     // An offering bot gives people time to answer before it settles the offer.
     const delay = botAwaitsTradeReplies(this.game.state, this.game.getPending(), this.botSeats)
-      ? Math.max(pace, this.tradePatienceMs)
-      : pace;
+      ? Math.max(paced, this.tradePatienceMs)
+      : paced;
     this.botRevision = revision;
     this.botHandle = this.scheduler.setTimeout(() => {
       this.botHandle = null;
@@ -580,29 +627,41 @@ export class LocalSession implements GameSession<LocalSessionSave> {
         return;
       const selected = chooseBotPending(this.game.state, this.game.getPending(), this.botSeats);
       if (!selected) return;
-      const actor = this.bots.get(selected.seat);
+      const bot = this.bots.get(selected.seat);
       const priv = this.game.privateView(selected.seat);
-      if (!actor || !priv) {
+      if (!bot || !priv) {
         this.fail('Bot has no private state');
         return;
       }
-      try {
-        const command = decideHosted(
-          actor.bot,
-          { state: this.game.state, seat: selected.seat, priv },
-          selected,
-          actor.rng,
-          this.engine,
-        );
-        const input: Input = { kind: 'command', seat: selected.seat, command };
+      const play = (decision: Decision): void => {
+        // A bot in a worker answers later; drop the answer if the game moved on meanwhile.
+        if (this.status.kind !== 'running' || this.paused || this.game.log.length !== revision)
+          return;
+        const input: Input = { kind: 'command', seat: selected.seat, command: decision.command };
         const valid = this.engine.validate(this.game.state, input);
         if (!valid.ok) {
           this.fail(`Bot produced ${valid.error.code}: ${valid.error.message}`);
           return;
         }
         this.accept(input);
+      };
+      const failed = (error: unknown): void => this.fail(`Bot decision failed: ${String(error)}`);
+      try {
+        const decided = this.runner.decide({
+          bot: `seat-${selected.seat}`,
+          level: bot.level,
+          seed: bot.seed,
+          state: this.game.state,
+          priv,
+          seat: selected.seat,
+          pending: selected,
+          hosted: true,
+          timeBudgetMs: HARD_BUDGET_MS,
+        });
+        if (decided instanceof Promise) decided.then(play).catch(failed);
+        else play(decided);
       } catch (error) {
-        this.fail(`Bot decision failed: ${String(error)}`);
+        failed(error);
       }
     }, delay);
   }

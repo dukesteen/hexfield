@@ -108,12 +108,15 @@ export interface P2PSessionOptions extends Omit<
   botKeys?: ReadonlyMap<Seat, Uint8Array>;
   /** Private recovery records and reserved replacement keys, retained with this journal. */
   recoveryStore?: RecoveryPrivateStore & RecoveryReadinessStore;
-  /** The bot sees only its own hand and the public state; commands still require validation. */
+  /**
+   * The bot sees only its own hand and the public state; commands still require validation. It may
+   * answer later (a bot in its own worker): an answer that arrives after the log moved on is dropped.
+   */
   decideBot?: (
     view: { state: GameState; priv: PrivateState; seat: Seat },
     pending: Extract<Pending, { kind: 'player' }>,
     level: 'easy' | 'medium' | 'hard',
-  ) => CommandShape | null;
+  ) => CommandShape | null | Promise<CommandShape | null>;
   /** Delay between committed state and a bot choice. Defaults to `DEFAULT_BOT_DELAY_MS`. */
   botDelayMs?: number;
   /** How long an offering bot waits for replies it cannot make. Defaults to BOT_TRADE_PATIENCE_MS. */
@@ -1877,12 +1880,7 @@ export class P2PSession implements GameSession<CertifiedHistory> {
         if (!pending || pending.seat !== chosen.seat || this.inflight.has(pending.seat)) return;
         const priv = this.getPrivate(pending.seat);
         if (!priv) return;
-        try {
-          const command = this.options.decideBot?.(
-            { state: copyCanonical(this.context.log.state), priv, seat: pending.seat },
-            copyCanonical(pending),
-            this.botLevel(pending.seat),
-          );
+        const submitBot = (command: CommandShape | null): void => {
           if (!command) return;
           void this.submit(pending.seat, command)
             .then((result) => {
@@ -1896,9 +1894,35 @@ export class P2PSession implements GameSession<CertifiedHistory> {
               this.protocolStatus = { kind: 'rejected', code: 'session-bot-submit' };
               this.emit([]);
             });
-        } catch {
+        };
+        const failed = (): void => {
           this.protocolStatus = { kind: 'rejected', code: 'session-bot-decision' };
           this.emit([]);
+        };
+        try {
+          const decided = this.options.decideBot?.(
+            { state: copyCanonical(this.context.log.state), priv, seat: pending.seat },
+            copyCanonical(pending),
+            this.botLevel(pending.seat),
+          );
+          if (!(decided instanceof Promise)) {
+            submitBot(decided ?? null);
+            return;
+          }
+          decided
+            .then((command) => {
+              // The log may have moved on while the bot thought; a stale answer is dropped.
+              if (
+                this.status.kind === 'running' &&
+                !this.recoveryInstalling &&
+                parent === entryHash(this.context.log.head)
+              )
+                submitBot(command);
+              return undefined;
+            })
+            .catch(failed);
+        } catch {
+          failed();
         }
       },
       waiting ? Math.max(delay, this.options.botTradePatienceMs ?? BOT_TRADE_PATIENCE_MS) : delay,

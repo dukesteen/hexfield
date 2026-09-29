@@ -1,6 +1,16 @@
 import { canonicalDecode, canonicalEncode, toBase64Url } from '@cp2p/codec';
-import { G, encodePoint, identityFromSecret, scalarFromBytes, scalePoint } from '@cp2p/crypto';
-import { decideHosted, RandomBot } from '@cp2p/bots';
+import {
+  G,
+  deriveBotSeed,
+  encodePoint,
+  identityFromSecret,
+  scalarFromBytes,
+  scalePoint,
+} from '@cp2p/crypto';
+import { createBotRng, humanlikeDelay } from '@cp2p/bots';
+import type { BotLevel } from '@cp2p/bots';
+import { defaultBotRunner } from './bot-runner.js';
+import type { BotRunner } from './bot-runner.js';
 import { success } from '@cp2p/engine';
 import type { Engine, Seat } from '@cp2p/engine';
 import {
@@ -33,6 +43,7 @@ import type {
   LogEntry,
   LogContext,
   CertifiedEntry,
+  P2PSessionOptions,
   ProtocolClock,
   ProtocolJournal,
   ReplayPolicy,
@@ -56,7 +67,7 @@ import { createOnlineGameCandidateStore } from './online-game-candidates.js';
 import { createSessionAuditRunner } from './audit-worker-client.js';
 import { createOnlineGameHistoryWriter } from './online-game-history-writer.js';
 import { createOnlineGameActivityWriter } from './online-game-activity.js';
-import { browserEntropy, randomIndex, randomSeed } from './random.js';
+import { browserEntropy, randomSeed } from './random.js';
 
 type OnlineJournal = ProtocolJournal & { close(): Promise<void> };
 
@@ -106,6 +117,16 @@ export class OnlineGameDisclosureError extends Error {
 }
 
 /** Opens only an authenticated, fully verified ceremony result under an exclusive game writer. */
+/** The lobby's three bot levels (a signed protocol field) and the bots that play them. */
+const ONLINE_LEVEL: Readonly<Record<'easy' | 'medium' | 'hard', BotLevel>> = {
+  easy: 'easy',
+  medium: 'normal',
+  hard: 'hard',
+};
+
+/** Thinking time for a searching (Hard) bot, per decision. */
+const HARD_BUDGET_MS = 300;
+
 export async function openOnlineGame(
   supplied: OnlineGameInput,
   runtime: OnlineGameRuntime = {},
@@ -159,6 +180,7 @@ export async function openOnlineGame(
   let lease: GameWriterLease | null = null;
   let transport: OnlineGameTransport | null = null;
   let session: P2PSession | null = null;
+  let botRunner: BotRunner | null = null;
   let historyWriter: ReturnType<typeof createOnlineGameHistoryWriter> | null = null;
   let activityWriter: ReturnType<typeof createOnlineGameActivityWriter> | null = null;
   let terminalHead: { seq: number; hash: string } | null = null;
@@ -182,6 +204,7 @@ export async function openOnlineGame(
     activityWriter?.stop();
     try {
       session?.dispose();
+      botRunner?.dispose();
       await session?.flush();
     } finally {
       await historyWriter?.flush();
@@ -432,7 +455,17 @@ export async function openOnlineGame(
         throw new Error('Hosted master differs from the frozen beacon chain');
       beaconSources.set(item.seat, provider.source);
     }
-    const bot = new RandomBot();
+    // Hosted bots think in one dedicated worker; each seeds its RNG from its seat's master secret.
+    const runner = (botRunner = defaultBotRunner());
+    const botSeeds = new Map(
+      activeMaterial
+        .filter((item) => item.kind === 'bot')
+        .map((item) => [
+          item.seat,
+          deriveBotSeed(item.master, { game: genesis.gameId, seat: item.seat }),
+        ]),
+    );
+    const botDelayMs = input.botDelayMs ?? DEFAULT_BOT_DELAY_MS;
     const botKeys = new Map(
       activeMaterial
         .filter((item) => item.kind === 'bot')
@@ -493,11 +526,42 @@ export async function openOnlineGame(
         return retired ? success(undefined) : routed;
       },
       botKeys,
-      botDelayMs: input.botDelayMs ?? DEFAULT_BOT_DELAY_MS,
-      decideBot: (
-        view: Parameters<RandomBot['decide']>[0],
-        pending: Parameters<RandomBot['decide']>[1],
-      ) => decideHosted(bot, view, pending, { int: (max) => randomIndex(browserEntropy, max) }),
+      botDelayMs,
+      decideBot: async (
+        view: Parameters<NonNullable<P2PSessionOptions['decideBot']>>[0],
+        pending: Parameters<NonNullable<P2PSessionOptions['decideBot']>>[1],
+        level: 'easy' | 'medium' | 'hard',
+      ) => {
+        const seed = botSeeds.get(view.seat);
+        if (!seed) return null;
+        const botLevel = ONLINE_LEVEL[level];
+        // On top of the table's pace, weighty decisions take longer and trade replies 1–3 s.
+        const extra =
+          humanlikeDelay(
+            botDelayMs,
+            pending,
+            view.state.turn.activeSeat,
+            createBotRng(randomSeed(browserEntropy)),
+            botLevel,
+          ) - botDelayMs;
+        const [decision] = await Promise.all([
+          runner.decide({
+            bot: `seat-${view.seat}`,
+            level: botLevel,
+            seed,
+            state: view.state,
+            priv: view.priv,
+            seat: view.seat,
+            pending,
+            hosted: true,
+            timeBudgetMs: HARD_BUDGET_MS,
+          }),
+          extra > 0
+            ? new Promise<void>((resolve) => input.clock.setTimeout(resolve, extra))
+            : undefined,
+        ]);
+        return decision.command;
+      },
       beaconSource: beacon.source,
       beaconSources,
       beaconContributions: input.store,

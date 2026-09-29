@@ -287,6 +287,38 @@ describe('LocalSession', () => {
     session.dispose();
   });
 
+  test('bots of every level finish a game, and their levels survive a save', () => {
+    const clock = new Clock();
+    const made = LocalSession.create({
+      config: config(),
+      humanSeats: [],
+      botSeats: seats,
+      botLevels: { 0: 'easy', 1: 'normal', 2: 'hard' },
+      genesisSeed: new Uint8Array(32).fill(9),
+      botDelayMs: 0,
+      entropy: entropy(43),
+      scheduler: clock,
+    });
+    if (!made.ok) throw new Error(made.error.message);
+    const session = made.value;
+    let ticks = 0;
+    while (!session.getState().result && ticks++ < 10_000 && clock.tick()) {}
+    expect(session.getState().result).not.toBeNull();
+    const saved = session.exportSave();
+    expect(saved.roles.botLevels).toEqual({ 0: 'easy', 1: 'normal', 2: 'hard' });
+    const restored = LocalSession.restore(saved, { entropy: entropy(57), scheduler: new Clock() });
+    if (!restored.ok) throw new Error(restored.error.message);
+    expect(restored.value.exportSave().roles.botLevels).toEqual(saved.roles.botLevels);
+    restored.value.dispose();
+    session.dispose();
+  });
+
+  test('a random-bot game saves no bot levels, as before', () => {
+    const session = create([0], [1, 2]);
+    expect(session.exportSave().roles).toEqual({ humanSeats: [0], botSeats: [1, 2] });
+    session.dispose();
+  });
+
   test('a saved fogbound game resumed mid-reveal never shows a fog tile twice', () => {
     const scenario = SCENARIOS.find((item) => item.id === 'fogbound');
     if (!scenario) throw new Error('Missing fogbound scenario');

@@ -19,6 +19,14 @@ import { LobbyNameEditor } from './LobbyNameEditor';
 import { ChatPanel } from './ChatPanel';
 import './online.css';
 
+/** The lobby's bot levels (a signed protocol field): easy, normal ('medium') and hard. */
+const ONLINE_BOT_LEVELS = ['easy', 'medium', 'hard'] as const;
+type OnlineBotLevel = (typeof ONLINE_BOT_LEVELS)[number];
+
+function isOnlineBotLevel(value: string): value is OnlineBotLevel {
+  return (ONLINE_BOT_LEVELS as readonly string[]).includes(value);
+}
+
 export type OnlineStartHandler = (room: OnlineRoomHandleValue) => void | Promise<void>;
 
 export function OnlineLobby({
@@ -538,20 +546,43 @@ function LobbySeatRow({
                 <select
                   defaultValue=""
                   onChange={(event) => {
-                    if (event.target.value === 'easy')
-                      report(lobby.setBot(seat.seat, 'easy', snapshot.self));
+                    const level = event.target.value;
+                    if (isOnlineBotLevel(level))
+                      report(lobby.setBot(seat.seat, level, snapshot.self));
                     event.currentTarget.value = '';
                   }}
                 >
                   <option value="" disabled>
                     {t('lobby:onlineAddBot')}
                   </option>
-                  <option value="easy">{t('lobby:onlineRandomBot')}</option>
+                  {ONLINE_BOT_LEVELS.map((level) => (
+                    <option key={level} value={level}>
+                      {t(`lobby:onlineAddBotLevel_${level}`)}
+                    </option>
+                  ))}
                 </select>
               </label>
             )}
             {seat.kind === 'bot' && (
               <>
+                <label>
+                  {t('lobby:onlineBotLevelLabel')}
+                  <select
+                    value={seat.botLevel}
+                    disabled={snapshot.lobby?.status !== 'open'}
+                    onChange={(event) => {
+                      const level = event.target.value;
+                      if (isOnlineBotLevel(level))
+                        report(lobby.setBot(seat.seat, level, seat.botHost));
+                    }}
+                  >
+                    {ONLINE_BOT_LEVELS.map((level) => (
+                      <option key={level} value={level}>
+                        {t(`lobby:onlineAddBotLevel_${level}`)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
                 <label>
                   {t('lobby:onlineBotHost')}
                   <select

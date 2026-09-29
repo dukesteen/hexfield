@@ -1,0 +1,52 @@
+/* A bot seat that owes a move: a small "Thinking" label with three pulsing dots. */
+.bot-thinking {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3em;
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.bot-thinking-dots {
+  display: inline-flex;
+  gap: 0.18em;
+}
+
+.bot-thinking-dots i {
+  width: 0.32em;
+  height: 0.32em;
+  border-radius: 50%;
+  background: currentColor;
+  animation: bot-thinking-pulse 1.2s ease-in-out infinite;
+}
+
+.bot-thinking-dots i:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.bot-thinking-dots i:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+.bot-level {
+  color: var(--muted);
+  font-size: 0.85em;
+}
+
+@keyframes bot-thinking-pulse {
+  0%,
+  80%,
+  100% {
+    opacity: 0.25;
+  }
+  40% {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bot-thinking-dots i {
+    animation: none;
+    opacity: 0.7;
+  }
+}

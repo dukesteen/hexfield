@@ -43,10 +43,11 @@ test('a guest host automatically signs and certifies its verified bot setup comm
         return P2PSession.create({
           decideBot: (view) => {
             decisions.push({ host: human.seat, bot: view.seat });
-            return (
+            const command =
               fixture.simulation.engine.getLegalCommands(view.state, view.seat, view.priv)
-                .commands[0] ?? null
-            );
+                .commands[0] ?? null;
+            // Every other answer comes later, as from a bot in its own worker.
+            return decisions.length % 2 ? Promise.resolve(command) : command;
           },
           botDelayMs: 350,
           genesisEntry: fixture.entry,

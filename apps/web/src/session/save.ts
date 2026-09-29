@@ -1,3 +1,4 @@
+import { BOT_LEVELS } from '@cp2p/bots';
 import { canonicalEncode, fromBase64Url, hashValue, toHex } from '@cp2p/codec';
 import * as v from 'valibot';
 import type {
@@ -55,7 +56,11 @@ const saveSchema = v.strictObject({
     board: v.optional(v.custom<BoardState>(record)),
   }),
   genesisSeed: v.string(),
-  roles: v.strictObject({ humanSeats: v.array(seatSchema), botSeats: v.array(seatSchema) }),
+  roles: v.strictObject({
+    humanSeats: v.array(seatSchema),
+    botSeats: v.array(seatSchema),
+    botLevels: v.optional(v.record(v.string(), v.picklist(BOT_LEVELS))),
+  }),
   genesis: v.array(inputSchema),
   batches: v.array(v.strictObject({ submitted: inputSchema, generated: v.array(inputSchema) })),
   finalHash: v.string(),
@@ -69,7 +74,12 @@ export function parseSave(value: unknown): LocalSessionSave {
   if (!/^[a-f0-9]{64}$/.test(parsed.finalHash)) throw new Error('Save has an invalid final hash');
   const { board, ...withoutBoard } = parsed.config;
   const config = board === undefined ? withoutBoard : { ...withoutBoard, board };
-  return owned({ ...parsed, config });
+  const { botLevels, ...roles } = parsed.roles;
+  return owned({
+    ...parsed,
+    config,
+    roles: botLevels === undefined ? roles : { ...roles, botLevels },
+  });
 }
 
 /** Feeds only recorded system outcomes while checking secret deck stock. */

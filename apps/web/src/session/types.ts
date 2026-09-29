@@ -1,3 +1,4 @@
+import type { BotLevel } from '@cp2p/bots';
 import type { GameConfig, Input, Seat } from '@cp2p/engine';
 
 export type {
@@ -22,7 +23,12 @@ export interface LocalSessionSave {
   engineVersion: string;
   config: GameConfig;
   genesisSeed: string;
-  roles: { humanSeats: Seat[]; botSeats: Seat[] };
+  roles: {
+    humanSeats: Seat[];
+    botSeats: Seat[];
+    /** Each bot seat's level, by seat; absent (older saves) means the random bot. */
+    botLevels?: Record<string, BotLevel>;
+  };
   genesis: Input[];
   batches: LocalSaveBatch[];
   finalHash: string;

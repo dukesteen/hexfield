@@ -386,5 +386,16 @@
   "knights:action.cardBishop",
   "knights:action.cardInventor",
   "knights:action.cardDiplomat",
-  "knights:action.cardSmith"
+  "knights:action.cardSmith",
+  "lobby:botLevel_random",
+  "lobby:botLevel_easy",
+  "lobby:botLevel_normal",
+  "lobby:botLevel_hard",
+  "lobby:onlineAddBotLevel_easy",
+  "lobby:onlineAddBotLevel_medium",
+  "lobby:onlineAddBotLevel_hard",
+  "game:botLevel_random",
+  "game:botLevel_easy",
+  "game:botLevel_normal",
+  "game:botLevel_hard"
 ]

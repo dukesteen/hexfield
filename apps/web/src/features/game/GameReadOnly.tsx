@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { RESOURCES, type CommandShape, type GameState, type Seat } from '@cp2p/engine';
 import { BoardView } from '../board/BoardView';
+import './bot-thinking.css';
 import { ResourceCard } from '../trade/ResourceCard';
 import {
   getDevelopmentCardUrl,
@@ -133,6 +134,15 @@ function PlayerRail({
   const { t } = useTranslation('game');
   const revealedSeat = useSessionStore((store) => store.revealedSeat);
   const holds = useCardHolds((store) => store.holds);
+  const pending = useSessionStore((store) => store.pending);
+  // A bot seat that owes a move is thinking (its host is pacing or computing its move).
+  const thinking = new Set(
+    pending.flatMap((item) =>
+      item.kind === 'player' && item.allowed.some((type) => type !== 'CLAIM_VICTORY')
+        ? [item.seat]
+        : [],
+    ),
+  );
   const base = state.config.options.base;
   const target =
     typeof base === 'object' && base !== null && 'vpTarget' in base ? base.vpTarget : 10;
@@ -257,7 +267,21 @@ function PlayerRail({
                   </span>
                 ) : (
                   <>
-                    {activeSeat === seatState.seat && <span>{t('game:actingNow')}</span>}
+                    {identity?.bot !== undefined && thinking.has(seatState.seat) ? (
+                      <span className="bot-thinking" role="status">
+                        {t('game:botThinking')}
+                        <span className="bot-thinking-dots" aria-hidden="true">
+                          <i />
+                          <i />
+                          <i />
+                        </span>
+                      </span>
+                    ) : (
+                      activeSeat === seatState.seat && <span>{t('game:actingNow')}</span>
+                    )}
+                    {identity?.bot !== undefined && (
+                      <span className="bot-level">{t(`game:botLevel_${identity.bot}`)}</span>
+                    )}
                     <span className="connection-status">
                       {connectionLabels?.[seatState.seat] ?? t('game:localConnection')}
                     </span>

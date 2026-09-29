@@ -1,4 +1,6 @@
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
+import { BOT_LEVELS, isBotLevel } from '@cp2p/bots';
+import type { BotLevel } from '@cp2p/bots';
 import type { BaseOptions } from '@cp2p/engine';
 import { DEFAULT_BOT_DELAY_MS } from '@cp2p/protocol';
 import {
@@ -53,6 +55,7 @@ interface PlayerDraft {
   seat: PlayerSeat;
   name: string;
   role: 'human' | 'bot';
+  level: BotLevel;
   color: PlayerColor;
   shape: PlayerShape;
 }
@@ -80,6 +83,7 @@ function NewLocalGame() {
       ...preset,
       name: t('lobby:defaultPlayerName', { number: preset.seat + 1 }),
       role: preset.seat === 0 ? 'human' : 'bot',
+      level: 'normal',
     })),
   );
   const [scenario, setScenario] = useState<Scenario>(() =>
@@ -145,6 +149,11 @@ function NewLocalGame() {
       config,
       humanSeats: selected.filter((player) => player.role === 'human').map((player) => player.seat),
       botSeats: selected.filter((player) => player.role === 'bot').map((player) => player.seat),
+      botLevels: Object.fromEntries(
+        selected
+          .filter((player) => player.role === 'bot')
+          .map((player) => [player.seat, player.level]),
+      ),
       botDelayMs,
     });
     if (!created.ok) {
@@ -238,6 +247,24 @@ function NewLocalGame() {
                       <option value="bot">{t('lobby:bot')}</option>
                     </select>
                   </label>
+                  {player.role === 'bot' && (
+                    <label>
+                      {t('lobby:botLevel', { number: index + 1 })}
+                      <select
+                        value={player.level}
+                        onChange={(event) => {
+                          const level = event.target.value;
+                          if (isBotLevel(level)) patchPlayer(player.seat, { level });
+                        }}
+                      >
+                        {BOT_LEVELS.map((level) => (
+                          <option key={level} value={level}>
+                            {t(`lobby:botLevel_${level}`)}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  )}
                   <label>
                     {t('lobby:playerColor', { number: index + 1 })}
                     <select
