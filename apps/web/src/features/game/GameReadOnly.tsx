@@ -37,12 +37,10 @@ import { ModulePanelExtras } from '../modules/ModulePanelExtras';
 import { isSeafaring, routeLength } from './seafaring';
 import { FixtureDialog } from '../modules/FixtureDialog';
 import type { KnightsController } from '../knights/controller';
-import { ImprovementsBoard } from '../knights/ImprovementsBoard';
 import { ImprovementsStrip } from '../knights/ImprovementsStrip';
 import { ProgressHand } from '../knights/ProgressHand';
 import { ProgressCardBack } from '../knights/ProgressCardFace';
 import { TRACKS, cardKinds, isCommodity, isKnights, progressHeld } from '../knights/state';
-import type { Track } from '../knights/state';
 
 const MAX_INLINE_DEVELOPMENT_CARDS = 5;
 const MAX_NARROW_INLINE_DEVELOPMENT_CARDS = 3;
@@ -1297,18 +1295,11 @@ function LiveGame({
                 data-testid="improvements-panel"
               >
                 <h2>{t('knights:improve.title')}</h2>
-                <ImprovementsBoard
+                <ImprovementsStrip
                   state={state}
                   seat={revealedSeat ?? actions.actorSeat}
-                  presentation={presentation}
-                  captions="cost"
-                  {...(revealedSeat !== null && actions.knights
-                    ? {
-                        buyable: actions.knights.improvable,
-                        onBuy: (track: Track) => actions.knights?.improve(track),
-                        disabled: actions.knights.disabled,
-                      }
-                    : {})}
+                  improvable={actions.knights?.improvable ?? []}
+                  onOpen={() => actions.knights?.openImprovements()}
                 />
               </section>
             )}
