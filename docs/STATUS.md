@@ -539,10 +539,14 @@ Source: [15-explorers.md](15-explorers.md)
 
 Source: [16-bots.md](16-bots.md)
 
-- [ ] Tournament thresholds met.
-- [ ] Hard bot decisions within budget on a mid-range phone (measured).
-- [ ] No bot ever submits a rejected command in 10k simulated games per level.
-- [ ] Bots support every shipped module (with at least Random fallback for any unsupported decision, logged as a warning).
+Stage 16 evidence is in [verification/stage16/acceptance.md](verification/stage16/acceptance.md): Easy, Normal and Hard bots (heuristics over the seat's legal commands; Hard adds a determinized Monte Carlo search at the opening and the robber), running in a dedicated Web Worker per bot host with only their own view, seafaring and knights plugins, the tournament harness, and a difficulty picker with a "thinking" indicator locally and online. **The legality run was 1,000 games per level, not 10,000, at the user's direction, and the phone budget was measured with Chromium CPU throttling as a proxy (no physical phone).**
+
+- [x] Tournament thresholds met. 2,000 four-player games each, seats rotated: Easy won [85.5%](verification/stage16/tournament-easy-vs-random.json) against three Random bots (≥ 60%), Normal [42.5%](verification/stage16/tournament-normal-vs-easy.json) against three Easy (≥ 40%), Hard [43.2%](verification/stage16/tournament-hard-vs-normal.json) against three Normal (≥ 35%). See [the tables](verification/stage16/acceptance.md#tournament-thresholds-met).
+- [x] Hard bot decisions within budget on a mid-range phone (measured). Per the user's decision this was **measured on a proxy, not a phone**: headless Chromium with 4× and 6× CPU throttling; every Hard decision stayed within the 150 ms phone budget (largest 140 ms, [evidence](verification/stage16/acceptance.md#hard-bot-decisions-within-budget-chromium-cpu-throttling-as-a-phone-proxy)). A check on a real mid-range phone remains to be done.
+- [x] No bot ever submits a rejected command in 10k simulated games per level. Per the user's decision the run was **1,000 games per level** (200 each on base, five-six, seafaring, knights and seafaring + knights, invariants on): [3,000/3,000 finished with no rejected command](verification/stage16/acceptance.md#no-bot-ever-submits-a-rejected-command-1000-games-per-level).
+- [x] Bots support every shipped module (with at least Random fallback for any unsupported decision, logged as a warning). Seafaring and knights plugins; the 3,000 module games raised [no fallback warning](verification/stage16/acceptance.md#bots-support-every-shipped-module) (frontier and explorers are not shipped).
+
+Tournament results for this version (commit 7366281, 2026-09-29), all levels together (`pnpm sim tournament --bots easy,normal,hard,random --games 2000 --seats-rotation --iterations 6`): Hard 49.0% of wins (Elo 1815), Normal 32.1% (1742), Easy 18.4% (1644), Random 0.4% (1000); games average 73 turns ([JSON](verification/stage16/tournament-all-levels.json)).
 
 ## 17 — Spectators, Replays & Map Editor
 
