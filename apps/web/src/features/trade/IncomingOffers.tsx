@@ -59,6 +59,42 @@ function actionTone(command: CommandShape): 'button-primary' | 'button-quiet' {
   return command.type === 'CONFIRM_TRADE' ? 'button-primary' : 'button-quiet';
 }
 
+function seatsIn(value: unknown, seats: readonly Seat[]): Seat[] {
+  return Array.isArray(value) ? seats.filter((seat) => value.includes(seat)) : [];
+}
+
+/**
+ * One line on what the viewer waits for or can do next, so an answered offer never looks inert:
+ * replies still owed, who accepted, everyone declined, or the proposer still to confirm.
+ */
+function offerHint(
+  offer: Record<string, unknown>,
+  view: { seat: Seat; active: Seat; seats: readonly Seat[]; confirmable: boolean },
+  t: ReturnType<typeof useTranslation>['t'],
+  playerLabel: (seat: Seat) => string,
+): string | null {
+  if (offer.valid === false) return null;
+  const proposer = view.seats.find((candidate) => candidate === offer.proposer);
+  if (proposer === undefined) return null;
+  const to = seatsIn(offer.to, view.seats);
+  const accepted = seatsIn(offer.acceptedBy, view.seats);
+  const declined = seatsIn(offer.declinedBy, view.seats);
+  if (proposer === view.seat) {
+    if (proposer !== view.active)
+      return t('rules:trade.hint.awaitingAnswer', { player: playerLabel(view.active) });
+    if (accepted.length > 0 && view.confirmable)
+      return t('rules:trade.hint.chooseAcceptor', {
+        count: accepted.length,
+        players: accepted.map(playerLabel).join(', '),
+      });
+    if (to.length > 0 && declined.length === to.length) return t('rules:trade.hint.allDeclined');
+    return accepted.length === 0 ? t('rules:trade.hint.waitingReplies') : null;
+  }
+  return accepted.includes(view.seat)
+    ? t('rules:trade.hint.waitingConfirm', { player: playerLabel(proposer) })
+    : null;
+}
+
 function StatusIcon({ status }: { status: ResponseStatus }) {
   return (
     <svg className="trade-response-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
@@ -139,6 +175,19 @@ export function IncomingOffers(props: CommandFormProps & { collapsedWhilePlacing
       command.type === 'RESPOND_TRADE' &&
       command.accept === true &&
       validationFor(command) === 'invalid',
+  );
+  const hint = offerHint(
+    selected,
+    {
+      seat,
+      active: state.turn.activeSeat,
+      seats: state.config.seats,
+      confirmable: choices.some(
+        (command) => command.type === 'CONFIRM_TRADE' && validationFor(command) === 'valid',
+      ),
+    },
+    t,
+    playerLabel,
   );
   const index = offers.indexOf(selected);
   const step = (delta: number) => {
@@ -225,6 +274,11 @@ export function IncomingOffers(props: CommandFormProps & { collapsedWhilePlacing
           {acceptBlocked && (
             <p className="trade-offer-note" id={noteId}>
               {t('rules:trade.cannotAccept')}
+            </p>
+          )}
+          {hint !== null && (
+            <p className="trade-offer-note" data-tone="status" role="status">
+              {hint}
             </p>
           )}
           <ValidationChecking

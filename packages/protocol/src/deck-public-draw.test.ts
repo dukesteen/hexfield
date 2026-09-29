@@ -99,6 +99,8 @@ function openSession(master: (seat: Seat) => Uint8Array) {
 }
 type Session = ReturnType<typeof openSession>;
 
+const yieldTask = () => new Promise<void>((resolve) => setImmediate(resolve));
+
 function withFrame(state: GameState, frame: GameState['turn']['phase'][number]): GameState {
   return { ...state, turn: { ...state.turn, phase: [...state.turn.phase, frame] } };
 }
@@ -460,8 +462,8 @@ describe('public deck draws', () => {
   }, 120_000);
 
   test('same genesis seed but different deck secrets reveal a different fog order', async () => {
-    const order = async (master: (seat: Seat) => Uint8Array): Promise<string[]> => {
-      let session = openSession(master);
+    const order = async (opened: Session): Promise<string[]> => {
+      let session = opened;
       const cards: string[] = [];
       for (let index = 0; index < 6; index++) {
         // oxlint-disable-next-line no-await-in-loop -- Each reveal follows the certified previous one.
@@ -477,7 +479,13 @@ describe('public deck draws', () => {
     expect(first.genesis.genesisSeed).toBe(second.genesis.genesisSeed);
     expect(first.state.board).toEqual(second.state.board);
     expect(need(first.definitions[1]).ceremonyId).toBe(need(second.definitions[1]).ceremonyId);
-    const [a, b, again] = [await order(masterA), await order(masterB), await order(masterA)];
+    // Opening a session shuffles every deck synchronously; a macrotask between the openings keeps
+    // the test worker responsive.
+    const a = await order(first);
+    await yieldTask();
+    const b = await order(second);
+    await yieldTask();
+    const again = await order(openSession(masterA));
     expect([...a].toSorted()).toEqual(Object.keys(FOG_CARDS));
     expect([...b].toSorted()).toEqual(Object.keys(FOG_CARDS));
     expect(a).not.toEqual(b);

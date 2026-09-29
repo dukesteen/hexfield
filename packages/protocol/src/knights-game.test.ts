@@ -240,7 +240,43 @@ async function play(
   return { fixture, captured };
 }
 
-describe('knights over the verified P2P protocol', () => {
+describe('knights over the verified P2P protocol, briefly', () => {
+  test('the opening of a two-seat game replays to the live hands over eight card kinds', async () => {
+    const config = shortKnights(2, 11);
+    const { fixture, captured } = await play(config, 63, { stopAfterSteps: 60 });
+    const rebuilt = reconstructPrivateSeats({
+      genesisEntry: fixture.genesisEntry,
+      entries: fixture.entries,
+      engine: fixture.engine,
+      policy: fixture.policy,
+      secrets: fixture.masters.map(({ seat }) => ({
+        seat,
+        master: scalarToBytes(BigInt(17 + seat)),
+      })),
+    });
+    if (!rebuilt.ok) throw new Error(`${rebuilt.error.code}: ${rebuilt.error.message}`);
+    try {
+      expect(captured.length).toBeGreaterThan(0);
+      for (const session of captured)
+        for (const seat of session.seats)
+          expect(rebuilt.value.driver.privateState(seat)).toEqual(session.states.get(seat));
+      const context = rebuilt.value.context.log;
+      expect(context.crypto?.hands.every((row) => Object.keys(row.commitments).length === 8)).toBe(
+        true,
+      );
+    } finally {
+      rebuilt.value.dispose();
+    }
+  }, 300_000);
+});
+
+/**
+ * Full verified knights games take many minutes each, so they are opt-in acceptance runs:
+ * `CP2P_HEAVY_TESTS=1 pnpm test packages/protocol/src/knights-game.test.ts`.
+ */
+const HEAVY = process.env.CP2P_HEAVY_TESTS === '1';
+
+describe.runIf(HEAVY)('knights over the verified P2P protocol', () => {
   test('a four-seat knights game is committed, proven and audited over eight card kinds', async () => {
     const config = shortKnights(4, 9);
     const { fixture } = await play(config, 61);

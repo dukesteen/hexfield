@@ -90,35 +90,46 @@ function room() {
   return { network, peers };
 }
 
-test('six humans complete a five-six ceremony with the 34-card deck', async () => {
-  const { network, peers } = room();
-  try {
-    for (const peer of peers) {
-      // oxlint-disable-next-line no-await-in-loop -- Peers join the frozen attempt in order.
-      expect((await peer.start()).ok).toBe(true);
+/**
+ * Six full shuffle passes over the 34-card deck take minutes, so this scale check is an opt-in
+ * acceptance run (`CP2P_HEAVY_TESTS=1`); `online-ceremony.test.ts` covers the ceremony itself.
+ */
+test.runIf(process.env.CP2P_HEAVY_TESTS === '1')(
+  'six humans complete a five-six ceremony with the 34-card deck',
+  async () => {
+    const { network, peers } = room();
+    try {
+      for (const peer of peers) {
+        // oxlint-disable-next-line no-await-in-loop -- Peers join the frozen attempt in order.
+        expect((await peer.start()).ok).toBe(true);
+      }
+      const started = performance.now();
+      for (let attempt = 0; attempt < 2_000; attempt += 1) {
+        network.clock.advanceBy(0);
+        // oxlint-disable-next-line no-await-in-loop -- Drain queued transport work between ticks.
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        if (peers.every((peer) => peer.result() !== null)) break;
+        if (peers.some((peer) => ['error', 'retired'].includes(peer.snapshot().phase))) break;
+      }
+      const snapshots = peers.map((peer) => peer.snapshot());
+      expect(snapshots.map((snapshot) => [snapshot.phase, snapshot.error])).toEqual(
+        peers.map(() => ['ready', null]),
+      );
+      const result = required(peers[0]?.result());
+      expect(result.genesis.signatures).toHaveLength(SEATS);
+      expect(result.transcripts[0]?.passes).toHaveLength(2 * SEATS);
+      expect(result.genesis.config.modules.map((module) => module.id)).toEqual([
+        'base',
+        'five-six',
+      ]);
+      for (const peer of peers) expect(peer.result()?.entry).toEqual(result.entry);
+      process.stdout.write(
+        `${JSON.stringify({ seats: SEATS, ceremonyWallMs: Math.round(performance.now() - started) })}\n`,
+      );
+    } finally {
+      for (const peer of peers) peer.dispose();
+      network.dispose();
     }
-    const started = performance.now();
-    for (let attempt = 0; attempt < 2_000; attempt += 1) {
-      network.clock.advanceBy(0);
-      // oxlint-disable-next-line no-await-in-loop -- Drain queued transport work between ticks.
-      await new Promise((resolve) => setTimeout(resolve, 0));
-      if (peers.every((peer) => peer.result() !== null)) break;
-      if (peers.some((peer) => ['error', 'retired'].includes(peer.snapshot().phase))) break;
-    }
-    const snapshots = peers.map((peer) => peer.snapshot());
-    expect(snapshots.map((snapshot) => [snapshot.phase, snapshot.error])).toEqual(
-      peers.map(() => ['ready', null]),
-    );
-    const result = required(peers[0]?.result());
-    expect(result.genesis.signatures).toHaveLength(SEATS);
-    expect(result.transcripts[0]?.passes).toHaveLength(2 * SEATS);
-    expect(result.genesis.config.modules.map((module) => module.id)).toEqual(['base', 'five-six']);
-    for (const peer of peers) expect(peer.result()?.entry).toEqual(result.entry);
-    process.stdout.write(
-      `${JSON.stringify({ seats: SEATS, ceremonyWallMs: Math.round(performance.now() - started) })}\n`,
-    );
-  } finally {
-    for (const peer of peers) peer.dispose();
-    network.dispose();
-  }
-}, 600_000);
+  },
+  600_000,
+);

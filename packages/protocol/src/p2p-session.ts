@@ -30,7 +30,7 @@ import { loadPreparedRecoveryReadiness, prepareRecoveryReadiness } from './recov
 import type { RecoveryReadinessStore } from './recovery-readiness.js';
 import type { RecoveryReadiness } from './recovery-types.js';
 import { quorumSize } from './votes.js';
-import { chooseBotPending } from './bot-pending.js';
+import { BOT_TRADE_PATIENCE_MS, botAwaitsTradeReplies, chooseBotPending } from './bot-pending.js';
 import { initialProposalContext, replayCertifiedPrefix } from './replay.js';
 import { cacheCommittedPublicSnapshot } from './public-snapshot.js';
 import { PRIVATE_TIMEOUT_TYPES, timedPrivateCommand } from './turn-timeout.js';
@@ -116,6 +116,8 @@ export interface P2PSessionOptions extends Omit<
   ) => CommandShape | null;
   /** Delay between committed state and a bot choice. Defaults to 350 ms. */
   botDelayMs?: number;
+  /** How long an offering bot waits for replies it cannot make. Defaults to BOT_TRADE_PATIENCE_MS. */
+  botTradePatienceMs?: number;
 }
 
 /** Certified history is useful for replay, but does not authorize importing a voting key. */
@@ -216,6 +218,13 @@ export class P2PSession implements GameSession<CertifiedHistory> {
           options.botDelayMs > 60_000)
       )
         return failure('session-bot-delay', 'Bot delay must be between zero and 60 seconds');
+      if (
+        options.botTradePatienceMs !== undefined &&
+        (!Number.isFinite(options.botTradePatienceMs) ||
+          options.botTradePatienceMs < 0 ||
+          options.botTradePatienceMs > 600_000)
+      )
+        return failure('session-bot-delay', 'Bot trade patience must be at most ten minutes');
       const initial = initialProposalContext(options.genesisEntry, options.engine, options.policy);
       if (!initial.ok) return initial;
       const context = initial.value;
@@ -1841,47 +1850,56 @@ export class P2PSession implements GameSession<CertifiedHistory> {
     if (this.botParent === parent || this.automaticParent === parent) return;
     const chosen = chooseBotPending(this.context.log.state, this.getPending(), this.hostedBots());
     if (!chosen || this.inflight.has(chosen.seat)) return;
+    const delay = this.options.botDelayMs ?? 350;
+    const waiting = botAwaitsTradeReplies(
+      this.context.log.state,
+      this.getPending(),
+      this.hostedBots(),
+    );
     this.botParent = parent;
-    this.botTimer = this.options.clock.setTimeout(() => {
-      this.botTimer = null;
-      if (
-        this.status.kind !== 'running' ||
-        this.recoveryInstalling ||
-        parent !== entryHash(this.context.log.head)
-      )
-        return;
-      const pending = chooseBotPending(
-        this.context.log.state,
-        this.getPending(),
-        this.hostedBots(),
-      );
-      if (!pending || pending.seat !== chosen.seat || this.inflight.has(pending.seat)) return;
-      const priv = this.getPrivate(pending.seat);
-      if (!priv) return;
-      try {
-        const command = this.options.decideBot?.(
-          { state: copyCanonical(this.context.log.state), priv, seat: pending.seat },
-          copyCanonical(pending),
-          this.botLevel(pending.seat),
+    this.botTimer = this.options.clock.setTimeout(
+      () => {
+        this.botTimer = null;
+        if (
+          this.status.kind !== 'running' ||
+          this.recoveryInstalling ||
+          parent !== entryHash(this.context.log.head)
+        )
+          return;
+        const pending = chooseBotPending(
+          this.context.log.state,
+          this.getPending(),
+          this.hostedBots(),
         );
-        if (!command) return;
-        void this.submit(pending.seat, command)
-          .then((result) => {
-            if (!result.ok && parent === entryHash(this.context.log.head)) {
-              this.botParent = null;
-              this.retryAutomatic(parent, result.error.code);
-            }
-            return undefined;
-          })
-          .catch(() => {
-            this.protocolStatus = { kind: 'rejected', code: 'session-bot-submit' };
-            this.emit([]);
-          });
-      } catch {
-        this.protocolStatus = { kind: 'rejected', code: 'session-bot-decision' };
-        this.emit([]);
-      }
-    }, this.options.botDelayMs ?? 350);
+        if (!pending || pending.seat !== chosen.seat || this.inflight.has(pending.seat)) return;
+        const priv = this.getPrivate(pending.seat);
+        if (!priv) return;
+        try {
+          const command = this.options.decideBot?.(
+            { state: copyCanonical(this.context.log.state), priv, seat: pending.seat },
+            copyCanonical(pending),
+            this.botLevel(pending.seat),
+          );
+          if (!command) return;
+          void this.submit(pending.seat, command)
+            .then((result) => {
+              if (!result.ok && parent === entryHash(this.context.log.head)) {
+                this.botParent = null;
+                this.retryAutomatic(parent, result.error.code);
+              }
+              return undefined;
+            })
+            .catch(() => {
+              this.protocolStatus = { kind: 'rejected', code: 'session-bot-submit' };
+              this.emit([]);
+            });
+        } catch {
+          this.protocolStatus = { kind: 'rejected', code: 'session-bot-decision' };
+          this.emit([]);
+        }
+      },
+      waiting ? Math.max(delay, this.options.botTradePatienceMs ?? BOT_TRADE_PATIENCE_MS) : delay,
+    );
   }
 
   private clearBotTimer(): void {

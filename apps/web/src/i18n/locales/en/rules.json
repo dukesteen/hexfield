@@ -88,7 +88,23 @@
     "decline": "Decline",
     "confirm": "Complete trade",
     "confirmWith": "Trade with {{player}}",
-    "withdraw": "Withdraw"
+    "withdraw": "Withdraw",
+    "hint": {
+      "waitingReplies": "Waiting for replies…",
+      "chooseAcceptor_one": "{{players}} accepted. Trade to complete it.",
+      "chooseAcceptor_other": "{{players}} accepted. Choose who to trade with.",
+      "allDeclined": "Everyone declined. Withdraw the offer or send a new one.",
+      "waitingConfirm": "You accepted. Waiting for {{player}} to confirm.",
+      "awaitingAnswer": "Waiting for {{player}} to answer your offer."
+    },
+    "notice": {
+      "completed": "Trade with {{player}} completed.",
+      "tradedElsewhere": "{{proposer}} traded with {{player}} instead.",
+      "withdrawn": "{{player}} withdrew the offer.",
+      "turnedDown": "{{player}} turned down your offer.",
+      "expired": "The offer expired when the turn ended.",
+      "dismiss": "Dismiss"
+    }
   },
   "bank": {
     "title": "Bank trade",

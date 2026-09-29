@@ -15,6 +15,15 @@ pnpm dev
 
 Open <http://127.0.0.1:5187/>. Run `pnpm check` for the repository checks or `pnpm test:e2e` for browser tests.
 
+## Verify locally
+
+`pnpm check:full` runs the static checks (types, lint, format, dependency boundaries, engine purity, translation keys), the build, every unit test with four workers, and the engine coverage gate. Slower acceptance runs are started by hand:
+
+- Browser tests: `pnpm test:e2e` (all three browsers), or `CI_BROWSER_SET=chromium pnpm test:e2e` for Chromium alone. Set `PLAYWRIGHT_TEST_PORT` to run beside another dev server.
+- Heavy unit tests: `CP2P_HEAVY_TESTS=1 pnpm test` adds the full verified Cities & Knights P2P games (`knights-game`, and the every-progress-card game in `knights-progress-game`), the six-seat online ceremony, and the full knights simulation sweeps. Each of those games takes minutes; pass a file path to run one.
+- Simulations: `pnpm sim run --games 2000 --players 4 --seed 42 --parallel 4` and `pnpm sim fuzz --iterations 50000 --seed 42`.
+- Network acceptance: `pnpm sim net --scenario <1-9> --seeds 5 --seed 42 --parallel 1`. Add `--security verified --seeds 1 --max-elapsed-ms 900000` for a real-crypto game, or `--lifecycle persistence` for the restart check.
+
 The `main` branch deploys to GitHub Pages after CI checks and the simulation job pass. Browser tests run by default. The Pages build uses `/hexfield/` as its asset base; local development and ordinary builds use `/`.
 
 After verifying the release changes with E2E tests locally, a maintainer can skip the hosted browser run with:

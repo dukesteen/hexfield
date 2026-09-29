@@ -735,3 +735,48 @@
 :root[data-motion='reduce'] .resource-card {
   transition: none;
 }
+
+.trade-offer-note[data-tone='status'] {
+  color: var(--text);
+}
+
+.trade-notice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 8px;
+  padding: 10px 8px 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 8px 24px #091d1733;
+  font-size: 14px;
+  line-height: 1.35;
+}
+
+.trade-notice > span {
+  flex: 1;
+}
+
+.trade-notice-dismiss {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.trade-notice-dismiss svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+}

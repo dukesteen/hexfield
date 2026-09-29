@@ -1267,8 +1267,9 @@ function LiveGame({
               submitting={actions.submitting}
             />
           )}
-          {!finished && actions.offerOverlay && (
+          {!finished && (actions.offerOverlay || actions.tradeNotice) && (
             <div className="board-offers" inert={actions.submitting}>
+              {actions.tradeNotice}
               {actions.offerOverlay}
             </div>
           )}
