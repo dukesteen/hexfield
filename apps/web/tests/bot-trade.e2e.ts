@@ -9,6 +9,10 @@ import type { Snapshot } from './helpers/knights-scenes.js';
 async function startBotGame(page: Page): Promise<void> {
   await page.goto('/#/local/new');
   await page.locator('#player-count').selectOption('3');
+  // These scenes test the random bots' trade replies (a spare card for a needed one); the default
+  // Normal bots judge offers by their plan instead.
+  await page.getByLabel('Player 2 difficulty').selectOption('random');
+  await page.getByLabel('Player 3 difficulty').selectOption('random');
   await page.getByText('Advanced rules').click();
   await page.getByLabel('Bot pace, milliseconds').fill('0');
   await page.getByRole('button', { name: 'Create game' }).click();
