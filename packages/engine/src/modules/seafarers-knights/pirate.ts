@@ -36,8 +36,11 @@ function chased(state: GameState): readonly string[] | null {
   const top = state.turn.phase.at(-1);
   if (top?.module !== 'base' || top.id !== 'moveRobber') return null;
   const data: unknown = top.data;
-  const only: unknown = typeof data === 'object' && data !== null ? Reflect.get(data, 'only') : null;
-  return Array.isArray(only) ? only.filter((item): item is string => typeof item === 'string') : null;
+  const only: unknown =
+    typeof data === 'object' && data !== null ? Reflect.get(data, 'only') : null;
+  return Array.isArray(only)
+    ? only.filter((item): item is string => typeof item === 'string')
+    : null;
 }
 
 /**

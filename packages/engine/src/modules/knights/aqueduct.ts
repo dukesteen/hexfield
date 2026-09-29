@@ -76,15 +76,16 @@ function goldEntitled(state: GameState, seat: Seat, roll: number): boolean {
  * from the active seat, when the bank still holds a resource. It runs only on a non-7 roll.
  */
 export function openAqueductChoices(state: GameState, roll: number): GameState {
-  const noted = knightsExt(state).noProduction.filter((seat) => !goldEntitled(state, seat, roll));
-  if (knightsExt(state).noProduction.length === 0) return state;
+  const listed = knightsExt(state).noProduction;
+  if (listed.length === 0) return state;
+  const noted = new Set(listed.filter((seat) => !goldEntitled(state, seat, roll)));
   const cleared = updateKnights(state, (old) => ({ ...old, noProduction: [] }));
   if (roll === 7 || bankResources(cleared).length === 0) return cleared;
   const seats = cleared.config.seats;
   const start = Math.max(0, seats.indexOf(cleared.turn.activeSeat));
   const queue = seats
     .map((_, offset) => seats[(start + offset) % seats.length])
-    .filter((seat): seat is Seat => seat !== undefined && noted.includes(seat));
+    .filter((seat): seat is Seat => seat !== undefined && noted.has(seat));
   return queue.length ? pushPhase(cleared, aqueductFrame(queue)) : cleared;
 }
 

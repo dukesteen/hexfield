@@ -152,10 +152,13 @@ export const diplomat: CardModule = {
       if (!removal.ok) return removal;
       const own = pieceOn(state, parsed.value.edge)?.seat === seat;
       if (parsed.value.build === null) return success(undefined);
-      if (!own) return failure('not-own-road', 'Only removing your own road earns a free road');
+      if (!own) return failure('not-own-road', 'Only removing your own piece earns a free one');
       return replacements(state, seat, parsed.value.edge, ctx).includes(parsed.value.build)
         ? success(undefined)
-        : failure('illegal-road', 'The free road must go on another legal edge');
+        : failure(
+            'illegal-road',
+            'The free piece must be of the removed kind, on another legal edge',
+          );
     },
     options: (state, seat, ctx) =>
       pieceEdges(state)

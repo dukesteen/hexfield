@@ -19,7 +19,7 @@ import {
 const engine = knightsEngine(true);
 
 describe('knights with five-six', () => {
-  test('the combination is allowed, and seafaring stays "later"', () => {
+  test('the combination is allowed, and seafaring only through a scenario', () => {
     expect(checkModuleCombination(['base', 'five-six', 'knights']).ok).toBe(true);
     expect(checkModuleCombination(['base', 'knights', 'seafaring']).ok).toBe(false);
   });
