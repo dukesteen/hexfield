@@ -54,7 +54,7 @@ function show(onHome?: () => void) {
 }
 
 test('the results offer a way back to the home screen', () => {
-  const onHome = vi.fn();
+  const onHome = vi.fn<() => void>();
   show(onHome);
   fireEvent.click(screen.getByRole('button', { name: 'Home', hidden: true }));
   expect(onHome).toHaveBeenCalledOnce();
