@@ -1,5 +1,7 @@
 import type { GameModule, RenderHint } from '../../core/modules/index.js';
+import { isFogTerrain } from '../../core/board/index.js';
 import type { GameState } from '../../core/state/index.js';
+import { hexesForVertex } from '../base/board/index.js';
 import { knightsExt } from '../knights/types.js';
 import { seafaringExt } from '../seafaring/types.js';
 import { enterPirate, holdPirate, limitBlockers } from './pirate.js';
@@ -11,9 +13,20 @@ import type { ComboExt } from './types.js';
 export { COMBO_ID, COMBO_VERSION, comboExt } from './types.js';
 export type { ComboExt } from './types.js';
 
-/** Public checks for the pair: the pirate enters with the first attack and not before. */
+/**
+ * Public checks for the pair: the pirate enters with the first attack and not before, and no knight
+ * stands beside unrevealed fog (a knight only reaches vertices where its seat's roads and ships end,
+ * and every road or ship reveals the fog at both ends, combos.md "Fog").
+ */
 function comboInvariants(state: GameState): string[] {
   const errors: string[] = [];
+  const fog = new Set(
+    state.board.hexes.filter((hex) => isFogTerrain(hex.terrain)).map((hex) => hex.id),
+  );
+  if (fog.size > 0 && !seafaringExt(state).fog)
+    for (const knight of knightsExt(state).knights)
+      if (hexesForVertex(state, knight.vertex).some((hex) => fog.has(hex)))
+        errors.push(`knight at ${knight.vertex} stands beside unrevealed fog`);
   const ext = comboExt(state);
   if (!ext.pirateEntered && seafaringExt(state).pirateHex !== null)
     errors.push('the pirate is on the board before the first attack');
