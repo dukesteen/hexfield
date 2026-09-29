@@ -61,7 +61,7 @@ test('shows newest events first with dice and player-colored action art', () => 
   expect(view.container.querySelector('ol')?.getAttribute('role')).toBe('list');
 });
 
-test('production shows its public recipients while system and private-card events stay anonymous', () => {
+test('production, system and private-card events stay anonymous', () => {
   const view = show([
     { type: 'resourcesProduced', bySeat: { '0': { grain: 1 }, '1': { brick: 2 } } },
     { type: 'resourceStolen', thief: 1, victim: 0, resource: 'ore' },
@@ -82,8 +82,13 @@ test('production shows its public recipients while system and private-card event
   expect(rows[2]?.querySelector('.event-log-action')?.getAttribute('src')).toBe(
     getGameArtUrl('cardBack'),
   );
-  expect(rows[3]?.querySelectorAll('.event-log-faction')).toHaveLength(2);
-  expect(rows[3]?.querySelectorAll('.event-log-action').length).toBeGreaterThan(0);
+  // Production names neither its recipients nor the kinds they received.
+  expect(rows[3]?.querySelectorAll('.event-log-faction')).toHaveLength(0);
+  expect(rows[3]?.querySelector('.event-log-action')?.getAttribute('src')).toBe(
+    getGameArtUrl('cardBack'),
+  );
+  expect(view.container.textContent).not.toContain('Grain');
+  expect(view.container.textContent).not.toContain('Brick');
   expect(view.container.textContent).not.toContain('monopoly');
   expect(view.container.textContent).not.toContain('private:1');
   expect(view.container.textContent).not.toContain('Ore');

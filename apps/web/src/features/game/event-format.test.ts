@@ -14,15 +14,13 @@ beforeAll(async () => {
 });
 const label = (seat: number) => `Player ${seat + 1}`;
 
-test('public production is readable and omits zero shortage gains', () => {
+test('production is logged without naming who received which cards', () => {
   const text = formatGameEvent(
     { type: 'resourcesProduced', bySeat: { '0': { grain: 2, ore: 0 }, '1': { brick: 1 } } },
     i18n.t,
     label,
   );
-  expect(text).toContain('Player 1: +2 Grain');
-  expect(text).toContain('Player 2: +1 Brick');
-  expect(text).not.toContain('Ore');
+  expect(text).toBe('Resources were produced.');
 });
 
 test('steal and development deal messages never expose private identities', () => {

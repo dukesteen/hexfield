@@ -59,20 +59,8 @@ export function formatGameEvent(
       ? t('log:diceRolledEvent', { count: event.roll, face: t(`log:eventFace.${face}`) })
       : t('log:diceRolled', { count: event.roll });
   }
-  if (event.type === 'resourcesProduced' && record(event.bySeat)) {
-    const gains = Object.entries(event.bySeat).flatMap(([seat, counts]) => {
-      if (!record(counts)) return [];
-      const cards = RESOURCES.flatMap((resource) => {
-        const count = counts[resource];
-        return typeof count === 'number' && count > 0
-          ? [t('log:resourceGain', { count, resource: t(`game:${resource}`) })]
-          : [];
-      });
-      return cards.length ? [`${playerLabel(Number(seat))}: ${cards.join(', ')}`] : [];
-    });
-    if (gains.length) return t('log:resourcesProducedDetailed', { details: gains.join('; ') });
-    return t('log:resourcesProduced');
-  }
+  // Who got which cards is left out on purpose, so the log is not a card-counting aid.
+  if (event.type === 'resourcesProduced') return t('log:resourcesProduced');
   if (event.type === 'resourcesDiscarded' && actor && typeof event.count === 'number')
     return t('log:resourcesDiscarded', { player: actor, count: event.count });
   if (event.type === 'devCardBought' && actor) return t('log:devCardBought', { player: actor });
