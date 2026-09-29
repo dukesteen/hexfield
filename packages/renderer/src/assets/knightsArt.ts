@@ -1,7 +1,21 @@
 // Generated from the Cities & Knights art in ./redesign (ck-*.svg). One import per file keeps the
 // bundler emitting each SVG as its own asset. Regenerate when art files are added or removed.
+import ckBarbarianLandingUrl from './redesign/ck-barbarian-landing.svg?no-inline';
 import ckBarbarianShipUrl from './redesign/ck-barbarian-ship.svg?no-inline';
 import ckBarbarianShipPieceUrl from './redesign/ck-barbarian-ship-piece.svg?no-inline';
+import ckBarbarianStartUrl from './redesign/ck-barbarian-start.svg?no-inline';
+import ckBarbarianStep1Url from './redesign/ck-barbarian-step-1.svg?no-inline';
+import ckBarbarianStep2Url from './redesign/ck-barbarian-step-2.svg?no-inline';
+import ckBarbarianStep3Url from './redesign/ck-barbarian-step-3.svg?no-inline';
+import ckBarbarianStep4Url from './redesign/ck-barbarian-step-4.svg?no-inline';
+import ckBarbarianStep5Url from './redesign/ck-barbarian-step-5.svg?no-inline';
+import ckBarbarianStep6Url from './redesign/ck-barbarian-step-6.svg?no-inline';
+import ckBarbarianStep7Url from './redesign/ck-barbarian-step-7.svg?no-inline';
+import ckBarbarianStep8Url from './redesign/ck-barbarian-step-8.svg?no-inline';
+import ckBarbarianStep9Url from './redesign/ck-barbarian-step-9.svg?no-inline';
+import ckBarbarianTrackTile0Url from './redesign/ck-barbarian-track-tile-0.svg?no-inline';
+import ckBarbarianTrackTile120Url from './redesign/ck-barbarian-track-tile-120.svg?no-inline';
+import ckBarbarianTrackTile60Url from './redesign/ck-barbarian-track-tile-60.svg?no-inline';
 import ckCardClothUrl from './redesign/ck-card-cloth.svg?no-inline';
 import ckCardCoinUrl from './redesign/ck-card-coin.svg?no-inline';
 import ckCardDefenderUrl from './redesign/ck-card-defender.svg?no-inline';
@@ -140,8 +154,22 @@ import ckWallWhiteUrl from './redesign/ck-wall-white.svg?no-inline';
 
 /** Cities & Knights art by file name without the extension. */
 export const KNIGHTS_ART: Readonly<Record<string, string>> = {
+  'ck-barbarian-landing': ckBarbarianLandingUrl,
   'ck-barbarian-ship': ckBarbarianShipUrl,
   'ck-barbarian-ship-piece': ckBarbarianShipPieceUrl,
+  'ck-barbarian-start': ckBarbarianStartUrl,
+  'ck-barbarian-step-1': ckBarbarianStep1Url,
+  'ck-barbarian-step-2': ckBarbarianStep2Url,
+  'ck-barbarian-step-3': ckBarbarianStep3Url,
+  'ck-barbarian-step-4': ckBarbarianStep4Url,
+  'ck-barbarian-step-5': ckBarbarianStep5Url,
+  'ck-barbarian-step-6': ckBarbarianStep6Url,
+  'ck-barbarian-step-7': ckBarbarianStep7Url,
+  'ck-barbarian-step-8': ckBarbarianStep8Url,
+  'ck-barbarian-step-9': ckBarbarianStep9Url,
+  'ck-barbarian-track-tile-0': ckBarbarianTrackTile0Url,
+  'ck-barbarian-track-tile-120': ckBarbarianTrackTile120Url,
+  'ck-barbarian-track-tile-60': ckBarbarianTrackTile60Url,
   'ck-card-cloth': ckCardClothUrl,
   'ck-card-coin': ckCardCoinUrl,
   'ck-card-defender': ckCardDefenderUrl,

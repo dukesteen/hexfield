@@ -87,69 +87,206 @@ export function decoratedCity(
   return wall ? { art: WALLED_CITY_ART } : null;
 }
 
+/** The fixture art key of the knights module's barbarian track. */
+export const BARBARIAN_TRACK_ART = 'barbarian-track';
+/** Steps of the track when the model does not say: the ship lands on the seventh. */
+export const DEFAULT_BARBARIAN_STEPS = 7;
+/** Numbered step tokens shipped as art (`ck-barbarian-step-1` to `-9`). */
+export const TRACK_STEP_TOKENS = 9;
+
+/** A grid axis of a two-hex footprint, in degrees: east-west, south-east and south-west. */
+export type TrackAxis = 0 | 60 | 120;
+export const TRACK_AXES: readonly TrackAxis[] = [0, 60, 120];
+
 /**
- * Space of the barbarian track art, matching `FIXTURE_ART_SIZE`: two pointy-top hexes of radius
- * 80 joined east to west, the ship's start in the west hex and the landing island in the east
- * hex. The steps are where the numbered circles are printed.
+ * Authored sizes of the joined two-hex sea tile along each grid axis (art units, 80 to a hex
+ * radius). Each is centred on the midpoint of its two hexes and lit from the top left, so it is
+ * drawn unrotated. From tools/generate-barbarian-track.mjs.
  */
-export const TRACK_ART = {
-  width: 289,
-  height: 174,
-  center: { x: 144.5, y: 87 },
-  /** The start space, the six numbered spaces and the landing beside the island. */
-  points: [
-    { x: 30, y: 99 },
-    { x: 57, y: 73 },
-    { x: 86, y: 97 },
-    { x: 116, y: 72 },
-    { x: 146, y: 93 },
-    { x: 175, y: 68 },
-    { x: 202, y: 93 },
-    { x: 236, y: 98 },
-  ],
-} as const;
+export const TRACK_TILE_ART: Readonly<Record<TrackAxis, { width: number; height: number }>> = {
+  0: { width: 284, height: 166 },
+  60: { width: 214, height: 286 },
+  120: { width: 214, height: 286 },
+};
+/** A step token's art box, centred on its disc of radius 11. */
+export const TRACK_TOKEN_ART = { width: 28, height: 28, radius: 11 } as const;
+/** Tokens draw a fifth larger than their art, so the numbers still read on a phone. */
+export const TRACK_TOKEN_SCALE = 1.2;
+/** The landing island's art box and the island's centre on it. */
+export const TRACK_LANDING_ART = { width: 60, height: 54, originX: 30, originY: 30 } as const;
+
+export const TRACK_START_KEY = 'ck-barbarian-start';
+export const TRACK_LANDING_KEY = 'ck-barbarian-landing';
+export function trackTileKey(axis: TrackAxis): string {
+  return `ck-barbarian-track-tile-${axis}`;
+}
+export function trackStepKey(step: number): string {
+  return `ck-barbarian-step-${Math.min(TRACK_STEP_TOKENS, Math.max(1, Math.trunc(step) || 1))}`;
+}
+/** Every art key of the composed track, for one preload. */
+export function trackArtKeys(): string[] {
+  return [
+    ...TRACK_AXES.map(trackTileKey),
+    TRACK_START_KEY,
+    TRACK_LANDING_KEY,
+    ...Array.from({ length: TRACK_STEP_TOKENS }, (_, index) => trackStepKey(index + 1)),
+  ];
+}
+
+/**
+ * Where the route runs, in art units from the footprint's midpoint along the axis from the outer
+ * hex to the anchor: the start space near the outer end, the numbered steps between, zig-zagging
+ * across the axis, and the island in the anchor hex. The ship docks a little below the island.
+ */
+const ROUTE = { start: -112, first: -84, last: 52, island: 92, zigzag: 11, dock: 12 } as const;
+
+/** One upright piece of the track: its art key, where its anchor sits and its board size. */
+export interface TrackPiece {
+  readonly key: string;
+  readonly at: Point;
+  readonly width: number;
+  readonly height: number;
+  /** The art point placed at `at`, as fractions of the art box. */
+  readonly anchor: { readonly x: number; readonly y: number };
+  /** Always zero: the track's pieces never turn with the fixture. */
+  readonly rotation: 0;
+}
+
+/** The track composed for one footprint: the tile, the route and its upright markers. */
+export interface BarbarianTrackLayout {
+  /** Midpoint of the two hexes. */
+  readonly center: Point;
+  /** Unit vector from the outer hex to the anchor hex, the way the barbarians sail. */
+  readonly direction: Point;
+  readonly axis: TrackAxis;
+  readonly tile: TrackPiece;
+  /** The dotted line: the start, every numbered step and the island. */
+  readonly route: readonly Point[];
+  /** Where the ship stands at each step: 0 is the start, `steps` the landing. */
+  readonly stops: readonly Point[];
+  /** The start space, the numbered steps in order, then the island. */
+  readonly markers: readonly TrackPiece[];
+  /** The ship's art faces east; it is mirrored when the island lies to the west. */
+  readonly shipFacesWest: boolean;
+}
+
+/** The grid axis a direction runs along, whichever way. */
+export function trackAxis(direction: Point): TrackAxis {
+  const degrees = (Math.atan2(direction.y, direction.x) * 180) / Math.PI;
+  const axis = (((Math.round(degrees / 60) * 60) % 180) + 180) % 180;
+  return axis === 60 ? 60 : axis === 120 ? 120 : 0;
+}
+
+/**
+ * Lay the barbarian track on a two-hex footprint (anchor first): the tile for its axis, then the
+ * start, `steps - 1` numbered spaces and the island along the axis. Every piece stays upright.
+ */
+export function barbarianTrackLayout(
+  fixture: RenderFixture,
+  hexSize: number,
+  steps = DEFAULT_BARBARIAN_STEPS,
+): BarbarianTrackLayout | null {
+  const [anchorCell, outerCell] = fixture.footprint;
+  if (!anchorCell || !outerCell) return null;
+  const anchor = hexToPixel(anchorCell.q, anchorCell.r, hexSize);
+  const outer = hexToPixel(outerCell.q, outerCell.r, hexSize);
+  const length = Math.hypot(anchor.x - outer.x, anchor.y - outer.y);
+  if (length === 0) return null;
+  const direction = { x: (anchor.x - outer.x) / length, y: (anchor.y - outer.y) / length };
+  // Across the axis, pointing up the screen, so the first step always zig-zags upwards.
+  const flip = direction.x > 0 || (direction.x === 0 && direction.y < 0) ? 1 : -1;
+  const across = { x: direction.y * flip, y: -direction.x * flip };
+  const center = { x: (anchor.x + outer.x) / 2, y: (anchor.y + outer.y) / 2 };
+  const unit = fixtureScale(hexSize);
+  const point = (along: number, side = 0): Point => ({
+    x: center.x + (direction.x * along + across.x * side) * unit,
+    y: center.y + (direction.y * along + across.y * side) * unit,
+  });
+  const count = Math.min(TRACK_STEP_TOKENS, Math.max(1, Math.trunc(steps) || 1) - 1);
+  const numbered = Array.from({ length: count }, (_, index) => {
+    const t = count === 1 ? 0.5 : index / (count - 1);
+    const along = ROUTE.first + (ROUTE.last - ROUTE.first) * t;
+    return point(along, index % 2 === 0 ? ROUTE.zigzag : -ROUTE.zigzag);
+  });
+  const start = point(ROUTE.start);
+  const island = point(ROUTE.island);
+  const axis = trackAxis(direction);
+  const tileArt = TRACK_TILE_ART[axis];
+  const token = (key: string, at: Point): TrackPiece => ({
+    key,
+    at,
+    width: TRACK_TOKEN_ART.width * unit * TRACK_TOKEN_SCALE,
+    height: TRACK_TOKEN_ART.height * unit * TRACK_TOKEN_SCALE,
+    anchor: { x: 0.5, y: 0.5 },
+    rotation: 0,
+  });
+  return {
+    center,
+    direction,
+    axis,
+    tile: {
+      key: trackTileKey(axis),
+      at: center,
+      width: tileArt.width * unit,
+      height: tileArt.height * unit,
+      anchor: { x: 0.5, y: 0.5 },
+      rotation: 0,
+    },
+    route: [start, ...numbered, island],
+    stops: [start, ...numbered, { x: island.x, y: island.y + ROUTE.dock * unit }],
+    markers: [
+      token(TRACK_START_KEY, start),
+      ...numbered.map((at, index) => token(trackStepKey(index + 1), at)),
+      {
+        key: TRACK_LANDING_KEY,
+        at: island,
+        width: TRACK_LANDING_ART.width * unit,
+        height: TRACK_LANDING_ART.height * unit,
+        anchor: {
+          x: TRACK_LANDING_ART.originX / TRACK_LANDING_ART.width,
+          y: TRACK_LANDING_ART.originY / TRACK_LANDING_ART.height,
+        },
+        rotation: 0,
+      },
+    ],
+    shipFacesWest: direction.x < -1e-6,
+  };
+}
+
+/** Evenly spaced dots along the route, `spacing` board pixels apart, for the dotted line. */
+export function routeDots(route: readonly Point[], spacing: number): Point[] {
+  const dots: Point[] = [];
+  let carry = 0;
+  for (let index = 1; index < route.length; index += 1) {
+    const from = route[index - 1];
+    const to = route[index];
+    if (!from || !to) continue;
+    const length = Math.hypot(to.x - from.x, to.y - from.y);
+    let at = carry;
+    for (; at <= length; at += spacing) {
+      const t = length === 0 ? 0 : at / length;
+      dots.push({ x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t });
+    }
+    carry = at - length;
+  }
+  return dots;
+}
 
 /** The art scale that lets the track's hexes fill their grid cells (art hexes have radius 80). */
 export function fixtureScale(hexSize: number): number {
   return hexSize / 80;
 }
 
-/** The centre of the fixture art, its rotation and the world-space scale, from its footprint. */
-export function fixtureFrame(
-  fixture: RenderFixture,
-  hexSize: number,
-): { center: Point; rotation: number; scale: number } | null {
-  const [anchor, outer] = fixture.footprint;
-  if (!anchor || !outer) return null;
-  const a = hexToPixel(anchor.q, anchor.r, hexSize);
-  const o = hexToPixel(outer.q, outer.r, hexSize);
-  return {
-    center: { x: (a.x + o.x) / 2, y: (a.y + o.y) / 2 },
-    rotation: Math.atan2(a.y - o.y, a.x - o.x),
-    scale: fixtureScale(hexSize),
-  };
-}
-
-/** A point of the track art in board pixels. */
-export function fixturePoint(fixture: RenderFixture, hexSize: number, art: Point): Point | null {
-  const frame = fixtureFrame(fixture, hexSize);
-  if (!frame) return null;
-  const dx = (art.x - TRACK_ART.center.x) * frame.scale;
-  const dy = (art.y - TRACK_ART.center.y) * frame.scale;
-  const cos = Math.cos(frame.rotation);
-  const sin = Math.sin(frame.rotation);
-  return { x: frame.center.x + dx * cos - dy * sin, y: frame.center.y + dx * sin + dy * cos };
-}
-
-/** The board pixel of the barbarian ship at `step` (0 is the start, `TRACK_ART.points.length - 1` the landing). */
+/** The board pixel of the barbarian ship at `step` (0 is the start, `steps` the landing). */
 export function barbarianStepPoint(
   fixture: RenderFixture,
   hexSize: number,
   step: number,
+  steps = DEFAULT_BARBARIAN_STEPS,
 ): Point | null {
-  const index = Math.min(TRACK_ART.points.length - 1, Math.max(0, Math.trunc(step)));
-  const point = TRACK_ART.points[index];
-  return point ? fixturePoint(fixture, hexSize, point) : null;
+  const stops = barbarianTrackLayout(fixture, hexSize, steps)?.stops;
+  if (!stops) return null;
+  return stops[Math.min(stops.length - 1, Math.max(0, Math.trunc(step)))] ?? null;
 }
 
 /** Board pixel and eased position of the ship between two steps, for the sailing motion. */
@@ -159,9 +296,10 @@ export function sailPosition(
   from: number,
   to: number,
   progress: number,
+  steps = DEFAULT_BARBARIAN_STEPS,
 ): Point | null {
-  const start = barbarianStepPoint(fixture, hexSize, from);
-  const end = barbarianStepPoint(fixture, hexSize, to);
+  const start = barbarianStepPoint(fixture, hexSize, from, steps);
+  const end = barbarianStepPoint(fixture, hexSize, to, steps);
   if (!start || !end) return null;
   const t = Math.min(1, Math.max(0, progress));
   const eased = t * t * (3 - 2 * t);
