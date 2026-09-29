@@ -12,11 +12,7 @@ import { checkModuleCombination } from './compat.js';
 import { FIVE_SIX_VERSION, fiveSixModule } from './five-six/index.js';
 import { KNIGHTS_VERSION, knightsModule } from './knights/index.js';
 import { SEAFARING_VERSION, seafaringModule } from './seafaring/index.js';
-import {
-  COMBO_ID,
-  COMBO_VERSION,
-  seafarersKnightsModule,
-} from './seafarers-knights/index.js';
+import { COMBO_ID, COMBO_VERSION, seafarersKnightsModule } from './seafarers-knights/index.js';
 
 /** Every rules module a game can select, with the version genesis must name. */
 export const MODULE_CATALOGUE: Readonly<

@@ -102,7 +102,8 @@ export function chaseProblem(
   if (knightsExt(state).robberLocked)
     return failure('robber-locked', 'The robber cannot be chased before the first attack');
   const beside = blockersAt(state, vertex, blockersOf(state, ctx));
-  if (beside.length === 0) return failure('not-at-robber', 'The knight must stand beside the robber');
+  if (beside.length === 0)
+    return failure('not-at-robber', 'The knight must stand beside the robber');
   const knight = readyKnight(state, seat, vertex);
   if (!knight.ok) return knight;
   return beside.some((blocker) => blocker.legalHexes.length > 0)

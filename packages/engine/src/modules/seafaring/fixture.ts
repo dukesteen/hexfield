@@ -22,14 +22,18 @@ export function perimeterFixtureSlot(spec: BoardShapeSpec): FixtureSlot | null {
       const key = `${anchor.q},${anchor.r},${step.q},${step.r}`;
       if (seen.has(key)) continue;
       seen.add(key);
-      const slot = { id: 'perimeter', anchor, outer: { q: anchor.q + step.q, r: anchor.r + step.r } };
+      const slot = {
+        id: 'perimeter',
+        anchor,
+        outer: { q: anchor.q + step.q, r: anchor.r + step.r },
+      };
       if (fixtureSlotProblem(spec, slot) === null) candidates.push(slot);
     }
-  const spread = (slot: FixtureSlot): number => Math.abs(slot.anchor.q + slot.anchor.r / 2 - middle);
+  const spread = (slot: FixtureSlot): number =>
+    Math.abs(slot.anchor.q + slot.anchor.r / 2 - middle);
   return (
     candidates.toSorted(
-      (a, b) =>
-        a.anchor.r - b.anchor.r || spread(a) - spread(b) || a.anchor.q - b.anchor.q,
+      (a, b) => a.anchor.r - b.anchor.r || spread(a) - spread(b) || a.anchor.q - b.anchor.q,
     )[0] ?? null
   );
 }

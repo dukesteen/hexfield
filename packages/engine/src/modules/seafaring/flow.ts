@@ -89,7 +89,11 @@ export function addShipCommands(
       );
     if (seafaringExt(state).shipMovedTurn !== state.turn.number)
       commands.push(
-        ...legalShipMoves(state, seat, ctx).map(({ from, to }) => ({ type: 'MOVE_SHIP', from, to })),
+        ...legalShipMoves(state, seat, ctx).map(({ from, to }) => ({
+          type: 'MOVE_SHIP',
+          from,
+          to,
+        })),
       );
   } else if (slot === 'sbp' && top && sbpSeat(state, top) === seat) {
     if (canPayShip(state, seat, ctx, priv))
