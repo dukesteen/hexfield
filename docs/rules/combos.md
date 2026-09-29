@@ -125,7 +125,7 @@ Multi-island boards make the barbarians relatively stronger, because ships and s
 
 - **Gold** pays resources only. A settlement claims 1 card and a city 2, of the five resources of the seat's choice (`CHOOSE_GOLD` never offers paper, cloth or coin). The bank shortage handling of [seafaring.md](seafaring.md) counts the five resources only.
 - **A city on gold** is a plain "2 cards of your choice". The forest, pasture and mountains swap of [knights.md](knights.md) is for those terrains only.
-- **Aqueduct.** A seat with a gold claim on a non-7 roll received cards and does not qualify (our choice).
+- **Aqueduct.** A seat with a gold claim on a non-7 roll received cards and does not qualify (our choice). On a roll with both, the gold choices are made first, then the Aqueduct choices; when the gold choices empty the bank of resources, the Aqueduct pays nothing, as when the bank runs out between two Aqueduct seats in knights.
 - **Fog.** The reveal reward is 1 resource for a land hex, 1 chosen resource for gold, nothing for sea or desert. It is never a commodity.
 - **Setup** gives no gold cards.
 

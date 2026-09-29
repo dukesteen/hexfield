@@ -3,6 +3,7 @@ import type { GameState } from '../../core/state/index.js';
 import { knightsExt } from '../knights/types.js';
 import { seafaringExt } from '../seafaring/types.js';
 import { enterPirate, holdPirate, limitBlockers } from './pirate.js';
+import { closeEmptyAqueduct } from './production.js';
 import { forgetRemovedShips } from './ships.js';
 import { COMBO_ID, COMBO_VERSION, comboExt } from './types.js';
 import type { ComboExt } from './types.js';
@@ -43,7 +44,7 @@ export function seafarersKnightsModule(): GameModule {
     },
     hooks: {
       onDiceResult: (state) => enterPirate(state),
-      afterInput: forgetRemovedShips,
+      afterInput: (state) => closeEmptyAqueduct(forgetRemovedShips(state)),
       robberLike: limitBlockers,
       renderHints: (state, acc) => {
         const ext = comboExt(state);

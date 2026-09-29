@@ -72,6 +72,26 @@ describe('gold fields', () => {
   });
 });
 
+describe('gold before the Aqueduct', () => {
+  test('gold choices come first; when they empty the bank, the Aqueduct closes unpaid', () => {
+    let state = withBuildings(newGame(), [
+      { vertex: GOLD_CORNER, seat: 0 },
+      { vertex: HOME, seat: 1 },
+    ]);
+    state = withLevels(state, 1, { science: 3 });
+    // The bank holds a single resource card.
+    state = {
+      ...state,
+      bank: { ...state.bank, brick: 0, lumber: 0, wool: 0, grain: 1, ore: 0 },
+    };
+    const rolled = roll(engine, inDice(state), SIX, 'trade');
+    expect(rolled.turn.phase.map((frame) => frame.id)).toEqual(['main', 'aqueduct', 'goldChoice']);
+    const chosen = submit(rolled, 0, { type: 'CHOOSE_GOLD', resources: { grain: 1 } });
+    expect(top(chosen)?.id).toBe('main');
+    expect(engine.checkInvariants(chosen)).toEqual([]);
+  });
+});
+
 describe('setup', () => {
   test('round 2 places a city, ships may start either round, and no gold is paid', () => {
     const started = engine.apply(newGame({ seats: 3 }), {
