@@ -88,3 +88,23 @@ describe('archipelago presets', () => {
     expect(archipelagoProblems(broken, ARCHIPELAGO_STANDARD)).toContain('2 gold fields');
   });
 });
+
+describe.each(PRESETS)('archipelago %s with distinct harbor waters', (_name, preset, seeds) => {
+  const params = { ...preset, distinctHarborWaters: true };
+
+  test(`every harbor faces its own water hex over ${seeds} seeds`, () => {
+    for (let seed = 1; seed <= seeds; seed++) {
+      const { board } = generateArchipelagoLayout(rngFor(seed), params);
+      expect(archipelagoProblems(board, params), `seed ${seed}`).toEqual([]);
+    }
+  }, 120_000);
+
+  test('without the option the checker ignores shared water, so older boards still validate', () => {
+    const shared = [...Array(seeds).keys()]
+      .map((seed) => generateArchipelagoLayout(rngFor(seed + 1), preset).board)
+      .find((board) =>
+        archipelagoProblems(board, params).some((problem) => problem.includes('share h:')),
+      );
+    if (shared) expect(archipelagoProblems(shared, preset)).toEqual([]);
+  }, 120_000);
+});

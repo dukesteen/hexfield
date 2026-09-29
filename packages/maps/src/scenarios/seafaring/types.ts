@@ -21,7 +21,7 @@ export type SeafaringOptions = {
   readonly bonusRegions?: readonly (readonly string[])[];
   readonly fog?: FogSpec;
   /** `archipelago` asks the module to generate the board at genesis instead of using `config.board`. */
-  readonly layout?: 'archipelago';
+  readonly layout?: 'archipelago' | 'archipelago-v2';
 };
 
 /** A fixed seafaring scenario: its board, the matching shape spec and the module options. */

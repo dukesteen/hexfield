@@ -376,7 +376,7 @@ describe('Desert Crossing', () => {
 describe('Open Sea', () => {
   test('is generated at genesis by the archipelago layout', () => {
     expect(OPEN_SEA_OPTIONS).toEqual({
-      layout: 'archipelago',
+      layout: 'archipelago-v2',
       pirateHex: null,
       islandBonus: { vp: 1 },
     });

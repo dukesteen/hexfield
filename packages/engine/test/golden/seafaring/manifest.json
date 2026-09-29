@@ -55,7 +55,7 @@
         "ship-build",
         "ship-move"
       ],
-      "inputs": 827,
+      "inputs": 679,
       "winner": 0,
       "engineVersion": "0.1.0"
     },
@@ -65,7 +65,7 @@
       "scenario": "four-isles-56",
       "seats": 6,
       "seed": 1200,
-      "gameIndex": 3,
+      "gameIndex": 1,
       "features": [
         "gold-choice",
         "island-bonus",
@@ -74,8 +74,8 @@
         "ship-build",
         "ship-move"
       ],
-      "inputs": 1190,
-      "winner": 1,
+      "inputs": 1403,
+      "winner": 3,
       "engineVersion": "0.1.0"
     },
     {

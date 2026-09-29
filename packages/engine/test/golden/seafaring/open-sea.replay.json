@@ -31,7 +31,7 @@
         "islandBonus": {
           "vp": 1
         },
-        "layout": "archipelago",
+        "layout": "archipelago-v2",
         "pirateHex": null,
         "setupAreas": null
       }
@@ -6071,119 +6071,119 @@
   "checkpoints": [
     {
       "index": 0,
-      "stateHash": "ec218476344946bf75f639445cee0f195a3252bfc64998a21052863552c02b66"
+      "stateHash": "ff0a56d52492ddd9c480169bf1ce2283b3c7a6bb40b3e1d5af67d3715d2b5202"
     },
     {
       "index": 25,
-      "stateHash": "22834fe96a91276eeac759260df155d029ead4535ccf1732d91aa42701a0b2b7"
+      "stateHash": "b97dd5131ec1bb7403c06e4f7d0e33a0aa5851e4fb849d90b732f3ec84f6a34a"
     },
     {
       "index": 50,
-      "stateHash": "4a311dad85b6c74830166d737043d4b74fe57add43941b3ebecc19e2331c971c"
+      "stateHash": "06ea5c6ca5083c0dc01cd6a35a3b014659a1fd6b68cd71473f4eb8daa013bce4"
     },
     {
       "index": 75,
-      "stateHash": "cc05d49cfd4b7da5db0cd8a5097b25cf96852a5f3e115fd54fdfbabca9cfc8f4"
+      "stateHash": "336c78c6a4c5769bf6025c702cf30a1b23d62c6cac33f754af1ad03d45eb5dad"
     },
     {
       "index": 100,
-      "stateHash": "99637e1816f351712a85e3f47a9bfa785810bb65ad4ee18a766486852b7996ca"
+      "stateHash": "82d082cce8ec319b3b5b0f0be0c47eb8b49a538b6a59c6d3bad17cb7fe0a79e3"
     },
     {
       "index": 125,
-      "stateHash": "9273ae948368be322321c7d38131bcea59cdb92fd987edddab862a95dbe06d19"
+      "stateHash": "bf832bb57b4728374598ef7f19c2db88309e20d0a3ec13a9a5d8fd919cbaa720"
     },
     {
       "index": 150,
-      "stateHash": "d1b55320de3c1325b378771a058dafed0a4961ef9ba2e28a7b0dd93936f6c074"
+      "stateHash": "29b30132a2aee83d0ac433bf324122f9e3edfc33659692298719ad9216c17492"
     },
     {
       "index": 175,
-      "stateHash": "bd43cecd03eda0a07066c783464b797e90806cf0d61d73beb961950f46893332"
+      "stateHash": "1379ab2bed49d4814a1a36e58de9f9a7890f55b19b4c7ef9e2df242b9fc494f3"
     },
     {
       "index": 200,
-      "stateHash": "d0e601a6077435a84128e3657964f3caa9741a921ead1ba7877156439076c049"
+      "stateHash": "ec08aae05f18874ef23be41fc1ab4025c2de1fc884a0d6461ef31b318dd04791"
     },
     {
       "index": 225,
-      "stateHash": "3f18c8ba7f3f738ae1fd9c5c70342b38377b53e4c26f22aad4458ced7c30e52a"
+      "stateHash": "a1d6a35b4aa3a76ef709fb3372d53f140b0b2c3c15a02704be69433abad1e175"
     },
     {
       "index": 250,
-      "stateHash": "42d5291917cb7ea3bc27268f4c5523b0d5f714210824771a636bae7d06bc45c8"
+      "stateHash": "91346f36f01d34cc8005315324f9ab5f8ebd6bad300ce09243d65453653cc0c7"
     },
     {
       "index": 275,
-      "stateHash": "be4f86a0c598b5da96b8133a39d4c69ec20b94a5073ddae9c28082d3efeab0a5"
+      "stateHash": "ede53de2a11fd37f6ec7eaf050c0929d66c16b693c67834e574344fc4a8fc343"
     },
     {
       "index": 300,
-      "stateHash": "8c08d95543e88f159804c98ce54c448845e691ba488e25bd53563c6e3c87bfa1"
+      "stateHash": "348f621bb9f3a445131002e5ab246c672ecb05bc6344afe3a65729d1e9c9016d"
     },
     {
       "index": 325,
-      "stateHash": "a512eaf8944e83369c7991ab03d97f50c77817b3821dfe2fd4458359eaf8ad19"
+      "stateHash": "216c6dbe8949ac67c8927dc7994970279207307960c591f8d9b0ac65ff5e57f1"
     },
     {
       "index": 350,
-      "stateHash": "384b928354862d3bbdc033991222dc28ec08fb41bd3227baef0ad0ec91eb593e"
+      "stateHash": "6f0c638c9e382e45d213bd76268ae33446a080a8d01267fe26628a99c5ee11d0"
     },
     {
       "index": 375,
-      "stateHash": "5682e4a3d2f331c5ce07ceb2aaaa1017326586f6ae583427c1e9e12c7a93e59e"
+      "stateHash": "1d2d757fabea50b9fa28429d1895f7b20f9be248170b12d1d823584c3f88ca91"
     },
     {
       "index": 400,
-      "stateHash": "37844b89739d5f1c2980e830e1a6c5277296c60800ea48193d7adc1533d93530"
+      "stateHash": "23dc7f487d50d7897ec9ec6e3280e55769fbe368961142c219d5c8aa7004a416"
     },
     {
       "index": 425,
-      "stateHash": "187d703badddbbdb2bcebc815e3edb1907255868176700fa27815c43b29f1a63"
+      "stateHash": "0eb145f3ba3f4d5c851b0607c7f6739b26c3deddb6a4ffe4ad18e7b9087044c9"
     },
     {
       "index": 450,
-      "stateHash": "cb9bc323d67fbbd197859cd430ee67c669479f05fa7e9fcb4dd059fcafb51bee"
+      "stateHash": "1c26d371cde81e63f69fc02bc0ff94ac8fef4de21835132135e1ef3c2cd00882"
     },
     {
       "index": 475,
-      "stateHash": "11f8556aa76b19267cc8e380a5e51762e5cc385a7eb65c9dbf17cab9ec4b8b88"
+      "stateHash": "ec31820bc209879506317b89bd875f4d976c4ed7d51b52d03e9346415f1febe3"
     },
     {
       "index": 500,
-      "stateHash": "4a1ff802f7b3d3ccdd03a806fbd644e20f8032531206195d8530de19bdae6448"
+      "stateHash": "3e361abffce14c517d76c4ba9d6769d438c349ca3991f9170b84e6fdd1487482"
     },
     {
       "index": 525,
-      "stateHash": "2ae95dc87ca23857c46d1e73b0b971c4fe14f8cb6c2d518d39d4411d9c62717f"
+      "stateHash": "c802ac623c8ad66c33fd54229c9451e0d897d8fedbce4a24051b5b9f2039d50c"
     },
     {
       "index": 550,
-      "stateHash": "56d88c4164cb03627cfacc5c1509fe2f60758caa989781b449e19d58e10ea1d9"
+      "stateHash": "536ad3ee4d1e4858f2440b3695cc37844e10a536befb105c654d86d6f8494218"
     },
     {
       "index": 575,
-      "stateHash": "4c574fae6d997558f88a121c30c24446caba5b4331fe1184f7b329edd225d768"
+      "stateHash": "8a685730cd898365299f5717cebcceea7a4ed3e2eee32708ff0217b975b0c759"
     },
     {
       "index": 600,
-      "stateHash": "1e2e9f3f9ef1cf08f31d5f36f5dd0aa4fbb404d12d910319e6e9c163f59389ff"
+      "stateHash": "15b87fffaf436be20c3ad44addad31613b0550b624a46235eb44a899c6887228"
     },
     {
       "index": 625,
-      "stateHash": "f24b535f320bd09def711e868c8d0c0b1d124ec582a92e72a77890ee7ce14106"
+      "stateHash": "d8e17f61b8cda6bc75b150aa1533cd510e6e2d5c170b4cba779dc9bd513b4dd9"
     },
     {
       "index": 650,
-      "stateHash": "96ee8ecb5a00eab52d8a23c331bf8ee5ca37a8a9cdf583ec8add60e62fecc9cb"
+      "stateHash": "3f1dc598f90cce8ee7f88c73f112f4ccb3d5ec972edaedca5bef1e3f4cf31cfe"
     },
     {
       "index": 675,
-      "stateHash": "26df3808e641aaca9f3620fb48762bc8eb8bf259547201da716c6e08dc2acd83"
+      "stateHash": "833abbf02b3ba5b0230d131e1a3491b5845aacfb03a34f113856fe9c64f6a541"
     },
     {
       "index": 697,
-      "stateHash": "04783b19cc8f7ad0aef88c5d165e961de41072a7f80b6b90e19a0290fbca2276"
+      "stateHash": "59b8df146c674b6465d6d2b32628b660e6f512676ab294a3af778e9e01ab4357"
     }
   ]
 }
