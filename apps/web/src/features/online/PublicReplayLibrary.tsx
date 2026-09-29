@@ -29,7 +29,7 @@ export function PublicReplayLibrary() {
   };
   return (
     <section className="saved-games" aria-labelledby="public-replay-title">
-      <h2 id="public-replay-title">{t('lobby:publicReplaysTitle')}</h2>
+      <h3 id="public-replay-title">{t('lobby:publicReplaysTitle')}</h3>
       <p className="muted">{t('lobby:publicReplaysDescription')}</p>
       <input
         ref={input}

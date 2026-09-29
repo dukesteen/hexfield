@@ -133,66 +133,10 @@
   color: var(--text);
 }
 
-.home-content {
-  max-width: 1200px;
-  align-items: center;
-  gap: clamp(32px, 6vw, 80px);
-}
-
-.home-intro {
-  position: relative;
-  isolation: isolate;
-  padding-top: 28px;
-}
-
-.home-intro h1 {
-  position: relative;
-  max-width: 12ch;
-  font-size: clamp(2.8rem, 6vw, 4.75rem);
-  line-height: 1.04;
-  letter-spacing: -0.025em;
-}
-
-.home-intro > p {
-  position: relative;
-  max-width: 36ch;
-  color: var(--muted);
-  font-size: 1rem;
-}
-
-.home-board-art {
-  display: block;
-  justify-self: center;
-  width: min(100%, 390px);
-  max-height: 360px;
-  object-fit: contain;
-  filter: drop-shadow(0 12px 16px rgb(61 47 53 / 12%));
-}
-
-.home-online-actions {
-  gap: 10px;
-}
-
-.home-beta-note {
-  font-size: 0.75rem;
-}
-
-.home-local-link,
 .home-page .text-link,
 .form-page .text-link,
 .online-page .text-link {
   color: var(--accent);
-}
-
-.home-saved-games {
-  gap: 18px;
-}
-.home-saved-games > .saved-games {
-  padding: 20px;
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  background: var(--surface);
-  box-shadow: 0 5px 0 var(--panel-shadow);
 }
 
 .saved-games {
@@ -384,25 +328,6 @@
 }
 
 @media (max-width: 767px) {
-  .home-content {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 28px;
-    padding: 28px 18px 40px;
-  }
-
-  .home-intro {
-    padding-top: 12px;
-  }
-
-  .home-board-art {
-    width: min(100%, 280px);
-    max-height: 240px;
-  }
-
-  .home-saved-games {
-    padding: 16px;
-  }
-
   .saved-game-row {
     grid-template-columns: minmax(0, 1fr) 18px;
     gap: 4px 10px;

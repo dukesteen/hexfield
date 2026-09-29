@@ -72,12 +72,16 @@ export function SavedOnlineGames() {
   const stats = saved.data?.stats;
   return (
     <section className="saved-games" aria-labelledby="online-saved-title">
-      <h2 id="online-saved-title">{t('lobby:onlineSavedGames')}</h2>
+      <h3 id="online-saved-title">{t('lobby:onlineSavedGames')}</h3>
       {saved.isError && <p role="alert">{t('lobby:onlineSavedLoadFailed')}</p>}
       {pending && !deleteTarget && <p role="status">{t('lobby:onlineHistoryWorking')}</p>}
       {message && !deleteTarget && <p role="alert">{t('lobby:onlineHistoryActionFailed')}</p>}
       {!!saved.data?.unavailableGameIds.length && (
-        <p role="status">{t('lobby:onlineSavedPartial')}</p>
+        <p className="muted" role="status">
+          {saved.data.games.length
+            ? t('lobby:onlineSavedPartial', { count: saved.data.unavailableGameIds.length })
+            : t('lobby:onlineSavedNoneAvailable', { count: saved.data.unavailableGameIds.length })}
+        </p>
       )}
       {stats && stats.gamesPlayed > 0 && (
         <div className="online-history-stats">

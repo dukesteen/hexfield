@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   open: vi.fn<() => Promise<string>>(async () => 'c'.repeat(64)),
   export: vi.fn<() => Promise<Uint8Array>>(async () => new Uint8Array([1, 2, 3])),
   navigate: vi.fn<() => Promise<void>>(async () => undefined),
+  listed: { hideGames: false, unavailable: [] as string[] },
 }));
 vi.mock('@tanstack/react-router', () => ({
   Link: ({ children, ...props }: { children: ReactNode; 'aria-label': string }) => (
@@ -23,24 +24,26 @@ vi.mock('../../queries/online-games', () => ({
   useResumableGames: () => ({
     isError: false,
     data: {
-      games: [
-        {
-          gameId: 'A'.repeat(22),
-          genesisDigest: 'B'.repeat(43),
-          genesis: {
-            seats: [
-              { seat: 0, name: 'Blue' },
-              { seat: 1, name: 'Orange' },
-            ],
-            createdAt: 1000,
-          },
-          outcome: null,
-          outcomeUnavailable: false,
-          activity: { lastActivityAt: 1000 },
-          abandoned: true,
-        },
-      ],
-      unavailableGameIds: [],
+      games: mocks.listed.hideGames
+        ? []
+        : [
+            {
+              gameId: 'A'.repeat(22),
+              genesisDigest: 'B'.repeat(43),
+              genesis: {
+                seats: [
+                  { seat: 0, name: 'Blue' },
+                  { seat: 1, name: 'Orange' },
+                ],
+                createdAt: 1000,
+              },
+              outcome: null,
+              outcomeUnavailable: false,
+              activity: { lastActivityAt: 1000 },
+              abandoned: true,
+            },
+          ],
+      unavailableGameIds: mocks.listed.unavailable,
     },
   }),
   useDeleteOnlineGame: () => ({ mutateAsync: mocks.remove, isPending: false }),
@@ -49,6 +52,8 @@ vi.mock('../../queries/online-games', () => ({
 }));
 
 afterEach(() => {
+  mocks.listed.hideGames = false;
+  mocks.listed.unavailable = [];
   cleanup();
   vi.clearAllMocks();
 });
@@ -100,4 +105,16 @@ test('replay opens only after validation succeeds; failure leaves the game link 
       params: { archiveId: 'c'.repeat(64) },
     }),
   );
+});
+
+test('unreadable saves are noted quietly, worded for whether other games remain', () => {
+  mocks.listed.unavailable = ['C'.repeat(22)];
+  render(<SavedOnlineGames />);
+  expect(screen.getByRole('status').textContent).toBe('lobby:onlineSavedPartial');
+  expect(screen.queryByRole('alert')).toBeNull();
+  cleanup();
+  mocks.listed.hideGames = true;
+  render(<SavedOnlineGames />);
+  expect(screen.getByRole('status').textContent).toBe('lobby:onlineSavedNoneAvailable');
+  expect(screen.queryByRole('link')).toBeNull();
 });
