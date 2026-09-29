@@ -411,3 +411,36 @@ test('an existing seafaring configuration opens on its own scenario', () => {
   );
   expect(page.getByLabelText('lobby:scenario')).toHaveProperty('value', 'four-isles');
 });
+
+test('the host can pick knights and commerce online, and its scenario follows the seat count', () => {
+  vi.useFakeTimers();
+  const save = vi.fn<(config: GameConfig, seed: GenesisSeedMode) => Result<void>>(() =>
+    success(undefined),
+  );
+  const page = render(
+    <OnlineConfiguration
+      takeover={takeover}
+      humanCount={4}
+      config={config}
+      seedMode={{ kind: 'joint' }}
+      editable
+      onSave={save}
+    />,
+  );
+  fireEvent.change(page.getByLabelText('lobby:scenario'), { target: { value: 'knights' } });
+  void act(() => vi.advanceTimersByTime(400));
+  const saved = save.mock.lastCall?.[0];
+  expect(saved?.modules.map((module) => module.id)).toEqual(['base', 'knights']);
+  expect(saved?.options.base).toMatchObject({ vpTarget: 13 });
+  // Knights keeps the generated map, so its layout choice is still offered.
+  expect(page.queryByLabelText('lobby:mapLayout')).not.toBeNull();
+  // Five seats move to the five-six knights scenario rather than dropping the expansion.
+  fireEvent.change(page.getByLabelText('lobby:playerCount'), { target: { value: '5' } });
+  void act(() => vi.advanceTimersByTime(400));
+  expect(save.mock.lastCall?.[0].modules.map((module) => module.id)).toEqual([
+    'base',
+    'five-six',
+    'knights',
+  ]);
+  expect(save.mock.lastCall?.[0].seats).toEqual([0, 1, 2, 3, 4]);
+});

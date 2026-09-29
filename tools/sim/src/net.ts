@@ -1619,6 +1619,14 @@ export async function runNetworkGame(options: NetworkGameOptions): Promise<Netwo
   }
 }
 
+const OPTIONAL_ACTIONS = new Set([
+  'CLAIM_VICTORY',
+  'PROPOSE_TRADE',
+  'CANCEL_TRADE',
+  'RESPOND_TRADE',
+  'OFFER_TRADE',
+]);
+
 function choosePending(state: GameState, pending: readonly Pending[], nonVoterSeat: Seat | null) {
   const players = pending.filter(
     (item): item is Extract<Pending, { kind: 'player' }> =>
@@ -1631,6 +1639,8 @@ function choosePending(state: GameState, pending: readonly Pending[], nonVoterSe
       (item) => item.seat !== state.turn.activeSeat && item.allowed.includes('RESPOND_TRADE'),
     ) ??
     players.find((item) => item.seat === state.turn.activeSeat) ??
+    // A choice owed off turn (a Wedding gift, a Saboteur discard, a surplus progress card).
+    players.find((item) => item.allowed.some((type) => !OPTIONAL_ACTIONS.has(type))) ??
     (players.length === 1 ? players[0] : undefined)
   );
 }

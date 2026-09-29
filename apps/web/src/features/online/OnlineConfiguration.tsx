@@ -6,6 +6,7 @@ import {
   scenarioById,
   scenarioConfig,
   scenarioOfConfig,
+  scenariosForSeats,
   standardFixedBoard,
 } from '@cp2p/maps';
 import type { GenesisSeedMode, TakeoverPolicy } from '@cp2p/protocol';
@@ -241,7 +242,15 @@ export function OnlineConfiguration({
   const changeSeats = (count: number) => {
     setSeatCount(count);
     const seafaring = seafaringId === null ? undefined : scenarioById(seafaringId);
-    if (seafaring && (count < seafaring.seats.min || count > seafaring.seats.max)) {
+    // Knights and commerce follows the seat count into its five-six scenario, and back.
+    const sibling = seafaring?.modules.includes('knights')
+      ? scenariosForSeats(count).find((scenario) => scenario.modules.includes('knights'))
+      : undefined;
+    if (seafaring && sibling) {
+      setSeafaringId(sibling.id);
+      if (count > 4 && options.mapLayout === 'standard-fixed')
+        setOptions((current) => ({ ...current, mapLayout: 'balanced-random' }));
+    } else if (seafaring && (count < seafaring.seats.min || count > seafaring.seats.max)) {
       // The seafaring board does not fit this seat count: fall back to the classic default.
       setSeafaringId(null);
       setOptions((current) => ({
