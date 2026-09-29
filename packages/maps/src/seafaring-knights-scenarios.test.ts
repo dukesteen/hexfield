@@ -59,13 +59,16 @@ describe('seafaring with knights scenarios', () => {
       for (const hex of footprint(state.board)) expect(onBoard.has(hex)).toBe(false);
       // The slot is a function of the board only: a fixed board keeps it for every seed.
       const again = engine.createGame(config, new Uint8Array(32).fill(7));
-      if (!generated) expect(again.board.fixtures).toEqual(state.board.fixtures);
+      expect(
+        generated || JSON.stringify(again.board.fixtures) === JSON.stringify(state.board.fixtures),
+      ).toBe(true);
       for (const hex of footprint(again.board))
         expect(again.board.hexes.some((item) => item.id === hex)).toBe(false);
       // The pirate waits for the first attack, on the scenario's (or the generator's) start hex.
       expect(seafaringExt(state).pirateHex).toBeNull();
-      if (generated) expect(comboExt(state).pirateStart).not.toBeNull();
-      else expect(comboExt(state).pirateStart).toBe(scenario.options.seafaring?.pirateHex);
+      const start = comboExt(state).pirateStart;
+      expect(start).toBe(generated ? start : scenario.options.seafaring?.pirateHex);
+      expect(start).not.toBeNull();
       expect(scenarioOfConfig(config)?.id).toBe(scenario.id);
       expect(engine.checkInvariants(state)).toEqual([]);
     },

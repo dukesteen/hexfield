@@ -285,13 +285,13 @@ describe('Four Isles', () => {
   });
 });
 
-describe.each(['fogbound', 'fogbound-56'])('Fogbound (%s)', (id) => {
-  const data = byId(id);
+describe.each(['fogbound', 'fogbound-56'])('Fogbound (%s)', (fogId) => {
+  const data = byId(fogId);
   const board = data.board();
   const fog = data.options.fog;
 
   test('the fog stack matches the fog hexes', () => {
-    expect(fog).toBe(id === 'fogbound' ? FOGBOUND_FOG : FOGBOUND_56_FOG);
+    expect(fog).toBe(fogId === 'fogbound' ? FOGBOUND_FOG : FOGBOUND_56_FOG);
     if (!fog) throw new Error('missing fog');
     const fogHexes = board.hexes.filter((hex) => hex.terrain === 'fog');
     const tiles = Object.values(fog.terrains).reduce((sum, count) => sum + count, 0);

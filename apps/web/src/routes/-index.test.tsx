@@ -143,6 +143,12 @@ test('saved games get their own section between the hero and the scenarios', asy
   ]);
 });
 
+/** The map names a home card lists. */
+const names = (list: HTMLElement) =>
+  within(list)
+    .getAllByRole('listitem')
+    .map((node) => node.textContent);
+
 test('what you can play lists the scenario groups from the maps package', async () => {
   renderHome();
   await findHero();
@@ -171,10 +177,6 @@ test('what you can play lists the scenario groups from the maps package', async 
   expect(within(combined).getByText('lobby:scenarioNewHorizonsKnights')).toBeTruthy();
   expect(within(combined).queryByText('lobby:scenarioNewHorizonsKnightsLarge')).toBeNull();
   // Every map at both seat counts: each card lists each map exactly once.
-  const names = (list: HTMLElement) =>
-    within(list)
-      .getAllByRole('listitem')
-      .map((node) => node.textContent);
   expect(names(seafaring)).toEqual([
     'lobby:scenarioNewHorizons',
     'lobby:scenarioFourIsles',
