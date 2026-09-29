@@ -380,6 +380,29 @@
       "text": "Every rival with more points than you gives you 2 cards."
     }
   },
+  "knightSheet": {
+    "level1": "Basic knight",
+    "level2": "Strong knight",
+    "level3": "Mighty knight",
+    "move_one": "Move knight (1 place)",
+    "move_other": "Move knight ({{count}} places)",
+    "displace_one": "Displace a knight (1 target)",
+    "displace_other": "Displace a knight ({{count}} targets)",
+    "readiness": {
+      "inactive": "Inactive",
+      "activatedThisTurn": "Activated this turn: ready next turn",
+      "ready": "Active and ready"
+    },
+    "idle": {
+      "notYours": "Only its owner can use this knight.",
+      "notYourTurn": "Not your turn. Knights act in your own action phase.",
+      "afterRoll": "Roll the dice first: knights act after the roll.",
+      "finishStep": "Finish the current step of your turn first.",
+      "inactive": "An inactive knight cannot move or act. Activate it (1 grain); it can act from your next turn. A knight that acted this turn is inactive too.",
+      "activatedThisTurn": "It was activated this turn, so it can move or act from your next turn.",
+      "noTarget": "No empty spot along your roads to move to, no weaker knight to displace, and no robber beside it."
+    }
+  },
   "action": {
     "knight": "Recruit knight",
     "wall": "Build city wall",

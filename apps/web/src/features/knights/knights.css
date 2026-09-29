@@ -573,6 +573,42 @@
   line-height: 1.4;
   text-align: center;
 }
+/* The sheet a tap on a knight opens. */
+.knight-sheet-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.knight-sheet-head img {
+  flex: none;
+  width: 64px;
+  height: auto;
+}
+.knight-sheet-owner {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+.knight-sheet-state {
+  margin: 2px 0 0;
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 700;
+}
+.knight-sheet-reason {
+  margin: 12px 0 0;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.4;
+}
+.knight-sheet-actions {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+}
 .progress-hand-discard,
 .progress-hand-harbor {
   align-self: center;

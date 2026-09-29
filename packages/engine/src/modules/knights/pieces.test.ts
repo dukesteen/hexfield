@@ -244,6 +244,26 @@ describe('moving knights', () => {
     expect(engine.checkInvariants(moved)).toEqual([]);
   });
 
+  test('a ready knight may step back one vertex along its own road, toward its own building', () => {
+    const { state, ring } = layout();
+    const start = withKnights(state, [{ seat: 0, vertex: at(ring, 3) }]);
+    // One vertex back, then (from the start again) back past it to the road's first ring corner.
+    const back = command(start, 0, { type: 'MOVE_KNIGHT', from: at(ring, 3), to: at(ring, 2) });
+    expect(knights(back).map((knight) => knight.vertex)).toEqual([at(ring, 2)]);
+    expect(
+      refused(start, 0, { type: 'MOVE_KNIGHT', from: at(ring, 3), to: at(ring, 0) }),
+    ).toBeNull();
+    // The legal list offers the step back too.
+    const legal = engine.getLegalCommands(start, 0).commands;
+    expect(
+      legal.some(
+        (item) =>
+          item.type === 'MOVE_KNIGHT' && item.from === at(ring, 3) && item.to === at(ring, 2),
+      ),
+    ).toBe(true);
+    expect(engine.checkInvariants(back)).toEqual([]);
+  });
+
   test('the destination must be empty, different and on the seat’s own roads', () => {
     const { state, ring, out } = layout();
     const start = withKnights(state, [

@@ -275,6 +275,26 @@ const openCardScene = (card: string, preRoll = false): Scene => ({
   },
 });
 
+/** A knight of the human beside its city, then a tap on it with no action chosen: its sheet. */
+const knightTapScene = (name: string, knight: { active: boolean; ready: boolean }): Scene => ({
+  name,
+  ready: dialogUp,
+  run: async (page) => {
+    let snap = withCity(await snapshot(page), SEAT);
+    // The knight stands midway along a road of three: it can step back or go on.
+    const walk = withRoadPath(withHand(inMain(snap, SEAT), SEAT, RICH), SEAT, 3);
+    snap = walk.snap;
+    const spot = walk.path[2] ?? '';
+    snap = withKnights(snap, [{ seat: SEAT, vertex: spot, level: 2, ...knight }]);
+    await replace(page, snap);
+    await page.waitForTimeout(700);
+    // The renderer gives the knight's position in page coordinates.
+    const at = await vertexPoint(page, spot);
+    if (!at) throw new Error('No knight on screen');
+    await page.mouse.click(at.x, at.y);
+  },
+});
+
 /** The improvements sheet with the human's levels set and a metropolis held, opened where it lives. */
 const improvementsScene = (
   name: string,
@@ -380,6 +400,8 @@ SCENES.push(
       if (await strip.count()) await strip.first().click();
     },
   },
+  knightTapScene('knight-sheet-ready', { active: true, ready: true }),
+  knightTapScene('knight-sheet-activated', { active: true, ready: false }),
   improvementsScene('improvements-levels-a', { trade: 3, politics: 1, science: 5 }, 'science'),
   improvementsScene('improvements-levels-b', { trade: 0, politics: 4, science: 2 }, 'politics'),
   {
