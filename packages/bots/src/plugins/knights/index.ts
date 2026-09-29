@@ -1,7 +1,7 @@
 import type { CommandShape } from '@cp2p/engine';
-import { COMMODITIES, RESOURCES, knightsOf } from '@cp2p/engine';
+import { RESOURCES, knightsOf } from '@cp2p/engine';
 import type { Cost } from '../../eval/index.js';
-import { chooseDiscard, incomePerTurn, resourceHand, shortfall } from '../../eval/index.js';
+import { incomePerTurn, resourceHand, shortfall } from '../../eval/index.js';
 import { openOffers } from '../../offers.js';
 import type { TurnContext } from '../../policy/context.js';
 import type { BotPlugin } from '../../policy/heuristic-bot.js';
@@ -12,7 +12,6 @@ import * as v1 from '../knights-v1.js';
 import { knightAction, recruitSite } from './actions.js';
 import { defenseNeeds, prepareDefense, richestSite, urgentDefense } from './barbarians.js';
 import {
-  commodityWorth,
   improvement,
   improvementV1,
   improvementValue,
@@ -46,7 +45,7 @@ export interface KnightsPolicy {
 export const KNIGHTS_POLICY: KnightsPolicy = {
   progress: true,
   barbarians: true,
-  metropolis: false,
+  metropolis: true,
   actions: false,
   walls: false,
 };
@@ -55,16 +54,6 @@ function addCost(cost: Cost, extra: Readonly<Record<string, number>>): Cost {
   const next = { ...cost };
   for (const resource of RESOURCES) next[resource] += extra[resource] ?? 0;
   return next;
-}
-
-/** A discard on a 7 that keeps the cards of the goal and of a winnable metropolis race. */
-function sevenDiscard(context: TurnContext): CommandShape | null {
-  const template = context.templates.find((item) => item.type === 'DISCARD');
-  const count = template?.count;
-  if (typeof count !== 'number') return null;
-  const cards = chooseDiscard(context.view.priv.hand, count, context.handContext());
-  const command = { type: 'DISCARD', cards };
-  return context.valid(command) ? command : null;
 }
 
 /**
@@ -145,13 +134,14 @@ export function createKnightsPlugin(policy: KnightsPolicy = KNIGHTS_POLICY): Bot
       if (types.has('RELOCATE_KNIGHT')) return v1.relocate(context);
       if (types.has('WEDDING_GIVE')) return discard(context, 'WEDDING_GIVE');
       if (types.has('SABOTEUR_DISCARD')) return discard(context, 'SABOTEUR_DISCARD');
-      if (types.has('DISCARD') && policy.metropolis) return sevenDiscard(context);
       // Over the progress-card limit a turn cannot end until one is discarded.
       if (types.has('DISCARD_PROGRESS') && !types.has('END_TURN')) {
         if (policy.progress) return salvagePlay(context) ?? progressDiscard(context);
         const discards = context.ofType('DISCARD_PROGRESS');
         return discards[context.rng.int(discards.length)] ?? null;
       }
+      // A free-road frame with no road left to place.
+      if (types.has('SKIP') && types.size === 1) return context.ofType('SKIP')[0] ?? null;
       if (types.has('HARBOR_REPLY')) {
         if (policy.progress) return harborReply(context);
         const replies = context.ofType('HARBOR_REPLY');
@@ -214,20 +204,13 @@ export function createKnightsPlugin(policy: KnightsPolicy = KNIGHTS_POLICY): Bot
       return policy.walls ? wallByHand(context) : v1.wall(context);
     },
     handContext(context, base) {
-      if (!policy.metropolis && !policy.walls && !policy.barbarians) return base;
+      if (!policy.walls && !policy.barbarians) return base;
       const { state, seat } = context.view;
       const needs = policy.barbarians ? defenseNeeds(context) : null;
       return {
         ...base,
         ...(needs ? { cost: addCost(base.cost, needs) } : {}),
         ...(policy.walls ? { safeCards: handLimit(state, seat) } : {}),
-        ...(policy.metropolis
-          ? {
-              kindValues: Object.fromEntries(
-                COMMODITIES.map((kind) => [kind, 0.35 * commodityWorth(context, kind)]),
-              ),
-            }
-          : {}),
       };
     },
   };

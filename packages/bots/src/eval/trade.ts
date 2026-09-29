@@ -15,8 +15,6 @@ export interface HandContext {
   safeCards?: number;
   /** Value of a card that is not a base resource (a commodity), in the same units. */
   otherKind?: number;
-  /** Per-kind values for cards that are not base resources, overriding `otherKind`. */
-  kindValues?: Readonly<Record<string, number>>;
 }
 
 /**
@@ -29,21 +27,16 @@ export function handScore(hand: Counts, context: HandContext): number {
   const turns = turnsToAfford(resources, context.cost, context.income, context.rates, 30);
   let cards = 0;
   let others = 0;
-  let valued = 0;
   for (const [kind, count] of Object.entries(hand)) {
     cards += count;
-    if ((RESOURCES as readonly string[]).includes(kind)) continue;
-    const value = context.kindValues?.[kind];
-    if (value === undefined) others += count;
-    else valued += count * value;
+    if (!(RESOURCES as readonly string[]).includes(kind)) others += count;
   }
   const risky = Math.max(0, cards - (context.safeCards ?? 7));
   return (
     -turns -
     0.35 * shortfall(resources, context.cost) +
     0.04 * cards +
-    (context.otherKind ?? 0.1) * others +
-    valued -
+    (context.otherKind ?? 0.1) * others -
     0.18 * risky
   );
 }

@@ -20,6 +20,9 @@ const TRACK_PRIORITY: Readonly<Record<string, number>> = { science: 3, trade: 2,
 
 const VP = 6;
 
+/** Most bank trades a metropolis purchase may take in one turn. */
+const RUSH_TRADES = 2;
+
 function asTrack(value: unknown): Track {
   return TRACKS.find((track) => track === value) ?? 'science';
 }
@@ -147,17 +150,17 @@ export function metropolisRush(context: TurnContext): CommandShape | null {
     if (!wins || !plainCities(state, seat).length) continue;
     const kind = TRACK_COMMODITY[track];
     const missing = next - (cranes ? 1 : 0) - (hand[kind] ?? 0);
-    if (missing <= 0 || missing > 2) continue;
+    if (missing <= 0 || missing > RUSH_TRADES) continue;
     const trade = cheapestTrade(context, kind, new Set([kind]));
     if (!trade) continue;
-    // Two trades must both be payable: check the cards after the first one.
-    if (missing === 2 && !affordsTwice(context, kind)) continue;
+    // Every trade the purchase needs must be payable.
+    if (tradesPayable(context, kind) < missing) continue;
     return trade;
   }
   return null;
 }
 
-function affordsTwice(context: TurnContext, kind: string): boolean {
+function tradesPayable(context: TurnContext, kind: string): number {
   const hand = context.view.priv.hand;
   const rates = context.handContext().rates;
   let trades = 0;
@@ -166,7 +169,7 @@ function affordsTwice(context: TurnContext, kind: string): boolean {
     const rate = isBaseResource(give) ? rates[give] : 4;
     trades += Math.floor((hand[give] ?? 0) / rate);
   }
-  return trades >= 2;
+  return trades;
 }
 
 /** The legal bank trade for one `kind` that hurts the hand least, or null. */
