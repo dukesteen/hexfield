@@ -3,10 +3,13 @@ import { barbarianStrength, knightsExt, knightsOf } from '@cp2p/engine';
 import { rawPips } from '../../eval/index.js';
 import type { TurnContext } from '../../policy/context.js';
 import { best } from '../../policy/setup.js';
-import { attackChance, idleStrength, plainCities, rollsToAttack, strengths } from './shared.js';
+import { cheapestTrade } from './improvements.js';
+import { attackChance, idleStrength, plainCities, strengths } from './shared.js';
 
 /** Activate for the attack once it is at least this likely before the bot's next action phase. */
 const ACTIVATE_AT = 0.25;
+/** Recruit once the attack is this likely within three rounds, and activate within two. */
+const RECRUIT_AT = 0.3;
 
 /** What the bot's knights must reach for the coming attack. */
 export interface DefensePlan {
@@ -75,17 +78,52 @@ function promotion(context: TurnContext, activeOnly: boolean): CommandShape | nu
 
 /**
  * Before the attack is likely (a turn ahead), activate knights up to the plan's target, and
- * promote an active knight if activations cannot reach it.
+ * promote an active knight if activations cannot reach it; recruit a round earlier. Short of the
+ * cards, trade for them.
  */
-export function urgentDefense(context: TurnContext): CommandShape | null {
+export function urgentDefense(
+  context: TurnContext,
+  recruitSite: (commands: CommandShape[]) => CommandShape | null,
+): CommandShape | null {
   const plan = defensePlan(context);
-  if (plan.chance < ACTIVATE_AT || plan.active >= plan.target) return null;
-  return activation(context) ?? promotion(context, true);
+  if (plan.active >= plan.target) return null;
+  const state = context.view.state;
+  if (plan.chance >= ACTIVATE_AT || attackChance(state, 2) >= RECRUIT_AT) {
+    const now = activation(context) ?? promotion(context, true);
+    if (now) return now;
+  }
+  // Three rounds ahead, recruit before the turn's builds spend the wool and ore.
+  if (plan.potential < plan.target && attackChance(state, 3) >= RECRUIT_AT) {
+    const recruit = recruitSite(context.ofType('BUILD_KNIGHT')) ?? promotion(context, false);
+    if (recruit) return recruit;
+  }
+  // Short of the cards: a bank trade for one, keeping the others.
+  const needs = defenseNeeds(context);
+  if (!needs) return null;
+  const hand = context.view.priv.hand;
+  for (const [kind, count] of Object.entries(needs))
+    if ((hand[kind] ?? 0) < count) {
+      const trade = cheapestTrade(context, kind, new Set(Object.keys(needs)));
+      if (trade) return trade;
+    }
+  return null;
 }
 
 /**
- * Within about two rounds of the attack, put enough knight strength on the board (recruits or
- * promotions) that activating it reaches the plan's target.
+ * The cards the coming attack asks the bot to keep: grain to activate a knight. (Also keeping
+ * wool and ore for a recruit cost more than the cities it saved in tuning.) Null when nothing is
+ * needed.
+ */
+export function defenseNeeds(context: TurnContext): Record<string, number> | null {
+  const plan = defensePlan(context);
+  if (plan.active >= plan.target) return null;
+  const state = context.view.state;
+  return plan.chance >= ACTIVATE_AT || attackChance(state, 2) >= RECRUIT_AT ? { grain: 1 } : null;
+}
+
+/**
+ * With the cards left after the turn's builds: activate knights up to the plan's target, and put
+ * enough knight strength on the board (recruits or promotions) that activating it reaches it.
  */
 export function prepareDefense(
   context: TurnContext,
@@ -93,8 +131,11 @@ export function prepareDefense(
 ): CommandShape | null {
   const { state, seat } = context.view;
   const plan = defensePlan(context);
+  if (plan.active < plan.target) {
+    const activate = activation(context);
+    if (activate) return activate;
+  }
   if (plan.potential >= plan.target) return null;
-  if (rollsToAttack(state) > 2 * state.seats.length + 2) return null;
   const promote = promotion(context, false);
   const recruit = recruitSite(context.ofType('BUILD_KNIGHT'));
   // A promotion needs no grain to activate when the knight is already active.

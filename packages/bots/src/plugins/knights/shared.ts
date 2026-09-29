@@ -117,11 +117,11 @@ export function idleStrength(state: GameState, seat: Seat): number {
 /**
  * The chance the barbarians attack before the bot's next action phase: the ship needs
  * `stepsLeft` ship faces (half of all event-die rolls), and every seat rolls once before the bot
- * can act again (its own next roll resolves before its action phase).
+ * can act again (its own next roll resolves before its action phase). `rounds` looks further.
  */
-export function attackChance(state: GameState): number {
+export function attackChance(state: GameState, rounds = 1): number {
   const stepsLeft = BARBARIAN_STEPS - knightsExt(state).barbarians.step;
-  const rolls = state.seats.length;
+  const rolls = state.seats.length * rounds;
   let chance = 0;
   // P(at least stepsLeft successes in `rolls` fair trials).
   for (let k = stepsLeft; k <= rolls; k++) chance += binomial(rolls, k) / 2 ** rolls;

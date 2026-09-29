@@ -1,5 +1,6 @@
 import type { CommandShape } from '@cp2p/engine';
-import { COMMODITIES, knightsOf } from '@cp2p/engine';
+import { COMMODITIES, RESOURCES, knightsOf } from '@cp2p/engine';
+import type { Cost } from '../../eval/index.js';
 import { chooseDiscard, incomePerTurn, resourceHand, shortfall } from '../../eval/index.js';
 import { openOffers } from '../../offers.js';
 import type { TurnContext } from '../../policy/context.js';
@@ -9,7 +10,7 @@ import { best, settlementValue } from '../../policy/setup.js';
 import { openSites } from '../../eval/index.js';
 import * as v1 from '../knights-v1.js';
 import { knightAction, recruitSite } from './actions.js';
-import { prepareDefense, richestSite, urgentDefense } from './barbarians.js';
+import { defenseNeeds, prepareDefense, richestSite, urgentDefense } from './barbarians.js';
 import {
   commodityWorth,
   improvement,
@@ -44,11 +45,17 @@ export interface KnightsPolicy {
 
 export const KNIGHTS_POLICY: KnightsPolicy = {
   progress: true,
-  barbarians: false,
+  barbarians: true,
   metropolis: false,
   actions: false,
   walls: false,
 };
+
+function addCost(cost: Cost, extra: Readonly<Record<string, number>>): Cost {
+  const next = { ...cost };
+  for (const resource of RESOURCES) next[resource] += extra[resource] ?? 0;
+  return next;
+}
 
 /** A discard on a 7 that keeps the cards of the goal and of a winnable metropolis race. */
 function sevenDiscard(context: TurnContext): CommandShape | null {
@@ -159,7 +166,7 @@ export function createKnightsPlugin(policy: KnightsPolicy = KNIGHTS_POLICY): Bot
         return null;
       // Main phase, before the base builds.
       if (policy.barbarians) {
-        const defend = urgentDefense(context);
+        const defend = urgentDefense(context, site(context));
         if (defend) return defend;
       }
       if (policy.progress) {
@@ -198,7 +205,7 @@ export function createKnightsPlugin(policy: KnightsPolicy = KNIGHTS_POLICY): Bot
         }
         if (!policy.actions) {
           const chase = context.ofType('CHASE_ROBBER')[0];
-          if (chase && urgentDefense(context) === null) return chase;
+          if (chase && urgentDefense(context, site(context)) === null) return chase;
         }
       } else {
         const moved = v1.knightMove(context);
@@ -207,10 +214,12 @@ export function createKnightsPlugin(policy: KnightsPolicy = KNIGHTS_POLICY): Bot
       return policy.walls ? wallByHand(context) : v1.wall(context);
     },
     handContext(context, base) {
-      if (!policy.metropolis && !policy.walls) return base;
+      if (!policy.metropolis && !policy.walls && !policy.barbarians) return base;
       const { state, seat } = context.view;
+      const needs = policy.barbarians ? defenseNeeds(context) : null;
       return {
         ...base,
+        ...(needs ? { cost: addCost(base.cost, needs) } : {}),
         ...(policy.walls ? { safeCards: handLimit(state, seat) } : {}),
         ...(policy.metropolis
           ? {
