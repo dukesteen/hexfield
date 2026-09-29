@@ -409,6 +409,16 @@
   filter: saturate(0.55);
   opacity: 0.85;
 }
+/* The deck's band and its label: the trade yellow takes dark ink; blue and green are deepened under
+   cream text. Each pair clears 4.5:1 (trade 7.1, politics 5.9, science 5.0). */
+.progress-face {
+  --band: color-mix(in srgb, var(--track) 70%, #2a1f24);
+  --band-ink: #fff8ec;
+}
+.progress-face[data-track='trade'] {
+  --band: var(--track);
+  --band-ink: #2a1f24;
+}
 .progress-face-band {
   display: flex;
   align-items: center;
@@ -416,8 +426,9 @@
   gap: 3px;
   width: 100%;
   padding: 2px 3px;
-  background: var(--track);
-  color: #fff;
+  background: var(--band);
+  color: var(--band-ink);
+  font-weight: 700;
   font-size: calc(var(--w) * 0.11);
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -428,14 +439,15 @@
   object-fit: contain;
 }
 .progress-face-band small {
+  color: inherit;
   font-size: inherit;
 }
 .progress-face-vp {
   margin-left: auto;
   padding: 0 4px;
   border-radius: 6px;
-  background: #fff8ec;
-  color: var(--track);
+  background: var(--band-ink);
+  color: var(--band);
   font-size: 0.95em;
 }
 .progress-face-emblem {
@@ -909,8 +921,9 @@
   .mobile-bottom-controls > .improvements-strip {
     margin: 0 0 6px;
   }
+  /* The scrolling row clips on both axes: room on every side for the playable ring and the lift. */
   .progress-hand {
-    padding: 4px 0 0;
+    padding: 6px 4px;
     border-left: 0;
     overflow-x: auto;
   }
@@ -1085,7 +1098,7 @@
 }
 .game-page[data-compact='true'] .hand-cards .progress-hand {
   width: 100%;
-  padding-top: 6px;
+  padding: 8px 4px 6px;
   border-top: 1px solid var(--border);
 }
 
