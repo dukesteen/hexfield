@@ -781,12 +781,47 @@
     grid-template-columns: 250px minmax(0, 1fr) 116px 96px;
   }
 }
-@media (min-width: 768px) and (max-width: 1100px) and (min-height: 501px) {
+@media (min-width: 1001px) and (max-width: 1100px) and (min-height: 501px) {
   .game-page .game-bottom:has(.desktop-build-grid[data-knights='true']) {
     grid-template-columns: 190px minmax(0, 1fr) 90px 78px;
   }
   .desktop-build-grid[data-knights='true'] {
     grid-template-columns: repeat(4, 38px);
+    gap: 4px;
+  }
+  .desktop-build-grid[data-knights='true'] .desktop-build-button {
+    width: 38px;
+    height: 38px;
+    min-height: 0;
+  }
+}
+@media (min-width: 768px) and (max-width: 1000px) and (min-height: 501px) {
+  .game-page .game-grid[data-knights='true'] {
+    grid-template-rows: minmax(0, 1fr) clamp(290px, 27dvh, 320px);
+  }
+  /* Too narrow for four columns: the build, trade and turn buttons share a row, the hand takes its own. */
+  .game-page .game-bottom:has(.desktop-build-grid[data-knights='true']) {
+    grid-template-columns: minmax(0, 1fr) 96px 84px;
+    grid-template-rows: auto auto;
+  }
+  .game-page .game-bottom:has(.desktop-build-grid[data-knights='true']) > .desktop-build-panel {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  .game-page .game-bottom:has(.desktop-build-grid[data-knights='true']) > .desktop-trade-panel {
+    grid-column: 2;
+    grid-row: 1;
+  }
+  .game-page .game-bottom:has(.desktop-build-grid[data-knights='true']) > .desktop-turn-control {
+    grid-column: 3;
+    grid-row: 1;
+  }
+  .game-page .game-bottom:has(.desktop-build-grid[data-knights='true']) > .hand-dock {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+  .desktop-build-grid[data-knights='true'] {
+    grid-template-columns: repeat(5, 38px);
     gap: 4px;
   }
   .desktop-build-grid[data-knights='true'] .desktop-build-button {
@@ -899,7 +934,16 @@
     top: 14px;
     left: 72px;
     display: block;
-    width: min(320px, 46%);
+    width: min(320px, calc(100% - 340px));
+  }
+}
+/* A narrow board has no room for pips beside the roll readout: the level number stands alone. */
+@media (min-width: 768px) and (max-width: 1000px) and (min-height: 501px) {
+  .knights-strip-overlay {
+    width: auto;
+  }
+  .knights-strip-overlay .strip-track .mini-pips {
+    display: none;
   }
 }
 .knights-strip-overlay .improvements-strip {
@@ -982,5 +1026,83 @@
 @media (min-width: 768px) and (min-height: 501px) {
   .game-bottom .progress-hand .progress-face {
     --w: 76px;
+  }
+}
+
+/* ---- Short screens: the card in a play dialog is smaller, so its choices and buttons stay in view ---- */
+@media (max-height: 500px) {
+  .play-card-body .progress-face[data-size='lg'] {
+    --w: 132px;
+  }
+  .play-card-body {
+    flex-wrap: nowrap;
+  }
+}
+
+/* ---- Landscape phones: the players sit over the top of the right column ---- */
+@media (max-height: 500px) and (min-width: 640px) {
+  /* The cockpit is taller in a knights game (improvements, progress cards): it never runs under the players. */
+  .game-page[data-compact='true'] .game-grid[data-knights='true'] .game-bottom {
+    max-height: calc(100dvh - 124px);
+    overflow-y: auto;
+  }
+  /* Eight kinds of card share one row of this narrow column, and the turn buttons stay in reach. */
+  .game-page[data-compact='true'] .hand-dock:has(.resource-hand-card[data-commodity='true']) {
+    --knights-card: 31px;
+  }
+  .game-page[data-compact='true'] .game-grid[data-knights='true'] .progress-hand .progress-face {
+    --w: 54px;
+  }
+  .game-page[data-compact='true'] .game-grid[data-knights='true'] .mobile-control-row {
+    position: sticky;
+    bottom: -14px;
+    z-index: 2;
+    padding-top: 6px;
+    background: var(--raised);
+  }
+  /* Five or six players: three narrow columns keep the list two rows high, as it is for four. */
+  .mobile-topbar .player-list:has(.player-panel:nth-child(5)) {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 4px;
+  }
+  .mobile-topbar .player-list:has(.player-panel:nth-child(5)) .player-panel-status,
+  .mobile-topbar .player-list:has(.player-panel:nth-child(5)) .production-receipt {
+    display: none;
+  }
+}
+
+/* ---- Short screens: eight card kinds fit one row, so a picker never scrolls inside a dialog ---- */
+@media (max-height: 500px) {
+  .action-forms dialog.trade-dialog .trade-card-grid:has(> :nth-child(8)) {
+    grid-template-columns: repeat(8, minmax(0, 1fr));
+  }
+  .action-forms dialog.trade-dialog:has(.trade-card-grid > :nth-child(8)) .trade-dialog-body {
+    padding-top: 6px;
+    padding-bottom: 4px;
+  }
+  .action-forms dialog.trade-dialog:has(.trade-card-grid > :nth-child(8)) {
+    padding: 10px 16px;
+  }
+  .action-forms dialog.trade-dialog:has(.trade-card-grid > :nth-child(8)) > h2 {
+    margin: 0 0 2px;
+    font-size: 1.05rem;
+  }
+  .action-forms dialog.trade-dialog:has(.trade-card-grid > :nth-child(8)) .trade-dialog-body > p {
+    margin: 0 0 2px;
+  }
+  /* The instruction above already says what the cards are for. */
+  .action-forms dialog.trade-dialog:has(.trade-card-grid > :nth-child(8)) legend {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+  .action-forms dialog.trade-dialog:has(.trade-card-grid > :nth-child(8)) .trade-card-picker-head {
+    min-height: 30px;
+  }
+  .action-forms dialog.trade-dialog:has(.trade-card-grid > :nth-child(8)) .trade-dialog-footer {
+    margin-top: 6px;
+    padding-top: 6px;
   }
 }

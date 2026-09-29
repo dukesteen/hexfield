@@ -20,5 +20,10 @@ export function FixtureDialog({
   const Dialog = fixture ? uiModule(fixture.module)?.Dialogs?.[fixture.id] : undefined;
   if (!Dialog) return null;
   const hints = engineForConfig(state.config).hooks.renderHints(state, []);
-  return <Dialog state={state} hints={hints} presentation={presentation} onClose={onClose} />;
+  // The shared dialog look is scoped to this wrapper, as it is for the action dialogs.
+  return (
+    <div className="action-forms">
+      <Dialog state={state} hints={hints} presentation={presentation} onClose={onClose} />
+    </div>
+  );
 }

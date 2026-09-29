@@ -1,6 +1,12 @@
 {
   "close": "Close",
   "free": "Free",
+  "costs": {
+    "knightsHeading": "Knights and walls",
+    "improvementsHeading": "City improvements",
+    "improvementsNote": "Level 1 to 5 of each track costs that many of its commodity: 1, then 2, up to 5.",
+    "levelCost": "Level {{level}}: {{cost}}"
+  },
   "countdown_one": "Barbarians: {{count}} step",
   "countdown_other": "Barbarians: {{count}} steps",
   "deckCount_one": "{{track}} deck: {{count}} card left",
@@ -176,6 +182,7 @@
     "waiting": "Not playable right now"
   },
   "crane": {
+    "next": "to level {{level}}",
     "choose": "Choose the improvement to buy with the Crane"
   },
   "deck": {

@@ -14,7 +14,7 @@ import type { ActionAvailability } from '../../actions/availability.js';
 import { cardInfo } from '../catalogue.js';
 import { ProgressCardFace } from '../ProgressCardFace.js';
 import { KindIcon } from './ChoiceDialogs.js';
-import { TRACKS, cardKinds } from '../state.js';
+import { TRACKS, cardKinds, knightsState } from '../state.js';
 import '../knights.css';
 
 function params(command: CommandShape): Record<string, unknown> {
@@ -87,7 +87,15 @@ export function PlayCardDialog(props: Props) {
 
   // The look-and-take cards: see the rival's hand or progress cards, then take.
   if (look && target !== null && (card === 'masterMerchant' || card === 'spy'))
-    return <LookAndTake {...props} card={card} target={target} commands={commands} />;
+    return (
+      <LookAndTake
+        {...props}
+        card={card}
+        target={target}
+        commands={commands}
+        onBack={() => setLook(false)}
+      />
+    );
 
   return (
     <DialogFrame title={title} variant="trade" onCancel={onCancel} footer={footer}>
@@ -129,6 +137,13 @@ export function PlayCardDialog(props: Props) {
                         onClick={() => setChosen(found)}
                       >
                         <span>{t(`knights:track.${track}`)}</span>
+                        <small>
+                          {t('knights:crane.next', {
+                            level:
+                              (knightsState(props.state)?.improvements[props.seat]?.[track] ?? 0) +
+                              1,
+                          })}
+                        </small>
                       </button>,
                     ]
                   : [];
@@ -271,7 +286,14 @@ function LookAndTake({
   seat,
   playerLabel,
   onSubmit,
-}: Props & { card: 'masterMerchant' | 'spy'; target: Seat; commands: readonly CommandShape[] }) {
+  onBack,
+}: Props & {
+  card: 'masterMerchant' | 'spy';
+  target: Seat;
+  commands: readonly CommandShape[];
+  /** Back to the card's own dialog: nothing has been played yet. */
+  onBack: () => void;
+}) {
   const { t } = useTranslation(['knights', 'rules']);
   const session = sessionForActions();
   const command = commands.find((item) => params(item).target === target);
@@ -286,7 +308,11 @@ function LookAndTake({
   if ('progress' in shown) {
     const cards = Object.entries(shown.progress);
     return (
-      <DialogFrame title={t('knights:spy.title', { player: playerLabel(target) })} variant="trade">
+      <DialogFrame
+        title={t('knights:spy.title', { player: playerLabel(target) })}
+        variant="trade"
+        onCancel={onBack}
+      >
         <p>{cards.length ? t('knights:spy.instruction') : t('knights:spy.empty')}</p>
         <ul className="progress-pick">
           {cards.map(([slotId, id]) => (
@@ -304,6 +330,9 @@ function LookAndTake({
           ))}
         </ul>
         <div className="trade-dialog-buttons">
+          <button className="button button-quiet" type="button" onClick={onBack}>
+            {t('rules:action.cancel')}
+          </button>
           <button
             className="button button-primary"
             type="button"
@@ -325,10 +354,14 @@ function LookAndTake({
     <DialogFrame
       title={t('knights:masterMerchant.title', { player: playerLabel(target) })}
       variant="trade"
+      onCancel={onBack}
       footer={
         <div className="trade-dialog-footer">
           <p aria-live="polite">{t('rules:discard.selected', { selected: picked, count })}</p>
           <div className="trade-dialog-buttons">
+            <button className="button button-quiet" type="button" onClick={onBack}>
+              {t('rules:action.cancel')}
+            </button>
             <button
               className="button button-primary"
               type="button"

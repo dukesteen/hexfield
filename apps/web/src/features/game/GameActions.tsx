@@ -1401,6 +1401,7 @@ export function useGameActions(
         )}
         {buildCostsOpen && (
           <BuildCostsDialog
+            knights={isKnights(state)}
             onClose={() => {
               setBuildCostsOpen(false);
               options.onFormClosed?.();
