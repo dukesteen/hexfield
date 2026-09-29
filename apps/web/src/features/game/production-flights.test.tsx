@@ -47,7 +47,9 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
-  document.querySelectorAll('.hand-dock, [data-seat-panel]').forEach((element) => element.remove());
+  document
+    .querySelectorAll('.hand-dock, .player-rail, [data-seat-panel]')
+    .forEach((element) => element.remove());
   sessionMock.current = null;
   effectsMock.current = null;
   useCardHolds.getState().clear();
@@ -263,6 +265,30 @@ test('scrolls a clipped revealed hand card into view before falling back to its 
   const launchedFlight = document.querySelector<HTMLElement>('.resource-flight');
   expect(launchedFlight?.style.getPropertyValue('--flight-dx')).toBe('80px');
   expect(launchedFlight?.style.getPropertyValue('--flight-dy')).toBe('95px');
+});
+
+test('flies toward the rail edge for a panel scrolled out of the player rail', async () => {
+  const rail = document.createElement('div');
+  rail.className = 'player-rail';
+  rail.style.overflowY = 'auto';
+  setRect(rail, rect(400, 0, 100, 200));
+  Object.defineProperty(rail, 'clientWidth', { configurable: true, value: 100 });
+  Object.defineProperty(rail, 'clientHeight', { configurable: true, value: 200 });
+  const panel = document.createElement('aside');
+  panel.dataset.seatPanel = '1';
+  setRect(panel, rect(400, 300, 100, 50));
+  rail.append(panel);
+  document.body.append(rail);
+  setEffects([flight('hidden-seat-grain', 1, 'grain')]);
+  const { emit } = setupSession();
+  render(<EffectsView />);
+
+  emit();
+  await act(() => vi.advanceTimersByTime(DICE_SETTLE_MS));
+  const launched = document.querySelector<HTMLElement>('.resource-flight');
+  expect(launched?.style.getPropertyValue('--flight-dx')).toBe('440px');
+  expect(launched?.style.getPropertyValue('--flight-dy')).toBe('180px');
+  expect(useCardHolds.getState().holds.map((hold) => hold.id)).toEqual(['hidden-seat-grain:in']);
 });
 
 test.each(['skip', 'reduced motion', 'session replacement', 'unmount'] as const)(

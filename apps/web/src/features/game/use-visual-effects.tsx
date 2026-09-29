@@ -124,6 +124,9 @@ export function useProductionReceipts(session: object | null): {
   return { receipts, add };
 }
 
+/** Overflow values that clip a scrolled child. */
+const CLIPPING = new Set(['auto', 'clip', 'hidden', 'scroll']);
+
 function visibleCenter(element: HTMLElement): { x: number; y: number } | null {
   const rect = element.getBoundingClientRect();
   if (rect.width <= 0 || rect.height <= 0) return null;
@@ -133,8 +136,8 @@ function visibleCenter(element: HTMLElement): { x: number; y: number } | null {
   for (let parent = element.parentElement; parent; parent = parent.parentElement) {
     const style = getComputedStyle(parent);
     const parentRect = parent.getBoundingClientRect();
-    const clipsX = ['auto', 'clip', 'hidden', 'scroll'].includes(style.overflowX);
-    const clipsY = ['auto', 'clip', 'hidden', 'scroll'].includes(style.overflowY);
+    const clipsX = CLIPPING.has(style.overflowX);
+    const clipsY = CLIPPING.has(style.overflowY);
     if (
       (clipsX &&
         (point.x < parentRect.left + parent.clientLeft ||
@@ -206,7 +209,7 @@ function edgeOfView(element: HTMLElement): Point | null {
   let bottom = window.innerHeight;
   for (let parent = element.parentElement; parent; parent = parent.parentElement) {
     const style = getComputedStyle(parent);
-    if (![style.overflowX, style.overflowY].some((value) => value !== 'visible')) continue;
+    if (![style.overflowX, style.overflowY].some((value) => CLIPPING.has(value))) continue;
     const box = parent.getBoundingClientRect();
     left = Math.max(left, box.left + parent.clientLeft);
     top = Math.max(top, box.top + parent.clientTop);
@@ -455,9 +458,8 @@ export function useVisualEffects(
       if (renderer) {
         cues.flights.forEach((flight, index) => {
           const launch = () => {
-            const card = handSlot(flight.seat, flight.resource);
-            const panel = seatPanel(flight.seat);
-            const to = (card && visibleCenter(card)) || (panel && visibleCenter(panel));
+            // Like any card: the hand slot, else the hand, else the panel (or the rail's edge).
+            const to = cardEndPoint(flight.seat, flight.resource);
             if (!to) {
               release(`${flight.id}:in`);
               return;

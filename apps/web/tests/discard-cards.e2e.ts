@@ -90,9 +90,10 @@ async function exerciseDiscard(
   await expect
     .poll(() =>
       confirm.evaluate((element) => {
+        // Sampled beside the button: the game page has its own accent, not the site's.
         const sample = document.createElement('span');
         sample.style.backgroundColor = 'var(--accent)';
-        document.body.append(sample);
+        element.after(sample);
         const accent = getComputedStyle(sample).backgroundColor;
         sample.remove();
         return getComputedStyle(element).backgroundColor === accent;
