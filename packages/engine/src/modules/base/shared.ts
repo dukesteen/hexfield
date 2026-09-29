@@ -307,8 +307,14 @@ export function afterInput(state: GameState, ctx: HandlerContext): GameState {
   const offers = baseExt(state.ext.base).offers;
   if (offers.length) {
     let changed = false;
+    // Offers may name module kinds (commodities), and hands carry them, so read every kind.
+    const kinds = cardKindsOf(next);
     const checked = offers.map((offer) => {
-      const possible = canAfford(ownSeat(next, offer.proposer).resources, offer.give);
+      const possible = canAfford(
+        kindBounds(ownSeat(next, offer.proposer).resources),
+        fillCounts(offer.give, kinds),
+        kinds,
+      );
       const valid = possible.ok && possible.value;
       if (valid === offer.valid) return offer;
       changed = true;

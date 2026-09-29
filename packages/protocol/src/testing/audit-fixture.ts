@@ -1,7 +1,7 @@
 import { fromBase64Url, hashValue, toBase64Url, toHex } from '@cp2p/codec';
 import { scalarToBytes } from '@cp2p/crypto';
-import { RESOURCES } from '@cp2p/engine';
-import type { CommandShape, GameState, Pending, Result, Seat } from '@cp2p/engine';
+import { kindBounds, kindsOfCounts, zeroCounts } from '@cp2p/engine';
+import type { CommandShape, GameConfig, GameState, Pending, Result, Seat } from '@cp2p/engine';
 import { createBeaconSecretSource } from '../beacon-source.js';
 import { MemoryBeaconContributionStore } from '../beacon-contributions.js';
 import { MemoryCheatCandidateStore } from '../cheat-candidates.js';
@@ -68,9 +68,10 @@ async function settleMessages(sessions: readonly P2PSession[], clock: VirtualClo
 function discard(state: GameState, seat: Seat): CommandShape {
   const holder = required(state.seats.find((item) => item.seat === seat));
   let remaining = Math.floor(holder.resources.total / 2);
-  const cards = { brick: 0, lumber: 0, wool: 0, grain: 0, ore: 0 };
-  for (const resource of RESOURCES) {
-    cards[resource] = Math.min(holder.resources.min[resource], remaining);
+  const kinds = kindsOfCounts(state.bank);
+  const cards = { ...zeroCounts(kinds) };
+  for (const resource of kinds) {
+    cards[resource] = Math.min(kindBounds(holder.resources).min[resource] ?? 0, remaining);
     remaining -= cards[resource];
   }
   if (remaining !== 0) throw new Error('No deterministic public discard');
@@ -105,14 +106,34 @@ export async function createTerminalAuditFixture(
     ceremonyNonce?: Uint8Array;
     prioritizeDevBuy?: boolean;
     maxElapsedMs?: number;
+    /** Wrap the config's engine, e.g. to alter `createGame`; sessions and the audit use the wrapper. */
+    wrapEngine?: (
+      engine: ReturnType<typeof createSimulationGenesis>['engine'],
+    ) => ReturnType<typeof createSimulationGenesis>['engine'];
+    /** A full genesis config (for example knights) in place of the four-seat base game. */
+    config?: GameConfig;
+    /** Leading seats played by humans; the rest are bots hosted by them. Defaults to two. */
+    humanCount?: number;
+    /** Deterministic identity and board seed for the simulation genesis. Defaults to 3. */
+    simulationSeed?: number;
+    /** Stop after this many commands without a result; `terminal` is then false and no audit runs. */
+    stopAfterSteps?: number;
     /** Includes automatic-input waits; short audit fixtures keep the default 500 steps. */
     maxSteps?: number;
     onProgress?: (step: number, state: GameState) => void;
     sessionOptions?: (options: P2PSessionOptions) => P2PSessionOptions;
     onSessionsReady?: (sessions: readonly P2PSession[], clock: VirtualClock) => Promise<void>;
+    /** Called with the live sessions and the certified state before each step's command. */
+    onStep?: (sessions: readonly P2PSession[], state: GameState, step: number) => void;
+    /** Runs with the live sessions at the result, or at `stopAfterSteps` for a partial game. */
     onTerminal?: (sessions: readonly P2PSession[], clock: VirtualClock) => Promise<void>;
     /** Let the test runner process I/O without advancing the protocol clock. */
     yieldTask?: () => Promise<void>;
+    /** Pick which of several simultaneous player pendings acts next; defaults to the first. */
+    choosePending?: (
+      pendings: readonly Extract<Pending, { kind: 'player' }>[],
+      state: GameState,
+    ) => Extract<Pending, { kind: 'player' }> | undefined;
     /** Test policy for legal player choices when no development purchase is available. */
     chooseCommand?: (
       host: P2PSession,
@@ -126,16 +147,20 @@ export async function createTerminalAuditFixture(
   policy: ReplayPolicy;
   masters: { seat: Seat; master: Uint8Array }[];
   identities: ReturnType<typeof createSimulationGenesis>['identities'];
+  /** False only when `stopAfterSteps` ended a game that had no result yet. */
+  terminal: boolean;
+  finalState: GameState;
 }> {
   async function settle(sessions: readonly P2PSession[], clock: VirtualClock, passes = 24) {
     await settleMessages(sessions, clock, passes);
     await options.yieldTask?.();
   }
   const startedAt = Date.now();
+  const humanCount = options.humanCount ?? 2;
   const simulation = createSimulationGenesis({
-    seed: 3,
-    humanCount: 2,
-    config: {
+    seed: options.simulationSeed ?? 3,
+    humanCount,
+    config: options.config ?? {
       modules: [{ id: 'base', version: '1.0.0' }],
       seats: [0, 1, 2, 3],
       options: {
@@ -145,9 +170,12 @@ export async function createTerminalAuditFixture(
       },
     },
   });
+  // A test may wrap the engine (for example to start a module in a later state); every session,
+  // the genesis state hash and the returned audit engine then share the wrapped rules.
+  const engine = options.wrapEngine ? options.wrapEngine(simulation.engine) : simulation.engine;
   const boardSeed =
     options.boardSeed?.slice() ??
-    fromBase64Url(createSimulationGenesis({ seed: 0, humanCount: 2 }).genesis.genesisSeed);
+    fromBase64Url(createSimulationGenesis({ seed: 0, humanCount }).genesis.genesisSeed);
   const humans = simulation.genesis.seats.filter((seat) => seat.kind === 'human');
   const raw = {
     ...genesisBody(simulation.genesis),
@@ -192,11 +220,9 @@ export async function createTerminalAuditFixture(
       ),
     ),
   };
-  const deckDefinition = required(value(genesisDeckDefinitions(genesis))[0]);
-  const genesisState = simulation.engine.createGame(
-    genesis.config,
-    fromBase64Url(genesis.genesisSeed),
-  );
+  // A module that declares no cards (knights has no development deck) has no deck ceremony.
+  const deckDefinition = value(genesisDeckDefinitions(genesis))[0];
+  const genesisState = engine.createGame(genesis.config, fromBase64Url(genesis.genesisSeed));
   const first = required(simulation.identities.get(0));
   const genesisEntry = signEntry(
     {
@@ -228,14 +254,15 @@ export async function createTerminalAuditFixture(
       localMasters.push(...masters.values());
       const sourceFor = (seat: Seat) => required(masters.get(seat));
       const deckSourceFor = (deckId: string, seat: Seat) => {
-        if (deckId !== deckDefinition.deckId) throw new Error('Unknown fixture deck');
+        if (!deckDefinition || deckId !== deckDefinition.deckId)
+          throw new Error('Unknown fixture deck');
         return createDeckSecretSource(sourceFor(seat), deckDefinition, seat);
       };
       const sourceIndex = humans.findIndex((seat) => seat.seat === human.seat);
       const beacon = required(beaconSources[sourceIndex]);
       const sessionOptions: P2PSessionOptions = {
         genesisEntry,
-        engine: simulation.engine,
+        engine,
         policy,
         seat: human.seat,
         secretKey: required(simulation.identities.get(human.seat)).secretKey,
@@ -257,9 +284,9 @@ export async function createTerminalAuditFixture(
         ),
         createDeckSource: deckSourceFor,
         deckContributions: new MemoryDeckStore(),
-        createDriver: (engine, signedGenesis, _clock, owned) =>
+        createDriver: (sessionEngine, signedGenesis, _clock, owned) =>
           new VerifiedSessionDriver(
-            engine,
+            sessionEngine,
             signedGenesis,
             owned,
             deckSourceFor,
@@ -288,7 +315,11 @@ export async function createTerminalAuditFixture(
       const current = required(sessions[0]);
       const state = required(current.getState());
       if (step % 25 === 0) options.onProgress?.(step, state);
-      if (state.result) {
+      options.onStep?.(sessions, state, step);
+      if (
+        state.result ||
+        (options.stopAfterSteps !== undefined && step >= options.stopAfterSteps)
+      ) {
         const entries = current.exportSave().entries.slice();
         if (!sessions.every((session) => session.exportSave().entries.length === entries.length)) {
           // oxlint-disable-next-line eslint/no-await-in-loop -- Wait for the final certificate on both peers.
@@ -302,16 +333,19 @@ export async function createTerminalAuditFixture(
         return {
           genesisEntry,
           entries: completedEntries,
-          engine: simulation.engine,
+          engine,
           policy,
           masters: genesis.seats.map(({ seat }) => ({
             seat,
             master: scalarToBytes(BigInt(17 + seat)),
           })),
           identities: simulation.identities,
+          terminal: !!state.result,
+          finalState: state,
         };
       }
-      const pending = required(current.getPending()).find((item) => item.kind === 'player');
+      const players = required(current.getPending()).filter((item) => item.kind === 'player');
+      const pending = options.choosePending ? options.choosePending(players, state) : players[0];
       if (!pending || pending.kind !== 'player') {
         network.clock.advanceBy(2_000);
         // oxlint-disable-next-line eslint/no-await-in-loop -- Wait for the certified system result.
@@ -333,7 +367,7 @@ export async function createTerminalAuditFixture(
         (legalSet.templates.some((item) => item.type === 'DISCARD')
           ? discard(state, pending.seat)
           : undefined) ??
-        quietRobber(state, pending.seat, legal, simulation.engine) ??
+        quietRobber(state, pending.seat, legal, engine) ??
         legal.find((item) => item.type !== 'STEAL');
       if (!command) throw new Error(`No safe command at audit fixture step ${step}`);
       let completion: Result<void> | null = null;

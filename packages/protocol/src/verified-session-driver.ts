@@ -1,7 +1,14 @@
 import { canonicalDecode, canonicalEncode, hashValue, toHex } from '@cp2p/codec';
 import { G, decodeScalar, encodePoint, encodeScalar, modScalar, scalePoint } from '@cp2p/crypto';
 import type { SchnorrProof } from '@cp2p/crypto';
-import { DEV_CARD_COUNTS, RESOURCES, failure, success } from '@cp2p/engine';
+import {
+  DEV_CARD_COUNTS,
+  cardKindsFor,
+  failure,
+  kindBounds,
+  kindsOfCounts,
+  success,
+} from '@cp2p/engine';
 import type {
   Engine,
   GameState,
@@ -9,7 +16,6 @@ import type {
   PrivateState,
   Result,
   Seat,
-  Resource,
   SystemInput,
 } from '@cp2p/engine';
 import { decodeDeckCard, proveDeckReveal } from './deck-draw.js';
@@ -81,24 +87,20 @@ function wipePrivateBytes(value: unknown, seen = new WeakSet<object>()): void {
   for (const nested of Object.values(value)) wipePrivateBytes(nested, seen);
 }
 
-function resourceCounts(state: PrivateState): Record<Resource, number> {
-  return {
-    brick: state.hand.brick ?? -1,
-    lumber: state.hand.lumber ?? -1,
-    wool: state.hand.wool ?? -1,
-    grain: state.hand.grain ?? -1,
-    ore: state.hand.ore ?? -1,
-  };
+/** The owned counts over exactly the given card kinds; a missing kind reads as -1 and fails. */
+function resourceCounts(state: PrivateState, kinds: readonly string[]): Record<string, number> {
+  return Object.fromEntries(kinds.map((kind) => [kind, state.hand[kind] ?? -1]));
 }
 
 function validOwnedState(state: GameState, priv: PrivateState): Result<void> {
   const holder = state.seats.find((item) => item.seat === priv.seat);
   if (!holder) return failure('verified-private-seat', 'Owned seat is missing from public state');
   let total = 0;
-  for (const resource of RESOURCES) {
+  const bounds = kindBounds(holder.resources);
+  for (const resource of kindsOfCounts(state.bank)) {
     const count = priv.hand[resource];
-    const min = holder.resources.min[resource] ?? 0;
-    const max = holder.resources.max[resource] ?? 0;
+    const min = bounds.min[resource] ?? 0;
+    const max = bounds.max[resource] ?? 0;
     if (count === undefined || !Number.isSafeInteger(count) || count < min || count > max)
       return failure('verified-private-bounds', 'Owned resources are outside public bounds');
     total += count;
@@ -123,7 +125,10 @@ export class VerifiedSessionDriver implements SessionDriver {
   private readonly digest: string;
   private readonly owned = new Set<Seat>();
   private privates = new Map<Seat, PrivateState>();
-  private blindings = new Map<Seat, Record<(typeof RESOURCES)[number], string>>();
+  private blindings = new Map<Seat, Record<string, string>>();
+  /** The last (ledger row, hand, blindings) triple whose opening verified, per owned seat. */
+  private readonly openedHands = new Map<Seat, string>();
+  private readonly kinds: readonly string[];
   private appliedHead: string | null = null;
   private disposed = false;
   private readonly deckRoutes = new Map<Seat, DeckSourceFactory>();
@@ -141,6 +146,7 @@ export class VerifiedSessionDriver implements SessionDriver {
     if (genesis.security !== 'verified')
       throw new TypeError('Verified session driver requires verified genesis');
     this.digest = genesisDigest(genesis);
+    this.kinds = cardKindsFor(genesis.config);
     if (ownedSeats.length === 0 || new Set(ownedSeats).size !== ownedSeats.length)
       throw new RangeError('At least one unique owned seat is required');
     const configured = new Set(genesis.config.seats);
@@ -149,7 +155,7 @@ export class VerifiedSessionDriver implements SessionDriver {
       this.owned.add(seat);
       this.privates.set(seat, engine.createPrivateState(seat, genesis.config));
       const zero = encodeScalar(0n);
-      this.blindings.set(seat, { brick: zero, lumber: zero, wool: zero, grain: zero, ore: zero });
+      this.blindings.set(seat, Object.fromEntries(this.kinds.map((kind) => [kind, zero])));
     }
   }
 
@@ -166,7 +172,7 @@ export class VerifiedSessionDriver implements SessionDriver {
   private verifyOwnedOpenings(
     context: LogContext,
     privates: ReadonlyMap<Seat, PrivateState> = this.privates,
-    blindingsBySeat: ReadonlyMap<Seat, Record<Resource, string>> = this.blindings,
+    blindingsBySeat: ReadonlyMap<Seat, Record<string, string>> = this.blindings,
   ): Result<void> {
     if (!context.crypto)
       return failure('crypto-context-required', 'Verified hand needs replayed crypto state');
@@ -177,14 +183,22 @@ export class VerifiedSessionDriver implements SessionDriver {
         return failure('verified-private-missing', 'Owned hand opening is missing');
       const valid = validOwnedState(context.state, priv);
       if (!valid.ok) return valid;
+      // The opening is a pure function of the ledger row, the counts and the blindings, and it
+      // costs one Pedersen commitment per kind, so an unchanged triple is not opened again.
+      const kinds = kindsOfCounts(context.state.bank);
+      const row = context.crypto.hands.find((item) => item.seat === seat);
+      const openedKey = toHex(hashValue({ kinds, row, hand: priv.hand, blindings }));
+      if (this.openedHands.get(seat) === openedKey) continue;
       const opened = verifyHandOpening(
         context.crypto.hands,
         this.genesis.config.seats,
         seat,
         priv.hand,
         blindings,
+        kinds,
       );
       if (!opened.ok) return opened;
+      this.openedHands.set(seat, openedKey);
     }
     return success(undefined);
   }
@@ -300,7 +314,7 @@ export class VerifiedSessionDriver implements SessionDriver {
       try {
         return createStealContribution(
           operation,
-          resourceCounts(priv),
+          resourceCounts(priv, kindsOfCounts(operation.commitments)),
           blindings,
           seed,
           signingKey,
@@ -451,6 +465,8 @@ export class VerifiedSessionDriver implements SessionDriver {
     if (count === undefined)
       return failure('verified-private-missing', 'Owned count resource is missing');
     const blinding = blindings[operation.resource];
+    if (blinding === undefined)
+      return failure('verified-private-missing', 'Owned count blinding is missing');
     let source: ReturnType<HandSourceFactory> | null = null;
     try {
       source = factory(seat);
@@ -720,7 +736,7 @@ export class VerifiedSessionDriver implements SessionDriver {
       return success(undefined);
     }
 
-    const privateData: Partial<Record<Seat, { card?: string; resource?: Resource }>> = {};
+    const privateData: Partial<Record<Seat, { card?: string; resource?: string }>> = {};
     const nextBlindings = new Map(this.blindings);
     if (input.kind === 'system' && input.type === 'STEAL_RESULT') {
       const steal = before.crypto?.steal;
@@ -766,7 +782,7 @@ export class VerifiedSessionDriver implements SessionDriver {
             const recovered = recoverStealTransferOpening(
               operation,
               fixed.contribution,
-              resourceCounts(priv),
+              resourceCounts(priv, kindsOfCounts(operation.commitments)),
               blindings,
               seed,
             );
@@ -822,13 +838,15 @@ export class VerifiedSessionDriver implements SessionDriver {
         if (!parent)
           return failure('verified-private-missing', 'Owned steal blindings are missing');
         const next = { ...parent };
-        for (const resource of RESOURCES)
+        for (const resource of kindsOfCounts(parent)) {
+          const own = parent[resource];
+          const moved = opening.blindings[resource];
+          if (own === undefined || moved === undefined)
+            return failure('verified-steal-opening', 'Fixed transfer misses a card kind');
           next[resource] = encodeScalar(
-            modScalar(
-              decodeScalar(parent[resource]) +
-                direction * decodeScalar(opening.blindings[resource]),
-            ),
+            modScalar(decodeScalar(own) + direction * decodeScalar(moved)),
           );
+        }
         nextBlindings.set(seat, next);
       }
     }
@@ -926,7 +944,7 @@ export class VerifiedSessionDriver implements SessionDriver {
     const checkedSources = donor.validateSources();
     if (!checkedSources.ok) return checkedSources;
 
-    const states = new Map<Seat, { state: PrivateState; blindings: Record<Resource, string> }>();
+    const states = new Map<Seat, { state: PrivateState; blindings: Record<string, string> }>();
     for (const seat of donor.owned) {
       const controller = context.authority.controllers.find((item) => item.seat === seat);
       const host = context.authority.controllers.find((item) => item.seat === controller?.hostSeat);

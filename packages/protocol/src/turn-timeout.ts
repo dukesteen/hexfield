@@ -1,4 +1,4 @@
-import { RESOURCES, failure, success } from '@cp2p/engine';
+import { failure, kindsOfCounts, success, zeroCounts } from '@cp2p/engine';
 import type {
   CommandShape,
   Engine,
@@ -108,12 +108,13 @@ export function timedDiscardCommand(
 ): Result<CommandShape> {
   const publicSeat = state.seats.find((seat) => seat.seat === privateState.seat);
   if (!publicSeat) return failure('automatic-discard-seat', 'Timed-out seat is unavailable');
-  const cards = { brick: 0, lumber: 0, wool: 0, grain: 0, ore: 0 };
+  const kinds = kindsOfCounts(state.bank);
+  const cards = { ...zeroCounts(kinds) };
   let remaining = Math.floor(publicSeat.resources.total / 2);
-  const ordered = [...RESOURCES].toSorted(
+  const ordered = [...kinds].toSorted(
     (a, b) =>
       (privateState.hand[b] ?? 0) - (privateState.hand[a] ?? 0) ||
-      RESOURCES.indexOf(a) - RESOURCES.indexOf(b),
+      kinds.indexOf(a) - kinds.indexOf(b),
   );
   for (const resource of ordered) {
     const amount = Math.min(privateState.hand[resource] ?? 0, remaining);

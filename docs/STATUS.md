@@ -499,10 +499,14 @@ Stage 11 is complete (Milestone M-E). The [acceptance evidence](verification/sta
 
 Source: [12-seafaring.md](12-seafaring.md)
 
-- [ ] All scenarios are playable locally and P2P; fog draws are verified on the move.
-- [ ] 20k simulated games per scenario pass the invariants (new invariants: ships ≤ 15, ships only on sea/coastal edges, pirate only at sea, robber only on land).
-- [ ] The trade-route fixtures pass, including the transition rules.
-- [x] Fog contents are provably not derivable from genesis (a test: two games with the same genesis seed but different deck secrets reveal different fog tiles).
+Stage 12 acceptance is recorded in [verification/stage12/acceptance.md](verification/stage12/acceptance.md): simulations of all eight scenario ids, the invariant and trade-route tests, one golden replay per scenario, six- and four-peer chaos runs with fog reveals, a verified deck-protocol run, and four-browser P2P games with audits. **The simulation ran 1,000 games per scenario, not the 20,000 in the stage document, at the user's direction.** Online games can now host the seafaring scenarios. Known follow-ups are in the evidence: the browser audit worker's fixed 60-second deadline is close for 350–500 input seafaring games, and the 16-point New Horizons 5–6 player target makes random-bot games long.
+
+- [x] All scenarios are playable locally and P2P; fog draws are verified on the move. All eight scenario ids start and answer setup in the local UI ([local play](verification/stage12/acceptance.md#local-play)), play a full game between peers ([every scenario](verification/stage12/acceptance.md#every-scenario-id-through-peer-sessions), and the [Fogbound](verification/stage12/acceptance.md#chaos-suite-on-fogbound-four-peers) and [Open Sea 5–6](verification/stage12/acceptance.md#chaos-suite-on-open-sea-56-six-peers) chaos suites), and the lobby hosts them. Fog draws ran through the real deck protocol in a [verified four-peer game](verification/stage12/acceptance.md#verified-genesis-real-deck-protocol-fogbound-scenario-1) (21 reveals, four audits complete) and in a [four-browser Fogbound game](verification/stage12/acceptance.md#four-browser-games-with-audit) that passed its audits.
+- [x] 20k simulated games per scenario pass the invariants (new invariants: ships ≤ 15, ships only on sea/coastal edges, pirate only at sea, robber only on land). Per the user's decision the run was **1,000 games per scenario**: [1,000/1,000 with zero failures on every scenario id](verification/stage12/acceptance.md#simulation-1000-games-per-scenario-with-invariants-on), invariants on. The [four invariants](verification/stage12/acceptance.md#the-four-invariants) each have a tampered-state test.
+- [x] The trade-route fixtures pass, including the transition rules. See [the fixtures](verification/stage12/acceptance.md#trade-route-fixtures-and-the-transition-rules).
+- [x] Fog contents are provably not derivable from genesis (a test: two games with the same genesis seed but different deck secrets reveal different fog tiles). See [the test](verification/stage12/acceptance.md#fog-contents-are-not-derivable-from-genesis).
+
+Golden replays for every scenario id and the P2P chaos runs with fog reveals (stage step 12) are recorded in the same [evidence](verification/stage12/acceptance.md#golden-replays-one-per-scenario-id).
 
 ## 13 — Knights & Commerce Module (`knights`)
 
