@@ -77,7 +77,7 @@ Sources outside the engine resolve draws. In local and simulation play a seeded 
 
 ## Board fixtures
 
-A fixture is `{ id, module, slot, footprint, orientation, art }` in `board.fixtures`. The field is present only when a module declares a fixture, so boards without fixtures hash exactly as before. Rules never read fixtures. The anchor stays a sea-frame hex for every rule, and robber, harbor and production code only look at land hexes and harbor edges. A board with too few slots fails genesis with `NO_FIXTURE_SLOT`.
+A fixture is `{ id, module, slot, footprint, orientation, art }` in `board.fixtures`. The field is present only when a module declares a fixture, so boards without fixtures hash exactly as before. Rules never read fixtures. The anchor stays a sea-frame hex for every rule, and robber, harbor and production code only look at land hexes and harbor edges. A board with too few slots fails genesis with `NO_FIXTURE_SLOT`. Slots are assigned after every `buildBoard`, from `boardSpec` asked with the **built** board as `config.board`: a board a module generates at genesis (the Open Sea archipelago) gets its slots from itself, and a fixed or explicit board gets the same slots as before.
 
 The renderer draws no sea tile on a footprint cell and runs the board's wooden frame around the footprint as well as the board, so fixture art sits inside the frame like any tile.
 

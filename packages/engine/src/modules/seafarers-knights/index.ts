@@ -37,11 +37,8 @@ export function seafarersKnightsModule(): GameModule {
     conflictsWith: [],
     optionsSchema: [],
     initState: (): ComboExt => ({ pirateStart: null, pirateEntered: false }),
-    initializeState: (ctx, state) => {
-      // The barbarian track needs a slot outside an explicit board's perimeter (combos.md).
-      if (!ctx.config.board) throw new Error('Seafaring with knights needs an explicit board');
-      return holdPirate(state);
-    },
+    // Runs after seafaring's own genesis, so a generated archipelago's pirate start is kept too.
+    initializeState: (_ctx, state) => holdPirate(state),
     hooks: {
       onDiceResult: (state) => enterPirate(state),
       afterInput: (state) => closeEmptyAqueduct(forgetRemovedShips(state)),

@@ -145,7 +145,11 @@ function directionIndex(from: HexCoord, to: HexCoord): number {
   );
 }
 
-/** Assign declared fixtures to the board shape's fixed slots, in declaration order. */
+/**
+ * Assign declared fixtures to the board shape's fixed slots, in declaration order. The shape is
+ * asked for with the built board as `config.board`, so a board generated at genesis (the Open Sea
+ * archipelago) gets slots derived from itself (docs/rules/hooks.md, "Board fixtures").
+ */
 function placeFixtures(
   config: GameConfig,
   board: BoardState,
@@ -153,7 +157,7 @@ function placeFixtures(
 ): BoardState {
   const declared = registry.hooks.boardFixtures(config, board, []);
   if (declared.length === 0) return board;
-  const slots = registry.hooks.boardSpec(config, null)?.fixtureSlots ?? [];
+  const slots = registry.hooks.boardSpec({ ...config, board }, null)?.fixtureSlots ?? [];
   if (new Set(declared.map((fixture) => fixture.id)).size !== declared.length)
     throw new Error('Duplicate board fixture id');
   if (slots.length < declared.length)
