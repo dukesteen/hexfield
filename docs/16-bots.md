@@ -80,3 +80,25 @@ Add per-module evaluation plugins:
 - [ ] Hard bot decisions within budget on a mid-range phone (measured).
 - [ ] No bot ever submits a rejected command in 10k simulated games per level.
 - [ ] Bots support every shipped module (with at least Random fallback for any unsupported decision, logged as a warning).
+
+## Follow-up: stronger bots (planned 2026-09-29)
+
+The first implementation met the thresholds, but its evidence ([acceptance](verification/stage16/acceptance.md)) showed where Hard is weak: its edge comes almost entirely from heuristics, the search adds little (main-phase search was switched off because it made the bot weaker), Hard does not search in expansion games, and knights progress cards are played at random. The follow-up work, in order:
+
+### A. Cities & Knights (first)
+
+1. **A policy per progress card** (replaces random play). Examples: Saboteur when opponents' public card counts are high; Spy and Master Merchant against the leader or the largest hand; Warlord just before a barbarian attack; Bishop on the leader's best hex; Diplomat to break the leader's longest road; Alchemist to hit the bot's own best numbers and avoid a 7; Irrigation/Mining only with at least two matching hexes; Merchant on the bot's strongest resource; Wedding when behind; discard the weakest card over the hand limit.
+2. **Barbarian planning.** Estimate the attack turn from the track position (a ship face comes up on half of all rolls). Keep enough active knight strength not to lose a city and, where cheap, to win the Defender point; let an attack succeed when the bot is safe and opponents are not; activate knights a turn ahead instead of reacting.
+3. **Metropolis race.** Choose improvement tracks by the commodities the bot's cities produce (paper from forest, cloth from pasture, coin from mountains), aim to reach level 4 first, push to 5 to take a metropolis held at 4, and value the level-3 abilities (Aqueduct, Trading House) early.
+4. **Active knights.** Displace opponents' knights that block expansion, chase the robber off own hexes, park knights on contested building spots or across the leader's longest road.
+5. **City walls** once the bot's hand regularly exceeds the limit.
+
+### B. All modes
+
+6. **Self-play weight tuning.** Tune the heuristic weights with the tournament harness (small batches of 200–400 games, at most two processes, never alongside a browser run), keeping the final acceptance tournaments on seeds never used while tuning.
+7. **Endgame awareness.** Detect a rival close to winning and focus the robber, trade refusals and road blocking on them; count hidden victory points when deciding to claim.
+8. **Search that pays off.** A faster sim-mode apply without event generation, a leaf evaluation (VP plus expected production) instead of full rollouts, shallow lookahead over macro-actions, and chance nodes for module decks and the knights event die so search works in expansion games.
+
+### Measuring
+
+Each step is measured with the tournament harness before it is kept: knights games (`--scenario knights` and a seafaring-with-knights scenario) for part A, base and five-six for part B, 2,000 games per final comparison on fresh seeds. Record the new numbers in [the stage 16 acceptance](verification/stage16/acceptance.md) and STATUS. A change that does not measurably help is not kept.
