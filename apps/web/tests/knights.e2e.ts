@@ -16,6 +16,55 @@ import {
   trackInView,
   untilHumanTurn,
 } from './helpers/knights-play.js';
+import {
+  inMain,
+  replace,
+  snapshot,
+  vertexPoint,
+  withBuildings,
+  withFrame,
+  withHand,
+  withLevels,
+  withMetropolis,
+  withRoadPath,
+  withWalls,
+} from './helpers/knights-scenes.js';
+
+/** The pixels of the board around a vertex, to tell whether what is drawn there changed. */
+async function cityPicture(page: Page, vertex: string): Promise<Buffer> {
+  const at = await vertexPoint(page, vertex);
+  const box = await page.locator('.board-view-canvas canvas').boundingBox();
+  if (!at || !box) throw new Error('The board is not on screen');
+  return page.screenshot({
+    clip: { x: box.x + at.x - 40, y: box.y + at.y - 40, width: 80, height: 80 },
+    animations: 'disabled',
+  });
+}
+
+/**
+ * Tap the first spot the game marks for a board choice, the way a player does, and return its id.
+ * The game names the spot in its list of actions; the tap goes through the canvas.
+ */
+async function tapMarked(page: Page, kind: 'relocate' | 'pillage'): Promise<string> {
+  await expect
+    .poll(() =>
+      page.evaluate(
+        (which) => window['__cp2p']?.diagnostics().actions?.placements[which].length ?? 0,
+        kind,
+      ),
+    )
+    .toBeGreaterThan(0);
+  const id = await page.evaluate(
+    (which) => window['__cp2p']?.diagnostics().actions?.placements[which][0]?.id ?? null,
+    kind,
+  );
+  if (!id) throw new Error(`Nothing is marked for ${kind}`);
+  const at = await vertexPoint(page, id);
+  const box = await page.locator('.board-view-canvas canvas').boundingBox();
+  if (!at || !box) throw new Error('The board is not on screen');
+  await page.mouse.click(box.x + at.x, box.y + at.y);
+  return id;
+}
 
 /** Where screenshots go: `KNIGHTS_SHOTS` when set, otherwise the test's own output folder. */
 async function shot(page: Page, testInfo: TestInfo, name: string): Promise<void> {
@@ -195,6 +244,80 @@ test.describe('cities and knights, local', () => {
     await strip.click();
     await expect(page.getByTestId('improve-science').locator('visible=true').first()).toBeVisible();
     await shot(page, testInfo, 'phone-improvements');
+    expect(errors).toEqual([]);
+  });
+
+  test('walls and a metropolis stand on the board; a displaced knight and a pillage are answered by tapping it', async ({
+    page,
+  }, testInfo) => {
+    const errors = watchErrors(page);
+    await startKnightsGame(page);
+    await untilHumanTurn(page, 'roll');
+    await rollDice(page);
+    await untilHumanTurn(page, 'main');
+    await page.waitForTimeout(1800);
+
+    // Two cities for the human, one walled and holding the trade metropolis.
+    let snap = await snapshot(page);
+    const mine = snap.state.board.buildings.filter((item) => item.seat === SEAT);
+    const [first, second] = mine.map((item) => item.vertex);
+    if (!first || !second) throw new Error('The human needs two buildings');
+    const before = await cityPicture(page, first);
+    snap = withBuildings(snap, [
+      { vertex: first, seat: SEAT, kind: 'city' },
+      { vertex: second, seat: SEAT, kind: 'city' },
+    ]);
+    snap = withWalls(snap, [{ seat: SEAT, vertex: first }]);
+    snap = withLevels(snap, SEAT, { trade: 4 });
+    snap = withMetropolis(snap, 'trade', SEAT, first);
+    snap = withHand(inMain(snap, SEAT), SEAT, { wool: 1, ore: 1 });
+    await replace(page, snap);
+    await page.waitForTimeout(800);
+    const ext = knightsOf(await gameState(page));
+    expect(ext.walls).toEqual(expect.arrayContaining([{ seat: SEAT, vertex: first }]));
+    expect(ext.metropolises.trade).toEqual({ seat: SEAT, vertex: first });
+    // The wall and the metropolis change what is drawn around the city.
+    expect((await cityPicture(page, first)).equals(before)).toBe(false);
+    await shot(page, testInfo, 'wall-and-metropolis');
+
+    // A displaced knight: the game holds the human until it is placed on a marked site.
+    // Roads for the knight to walk: it stands on the second vertex, and its owner may put it on the first or third.
+    const walk = withRoadPath(await snapshot(page), SEAT, 3);
+    const origin = walk.path[2] ?? '';
+    await replace(
+      page,
+      withFrame(walk.snap, 'knights', 'displaced', {
+        seat: SEAT,
+        origin,
+        level: 2,
+        active: true,
+        ready: false,
+        promotedTurn: null,
+      }),
+    );
+    await expect(page.getByText(/Your knight was displaced/).first()).toBeVisible();
+    expect(await legalTypes(page)).toContain('RELOCATE_KNIGHT');
+    await shot(page, testInfo, 'relocate-prompt');
+    const site = await tapMarked(page, 'relocate');
+    await page.getByRole('button', { name: 'Place the knight here?' }).click();
+    await expect.poll(async () => (await legalTypes(page)).includes('RELOCATE_KNIGHT')).toBe(false);
+    const placed = knightsOf(await gameState(page)).knights.find((item) => item.vertex === site);
+    expect(placed).toMatchObject({ seat: SEAT, level: 2 });
+
+    // A pillage: the human picks which city is lost, and the walled one may be kept.
+    await replace(
+      page,
+      withFrame(await snapshot(page), 'knights', 'pillage', { remaining: [SEAT], roll: 5 }),
+    );
+    await expect(page.getByText(/The barbarians won/).first()).toBeVisible();
+    expect(await legalTypes(page)).toContain('CHOOSE_PILLAGE');
+    await shot(page, testInfo, 'pillage-prompt');
+    const lost = await tapMarked(page, 'pillage');
+    await page.getByRole('button', { name: 'Lose this city?' }).click();
+    await expect.poll(async () => (await legalTypes(page)).includes('CHOOSE_PILLAGE')).toBe(false);
+    const after = await gameState(page);
+    const kept = after.board.buildings.find((item) => item.vertex === lost);
+    expect(kept?.kind).toBe('settlement');
     expect(errors).toEqual([]);
   });
 

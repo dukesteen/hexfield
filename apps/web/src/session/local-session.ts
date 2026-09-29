@@ -289,6 +289,45 @@ export class LocalSession implements GameSession<LocalSessionSave> {
   }
 
   /**
+   * Development-only scenario control: replace the whole game (public state and every seat's
+   * hand) so a screenshot or a test can start from a hand-built position. The input log no longer
+   * replays the result, so an exported save of such a game is not valid.
+   */
+  devReplace(state: GameState, privates: Readonly<Record<string, PrivateState>>): Result<void> {
+    if (!import.meta.env.DEV) return failure('unavailable', 'Scenario control is development-only');
+    if (this.status.kind !== 'running')
+      return failure('session-inactive', 'Local session is not running');
+    const map = new Map<Seat, PrivateState>(
+      state.config.seats.flatMap((seat) => {
+        const value = privates[String(seat)];
+        return value ? [[seat, value] as const] : [];
+      }),
+    );
+    Reflect.set(this.game, 'current', state);
+    Reflect.set(this.game, 'privateBySeat', map);
+    // One placeholder entry moves the revision, so every subscriber sees a new update.
+    const entries: unknown = Reflect.get(this.game, 'entries');
+    if (Array.isArray(entries)) entries.push({ kind: 'system', type: 'DEV_REPLACE' });
+    this.reconcile();
+    this.emit([]);
+    return success(undefined);
+  }
+
+  /** Development-only: submit a command as any seat, a bot's included. */
+  devApply(seat: Seat, command: CommandShape): Result<void> {
+    if (!import.meta.env.DEV) return failure('unavailable', 'Scenario control is development-only');
+    const input: Input = { kind: 'command', seat, command };
+    const valid = this.engine.validate(this.game.state, input);
+    return valid.ok ? this.accept(input) : valid;
+  }
+
+  /** Development-only: what any seat could do right now. */
+  devLegal(seat: Seat): LegalCommandSet {
+    if (!import.meta.env.DEV) return { commands: [], templates: [] };
+    return this.engine.getLegalCommands(this.game.state, seat, this.game.privateView(seat));
+  }
+
+  /**
    * Local play only: the choice a human makes when Master Merchant or the Spy takes cards. The
    * take resolves in the same step as the play, so the choice is stated before it.
    */
