@@ -348,6 +348,21 @@ export function scenariosForModules(modules: readonly string[]): Scenario[] {
   );
 }
 
+/** A scenario id without its five-six suffix, so a scenario and its 5–6 player version match. */
+const stem = (id: string): string => id.replace(/-56$/, '');
+
+/**
+ * The scenario to play at a new seat count: the scenario itself when it fits, else its 3–4 or 5–6
+ * player version (same map and expansions, `-56` id suffix), else undefined.
+ */
+export function scenarioAtSeats(scenario: Scenario, count: number): Scenario | undefined {
+  if (count >= scenario.seats.min && count <= scenario.seats.max) return scenario;
+  const others = (item: Scenario) => item.modules.filter((id) => id !== 'five-six').join(',');
+  return scenariosForSeats(count).find(
+    (item) => stem(item.id) === stem(scenario.id) && others(item) === others(scenario),
+  );
+}
+
 /** The default scenario for a seat count: the first generator scenario that fits. */
 export function defaultScenario(count: number): Scenario {
   const found = scenariosForSeats(count).find((scenario) => scenario.board.kind === 'generator');

@@ -389,10 +389,10 @@ test('the host can pick a seafaring scenario, and its board and rules module tra
   void act(() => vi.advanceTimersByTime(400));
   expect(save.mock.lastCall?.[0].modules.map((module) => module.id)).toEqual(['base', 'seafaring']);
   expect(save.mock.lastCall?.[0].options.base).toMatchObject({ discardLimit: 9 });
-  // A seat count the scenario does not fit falls back to a classic game.
-  fireEvent.change(page.getByLabelText('lobby:playerCount'), { target: { value: '6' } });
+  // A seat count no version of the map fits falls back to a classic game.
+  fireEvent.change(page.getByLabelText('lobby:playerCount'), { target: { value: '2' } });
   void act(() => vi.advanceTimersByTime(400));
-  expect(save.mock.lastCall?.[0].modules.map((module) => module.id)).toEqual(['base', 'five-six']);
+  expect(save.mock.lastCall?.[0].modules.map((module) => module.id)).toEqual(['base']);
   expect(save.mock.lastCall?.[0]).not.toHaveProperty('board');
 });
 
@@ -444,3 +444,42 @@ test('the host can pick knights and commerce online, and its scenario follows th
   ]);
   expect(save.mock.lastCall?.[0].seats).toEqual([0, 1, 2, 3, 4]);
 });
+
+test.each([
+  ['fogbound', 4, 'fogbound-56', 5, 12],
+  ['four-isles-knights', 3, 'four-isles-knights-56', 6, 15],
+  ['new-horizons-knights-56', 5, 'new-horizons-knights', 4, 16],
+  ['open-sea-knights', 4, 'open-sea-knights-56', 5, 14],
+])(
+  'a seafaring map follows the seat count: %s at %i seats becomes %s at %i',
+  (from, seats, to, next, vpTarget) => {
+    vi.useFakeTimers();
+    const scenario = scenarioById(from);
+    const target = scenarioById(to);
+    if (!scenario || !target) throw new Error('Missing scenario');
+    const save = vi.fn<(config: GameConfig, seed: GenesisSeedMode) => Result<void>>(() =>
+      success(undefined),
+    );
+    const page = render(
+      <OnlineConfiguration
+        takeover={takeover}
+        humanCount={seats}
+        config={scenarioConfig(scenario, seats)}
+        seedMode={{ kind: 'joint' }}
+        editable
+        onSave={save}
+      />,
+    );
+    fireEvent.change(page.getByLabelText('lobby:playerCount'), {
+      target: { value: String(next) },
+    });
+    void act(() => vi.advanceTimersByTime(400));
+    expect(page.getByLabelText('lobby:scenario')).toHaveProperty('value', to);
+    const saved = save.mock.lastCall?.[0];
+    expect(saved?.modules.map((module) => module.id)).toEqual(
+      scenarioConfig(target, next).modules.map((module) => module.id),
+    );
+    expect(saved?.seats).toHaveLength(next);
+    expect(saved?.options.base).toMatchObject({ vpTarget });
+  },
+);

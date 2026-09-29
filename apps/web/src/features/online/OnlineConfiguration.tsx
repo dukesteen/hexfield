@@ -3,10 +3,10 @@ import { baseModule } from '@cp2p/engine';
 import type { GameConfig, OptionSpec, Result, TurnTimer } from '@cp2p/engine';
 import {
   defaultScenario,
+  scenarioAtSeats,
   scenarioById,
   scenarioConfig,
   scenarioOfConfig,
-  scenariosForSeats,
   standardFixedBoard,
 } from '@cp2p/maps';
 import type { GenesisSeedMode, TakeoverPolicy } from '@cp2p/protocol';
@@ -43,9 +43,6 @@ function seafaringIdOf(config: GameConfig): string | null {
   const scenario = scenarioOfConfig(config);
   return scenario && isExpansionScenario(scenario) ? scenario.id : null;
 }
-
-/** A scenario id without its five-six suffix, so a scenario and its large variant match. */
-const stem = (id: string): string => id.replace(/-56$/, '');
 
 /** Keep a newer local draft when an earlier signed configuration arrives. */
 export function OnlineConfiguration({
@@ -245,16 +242,12 @@ export function OnlineConfiguration({
   const changeSeats = (count: number) => {
     setSeatCount(count);
     const seafaring = seafaringId === null ? undefined : scenarioById(seafaringId);
-    // Knights and commerce follows the seat count into its five-six scenario, and back; a
-    // combined seafaring board only into its own five-six layout.
-    const sibling = seafaring?.modules.includes('knights')
-      ? scenariosForSeats(count).find(
-          (scenario) =>
-            scenario.modules.includes('knights') && stem(scenario.id) === stem(seafaring.id),
-        )
-      : undefined;
+    // An expansion map follows the seat count into its 3–4 or 5–6 player version, and back.
+    const sibling = seafaring && scenarioAtSeats(seafaring, count);
     if (seafaring && sibling) {
       setSeafaringId(sibling.id);
+      if (sibling.id !== seafaring.id)
+        setOptions((current) => ({ ...current, vpTarget: sibling.vpTarget }));
       if (count > 4 && options.mapLayout === 'standard-fixed')
         setOptions((current) => ({ ...current, mapLayout: 'balanced-random' }));
     } else if (seafaring && (count < seafaring.seats.min || count > seafaring.seats.max)) {

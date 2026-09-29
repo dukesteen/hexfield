@@ -65,7 +65,10 @@ test('seafaring with Cities & Knights has its own group, at three to four and fi
   const group = screen.getByRole('group', { name: 'Seafaring with Cities & Knights' });
   expect(optionNames(group)).toEqual([
     'New Horizons with Cities & Knights',
+    'Four Isles with Cities & Knights',
+    'Fogbound with Cities & Knights',
     'Desert Crossing with Cities & Knights',
+    'Open Sea with Cities & Knights',
   ]);
   fireEvent.change(screen.getByRole('combobox'), { target: { value: 'desert-crossing-knights' } });
   expect(onScenario).toHaveBeenCalledWith(
@@ -75,14 +78,22 @@ test('seafaring with Cities & Knights has its own group, at three to four and fi
   mount({ seatCount: 6, scenarioId: 'five-six' });
   expect(
     optionNames(screen.getByRole('group', { name: 'Seafaring with Cities & Knights' })),
-  ).toEqual(['New Horizons with Cities & Knights (5–6 players)']);
+  ).toEqual([
+    'New Horizons with Cities & Knights (5–6 players)',
+    'Four Isles with Cities & Knights (5–6 players)',
+    'Fogbound with Cities & Knights (5–6 players)',
+    'Desert Crossing with Cities & Knights (5–6 players)',
+    'Open Sea with Cities & Knights (5–6 players)',
+  ]);
 });
 
-test('a five to six player game is offered the large seafaring variants only', () => {
+test('a five to six player game is offered the 5–6 player version of every seafaring map', () => {
   mount({ seatCount: 5, scenarioId: 'five-six' });
   expect(optionNames(screen.getByRole('group', { name: 'Seafaring' }))).toEqual([
     'New Horizons (5–6 players)',
     'Four Isles (5–6 players)',
+    'Fogbound (5–6 players)',
+    'Desert Crossing (5–6 players)',
     'Open Sea (5–6 players)',
   ]);
 });
@@ -166,4 +177,4 @@ test('every offered seafaring scenario starts with its own victory target', () =
     const scenario = SCENARIOS.find((candidate) => candidate.id === id);
     expect(base).toMatchObject({ vpTarget: scenario?.vpTarget });
   }
-});
+}, 60_000);

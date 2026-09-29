@@ -5,6 +5,7 @@ export {
   BOARD_SHAPES,
   SCENARIOS,
   defaultScenario,
+  scenarioAtSeats,
   scenarioById,
   scenarioConfig,
   scenarioIsPlayable,

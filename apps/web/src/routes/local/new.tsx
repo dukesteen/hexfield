@@ -1,6 +1,12 @@
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
 import type { BaseOptions } from '@cp2p/engine';
-import { defaultScenario, scenarioById, scenarioConfig, type Scenario } from '@cp2p/maps';
+import {
+  defaultScenario,
+  scenarioAtSeats,
+  scenarioById,
+  scenarioConfig,
+  type Scenario,
+} from '@cp2p/maps';
 import { useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import * as v from 'valibot';
@@ -93,8 +99,9 @@ function NewLocalGame() {
   };
   const changePlayerCount = (count: number) => {
     setPlayerCount(count);
-    if (count < scenario.seats.min || count > scenario.seats.max)
-      chooseScenario(defaultScenario(count));
+    // An expansion map follows the seat count into its 3–4 or 5–6 player version.
+    const next = scenarioAtSeats(scenario, count) ?? defaultScenario(count);
+    if (next !== scenario) chooseScenario(next);
   };
   const [botDelayMs, setBotDelayMs] = useState(450);
   const [error, setError] = useState(false);
