@@ -81,10 +81,7 @@ function promotion(context: TurnContext, activeOnly: boolean): CommandShape | nu
  * promote an active knight if activations cannot reach it; recruit a round earlier. Short of the
  * cards, trade for them.
  */
-export function urgentDefense(
-  context: TurnContext,
-  recruitSite: (commands: CommandShape[]) => CommandShape | null,
-): CommandShape | null {
+export function urgentDefense(context: TurnContext): CommandShape | null {
   const plan = defensePlan(context);
   if (plan.active >= plan.target) return null;
   const state = context.view.state;
@@ -94,7 +91,7 @@ export function urgentDefense(
   }
   // Three rounds ahead, recruit before the turn's builds spend the wool and ore.
   if (plan.potential < plan.target && attackChance(state, 3) >= RECRUIT_AT) {
-    const recruit = recruitSite(context.ofType('BUILD_KNIGHT')) ?? promotion(context, false);
+    const recruit = recruitSite(context) ?? promotion(context, false);
     if (recruit) return recruit;
   }
   // Short of the cards: a bank trade for one, keeping the others.
@@ -125,10 +122,7 @@ export function defenseNeeds(context: TurnContext): Record<string, number> | nul
  * With the cards left after the turn's builds: activate knights up to the plan's target, and put
  * enough knight strength on the board (recruits or promotions) that activating it reaches it.
  */
-export function prepareDefense(
-  context: TurnContext,
-  recruitSite: (commands: CommandShape[]) => CommandShape | null,
-): CommandShape | null {
+export function prepareDefense(context: TurnContext): CommandShape | null {
   const { state, seat } = context.view;
   const plan = defensePlan(context);
   if (plan.active < plan.target) {
@@ -137,7 +131,7 @@ export function prepareDefense(
   }
   if (plan.potential >= plan.target) return null;
   const promote = promotion(context, false);
-  const recruit = recruitSite(context.ofType('BUILD_KNIGHT'));
+  const recruit = recruitSite(context);
   // A promotion needs no grain to activate when the knight is already active.
   const knights = knightsOf(state, seat);
   if (promote && knights.some((knight) => knight.active && knight.vertex === promote.vertex))
@@ -145,10 +139,10 @@ export function prepareDefense(
   return recruit ?? promote;
 }
 
-/** Where to recruit when nothing better is known: the richest vertex. */
-export function richestSite(context: TurnContext, commands: CommandShape[]): CommandShape | null {
+/** A recruit on the richest vertex it may take. */
+export function recruitSite(context: TurnContext): CommandShape | null {
   return best(
-    commands,
+    context.ofType('BUILD_KNIGHT'),
     (command) => rawPips(context.view.state, String(command.vertex), context.info),
     context,
   );

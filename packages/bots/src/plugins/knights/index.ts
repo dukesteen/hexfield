@@ -9,8 +9,7 @@ import { discard } from '../../policy/reactions.js';
 import { best, settlementValue } from '../../policy/setup.js';
 import { openSites } from '../../eval/index.js';
 import * as v1 from '../knights-v1.js';
-import { knightAction, recruitSite } from './actions.js';
-import { defenseNeeds, prepareDefense, richestSite, urgentDefense } from './barbarians.js';
+import { defenseNeeds, prepareDefense, recruitSite, urgentDefense } from './barbarians.js';
 import {
   improvement,
   improvementV1,
@@ -36,8 +35,6 @@ export interface KnightsPolicy {
   barbarians: boolean;
   /** Improvements and commodities valued by the metropolis race. */
   metropolis: boolean;
-  /** Knight actions and recruit sites chosen for blocking and chasing. */
-  actions: boolean;
   /** City walls by the expected hand size against the limit. */
   walls: boolean;
 }
@@ -46,7 +43,6 @@ export const KNIGHTS_POLICY: KnightsPolicy = {
   progress: true,
   barbarians: true,
   metropolis: true,
-  actions: false,
   walls: false,
 };
 
@@ -87,14 +83,11 @@ function wallByHand(context: TurnContext): CommandShape | null {
 }
 
 /** Keep at least one knight per city on the board (blocking, chasing, the next attack). */
-function utilityKnight(
-  context: TurnContext,
-  site: (commands: CommandShape[]) => CommandShape | null,
-): CommandShape | null {
+function utilityKnight(context: TurnContext): CommandShape | null {
   const { state, seat } = context.view;
   const knights = knightsOf(state, seat).length;
   if (knights >= Math.max(1, citiesOf(state, seat).length)) return null;
-  return site(context.ofType('BUILD_KNIGHT'));
+  return recruitSite(context);
 }
 
 function medicine(context: TurnContext): CommandShape | null {
@@ -117,8 +110,6 @@ function medicine(context: TurnContext): CommandShape | null {
 
 /** The knights policy of Normal and Hard; parts switched off play the stage 16 policy. */
 export function createKnightsPlugin(policy: KnightsPolicy = KNIGHTS_POLICY): BotPlugin {
-  const site = (context: TurnContext) => (commands: CommandShape[]) =>
-    policy.actions ? recruitSite(context, commands) : richestSite(context, commands);
   return {
     module: 'knights',
     decide(context) {
@@ -156,7 +147,7 @@ export function createKnightsPlugin(policy: KnightsPolicy = KNIGHTS_POLICY): Bot
         return null;
       // Main phase, before the base builds.
       if (policy.barbarians) {
-        const defend = urgentDefense(context, site(context));
+        const defend = urgentDefense(context);
         if (defend) return defend;
       }
       if (policy.progress) {
@@ -181,22 +172,14 @@ export function createKnightsPlugin(policy: KnightsPolicy = KNIGHTS_POLICY): Bot
       }
       const improved = policy.metropolis ? improvement(context) : improvementV1(context);
       if (improved) return improved;
-      if (policy.barbarians || policy.actions) {
-        const defended = policy.barbarians ? prepareDefense(context, site(context)) : null;
+      if (policy.barbarians) {
+        const defended = prepareDefense(context);
         if (defended) return defended;
-        const acted = policy.actions ? knightAction(context) : null;
-        if (acted) return acted;
-        const knight = utilityKnight(context, site(context));
+        const knight = utilityKnight(context);
         if (knight) return knight;
-        if (!policy.barbarians) {
-          // The stage 16 activation rule, when only the actions part is on.
-          const activate = context.ofType('ACTIVATE_KNIGHT')[0];
-          if (activate && v1.underThreat(context)) return activate;
-        }
-        if (!policy.actions) {
-          const chase = context.ofType('CHASE_ROBBER')[0];
-          if (chase && urgentDefense(context, site(context)) === null) return chase;
-        }
+        // A ready knight not needed for the attack drives the robber away and steals.
+        const chase = context.ofType('CHASE_ROBBER')[0];
+        if (chase && urgentDefense(context) === null) return chase;
       } else {
         const moved = v1.knightMove(context);
         if (moved) return moved;
