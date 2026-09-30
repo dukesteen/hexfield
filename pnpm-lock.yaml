@@ -219,6 +219,9 @@ importers:
 
   packages/maps:
     dependencies:
+      '@cp2p/codec':
+        specifier: workspace:*
+        version: link:../codec
       '@cp2p/engine':
         specifier: workspace:*
         version: link:../engine

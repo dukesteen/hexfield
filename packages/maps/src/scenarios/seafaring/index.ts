@@ -11,6 +11,7 @@ export {
   adjacentLandPairs,
   boardFromLayout,
   cellId,
+  harborIssues,
   harborProblems,
   islandHexes,
   parseRows,
@@ -18,7 +19,7 @@ export {
   shapeFromBoard,
   tokenProblems,
 } from './layout.js';
-export type { SeafaringLayout } from './layout.js';
+export type { HarborIssue, SeafaringLayout } from './layout.js';
 export { NEW_HORIZONS, NEW_HORIZONS_56 } from './new-horizons.js';
 export { OPEN_SEA_OPTIONS } from './open-sea.js';
 export { defineFixedSeafaring } from './types.js';

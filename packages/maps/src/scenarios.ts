@@ -19,6 +19,7 @@ import {
   NEW_HORIZONS_56,
   OPEN_SEA_OPTIONS,
 } from './scenarios/seafaring/index.js';
+import { isCustomConfig } from './custom/config.js';
 import { standardFixedBoard } from './standard-fixed.js';
 
 /** Board shapes a scenario can generate from; slots and bags come from the engine. */
@@ -416,8 +417,9 @@ function sameBoard(config: GameConfig, scenario: Scenario): boolean {
   return boardKey(config.board) === boardKey(scenario.board.board());
 }
 
-/** Identify which listed scenario a genesis config was built from, if any. */
+/** Identify which listed scenario a genesis config was built from, if any. A custom map is none. */
 export function scenarioOfConfig(config: GameConfig): Scenario | undefined {
+  if (isCustomConfig(config)) return undefined;
   const ids = config.modules.map((module) => module.id).toSorted();
   const fixed = Boolean(config.board);
   const matches = SCENARIOS.filter(
