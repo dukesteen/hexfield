@@ -62,7 +62,8 @@ export function parseNetBatchOptions(args: readonly string[]): NetBatchOptions {
     if (value === undefined || value.startsWith('--'))
       throw new Error(`--${name} needs an integer value`);
     if (name === 'map') {
-      if (!/^[a-z0-9-]+$/.test(value)) throw new Error('--map needs a scenario id');
+      if (!/^(?:[a-z0-9-]+|HXMAP1\.[A-Za-z0-9_-]+)$/.test(value))
+        throw new Error('--map needs a scenario id or a map string');
     } else if (name === 'security') {
       if (value !== 'stub' && value !== 'verified')
         throw new Error('--security must be stub or verified');

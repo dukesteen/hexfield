@@ -3,7 +3,7 @@ import { setImmediate as yieldEventLoop } from 'node:timers/promises';
 import { canonicalDecode, hashValue, toHex } from '@cp2p/codec';
 import type { CommandShape, GameState, Pending, PrivateState, Result, Seat } from '@cp2p/engine';
 import { moduleSelection } from '@cp2p/engine';
-import { scenarioById, scenarioConfig } from '@cp2p/maps';
+import { MAP_PREFIX, decodeMap, mapConfig, scenarioById, scenarioConfig } from '@cp2p/maps';
 import {
   MemoryProtocolJournal,
   P2PSession,
@@ -56,7 +56,10 @@ export interface NetworkGameOptions {
   scenario: number;
   /** Four seats by default; six uses the five-six module (stub security only). */
   players?: 4 | 6;
-  /** A catalogue scenario id (for example a seafaring board) played at `players` seats. */
+  /**
+   * A catalogue scenario id (for example a seafaring board) or a map editor share string
+   * (`HXMAP1.…`), played at `players` seats.
+   */
   map?: string;
   maxSteps?: number;
   /** Stage 07 acceptance uses genuine private sources and proofs on the same fault schedules. */
@@ -163,9 +166,18 @@ export async function runNetworkGame(options: NetworkGameOptions): Promise<Netwo
   const players = options.players ?? 4;
   if (players === 6 && options.security === 'verified')
     throw new Error('Six-peer network games use stub security');
-  const mapScenario = options.map === undefined ? undefined : scenarioById(options.map);
-  if (options.map !== undefined && !mapScenario) throw new Error(`Unknown map ${options.map}`);
-  const mapGenesisConfig = mapScenario ? scenarioConfig(mapScenario, players) : undefined;
+  const customMap = options.map?.startsWith(MAP_PREFIX)
+    ? unwrap(await decodeMap(options.map))
+    : null;
+  const mapScenario =
+    options.map === undefined || customMap ? undefined : scenarioById(options.map);
+  if (options.map !== undefined && !customMap && !mapScenario)
+    throw new Error(`Unknown map ${options.map}`);
+  const mapGenesisConfig = customMap
+    ? unwrap(mapConfig(customMap, players))
+    : mapScenario
+      ? scenarioConfig(mapScenario, players)
+      : undefined;
   const lifecycle = options.lifecycle ? new PersistenceLifecycle() : null;
   let lifecycleObservedRevision = -1;
   const started = performance.now();
@@ -1403,7 +1415,7 @@ export async function runNetworkGame(options: NetworkGameOptions): Promise<Netwo
             else if (entry.payload.kind === 'system') type = entry.payload.input.type;
             if (type) inputCounts[type] = (inputCounts[type] ?? 0) + 1;
           }
-          mapEvidence = { id: options.map, inputCounts };
+          mapEvidence = { id: customMap ? 'custom' : options.map, inputCounts };
         }
         checkDeadline();
         return {
