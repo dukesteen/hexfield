@@ -1,1 +1,105 @@
-{"mode":"net","options":{"scenario":1,"seeds":1,"startIndex":0,"seed":42,"parallel":1,"players":4,"map":"HXMAP1.jZRRT4MwFIX_irnPNYGii_Kmia97MvHB-FDkjjUrLbZlLln2373AcK1DtoQESr-enHt62z2sTAW5bpVisBa2MNZB_r4HLCuEHDC_TRk9yzdgsJG6pH8VarTyEw4sxDhLWACpti7QnjEZW75cUsoYv0yRKx65KgjZxAzvmUtKnKWh8coKqWMi6xIIkG9jFBw-KDDc4RDXF3RBgR1eHm2vksNaKuVopTcbpPGi0z2xSYiuJKoyYO9iNpJthPOtxROcJjHNI2Vj0fkT_Diy_NxFiQ5twHadEeORkdq02tNn4PshxvlcjfzIJhPRTUj_VnnkZ7XvIzaZCySL0LkNHIub2uv_Yk4nzE4Ul0X4Va1xVWekR5hPWD6jFzE820Z_lJOZ2FLeHZfalK3qDwwNtKi70_UsvUd9I50SdLYYNNIKj-ONZE3R3SKk118wNO9QeFLYQy12FASJyqGPaMa3zZNF4cbV2z6bbfMqbIW-b58f"},"requestedSeeds":1,"completedGames":1,"averageTurns":87,"averageInputs":485,"averageVirtualMilliseconds":1737,"averageElapsedMilliseconds":55512.679666,"results":[{"map":{"id":"custom","inputCounts":{"START_SEAT":1,"PLACE_SETTLEMENT":8,"PLACE_ROAD":8,"ROLL_DICE":87,"DICE_RESULT":87,"END_TURN":86,"BUILD_CITY":7,"OFFER_TRADE":22,"RESPOND_TRADE":66,"CANCEL_TRADE":6,"MARITIME_TRADE":11,"BUILD_ROAD":18,"BUY_DEV_CARD":3,"CARD_DEALT":3,"DISCARD":24,"MOVE_ROBBER":13,"STEAL":10,"STEAL_RESULT":10,"PLAY_DEV_CARD":3,"SKIP":1,"CONFIRM_TRADE":3,"BUILD_SETTLEMENT":8}},"security":"stub","protocolVersion":6,"seed":42,"gameIndex":0,"scenario":1,"turns":87,"inputs":485,"virtualMilliseconds":1737,"elapsedMilliseconds":55512.679666,"operationTimings":{"sessionFlush":{"calls":20461,"totalMilliseconds":53678.57015899993,"maximumMilliseconds":159.69966700000077},"networkDelivery":{"calls":20076,"totalMilliseconds":841.5590590001605,"maximumMilliseconds":7.823959000000059},"botDecide":{"calls":384,"totalMilliseconds":122.68832800000246,"maximumMilliseconds":2.104624999999942}},"finalStateHash":"97a136702bdcffd14ea5e2d37867e4615d2cffa9cab3deed1562267bcccb969e","finalLogHash":"c995b19fd3922c8b8a03ea784dd69e96a55f8a1780ed0eca1e12ccc81054e7ca","audits":[],"faultInjected":false,"faultRecovered":false,"faultEvidence":{"injectedAtRevision":0,"majorityCommitsDuringPartition":null,"isolatedCommitsDuringPartition":null,"pausedPeersDuringPartition":0,"replacementTerm":null,"censoredCommandCommitted":false,"snapshotRequests":0,"snapshotResponses":0,"derivedContextDiagnostic":null,"snapshotRepairAdopted":false,"repairSnapshotParentSeq":null,"repairSnapshotHash":null,"continuationCommandHash":null,"duplicateDeliveries":0,"certifiedExclusionPeers":0,"byzantineCommandCommits":0,"rejectedProposalHash":null,"nonVoterMessageTypes":[],"nonVoterPublishedMaster":false}}],"failures":[],"parallel":1,"sourceFingerprint":"6a87dad33dc7625bd38657d341736b2de72da1287ef9df672e2b77f9dffc8ceb","sourceUnchanged":true}
+{
+  "mode": "net",
+  "options": {
+    "scenario": 1,
+    "seeds": 1,
+    "startIndex": 0,
+    "seed": 42,
+    "parallel": 1,
+    "players": 4,
+    "map": "HXMAP1.jZRRT4MwFIX_irnPNYGii_Kmia97MvHB-FDkjjUrLbZlLln2373AcK1DtoQESr-enHt62z2sTAW5bpVisBa2MNZB_r4HLCuEHDC_TRk9yzdgsJG6pH8VarTyEw4sxDhLWACpti7QnjEZW75cUsoYv0yRKx65KgjZxAzvmUtKnKWh8coKqWMi6xIIkG9jFBw-KDDc4RDXF3RBgR1eHm2vksNaKuVopTcbpPGi0z2xSYiuJKoyYO9iNpJthPOtxROcJjHNI2Vj0fkT_Diy_NxFiQ5twHadEeORkdq02tNn4PshxvlcjfzIJhPRTUj_VnnkZ7XvIzaZCySL0LkNHIub2uv_Yk4nzE4Ul0X4Va1xVWekR5hPWD6jFzE820Z_lJOZ2FLeHZfalK3qDwwNtKi70_UsvUd9I50SdLYYNNIKj-ONZE3R3SKk118wNO9QeFLYQy12FASJyqGPaMa3zZNF4cbV2z6bbfMqbIW-b58f"
+  },
+  "requestedSeeds": 1,
+  "completedGames": 1,
+  "averageTurns": 87,
+  "averageInputs": 485,
+  "averageVirtualMilliseconds": 1737,
+  "averageElapsedMilliseconds": 55512.679666,
+  "results": [
+    {
+      "map": {
+        "id": "custom",
+        "inputCounts": {
+          "START_SEAT": 1,
+          "PLACE_SETTLEMENT": 8,
+          "PLACE_ROAD": 8,
+          "ROLL_DICE": 87,
+          "DICE_RESULT": 87,
+          "END_TURN": 86,
+          "BUILD_CITY": 7,
+          "OFFER_TRADE": 22,
+          "RESPOND_TRADE": 66,
+          "CANCEL_TRADE": 6,
+          "MARITIME_TRADE": 11,
+          "BUILD_ROAD": 18,
+          "BUY_DEV_CARD": 3,
+          "CARD_DEALT": 3,
+          "DISCARD": 24,
+          "MOVE_ROBBER": 13,
+          "STEAL": 10,
+          "STEAL_RESULT": 10,
+          "PLAY_DEV_CARD": 3,
+          "SKIP": 1,
+          "CONFIRM_TRADE": 3,
+          "BUILD_SETTLEMENT": 8
+        }
+      },
+      "security": "stub",
+      "protocolVersion": 6,
+      "seed": 42,
+      "gameIndex": 0,
+      "scenario": 1,
+      "turns": 87,
+      "inputs": 485,
+      "virtualMilliseconds": 1737,
+      "elapsedMilliseconds": 55512.679666,
+      "operationTimings": {
+        "sessionFlush": {
+          "calls": 20461,
+          "totalMilliseconds": 53678.57015899993,
+          "maximumMilliseconds": 159.69966700000077
+        },
+        "networkDelivery": {
+          "calls": 20076,
+          "totalMilliseconds": 841.5590590001605,
+          "maximumMilliseconds": 7.823959000000059
+        },
+        "botDecide": {
+          "calls": 384,
+          "totalMilliseconds": 122.68832800000246,
+          "maximumMilliseconds": 2.104624999999942
+        }
+      },
+      "finalStateHash": "97a136702bdcffd14ea5e2d37867e4615d2cffa9cab3deed1562267bcccb969e",
+      "finalLogHash": "c995b19fd3922c8b8a03ea784dd69e96a55f8a1780ed0eca1e12ccc81054e7ca",
+      "audits": [],
+      "faultInjected": false,
+      "faultRecovered": false,
+      "faultEvidence": {
+        "injectedAtRevision": 0,
+        "majorityCommitsDuringPartition": null,
+        "isolatedCommitsDuringPartition": null,
+        "pausedPeersDuringPartition": 0,
+        "replacementTerm": null,
+        "censoredCommandCommitted": false,
+        "snapshotRequests": 0,
+        "snapshotResponses": 0,
+        "derivedContextDiagnostic": null,
+        "snapshotRepairAdopted": false,
+        "repairSnapshotParentSeq": null,
+        "repairSnapshotHash": null,
+        "continuationCommandHash": null,
+        "duplicateDeliveries": 0,
+        "certifiedExclusionPeers": 0,
+        "byzantineCommandCommits": 0,
+        "rejectedProposalHash": null,
+        "nonVoterMessageTypes": [],
+        "nonVoterPublishedMaster": false
+      }
+    }
+  ],
+  "failures": [],
+  "parallel": 1,
+  "sourceFingerprint": "6a87dad33dc7625bd38657d341736b2de72da1287ef9df672e2b77f9dffc8ceb",
+  "sourceUnchanged": true
+}

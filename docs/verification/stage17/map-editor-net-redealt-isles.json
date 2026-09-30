@@ -1,1 +1,107 @@
-{"mode":"net","options":{"scenario":1,"seeds":1,"startIndex":0,"seed":42,"parallel":1,"players":4,"map":"HXMAP1.lZdLj5swEID_SuWzV8JPUm576HUPq5V6qHogxSEoPFID25Wi_e-1wdkwEJHhZDJ8GYZvGAsu5NDkJKn7sqTkmNp9Y1uS_LoQk-WGJMQkT5zG9OUHoeRU1JkLlX21N5Z80gkUUQ6Y3KZFDRFGJX35OUFMbWzxB0KcRhhIAKixBgLSA5Nq_jVNOSckrPfedaS_8cl19o44QST29d7L89vZNB9mdPmXJE-MEktc6aQzdpCTkNak7p9dczL12AGf-saKDazcwKope3Dy2u6GS8jqKXtO2653rr9gdYX5hiL4sogHrEaxAs9GAxrhUYZHUR2O8A2OlmrnPdMABWbzpsxuoADgem-vSRneFVu6mpf6HaB8DWUMsChZd4YBGpAABKqqpq87d9hOSogAjnq2-NLXWmb-2NkOoNBZYcpsmpYDFuVsw-xuGN0NkytwxhjA2QNcAho1lALvTOCdicd77uzW9FqHrw-DxI-lxG9hEm9L4m3Jpa3MtMZ2KzQQdizKsl1uIhKxjX0NmsILU3dmctYGDlC-WoIALMqYWhpbpIUlqLVqNUBRQ6mXuuZZBUAZomF6aWtGKkCiXGn8LGr8_hU_vn8F0LX73wESNV4xXsAO_2TvMFuBe3Wtmqwvh5dXf_6Q2qLOiYvXaeXfe19NZtKy-1a0HqLkXNi08yeOrmLhArbZ-08EH3Bv2i7gsnQu3YVU6cfQrKoYnyB3puvPz9akw9WO_sVTuT8MB3o4iIYMflVhHeOMsrDysMqwjpz7lggrC-vIiRAXIS4CL0JeGfLIEJchrgKvQh4VOBU4HfLqwOnAxSEeu7hz-D404P38ltrcdO6H-PwP"},"requestedSeeds":1,"completedGames":1,"averageTurns":178,"averageInputs":946,"averageVirtualMilliseconds":3401,"averageElapsedMilliseconds":128865.332,"results":[{"map":{"id":"custom","inputCounts":{"START_SEAT":1,"PLACE_SETTLEMENT":8,"PLACE_ROAD":8,"ROLL_DICE":178,"DICE_RESULT":178,"BUILD_ROAD":13,"END_TURN":177,"CHOOSE_GOLD":32,"MOVE_ROBBER":17,"STEAL":14,"STEAL_RESULT":14,"BUILD_SHIP":12,"OFFER_TRADE":28,"RESPOND_TRADE":84,"CANCEL_TRADE":10,"MARITIME_TRADE":27,"BUILD_SETTLEMENT":9,"MOVE_SHIP":40,"DISCARD":66,"MOVE_PIRATE":17,"BUILD_CITY":10,"BUY_DEV_CARD":1,"CARD_DEALT":1,"CLAIM_VICTORY":1}},"security":"stub","protocolVersion":6,"seed":42,"gameIndex":0,"scenario":1,"turns":178,"inputs":946,"virtualMilliseconds":3401,"elapsedMilliseconds":128865.332,"operationTimings":{"sessionFlush":{"calls":40006,"totalMilliseconds":123411.46380200192,"maximumMilliseconds":302.1053749999992},"networkDelivery":{"calls":39216,"totalMilliseconds":1490.3955859995967,"maximumMilliseconds":17.021082999999635},"botDecide":{"calls":789,"totalMilliseconds":614.5204010000953,"maximumMilliseconds":27.95183299999917}},"finalStateHash":"cdd83bf2737c15b1372f5c3a9cc0877259d0b2f6abd39cb65c3f71e4773bfcbd","finalLogHash":"a8fed2ec872d981be48a9972dc3fc8844362eaa5f42823362eab6840b7381bcc","audits":[],"faultInjected":false,"faultRecovered":false,"faultEvidence":{"injectedAtRevision":0,"majorityCommitsDuringPartition":null,"isolatedCommitsDuringPartition":null,"pausedPeersDuringPartition":0,"replacementTerm":null,"censoredCommandCommitted":false,"snapshotRequests":0,"snapshotResponses":0,"derivedContextDiagnostic":null,"snapshotRepairAdopted":false,"repairSnapshotParentSeq":null,"repairSnapshotHash":null,"continuationCommandHash":null,"duplicateDeliveries":0,"certifiedExclusionPeers":0,"byzantineCommandCommits":0,"rejectedProposalHash":null,"nonVoterMessageTypes":[],"nonVoterPublishedMaster":false}}],"failures":[],"parallel":1,"sourceFingerprint":"6a87dad33dc7625bd38657d341736b2de72da1287ef9df672e2b77f9dffc8ceb","sourceUnchanged":true}
+{
+  "mode": "net",
+  "options": {
+    "scenario": 1,
+    "seeds": 1,
+    "startIndex": 0,
+    "seed": 42,
+    "parallel": 1,
+    "players": 4,
+    "map": "HXMAP1.lZdLj5swEID_SuWzV8JPUm576HUPq5V6qHogxSEoPFID25Wi_e-1wdkwEJHhZDJ8GYZvGAsu5NDkJKn7sqTkmNp9Y1uS_LoQk-WGJMQkT5zG9OUHoeRU1JkLlX21N5Z80gkUUQ6Y3KZFDRFGJX35OUFMbWzxB0KcRhhIAKixBgLSA5Nq_jVNOSckrPfedaS_8cl19o44QST29d7L89vZNB9mdPmXJE-MEktc6aQzdpCTkNak7p9dczL12AGf-saKDazcwKope3Dy2u6GS8jqKXtO2653rr9gdYX5hiL4sogHrEaxAs9GAxrhUYZHUR2O8A2OlmrnPdMABWbzpsxuoADgem-vSRneFVu6mpf6HaB8DWUMsChZd4YBGpAABKqqpq87d9hOSogAjnq2-NLXWmb-2NkOoNBZYcpsmpYDFuVsw-xuGN0NkytwxhjA2QNcAho1lALvTOCdicd77uzW9FqHrw-DxI-lxG9hEm9L4m3Jpa3MtMZ2KzQQdizKsl1uIhKxjX0NmsILU3dmctYGDlC-WoIALMqYWhpbpIUlqLVqNUBRQ6mXuuZZBUAZomF6aWtGKkCiXGn8LGr8_hU_vn8F0LX73wESNV4xXsAO_2TvMFuBe3Wtmqwvh5dXf_6Q2qLOiYvXaeXfe19NZtKy-1a0HqLkXNi08yeOrmLhArbZ-08EH3Bv2i7gsnQu3YVU6cfQrKoYnyB3puvPz9akw9WO_sVTuT8MB3o4iIYMflVhHeOMsrDysMqwjpz7lggrC-vIiRAXIS4CL0JeGfLIEJchrgKvQh4VOBU4HfLqwOnAxSEeu7hz-D404P38ltrcdO6H-PwP"
+  },
+  "requestedSeeds": 1,
+  "completedGames": 1,
+  "averageTurns": 178,
+  "averageInputs": 946,
+  "averageVirtualMilliseconds": 3401,
+  "averageElapsedMilliseconds": 128865.332,
+  "results": [
+    {
+      "map": {
+        "id": "custom",
+        "inputCounts": {
+          "START_SEAT": 1,
+          "PLACE_SETTLEMENT": 8,
+          "PLACE_ROAD": 8,
+          "ROLL_DICE": 178,
+          "DICE_RESULT": 178,
+          "BUILD_ROAD": 13,
+          "END_TURN": 177,
+          "CHOOSE_GOLD": 32,
+          "MOVE_ROBBER": 17,
+          "STEAL": 14,
+          "STEAL_RESULT": 14,
+          "BUILD_SHIP": 12,
+          "OFFER_TRADE": 28,
+          "RESPOND_TRADE": 84,
+          "CANCEL_TRADE": 10,
+          "MARITIME_TRADE": 27,
+          "BUILD_SETTLEMENT": 9,
+          "MOVE_SHIP": 40,
+          "DISCARD": 66,
+          "MOVE_PIRATE": 17,
+          "BUILD_CITY": 10,
+          "BUY_DEV_CARD": 1,
+          "CARD_DEALT": 1,
+          "CLAIM_VICTORY": 1
+        }
+      },
+      "security": "stub",
+      "protocolVersion": 6,
+      "seed": 42,
+      "gameIndex": 0,
+      "scenario": 1,
+      "turns": 178,
+      "inputs": 946,
+      "virtualMilliseconds": 3401,
+      "elapsedMilliseconds": 128865.332,
+      "operationTimings": {
+        "sessionFlush": {
+          "calls": 40006,
+          "totalMilliseconds": 123411.46380200192,
+          "maximumMilliseconds": 302.1053749999992
+        },
+        "networkDelivery": {
+          "calls": 39216,
+          "totalMilliseconds": 1490.3955859995967,
+          "maximumMilliseconds": 17.021082999999635
+        },
+        "botDecide": {
+          "calls": 789,
+          "totalMilliseconds": 614.5204010000953,
+          "maximumMilliseconds": 27.95183299999917
+        }
+      },
+      "finalStateHash": "cdd83bf2737c15b1372f5c3a9cc0877259d0b2f6abd39cb65c3f71e4773bfcbd",
+      "finalLogHash": "a8fed2ec872d981be48a9972dc3fc8844362eaa5f42823362eab6840b7381bcc",
+      "audits": [],
+      "faultInjected": false,
+      "faultRecovered": false,
+      "faultEvidence": {
+        "injectedAtRevision": 0,
+        "majorityCommitsDuringPartition": null,
+        "isolatedCommitsDuringPartition": null,
+        "pausedPeersDuringPartition": 0,
+        "replacementTerm": null,
+        "censoredCommandCommitted": false,
+        "snapshotRequests": 0,
+        "snapshotResponses": 0,
+        "derivedContextDiagnostic": null,
+        "snapshotRepairAdopted": false,
+        "repairSnapshotParentSeq": null,
+        "repairSnapshotHash": null,
+        "continuationCommandHash": null,
+        "duplicateDeliveries": 0,
+        "certifiedExclusionPeers": 0,
+        "byzantineCommandCommits": 0,
+        "rejectedProposalHash": null,
+        "nonVoterMessageTypes": [],
+        "nonVoterPublishedMaster": false
+      }
+    }
+  ],
+  "failures": [],
+  "parallel": 1,
+  "sourceFingerprint": "6a87dad33dc7625bd38657d341736b2de72da1287ef9df672e2b77f9dffc8ceb",
+  "sourceUnchanged": true
+}
