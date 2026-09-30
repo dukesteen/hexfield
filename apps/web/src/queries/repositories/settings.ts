@@ -24,6 +24,8 @@ const settingsSchema = v.strictObject({
   theme: v.picklist(['system', 'light', 'dark']),
   hotseatCover: v.boolean(),
   reducedMotion: v.picklist(['system', 'reduce']),
+  /** Pick a face-down card on the steal sheet (cosmetic; absent in older records means on). */
+  pickStealCard: v.optional(v.boolean()),
   network: networkSettingsSchema,
 });
 
@@ -33,6 +35,7 @@ const settingsPatchSchema = v.partial(
     theme: v.picklist(['system', 'light', 'dark']),
     hotseatCover: v.boolean(),
     reducedMotion: v.picklist(['system', 'reduce']),
+    pickStealCard: v.boolean(),
     network: networkSettingsSchema,
   }),
 );
@@ -46,6 +49,7 @@ export const DEFAULT_SETTINGS: Settings = {
   theme: 'system',
   hotseatCover: true,
   reducedMotion: 'system',
+  pickStealCard: true,
   network: DEFAULT_NETWORK_SETTINGS,
 };
 

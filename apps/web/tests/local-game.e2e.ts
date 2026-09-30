@@ -225,6 +225,17 @@ async function observedRevision(page: Page): Promise<number> {
   );
 }
 
+/** Rob the first victim offered: choose it, then pick its first face-down card on the sheet. */
+async function stealFirst(page: Page, input: 'mouse' | 'touch'): Promise<void> {
+  const dialog = page.getByRole('dialog', { name: 'Steal a card' });
+  const first = dialog.getByRole('button').first();
+  const back = dialog.getByRole('button', { name: /face down$/ }).first();
+  const press = (target: typeof first) => (input === 'touch' ? target.tap() : target.click());
+  // With one victim the sheet opens at once; with several, the victim comes first.
+  if (!((await first.getAttribute('aria-label')) ?? '').endsWith('face down')) await press(first);
+  await press(back);
+}
+
 async function revealIfCovered(page: Page, input: 'mouse' | 'touch' = 'mouse'): Promise<void> {
   const reveal = page.getByRole('button', { name: 'Reveal hand' });
   if (await reveal.isVisible()) {
@@ -2136,6 +2147,13 @@ test('real steals fly the stolen card between its hand slot and the other panel'
         },
         { other: scenario.to === 0 ? scenario.from : scenario.to, pause: scenario.pauseForCapture },
       );
+      if (scenario.to === 0) {
+        // These check the steal made straight from the victim choice (the steal sheet has its own).
+        await page.goto('/#/settings');
+        await page.getByLabel('Pick the card to steal').uncheck();
+        await page.getByRole('button', { name: 'Save settings' }).click();
+        await expect(page.getByText('Settings saved')).toBeVisible();
+      }
       await openGoldenPrefix(page, scenario.prefix, scenario.file, {
         humanSeats: [0],
         botDelayMs: 800,
@@ -2431,9 +2449,7 @@ async function rollAndBuildRoad(
     if (view.robber) {
       await clickLegalPlacement(page, 'hex', view.robber, view.revision, input);
     } else if (view.steal > 0) {
-      const victim = page.getByRole('dialog', { name: 'Steal a card' }).getByRole('button').first();
-      if (input === 'touch') await victim.tap();
-      else await victim.click();
+      await stealFirst(page, input);
     } else await page.waitForTimeout(20);
   }
   expect(reachedMain, 'Roll and any robber interruption must reach the main phase').toBe(true);
@@ -2857,9 +2873,7 @@ async function playVisibleHumanStep(
     return 'acted';
   }
   if (actions.stealTargets.length > 0) {
-    const victim = page.getByRole('dialog', { name: 'Steal a card' }).getByRole('button').first();
-    if (input === 'touch') await victim.tap();
-    else await victim.click();
+    await stealFirst(page, input);
     await expect
       .poll(() =>
         page.evaluate(() => {

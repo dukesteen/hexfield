@@ -14,6 +14,8 @@ export interface CountHold {
   readonly delta: number;
   /** A safety deadline: a hold never outlives its flight by much, whatever happens to it. */
   readonly expiresAt: number;
+  /** Waits on the thief turning over a stolen card, not on a flight: new flights keep it. */
+  readonly pinned?: boolean;
 }
 
 /** The hand a seat's screen shows while cards are still in the air. */
@@ -43,7 +45,8 @@ interface CardHoldStore {
   release: (ids: readonly string[]) => void;
   /** Drop holds past their deadline. */
   prune: (now: number) => void;
-  clear: () => void;
+  /** Drop every hold, or all but the pinned ones. */
+  clear: (keepPinned?: boolean) => void;
 }
 
 const NO_HOLDS: readonly CountHold[] = [];
@@ -68,7 +71,13 @@ export const useCardHolds = create<CardHoldStore>((set) => ({
         ? { holds: store.holds.filter((hold) => hold.expiresAt > now) }
         : store,
     ),
-  clear: () => set((store) => (store.holds.length === 0 ? store : { holds: NO_HOLDS })),
+  clear: (keepPinned = false) =>
+    set((store) => {
+      if (store.holds.length === 0) return store;
+      if (!keepPinned) return { holds: NO_HOLDS };
+      const kept = store.holds.filter((hold) => hold.pinned);
+      return kept.length === store.holds.length ? store : { holds: kept };
+    }),
 }));
 
 /** The hand to draw for a seat: its true counts less the cards still flying. */

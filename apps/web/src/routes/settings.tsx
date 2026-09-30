@@ -37,11 +37,12 @@ function SettingsForm({ initial }: { initial: Settings }) {
   const [theme, setTheme] = useState(initial.theme);
   const [hotseatCover, setHotseatCover] = useState(initial.hotseatCover);
   const [reducedMotion, setReducedMotion] = useState(initial.reducedMotion);
+  const [pickStealCard, setPickStealCard] = useState(initial.pickStealCard ?? true);
   const update = useUpdateSettings();
 
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    update.mutate({ theme, hotseatCover, reducedMotion });
+    update.mutate({ theme, hotseatCover, reducedMotion, pickStealCard });
   };
 
   return (
@@ -72,6 +73,21 @@ function SettingsForm({ initial }: { initial: Settings }) {
           />
           <span>{t('lobby:hotseatCover')}</span>
         </label>
+      </fieldset>
+      <fieldset>
+        <legend>{t('lobby:gameplay')}</legend>
+        <label className="checkbox-row">
+          <input
+            type="checkbox"
+            checked={pickStealCard}
+            aria-describedby="pick-steal-card-hint"
+            onChange={(event) => setPickStealCard(event.target.checked)}
+          />
+          <span>{t('lobby:pickStealCard')}</span>
+        </label>
+        <p id="pick-steal-card-hint" className="muted">
+          {t('lobby:pickStealCardHint')}
+        </p>
       </fieldset>
       <fieldset>
         <legend>{t('lobby:motion')}</legend>

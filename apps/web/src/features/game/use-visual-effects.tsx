@@ -2,10 +2,16 @@ import { useCallback, useEffect, useRef, useState, type CSSProperties } from 're
 import { RESOURCES, isBaseResource, type GameState, type Resource, type Seat } from '@cp2p/engine';
 import type { GameSession } from '@cp2p/protocol';
 import type { BoardRenderer } from '@cp2p/renderer';
-import { DICE_SETTLE_MS, getCommodityCardUrl, getResourceCardUrl } from '@cp2p/renderer';
+import {
+  DICE_SETTLE_MS,
+  getCommodityCardUrl,
+  getGameArtUrl,
+  getResourceCardUrl,
+} from '@cp2p/renderer';
 import { sessionForActions, useSessionStore } from '../../store/session-store';
 import type { CardEnd, CardFlight, HandView } from './card-flights';
 import { useCardHolds, type CountHold } from './card-holds';
+import { useStealReveal, type ScreenPoint } from './steal-reveal';
 import { deriveVisualEffects, type ProductionGain } from './visual-effects';
 import './trade-card-flight.css';
 import './steal-card-flight.css';
@@ -29,6 +35,8 @@ interface CardFlightView {
   y: number;
   dx: number;
   dy: number;
+  /** A stolen card that turns over from its back to its face on the way. */
+  reveal?: boolean;
 }
 
 /**
@@ -43,6 +51,8 @@ export const PRODUCTION_SPREAD_MS = 450;
 const SCROLL_SETTLE_MS = 350;
 /** How long past its flight a hold may live if its flight never reports back. */
 const HOLD_SLACK_MS = 2000;
+/** The longest a stolen card waits on the steal sheet before its count shows anyway. */
+const REVEAL_HOLD_MS = 120_000;
 
 interface TimedProductionGain extends ProductionGain {
   readonly expiresAt: number;
@@ -184,6 +194,19 @@ function handSlot(seat: Seat, kind: string): HTMLElement | null {
   return document.querySelector<HTMLElement>(`.hand-dock [data-resource="${kind}"] img`);
 }
 
+/** A fair steal result flying into the viewer's own hand, whose face the viewer may see. */
+export function isStealInto(
+  flight: CardFlight,
+  seat: Seat,
+): flight is CardFlight & { from: Seat; face: string } {
+  return (
+    flight.id.includes(':steal:') &&
+    flight.to === seat &&
+    flight.from !== 'bank' &&
+    flight.face !== null
+  );
+}
+
 function seatPanel(seat: Seat): HTMLElement | null {
   return document.querySelector<HTMLElement>(`[data-seat-panel="${seat}"]`);
 }
@@ -304,6 +327,8 @@ function cardFlightHolds(flight: CardFlight, expiresAt: number): CountHold[] {
 export function useVisualEffects(
   renderer: Pick<BoardRenderer, 'playEffects' | 'skipAnimations' | 'getPixelPosition'> | null,
   reducedMotion: boolean,
+  /** The thief picks a face-down card on the steal sheet before its own steals show. */
+  pickStealCard = false,
 ) {
   const [flights, setFlights] = useState<FlightView[]>([]);
   const [cardFlights, setCardFlights] = useState<CardFlightView[]>([]);
@@ -314,19 +339,27 @@ export function useVisualEffects(
   useEffect(() => {
     rendererRef.current = renderer;
   }, [renderer]);
-  const cancelPendingFlights = useCallback(() => {
+  const pickRef = useRef(pickStealCard);
+  useEffect(() => {
+    pickRef.current = pickStealCard;
+  }, [pickStealCard]);
+  /** Stop everything in the air; `keepPinned` keeps stolen cards still waiting on the sheet. */
+  const cancelPendingFlights = useCallback((keepPinned = false) => {
     for (const frame of pendingFrames.current) window.cancelAnimationFrame(frame);
     pendingFrames.current.clear();
     for (const timer of pendingTimers.current) window.clearTimeout(timer);
     pendingTimers.current.clear();
-    useCardHolds.getState().clear();
+    useCardHolds.getState().clear(keepPinned);
   }, []);
   const session = sessionForActions();
   const { receipts, add: addProductionGains } = useProductionReceipts(session);
   useEffect(() => {
     setFlights([]);
     setCardFlights([]);
-    return cancelPendingFlights;
+    return () => {
+      useStealReveal.getState().reset();
+      cancelPendingFlights();
+    };
   }, [cancelPendingFlights, session]);
   useEffect(() => {
     if (reducedMotion) {
@@ -359,22 +392,23 @@ export function useVisualEffects(
       for (const expiresAt of new Set(holds.map((item) => item.expiresAt)))
         schedule(() => useCardHolds.getState().prune(Date.now()), expiresAt - now);
     };
-    const launchCard = (flight: CardFlight, retried: boolean) => {
+    /** Fly a card; `start` overrides where it takes off (a card turned over on the steal sheet). */
+    const launchCard = (flight: CardFlight, retried: boolean, start?: ScreenPoint) => {
       const revealed = useSessionStore.getState().revealedSeat;
       // A private face shows only while its own seat's hand is on screen.
       const face =
         flight.private && revealed !== flight.from && revealed !== flight.to ? null : flight.face;
       if (!retried && face) {
         const clipped =
-          clippedSlot(flight.from === 'bank' ? null : handSlot(flight.from, face)) ??
+          clippedSlot(flight.from === 'bank' || start ? null : handSlot(flight.from, face)) ??
           clippedSlot(flight.to === 'bank' ? null : handSlot(flight.to, face));
         if (clipped) {
           clipped.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
-          schedule(() => launchCard(flight, true), SCROLL_SETTLE_MS);
+          schedule(() => launchCard(flight, true, start), SCROLL_SETTLE_MS);
           return;
         }
       }
-      const from = cardEndPoint(flight.from, face);
+      const from = start ?? cardEndPoint(flight.from, face);
       const to = cardEndPoint(flight.to, face);
       if (!from || !to) {
         release(`${flight.id}:in`, `${flight.id}:out`);
@@ -391,13 +425,36 @@ export function useVisualEffects(
           y: from.y,
           dx: to.x - from.x,
           dy: to.y - from.y,
+          // Without the sheet a stolen card turns over in the air; off the sheet it already has.
+          ...(!start && face && revealed !== null && isStealInto(flight, revealed)
+            ? { reveal: true }
+            : {}),
         },
       ]);
       schedule(() => release(`${flight.id}:in`), CARD_LANDS_MS);
     };
+    /** The steal sheet turned a stolen card over: fly it on from there, or just count it. */
+    const launchReveal = (flight: CardFlight, start: ScreenPoint | null) => {
+      const id = `${flight.id}:in`;
+      release(id);
+      if (!start || reducedMotion || flight.to === 'bank') return;
+      // From here it is an ordinary flight, cancelled and pruned like any other.
+      hold([
+        {
+          id,
+          seat: flight.to,
+          kind: flight.face,
+          delta: flight.count,
+          expiresAt: Date.now() + SCROLL_SETTLE_MS + CARD_FLIGHT_MS + HOLD_SLACK_MS,
+        },
+      ]);
+      launchCard(flight, false, start);
+    };
     let before = session.getState();
     let hands = knownHands(session, before);
     let revision = -Infinity;
+    // The viewer's Bishop robs with no victim choice: its steals open the sheet by themselves.
+    let bishopSteals = false;
     const unsubscribe = session.subscribe((update) => {
       const nextHands = knownHands(session, update.state);
       const jump =
@@ -414,6 +471,16 @@ export function useVisualEffects(
       before = update.state;
       hands = nextHands;
       revision = update.revision;
+      const bishop =
+        bishopSteals ||
+        update.events.some(
+          (event) =>
+            event.type === 'progressCardPlayed' &&
+            event.card === 'bishop' &&
+            viewerSeat !== null &&
+            event.seat === viewerSeat,
+        );
+      bishopSteals = bishop && update.state.turn.phase.at(-1)?.id === 'stealResult';
       if (jump) {
         // Undo, restore or a resync: show the new state as it is, with nothing in the air.
         cancelPendingFlights();
@@ -428,10 +495,33 @@ export function useVisualEffects(
         update.revision,
         viewer,
       );
+      // The viewer's own steals wait for the steal sheet to turn them over, when it shows them.
+      const sheeted = new Set<string>();
+      if (viewer)
+        for (const flight of cues.cardFlights) {
+          if (!isStealInto(flight, viewer.seat)) continue;
+          const reveals = useStealReveal.getState();
+          const handSize =
+            previous.seats.find((item) => item.seat === flight.from)?.resources.total ?? 1;
+          const shown = reveals.offer(
+            {
+              thief: viewer.seat,
+              victim: flight.from,
+              handSize,
+              face: flight.face,
+              launch: (start) => launchReveal(flight, start),
+            },
+            // A steal the thief chose goes to its open sheet; only a Bishop's opens one itself.
+            pickRef.current && bishop,
+          );
+          if (shown) sheeted.add(flight.id);
+          else reveals.announce(flight.id, flight.from, flight.face);
+        }
+      const launched = cues.cardFlights.filter((flight) => !sheeted.has(flight.id));
       const rolled = update.events.some((event) => event.type === 'diceRolled');
-      if (rolled || cues.flights.length + cues.cardFlights.length > 0) {
+      if (rolled || cues.flights.length + launched.length > 0) {
         // New cards never queue behind the last ones: whatever is still in the air lands at once.
-        cancelPendingFlights();
+        cancelPendingFlights(true);
         setFlights([]);
         setCardFlights([]);
       }
@@ -451,8 +541,25 @@ export function useVisualEffects(
           })),
         );
       hold(
-        cues.cardFlights.flatMap((flight) =>
+        launched.flatMap((flight) =>
           cardFlightHolds(flight, now + SCROLL_SETTLE_MS + CARD_FLIGHT_MS + HOLD_SLACK_MS),
+        ),
+      );
+      // A stolen card on the sheet counts once it lands, however long the thief takes to pick.
+      hold(
+        cues.cardFlights.flatMap((flight) =>
+          sheeted.has(flight.id) && flight.to !== 'bank'
+            ? [
+                {
+                  id: `${flight.id}:in`,
+                  seat: flight.to,
+                  kind: flight.face,
+                  delta: flight.count,
+                  expiresAt: now + REVEAL_HOLD_MS,
+                  pinned: true,
+                },
+              ]
+            : [],
         ),
       );
       if (renderer) {
@@ -495,9 +602,9 @@ export function useVisualEffects(
           }, launchAt(index));
         });
       }
-      if (cues.cardFlights.length)
+      if (launched.length)
         nextFrame(() => {
-          for (const flight of cues.cardFlights) launchCard(flight, false);
+          for (const flight of launched) launchCard(flight, false);
         });
     });
     // Resubscribing (a new renderer) keeps what is already in the air; a new session, reduced
@@ -536,13 +643,22 @@ export function useVisualEffects(
             ? []
             : [
                 <span
-                  className="trade-card-flight"
+                  className={`trade-card-flight${flight.reveal ? ' steal-reveal-flight' : ''}`}
                   key={flight.id}
                   data-card={flight.face}
                   style={flightStyle(flight)}
-                  onAnimationEnd={() => dropCard(flight.id)}
+                  onAnimationEnd={(event) => {
+                    if (event.target === event.currentTarget) dropCard(flight.id);
+                  }}
                 >
-                  <img src={cardFaceUrl(flight.face)} alt="" />
+                  {flight.reveal ? (
+                    <span className="steal-reveal-flip">
+                      <img className="steal-reveal-back" src={getGameArtUrl('cardBack')} alt="" />
+                      <img className="steal-reveal-face" src={cardFaceUrl(flight.face)} alt="" />
+                    </span>
+                  ) : (
+                    <img src={cardFaceUrl(flight.face)} alt="" />
+                  )}
                   {flight.count > 1 && <b>×{flight.count}</b>}
                 </span>,
               ],
