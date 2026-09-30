@@ -9,6 +9,7 @@ import {
 } from '@cp2p/renderer';
 import { DialogFrame } from '../../dialogs/DialogFrame.js';
 import { resourceLabel } from '../../dialogs/resources.js';
+import { ResourceCardSummary } from '../../trade/ResourceCard.js';
 import type { CommandFormProps } from '../../dialogs/types.js';
 import { TRACKS, isCommodity } from '../state.js';
 import type { Track } from '../state.js';
@@ -34,7 +35,7 @@ export function KindIcon({ kind }: { kind: string }) {
 }
 
 /** The Aqueduct: a roll that gave you nothing pays one resource of your choice. */
-export function AqueductDialog({ legal, onSubmit }: CommandFormProps) {
+export function AqueductDialog({ legal, privateState, onSubmit }: CommandFormProps) {
   const { t } = useTranslation(['knights', 'rules']);
   const choices = legal.commands.filter((command) => command.type === 'CHOOSE_AQUEDUCT');
   if (choices.length === 0) return null;
@@ -61,6 +62,8 @@ export function AqueductDialog({ legal, onSubmit }: CommandFormProps) {
           );
         })}
       </div>
+      {/* The dialog covers the hand on phones, so show what the seat already holds. */}
+      <ResourceCardSummary label={t('rules:trade.yourHand')} values={privateState.hand} />
     </DialogFrame>
   );
 }

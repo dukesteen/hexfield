@@ -47,6 +47,19 @@ describe('the Aqueduct', () => {
     expect(props.onSubmit).toHaveBeenCalledWith({ type: 'CHOOSE_AQUEDUCT', resource: 'ore' });
   });
 
+  test('shows the hand the dialog covers on phones, commodities included', () => {
+    const props = formProps(
+      genesis,
+      commands([{ type: 'CHOOSE_AQUEDUCT', resource: 'ore' }]),
+      handOf({ grain: 2, cloth: 1 }),
+    );
+    withI18n(i18n, <AqueductDialog {...props} />);
+    const hand = screen.getByRole('group', { name: 'Your hand' });
+    expect(hand.textContent).toContain('Grain');
+    expect(hand.textContent).toContain('Cloth');
+    expect(hand.textContent).not.toContain('Ore');
+  });
+
   test('shows nothing when the engine offers no choice', () => {
     const { container } = withI18n(i18n, <AqueductDialog {...formProps(genesis, commands([]))} />);
     expect(container.textContent).toBe('');
