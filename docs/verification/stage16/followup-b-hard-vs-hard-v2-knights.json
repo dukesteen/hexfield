@@ -1,11 +1,6 @@
 {
   "mode": "tournament",
-  "bots": [
-    "hard",
-    "hard-v2",
-    "hard-v2",
-    "hard-v2"
-  ],
+  "bots": ["hard", "hard-v2", "hard-v2", "hard-v2"],
   "seed": 1803,
   "seatsRotation": true,
   "scenario": "knights",

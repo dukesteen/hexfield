@@ -1,11 +1,6 @@
 {
   "mode": "tournament",
-  "bots": [
-    "normal",
-    "normal",
-    "normal",
-    "normal"
-  ],
+  "bots": ["normal", "normal", "normal", "normal"],
   "seed": 1809,
   "seatsRotation": true,
   "scenario": "knights",
