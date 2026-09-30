@@ -1,4 +1,4 @@
-import { fromBase64Url } from '@cp2p/codec';
+import { fromBase64Url, hashValue, toHex } from '@cp2p/codec';
 import { engineForConfig, failure, success } from '@cp2p/engine';
 import type {
   CommandShape,
@@ -76,6 +76,8 @@ export class ReplaySession<Document = unknown> implements GameSession<Document> 
   readonly mode = 'replay' as const;
   readonly timeline: ReplayTimeline;
   readonly stats: ReplayStats;
+  /** Hash of the full engine state after the last input, to check against its source. */
+  readonly finalStateHash: string;
   private readonly listeners = new Set<(update: SessionUpdate) => void>();
   private cursor: number;
   private state: GameState;
@@ -99,6 +101,7 @@ export class ReplaySession<Document = unknown> implements GameSession<Document> 
     this.cursor = transcript.inputs.length;
     this.state = final.state;
     this.privates = final.privates;
+    this.finalStateHash = toHex(hashValue(final.state));
   }
 
   /** Replays the whole transcript once; any rejected input rejects the replay. */

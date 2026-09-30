@@ -1,37 +1,8 @@
-import { readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { hashValue, toHex } from '@cp2p/codec';
-import type { GameConfig, Input } from '@cp2p/engine';
 import { describe, expect, test } from 'vitest';
 import { CHECKPOINT_INTERVAL, ReplaySession } from './replay-session.js';
 import type { ReplayTranscript } from './replay-session.js';
-
-const golden = join(
-  dirname(fileURLToPath(import.meta.url)),
-  '../../../../../packages/engine/test/golden',
-);
-
-interface GoldenReplay {
-  config: GameConfig;
-  genesisSeed: string;
-  inputs: Input[];
-  checkpoints: { index: number; stateHash: string }[];
-}
-
-/** Engine goldens are local games: every input carries its own identities. */
-export function goldenTranscript(file: string): ReplayTranscript<null> & { raw: GoldenReplay } {
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Verified by the engine goldens.
-  const raw = JSON.parse(readFileSync(join(golden, file), 'utf8')) as GoldenReplay;
-  return {
-    raw,
-    config: raw.config,
-    genesisSeed: raw.genesisSeed,
-    inputs: raw.inputs,
-    privateData: [],
-    document: null,
-  };
-}
+import { goldenTranscript } from './replay-golden.test-helper.js';
 
 function created(transcript: ReplayTranscript<null>): ReplaySession<null> {
   const session = ReplaySession.create(transcript);

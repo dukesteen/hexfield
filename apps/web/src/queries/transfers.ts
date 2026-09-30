@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { BOT_LEVELS } from '@cp2p/bots';
 import { DEFAULT_BOT_DELAY_MS, LOBBY_COLOURS } from '@cp2p/protocol';
 import * as v from 'valibot';
 import { PLAYER_COLORS, PLAYER_SEATS, PLAYER_SHAPES } from '../features/players/identity';
@@ -18,6 +19,8 @@ const presentationSchema = v.strictObject({
         name: v.pipe(v.string(), v.minLength(1), v.maxLength(40)),
         color: v.picklist(LOBBY_COLOURS),
         shape: v.picklist(PLAYER_SHAPES),
+        // A bot game's saved presentation names each bot's level.
+        bot: v.optional(v.picklist(BOT_LEVELS)),
       }),
     ),
     v.minLength(2),
@@ -77,7 +80,7 @@ function checkedPresentation(raw: unknown, save: LocalSessionSave): GamePresenta
 }
 
 /** Keep batch boundaries so an exported replay remains a verifiable local authority. */
-export function createLocalReplay(raw: unknown, presentation?: GamePresentation): LocalReplay {
+export function createLocalReplay(raw: unknown, presentation?: unknown): LocalReplay {
   const save = verifiedSave(raw);
   return {
     format: 'hexfield-local-replay',
@@ -86,7 +89,9 @@ export function createLocalReplay(raw: unknown, presentation?: GamePresentation)
     save,
     inputs: flattenedInputs(save),
     finalHash: save.finalHash,
-    ...(presentation ? { presentation: checkedPresentation(presentation, save) } : {}),
+    ...(presentation !== undefined
+      ? { presentation: checkedPresentation(presentation, save) }
+      : {}),
   };
 }
 
