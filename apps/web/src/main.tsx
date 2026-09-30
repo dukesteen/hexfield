@@ -7,6 +7,7 @@ import { i18n } from './i18n';
 import { queryClient } from './queryClient';
 import { router } from './router';
 import { canonicalUrl } from './canonical-host';
+import { registerServiceWorker } from './pwa/register';
 import './style.css';
 import './app.css';
 import './features/game/game-theme.css';
@@ -16,6 +17,9 @@ import './features/game/mobile-theme.css';
 // www.<domain> serves the same files; move to the bare domain so there is one app origin.
 const canonical = canonicalUrl(window.location);
 if (canonical) window.location.replace(canonical);
+
+// Offline play and the update prompt (stage 18); production builds only.
+if (!canonical) registerServiceWorker();
 
 const root = document.getElementById('root');
 if (!root) throw new Error('Missing #root');

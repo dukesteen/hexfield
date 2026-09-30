@@ -1,0 +1,13 @@
+# Cloudflare Workers static-asset headers (ignored by GitHub Pages).
+# The service worker and manifest must revalidate so an update is found promptly;
+# hashed build output never changes, so it may be cached for a year.
+/sw.js
+  Cache-Control: no-cache
+/manifest.webmanifest
+  Cache-Control: no-cache
+/
+  Cache-Control: no-cache
+/index.html
+  Cache-Control: no-cache
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
