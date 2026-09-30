@@ -6,7 +6,7 @@ import { MAX_ONLINE_PUBLIC_ARCHIVE_BYTES } from '../../session/online-public-arc
 import { replayFailureMessage } from './replay-failure.js';
 
 export function PublicReplayLibrary() {
-  const { t } = useTranslation('lobby');
+  const { t } = useTranslation(['lobby', 'game']);
   const navigate = useNavigate();
   const catalogue = usePublicReplays();
   const imported = useImportPublicReplay();
@@ -49,6 +49,9 @@ export function PublicReplayLibrary() {
       >
         {t('lobby:publicReplayImport')}
       </button>
+      <Link to="/replay/import" className="button button-quiet">
+        {t('game:replay.openString')}
+      </Link>
       {imported.isPending && <p role="status">{t('lobby:publicReplayVerifying')}</p>}
       {(error !== null || catalogue.isError) && (
         <p role="alert">{replayFailureMessage(error ?? catalogue.error, t)}</p>

@@ -350,3 +350,25 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* A saved game row with its replay link beside it. */
+.saved-game-entry {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.saved-game-entry > .saved-game-row {
+  flex: 1 1 auto;
+  min-width: 0;
+  border-bottom: 0;
+}
+
+.saved-game-replay {
+  flex: 0 0 auto;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+}

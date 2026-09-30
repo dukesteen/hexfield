@@ -955,6 +955,8 @@ interface GameScreenProps {
   devTools?: React.ReactNode;
   onRematch?: () => Promise<void>;
   onExportReplay: () => Promise<void>;
+  /** Open the finished game in the replay viewer. */
+  onWatchReplay?: () => Promise<void>;
   onRendererReady?: (renderer: BoardRenderer) => void;
   onActionsChange?: (actions: ActionAvailability | null, revision: number) => void;
 }
@@ -971,6 +973,7 @@ export function GameReadOnly({
   devTools,
   onRematch,
   onExportReplay,
+  onWatchReplay,
   onRendererReady,
   onActionsChange,
 }: GameScreenProps) {
@@ -991,6 +994,7 @@ export function GameReadOnly({
       {...(devTools ? { devTools } : {})}
       {...(onRematch ? { onRematch } : {})}
       onExportReplay={onExportReplay}
+      {...(onWatchReplay ? { onWatchReplay } : {})}
       {...(onRendererReady ? { onRendererReady } : {})}
       {...(onActionsChange ? { onActionsChange } : {})}
     />
@@ -1068,6 +1072,7 @@ function LiveGame({
   devTools,
   onRematch,
   onExportReplay,
+  onWatchReplay,
   onRendererReady,
   onActionsChange,
 }: GameScreenProps & { state: GameState }) {
@@ -1507,6 +1512,7 @@ function LiveGame({
           onHome={onLeave}
           {...(onRematch ? { onRematch } : {})}
           onExportReplay={onExportReplay}
+          {...(onWatchReplay ? { onWatchReplay } : {})}
           {...(resultNotice !== undefined ? { resultNotice } : {})}
         />
       )}

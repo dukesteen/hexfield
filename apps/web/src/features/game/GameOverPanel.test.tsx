@@ -38,7 +38,7 @@ beforeAll(async () => {
 });
 afterEach(cleanup);
 
-function show(onHome?: () => void) {
+function show(onHome?: () => void, onWatchReplay?: () => Promise<void>) {
   return render(
     <I18nextProvider i18n={i18n}>
       <GameOverPanel
@@ -48,6 +48,7 @@ function show(onHome?: () => void) {
         onViewBoard={() => undefined}
         {...(onHome ? { onHome } : {})}
         onExportReplay={() => Promise.resolve()}
+        {...(onWatchReplay ? { onWatchReplay } : {})}
       />
     </I18nextProvider>,
   );
@@ -63,4 +64,11 @@ test('the results offer a way back to the home screen', () => {
 test('without a home action the results show no Home button', () => {
   show();
   expect(screen.queryByRole('button', { name: 'Home', hidden: true })).toBeNull();
+});
+
+test('the results open the game in the replay viewer', () => {
+  const onWatchReplay = vi.fn<() => Promise<void>>(() => Promise.resolve());
+  show(undefined, onWatchReplay);
+  fireEvent.click(screen.getByRole('button', { name: 'Watch replay', hidden: true }));
+  expect(onWatchReplay).toHaveBeenCalledOnce();
 });

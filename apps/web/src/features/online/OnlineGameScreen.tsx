@@ -27,7 +27,10 @@ import type { OnlineTransferBrowser } from '../../session/online-transfer-browse
 import { createTransferInviteUrl } from '../../session/online-transfer-link';
 import { useRequestPersistentStorage } from '../../queries/storage-persistence';
 import { queryKeys } from '../../queries/keys';
-import { encodePublicReplay } from '../../session/online-public-archive-client.js';
+import {
+  encodePublicReplay,
+  importPublicReplay,
+} from '../../session/online-public-archive-client.js';
 import { FullSaveExportDialog } from './FullSaveExportDialog.js';
 import { RecoveryVoidDialog } from './RecoveryVoidDialog.js';
 import { PLAYER_SHAPES } from '../players/identity';
@@ -383,6 +386,18 @@ function OnlineGameInstance({
       }
     },
   });
+  /**
+   * Opens the certified history in the replay viewer and leaves the room. Hands stay hidden
+   * until the audit's masters are saved; the history list's replay then shows them.
+   */
+  const watchReplay = async () => {
+    const history = await Promise.resolve(game.session.exportSave());
+    const archiveId = await importPublicReplay(await encodePublicReplay(game.gameId, history));
+    await closeOnlineRoom(room.invite.roomId);
+    await queryClient.invalidateQueries({ queryKey: queryKeys.onlineGames(), exact: true });
+    allowNavigation.current = true;
+    await navigate({ to: '/replay/$archiveId', params: { archiveId } });
+  };
   const leave = async () => {
     if (busy) return;
     setBusy(true);
@@ -452,6 +467,7 @@ function OnlineGameInstance({
           saveStatus={status?.kind === 'error' ? 'error' : 'saved'}
           onLeave={() => setLeaving(true)}
           onExportReplay={() => exported.mutateAsync()}
+          onWatchReplay={watchReplay}
           resultNotice={resultNotice}
           menuActions={
             <>

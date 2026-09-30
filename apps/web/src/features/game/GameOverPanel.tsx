@@ -54,6 +54,7 @@ export function GameOverPanel({
   onHome,
   onRematch,
   onExportReplay,
+  onWatchReplay,
   resultNotice,
 }: {
   state: GameState;
@@ -64,6 +65,8 @@ export function GameOverPanel({
   onHome?: () => void;
   onRematch?: () => Promise<void>;
   onExportReplay: () => Promise<void>;
+  /** Open the game in the replay viewer. */
+  onWatchReplay?: () => Promise<void>;
   resultNotice?: ReactNode;
 }) {
   const { t } = useTranslation('game');
@@ -258,6 +261,16 @@ export function GameOverPanel({
         >
           {t('game:exportReplay')}
         </button>
+        {onWatchReplay && (
+          <button
+            className="button button-quiet"
+            type="button"
+            disabled={busy}
+            onClick={() => void run(onWatchReplay)}
+          >
+            {t('game:replay.watch')}
+          </button>
+        )}
         {onRematch && (
           <button
             className="button button-primary"

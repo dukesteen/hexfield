@@ -276,6 +276,18 @@ function LocalGameInstance({ record, gameId }: { record: SavedGameRecord; gameId
     });
   };
 
+  const watchReplay = async () => {
+    // The replay reads the saved game, so save the finished game first.
+    await coordinatorRef.current?.flush();
+    allowNavigationRef.current = true;
+    try {
+      await navigate({ to: '/replay/local/$gameId', params: { gameId } });
+    } catch (error) {
+      allowNavigationRef.current = false;
+      throw error;
+    }
+  };
+
   const rematch = async () => {
     const session = sessionRef.current;
     if (!session) throw new Error('No live session');
@@ -349,6 +361,7 @@ function LocalGameInstance({ record, gameId }: { record: SavedGameRecord; gameId
           }
           onRematch={rematch}
           onExportReplay={exportCurrentReplay}
+          onWatchReplay={watchReplay}
           onRendererReady={setRenderer}
           onActionsChange={onActionsChange}
         />
