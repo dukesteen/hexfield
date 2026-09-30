@@ -72,6 +72,17 @@ by the assets binding before the SPA fallback. After a deploy, check that
 home page in an Open Graph checker (for example opengraph.xyz) or a chat app. Chat
 apps cache previews, so a changed image may need their cache refresh.
 
+App updates and offline play: the build ships a Workbox service worker (`sw.js`)
+that precaches the whole app. `apps/web/public/_headers` (copied into `dist/`)
+makes `/sw.js`, `/manifest.webmanifest`, `/` and `/index.html` revalidate
+(`Cache-Control: no-cache`) and the hashed `/assets/*` immutable, so a deploy is
+found at the browser's next update check. Players see "Update available" on a
+non-game screen and reload when they choose; open games are never reloaded. The
+worker never serves `/room/*`, `/api/*` or `/healthz` from its cache. After a
+deploy, check `curl -I https://playhexfield.com/sw.js` shows `no-cache` and
+`/manifest.webmanifest` answers `200`. See the
+[PWA evidence](../verification/stage18/pwa.md) for the phone checks.
+
 Worker invocation logs are disabled to avoid recording room URLs. Application
 errors omit provider bodies and credentials. Use deployment versions for code
 rollbacks; Durable Object migrations and data do not roll back with code.

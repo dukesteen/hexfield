@@ -564,7 +564,7 @@ Source: [17-spectators-replays-map-editor.md](17-spectators-replays-map-editor.m
 
 Source: [18-pwa-release.md](18-pwa-release.md)
 
-- [ ] Installable PWA; offline local and bot games work in airplane mode.
+- [x] Installable PWA; offline local and bot games work in airplane mode. [Evidence](verification/stage18/pwa.md): Chromium's installability check passes and a production build plays base, seafaring and knights bot games with the network off. A real-phone airplane-mode check is pending after deploy.
 - [ ] Performance budgets and accessibility checks pass in CI.
 - [ ] Automated deploys for the app and the signaling service.
 - [ ] The release checklist is completed for v1.0.0.
