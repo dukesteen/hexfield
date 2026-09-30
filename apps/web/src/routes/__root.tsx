@@ -7,6 +7,7 @@ import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSettings } from '../queries/hooks';
 import { LocalVaultGate } from '../features/online/LocalVaultGate.js';
+import { PwaNotices } from '../pwa/PwaNotices.js';
 
 function ThemePreference() {
   const { data } = useSettings();
@@ -38,6 +39,7 @@ function RootContent() {
       <LocalVaultGate bypass={localGame || path === '/settings' || path.startsWith('/editor')}>
         <Outlet />
       </LocalVaultGate>
+      <PwaNotices />
       {import.meta.env.DEV && !localGame && (
         <>
           <TanStackRouterDevtools />

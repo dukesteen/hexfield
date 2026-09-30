@@ -851,3 +851,15 @@
     padding: 14px;
   }
 }
+
+.online-version-notice {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  align-items: center;
+}
+
+.online-version-notice p {
+  flex: 1 1 240px;
+  margin: 0;
+}

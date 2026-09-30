@@ -65,5 +65,12 @@
     "working": "Updating local protection…",
     "playLocal": "Play a local game instead",
     "cancel": "Cancel"
-  }
+  },
+  "pwaUpdateAvailable": "Update available",
+  "pwaUpdateDescription": "A new version of Hexfield is ready.",
+  "pwaUpdateReload": "Reload",
+  "pwaUpdateLater": "Later",
+  "pwaUpdating": "Updating Hexfield…",
+  "pwaBackgroundWarning": "Keep Hexfield in front during online games. While this tab is in the background, your browser may pause it and disconnect you from the other players.",
+  "pwaDismiss": "Dismiss"
 }

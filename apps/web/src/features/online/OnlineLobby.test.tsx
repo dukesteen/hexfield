@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render } from '@testing-library/react';
+import { cleanup, fireEvent, render, within } from '@testing-library/react';
 import { canonicalEncode } from '@cp2p/codec';
 import { identityFromSecret, signObject } from '@cp2p/crypto';
 import { BASE_VERSION, ENGINE_VERSION, success } from '@cp2p/engine';
@@ -213,9 +213,12 @@ test.each(['protocol-version', 'engine-version'] as const)(
         kind === 'protocol-version'
           ? englishLobby.onlineProtocolMismatch
           : englishLobby.onlineEngineMismatch;
-      expect(page.getByRole('alert').textContent).toBe(
+      const alert = page.getByRole('alert');
+      expect(alert.querySelector('p')?.textContent).toBe(
         message.replace('{{version}}', String(hostVersion)),
       );
+      // Stage 18: the notice offers an update, which never reloads mid-game by itself.
+      expect(within(alert).getByRole('button', { name: 'lobby:onlineUpdateNow' })).toBeTruthy();
       expect(page.queryByRole('button', { name: 'lobby:onlineStartAction' })).toBeNull();
       expect(startGame).not.toHaveBeenCalled();
     } finally {

@@ -17,6 +17,7 @@ import { ConnectionDiagnostics } from './ConnectionDiagnostics';
 import { OnlineConfiguration } from './OnlineConfiguration';
 import { LobbyNameEditor } from './LobbyNameEditor';
 import { ChatPanel } from './ChatPanel';
+import { VersionMismatchNotice } from './VersionMismatchNotice';
 import './online.css';
 
 /** The lobby's bot levels (a signed protocol field): easy, normal ('medium') and hard. */
@@ -208,15 +209,21 @@ export function OnlineLobby({
             {t('lobby:onlineConnectionNotice')}
           </p>
         )}
-        {snapshot.diagnostic && (
-          <p className="online-notice" role="alert">
-            {snapshot.diagnostic.kind === 'protocol-version'
-              ? t('lobby:onlineProtocolMismatch', { version: snapshot.diagnostic.hostVersion })
-              : snapshot.diagnostic.kind === 'engine-version'
-                ? t('lobby:onlineEngineMismatch', { version: snapshot.diagnostic.hostVersion })
-                : t('lobby:onlineInvalidLobbyMessage')}
-          </p>
-        )}
+        {snapshot.diagnostic &&
+          (snapshot.diagnostic.kind === 'protocol-version' ||
+          snapshot.diagnostic.kind === 'engine-version' ? (
+            <VersionMismatchNotice
+              message={
+                snapshot.diagnostic.kind === 'protocol-version'
+                  ? t('lobby:onlineProtocolMismatch', { version: snapshot.diagnostic.hostVersion })
+                  : t('lobby:onlineEngineMismatch', { version: snapshot.diagnostic.hostVersion })
+              }
+            />
+          ) : (
+            <p className="online-notice" role="alert">
+              {t('lobby:onlineInvalidLobbyMessage')}
+            </p>
+          ))}
         {actionError && (
           <p className="online-notice" role="alert">
             {t('lobby:onlineActionFailed')}

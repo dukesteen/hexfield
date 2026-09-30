@@ -1,0 +1,40 @@
+/* Non-blocking notices: the update prompt and the online backgrounding warning. */
+.pwa-toast {
+  position: fixed;
+  top: max(12px, env(safe-area-inset-top));
+  left: 50%;
+  z-index: 40;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  align-items: center;
+  justify-content: space-between;
+  width: min(520px, calc(100vw - 32px));
+  padding: 10px 12px 10px 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 6px 18px var(--panel-shadow);
+  transform: translateX(-50%);
+}
+
+.pwa-toast p {
+  flex: 1 1 220px;
+  margin: 0;
+  font-size: 0.92rem;
+}
+
+.pwa-toast-warning {
+  border-color: color-mix(in srgb, var(--error), transparent 55%);
+}
+
+.pwa-toast-actions {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.pwa-toast-actions .button {
+  min-height: 40px;
+}
