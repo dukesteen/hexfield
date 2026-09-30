@@ -104,7 +104,8 @@ module.exports = {
       from: { path: '^packages/maps/', pathNot: '\\.test\\.[cm]?[jt]sx?$' },
       to: {
         pathNot:
-          '^(packages/(?:maps|engine)/|@cp2p/engine(?:/|$)|valibot(?:/|$)|node_modules/[.]pnpm/valibot@|node_modules/valibot/)',
+          // codec: the map share string uses the canonical JSON and base64url the hashes use.
+          '^(packages/(?:maps|engine|codec)/|@cp2p/(?:engine|codec)(?:/|$)|valibot(?:/|$)|node_modules/[.]pnpm/valibot@|node_modules/valibot/)',
       },
     },
     {
