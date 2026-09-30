@@ -83,4 +83,4 @@ Stage 10 is complete (the storage and replay formats exist). The map editor also
 
 - [ ] A spectator can watch a live 4-player P2P game. The message-interception test proves it received no secrets.
 - [ ] Any finished game can be replayed, with an omniscient view after the audit. Seeking to any point takes < 200 ms.
-- [ ] A custom map made in the editor can be shared as a string, loaded in a lobby, and played P2P.
+- [x] A custom map made in the editor can be shared as a string, loaded in a lobby, and played P2P. ([verification](verification/stage17/map-editor.md))
