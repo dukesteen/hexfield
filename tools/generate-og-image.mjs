@@ -1,4 +1,5 @@
 // Regenerate the share image and icons: node tools/generate-og-image.mjs
+// Only the favicons and PWA app icons: node tools/generate-og-image.mjs --icons-only
 // Composes the redesign art into SVG, renders it with Playwright's Chromium and, when the
 // pngquant binary is on PATH, quantises the PNGs so they stay small for link previews.
 import assert from 'node:assert/strict';
@@ -185,8 +186,12 @@ function brandHex(cx, cy, r) {
 <path d="${hexPath(cx, cy, r * 0.62)}" fill="none" stroke="#f5ebd9" stroke-opacity="0.55" stroke-width="${round(r * 0.1)}"/>`;
 }
 
-const brandSvg = (size, background) => {
-  const r = size * (background ? 0.36 : 0.44);
+/**
+ * `maskable` keeps the tile inside the manifest's 80% safe circle, since launchers may crop
+ * the icon to any shape inside it.
+ */
+const brandSvg = (size, background, maskable = false) => {
+  const r = size * (maskable ? 0.3 : background ? 0.36 : 0.44);
   const cy = size / 2 - r * 0.08;
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${size} ${size}" width="${size}" height="${size}">${
     background ? `<rect width="${size}" height="${size}" fill="${palette.page}"/>` : ''
@@ -344,27 +349,34 @@ async function render(
   compress(file, colors);
 }
 
-const icon = (size, background) =>
-  `<!doctype html><html><body style="margin:0;background:transparent">${brandSvg(size, background)}</body></html>`;
+const icon = (size, background, maskable = false) =>
+  `<!doctype html><html><body style="margin:0;background:transparent">${brandSvg(size, background, maskable)}</body></html>`;
 
+const iconsOnly = process.argv.includes('--icons-only');
 const browser = await chromium.launch();
 try {
   await Promise.all([
-    ...Object.entries(cards).map(([file, card]) =>
+    ...(iconsOnly ? [] : Object.entries(cards)).map(([file, card]) =>
       render(browser, file, page(card), card.width, card.height, { colors: card.colors }),
     ),
     render(browser, 'favicon-32.png', icon(32, false), 32, 32, { transparent: true, colors: 64 }),
     render(browser, 'apple-touch-icon.png', icon(180, true), 180, 180, { colors: 64 }),
+    // The web app manifest's install icons (stage 18): opaque tiles plus a maskable one.
+    render(browser, 'icon-192.png', icon(192, true), 192, 192, { colors: 64 }),
+    render(browser, 'icon-512.png', icon(512, true), 512, 512, { colors: 64 }),
+    render(browser, 'icon-maskable-512.png', icon(512, true, true), 512, 512, { colors: 64 }),
   ]);
 } finally {
   await browser.close();
 }
 writeFileSync(new URL('favicon.svg', out), `${brandSvg(64, false)}\n`);
 for (const file of [
-  'og.png',
-  'og-square.png',
+  ...(iconsOnly ? [] : ['og.png', 'og-square.png']),
   'favicon.svg',
   'favicon-32.png',
   'apple-touch-icon.png',
+  'icon-192.png',
+  'icon-512.png',
+  'icon-maskable-512.png',
 ])
   console.log(`${file}: ${Math.round(statSync(new URL(file, out)).size / 1024)} KB`);
