@@ -576,9 +576,10 @@
 }
 
 /* On-board chat access; sits under the game menu button. */
+/* Below the game menu (z-index 30) so its open panel covers the launcher. */
 .online-chat-launcher {
   position: fixed;
-  z-index: 30;
+  z-index: 29;
   top: calc(64px + env(safe-area-inset-top));
   left: 12px;
   display: flex;
