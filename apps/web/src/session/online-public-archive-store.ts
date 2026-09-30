@@ -175,3 +175,68 @@ export async function importOnlinePublicArchive(
     return failure('public-archive-storage', 'Public replay could not be stored');
   }
 }
+
+const mastersSchema = v.strictObject({
+  protocol: v.literal('online-public-archive-masters-v1'),
+  masters: v.pipe(
+    v.array(
+      v.strictObject({
+        seat: v.picklist([0, 1, 2, 3, 4, 5] as const),
+        master: v.pipe(v.string(), v.regex(/^[A-Za-z0-9_-]{43}$/)),
+      }),
+    ),
+    v.minLength(2),
+    v.maxLength(6),
+  ),
+});
+
+export type ArchiveMasters = v.InferOutput<typeof mastersSchema>['masters'];
+
+function mastersKey(id: string): string {
+  return `${NAMESPACE}/masters/${id}`;
+}
+
+/**
+ * Keeps the audit's revealed masters beside an archive, so reopening it can show every hand.
+ * They are unverified here; opening passes them through the audit, which checks each against
+ * the signed genesis. A later import replaces them (a stale set would only fail that audit).
+ */
+export async function saveOnlineArchiveMasters(
+  store: EscrowCeremonyStore,
+  id: string,
+  masters: ArchiveMasters,
+): Promise<Result<void>> {
+  if (!ID.test(id)) return failure('public-archive-id', 'Public replay identifier is invalid');
+  const parsed = v.safeParse(mastersSchema, {
+    protocol: 'online-public-archive-masters-v1',
+    masters,
+  });
+  if (!parsed.success) return failure('public-archive-masters', 'Revealed masters are invalid');
+  try {
+    const bytes = canonicalEncode(parsed.output);
+    const key = mastersKey(id);
+    if (await store.putIfAbsent(key, bytes)) return success(undefined);
+    const existing = await store.load(key);
+    if (existing && equalBytes(existing, bytes)) return success(undefined);
+    return existing && (await store.compareAndSwap(key, existing, bytes))
+      ? success(undefined)
+      : failure('public-archive-masters', 'Revealed masters changed during import');
+  } catch {
+    return failure('public-archive-storage', 'Revealed masters could not be stored');
+  }
+}
+
+export async function loadOnlineArchiveMasters(
+  store: EscrowCeremonyStore,
+  id: string,
+): Promise<ArchiveMasters | null> {
+  if (!ID.test(id)) return null;
+  try {
+    const bytes = await store.load(mastersKey(id));
+    if (!bytes || bytes.length > 4096) return null;
+    const parsed = v.safeParse(mastersSchema, canonicalDecode(bytes));
+    return parsed.success ? parsed.output.masters : null;
+  } catch {
+    return null;
+  }
+}

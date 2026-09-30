@@ -39,6 +39,8 @@ export interface VerifiedPublicOnlineArchive {
   readonly state: Readonly<GameState>;
   readonly inputs: readonly Input[];
   readonly events: readonly GameEvent[];
+  /** The exact archive file, so a viewer can export what it opened. */
+  readonly bytes: Uint8Array;
 }
 
 function equalBytes(left: Uint8Array, right: Uint8Array): boolean {
@@ -160,6 +162,7 @@ export function validateOnlinePublicArchive(
     state: replay.context.log.state,
     inputs: replay.inputs,
     events: replay.events,
+    bytes,
   });
 }
 

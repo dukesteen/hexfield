@@ -38,6 +38,26 @@ function isResponse(value: unknown, id: number): value is OnlineSavedGameWorkerR
       bytes.byteLength <= MAX_ONLINE_PUBLIC_ARCHIVE_BYTES
     );
   }
+  if (kind === 'replayed') {
+    const bytes: unknown = Reflect.get(value, 'bytes');
+    const masters: unknown = Reflect.get(value, 'masters');
+    return (
+      keys === 'bytes,id,kind,masters' &&
+      bytes instanceof Uint8Array &&
+      bytes.byteLength <= MAX_ONLINE_PUBLIC_ARCHIVE_BYTES &&
+      Array.isArray(masters) &&
+      masters.length <= 6 &&
+      masters.every(
+        (item: unknown) =>
+          typeof item === 'object' &&
+          item !== null &&
+          Object.keys(item).toSorted().join(',') === 'master,seat' &&
+          Number.isInteger(Reflect.get(item, 'seat')) &&
+          Reflect.get(item, 'master') instanceof Uint8Array &&
+          Reflect.get(item, 'master').length === 32,
+      )
+    );
+  }
   if (kind === 'deleted') {
     const result = Reflect.get(value, 'result');
     return (
@@ -50,7 +70,7 @@ function isResponse(value: unknown, id: number): value is OnlineSavedGameWorkerR
 
 function runJob(
   request:
-    | { readonly kind: 'export'; readonly gameId: string }
+    | { readonly kind: 'export' | 'replay'; readonly gameId: string }
     | { readonly kind: 'delete'; readonly gameId: string; readonly genesisDigest: string },
   factory: SavedGameWorkerFactory,
   signal?: AbortSignal,
@@ -128,6 +148,20 @@ export async function exportStoredGameReplayWithSignal(
   const response = await runJob({ kind: 'export', gameId }, defaultWorker, signal);
   if (response.kind !== 'exported') throw new Error('Saved-game worker returned the wrong result');
   return new Uint8Array(response.bytes);
+}
+
+/**
+ * The verified public archive plus the masters every seat revealed for the audit (empty when
+ * the audit did not verify), so the replay viewer can show every hand.
+ */
+export async function exportStoredGameReplayWithMasters(
+  gameId: string,
+  signal?: AbortSignal,
+): Promise<{ bytes: Uint8Array; masters: readonly { seat: number; master: Uint8Array }[] }> {
+  if (!GAME_ID.test(gameId)) throw new Error('Invalid online game identifier');
+  const response = await runJob({ kind: 'replay', gameId }, defaultWorker, signal);
+  if (response.kind !== 'replayed') throw new Error('Saved-game worker returned the wrong result');
+  return { bytes: new Uint8Array(response.bytes), masters: response.masters };
 }
 
 /** Permanently forgets local game data; a busy result leaves the game available. */

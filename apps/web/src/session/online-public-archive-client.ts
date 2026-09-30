@@ -3,7 +3,7 @@ import { getOnlineVaultController } from './online-vault-controller.js';
 import { MAX_ONLINE_PUBLIC_ARCHIVE_BYTES } from './online-public-archive-format.js';
 import type { PublicArchiveVersion } from './online-public-archive.js';
 import type {
-  PublicArchiveDisplay,
+  PublicArchiveReplay,
   PublicArchiveWorkerResponse,
 } from './online-public-archive-worker.js';
 
@@ -75,7 +75,11 @@ function validResponse(value: unknown, id: number): value is PublicArchiveWorker
 
 async function runJob(
   body:
-    | { readonly kind: 'import'; readonly bytes: Uint8Array }
+    | {
+        readonly kind: 'import';
+        readonly bytes: Uint8Array;
+        readonly masters?: readonly { readonly seat: number; readonly master: Uint8Array }[];
+      }
     | {
         readonly kind: 'open';
         readonly archiveId: string;
@@ -163,11 +167,22 @@ async function runJob(
 export async function importPublicReplay(
   supplied: Uint8Array,
   factory: PublicArchiveWorkerFactory = defaultWorker,
+  masters?: readonly { readonly seat: number; readonly master: Uint8Array }[],
 ): Promise<string> {
   if (!(supplied instanceof Uint8Array) || supplied.length > MAX_ONLINE_PUBLIC_ARCHIVE_BYTES)
     throw new Error('Public replay exceeds its size limit');
   const bytes = new Uint8Array(supplied);
-  const response = await runJob({ kind: 'import', bytes }, factory, [bytes.buffer]);
+  const response = await runJob(
+    masters?.length
+      ? {
+          kind: 'import',
+          bytes,
+          masters: masters.map((item) => ({ seat: item.seat, master: item.master.slice() })),
+        }
+      : { kind: 'import', bytes },
+    factory,
+    [bytes.buffer],
+  );
   if (response.kind !== 'imported')
     throw new Error('Public replay worker returned the wrong result');
   return response.archiveId;
@@ -177,7 +192,7 @@ export async function openPublicReplay(
   id: string,
   factory: PublicArchiveWorkerFactory = defaultWorker,
   signal?: AbortSignal,
-): Promise<PublicArchiveDisplay | null> {
+): Promise<PublicArchiveReplay | null> {
   if (!/^[0-9a-f]{64}$/.test(id)) throw new Error('Invalid public replay identifier');
   const response = await runJob({ kind: 'open', archiveId: id }, factory, [], signal);
   if (response.kind !== 'opened') throw new Error('Public replay worker returned the wrong result');

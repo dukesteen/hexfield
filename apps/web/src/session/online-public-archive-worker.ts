@@ -1,13 +1,19 @@
 import { IndexedDbByteStore } from '@cp2p/storage';
-import type { GameEvent, GameState } from '@cp2p/engine';
+import { createCatalogueEngine } from '@cp2p/engine';
+import type { GameConfig, GameEvent, GameState, Input, PrivateInputData, Seat } from '@cp2p/engine';
+import { auditCertifiedGame } from '@cp2p/protocol';
 import type { EscrowCeremonyStore } from '@cp2p/protocol';
 import {
   importOnlinePublicArchive,
   listOnlinePublicArchiveSummaries,
+  loadOnlineArchiveMasters,
   openOnlinePublicArchive,
   peekStoredOnlinePublicArchiveVersion,
+  saveOnlineArchiveMasters,
 } from './online-public-archive-store.js';
-import type { PublicArchiveSummary } from './online-public-archive-store.js';
+import type { ArchiveMasters, PublicArchiveSummary } from './online-public-archive-store.js';
+import type { VerifiedPublicOnlineArchive } from './online-public-archive.js';
+import { baseAuditPolicy } from './audit-worker-job.js';
 import { MAX_ONLINE_PUBLIC_ARCHIVE_BYTES } from './online-public-archive.js';
 import {
   encodeOnlinePublicArchive,
@@ -15,12 +21,18 @@ import {
 } from './online-public-archive.js';
 import type { PublicArchiveVersion } from './online-public-archive.js';
 import { loadOnlineGameRecord } from './online-game-records.js';
-import { canonicalEncode } from '@cp2p/codec';
+import { canonicalEncode, fromBase64Url, toBase64Url } from '@cp2p/codec';
 import { certifiedEntrySchema, logEntrySchema } from '@cp2p/protocol';
 import * as v from 'valibot';
 
 export type PublicArchiveWorkerRequest =
-  | { readonly id: number; readonly kind: 'import'; readonly bytes: Uint8Array }
+  | {
+      readonly id: number;
+      readonly kind: 'import';
+      readonly bytes: Uint8Array;
+      /** The audit's revealed masters, kept beside the archive for a full-information replay. */
+      readonly masters?: readonly { readonly seat: number; readonly master: Uint8Array }[];
+    }
   | { readonly id: number; readonly kind: 'open'; readonly archiveId: string }
   | { readonly id: number; readonly kind: 'list' }
   | {
@@ -49,9 +61,25 @@ export interface PublicArchiveDisplay {
   }[];
 }
 
+/** An opened archive with what the replay viewer needs to step through it. */
+export interface PublicArchiveReplay extends PublicArchiveDisplay {
+  /** The replay transcript: the signed genesis rules and seed, and every certified input. */
+  readonly config: GameConfig;
+  readonly genesisSeed: string;
+  readonly inputs: readonly Input[];
+  /**
+   * Each input's private data from a passing audit of the revealed masters, or null when the
+   * game has no complete, verified audit (the replay is then public only).
+   */
+  readonly privateData: readonly (Partial<Record<Seat, PrivateInputData>> | null)[] | null;
+  /** The exact archive file and, when the audit passed, the masters it used. */
+  readonly bytes: Uint8Array;
+  readonly masters: ArchiveMasters | null;
+}
+
 export type PublicArchiveWorkerResponse =
   | { readonly id: number; readonly kind: 'imported'; readonly archiveId: string }
-  | { readonly id: number; readonly kind: 'opened'; readonly archive: PublicArchiveDisplay | null }
+  | { readonly id: number; readonly kind: 'opened'; readonly archive: PublicArchiveReplay | null }
   | {
       readonly id: number;
       readonly kind: 'listed';
@@ -71,12 +99,15 @@ function validRequest(value: unknown): value is PublicArchiveWorkerRequest {
   const id = Reflect.get(value, 'id');
   const kind = Reflect.get(value, 'kind');
   if (!Number.isSafeInteger(id) || Number(id) < 1) return false;
-  if (kind === 'import')
+  if (kind === 'import') {
+    const masters: unknown = Reflect.get(value, 'masters');
     return (
-      Object.keys(value).length === 3 &&
+      Object.keys(value).length === (masters === undefined ? 3 : 4) &&
       Reflect.get(value, 'bytes') instanceof Uint8Array &&
-      Reflect.get(value, 'bytes').length <= MAX_ONLINE_PUBLIC_ARCHIVE_BYTES
+      Reflect.get(value, 'bytes').length <= MAX_ONLINE_PUBLIC_ARCHIVE_BYTES &&
+      (masters === undefined || validMasters(masters))
     );
+  }
   if (kind === 'open')
     return (
       Object.keys(value).length === 3 &&
@@ -90,6 +121,55 @@ function validRequest(value: unknown): value is PublicArchiveWorkerRequest {
     typeof Reflect.get(value, 'gameId') === 'string' &&
     /^[A-Za-z0-9_-]{22}$/.test(Reflect.get(value, 'gameId'))
   );
+}
+
+function validMasters(value: unknown): boolean {
+  return (
+    Array.isArray(value) &&
+    value.length >= 2 &&
+    value.length <= 6 &&
+    value.every(
+      (item: unknown) =>
+        typeof item === 'object' &&
+        item !== null &&
+        Object.keys(item).length === 2 &&
+        displaySeat(Number(Reflect.get(item, 'seat'))) &&
+        Reflect.get(item, 'master') instanceof Uint8Array &&
+        Reflect.get(item, 'master').length === 32,
+    )
+  );
+}
+
+/**
+ * Reconstructs every hand with the end-of-game audit. The transcript is used only when the
+ * audit passes completely and its inputs are exactly the archive's certified inputs.
+ */
+function omniscientTranscript(
+  archive: VerifiedPublicOnlineArchive,
+  masters: ArchiveMasters,
+): (Partial<Record<Seat, PrivateInputData>> | null)[] | null {
+  if (!archive.state.result) return null;
+  const observed: { input: Input; data: Partial<Record<Seat, PrivateInputData>> }[] = [];
+  const secrets = masters.map((item) => ({ seat: item.seat, master: fromBase64Url(item.master) }));
+  try {
+    const report = auditCertifiedGame({
+      genesisEntry: archive.start.result.entry,
+      entries: archive.entries,
+      masters: secrets,
+      engine: createCatalogueEngine(),
+      policy: baseAuditPolicy,
+      onPrivateInput: (input, data) => observed.push({ input, data }),
+    });
+    if (!report.ok || !report.complete || observed.length !== archive.inputs.length) return null;
+    for (const [index, item] of observed.entries())
+      if (!sameBytes(canonicalEncode(item.input), canonicalEncode(archive.inputs[index])))
+        return null;
+    return observed.map(({ data }) => (Object.keys(data).length ? data : null));
+  } catch {
+    return null;
+  } finally {
+    for (const item of secrets) item.master.fill(0);
+  }
 }
 
 function displaySeat(seat: number): seat is 0 | 1 | 2 | 3 | 4 | 5 {
@@ -108,6 +188,16 @@ export async function runPublicArchiveWorkerRequest(
     if (supplied.kind === 'import') {
       const result = await importOnlinePublicArchive(store, supplied.bytes);
       if (!result.ok) throw new Error(result.error.message);
+      if (supplied.masters) {
+        const saved = await saveOnlineArchiveMasters(
+          store,
+          result.value.id,
+          supplied.masters.flatMap((item) =>
+            displaySeat(item.seat) ? [{ seat: item.seat, master: toBase64Url(item.master) }] : [],
+          ),
+        );
+        if (!saved.ok) throw new Error(saved.error.message);
+      }
       return { id, kind: 'imported', archiveId: result.value.id };
     }
     if (supplied.kind === 'encode') {
@@ -137,6 +227,9 @@ export async function runPublicArchiveWorkerRequest(
         throw new Error('Public replay has an unsupported roster');
       return { seat: seat.seat, name: seat.name, color: seat.colour };
     });
+    const masters = await loadOnlineArchiveMasters(store, archive.id);
+    const privateData = masters ? omniscientTranscript(archive, masters) : null;
+    const { genesis } = archive.start.result;
     return {
       id,
       kind: 'opened',
@@ -147,6 +240,12 @@ export async function runPublicArchiveWorkerRequest(
         state: archive.state,
         events: archive.events,
         players,
+        config: genesis.config,
+        genesisSeed: genesis.genesisSeed,
+        inputs: archive.inputs,
+        privateData,
+        bytes: archive.bytes,
+        masters: privateData ? masters : null,
       },
     };
   } catch {

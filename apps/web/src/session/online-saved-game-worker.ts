@@ -7,9 +7,13 @@ import {
   MAX_ONLINE_PUBLIC_ARCHIVE_BYTES,
 } from './online-public-archive.js';
 import { deleteOnlineGameRecord, loadOnlineGameRecord } from './online-game-records.js';
+import { loadRevealedMasters } from './online-replay-masters.js';
+import type { RevealedMaster } from './online-replay-masters.js';
 
 export type OnlineSavedGameWorkerRequest =
   | { readonly id: number; readonly kind: 'export'; readonly gameId: string }
+  /** The public archive plus the audit's revealed masters, for a full-information replay. */
+  | { readonly id: number; readonly kind: 'replay'; readonly gameId: string }
   | {
       readonly id: number;
       readonly kind: 'delete';
@@ -19,6 +23,12 @@ export type OnlineSavedGameWorkerRequest =
 
 export type OnlineSavedGameWorkerResponse =
   | { readonly id: number; readonly kind: 'exported'; readonly bytes: Uint8Array }
+  | {
+      readonly id: number;
+      readonly kind: 'replayed';
+      readonly bytes: Uint8Array;
+      readonly masters: readonly RevealedMaster[];
+    }
   | { readonly id: number; readonly kind: 'deleted'; readonly result: DeleteOnlineGameDataResult }
   | { readonly id: number; readonly kind: 'error'; readonly error: string };
 
@@ -52,7 +62,7 @@ function validRequest(value: unknown): value is OnlineSavedGameWorkerRequest {
       !GAME_ID.test(gameId)
     )
       return false;
-    if (kind === 'export') return Object.keys(value).length === 3;
+    if (kind === 'export' || kind === 'replay') return Object.keys(value).length === 3;
     const genesisDigest: unknown = Reflect.get(value, 'genesisDigest');
     return (
       kind === 'delete' &&
@@ -107,7 +117,10 @@ export async function runOnlineSavedGameWorkerRequest(
     if (!encoded.ok) throw new Error('Saved certified history could not be verified');
     if (encoded.value.byteLength > MAX_ONLINE_PUBLIC_ARCHIVE_BYTES)
       throw new Error('Saved replay exceeds its size limit');
-    return { id, kind: 'exported', bytes: encoded.value };
+    if (supplied.kind === 'export') return { id, kind: 'exported', bytes: encoded.value };
+    // A missing or unverified audit leaves the replay public; it never fails the export.
+    const masters = await loadRevealedMasters(store, start).catch(() => []);
+    return { id, kind: 'replayed', bytes: encoded.value, masters };
   } catch {
     return { id, kind: 'error', error: 'Saved game could not be verified or changed' };
   } finally {

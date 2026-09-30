@@ -1,4 +1,4 @@
-import { canonicalDecode, canonicalEncode } from '@cp2p/codec';
+import { canonicalDecode, canonicalEncode, hashValue, toHex } from '@cp2p/codec';
 import { IndexedDbByteStore } from '@cp2p/storage';
 import 'fake-indexeddb/auto';
 import type { Result } from '@cp2p/engine';
@@ -21,6 +21,7 @@ import {
   openOnlinePublicArchive,
 } from './online-public-archive-store.js';
 import { runPublicArchiveWorkerRequest } from './online-public-archive-worker.js';
+import { concealHands, ReplaySession } from '../features/replay/replay-session.js';
 
 function value<T>(result: Result<T>): T {
   if (!result.ok) throw new Error(`${result.error.code}: ${result.error.message}`);
@@ -106,6 +107,39 @@ test('worker import and open return only verified public display data', async ()
   );
   expect(bad.kind).toBe('error');
   expect(store.records.size).toBe(2);
+}, 60_000);
+
+test('an opened archive carries a replay transcript; masters without a passing audit stay public', async () => {
+  const store = new MemoryStore();
+  const masters = [0, 1, 2, 3].map((seat) => ({ seat, master: new Uint8Array(32).fill(seat + 1) }));
+  const imported = await runPublicArchiveWorkerRequest(
+    { id: 12, kind: 'import', bytes: archiveBytes.slice(), masters },
+    store,
+  );
+  if (imported.kind !== 'imported') throw new Error('Archive with masters was not imported');
+  expect([...store.records.keys()]).toContain(`online-replay/v1/masters/${imported.archiveId}`);
+  const opened = await runPublicArchiveWorkerRequest(
+    { id: 13, kind: 'open', archiveId: imported.archiveId },
+    store,
+  );
+  if (opened.kind !== 'opened' || !opened.archive) throw new Error('Archive did not open');
+  // This fixture has no game result, so no audit can pass: the replay stays public.
+  expect(opened.archive.privateData).toBeNull();
+  expect(opened.archive.masters).toBeNull();
+  expect(sameBytes(opened.archive.bytes, archiveBytes)).toBe(true);
+  expect(opened.archive.config).toEqual(start.result.genesis.config);
+  const session = ReplaySession.create({
+    config: opened.archive.config,
+    genesisSeed: opened.archive.genesisSeed,
+    inputs: opened.archive.inputs,
+    privateData: opened.archive.privateData,
+    document: null,
+  });
+  if (!session.ok) throw new Error(session.error.message);
+  expect(toHex(hashValue(session.value.getState()))).toBe(
+    toHex(hashValue(concealHands(opened.archive.state))),
+  );
+  expect(session.value.fullInformation).toBe(false);
 }, 60_000);
 
 test('worker exports a stored signed start and certified history as importable HXAR1 bytes', async () => {

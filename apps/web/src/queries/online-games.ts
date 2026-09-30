@@ -8,7 +8,11 @@ import {
   loadOnlineGameVoid,
 } from '../session/online-game-history.js';
 import { isOnlineGameAbandoned, loadOnlineGameActivity } from '../session/online-game-activity.js';
-import { deleteStoredGame, exportStoredGameReplay } from '../session/online-saved-game-client.js';
+import {
+  deleteStoredGame,
+  exportStoredGameReplay,
+  exportStoredGameReplayWithMasters,
+} from '../session/online-saved-game-client.js';
 import { importPublicReplay } from '../session/online-public-archive-client.js';
 import { queryKeys } from './keys.js';
 
@@ -105,7 +109,15 @@ export function useExportOnlineReplay() {
 
 export function useOpenOnlineReplay() {
   return useMutation({
-    mutationFn: async (gameId: string) => importPublicReplay(await exportStoredGameReplay(gameId)),
+    // An audited game brings its revealed masters, so the viewer can show every hand.
+    mutationFn: async (gameId: string) => {
+      const { bytes, masters } = await exportStoredGameReplayWithMasters(gameId);
+      try {
+        return await importPublicReplay(bytes, undefined, masters);
+      } finally {
+        for (const item of masters) item.master.fill(0);
+      }
+    },
   });
 }
 
