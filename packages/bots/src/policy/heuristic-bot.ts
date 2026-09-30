@@ -36,7 +36,7 @@ export class HeuristicBot implements Bot {
 
   constructor(
     readonly config: LevelConfig,
-    private readonly plugins: readonly BotPlugin[] = [],
+    protected readonly plugins: readonly BotPlugin[] = [],
     private readonly fixedEngine?: Engine,
   ) {
     this.id = config.id;

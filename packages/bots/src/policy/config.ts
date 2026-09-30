@@ -181,6 +181,7 @@ function isPlain(value: unknown): value is Record<string, unknown> {
 /** Optional keys an override may add where the base leaves them out. */
 const OPTIONAL: Readonly<Record<string, readonly string[]>> = {
   vertex: ['diversity', 'expansion', 'harbor'],
+  search: ['lookahead', 'expansions'],
 };
 
 /**

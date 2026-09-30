@@ -10,6 +10,7 @@ import type {
 } from '@cp2p/engine';
 import { kindsOfCounts } from '@cp2p/engine';
 import type { Bot, BotRng } from '../types.js';
+import type { Chance } from './chance.js';
 import type { World } from './determinize.js';
 
 type PlayerPending = Extract<Pending, { kind: 'player' }>;
@@ -130,8 +131,9 @@ function nextPlayer(pending: readonly Pending[], active: Seat): PlayerPending | 
 
 /**
  * Play a sampled world forward with a fast policy until `turns` more turns have started, the game
- * ends, a chance event the sampler does not model comes up, or `outOfTime` says to stop. `first` is the searched command,
- * applied for `seat` before the policy takes over.
+ * ends, a chance event the sampler does not model comes up, or `outOfTime` says to stop. `first`
+ * is the searched command, applied for `seat` before the policy takes over. Chance events come
+ * from `chance` when given (every module's events), else from the stage 16 base sampler on `rng`.
  */
 export function rollout(
   engine: Engine,
@@ -143,6 +145,7 @@ export function rollout(
   turns: number,
   /** Stops the rollout (returning 'timeout') once this reports the time is up. */
   outOfTime: () => boolean = () => false,
+  chance?: Chance,
 ): RolloutEnd | 'timeout' | null {
   let state = world.state;
   let privates = world.privates;
@@ -170,7 +173,9 @@ export function rollout(
         item.kind === 'random' || item.kind === 'reveal',
     );
     if (system) {
-      const answer = resolveSystem(system, state, privates, world, rng);
+      const answer = chance
+        ? chance(system, state, privates)
+        : resolveSystem(system, state, privates, world, rng);
       if (!answer || !apply(answer.input, answer.privateData)) break;
       continue;
     }

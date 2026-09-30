@@ -10,6 +10,9 @@ import { edgeValue, settlementValue } from '../policy/setup.js';
 import type { Bot, BotRng, DecideContext } from '../types.js';
 import { determinize } from './determinize.js';
 import { leafValue } from './leaf.js';
+import { sampledChance } from './chance.js';
+import { copyWorld, lookahead, macroCandidates } from './lookahead.js';
+import type { LookaheadSettings } from './lookahead.js';
 import { rollout } from './rollout.js';
 
 /** Modules whose chance events the search can sample; other games play the heuristic alone. */
@@ -26,6 +29,17 @@ export interface SearchSettings {
   width: number;
   /** Which decisions are searched. */
   searched: { setup: boolean; main: boolean; robber: boolean };
+  /**
+   * The main-phase lookahead over macro-actions to the end of the bot's turn, scored by a static
+   * evaluation (follow-up B); absent or null: off. It replaces the `main` rollouts.
+   */
+  lookahead?: LookaheadSettings | null;
+  /**
+   * Sample every module's chance events (event die, progress and fog decks, opponents' progress
+   * cards) on separate dice and draw streams, so the search also runs in expansion games
+   * (follow-up B). Off: the stage 16 base sampler, and expansion games play the heuristic alone.
+   */
+  expansions?: boolean;
 }
 
 /**
@@ -99,10 +113,13 @@ export class HardBot extends HeuristicBot {
     this.rolloutConfig = { ...config, offers: false };
   }
 
+  private readonly policyFor = (seat: Seat, engine: Engine): Bot =>
+    this.rolloutPolicy(seat, engine);
+
   private rolloutPolicy(seat: Seat, engine: Engine): Bot {
     let bot = this.rolloutBots.get(seat);
     if (!bot) {
-      bot = new HeuristicBot(this.rolloutConfig, [], engine);
+      bot = new HeuristicBot(this.rolloutConfig, this.plugins, engine);
       this.rolloutBots.set(seat, bot);
     }
     return bot;
@@ -116,7 +133,16 @@ export class HardBot extends HeuristicBot {
     const heuristic = super.choose(context, options);
     if (!heuristic) return heuristic;
     const modules = context.view.state.config.modules;
-    if (!modules.every((module) => SEARCHABLE.has(module.id))) return heuristic;
+    if (!this.settings.expansions && !modules.every((module) => SEARCHABLE.has(module.id)))
+      return heuristic;
+    const macro = this.settings.lookahead;
+    if (macro) {
+      const candidates = macroCandidates(context, heuristic, macro.candidates);
+      if (candidates)
+        return lookahead(context, candidates, macro, this.policyFor, () =>
+          deadline === null ? false : now() >= deadline,
+        );
+    }
     const plan = this.candidates(context, heuristic);
     if (!plan || plan.candidates.length < 2) return heuristic;
     return this.search(context, heuristic, plan.candidates, plan.horizon, options, deadline);
@@ -215,23 +241,30 @@ export class HardBot extends HeuristicBot {
       iteration++
     ) {
       // One sampled world and one dice stream per iteration, shared by every candidate.
-      const world = determinize(view, engine, rng);
+      const sampled = this.settings.expansions === true;
+      const world = determinize(view, engine, rng, sampled);
       const seed = seedFrom(rng);
+      const streams = sampled ? [seedFrom(rng), seedFrom(rng)] : [];
       const values: number[] = [];
       for (const candidate of candidates) {
         // Out of time mid-iteration: drop the partial iteration, so every candidate keeps the
         // same samples (a paired comparison).
         if (late(average())) break;
         const started = now();
+        const copy = copyWorld(world);
+        const [diceSeed, drawSeed] = streams;
         const end = rollout(
           engine,
-          { ...world, devDeck: [...world.devDeck] },
+          copy,
           view.seat,
           candidate,
           (seat) => this.rolloutPolicy(seat, engine),
           createRng(seed),
           horizon,
           () => late(0),
+          diceSeed && drawSeed
+            ? sampledChance(copy, createRng(diceSeed), createRng(drawSeed))
+            : undefined,
         );
         if (end === 'timeout') break;
         values.push(end ? leafValue(engine, end.state, end.privates, view.seat) : -10);
