@@ -41,9 +41,6 @@ function Home() {
               <Link to="/local/new" className="button button-quiet">
                 {t('lobby:newGame')}
               </Link>
-              <Link to="/editor" className="button button-quiet">
-                {t('lobby:mapEditorLink')}
-              </Link>
             </div>
             <small className="home-beta-note">{t('lobby:multiplayerBeta')}</small>
           </div>
@@ -69,6 +66,12 @@ function Home() {
           <div className="home-section-heading">
             <h2 id="home-library-title">{t('lobby:homeLibraryTitle')}</h2>
             <p className="muted">{t('lobby:homeLibraryIntro')}</p>
+            <p className="muted home-editor-note">
+              {t('lobby:homeEditorNote')}{' '}
+              <Link to="/editor" className="text-link">
+                {t('lobby:mapEditorLink')}
+              </Link>
+            </p>
           </div>
           <div className="home-panels">
             <PublicReplayLibrary />
