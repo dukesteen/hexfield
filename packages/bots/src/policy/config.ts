@@ -55,18 +55,6 @@ export const DEFAULT_KNIGHTS: KnightsParams = {
   vp: 6,
 };
 
-/** Endgame awareness (follow-up B): how the bot treats a rival close to winning. */
-export interface EndgameParams {
-  /** A rival whose estimated points (public plus likely hidden) are this close to the target. */
-  margin: number;
-  /** Extra robber and steal weight on such a rival. */
-  focus: number;
-  /** No trade at all with a rival this close (estimated points from the target). */
-  refuseMargin: number;
-  /** Take a road or settlement spot a close rival needs for the longest road that wins. */
-  blockRoads: boolean;
-}
-
 /** The knobs that separate the heuristic levels. */
 export interface LevelConfig {
   id: 'easy' | 'normal' | 'hard';
@@ -100,8 +88,6 @@ export interface LevelConfig {
   dumpHand: boolean;
   /** The Cities & Knights policy's values (the stage 16 policy ignores them). */
   knightsPolicy: KnightsParams;
-  /** Endgame awareness, or null for none. */
-  endgame: EndgameParams | null;
 }
 
 /** The stage 16 values every level started from. */
@@ -110,7 +96,6 @@ const STAGE16 = {
   tradeTuning: DEFAULT_TRADE_TUNING,
   hand: DEFAULT_HAND,
   knightsPolicy: DEFAULT_KNIGHTS,
-  endgame: null,
 } as const;
 
 export const EASY: LevelConfig = {
@@ -181,7 +166,7 @@ function isPlain(value: unknown): value is Record<string, unknown> {
 /** Optional keys an override may add where the base leaves them out. */
 const OPTIONAL: Readonly<Record<string, readonly string[]>> = {
   vertex: ['diversity', 'expansion', 'harbor'],
-  search: ['lookahead', 'expansions'],
+  search: ['expansions'],
 };
 
 /**

@@ -1,10 +1,16 @@
 import { describe, expect, test } from 'vitest';
-import { createBaseEngine, exactResourceBounds, loseHidden } from '@cp2p/engine';
+import {
+  createBaseEngine,
+  exactResourceBounds,
+  knightsConfig,
+  knightsEngine,
+  loseHidden,
+} from '@cp2p/engine';
 import type { GameState, Pending, PrivateState } from '@cp2p/engine';
 import { createBotRng } from '../random-bot.js';
 import { PLUGINS } from '../levels.js';
 import { determinize } from './determinize.js';
-import { HardBot } from './hard-bot.js';
+import { DEFAULT_SEARCH, HARD_SEARCH, HardBot } from './hard-bot.js';
 
 const engine = createBaseEngine();
 
@@ -83,5 +89,36 @@ describe('Hard bot search', () => {
     );
     expect(command.type).toBe('PLACE_SETTLEMENT');
     expect(performance.now() - started).toBeLessThan(1000);
+  });
+
+  test('Hard searches its opening in a knights game; the stage 16 settings do not', () => {
+    const knights = knightsEngine();
+    const created = knights.createGame(knightsConfig({ seats: 3 }), new Uint8Array(32).fill(4));
+    const applied = knights.apply(created, { kind: 'system', type: 'START_SEAT', seat: 0 });
+    if (!applied.ok) throw new Error(applied.error.message);
+    const state = applied.value.state;
+    const pending = knights
+      .getPending(state)
+      .find((item) => item.kind === 'player' && item.seat === 0);
+    if (!pending) throw new Error('No setup pending');
+    const priv = knights.createPrivateState(0, state.config);
+    const timed = (settings: typeof HARD_SEARCH) => {
+      const started = performance.now();
+      const command = new HardBot(PLUGINS, knights, settings).decide(
+        { state, priv, seat: 0 },
+        pending,
+        createBotRng(new Uint8Array(32).fill(5)),
+        { iterationBudget: 1 },
+      );
+      return { command, ms: performance.now() - started };
+    };
+    const searched = timed(HARD_SEARCH);
+    expect(searched.command.type).toBe('PLACE_SETTLEMENT');
+    expect(
+      knights.validate(state, { kind: 'command', seat: 0, command: searched.command }).ok,
+    ).toBe(true);
+    expect(timed(HARD_SEARCH).command).toEqual(searched.command);
+    // The stage 16 settings play the heuristic alone in expansion games: far faster.
+    expect(timed(DEFAULT_SEARCH).ms).toBeLessThan(searched.ms);
   });
 });

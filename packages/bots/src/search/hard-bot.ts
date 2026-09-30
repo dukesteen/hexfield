@@ -9,11 +9,9 @@ import { HeuristicBot } from '../policy/heuristic-bot.js';
 import type { BotPlugin } from '../policy/heuristic-bot.js';
 import { edgeValue, settlementValue } from '../policy/setup.js';
 import type { Bot, BotRng, DecideContext } from '../types.js';
-import { determinize } from './determinize.js';
+import { copyWorld, determinize } from './determinize.js';
 import { leafValue } from './leaf.js';
 import { sampledChance } from './chance.js';
-import { copyWorld, lookahead, macroCandidates } from './lookahead.js';
-import type { LookaheadSettings } from './lookahead.js';
 import { rollout } from './rollout.js';
 
 /** Modules whose chance events the search can sample; other games play the heuristic alone. */
@@ -30,11 +28,6 @@ export interface SearchSettings {
   width: number;
   /** Which decisions are searched. */
   searched: { setup: boolean; main: boolean; robber: boolean };
-  /**
-   * The main-phase lookahead over macro-actions to the end of the bot's turn, scored by a static
-   * evaluation (follow-up B); absent or null: off. It replaces the `main` rollouts.
-   */
-  lookahead?: LookaheadSettings | null;
   /**
    * Search expansion games too (follow-up B): their rollouts sample every module's chance events
    * (the event die, progress decks and cards, reveals) on separate dice and draw streams, and
@@ -60,7 +53,7 @@ export const DEFAULT_SEARCH: SearchSettings = {
 /**
  * The search the current Hard level plays: the stage 16 search in base and five-six games, and
  * the opening search in expansion games without fog (follow-up B; the robber search measured
- * neutral there and the main-phase lookahead weaker, so neither runs).
+ * neutral there, so it does not run).
  */
 export const HARD_SEARCH: SearchSettings = {
   ...DEFAULT_SEARCH,
@@ -151,14 +144,6 @@ export class HardBot extends HeuristicBot {
         Object.values(decksFor(context.view.state.config)).some((deck) => deck.reveal === 'public')
       )
         return heuristic;
-    }
-    const macro = this.settings.lookahead;
-    if (macro) {
-      const candidates = macroCandidates(context, heuristic, macro.candidates);
-      if (candidates)
-        return lookahead(context, candidates, macro, this.policyFor, () =>
-          deadline === null ? false : now() >= deadline,
-        );
     }
     const plan = this.candidates(context, heuristic, expansion);
     if (!plan || plan.candidates.length < 2) return heuristic;

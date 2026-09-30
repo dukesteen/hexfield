@@ -4,8 +4,7 @@ import type { GameState, Pending, PrivateState } from '@cp2p/engine';
 import { createRng } from '@cp2p/engine/rng';
 import { RandomBot, createBotRng } from '../random-bot.js';
 import { sampledChance } from './chance.js';
-import { determinize } from './determinize.js';
-import { copyWorld } from './lookahead.js';
+import { copyWorld, determinize } from './determinize.js';
 import { rollout } from './rollout.js';
 
 const engine = knightsEngine();

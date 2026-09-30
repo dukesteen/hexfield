@@ -120,3 +120,12 @@ export function determinize(view: BotView, engine: Engine, rng: BotRng, modules 
     decks,
   };
 }
+
+/** A copy of a world whose decks a rollout may draw from. */
+export function copyWorld(world: World): World {
+  return {
+    ...world,
+    devDeck: [...world.devDeck],
+    decks: new Map([...world.decks].map(([id, cards]) => [id, [...cards]])),
+  };
+}
