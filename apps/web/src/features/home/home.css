@@ -62,13 +62,6 @@
   padding-inline: 18px;
 }
 
-.home-beta-note {
-  display: block;
-  margin-top: 16px;
-  color: var(--muted);
-  font-size: 0.75rem;
-}
-
 .home-hero-art {
   position: relative;
   justify-self: center;

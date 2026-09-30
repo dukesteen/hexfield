@@ -72,7 +72,7 @@ function renderHome(saves = failedSaves, online = failedOnline) {
 /** The route chunk pulls in the engine and maps, so the first render can take a moment. */
 const findHero = () => screen.findByRole('heading', { level: 1 }, { timeout: 10_000 });
 
-test('home keeps local play and exposes create/join beta routes', async () => {
+test('home keeps local play and exposes create/join routes', async () => {
   const router = renderHome();
   await findHero();
 

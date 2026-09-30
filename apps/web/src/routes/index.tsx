@@ -42,7 +42,6 @@ function Home() {
                 {t('lobby:newGame')}
               </Link>
             </div>
-            <small className="home-beta-note">{t('lobby:multiplayerBeta')}</small>
           </div>
           <div className="home-hero-art" aria-hidden="true">
             <img className="home-board-art" src={getGameArtUrl('preview')} alt="" />
