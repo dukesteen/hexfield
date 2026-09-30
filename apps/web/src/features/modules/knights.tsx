@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { BARBARIAN_FIXTURE, BARBARIAN_STEPS } from '@cp2p/engine';
+import { BARBARIAN_FIXTURE, BARBARIAN_STEPS, VICTORY_CARDS } from '@cp2p/engine';
 import {
   getBarbarianShipUrl,
   getDefenderIconUrl,
   getKnightIconUrl,
   getMerchantIconUrl,
   getMetropolisIconUrl,
+  getTrackIconUrl,
 } from '@cp2p/renderer';
 import { DialogFrame } from '../dialogs/DialogFrame';
 import { BarbarianAttackNotice } from '../knights/AttackNotice';
@@ -193,7 +194,7 @@ export function KnightsPanelExtras({ state, seat, presentation }: ModulePanelPro
         )}
         {defenders > 0 && (
           <span
-            className="knights-chip award-chip"
+            className="knights-chip is-award"
             title={t('knights:panel.defender', { count: defenders })}
             aria-label={t('knights:panel.defender', { count: defenders })}
             data-testid="defender-badge"
@@ -223,11 +224,15 @@ export function KnightsPanelExtras({ state, seat, presentation }: ModulePanelPro
         )}
         {shown.map((card) => (
           <span
-            className="knights-chip award-chip"
+            className="knights-chip is-award"
             key={card}
             title={t(`knights:cards.${card}.name`)}
           >
-            <b>{t('knights:card.vp')}</b>
+            {/* A shown Printer or Constitution: its deck's icon and the point it scores. */}
+            {VICTORY_CARDS[card] && (
+              <img src={getTrackIconUrl(VICTORY_CARDS[card])} alt="" aria-hidden="true" />
+            )}
+            <b aria-hidden="true">+1</b>
             <span className="trade-visually-hidden">{t(`knights:cards.${card}.name`)}</span>
           </span>
         ))}

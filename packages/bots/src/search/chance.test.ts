@@ -6,6 +6,7 @@ import { RandomBot, createBotRng } from '../random-bot.js';
 import { sampledChance } from './chance.js';
 import { copyWorld, determinize } from './determinize.js';
 import { rollout } from './rollout.js';
+import type { BotView } from '../types.js';
 
 const engine = knightsEngine();
 
@@ -27,7 +28,7 @@ function started(): { state: GameState; priv: PrivateState; first: Pending } {
 describe('sampled chance (follow-up B)', () => {
   test('a knights rollout runs on: event die, progress draws and reveals are all answered', () => {
     const { state, priv, first } = started();
-    const view = { state, priv, seat: 0 };
+    const view: BotView = { state, priv, seat: 0 };
     const random = new RandomBot(engine);
     const firstMove = random.decide(view, first, createBotRng(new Uint8Array(32).fill(1)));
     const world = determinize(view, engine, createBotRng(new Uint8Array(32).fill(2)), true);

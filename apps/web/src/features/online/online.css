@@ -416,7 +416,7 @@
 }
 
 .online-game-notice-heading strong {
-  font-family: 'Young Serif', Georgia, serif;
+  font-family: 'Tienne', Georgia, serif;
   font-size: 15px;
   font-weight: 400;
 }
@@ -609,7 +609,7 @@
 }
 
 .online-page.online-lobby-page .online-lobby-heading h1 {
-  font-family: 'Young Serif', Georgia, serif;
+  font-family: 'Tienne', Georgia, serif;
   font-size: clamp(2rem, 3.5vw, 3.1rem);
   font-weight: 400;
   line-height: 1.08;
@@ -660,7 +660,7 @@
 
 .online-page.online-lobby-page :is(.online-section, .online-start-panel, .online-chat) h2 {
   margin: 0;
-  font-family: 'Young Serif', Georgia, serif;
+  font-family: 'Tienne', Georgia, serif;
   font-size: 1.25rem;
   font-weight: 400;
 }
@@ -698,7 +698,7 @@
 .online-page.online-lobby-page .online-seat-title strong {
   min-width: 0;
   overflow-wrap: anywhere;
-  font-family: 'Young Serif', Georgia, serif;
+  font-family: 'Tienne', Georgia, serif;
   font-size: 1.1rem;
   font-weight: 400;
 }
@@ -753,7 +753,7 @@
 }
 
 .online-page.online-lobby-page .connection-diagnostics summary {
-  font-family: 'Young Serif', Georgia, serif;
+  font-family: 'Tienne', Georgia, serif;
   font-size: 1rem;
   font-weight: 400;
 }

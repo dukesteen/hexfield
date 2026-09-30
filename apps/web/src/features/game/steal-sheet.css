@@ -1,0 +1,178 @@
+/* The steal sheet: the victim's hand as a fan of face-down cards. */
+.action-forms dialog.steal-sheet {
+  width: min(92vw, 560px);
+  text-align: center;
+}
+
+.steal-sheet-victim {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 0;
+}
+
+.steal-sheet-swatch {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--surface);
+  border-radius: 50%;
+  background: var(--player-color, var(--accent));
+  box-shadow: 0 0 0 1px var(--control);
+}
+
+.steal-fan {
+  --card-w: 64px;
+  --card-h: calc(var(--card-w) * 10 / 7);
+  --overlap: clamp(
+    calc(var(--card-w) * -0.66),
+    calc((min(80vw, 440px) - var(--fan-count) * var(--card-w)) / max(1, var(--fan-count) - 1)),
+    -10px
+  );
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  min-height: calc(var(--card-h) + 36px);
+  padding: 22px 8px 6px;
+}
+
+:where(.action-forms dialog) .steal-card {
+  position: relative;
+  flex: none;
+  width: var(--card-w);
+  height: var(--card-h);
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  transform: rotate(var(--card-angle, 0deg));
+  transition:
+    transform 160ms ease-out,
+    opacity 200ms ease-out;
+  perspective: 600px;
+}
+
+.steal-card + .steal-card {
+  margin-left: var(--overlap);
+}
+
+.steal-card:not([aria-disabled='true']):hover,
+.steal-card:focus-visible {
+  z-index: 2;
+  transform: rotate(var(--card-angle, 0deg)) translateY(-10px);
+}
+
+.steal-card:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.steal-card[aria-disabled='true'] {
+  cursor: default;
+}
+
+.steal-card[aria-disabled='true']:not(.is-picked) {
+  opacity: 0.55;
+}
+
+.steal-card.is-picked {
+  z-index: 3;
+  transform: rotate(0deg) translateY(-18px) scale(1.12);
+}
+
+.steal-card-inner {
+  position: absolute;
+  inset: 0;
+  display: block;
+  border-radius: inherit;
+  transform-style: preserve-3d;
+  transition: transform 420ms cubic-bezier(0.3, 0.7, 0.3, 1);
+}
+
+.steal-card.is-turned .steal-card-inner {
+  transform: rotateY(180deg);
+}
+
+.steal-card-inner img {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 7px;
+  box-shadow: 0 3px 8px #091d1740;
+  backface-visibility: hidden;
+}
+
+.steal-card-face {
+  transform: rotateY(180deg);
+}
+
+.steal-card.is-pending .steal-card-inner img {
+  animation: steal-card-pending 900ms ease-in-out infinite alternate;
+}
+
+@keyframes steal-card-pending {
+  from {
+    box-shadow:
+      0 3px 8px #091d1740,
+      0 0 0 2px var(--accent);
+  }
+  to {
+    box-shadow:
+      0 3px 8px #091d1740,
+      0 0 14px 4px var(--accent);
+  }
+}
+
+.steal-fan-more {
+  align-self: center;
+  margin-left: 10px;
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--raised);
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.steal-sheet-status {
+  min-height: 1.5em;
+  font-weight: 600;
+}
+
+/* Reduced motion: the face shows at once, with no turn and no lift. */
+.steal-sheet-still .steal-card,
+.steal-sheet-still .steal-card-inner {
+  transition: none;
+}
+
+.steal-sheet-still .steal-card.is-pending .steal-card-inner img {
+  animation: none;
+  box-shadow: 0 0 0 3px var(--accent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .steal-card,
+  .steal-card-inner {
+    transition: none;
+  }
+}
+
+@media (max-width: 520px) {
+  .steal-fan {
+    --card-w: 52px;
+  }
+}
+
+/* Announces a steal no sheet showed; read by screen readers only. */
+.steal-announcer {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}

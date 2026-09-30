@@ -10,9 +10,10 @@
   font-weight: 500 900;
   font-display: swap;
 }
+/* Display face: Tienne Bold (SIL Open Font License, assets/fonts/tienne-OFL.txt). */
 @font-face {
-  font-family: 'Young Serif';
-  src: url('../../assets/fonts/young-serif.ttf') format('truetype');
+  font-family: 'Tienne';
+  src: url('../../assets/fonts/tienne-bold.ttf') format('truetype');
   font-weight: 400 900;
   font-display: swap;
 }
@@ -63,7 +64,7 @@
 .game-page .player-details-head strong,
 .game-page .event-log > summary,
 .game-page .game-info > summary {
-  font-family: 'Young Serif', Georgia, serif;
+  font-family: 'Tienne', Georgia, serif;
   font-weight: 400;
 }
 .game-page h2 {
@@ -297,7 +298,7 @@
   .game-page .player-vp {
     min-width: 36px;
     padding: 4px;
-    font-family: 'Young Serif', Georgia, serif;
+    font-family: 'Tienne', Georgia, serif;
     font-size: 18px;
     line-height: 1.1;
   }
@@ -675,7 +676,7 @@
     background: #c2493a;
     color: #fff8ec;
     box-shadow: 0 4px 0 #8e2f24;
-    font-family: 'Young Serif', Georgia, serif;
+    font-family: 'Tienne', Georgia, serif;
     font-size: 22px;
     line-height: 1.15;
     text-align: center;

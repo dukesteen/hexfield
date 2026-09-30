@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   getGameArtUrl,
@@ -48,6 +48,9 @@ import { actingSeat } from '../../store/pending-actors';
 import type { GamePresentation } from '../../queries/repositories/saved-games';
 import { recordOrdinaryActionRejection } from './action-diagnostics';
 import { BuildCostsDialog } from './BuildCostsDialog.js';
+import { StealSheet } from './StealSheet';
+import { useStealReveal } from './steal-reveal';
+import { resourceLabel } from '../dialogs/resources.js';
 import { fogDrawPending, isSeafaring } from './seafaring';
 import { KnightsBuildButtons, KnightsBuildRows } from '../knights/BuildControls';
 import { KnightsForms } from '../knights/KnightsForms';
@@ -143,6 +146,8 @@ const actionPaths: Readonly<Record<string, string>> = {
   BUY_DEV_CARD: 'M5 4h12v15H5zM8 7h12v15H8z',
   PLAY_DEV_CARD: 'M5 4h12v15H5zM8 7h12v15H8z',
 };
+/** How long the steal sheet waits for a fair result before it gives up and closes. */
+const STEAL_RESULT_WAIT_MS = 30_000;
 const noChoices = [] as const;
 /** Commands that end or advance the seat's own phase; shown as the promoted turn button. */
 const TURN_COMMANDS: ReadonlySet<string> = new Set(['ROLL_DICE', 'END_TURN', 'END_SBP']);
@@ -344,6 +349,11 @@ export function useGameActions(
   options: {
     compact?: boolean;
     reducedMotion?: boolean;
+    /**
+     * The "pick the card to steal" setting: steals go through the steal sheet. Null while the
+     * settings load: the victim choice waits, so a steal never takes the wrong path.
+     */
+    pickStealCard?: boolean | null;
     onHandOff?: () => void;
     onFormClosed?: () => void;
   } = {},
@@ -542,6 +552,42 @@ export function useGameActions(
     })();
   };
   useEffect(() => setError(null), [seat, phase]);
+  const stealReveal = useStealReveal((store) => store.active);
+  const stealAnnounced = useStealReveal((store) => store.announced);
+  const stealCommand =
+    stealReveal === null
+      ? undefined
+      : availability?.stealTargets.find((target) => target.seat === stealReveal.victim)?.command;
+  const openStealSheet = useCallback(
+    (victim: Seat, handSize: number) => {
+      const reveals = useStealReveal.getState();
+      if (seat !== null && reveals.active === null) reveals.open(seat, victim, handSize);
+    },
+    [seat],
+  );
+  const stealStage =
+    stealReveal === null
+      ? null
+      : stealReveal.face !== null
+        ? 'revealed'
+        : stealReveal.picked === null
+          ? 'choosing'
+          : 'drawing';
+  useEffect(() => {
+    // The steal is no longer this seat's to make (a timeout stole, or the game moved on).
+    if (stealStage === 'choosing' && !stealCommand) useStealReveal.getState().reset();
+  }, [stealCommand, stealStage]);
+  useEffect(() => {
+    // The steal could not be submitted: the thief may tap again.
+    if (stealStage === 'drawing' && stealCommand && !isSubmitting && error !== null)
+      useStealReveal.getState().unpick();
+  }, [error, isSubmitting, stealCommand, stealStage]);
+  useEffect(() => {
+    // A result that never comes (a lost connection) must not keep the sheet open for good.
+    if (stealStage !== 'drawing') return undefined;
+    const timer = window.setTimeout(() => useStealReveal.getState().reset(), STEAL_RESULT_WAIT_MS);
+    return () => window.clearTimeout(timer);
+  }, [stealStage]);
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (
@@ -1428,7 +1474,12 @@ export function useGameActions(
         {!conflicted && status?.kind !== 'error' && availability && formProps && (
           <>
             {visibleForm === 'discard' && <DiscardDialog {...formProps} />}
-            {visibleForm === 'steal' && <StealDialog {...formProps} />}
+            {visibleForm === 'steal' && !stealReveal && options.pickStealCard !== null && (
+              <StealDialog
+                {...formProps}
+                onPickCard={options.pickStealCard ? openStealSheet : undefined}
+              />
+            )}
             {visibleForm === 'gold' && <GoldDialog {...formProps} />}
             {visibleForm === 'trade' && (
               <TradeComposer {...formProps} onCancel={closeFormAndFocus} />
@@ -1462,6 +1513,42 @@ export function useGameActions(
             )}
           </>
         )}
+        {stealReveal && seat !== null && (
+          <StealSheet
+            key={stealReveal.id}
+            reveal={stealReveal}
+            victimName={playerLabel(stealReveal.victim)}
+            victimColor={
+              presentation.players.find((player) => player.seat === stealReveal.victim)?.color ??
+              'blue'
+            }
+            reducedMotion={options.reducedMotion ?? false}
+            onPick={(index) => {
+              useStealReveal.getState().pick(index);
+              // Only the victim goes out: the tapped card is the sheet's own business.
+              if (stealReveal.face === null && stealCommand) submit(stealCommand);
+            }}
+            onCancel={
+              (availability?.stealTargets.length ?? 0) > 1
+                ? () => useStealReveal.getState().reset()
+                : undefined
+            }
+            onDone={(from) => {
+              const done = useStealReveal.getState().finish();
+              // The sheet closes first; the card then flies on from where it turned over.
+              requestAnimationFrame(() => done?.launch?.(from));
+              if (!useStealReveal.getState().active) options.onFormClosed?.();
+            }}
+          />
+        )}
+        <p className="steal-announcer" role="status">
+          {stealAnnounced
+            ? t('rules:steal.stole', {
+                resource: resourceLabel(t, stealAnnounced.face),
+                player: playerLabel(stealAnnounced.victim),
+              })
+            : ''}
+        </p>
         {knightSheet}
         {buildCostsOpen && (
           <BuildCostsDialog

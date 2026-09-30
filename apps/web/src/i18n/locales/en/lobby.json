@@ -522,5 +522,8 @@
   "onlineBotLevelLabel": "Difficulty",
   "onlineAddBotLevel_easy": "Easy bot",
   "onlineAddBotLevel_medium": "Normal bot",
-  "onlineAddBotLevel_hard": "Hard bot"
+  "onlineAddBotLevel_hard": "Hard bot",
+  "gameplay": "Gameplay",
+  "pickStealCard": "Pick the card to steal",
+  "pickStealCardHint": "Off: steal as soon as you choose a player."
 }

@@ -43,7 +43,18 @@
     "title": "Steal a card",
     "instruction": "Choose a player to steal from.",
     "seat_one": "{{player}} — {{count}} card",
-    "seat_other": "{{player}} — {{count}} cards"
+    "seat_other": "{{player}} — {{count}} cards",
+    "pickInstruction": "Pick one of {{player}}'s cards.",
+    "handCount_one": "{{count}} card",
+    "handCount_other": "{{count}} cards",
+    "fanLabel": "{{player}}'s cards, face down",
+    "cardFaceDown": "Card {{index}} of {{count}}, face down",
+    "cardFaceUp": "Card {{index}} of {{count}}, {{resource}}",
+    "moreCards_one": "and {{count}} more card",
+    "moreCards_other": "and {{count}} more cards",
+    "drawing": "Drawing a card at random…",
+    "stole": "You stole 1 {{resource}} from {{player}}",
+    "back": "Choose another player"
   },
   "trade": {
     "title": "Player trade",
