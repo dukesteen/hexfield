@@ -1,0 +1,47 @@
+.custom-map-picker {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+}
+
+.custom-map-picker textarea {
+  width: 100%;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--page);
+  color: var(--text);
+  font:
+    0.78rem/1.4 ui-monospace,
+    monospace;
+  word-break: break-all;
+}
+
+.custom-map-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.custom-map-summary {
+  display: grid;
+  gap: 2px;
+  padding: 10px 12px;
+  border-left: 4px solid var(--ready-text);
+  border-radius: 8px;
+  background: var(--page);
+}
+
+.custom-map-summary[data-state='invalid'],
+.custom-map-summary[data-state='seats'] {
+  border-left-color: var(--error);
+}
+
+.custom-map-summary p {
+  margin: 4px 0 0;
+  color: var(--error);
+}

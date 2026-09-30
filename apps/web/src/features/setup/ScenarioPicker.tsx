@@ -30,7 +30,16 @@ interface ScenarioPickerProps {
   readonly classicOnly?: boolean;
   /** An online game: scenarios whose private flows do not run over the network yet are left out. */
   readonly online?: boolean;
+  /** Offer "Custom map" (an editor map). `modules` are the chosen map's, once there is one. */
+  readonly custom?: {
+    readonly selected: boolean;
+    readonly modules: readonly string[];
+    readonly onSelect: () => void;
+  };
 }
+
+/** The select value of the "Custom map" choice. */
+export const CUSTOM_CHOICE = 'custom';
 
 /**
  * Modules a local game plays but an online game cannot yet. Knights and commerce plays online:
@@ -67,6 +76,7 @@ export function ScenarioPicker({
   disabled = false,
   classicOnly = false,
   online = false,
+  custom,
 }: ScenarioPickerProps) {
   const { t } = useTranslation('lobby');
   const choices = scenariosForSeats(seatCount).filter(
@@ -79,16 +89,24 @@ export function ScenarioPicker({
     (scenario) => isSeafaringScenario(scenario) && !isSeafaringKnightsScenario(scenario),
   );
   const combined = choices.filter(isSeafaringKnightsScenario);
-  const current = choices.find((scenario) => scenario.id === scenarioId) ?? choices[0];
-  const selected = current?.modules ?? ['base'];
+  const current = custom?.selected
+    ? undefined
+    : (choices.find((scenario) => scenario.id === scenarioId) ?? choices[0]);
+  const selected = custom?.selected
+    ? ['base', ...custom.modules, ...(seatCount > 4 ? ['five-six'] : [])]
+    : (current?.modules ?? ['base']);
   return (
     <div className="scenario-picker">
       <label>
         {t('lobby:scenario')}
         <select
-          value={current?.id ?? ''}
+          value={custom?.selected ? CUSTOM_CHOICE : (current?.id ?? '')}
           disabled={disabled}
           onChange={(event) => {
+            if (event.target.value === CUSTOM_CHOICE) {
+              custom?.onSelect();
+              return;
+            }
             const next = scenarioById(event.target.value);
             if (next) onScenario(next);
           }}
@@ -118,9 +136,15 @@ export function ScenarioPicker({
                     ))}
                   </optgroup>
                 ))}
+          {custom && (
+            <optgroup label={t('lobby:scenarioGroupCustom')}>
+              <option value={CUSTOM_CHOICE}>{t('lobby:scenarioCustom')}</option>
+            </optgroup>
+          )}
         </select>
       </label>
       {current && <p className="muted scenario-about">{t(`lobby:${current.aboutKey}`)}</p>}
+      {custom?.selected && <p className="muted scenario-about">{t('lobby:scenarioCustomAbout')}</p>}
       <fieldset className="expansion-list">
         <legend>{t('lobby:expansions')}</legend>
         {EXPANSION_IDS.map((id) => {
