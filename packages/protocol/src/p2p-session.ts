@@ -418,6 +418,7 @@ export class P2PSession implements GameSession<CertifiedHistory> {
             openedSession.status = {
               kind: 'error',
               message: 'This seat has a new controller. Its previous signing key is retired.',
+              code: 'seat-retired',
             };
             for (const seat of openedSession.tradeIntents.keys()) openedSession.cancelPending(seat);
             openedSession.clearAutomaticRetry();

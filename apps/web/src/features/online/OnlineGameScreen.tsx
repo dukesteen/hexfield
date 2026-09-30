@@ -20,6 +20,7 @@ import { ChatPanel } from './ChatPanel';
 import { ChatLauncher } from './ChatLauncher';
 import { TransferPanel } from './TransferPanel';
 import { RecoveryPanel } from './RecoveryPanel';
+import { RecoveredSeatNotices } from './RecoveredSeatNotices';
 import { useReconnectFallback } from './use-reconnect-fallback';
 import { useSourceTransfer } from '../../queries/online-transfers';
 import type { OnlineTransferBrowser } from '../../session/online-transfer-browser';
@@ -182,6 +183,14 @@ function OnlineGameInstance({
   const status = useSessionStore((store) => store.status);
   const headHash = useSessionStore((store) => store.fairness?.head.hash ?? null);
   const recoveryCandidate = useSessionStore((store) => store.recoveryCandidate);
+  const selfRecovered = useSessionStore(
+    (store) =>
+      store.state?.seats.find((seat) => seat.seat === game.seat)?.status === 'bot' &&
+      game.genesis.seats.some((seat) => seat.seat === game.seat && seat.kind === 'human'),
+  );
+  const selfRetired = useSessionStore(
+    (store) => store.status?.kind === 'error' && store.status.code === 'seat-retired',
+  );
   const { mutate: requestPersistentStorage } = useRequestPersistentStorage();
   const [attached, setAttached] = useState(false);
   const [leaving, setLeaving] = useState(false);
@@ -253,6 +262,7 @@ function OnlineGameInstance({
   }, [transferOpen]);
   const halted = snapshot.startup?.phase === 'halted';
   const disclosed = snapshot.startup?.error === 'online-ceremony-disputed';
+  const canTransfer = room.startTransfer !== undefined && !halted && !voided;
   const blocker = useBlocker({
     shouldBlockFn: ({ current, next }) =>
       !allowNavigation.current && !snapshot.closed && current.pathname !== next.pathname,
@@ -459,7 +469,7 @@ function OnlineGameInstance({
               >
                 {t('lobby:fullSaveExport')}
               </button>
-              {room.startTransfer && !halted && !voided && (
+              {canTransfer && !selfRecovered && !selfRetired && (
                 <button
                   className="button button-quiet"
                   type="button"
@@ -468,9 +478,7 @@ function OnlineGameInstance({
                   {t('lobby:transferSourceTitle')}
                 </button>
               )}
-              {room.startTransfer &&
-                !halted &&
-                !voided &&
+              {canTransfer &&
                 returnSeats.map((seat) => (
                   <button
                     key={seat}
@@ -496,8 +504,25 @@ function OnlineGameInstance({
                   {t('game:results')}
                 </button>
               </div>
-            ) : missing.length > 0 || recoveryCandidate ? (
+            ) : missing.length > 0 ||
+              recoveryCandidate ||
+              selfRecovered ||
+              selfRetired ||
+              (returnSeats.length > 0 && canTransfer) ? (
               <>
+                <RecoveredSeatNotices
+                  selfSeat={selfRecovered || selfRetired ? game.seat : null}
+                  retired={selfRetired && !selfRecovered}
+                  returnable={
+                    canTransfer
+                      ? returnSeats.map((seat) => ({
+                          seat,
+                          name: presentation.players[seat]?.name ?? String(seat + 1),
+                        }))
+                      : []
+                  }
+                  onReturn={(seat) => void openTransfer({ seat, mode: 'return' })}
+                />
                 {missing.length > 0 && (
                   <div className="online-game-notice">
                     <div className="online-game-notice-heading">

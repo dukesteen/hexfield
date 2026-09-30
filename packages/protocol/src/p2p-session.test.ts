@@ -17,6 +17,7 @@ import { P2PSession } from './p2p-session.js';
 import { ReplicatedLog } from './replicated-log.js';
 import type { P2PSessionOptions, SessionDriver } from './p2p-session.js';
 import type { ReplayPolicy } from './replay.js';
+import type { SessionUpdate } from './session-types.js';
 import { replayCertifiedPrefix } from './replay.js';
 import { initialProposalContext, snapshotFromContext } from './replay.js';
 import { proposerFor } from './proposal.js';
@@ -501,12 +502,12 @@ describe('P2PSession', () => {
       const privateBefore = session.getPrivate(0);
       expect(privateBefore).not.toBeNull();
       const snapshot = session.getState();
-      const statuses: string[] = [];
-      session.subscribe((update) => statuses.push(update.status.kind));
+      const statuses: SessionUpdate['status'][] = [];
+      session.subscribe((update) => statuses.push(update.status));
       // Replica tests establish certificate validation and durable retirement;
       // this test exercises its application callback boundary.
       callback({ kind: 'retired', seat: 0 });
-      expect(statuses.at(-1)).toBe('error');
+      expect(statuses.at(-1)).toMatchObject({ kind: 'error', code: 'seat-retired' });
       expect(session.getProtocolStatus()).toEqual({ kind: 'retired', seat: 0 });
       expect(session.controllableSeats()).toEqual([]);
       expect(session.getPrivate(0)).toBeNull();

@@ -202,6 +202,7 @@
   "staleAction": "The game changed. Choose your action again.",
   "invalidAction": "That action is no longer available.",
   "sessionStopped": "This game stopped after an unexpected error. Your progress is saved.",
+  "seatRetired": "This device no longer controls this seat.",
   "saveConflictStopped": "This game is paused because another tab changed its save.",
   "playCard": "Play {{card}}",
   "placement": {
