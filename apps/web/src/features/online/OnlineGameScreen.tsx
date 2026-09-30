@@ -17,6 +17,7 @@ import { UnsupportedOnlineGameVersionError } from '../../session/online-game-rec
 import { ManualConnectionPanel } from './ManualConnectionPanel';
 import { ConnectionDiagnostics } from './ConnectionDiagnostics';
 import { ChatPanel } from './ChatPanel';
+import { ChatLauncher } from './ChatLauncher';
 import { TransferPanel } from './TransferPanel';
 import { RecoveryPanel } from './RecoveryPanel';
 import { useReconnectFallback } from './use-reconnect-fallback';
@@ -447,13 +448,6 @@ function OnlineGameInstance({
               <button
                 className="button button-quiet"
                 type="button"
-                onClick={() => setChatOpen(true)}
-              >
-                {t('lobby:chatTitle')}
-              </button>
-              <button
-                className="button button-quiet"
-                type="button"
                 onClick={() => setConnectionOpen(true)}
               >
                 {t('lobby:connectionDiagnosticsTitle')}
@@ -558,6 +552,15 @@ function OnlineGameInstance({
           {t('game:loadingGame')}
         </div>
       )}
+      {attached && (
+        <ChatLauncher
+          chat={snapshot.chat}
+          labels={peerLabels}
+          self={snapshot.self}
+          open={chatOpen}
+          onOpen={() => setChatOpen(true)}
+        />
+      )}
       <dialog
         ref={connectionDialog}
         className="app-dialog connection-dialog"
@@ -597,10 +600,13 @@ function OnlineGameInstance({
         aria-label={t('lobby:chatTitle')}
         onCancel={() => setChatOpen(false)}
       >
-        <button className="button button-quiet" type="button" onClick={() => setChatOpen(false)}>
-          {t('lobby:manualClose')}
-        </button>
-        <ChatPanel room={room} chat={snapshot.chat} labels={peerLabels} self={snapshot.self} />
+        <ChatPanel
+          room={room}
+          chat={snapshot.chat}
+          labels={peerLabels}
+          self={snapshot.self}
+          onClose={() => setChatOpen(false)}
+        />
       </dialog>
       <dialog
         ref={transferDialog}
