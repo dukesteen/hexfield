@@ -471,7 +471,7 @@
 }
 .progress-face-name {
   padding: 0 4px;
-  font-family: 'Young Serif', Georgia, serif;
+  font-family: 'Tienne', Georgia, serif;
   font-size: calc(var(--w) * 0.115);
   font-weight: 400;
   line-height: 1.1;
@@ -823,7 +823,7 @@
   background: var(--raised);
 }
 .barbarian-fight strong {
-  font-family: 'Young Serif', Georgia, serif;
+  font-family: 'Tienne', Georgia, serif;
   font-size: 26px;
   font-weight: 400;
 }

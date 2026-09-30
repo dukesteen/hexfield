@@ -73,7 +73,7 @@
   padding: 4px 5px;
   border-radius: 7px;
   font:
-    15px/1 'Young Serif',
+    15px/1 'Tienne',
     Georgia,
     serif;
 }
@@ -149,7 +149,7 @@
   order: -1;
   padding-inline: 2px;
   font:
-    18px/1 'Young Serif',
+    18px/1 'Tienne',
     Georgia,
     serif;
 }
@@ -374,7 +374,7 @@
   color: #fff8ec;
   box-shadow: 0 3px 0 #8e2f24;
   font:
-    16px/1.1 'Young Serif',
+    16px/1.1 'Tienne',
     Georgia,
     serif;
 }
@@ -481,7 +481,7 @@
   gap: 5px;
   min-width: 0;
   font:
-    16px 'Young Serif',
+    16px 'Tienne',
     Georgia,
     serif;
 }

@@ -67,7 +67,7 @@
 .form-page h2,
 .online-page h1,
 .online-page h2 {
-  font-family: 'Young Serif', Georgia, serif;
+  font-family: 'Tienne', Georgia, serif;
   font-weight: 400;
 }
 
@@ -81,7 +81,7 @@
 .home-page .app-brand,
 .form-page .app-brand,
 .online-page .app-brand {
-  font-family: 'Young Serif', Georgia, serif;
+  font-family: 'Tienne', Georgia, serif;
   font-size: 1.125rem;
   font-weight: 400;
 }
@@ -225,7 +225,7 @@
 }
 
 .settings-form > fieldset legend {
-  font-family: 'Young Serif', Georgia, serif;
+  font-family: 'Tienne', Georgia, serif;
   font-size: 1.1rem;
   font-weight: 400;
 }
@@ -244,7 +244,7 @@
 }
 
 .network-settings summary {
-  font-family: 'Young Serif', Georgia, serif;
+  font-family: 'Tienne', Georgia, serif;
   font-size: 1.05rem;
 }
 

@@ -213,7 +213,7 @@ function hexPattern(width, height) {
 function page({ width, height, board, text }) {
   const slice = boardSlice(board);
   return `<!doctype html><html><head><meta charset="utf-8"><style>
-${fontFace('Young Serif', 'young-serif.ttf')}
+${fontFace('Tienne', 'tienne-bold.ttf')}
 ${fontFace('DM Mono', 'dm-mono-regular.ttf')}
 ${fontFace('DM Mono Medium', 'dm-mono-medium.ttf')}
 html,body{margin:0;background:${palette.page};}
@@ -222,8 +222,8 @@ html,body{margin:0;background:${palette.page};}
 .text{position:absolute;${text.position}}
 .brand{display:flex;align-items:center;gap:${text.gap}px;}
 .brand svg{flex:none;}
-h1{font:400 ${text.title}px/1 'Young Serif';margin:0;letter-spacing:-0.01em;}
-h2{font:400 ${text.headline}px/1.15 'Young Serif';color:${palette.accent};margin:${text.headline * 0.9}px 0 0;}
+h1{font:700 ${text.title}px/1 'Tienne';margin:0;letter-spacing:-0.01em;}
+h2{font:700 ${text.headline}px/1.15 'Tienne';color:${palette.accent};margin:${text.headline * 0.9}px 0 0;}
 p{font:400 ${text.body}px/1.45 'DM Mono';color:${palette.muted};margin:${text.body * 0.8}px 0 0;max-width:${text.bodyWidth}px;}
 .url{display:inline-block;margin-top:${text.body * 1.4}px;font:400 ${text.url}px/1 'DM Mono Medium';color:${palette.text};
   padding:${text.url * 0.55}px ${text.url * 0.8}px;border-radius:12px;background:${palette.brand};box-shadow:0 4px 0 #6f2219;}
