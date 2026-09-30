@@ -106,9 +106,6 @@ export class HeuristicBot implements Bot {
 
   protected baseChoice(context: TurnContext): CommandShape | null {
     const { types } = context;
-    // With endgame awareness, a legal claim of the win comes before anything else.
-    const claim = context.config.endgame ? context.ofType('CLAIM_VICTORY')[0] : undefined;
-    if (claim) return claim;
     if (types.has('PLACE_SETTLEMENT')) return setupSettlement(context);
     if (types.has('PLACE_ROAD')) return roadToward(context, 'PLACE_ROAD');
     if (types.has('DISCARD')) return discard(context);

@@ -1,7 +1,6 @@
 import type { GameState, Resource, Seat } from '@cp2p/engine';
 import { RESOURCES } from '@cp2p/engine';
 import type { Rates } from './board.js';
-import type { PointsOf } from './robber.js';
 import { resourceHand, shortfall, turnsToAfford } from './plan.js';
 import type { Cost } from './plan.js';
 
@@ -106,9 +105,7 @@ export function dangerous(
   partner: Seat,
   target: number,
   margin: number,
-  points?: PointsOf,
 ): boolean {
-  if (points) return points(partner) >= target - margin;
   const holder = state.seats.find((item) => item.seat === partner);
   return (holder?.publicVp ?? 0) >= target - margin;
 }
@@ -123,11 +120,10 @@ export function acceptsTrade(
   target: number,
   context: HandContext,
   policy: TradePolicy = DEFAULT_TRADE_POLICY,
-  points?: PointsOf,
 ): boolean {
   const gain = tradeGain(hand, gets, gives, context);
   if (gain === null) return false;
-  const needed = dangerous(state, partner, target, policy.dangerMargin, points)
+  const needed = dangerous(state, partner, target, policy.dangerMargin)
     ? policy.dangerThreshold
     : policy.threshold;
   return gain >= needed;

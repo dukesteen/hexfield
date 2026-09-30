@@ -10,7 +10,6 @@ import {
   stealScore,
 } from '../eval/index.js';
 import type { TurnContext } from './context.js';
-import { refusesPartner, robberWeightsFor } from './endgame.js';
 import { best } from './setup.js';
 
 /** A discard (or any "give up N cards" choice) that keeps the goal's cards. */
@@ -49,14 +48,7 @@ export function robberHex(context: TurnContext, type = 'MOVE_ROBBER'): CommandSh
       const hex = String(command.hex);
       return context.config.robber === 'simple'
         ? opponentPips(context, hex)
-        : robberHexScore(
-            state,
-            seat,
-            hex,
-            context.target,
-            robberWeightsFor(context),
-            context.config.endgame ? context.points() : undefined,
-          );
+        : robberHexScore(state, seat, hex, context.target, context.config.robberWeights);
     },
     context,
   );
@@ -72,14 +64,7 @@ export function stealVictim(context: TurnContext, type = 'STEAL'): CommandShape 
       const victim = state.seats.find((item) => item.seat === command.victim);
       if (!victim) return -1;
       if (context.config.robber === 'simple') return victim.resources.total;
-      return stealScore(
-        state,
-        seat,
-        victim.seat,
-        context.target,
-        robberWeightsFor(context),
-        context.config.endgame ? context.points() : undefined,
-      );
+      return stealScore(state, seat, victim.seat, context.target, context.config.robberWeights);
     },
     context,
   );
@@ -113,7 +98,6 @@ export function wantsTradeWith(
     const closer = shortfall(resourceHand(after), cost) < before;
     return closer && total(gets) >= total(gives);
   }
-  if (refusesPartner(context, partner)) return false;
   return acceptsTrade(
     state,
     hand,
@@ -123,7 +107,6 @@ export function wantsTradeWith(
     context.target,
     context.handContext(),
     context.config.trade,
-    context.config.endgame ? context.points() : undefined,
   );
 }
 

@@ -12,7 +12,6 @@ import {
 } from '../eval/index.js';
 import { openOffers } from '../offers.js';
 import type { TurnContext } from './context.js';
-import { blockRoad, offerRecipients } from './endgame.js';
 import { wantsTradeWith } from './reactions.js';
 import { best, edgeValue, settlementValue } from './setup.js';
 
@@ -245,14 +244,7 @@ function offerTrade(context: TurnContext, memory: TurnMemory): CommandShape | nu
   const pair = wantAndSpare(hand, context.handContext());
   if (!pair || pair.wantValue <= pair.spareValue + context.config.tradeTuning.offerMargin)
     return null;
-  const to = offerRecipients(context);
-  if (to?.length === 0) return null;
-  const command = {
-    type: 'OFFER_TRADE',
-    give: { [pair.spare]: 1 },
-    want: { [pair.want]: 1 },
-    ...(to ? { to } : {}),
-  };
+  const command = { type: 'OFFER_TRADE', give: { [pair.spare]: 1 }, want: { [pair.want]: 1 } };
   if (!context.valid(command)) return null;
   memory.offers++;
   return command;
@@ -401,8 +393,6 @@ export function mainTurn(
   if (settled) return settled;
   const card = devCardPlay(context);
   if (card) return card;
-  const block = blockRoad(context);
-  if (block) return block;
   const built = build(context);
   if (built) return built;
   const module = extra();
