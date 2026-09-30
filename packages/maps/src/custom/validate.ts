@@ -318,3 +318,17 @@ export function problemLocations(problems: readonly MapProblem[]): {
     edges: [...new Set(problems.flatMap((problem) => problem.edges ?? []))],
   };
 }
+
+/**
+ * The map with the widest seat range around its own that validates without errors. A config only
+ * records the seat count in use, so a lobby rebuilding the map from it offers every count the
+ * board supports instead of that one.
+ */
+export function widenSeats(map: MapDef): MapDef {
+  const fits = (count: number) =>
+    validateMap({ ...map, seats: { min: count, max: count } }).errors.length === 0;
+  let { min, max } = map.seats;
+  while (min > 2 && fits(min - 1)) min -= 1;
+  while (max < 6 && fits(max + 1)) max += 1;
+  return { ...map, seats: { min, max } };
+}

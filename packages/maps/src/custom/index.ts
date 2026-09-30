@@ -9,7 +9,7 @@ export {
 } from './board.js';
 export { MAP_PREFIX, decodeMap, encodeMap, importMap, mapBytes, mapJson } from './codec.js';
 export { isCustomConfig } from './config.js';
-export { autoTokens, defaultTokenBag, randomiseMap } from './generate.js';
+export { autoTokens, defaultFogStack, defaultTokenBag, randomiseMap } from './generate.js';
 export {
   HARBOR_KINDS,
   MAP_FORMAT,
@@ -20,6 +20,7 @@ export {
   SEAFARING_MAP_TERRAINS,
   canonicalMap,
   emptyMap,
+  isMapToken,
   mapDefSchema,
   parseMapDef,
 } from './schema.js';
@@ -31,7 +32,8 @@ export type {
   MapHex,
   MapModule,
   MapTerrain,
+  MapToken,
 } from './schema.js';
 export { mapFromScenario } from './templates.js';
-export { isTokenless, problemLocations, setupSpots, validateMap } from './validate.js';
+export { isTokenless, problemLocations, setupSpots, validateMap, widenSeats } from './validate.js';
 export type { MapProblem, MapProblemCode, MapReport } from './validate.js';

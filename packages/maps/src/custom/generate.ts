@@ -3,7 +3,7 @@ import type { Result } from '@cp2p/engine';
 import { hexId } from '@cp2p/engine/geometry';
 import { createRng } from '@cp2p/engine/rng';
 import { isMapToken } from './schema.js';
-import type { MapDef, MapHex, MapTerrain } from './schema.js';
+import type { MapDef, MapFog, MapHex, MapTerrain } from './schema.js';
 import { isTokenless } from './validate.js';
 
 /** The base game's 18 numbers in an order where every prefix stays balanced across the dice. */
@@ -106,4 +106,25 @@ export function randomiseMap(map: MapDef, seed: number): Result<MapDef> {
           ? hexId(cells[0])
           : null;
   return autoTokens({ ...map, hexes, robber }, rng.nextU32());
+}
+
+/**
+ * A fog stack for `count` fog hexes: about a quarter open sea, one gold per eight tiles and the
+ * rest the base game's resources, numbered from the base set.
+ */
+export function defaultFogStack(count: number): MapFog {
+  const sea = Math.round(count / 4);
+  const gold = Math.floor(count / 8);
+  const land = Math.max(0, count - sea - gold);
+  const terrains: Record<string, number> = {};
+  const add = (terrain: string, amount = 1) => {
+    if (amount > 0) terrains[terrain] = (terrains[terrain] ?? 0) + amount;
+  };
+  add('sea', sea);
+  add('gold', gold);
+  for (let index = 0; index < land; index++)
+    add(TERRAIN_CYCLE.filter((terrain) => terrain !== 'desert')[index % 18] ?? 'forest');
+  const tokens: Record<string, number> = {};
+  for (const token of defaultTokenBag(land + gold)) tokens[token] = (tokens[token] ?? 0) + 1;
+  return { terrains, tokens };
 }

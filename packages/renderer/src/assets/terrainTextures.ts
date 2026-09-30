@@ -418,6 +418,26 @@ export function getIslandChitUrl(vp: number): string {
 export function getGameArtUrl(art: GameArt): string {
   return artUrl(GAME_ART[art]);
 }
+/** A terrain tile's art, for palettes (the map editor). Unknown terrains get the sea tile. */
+export function getTileArtUrl(terrain: string, variant = 1): string {
+  const v = Math.min(3, Math.max(1, Math.trunc(variant) || 1));
+  if (terrain === 'desert') return artUrl('tile-desert');
+  if (terrain === 'gold') return artUrl(`sf-tile-gold-${v}`);
+  if (terrain === 'fog') return artUrl('sf-tile-fog');
+  const known = ['forest', 'hills', 'pasture', 'fields', 'mountains'].includes(terrain);
+  return artUrl(`tile-${known ? terrain : 'sea'}-${v}`);
+}
+/** A number token's art (2–12 without 7). */
+export function getTokenArtUrl(token: number): string {
+  return artUrl(`token-${token}`);
+}
+/** A harbor's art: `generic` is the 3:1 harbor, otherwise the resource's 2:1 harbor. */
+export function getHarborArtUrl(kind: string): string {
+  return artUrl(kind === 'generic' ? 'harbor-3to1' : `harbor-${kind}`);
+}
+export function getRobberArtUrl(): string {
+  return artUrl('robber');
+}
 export function artUrl(key: string): string {
   const url = ART[key];
   if (!url) throw new Error(`Missing art asset: ${key}`);

@@ -9,6 +9,7 @@ import {
   MAP_PREFIX,
   autoTokens,
   decodeMap,
+  defaultFogStack,
   defaultTokenBag,
   emptyMap,
   encodeMap,
@@ -24,6 +25,7 @@ import {
   randomiseMap,
   setupSpots,
   validateMap,
+  widenSeats,
 } from './index.js';
 import type { MapDef, MapProblemCode } from './index.js';
 
@@ -280,6 +282,12 @@ describe('solver and randomiser', () => {
     expect(autoTokens(map, 9)).toEqual(kept);
   });
 
+  test('a default fog stack fits its fog hexes', () => {
+    const map = required(mapFromScenario(required(scenarioById('fogbound')), 'Fog'));
+    const fogHexes = map.hexes.filter((hex) => hex.terrain === 'fog').length;
+    expect(codes(validateMap({ ...map, fog: defaultFogStack(fogHexes) }).errors)).toEqual([]);
+  });
+
   test('randomise deals a playable map on any shape', () => {
     for (const [source, seed] of [
       [classic(), 1],
@@ -312,6 +320,7 @@ describe('lobby configs', () => {
       expect(state.board.hexes).toHaveLength(19);
       const back = required(mapOfConfig(config.value, map.name));
       expect(mapBoard(back)).toEqual(mapBoard(map));
+      expect(widenSeats(back).seats).toEqual({ min: 2, max: 6 });
     }
     expect(mapConfig(map, 7).ok).toBe(false);
   });
