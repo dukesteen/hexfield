@@ -10,6 +10,7 @@ import {
 } from 'fake-indexeddb';
 import { openDB } from 'idb';
 import { afterEach, describe, expect, test, vi } from 'vitest';
+import { DATABASE_VERSION } from './database.js';
 import { IndexedDbByteStore } from './indexed-db-byte-store.js';
 
 interface SeedDatabase {
@@ -130,7 +131,7 @@ describe('IndexedDbByteStore', () => {
     const store = new IndexedDbByteStore();
     await store.putIfAbsent('settings/value', new Uint8Array([3]));
 
-    const upgraded = await openDB<FutureDatabase>('cp2p', 6, {
+    const upgraded = await openDB<FutureDatabase>('cp2p', DATABASE_VERSION + 1, {
       upgrade(database) {
         database.createObjectStore('future');
       },
@@ -163,6 +164,7 @@ describe('IndexedDbByteStore', () => {
       'deletedGames',
       'entries',
       'games',
+      'maps',
       'snapshots',
       'vault',
     ]);

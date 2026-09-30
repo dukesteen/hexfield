@@ -41,3 +41,5 @@ export type {
   TransferReadinessRecord,
   TransferImportOutcome,
 } from './transfer-import-store.js';
+export { IndexedDbMapStore, MAX_SAVED_MAP_BYTES } from './map-store.js';
+export type { SavedMapRecord } from './map-store.js';
