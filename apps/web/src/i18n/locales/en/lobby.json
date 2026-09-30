@@ -525,5 +525,5 @@
   "onlineAddBotLevel_hard": "Hard bot",
   "gameplay": "Gameplay",
   "pickStealCard": "Pick the card to steal",
-  "pickStealCardHint": "Off: steal as soon as you choose a player. Either way the card is drawn at random."
+  "pickStealCardHint": "Off: steal as soon as you choose a player."
 }
