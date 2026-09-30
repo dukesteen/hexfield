@@ -135,9 +135,16 @@ export function tokenProblems(hexes: readonly BoardHex[]): string[] {
   return problems;
 }
 
-/** Harbor rule violations: coastal edges only, no shared vertex, no duplicate edge. */
-export function harborProblems(board: BoardState): string[] {
-  const problems: string[] = [];
+/** One harbor rule violation, located at the harbor's edge (the map editor marks it there). */
+export type HarborIssue =
+  | { readonly kind: 'not-coastal'; readonly edge: string }
+  | { readonly kind: 'shared-water'; readonly edge: string; readonly water: string }
+  | { readonly kind: 'shared-vertex'; readonly edge: string; readonly vertex: string }
+  | { readonly kind: 'duplicate'; readonly edge: string };
+
+/** Harbor rule violations: coastal edges only, one per water hex, no shared vertex or edge. */
+export function harborIssues(board: BoardState): HarborIssue[] {
+  const issues: HarborIssue[] = [];
   const coast = new Set<string>(coastalEdges(board.hexes));
   const graph = buildBoardGraph(board.hexes);
   const land = new Set(
@@ -145,24 +152,41 @@ export function harborProblems(board: BoardState): string[] {
   );
   const seen = new Set<string>();
   const waters = new Set<string>();
+  const edges = new Set<string>();
   for (const { edge } of board.harbors) {
+    if (edges.has(edge)) issues.push({ kind: 'duplicate', edge });
+    edges.add(edge);
     const index = graph.edgeIndex[edge];
-    if (index === undefined || !coast.has(edge)) problems.push(`${edge}: not a coastal edge`);
+    if (index === undefined || !coast.has(edge)) issues.push({ kind: 'not-coastal', edge });
     // Each harbor's pier and token sit in the water hex it faces, so two harbors must not share one.
     const water = (index === undefined ? [] : (graph.edgeHexes[index] ?? [])).find(
       (id) => !land.has(id),
     );
     if (water !== undefined) {
-      if (waters.has(water)) problems.push(`${edge}: faces ${water} with another harbor`);
+      if (waters.has(water)) issues.push({ kind: 'shared-water', edge, water });
       waters.add(water);
     }
     for (const vertex of index === undefined ? [] : (graph.edgeVertices[index] ?? [])) {
-      if (seen.has(vertex)) problems.push(`${edge}: shares vertex ${vertex} with another harbor`);
+      if (seen.has(vertex)) issues.push({ kind: 'shared-vertex', edge, vertex });
       seen.add(vertex);
     }
   }
-  if (new Set(board.harbors.map((harbor) => harbor.edge)).size !== board.harbors.length)
-    problems.push('duplicate harbor edge');
+  return issues;
+}
+
+/** Harbor rule violations as text: coastal edges only, no shared vertex, no duplicate edge. */
+export function harborProblems(board: BoardState): string[] {
+  const issues = harborIssues(board);
+  const problems = issues.flatMap((issue) =>
+    issue.kind === 'not-coastal'
+      ? [`${issue.edge}: not a coastal edge`]
+      : issue.kind === 'shared-water'
+        ? [`${issue.edge}: faces ${issue.water} with another harbor`]
+        : issue.kind === 'shared-vertex'
+          ? [`${issue.edge}: shares vertex ${issue.vertex} with another harbor`]
+          : [],
+  );
+  if (issues.some((issue) => issue.kind === 'duplicate')) problems.push('duplicate harbor edge');
   return problems;
 }
 

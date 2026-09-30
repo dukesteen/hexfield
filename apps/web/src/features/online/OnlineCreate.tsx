@@ -1,5 +1,13 @@
 import type { BaseOptions, GameConfig } from '@cp2p/engine';
-import { defaultScenario, scenarioAtSeats, scenarioConfig, type Scenario } from '@cp2p/maps';
+import {
+  defaultScenario,
+  mapConfig,
+  mapSeatCounts,
+  scenarioAtSeats,
+  scenarioConfig,
+  type MapDef,
+  type Scenario,
+} from '@cp2p/maps';
 import { useNavigate } from '@tanstack/react-router';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -8,6 +16,7 @@ import { useSettings } from '../../queries/hooks';
 import { DEFAULT_NETWORK_SETTINGS, effectiveNetworkSettings } from '../../queries/network-config';
 import { beginOnlineRoomOpen, closeOnlineRoom } from './room-registry.js';
 import { ScenarioPicker, isSeafaringScenario } from '../setup/ScenarioPicker';
+import { CustomMapPicker, useCustomMapProblem } from '../setup/CustomMapPicker';
 import { MAX_PLAYERS, MIN_PLAYERS } from '../players/identity';
 import './online.css';
 
@@ -47,13 +56,26 @@ export function OnlineCreate() {
   const [scenario, setScenario] = useState<Scenario>(() => defaultScenario(4));
   const [mapLayout, setMapLayout] = useState<BaseOptions['mapLayout']>('balanced-random');
   const [vpTarget, setVpTarget] = useState(10);
+  const [useCustom, setUseCustom] = useState(false);
+  const [customMap, setCustomMap] = useState<MapDef | null>(null);
+  const customProblem = useCustomMapProblem(useCustom ? customMap : null, seatCount);
   /** A scenario brings its own victory target, so the field follows the choice. */
   const chooseScenario = (next: Scenario) => {
+    setUseCustom(false);
     setScenario(next);
     setVpTarget(next.vpTarget);
   };
+  /** A custom map brings its target, and the seat count moves into the map's range. */
+  const chooseMap = (map: MapDef) => {
+    setCustomMap(map);
+    setVpTarget(map.vpTarget);
+    const counts = mapSeatCounts(map);
+    if (counts.length > 0 && !counts.includes(seatCount))
+      setSeatCount(counts.find((item) => item >= seatCount) ?? counts.at(-1) ?? seatCount);
+  };
   const changeSeatCount = (count: number) => {
     setSeatCount(count);
+    if (useCustom) return;
     // An expansion map follows the seat count into its 3–4 or 5–6 player version.
     const next = scenarioAtSeats(scenario, count) ?? defaultScenario(count);
     if (next !== scenario) chooseScenario(next);
@@ -75,7 +97,19 @@ export function OnlineCreate() {
     setBusy(true);
     setError(false);
     const options: BaseOptions = { ...DEFAULT_OPTIONS, mapLayout, vpTarget };
-    const config: GameConfig = scenarioConfig(scenario, seatCount, { base: { ...options } });
+    let config: GameConfig = scenarioConfig(scenario, seatCount, { base: { ...options } });
+    if (useCustom) {
+      const custom =
+        customMap && customProblem === null
+          ? mapConfig(customMap, seatCount, { base: { ...options } })
+          : null;
+      if (!custom?.ok) {
+        setError(true);
+        setBusy(false);
+        return;
+      }
+      config = custom.value;
+    }
     const opening = beginOnlineRoomOpen(`host:${crypto.randomUUID()}`, {
       kind: 'host',
       serverUrl: connection === 'manual' ? '' : serverUrl,
@@ -202,21 +236,36 @@ export function OnlineCreate() {
               scenarioId={scenario.id}
               onScenario={chooseScenario}
               onSeatCount={changeSeatCount}
+              custom={{
+                selected: useCustom,
+                modules: customMap?.modules ?? [],
+                onSelect: () => setUseCustom(true),
+              }}
             />
-            {scenario.board.kind === 'generator' && !isSeafaringScenario(scenario) && (
-              <label>
-                {t('lobby:mapLayout')}
-                <select
-                  value={mapLayout}
-                  onChange={(event) =>
-                    setMapLayout(event.target.value === 'random' ? 'random' : 'balanced-random')
-                  }
-                >
-                  <option value="balanced-random">{t('lobby:mapBalanced')}</option>
-                  <option value="random">{t('lobby:mapRandom')}</option>
-                </select>
-              </label>
+            {useCustom && (
+              <CustomMapPicker
+                seatCount={seatCount}
+                map={customMap}
+                problem={customProblem}
+                onMap={chooseMap}
+              />
             )}
+            {!useCustom &&
+              scenario.board.kind === 'generator' &&
+              !isSeafaringScenario(scenario) && (
+                <label>
+                  {t('lobby:mapLayout')}
+                  <select
+                    value={mapLayout}
+                    onChange={(event) =>
+                      setMapLayout(event.target.value === 'random' ? 'random' : 'balanced-random')
+                    }
+                  >
+                    <option value="balanced-random">{t('lobby:mapBalanced')}</option>
+                    <option value="random">{t('lobby:mapRandom')}</option>
+                  </select>
+                </label>
+              )}
             <label>
               {t('lobby:vpTarget')}
               <input
@@ -233,7 +282,9 @@ export function OnlineCreate() {
           <button
             className="button button-primary"
             type="submit"
-            disabled={busy || settings.isLoading}
+            disabled={
+              busy || settings.isLoading || (useCustom && (!customMap || customProblem !== null))
+            }
           >
             {busy ? t('lobby:onlineOpening') : t('lobby:onlineCreateAction')}
           </button>

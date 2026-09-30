@@ -15,6 +15,7 @@
     "build": "tsc -b"
   },
   "dependencies": {
+    "@cp2p/codec": "workspace:*",
     "@cp2p/engine": "workspace:*",
     "valibot": "^1.0.0"
   }

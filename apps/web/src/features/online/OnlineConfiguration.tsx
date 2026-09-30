@@ -3,17 +3,24 @@ import { baseModule } from '@cp2p/engine';
 import type { GameConfig, OptionSpec, Result, TurnTimer } from '@cp2p/engine';
 import {
   defaultScenario,
+  isCustomConfig,
+  mapBoard,
+  mapConfig,
+  mapOfConfig,
   scenarioAtSeats,
   scenarioById,
   scenarioConfig,
   scenarioOfConfig,
   standardFixedBoard,
+  widenSeats,
 } from '@cp2p/maps';
+import type { MapDef } from '@cp2p/maps';
 import type { GenesisSeedMode, TakeoverPolicy } from '@cp2p/protocol';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { MAX_PLAYERS, MIN_PLAYERS, modulesForSeatCount } from '../players/identity';
 import { ScenarioPicker, isExpansionScenario } from '../setup/ScenarioPicker';
+import { CustomMapPicker, useCustomMapProblem } from '../setup/CustomMapPicker';
 
 const rules = baseModule();
 const seats = [0, 1, 2, 3, 4, 5] as const;
@@ -44,6 +51,23 @@ function seafaringIdOf(config: GameConfig): string | null {
   return scenario && isExpansionScenario(scenario) ? scenario.id : null;
 }
 
+/** What a custom map puts in the signed config; equal keys mean the same board and rules. */
+function customKeyOf(map: MapDef | null): string | null {
+  return map
+    ? JSON.stringify([mapBoard(map), map.modules, map.pirate, map.setupAreas, map.fog])
+    : null;
+}
+
+/**
+ * The custom map a signed config plays. The host's own copy is kept while it matches; otherwise
+ * the seat range is widened to every count the board supports (the config records only one).
+ */
+function customOf(config: GameConfig, previous: MapDef | null, name: string): MapDef | null {
+  const rebuilt = mapOfConfig(config, name);
+  const derived = rebuilt && widenSeats(rebuilt);
+  return previous && derived && customKeyOf(previous) === customKeyOf(derived) ? previous : derived;
+}
+
 /** Keep a newer local draft when an earlier signed configuration arrives. */
 export function OnlineConfiguration({
   config,
@@ -66,6 +90,12 @@ export function OnlineConfiguration({
   const [seatCount, setSeatCount] = useState(config.seats.length);
   const [options, setOptions] = useState<Record<string, unknown>>(() => initialOptions(config));
   const [seafaringId, setSeafaringId] = useState(() => seafaringIdOf(config));
+  const [useCustom, setUseCustom] = useState(() => isCustomConfig(config));
+  const [customMap, setCustomMap] = useState<MapDef | null>(() =>
+    customOf(config, null, t('lobby:scenarioCustom')),
+  );
+  const customKey = useCustom ? customKeyOf(customMap) : null;
+  const customProblem = useCustomMapProblem(useCustom && editable ? customMap : null, seatCount);
   const [fixedSeed, setFixedSeed] = useState(seedMode.kind === 'fixed');
   const [takeoverDraft, setTakeoverDraft] = useState<TakeoverPolicy>(takeover);
   const [seedHex, setSeedHex] = useState(() =>
@@ -74,7 +104,7 @@ export function OnlineConfiguration({
   const [error, setError] = useState(false);
   const [revision, setRevision] = useState(0);
   const baseline = useRef(
-    JSON.stringify([seatCount, options, seafaringId, fixedSeed, seedHex, takeoverDraft]),
+    JSON.stringify([seatCount, options, seafaringId, customKey, fixedSeed, seedHex, takeoverDraft]),
   );
   const externalKey = toHex(hashValue([config, seedMode, takeover]));
   const previousExternal = useRef(externalKey);
@@ -103,6 +133,8 @@ export function OnlineConfiguration({
     setSeatCount(config.seats.length);
     setOptions(initialOptions(config));
     setSeafaringId(seafaringIdOf(config));
+    setUseCustom(isCustomConfig(config));
+    setCustomMap((previous) => customOf(config, previous, t('lobby:scenarioCustom')));
     setFixedSeed(seedMode.kind === 'fixed');
     setTakeoverDraft(takeover);
     setSeedHex(seedMode.kind === 'fixed' ? toHex(fromBase64Url(seedMode.seed)) : '');
@@ -110,6 +142,7 @@ export function OnlineConfiguration({
       config.seats.length,
       initialOptions(config),
       seafaringIdOf(config),
+      customKeyOf(isCustomConfig(config) ? mapOfConfig(config, '') : null),
       seedMode.kind === 'fixed',
       seedMode.kind === 'fixed' ? toHex(fromBase64Url(seedMode.seed)) : '',
       takeover,
@@ -117,14 +150,21 @@ export function OnlineConfiguration({
     setRevision(0);
     setError(false);
     latestSubmitted.current = null;
-  }, [externalKey, config, seedMode, takeover, revision]);
+  }, [externalKey, config, seedMode, takeover, revision, t]);
 
   useEffect(() => {
     if (!editable || revision === 0) return undefined;
     if (
       !latestSubmitted.current &&
-      JSON.stringify([seatCount, options, seafaringId, fixedSeed, seedHex, takeoverDraft]) ===
-        baseline.current
+      JSON.stringify([
+        seatCount,
+        options,
+        seafaringId,
+        customKey,
+        fixedSeed,
+        seedHex,
+        takeoverDraft,
+      ]) === baseline.current
     ) {
       setRevision(0);
       return undefined;
@@ -133,6 +173,8 @@ export function OnlineConfiguration({
       setError(true);
       return undefined;
     }
+    // A custom map is saved only once one is chosen and it can start at this seat count.
+    if (useCustom && (!customMap || customProblem !== null)) return undefined;
     const timer = window.setTimeout(() => {
       const selectedSeed: GenesisSeedMode = fixedSeed
         ? {
@@ -159,21 +201,30 @@ export function OnlineConfiguration({
             : (currentConfig.current.options[id] ?? {}),
         ]),
       );
+      const custom =
+        useCustom && customMap ? mapConfig(customMap, seatCount, { base: { ...options } }) : null;
+      if (custom && !custom.ok) {
+        setError(true);
+        return;
+      }
       // An expansion scenario brings its own modules, options and board, beside the base rules.
-      const next: GameConfig = seafaring
-        ? scenarioConfig(seafaring, seatCount, { base: { ...options } })
-        : {
-            ...previous,
-            modules,
-            seats: seats.slice(0, seatCount),
-            options: moduleOptions,
-            ...(fixed ? { board: previousBoard ?? standardFixedBoard() } : {}),
-          };
+      const next: GameConfig = custom?.ok
+        ? custom.value
+        : seafaring
+          ? scenarioConfig(seafaring, seatCount, { base: { ...options } })
+          : {
+              ...previous,
+              modules,
+              seats: seats.slice(0, seatCount),
+              options: moduleOptions,
+              ...(fixed ? { board: previousBoard ?? standardFixedBoard() } : {}),
+            };
       const key = toHex(hashValue([next, selectedSeed, takeoverDraft]));
       const draftKey = JSON.stringify([
         seatCount,
         options,
         seafaringId,
+        customKey,
         fixedSeed,
         seedHex.toLowerCase(),
         takeoverDraft,
@@ -198,6 +249,10 @@ export function OnlineConfiguration({
     options,
     revision,
     seafaringId,
+    customKey,
+    customMap,
+    customProblem,
+    useCustom,
     seatCount,
     seedHex,
     takeoverDraft,
@@ -241,6 +296,10 @@ export function OnlineConfiguration({
       : defaultScenario(seatCount).id);
   const changeSeats = (count: number) => {
     setSeatCount(count);
+    if (useCustom) {
+      changed();
+      return;
+    }
     const seafaring = seafaringId === null ? undefined : scenarioById(seafaringId);
     // An expansion map follows the seat count into its 3–4 or 5–6 player version, and back.
     const sibling = seafaring && scenarioAtSeats(seafaring, count);
@@ -290,8 +349,19 @@ export function OnlineConfiguration({
             seatCount={seatCount}
             scenarioId={scenarioId}
             disabled={!editable}
+            custom={{
+              selected: useCustom,
+              modules: customMap?.modules ?? [],
+              onSelect: () => {
+                setUseCustom(true);
+                setSeafaringId(null);
+                changed();
+              },
+            }}
             onScenario={(scenario) => {
-              const wasSeafaring = seafaringId !== null;
+              const wasCustom = useCustom;
+              setUseCustom(false);
+              const wasSeafaring = seafaringId !== null || wasCustom;
               if (isExpansionScenario(scenario)) {
                 // The scenario's own board and victory target replace the classic map choice.
                 setSeafaringId(scenario.id);
@@ -299,7 +369,9 @@ export function OnlineConfiguration({
                   ...current,
                   vpTarget: scenario.vpTarget,
                   mapLayout:
-                    scenario.board.kind === 'fixed' || current.mapLayout === 'standard-fixed'
+                    scenario.board.kind === 'fixed' ||
+                    current.mapLayout === 'standard-fixed' ||
+                    current.mapLayout === 'custom'
                       ? 'balanced-random'
                       : current.mapLayout,
                 }));
@@ -309,13 +381,39 @@ export function OnlineConfiguration({
               setSeafaringId(null);
               if (wasSeafaring) patch('vpTarget', scenario.vpTarget);
               if (scenario.board.kind === 'fixed') patch('mapLayout', 'standard-fixed');
-              else if (options.mapLayout === 'standard-fixed' || wasSeafaring)
+              else if (
+                options.mapLayout === 'standard-fixed' ||
+                options.mapLayout === 'custom' ||
+                wasSeafaring
+              )
                 patch('mapLayout', 'balanced-random');
             }}
             onSeatCount={changeSeats}
           />
+          {useCustom && editable && (
+            <CustomMapPicker
+              seatCount={seatCount}
+              map={customMap}
+              problem={customProblem}
+              onMap={(map) => {
+                setCustomMap(map);
+                setOptions((current) => ({ ...current, vpTarget: map.vpTarget }));
+                changed();
+              }}
+            />
+          )}
+          {useCustom && !editable && customMap && (
+            <p className="muted" data-testid="online-custom-map">
+              {t('lobby:customMapInLobby', {
+                hexes: customMap.hexes.filter((hex) => hex.terrain !== 'sea').length,
+              })}
+            </p>
+          )}
           {rules.optionsSchema
-            .filter((spec) => spec.key !== 'mapLayout' || (!fixedScenario && !pickedBoardFixed))
+            .filter(
+              (spec) =>
+                spec.key !== 'mapLayout' || (!fixedScenario && !pickedBoardFixed && !useCustom),
+            )
             .map((spec) => (
               <RuleField
                 key={spec.key}

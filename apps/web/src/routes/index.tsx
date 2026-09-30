@@ -41,6 +41,9 @@ function Home() {
               <Link to="/local/new" className="button button-quiet">
                 {t('lobby:newGame')}
               </Link>
+              <Link to="/editor" className="button button-quiet">
+                {t('lobby:mapEditorLink')}
+              </Link>
             </div>
             <small className="home-beta-note">{t('lobby:multiplayerBeta')}</small>
           </div>

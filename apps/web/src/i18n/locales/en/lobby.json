@@ -545,5 +545,21 @@
   "onlineUpdateNow": "Update now",
   "onlineUpdateLatest": "This device already has the newest version of Hexfield. Ask the other players to update.",
   "publicReplayOlderVersion": "This replay was created with an older version of Hexfield ({{version}}). This version cannot verify its history, so it cannot be shown.",
-  "publicReplayNewerVersion": "This replay was created with a newer version of Hexfield ({{version}}). Update the app to open it."
+  "publicReplayNewerVersion": "This replay was created with a newer version of Hexfield ({{version}}). Update the app to open it.",
+  "mapEditorLink": "Map editor",
+  "scenarioGroupCustom": "Your maps",
+  "scenarioCustom": "Custom map",
+  "scenarioCustomAbout": "A map made in the map editor. Paste its string or pick one you saved; every player's device builds the same board from the signed game settings.",
+  "customMapSaved": "Saved map",
+  "customMapChoose": "Choose a saved map",
+  "customMapPaste": "Or paste a map string",
+  "customMapUse": "Use this map",
+  "customMapOpenEditor": "Open the map editor",
+  "customMapInvalidString": "That map string could not be read.",
+  "customMapNone": "No map chosen yet.",
+  "customMapSummary": "{{hexes}} hexes · {{min}}–{{max}} players · first to {{target}}",
+  "customMapNotValid": "This map has problems; fix them in the map editor first.",
+  "customMapWrongSeats_one": "This map is not drawn for {{count}} player. It plays with {{seats}}.",
+  "customMapWrongSeats_other": "This map is not drawn for {{count}} players. It plays with {{seats}}.",
+  "customMapInLobby": "A custom map with {{hexes}} hexes, chosen by the host."
 }

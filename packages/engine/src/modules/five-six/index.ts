@@ -12,6 +12,7 @@ import type { Seat } from '../../core/types/index.js';
 import { buildCommands } from '../base/legal.js';
 import { finishTurnFlowFrame } from '../base/phases/turn.js';
 import { afterInput } from '../base/shared.js';
+import { customShapeOf } from '../base/board/custom.js';
 import { baseOptions } from '../base/types.js';
 import { incompatibleModules } from '../compat.js';
 import { FIVE_SIX_BOARD } from './board.js';
@@ -134,7 +135,8 @@ export function fiveSixModule(): GameModule {
     optionsSchema: [{ key: 'specialBuildPhase', type: 'boolean', default: true }],
     hooks: {
       seatRange: () => ({ min: 5, max: 6 }),
-      boardSpec: () => FIVE_SIX_BOARD,
+      // An editor map keeps its own shape at any seat count.
+      boardSpec: (config) => customShapeOf(config) ?? FIVE_SIX_BOARD,
       bankInit: (_config, acc) =>
         Object.fromEntries(Object.keys(acc).map((kind) => [kind, FIVE_SIX_BANK])),
       devDeck: () => ({ ...FIVE_SIX_DEV_CARDS }),

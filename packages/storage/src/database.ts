@@ -2,7 +2,7 @@ import { openDB } from 'idb';
 import type { DBSchema, IDBPDatabase, IDBPTransaction } from 'idb';
 
 export const DATABASE_NAME = 'cp2p';
-export const DATABASE_VERSION = 5;
+export const DATABASE_VERSION = 6;
 export const BYTE_STORE = 'bytes';
 export const GAME_STORE = 'games';
 export const ENTRY_STORE = 'entries';
@@ -10,6 +10,8 @@ export const CONSENSUS_STORE = 'consensus';
 export const DELETED_GAME_STORE = 'deletedGames';
 export const SNAPSHOT_STORE = 'snapshots';
 export const VAULT_STORE = 'vault';
+/** Saved editor maps (version 6). Public data, outside the vault. */
+export const MAP_STORE = 'maps';
 
 export const MAX_RECORD_BYTES = 16 * 1024 * 1024;
 
@@ -21,6 +23,7 @@ export interface CP2PDatabase extends DBSchema {
   deletedGames: { key: string; value: Uint8Array };
   snapshots: { key: [string, number]; value: Uint8Array };
   vault: { key: string; value: Uint8Array };
+  maps: { key: string; value: Uint8Array };
 }
 
 export function openDatabase(
@@ -42,6 +45,7 @@ export function openDatabase(
       if (oldVersion < 3) database.createObjectStore(DELETED_GAME_STORE);
       if (oldVersion < 4) database.createObjectStore(SNAPSHOT_STORE);
       if (oldVersion < 5) database.createObjectStore(VAULT_STORE);
+      if (oldVersion < 6) database.createObjectStore(MAP_STORE);
     },
     blocking: () => {
       blocked();
@@ -61,6 +65,7 @@ export function strictWriteTransaction<
     | 'deletedGames'
     | 'snapshots'
     | 'vault'
+    | 'maps'
   )[],
 >(
   database: IDBPDatabase<CP2PDatabase>,

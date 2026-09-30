@@ -35,6 +35,7 @@ describe('network simulation CLI options', () => {
       players: 4,
     });
     expect(() => parseNetBatchOptions(['--map', 'Fog Bound'])).toThrow('--map needs a scenario id');
+    expect(parseNetBatchOptions(['--map', 'HXMAP1.abc_-'])).toMatchObject({ map: 'HXMAP1.abc_-' });
   });
 
   test('shards use distinct deterministic game indices within the requested range', () => {

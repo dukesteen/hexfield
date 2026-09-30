@@ -15,12 +15,16 @@ export {
   getDieUrl,
   getFactionUrl,
   getGameArtUrl,
+  getHarborArtUrl,
   getIslandChitUrl,
   getPieceIconUrl,
   getResourceCardUrl,
   getResourceIconUrl,
+  getRobberArtUrl,
   getSeafaringIconUrl,
   getShipIconUrl,
+  getTileArtUrl,
+  getTokenArtUrl,
 } from './assets/terrainTextures.js';
 export {
   getBarbarianShipUrl,
@@ -45,6 +49,8 @@ export type { CommodityName, EventDieFace, GlyphName } from './assets/knightsIco
 export { barbarianStepPoint, barbarianTrackLayout, sailPosition } from './knightsLayout.js';
 export type { BarbarianTrackLayout, TrackPiece } from './knightsLayout.js';
 export { hexExtents, isLandTerrain, islandBoundarySegments, landIslands } from './boardShape.js';
+export { MAP_EDITOR_LAYER, createMapEditorLayer } from './mapEditorLayer.js';
+export type { MapEditorOverlay } from './mapEditorLayer.js';
 export { shipVariantForEdge } from './shipVariant.js';
 export type { ShipVariant } from './shipVariant.js';
 export type {

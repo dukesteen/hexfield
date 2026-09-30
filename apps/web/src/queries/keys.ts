@@ -6,5 +6,6 @@ export const queryKeys = {
   onlineGames: () => ['onlineGames'] as const,
   turnCredentials: (endpoint: string) => ['turnCredentials', endpoint] as const,
   replay: (id: string) => ['replays', id] as const,
+  maps: () => ['maps'] as const,
   map: (id: string) => ['maps', id] as const,
 };

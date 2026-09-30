@@ -18,7 +18,14 @@ export {
   FIXED_SEAFARING,
   FOGBOUND_FOG,
   OPEN_SEA_OPTIONS,
+  harborIssues,
   harborProblems,
   tokenProblems,
 } from './scenarios/seafaring/index.js';
-export type { FixedSeafaringData, FogSpec, SeafaringOptions } from './scenarios/seafaring/index.js';
+export type {
+  FixedSeafaringData,
+  FogSpec,
+  HarborIssue,
+  SeafaringOptions,
+} from './scenarios/seafaring/index.js';
+export * from './custom/index.js';
