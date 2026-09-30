@@ -1,4 +1,5 @@
 import type { CommandShape, Engine, Seat } from '@cp2p/engine';
+import { decksFor } from '@cp2p/engine';
 import { createRng } from '@cp2p/engine/rng';
 import { openSites, robberHexScore } from '../eval/index.js';
 import { HARD } from '../policy/config.js';
@@ -35,11 +36,12 @@ export interface SearchSettings {
    */
   lookahead?: LookaheadSettings | null;
   /**
-   * Sample every module's chance events (event die, progress and fog decks, opponents' progress
-   * cards) on separate dice and draw streams, so the search also runs in expansion games
-   * (follow-up B). Off: the stage 16 base sampler, and expansion games play the heuristic alone.
+   * Search expansion games too (follow-up B): their rollouts sample every module's chance events
+   * (the event die, progress decks and cards, reveals) on separate dice and draw streams, and
+   * `searched` there says which decisions are searched. Absent or null: expansion games play the
+   * heuristic alone. Base and five-six games keep the stage 16 sampler either way.
    */
-  expansions?: boolean;
+  expansions?: { searched: { setup: boolean; robber: boolean } } | null;
 }
 
 /**
@@ -55,8 +57,15 @@ export const DEFAULT_SEARCH: SearchSettings = {
   searched: { setup: true, main: false, robber: true },
 };
 
-/** The search the current Hard level plays. */
-export const HARD_SEARCH: SearchSettings = DEFAULT_SEARCH;
+/**
+ * The search the current Hard level plays: the stage 16 search in base and five-six games, and
+ * the opening search in expansion games without fog (follow-up B; the robber search measured
+ * neutral there and the main-phase lookahead weaker, so neither runs).
+ */
+export const HARD_SEARCH: SearchSettings = {
+  ...DEFAULT_SEARCH,
+  expansions: { searched: { setup: true, robber: false } },
+};
 
 /** Share of the time budget the search may use before it stops starting work. */
 const SEARCH_SHARE = 0.85;
@@ -133,8 +142,16 @@ export class HardBot extends HeuristicBot {
     const heuristic = super.choose(context, options);
     if (!heuristic) return heuristic;
     const modules = context.view.state.config.modules;
-    if (!this.settings.expansions && !modules.every((module) => SEARCHABLE.has(module.id)))
-      return heuristic;
+    const expansion = !modules.every((module) => SEARCHABLE.has(module.id));
+    if (expansion) {
+      if (!this.settings.expansions) return heuristic;
+      // Fog stays hidden in rollouts (the fast policy rarely sails into it), and searching fog
+      // maps measured weaker than the heuristic, so games with a public deck are not searched.
+      if (
+        Object.values(decksFor(context.view.state.config)).some((deck) => deck.reveal === 'public')
+      )
+        return heuristic;
+    }
     const macro = this.settings.lookahead;
     if (macro) {
       const candidates = macroCandidates(context, heuristic, macro.candidates);
@@ -143,19 +160,30 @@ export class HardBot extends HeuristicBot {
           deadline === null ? false : now() >= deadline,
         );
     }
-    const plan = this.candidates(context, heuristic);
+    const plan = this.candidates(context, heuristic, expansion);
     if (!plan || plan.candidates.length < 2) return heuristic;
-    return this.search(context, heuristic, plan.candidates, plan.horizon, options, deadline);
+    return this.search(
+      context,
+      heuristic,
+      plan.candidates,
+      plan.horizon,
+      options,
+      deadline,
+      expansion,
+    );
   }
 
   /** The moves worth comparing at this decision, the heuristic's own among them. */
   private candidates(
     context: TurnContext,
     heuristic: CommandShape,
+    expansion: boolean,
   ): { candidates: CommandShape[]; horizon: number } | null {
     const { width, horizon } = this.settings;
     const { state, seat } = context.view;
-    const { searched } = this.settings;
+    const searched = expansion
+      ? { ...(this.settings.expansions?.searched ?? { setup: false, robber: false }), main: false }
+      : this.settings.searched;
     if (heuristic.type === 'PLACE_SETTLEMENT') {
       if (!searched.setup) return null;
       const open = openSites(state, context.info);
@@ -224,6 +252,7 @@ export class HardBot extends HeuristicBot {
     horizon: number,
     options: DecideContext,
     deadline: number | null,
+    sampled: boolean,
   ): CommandShape {
     const { view, engine, rng } = context;
     const totals = candidates.map(() => 0);
@@ -241,7 +270,6 @@ export class HardBot extends HeuristicBot {
       iteration++
     ) {
       // One sampled world and one dice stream per iteration, shared by every candidate.
-      const sampled = this.settings.expansions === true;
       const world = determinize(view, engine, rng, sampled);
       const seed = seedFrom(rng);
       const streams = sampled ? [seedFrom(rng), seedFrom(rng)] : [];

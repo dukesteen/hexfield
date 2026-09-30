@@ -1,13 +1,14 @@
 import { isBotLevel } from '@cp2p/bots';
 import type { BotLevel } from '@cp2p/bots';
 import { LocalGame, engineForConfig, moduleSelection } from '@cp2p/engine';
+import { scenarioById, scenarioConfig } from '@cp2p/maps';
 import type { GameConfig, Pending, Seat } from '@cp2p/engine';
 import { inlineBotRunner, workerBotRunner } from '../session/bot-runner.js';
 import { browserEntropy, createBrowserRandomSource, randomSeed } from '../session/random.js';
 
 /**
- * Diagnostic: four bots of one level play a base game, each decision made in the real bot worker
- * with the given time budget. Reports how long the worker spent per decision kind. Used with CPU
+ * Diagnostic: four bots of one level play a base game (or `?scenario=<id>`), each decision made in
+ * the real bot worker with the given time budget. Reports how long the worker spent per decision kind. Used with CPU
  * throttling as a mid-range phone proxy (docs/verification/stage16).
  */
 const button = document.querySelector<HTMLButtonElement>('#run');
@@ -29,12 +30,16 @@ function stats(values: number[]) {
   return { n: sorted.length, medianMs: at(0.5), p95Ms: at(0.95), maxMs: sorted.at(-1) ?? 0 };
 }
 
-async function play(level: BotLevel, budgetMs: number, inline: boolean) {
-  const config: GameConfig = {
-    modules: moduleSelection(['base']),
-    seats: [0, 1, 2, 3],
-    options: { base: { vpTarget: 10 } },
-  };
+async function play(level: BotLevel, budgetMs: number, inline: boolean, scenario: string | null) {
+  const chosen = scenario ? scenarioById(scenario) : undefined;
+  if (scenario && !chosen) throw new Error(`Unknown scenario ${scenario}`);
+  const config: GameConfig = chosen
+    ? scenarioConfig(chosen, 4)
+    : {
+        modules: moduleSelection(['base']),
+        seats: [0, 1, 2, 3],
+        options: { base: { vpTarget: 10 } },
+      };
   const engine = engineForConfig(config);
   const created = LocalGame.create(
     engine,
@@ -87,6 +92,7 @@ async function play(level: BotLevel, budgetMs: number, inline: boolean) {
   return {
     level,
     budgetMs,
+    scenario: scenario ?? 'base',
     runner: inline ? 'inline' : 'worker',
     finished: game.state.result !== null,
     turns: game.state.turn.number,
@@ -109,7 +115,7 @@ button.addEventListener('click', () => {
   }
   button.disabled = true;
   output.textContent = 'Playing…';
-  play(level, budget, params.get('inline') === '1')
+  play(level, budget, params.get('inline') === '1', params.get('scenario'))
     .then((result) => {
       output.textContent = JSON.stringify(result, null, 2);
       output.dataset.done = 'true';
