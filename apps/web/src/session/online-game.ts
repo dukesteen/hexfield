@@ -9,7 +9,7 @@ import {
 } from '@cp2p/crypto';
 import { createBotRng, humanlikeDelay } from '@cp2p/bots';
 import type { BotLevel } from '@cp2p/bots';
-import { defaultBotRunner, hardBudgetMs } from './bot-runner.js';
+import { defaultBotRunner, hardBudgetMs, hostedBotSeed } from './bot-runner.js';
 import type { BotRunner } from './bot-runner.js';
 import { success } from '@cp2p/engine';
 import type { Engine, Seat } from '@cp2p/engine';
@@ -529,8 +529,7 @@ export async function openOnlineGame(
         pending: Parameters<NonNullable<P2PSessionOptions['decideBot']>>[1],
         level: 'easy' | 'medium' | 'hard',
       ) => {
-        const seed = botSeeds.get(view.seat);
-        if (!seed) return null;
+        const seed = hostedBotSeed(botSeeds, view.seat, browserEntropy);
         const botLevel = ONLINE_LEVEL[level];
         // On top of the table's pace, weighty decisions take longer and trade replies 1–3 s.
         const extra =

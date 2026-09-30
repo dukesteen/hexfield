@@ -1,6 +1,8 @@
 import { BotClient, BotHost, workerPort } from '@cp2p/bots';
 import type { DecideArgs, Decision } from '@cp2p/bots';
-import type { Engine } from '@cp2p/engine';
+import type { Engine, Seat } from '@cp2p/engine';
+import { randomSeed } from './random.js';
+import type { Entropy } from './random.js';
 
 /** Runs a bot host's bots: in a dedicated Web Worker in the browser, inline where there is none. */
 export interface BotRunner {
@@ -57,4 +59,22 @@ export function hardBudgetMs(
   userAgent: string = typeof navigator === 'undefined' ? '' : navigator.userAgent,
 ): number {
   return /Mobi|Android|iPhone|iPad/i.test(userAgent) ? 150 : 300;
+}
+
+/**
+ * A hosted bot's RNG seed. Seats hosted when the game opened derive theirs from
+ * the seat master; a bot a takeover activated later gets a fresh local seed,
+ * kept for the rest of the session. The seed only drives the bot's choices,
+ * which peers still validate.
+ */
+export function hostedBotSeed(
+  seeds: Map<Seat, Uint8Array>,
+  seat: Seat,
+  entropy: Entropy,
+): Uint8Array {
+  const known = seeds.get(seat);
+  if (known) return known;
+  const seed = randomSeed(entropy);
+  seeds.set(seat, seed);
+  return seed;
 }
