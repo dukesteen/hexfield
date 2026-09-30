@@ -29,7 +29,7 @@ test('the bot host sees each returnable seat with its return action', () => {
 
 test('the replaced player is told how to take the seat back', () => {
   const page = render(<RecoveredSeatNotices selfSeat={2} returnable={[]} onReturn={() => {}} />);
-  expect(page.getByText('lobby:recoveredSelfTitle:{"seat":3}')).toBeTruthy();
+  expect(page.getByText('lobby:recoveredSelfTitle')).toBeTruthy();
   expect(page.getByText('lobby:recoveredSelfBody:{"seat":3}')).toBeTruthy();
   expect(page.queryAllByRole('button')).toHaveLength(0);
 });
@@ -39,7 +39,7 @@ test('a retired original device learns why it stopped and how to return', () => 
     <RecoveredSeatNotices selfSeat={0} retired returnable={[]} onReturn={() => {}} />,
   );
   expect(page.getByText('lobby:retiredSelfTitle:{"seat":1}')).toBeTruthy();
-  expect(page.getByText('lobby:retiredSelfBody:{"seat":1}')).toBeTruthy();
+  expect(page.getByText('lobby:retiredSelfBody')).toBeTruthy();
 });
 
 test('nothing renders without a recovered seat', () => {

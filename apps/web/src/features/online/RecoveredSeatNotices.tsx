@@ -26,14 +26,14 @@ export function RecoveredSeatNotices({
       {selfSeat !== null && (
         <div className="online-game-notice" role="status">
           <strong>
-            {t(retired ? 'lobby:retiredSelfTitle' : 'lobby:recoveredSelfTitle', {
-              seat: selfSeat + 1,
-            })}
+            {retired
+              ? t('lobby:retiredSelfTitle', { seat: selfSeat + 1 })
+              : t('lobby:recoveredSelfTitle')}
           </strong>
           <p>
-            {t(retired ? 'lobby:retiredSelfBody' : 'lobby:recoveredSelfBody', {
-              seat: selfSeat + 1,
-            })}
+            {retired
+              ? t('lobby:retiredSelfBody')
+              : t('lobby:recoveredSelfBody', { seat: selfSeat + 1 })}
           </p>
         </div>
       )}
