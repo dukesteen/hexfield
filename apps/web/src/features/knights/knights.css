@@ -371,6 +371,10 @@
   height: 18px;
   object-fit: contain;
 }
+/* Points (Defender, shown victory cards): same size as the other chips, with a warm edge. */
+.knights-chip.is-award {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+}
 .knights-chip-card {
   width: 12px;
   height: 16px;

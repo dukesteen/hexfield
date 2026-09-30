@@ -31,6 +31,15 @@
 .bot-level {
   color: var(--muted);
   font-size: 0.85em;
+  white-space: nowrap;
+}
+
+/* "Thinking…", the bot's level and the connection share one line; wrap instead of running
+   past the panel's edge when the sidebar is narrow. */
+.player-panel-status:has(.bot-level) {
+  flex-wrap: wrap;
+  row-gap: 2px;
+  min-width: 0;
 }
 
 @keyframes bot-thinking-pulse {
