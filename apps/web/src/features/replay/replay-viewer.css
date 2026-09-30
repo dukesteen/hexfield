@@ -588,6 +588,19 @@
   white-space: nowrap;
 }
 
+@media (max-width: 480px) {
+  .replay-trades {
+    font-size: 0.78rem;
+  }
+
+  .replay-table th,
+  .replay-table td,
+  .replay-trades th,
+  .replay-trades td {
+    padding: 4px 5px;
+  }
+}
+
 .replay-import {
   max-width: 760px;
   margin: 0 auto;
