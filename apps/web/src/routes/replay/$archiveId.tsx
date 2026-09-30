@@ -1,75 +1,44 @@
 import { createFileRoute, Link } from '@tanstack/react-router';
-import { useMemo } from 'react';
+import { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { BoardView } from '../../features/board/BoardView.js';
-import { toRenderModel } from '../../features/board/toRenderModel.js';
-import { formatGameEvent } from '../../features/game/event-format.js';
-import { useBoardAppearance } from '../../features/game/use-appearance.js';
-import { usePublicReplay } from '../../queries/online-public-replays.js';
-import type { PublicArchiveDisplay } from '../../session/online-public-archive-worker.js';
-import type { GamePresentation } from '../../queries/repositories/saved-games.js';
 import { replayFailureMessage } from '../../features/online/replay-failure.js';
-import './replay.css';
-import { PLAYER_SHAPES } from '../../features/players/identity';
-
-const SHAPES = PLAYER_SHAPES;
+import { loadOnlineReplay } from '../../features/replay/replay-load.js';
+import { ReplayViewer } from '../../features/replay/ReplayViewer.js';
+import { useDeferredReplay } from '../../features/replay/use-replay.js';
+import { usePublicReplay } from '../../queries/online-public-replays.js';
+import type { PublicArchiveReplay } from '../../session/online-public-archive-worker.js';
 
 export const Route = createFileRoute('/replay/$archiveId')({ component: PublicReplayPage });
 
-function VerifiedReplay({ archive }: { archive: PublicArchiveDisplay }) {
-  const { t } = useTranslation(['lobby', 'game', 'log']);
-  const presentation = useMemo<GamePresentation>(
-    () => ({
-      players: archive.players.map((player) => ({
-        ...player,
-        shape: SHAPES[player.seat],
-      })),
-      botDelayMs: 0,
-    }),
-    [archive.players],
-  );
-  const { appearance, reducedMotion } = useBoardAppearance(presentation);
-  const model = useMemo(() => toRenderModel(archive.state, 'spectator'), [archive.state]);
+function Failure({ message }: { message: string }) {
+  const { t } = useTranslation('lobby');
   return (
-    <main className="app-page public-replay-page">
-      <header className="app-header">
-        <Link to="/" className="text-link">
-          {t('lobby:backHome')}
-        </Link>
-        <h1>{t('lobby:publicReplayTitle')}</h1>
-      </header>
-      <p className="muted">{t('lobby:publicReplayReadOnly')}</p>
-      <p>{t('lobby:publicReplayHead', { number: archive.head.seq })}</p>
-      <div className="public-replay-layout">
-        <section aria-label={t('lobby:publicReplayBoard')} className="public-replay-board">
-          <BoardView model={model} appearance={appearance} reducedMotion={reducedMotion} />
-        </section>
-        <aside className="public-replay-sidebar">
-          <h2>{t('lobby:publicReplayPlayers')}</h2>
-          <ol>
-            {presentation.players.map((player) => (
-              <li key={player.seat}>{player.name}</li>
-            ))}
-          </ol>
-          <details className="event-log" open>
-            <summary>{t('game:eventLog')}</summary>
-            <ol>
-              {archive.events.toReversed().map((event, index) => (
-                <li key={index}>
-                  {formatGameEvent(
-                    event,
-                    t,
-                    (seat) =>
-                      presentation.players.find((player) => player.seat === seat)?.name ??
-                      String(seat + 1),
-                  )}
-                </li>
-              ))}
-            </ol>
-          </details>
-        </aside>
-      </div>
+    <main className="app-page message-page">
+      <h1>{message}</h1>
+      <Link to="/" className="button button-primary">
+        {t('lobby:backHome')}
+      </Link>
     </main>
+  );
+}
+
+function VerifiedReplay({ archive }: { archive: PublicArchiveReplay }) {
+  const { t } = useTranslation(['lobby', 'game']);
+  const load = useCallback(() => loadOnlineReplay(archive), [archive]);
+  const replay = useDeferredReplay(load);
+  if (replay.status === 'loading')
+    return (
+      <p className="app-page" role="status">
+        {t('game:replay.preparing')}
+      </p>
+    );
+  if (replay.status === 'error') return <Failure message={t('lobby:publicReplayFailed')} />;
+  return (
+    <ReplayViewer
+      loaded={replay.value}
+      title={t('lobby:publicReplayTitle')}
+      notice={<p className="muted">{t('lobby:publicReplayReadOnly')}</p>}
+    />
   );
 }
 
@@ -84,13 +53,6 @@ function PublicReplayPage() {
       </p>
     );
   if (replay.isError || !replay.data)
-    return (
-      <main className="app-page message-page">
-        <h1>{replayFailureMessage(replay.error, t)}</h1>
-        <Link to="/" className="button button-primary">
-          {t('lobby:backHome')}
-        </Link>
-      </main>
-    );
+    return <Failure message={replayFailureMessage(replay.error, t)} />;
   return <VerifiedReplay archive={replay.data} />;
 }

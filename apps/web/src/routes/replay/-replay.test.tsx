@@ -31,9 +31,27 @@ vi.mock('../../queries/online-vault.js', () => ({
 vi.mock('../../features/game/use-appearance.js', () => ({
   useBoardAppearance: () => ({ appearance: { theme: 'light', players: [] }, reducedMotion: true }),
 }));
-vi.mock('../../features/board/toRenderModel.js', () => ({ toRenderModel: () => ({}) }));
-vi.mock('../../features/board/BoardView.js', () => ({
-  BoardView: () => <div role="group" aria-label="public board" />,
+vi.mock('../../features/replay/replay-load.js', () => ({
+  loadOnlineReplay: (archive: { players: { name: string }[] }) => ({
+    presentation: { players: archive.players, botDelayMs: 0 },
+  }),
+}));
+vi.mock('../../features/replay/ReplayViewer.js', () => ({
+  ReplayViewer: ({
+    loaded,
+    notice,
+  }: {
+    loaded: { presentation: { players: { name: string }[] } };
+    notice: React.ReactNode;
+  }) => (
+    <main>
+      <div role="group" aria-label="public board" />
+      {loaded.presentation.players.map((player) => (
+        <p key={player.name}>{player.name}</p>
+      ))}
+      {notice}
+    </main>
+  ),
 }));
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 
@@ -41,7 +59,7 @@ afterEach(() => {
   cleanup();
 });
 
-test('verified replay opens a public board and roster without session controls', async () => {
+test('a verified archive opens in the replay viewer with its roster', async () => {
   const queryClient = new QueryClient();
   const router = createRouter({
     routeTree,
@@ -58,6 +76,5 @@ test('verified replay opens a public board and roster without session controls',
   expect(screen.getByText('Blair')).toBeTruthy();
   expect(screen.getByText('lobby:publicReplayReadOnly')).toBeTruthy();
   expect(screen.getByRole('group', { name: 'public board' })).toBeTruthy();
-  expect(screen.queryByRole('button')).toBeNull();
   queryClient.clear();
 }, 20_000);
