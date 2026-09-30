@@ -1,3 +1,4 @@
+/// <reference types="vite-plugin-pwa/client" />
 import { registerSW } from 'virtual:pwa-register';
 import { pwaUpdates } from './update-store.js';
 
