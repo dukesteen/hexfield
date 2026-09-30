@@ -54,7 +54,6 @@
     "moreCards_other": "and {{count}} more cards",
     "drawing": "Drawing a card at random…",
     "stole": "You stole 1 {{resource}} from {{player}}",
-    "fairNote": "The card you get is drawn at random, whichever one you pick.",
     "back": "Choose another player"
   },
   "trade": {

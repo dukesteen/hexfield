@@ -143,10 +143,6 @@
   font-weight: 600;
 }
 
-.steal-sheet-note {
-  font-size: 0.8rem;
-}
-
 /* Reduced motion: the face shows at once, with no turn and no lift. */
 .steal-sheet-still .steal-card,
 .steal-sheet-still .steal-card-inner {

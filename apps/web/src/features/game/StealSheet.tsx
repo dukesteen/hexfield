@@ -200,7 +200,6 @@ export function StealSheet({
         <p className="steal-sheet-status" role="status">
           {status}
         </p>
-        <p className="steal-sheet-note muted">{t('rules:steal.fairNote')}</p>
         {onCancel && picked === null && face === null && (
           <button type="button" onClick={onCancel}>
             {t('rules:steal.back')}
