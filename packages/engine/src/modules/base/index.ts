@@ -8,6 +8,7 @@ import type {
 import type { GameState } from '../../core/state/index.js';
 import { BASE_OPTIONS } from './config.js';
 import { BANK_START, BASE_DECKS, BASE_VERSION, PIECES_START } from './constants.js';
+import { customShapeOf } from './board/custom.js';
 import { STANDARD_BOARD } from './board/shapes.js';
 import { incompatibleModules } from '../compat.js';
 import { generateBoard } from './setup/board/index.js';
@@ -180,7 +181,7 @@ export function baseModule(): GameModule {
     // values that core, not base, starts.
     hooks: {
       seatRange: () => ({ min: 2, max: 4 }),
-      boardSpec: (_config, acc) => acc ?? STANDARD_BOARD,
+      boardSpec: (config, acc) => acc ?? customShapeOf(config) ?? STANDARD_BOARD,
       victoryPoints: (state, seat, priv, acc) => [
         ...acc,
         ...hiddenVictoryPoints(state, seat, priv),

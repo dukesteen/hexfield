@@ -151,16 +151,22 @@ export function validateFixedBoard(board: BoardState, spec: BoardShapeSpec): voi
   const robber = board.hexes.find((hex) => hex.id === board.robberHex);
   const robberOk = seafaring
     ? board.robberHex === null || (robber && isLandTerrain(robber.terrain))
-    : robber?.terrain === 'desert';
+    : spec.custom === true
+      ? robber !== undefined && isLandTerrain(robber.terrain)
+      : robber?.terrain === 'desert';
   if (!robberOk || board.roads.length !== 0 || board.buildings.length !== 0) {
     throw new BoardGenerationError(
       seafaring
         ? 'Fixed board must start empty with robber on land or off the board'
-        : 'Fixed board must start empty with robber on desert',
+        : spec.custom === true
+          ? 'Custom board must start empty with robber on land'
+          : 'Fixed board must start empty with robber on desert',
     );
   }
-  // A seafaring board's coast depends on its sea hexes, so harbors need only be coastal.
-  const slots = new Set<string>(seafaring ? coastalEdges(board.hexes) : spec.harborSlots);
+  // A seafaring or editor board's coast depends on its own hexes, so harbors need only be coastal.
+  const slots = new Set<string>(
+    seafaring || spec.custom === true ? coastalEdges(board.hexes) : spec.harborSlots,
+  );
   if (
     board.harbors.length !== spec.harbors.length ||
     board.harbors.some((harbor) => !harbor || !slots.has(harbor.edge)) ||
@@ -235,6 +241,44 @@ function balancedTokens(
   return search(0) ? assigned : null;
 }
 
+/** A hex the token solver fills: its position and terrain (pips are capped per terrain when strict). */
+export interface TokenSlot {
+  readonly id: string;
+  readonly q: number;
+  readonly r: number;
+  readonly terrain: string;
+}
+
+/**
+ * The balanced token search of the random layouts, for any set of productive hexes (the map editor
+ * uses it): no equal or 6/8 numbers side by side, nor 2/12 when strict. Returns each hex's token,
+ * or null when the search gives up. `rng` only orders the search, so a seed gives one answer.
+ */
+export function solveTokens(
+  rng: GenesisRandom,
+  slots: readonly TokenSlot[],
+  tokens: readonly number[],
+  strict = false,
+): Map<string, number> | null {
+  if (slots.length !== tokens.length || slots.some((slot) => slot.terrain === 'desert'))
+    return null;
+  const spec: BoardShapeSpec = {
+    id: 'token-solver',
+    hexes: slots.map(({ q, r }) => ({ q, r })),
+    terrains: slots.map((slot) => slot.terrain),
+    tokens,
+    harbors: [],
+    harborSlots: [],
+    fixtureSlots: [],
+    pipCaps: {},
+  };
+  const hexes = slots.map(({ id, q, r, terrain }) => ({ id, q, r, terrain, token: null }));
+  const assigned = balancedTokens(rng, spec, hexes, strict);
+  return assigned
+    ? new Map(slots.map((slot, index) => [slot.id, required(assigned[index])]))
+    : null;
+}
+
 /** Generate a board for a shape from genesis randomness, or validate a supplied fixed board. */
 export function generateBoard(
   rng: GenesisRandom,
@@ -242,7 +286,7 @@ export function generateBoard(
   providedBoard?: BoardState,
   spec: BoardShapeSpec = STANDARD_BOARD,
 ): BoardState {
-  if (options.mapLayout === 'standard-fixed') {
+  if (options.mapLayout === 'standard-fixed' || options.mapLayout === 'custom') {
     if (!providedBoard) throw new BoardGenerationError('Fixed layout requires config.board');
     validateFixedBoard(providedBoard, spec);
     return {

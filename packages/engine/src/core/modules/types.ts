@@ -82,6 +82,11 @@ export interface BoardShapeSpec {
    * coastal, and the robber may start on any land hex or off the board. Only fixed boards are accepted.
    */
   seafaring?: boolean;
+  /**
+   * Set for an editor map (base `mapLayout: 'custom'`). `hexes` lists the map's own land, the bags
+   * are the map's, harbors need only be coastal and the robber may start on any land hex.
+   */
+  custom?: boolean;
 }
 
 /** A module's request for a fixture. Genesis assigns declarations to slots in order. */

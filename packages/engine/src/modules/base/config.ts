@@ -1,6 +1,7 @@
 import type { OptionSpec } from '../../core/modules/index.js';
 
-export type MapLayout = 'standard-fixed' | 'random' | 'balanced-random';
+/** `custom` plays the map in `config.board` as drawn in the map editor (any land shape). */
+export type MapLayout = 'standard-fixed' | 'random' | 'balanced-random' | 'custom';
 export type DiceMode = 'random' | 'balanced';
 export interface TurnTimer {
   preRollSec: number;
@@ -40,7 +41,7 @@ export const BASE_OPTIONS: readonly OptionSpec[] = [
     key: 'mapLayout',
     type: 'enum',
     default: 'balanced-random',
-    values: ['standard-fixed', 'random', 'balanced-random'],
+    values: ['standard-fixed', 'random', 'balanced-random', 'custom'],
   },
   { key: 'strictBalance', type: 'boolean', default: false },
   { key: 'playerTrades', type: 'boolean', default: true },
