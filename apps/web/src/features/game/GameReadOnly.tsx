@@ -1082,8 +1082,9 @@ function LiveGame({
   const optionalViewingSeat = useSessionStore((store) => store.optionalViewingSeat);
   const compact = useCompactCockpit();
   const { appearance, reducedMotion } = useBoardAppearance(presentation);
-  // On unless turned off in Settings (older saved settings leave it out).
-  const pickStealCard = useSettings().data?.pickStealCard ?? true;
+  // On unless turned off in Settings (older saved settings leave it out); null while loading.
+  const settings = useSettings();
+  const pickStealCard = settings.data ? (settings.data.pickStealCard ?? true) : null;
   const [gameInfoOpen, setGameInfoOpen] = useState(!compact);
   useEffect(() => setGameInfoOpen(!compact), [compact]);
   const [sheet, setSheet] = useState<{ kind: MobileTab } | { kind: 'player'; seat: Seat } | null>(
@@ -1124,7 +1125,11 @@ function LiveGame({
     requestAnimationFrame(() => resultsButton.current?.focus());
   };
   const boardRef = useRef<HTMLElement>(null);
-  const { skip, overlay, receipts } = useVisualEffects(renderer, reducedMotion, pickStealCard);
+  const { skip, overlay, receipts } = useVisualEffects(
+    renderer,
+    reducedMotion,
+    pickStealCard ?? true,
+  );
   const lastRoll = latestDiceRoll(events);
   const model = useMemo(() => toRenderModel(state, 'spectator'), [state]);
   const actions = useGameActions(state, pending, presentation, {

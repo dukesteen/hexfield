@@ -349,8 +349,11 @@ export function useGameActions(
   options: {
     compact?: boolean;
     reducedMotion?: boolean;
-    /** The "pick the card to steal" setting: steals go through the steal sheet. */
-    pickStealCard?: boolean;
+    /**
+     * The "pick the card to steal" setting: steals go through the steal sheet. Null while the
+     * settings load: the victim choice waits, so a steal never takes the wrong path.
+     */
+    pickStealCard?: boolean | null;
     onHandOff?: () => void;
     onFormClosed?: () => void;
   } = {},
@@ -1471,7 +1474,7 @@ export function useGameActions(
         {!conflicted && status?.kind !== 'error' && availability && formProps && (
           <>
             {visibleForm === 'discard' && <DiscardDialog {...formProps} />}
-            {visibleForm === 'steal' && !stealReveal && (
+            {visibleForm === 'steal' && !stealReveal && options.pickStealCard !== null && (
               <StealDialog
                 {...formProps}
                 onPickCard={options.pickStealCard ? openStealSheet : undefined}

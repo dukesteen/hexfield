@@ -2153,6 +2153,7 @@ test('real steals fly the stolen card between its hand slot and the other panel'
         await page.getByLabel('Pick the card to steal').uncheck();
         await page.getByRole('button', { name: 'Save settings' }).click();
         await expect(page.getByText('Settings saved')).toBeVisible();
+        await page.goto('about:blank');
       }
       await openGoldenPrefix(page, scenario.prefix, scenario.file, {
         humanSeats: [0],

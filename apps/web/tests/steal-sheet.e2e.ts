@@ -147,6 +147,8 @@ async function setPickCard(page: Page, on: boolean) {
   if (!on) await box.uncheck();
   await page.getByRole('button', { name: 'Save settings' }).click();
   await expect(page.getByText('Settings saved')).toBeVisible();
+  // The game opens in a fresh document, so its saved-game init script runs.
+  await page.goto('about:blank');
 }
 
 test('the thief picks a face-down card, it turns over, then flies into its hand slot', async ({

@@ -164,12 +164,13 @@ test('a result fills the open steal of its victim, whatever back was tapped', ()
 
 test('a Bishop robs seat after seat: each result waits its turn on the sheet', () => {
   const store = useStealReveal.getState();
-  const launches = [vi.fn<(from: unknown) => void>(), vi.fn<(from: unknown) => void>()];
+  const first = vi.fn<(from: unknown) => void>();
+  const second = vi.fn<(from: unknown) => void>();
   expect(
-    store.offer({ thief: 0, victim: 1, handSize: 4, face: 'brick', launch: launches[0]! }, true),
+    store.offer({ thief: 0, victim: 1, handSize: 4, face: 'brick', launch: first }, true),
   ).toBe(true);
   expect(
-    store.offer({ thief: 0, victim: 3, handSize: 2, face: 'coin', launch: launches[1]! }, true),
+    store.offer({ thief: 0, victim: 3, handSize: 2, face: 'coin', launch: second }, true),
   ).toBe(true);
   expect(useStealReveal.getState().active).toMatchObject({
     victim: 1,
@@ -182,7 +183,7 @@ test('a Bishop robs seat after seat: each result waits its turn on the sheet', (
   expect(useStealReveal.getState().active).toMatchObject({ victim: 3, face: 'coin', handSize: 2 });
   // Resetting lands whatever is still waiting, so no count stays held back.
   useStealReveal.getState().reset();
-  expect(launches[1]).toHaveBeenCalledWith(null);
+  expect(second).toHaveBeenCalledWith(null);
   expect(useStealReveal.getState().active).toBeNull();
 });
 
