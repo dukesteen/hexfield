@@ -1,0 +1,36 @@
+{
+  "mode": "tournament",
+  "bots": [
+    "normal",
+    "normal",
+    "normal",
+    "normal"
+  ],
+  "seed": 1809,
+  "seatsRotation": true,
+  "scenario": "knights",
+  "iterationBudget": 6,
+  "verifyInvariants": true,
+  "parallel": 2,
+  "games": 200,
+  "finishedGames": 200,
+  "failedGames": 0,
+  "averageTurns": 95.275,
+  "results": [
+    {
+      "level": "normal",
+      "seats": 800,
+      "games": 200,
+      "wins": 200,
+      "winShare": 1,
+      "winRatePerSeat": 0.25,
+      "averageVp": 8.92625,
+      "elo": 1000
+    }
+  ],
+  "fallbackWarnings": {},
+  "failures": [],
+  "elapsedMilliseconds": 30959.971875,
+  "sourceFingerprint": "61578736319c91f035775a30ccea77d1e65839b87dbdebfc3079184698d97002",
+  "sourceUnchanged": true
+}

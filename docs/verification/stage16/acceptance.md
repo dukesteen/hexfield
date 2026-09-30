@@ -156,3 +156,101 @@ Four bots of one level, invariants on, seed 1704.
 No rejected command, no failure and no fallback warning; the final comparisons add 6,000 more knights games without one. A tuning run surfaced a free-road frame that offers only `SKIP` (a Road Building card with no road left to place); the policy now answers it.
 
 Unit tests: `packages/bots/src/plugins/knights/knights-policy.test.ts` (the attack chance, activating a turn ahead, the metropolis purchase before a city and the bank trade for a missing commodity, the Alchemist on the best number, the progress discard, the Merchant).
+
+## Follow-up B: all modes
+
+Dates are local time, 2026-09-30. The plan is [16-bots.md, "Follow-up: stronger bots"](../../16-bots.md#follow-up-stronger-bots-planned-2026-09-29), part B (items 6–8). Decisions are in [DECISIONS](../../DECISIONS.md) ("Stage 16 follow-up B — …"). Every final run below used the source at one fingerprint (`61578736319c…`, `sourceUnchanged: true`), invariants on, `--iterations 6`, at most five worker processes while the load average stayed below 8 (two otherwise), one run at a time. Tuning seeds were 5001–5304; the final runs use seeds never used for tuning (1801–1809).
+
+The follow-up A levels are frozen as the simulator's benchmark levels `hard-v2` and `normal-v2` (never offered in a game). Easy is unchanged.
+
+### How each item was measured
+
+One seat of the candidate against three bots of the version before it (five on five-six), seats rotated, 400-game batches, invariants off. "Of expected" is the candidate's wins divided by an equal bot's expected wins (a quarter of the games, a sixth on five-six), so 1.00 is no change; its standard error over 3,200 games is about 0.03. The heuristic items (6, 7) ran with `--iterations 0` (heuristic only, on both sides), the search items with `--iterations 6`.
+
+| Item                                                           | Games                                    | Result (of expected, or win share)                                    | Kept                          |
+| -------------------------------------------------------------- | ---------------------------------------- | --------------------------------------------------------------------- | ----------------------------- |
+| 6. Tuning, base weights (21 parameters, coordinate search)     | 43 × 3,200, base + five-six              | all 0.95–1.03; the one accepted change 1.05 and 0.97 on fresh seeds   | no                            |
+| 6. Tuning, knights values (9 parameters)                       | 18 × 3,200, knights + four-isles-knights | two changes accepted (1.07 on the tuning seeds), 0.996 on fresh seeds | no                            |
+| 7. Endgame awareness, all parts                                | 6,400, base + five-six                   | 1.02                                                                  | no                            |
+| 7. Robber focus / trade refusal / road block alone             | 4,800 each                               | 1.00 / 1.00 / 1.00                                                    | no                            |
+| 8. Main-phase lookahead with a leaf evaluation (7 variants)    | 1,600 each, base + five-six              | 0.15–0.99                                                             | no                            |
+| 8. Search with module chance nodes, knights                    | 800                                      | 32.1% (1.28)                                                          | yes                           |
+| 8. Same, four-isles-knights                                    | 800                                      | 47.3% (1.89)                                                          | yes                           |
+| 8. Same, four-isles                                            | 800                                      | 43.0% (1.72)                                                          | yes                           |
+| 8. Same, fogbound                                              | 800                                      | 20.1% (0.81)                                                          | no: fog maps are not searched |
+| 8. Knights: opening search only / robber search only           | 800 each                                 | 1.23 / 1.02                                                           | the opening only              |
+| 8. Separate dice streams in base (against the stage 16 search) | 800 each                                 | 0.94 (0.93 without the robber search)                                 | no: base keeps stage 16       |
+
+Profiles of Hard's search (base and knights) put event generation under 0.1% of the search time (the rollout policy's planning, legal-command listing and validation take most of it), so a sim-mode apply without events was not built: it could not measurably help.
+
+### Final comparison (2,000 games each)
+
+`pnpm sim tournament --bots hard,hard-v2,hard-v2,hard-v2 --games 2000 --seats-rotation --iterations 6 [--scenario <id>]` (five-six: five `hard-v2`); with one seat of the new level the even-field baseline is 25% (16.7% on five-six).
+
+| Tournament                                                                            | Games     | Level     |  Seats |  Wins | Win share | Avg VP |  Elo | Avg turns |
+| ------------------------------------------------------------------------------------- | --------- | --------- | -----: | ----: | --------: | -----: | ---: | --------: |
+| [hard vs hard-v2, base](followup-b-hard-vs-hard-v2-base.json)                         | 2000/2000 | hard      |  2,000 |   504 | **25.2%** |   7.36 | 1000 |      77.3 |
+| [hard vs hard-v2, base](followup-b-hard-vs-hard-v2-base.json)                         | 2000/2000 | hard-v2   |  6,000 | 1,496 |     74.8% |   7.38 |  998 |      77.3 |
+| [hard vs hard-v2, five-six (6 seats)](followup-b-hard-vs-hard-v2-five-six.json)       | 2000/2000 | hard      |  2,000 |   359 | **17.9%** |   7.02 | 1000 |      77.0 |
+| [hard vs hard-v2, five-six (6 seats)](followup-b-hard-vs-hard-v2-five-six.json)       | 2000/2000 | hard-v2   | 10,000 | 1,641 |     82.0% |   6.91 |  984 |      77.0 |
+| [hard vs hard-v2, knights](followup-b-hard-vs-hard-v2-knights.json)                   | 2000/2000 | hard      |  2,000 |   624 | **31.2%** |   9.48 | 1000 |      94.1 |
+| [hard vs hard-v2, knights](followup-b-hard-vs-hard-v2-knights.json)                   | 2000/2000 | hard-v2   |  6,000 | 1,376 |     68.8% |   8.72 |  947 |      94.1 |
+| [hard vs hard-v2, four-isles (seafaring)](followup-b-hard-vs-hard-v2-four-isles.json) | 2000/2000 | hard      |  2,000 |   843 | **42.1%** |  10.87 | 1000 |      85.4 |
+| [hard vs hard-v2, four-isles (seafaring)](followup-b-hard-vs-hard-v2-four-isles.json) | 2000/2000 | hard-v2   |  6,000 | 1,157 |     57.9% |   9.15 |  864 |      85.4 |
+| [normal vs normal-v2, base](followup-b-normal-vs-normal-v2-base.json)                 | 2000/2000 | normal    |  2,000 |   501 | **25.1%** |   7.36 | 1000 |      72.1 |
+| [normal vs normal-v2, base](followup-b-normal-vs-normal-v2-base.json)                 | 2000/2000 | normal-v2 |  6,000 | 1,499 |     75.0% |   7.36 | 1000 |      72.1 |
+
+The new Hard is the follow-up A heuristic with its opening search now running in expansion games, so it gains where that search runs: 31.2% of knights games and 42.1% of four-isles games (standard error 1.0–1.1) where no change would be 25%. In base and five-six it plays as `hard-v2` does (25.2%, and 17.9% against 16.7%, both within noise), and Normal is unchanged (25.1%): no base-game change measured as an improvement, so none was kept.
+
+### The stage 16 thresholds still hold
+
+Fresh seeds 1806–1808, four-player base games, invariants on.
+
+| Threshold (stage 16)           | Measured                                                                          | Result |
+| ------------------------------ | --------------------------------------------------------------------------------- | ------ |
+| Easy beats Random ≥ 60%        | [86.3%](followup-b-easy-vs-random.json), 1,725/2,000 wins (avg VP 9.71 vs 4.75)   | met    |
+| Normal ≥ 40% win share vs Easy | [43.0%](followup-b-normal-vs-easy.json), 860/2,000 wins (SE 1.1, Elo 1000 vs 858) | met    |
+| Hard ≥ 35% win share vs Normal | [41.3%](followup-b-hard-vs-normal.json), 826/2,000 wins (SE 1.1, Elo 1000 vs 870) | met    |
+
+The levels stay distinct and ordered: Easy is the weakest bot, Normal beats Easy and Hard beats Normal.
+
+### Legality (200 games per level and module set)
+
+Four bots of one level (six on five-six), invariants on, seed 1809.
+
+| Run                                                                                      | Level  | Module set                               | Games finished | Failed | Fallback warnings | Avg turns |
+| ---------------------------------------------------------------------------------------- | ------ | ---------------------------------------- | -------------: | -----: | ----------------: | --------: |
+| [legality-easy-base](followup-b-legality-easy-base.json)                                 | easy   | base                                     |        200/200 |      0 |                 0 |      79.4 |
+| [legality-easy-five-six](followup-b-legality-easy-five-six.json)                         | easy   | five-six (6 seats)                       |        200/200 |      0 |                 0 |      73.4 |
+| [legality-easy-knights](followup-b-legality-easy-knights.json)                           | easy   | knights                                  |        200/200 |      0 |                 0 |     115.7 |
+| [legality-easy-four-isles](followup-b-legality-easy-four-isles.json)                     | easy   | seafaring (four-isles)                   |        200/200 |      0 |                 0 |      86.2 |
+| [legality-easy-four-isles-knights](followup-b-legality-easy-four-isles-knights.json)     | easy   | seafaring + knights (four-isles-knights) |        200/200 |      0 |                 0 |     117.1 |
+| [legality-normal-base](followup-b-legality-normal-base.json)                             | normal | base                                     |        200/200 |      0 |                 0 |      73.6 |
+| [legality-normal-five-six](followup-b-legality-normal-five-six.json)                     | normal | five-six (6 seats)                       |        200/200 |      0 |                 0 |      65.8 |
+| [legality-normal-knights](followup-b-legality-normal-knights.json)                       | normal | knights                                  |        200/200 |      0 |                 0 |      95.3 |
+| [legality-normal-four-isles](followup-b-legality-normal-four-isles.json)                 | normal | seafaring (four-isles)                   |        200/200 |      0 |                 0 |      78.6 |
+| [legality-normal-four-isles-knights](followup-b-legality-normal-four-isles-knights.json) | normal | seafaring + knights (four-isles-knights) |        200/200 |      0 |                 0 |      93.0 |
+| [legality-hard-base](followup-b-legality-hard-base.json)                                 | hard   | base                                     |        200/200 |      0 |                 0 |      76.8 |
+| [legality-hard-five-six](followup-b-legality-hard-five-six.json)                         | hard   | five-six (6 seats)                       |        200/200 |      0 |                 0 |      74.8 |
+| [legality-hard-knights](followup-b-legality-hard-knights.json)                           | hard   | knights                                  |        200/200 |      0 |                 0 |      96.5 |
+| [legality-hard-four-isles](followup-b-legality-hard-four-isles.json)                     | hard   | seafaring (four-isles)                   |        200/200 |      0 |                 0 |      87.0 |
+| [legality-hard-four-isles-knights](followup-b-legality-hard-four-isles-knights.json)     | hard   | seafaring + knights (four-isles-knights) |        200/200 |      0 |                 0 |      96.4 |
+
+3,000 games with no rejected command, no failure and no fallback warning; the final comparisons add 16,000 more games without one.
+
+### Hard's phone budget (Chromium CPU throttling as a proxy)
+
+Re-measured as in stage 16 (`apps/web/dev/bot-timing.html`, which now takes `?scenario=<id>`; four Hard bots, the real bot host, a 150 ms budget, headless Chromium with DevTools CPU throttling, bots on the page's thread), two games per rate on base and on knights, where Hard now searches its openings: [base](followup-b-phone-proxy-base.json), [knights](followup-b-phone-proxy-knights.json). Each cell gives both games.
+
+| Game    | CPU throttling | Opening settlements (n, max ms) | Robber (n, max ms)     | Other decisions, max ms |
+| ------- | -------------- | ------------------------------- | ---------------------- | ----------------------- |
+| base    | 1×             | 8, 120 / 8, 125                 | 23, 127 / 26, 128      | 0.4                     |
+| base    | 4×             | 8, 122 / 8, 123                 | 18, 128 / 24, 127      | 2.2                     |
+| base    | 6×             | 8, 136 / 8, 138                 | 12, 129 / 14, 124      | 2.8                     |
+| knights | 1×             | 8, 112 / 8, 125                 | not searched (max 0.2) | 1.8                     |
+| knights | 4×             | 8, 134 / 8, 135                 | not searched (max 1)   | 4.4                     |
+| knights | 6×             | 8, 139 / 8, 141                 | not searched (max 2)   | 15.8                    |
+
+Every decision stayed within the 150 ms budget (largest 141 ms, a knights opening at 6×). Knights rollouts cost more than base ones, so on a slow phone fewer iterations fit in the budget than the simulator's six; the search's gain was measured with the simulator's iteration budget, not on a phone. **This is a proxy**: no physical phone was measured.
+
+Unit tests: `packages/bots/src/search/chance.test.ts` (a knights rollout answers the event die, progress draws and reveals for 40 turns; the dice stream does not depend on the draws), `packages/bots/src/search/search.test.ts` (Hard searches its knights opening, legally and reproducibly; the stage 16 settings do not), `packages/bots/src/levels.test.ts` (the benchmark levels, and parameter overrides refusing unknown or mistyped parameters).

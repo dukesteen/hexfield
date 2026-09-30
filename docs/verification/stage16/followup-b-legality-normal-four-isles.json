@@ -1,0 +1,36 @@
+{
+  "mode": "tournament",
+  "bots": [
+    "normal",
+    "normal",
+    "normal",
+    "normal"
+  ],
+  "seed": 1809,
+  "seatsRotation": true,
+  "scenario": "four-isles",
+  "iterationBudget": 6,
+  "verifyInvariants": true,
+  "parallel": 2,
+  "games": 200,
+  "finishedGames": 200,
+  "failedGames": 0,
+  "averageTurns": 78.58,
+  "results": [
+    {
+      "level": "normal",
+      "seats": 800,
+      "games": 200,
+      "wins": 200,
+      "winShare": 1,
+      "winRatePerSeat": 0.25,
+      "averageVp": 9.295,
+      "elo": 1000
+    }
+  ],
+  "fallbackWarnings": {},
+  "failures": [],
+  "elapsedMilliseconds": 39409.138416,
+  "sourceFingerprint": "61578736319c91f035775a30ccea77d1e65839b87dbdebfc3079184698d97002",
+  "sourceUnchanged": true
+}
