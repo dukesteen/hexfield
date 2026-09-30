@@ -1,7 +1,8 @@
 import { SCALAR_ORDER, scalarToBytes } from '@cp2p/crypto';
 import { RandomBot, createBotRng } from '../../bots/src/index.js';
+import { fromBase64Url, hashValue, toHex } from '@cp2p/codec';
 import { success } from '@cp2p/engine';
-import type { Engine } from '@cp2p/engine';
+import type { Engine, Input, PrivateInputData, PrivateState, Seat } from '@cp2p/engine';
 import { beforeAll, describe, expect, test, vi } from 'vitest';
 import { auditCertifiedGame } from './audit.js';
 import * as proposal from './proposal.js';
@@ -86,6 +87,39 @@ describe('certified end-game audit', () => {
       true,
     );
     expect(fixture.entries[(report.terminal?.seq ?? 0) - 1]?.entry.payload.kind).toBe('command');
+  }, 30_000);
+
+  test('hands a replay viewer every certified input with its reconstructed private data', () => {
+    const observed: { input: Input; data: Partial<Record<Seat, PrivateInputData>> }[] = [];
+    const report = auditCertifiedGame({
+      ...fixture,
+      onPrivateInput: (input, data) => observed.push({ input, data }),
+    });
+    expect(report.ok).toBe(true);
+    expect(observed.length).toBeGreaterThan(0);
+    const payload = fixture.genesisEntry.payload;
+    if (payload.kind !== 'genesis') throw new Error('Fixture genesis is missing');
+    const { config, genesisSeed } = payload.genesis;
+    const { engine } = fixture;
+    let state = engine.createGame(config, fromBase64Url(genesisSeed));
+    let privates: ReadonlyMap<Seat, PrivateState> = new Map(
+      config.seats.map((seat) => [seat, engine.createPrivateState(seat, config)]),
+    );
+    for (const { input, data } of observed) {
+      const applied = engine.apply(state, input);
+      const next = engine.applyAllPrivates(privates, state, input, data);
+      if (!applied.ok || !next.ok) throw new Error('Observed transcript does not replay');
+      state = applied.value.state;
+      privates = next.value;
+    }
+    expect(toHex(hashValue(state))).toBe(toHex(hashValue(fixture.finalState)));
+    expect(engine.checkPrivateInvariants(state, privates)).toEqual([]);
+    expect(
+      observed.some(
+        ({ input, data }) =>
+          input.kind === 'system' && input.type === 'CARD_DEALT' && Object.keys(data).length > 0,
+      ),
+    ).toBe(true);
   }, 30_000);
 
   test('validates each certified entry twice while matching the four-pass reference', () => {

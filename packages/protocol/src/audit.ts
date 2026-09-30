@@ -1,7 +1,7 @@
 import { fromBase64Url, hashValue, toBase64Url, toHex } from '@cp2p/codec';
 import { scalarFromBytes } from '@cp2p/crypto';
 import { LocalGame, failure, kindsOfCounts, success } from '@cp2p/engine';
-import type { Engine, PrivateInputData, Result, Seat } from '@cp2p/engine';
+import type { Engine, Input, PrivateInputData, Result, Seat } from '@cp2p/engine';
 import { decodeDeckCard } from './deck-draw.js';
 import { createDeckSecretSource } from './deck-source.js';
 import { entryHash } from './genesis.js';
@@ -32,6 +32,15 @@ export interface AuditCertifiedGameInput {
   readonly engine: Engine;
   readonly policy: ReplayPolicy;
   readonly masters: readonly { readonly seat: Seat; readonly master: Uint8Array }[];
+  /**
+   * Receives each certified engine input, in order, with the private data the omniscient
+   * replay reconstructed for it (a replay viewer's full-information transcript). Trust what it
+   * received only when the returned report is ok and complete.
+   */
+  readonly onPrivateInput?: (
+    input: Input,
+    privateData: Partial<Record<Seat, PrivateInputData>>,
+  ) => void;
 }
 
 function ref(entry: Parameters<typeof entryHash>[0]): AuditEntryRef {
@@ -343,6 +352,7 @@ export function auditCertifiedGame(input: AuditCertifiedGameInput): AuditReport 
               }
               const applied = game.applyRecorded(recordedInput, data.value);
               if (!applied.ok) return applied;
+              input.onPrivateInput?.(recordedInput, data.value);
             } catch {
               return failure(
                 'audit-private-input',
