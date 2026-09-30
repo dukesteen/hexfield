@@ -252,13 +252,11 @@ test('a certified seat transfer retires the old signer and the new device makes 
     const invitation = await source.getByRole('textbox', { name: /^Invitation link/ }).inputValue();
     await survivor.goto(invitation);
     await expect(survivor.getByRole('heading', { name: 'Transfer acceptance' })).toBeVisible();
-    // A seat request that races another lobby commit is dropped without a reply; ask again.
-    await expect(async () => {
-      await survivor.getByRole('button', { name: 'Take seat' }).click({ timeout: 2_000 });
-      await expect(survivor.getByRole('button', { name: 'Ready up' })).toBeVisible({
-        timeout: 5_000,
-      });
-    }).toPass({ timeout: 45_000 });
+    // One click: a request that races another lobby commit is re-sent by the lobby itself.
+    await survivor.getByRole('button', { name: 'Take seat' }).click();
+    await expect(survivor.getByRole('button', { name: 'Ready up' })).toBeVisible({
+      timeout: 15_000,
+    });
     await expect(source.getByText('Source', { exact: true })).toBeVisible();
     await source.getByRole('button', { name: 'Ready up' }).click();
     await survivor.getByRole('button', { name: 'Ready up' }).click();

@@ -189,6 +189,12 @@
   font-weight: 680;
 }
 
+.online-seat-notice {
+  margin: 0;
+  color: var(--error);
+  font-size: 0.88rem;
+}
+
 .online-seat-edit {
   display: flex;
   align-items: end;

@@ -15,6 +15,7 @@ import { genesisDigest, LobbyController } from '@cp2p/protocol';
 import type {
   LobbyDiagnostic,
   LobbyFreezeAgreement,
+  LobbySeatRequest,
   LobbyState,
   PeerId,
   ProtocolClock,
@@ -75,6 +76,8 @@ export interface OnlineRoomSnapshot {
   readonly lobby: LobbyState | null;
   readonly agreement: LobbyFreezeAgreement | null;
   readonly diagnostic: LobbyDiagnostic | null;
+  /** This device's own Take seat request while the host has not seated it. */
+  readonly seatRequest?: LobbySeatRequest | null;
   readonly connectionError: string | null;
   readonly startup: OnlineStartupSnapshot | null;
   readonly chat?: ChatSnapshot;
@@ -275,6 +278,7 @@ export class OnlineRoom {
       this.unsubscribers.push(
         controller.onChange(() => this.refresh()),
         controller.onDiagnostic(() => this.refresh()),
+        controller.onSeatRequest(() => this.refresh()),
       );
     }
     void this.chat.start().catch(() => this.refresh());
@@ -1010,6 +1014,7 @@ export class OnlineRoom {
       startup: this.startup.snapshot(),
       chat: this.chat.snapshot(),
       diagnostic: this.lobby?.getDiagnostic() ?? null,
+      seatRequest: this.lobby?.seatRequest() ?? null,
     });
   }
 

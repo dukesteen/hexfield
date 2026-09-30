@@ -44,6 +44,18 @@ export type LobbyRequest =
   | { kind: 'setReady'; ready: boolean }
   | { kind: 'spectate' };
 
+/** Why the host refused a signed lobby request; sent back so the guest is never left waiting. */
+export type LobbyRejectReason = 'stale-lobby' | 'seat-unavailable' | 'invalid-request';
+
+/**
+ * The guest's own Take seat request. It clears once the signed snapshot seats this device.
+ * A `stale-lobby` phase means the lobby kept changing through every automatic re-send.
+ */
+export type LobbySeatRequest =
+  | { readonly seat: Seat; readonly phase: 'pending'; readonly attempts: number }
+  | { readonly seat: Seat; readonly phase: 'rejected'; readonly reason: LobbyRejectReason }
+  | { readonly seat: Seat; readonly phase: 'timeout' };
+
 export interface LobbyFreezeAck {
   readonly body: {
     readonly lobbyId: string;

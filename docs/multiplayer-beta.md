@@ -7,6 +7,7 @@ The user narrowed the immediate release goal on 2026-09-27 to playing with frien
 - The app at [playhexfield.com](https://playhexfield.com/) creates rooms with hosted WebSocket signaling by default. Friends join through the invitation link. The GitHub Pages build retains manual invitation and answer codes. Public STUN services help discover direct routes.
 - Two to four human players can play the base game, with existing hosted bots filling seats when wanted.
 - Players can finish a game and inspect the result and audit.
+- A guest's Take seat click always gets an answer: the seat, a re-sent request when the lobby changed at the same moment, a note that the seat was taken, or a retry offer when the host does not answer.
 - Closing and reopening the same browser profile restores the existing seat. Reconnecting can require another exchange of connection codes.
 - A missing player in a game with two or three humans is not replaced. The game waits whenever the current agreement or private-card protocol needs that player.
 - Since protocol v6 (2026-09-28), which the [deferred-items audit](verification/multiplayer-deferred-audit.md) maps to code and evidence:

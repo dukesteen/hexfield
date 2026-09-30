@@ -3,7 +3,11 @@ import { identityFromSecret, signObject } from '@cp2p/crypto';
 import { BASE_VERSION, ENGINE_VERSION, FIVE_SIX_VERSION } from '@cp2p/engine';
 import type { GameConfig, Result } from '@cp2p/engine';
 import { afterEach, describe, expect, test } from 'vitest';
-import { LobbyController, verifyLobbyFreezeAgreement } from './lobby.js';
+import {
+  LOBBY_SEAT_REQUEST_TIMEOUT_MS,
+  LobbyController,
+  verifyLobbyFreezeAgreement,
+} from './lobby.js';
 import { createMemnet } from './testing/memnet.js';
 import type { Transport } from './transport.js';
 import { PROTOCOL_VERSION } from './types.js';
@@ -676,5 +680,289 @@ describe('signed lobby controller', () => {
     room.flush();
     expect(room.second.freezeAgreement()?.acks).toHaveLength(2);
     expect(room.third.freezeAgreement()?.acks).toHaveLength(2);
+  });
+});
+
+/** A host and a guest whose transports can be observed or made lossy. */
+function twoPeerRoom(
+  options: { beforeHostReceives?: () => void; dropGuestSends?: () => boolean } = {},
+) {
+  const keys = [new Uint8Array(32).fill(41), new Uint8Array(32).fill(42)];
+  const peers = keys.map((key) => identityFromSecret(key).peerId);
+  const hostPeer = required(peers[0]);
+  const guestPeer = required(peers[1]);
+  const net = createMemnet({ peers });
+  const hostTransport = net.transport(hostPeer);
+  const wrappedHost: Transport = {
+    self: hostTransport.self,
+    peers: () => hostTransport.peers(),
+    send: (to, bytes) => hostTransport.send(to, bytes),
+    broadcast: (bytes) => hostTransport.broadcast(bytes),
+    onMessage: (listener) =>
+      hostTransport.onMessage((from, bytes) => {
+        options.beforeHostReceives?.();
+        listener(from, bytes);
+      }),
+    onPeerChange: (listener) => hostTransport.onPeerChange(listener),
+    disconnect: (peer) => hostTransport.disconnect(peer),
+  };
+  const guestTransport = net.transport(guestPeer);
+  const wrappedGuest: Transport = {
+    self: guestTransport.self,
+    peers: () => guestTransport.peers(),
+    send(to, bytes) {
+      if (!options.dropGuestSends?.()) guestTransport.send(to, bytes);
+    },
+    broadcast: (bytes) => guestTransport.broadcast(bytes),
+    onMessage: (listener) => guestTransport.onMessage(listener),
+    onPeerChange: (listener) => guestTransport.onPeerChange(listener),
+    disconnect: (peer) => guestTransport.disconnect(peer),
+  };
+  const host = value(
+    LobbyController.createHost({
+      lobbyId: 'seat_room',
+      name: 'Room',
+      hostName: 'Host',
+      config: {
+        modules: [{ id: 'base', version: BASE_VERSION }],
+        seats: [0, 1],
+        options: { base: { mapLayout: 'random', vpTarget: 3 } },
+      },
+      transport: wrappedHost,
+      clock: net.clock,
+      secretKey: required(keys[0]),
+    }),
+  );
+  const guest = value(
+    LobbyController.join({
+      lobbyId: 'seat_room',
+      hostPeer,
+      transport: wrappedGuest,
+      clock: net.clock,
+      secretKey: required(keys[1]),
+    }),
+  );
+  const room = {
+    keys,
+    hostPeer,
+    guestPeer,
+    net,
+    host,
+    guest,
+    dispose() {
+      guest.dispose();
+      host.dispose();
+      net.dispose();
+    },
+  };
+  active.push(room);
+  net.clock.advanceBy(0);
+  return room;
+}
+
+describe('Take seat feedback', () => {
+  test('a Take seat that races a host commit is refused as stale and re-sent', () => {
+    const room = setup();
+    active.push(room);
+    room.flush();
+    const phases: unknown[] = [];
+    room.second.onSeatRequest((request) => phases.push(request));
+    value(room.second.request({ kind: 'takeSeat', seat: 1 }));
+    // The host commits before the guest's request (signed against the older version) arrives.
+    value(room.host.request({ kind: 'setName', name: 'Renamed host' }));
+    room.flush();
+    expect(room.host.state()?.seats[1]).toMatchObject({
+      kind: 'human',
+      peer: required(room.peers[1]),
+    });
+    expect(room.second.state()?.seats[1]).toMatchObject({ kind: 'human' });
+    expect(room.host.state()?.seats[0]).toMatchObject({ name: 'Renamed host' });
+    expect(room.second.seatRequest()).toBeNull();
+    expect(phases).toEqual([
+      null,
+      { seat: 1, phase: 'pending', attempts: 1 },
+      { seat: 1, phase: 'pending', attempts: 2 },
+      null,
+    ]);
+  });
+
+  test('a Take seat that races a host settings change is re-sent against the new settings', () => {
+    const room = setup();
+    active.push(room);
+    room.flush();
+    value(room.second.request({ kind: 'takeSeat', seat: 2 }));
+    value(
+      room.host.configure({
+        ...room.config,
+        options: { base: { mapLayout: 'random', vpTarget: 5 } },
+      }),
+    );
+    room.flush();
+    expect(room.host.state()?.config.options).toEqual({
+      base: { mapLayout: 'random', vpTarget: 5 },
+    });
+    expect(room.host.state()?.seats[2]).toMatchObject({ kind: 'human' });
+    expect(room.second.seatRequest()).toBeNull();
+  });
+
+  test('two guests racing for one seat: one is seated, the other is told the seat is gone', () => {
+    const room = setup();
+    active.push(room);
+    room.flush();
+    value(room.second.request({ kind: 'takeSeat', seat: 1 }));
+    value(room.third.request({ kind: 'takeSeat', seat: 1 }));
+    room.flush();
+    const seat = room.host.state()?.seats[1];
+    expect(seat?.kind).toBe('human');
+    const winner = seat?.kind === 'human' ? seat.peer : null;
+    const loser = winner === room.peers[1] ? room.third : room.second;
+    // Never double-assigned: the seat has one owner and the loser has no seat.
+    expect(room.host.state()?.seats.filter((item) => item.kind === 'human')).toHaveLength(2);
+    expect(loser.seatRequest()).toEqual({ seat: 1, phase: 'rejected', reason: 'seat-unavailable' });
+    value(loser.request({ kind: 'takeSeat', seat: 2 }));
+    room.flush();
+    expect(room.host.state()?.seats[2]?.kind).toBe('human');
+    expect(room.host.state()?.seats[1]).toMatchObject({ kind: 'human', peer: winner });
+    expect(loser.seatRequest()).toBeNull();
+  });
+
+  test('a host that fills the seat first sends seat-unavailable back to the guest', () => {
+    const room = setup();
+    active.push(room);
+    room.flush();
+    value(room.second.request({ kind: 'takeSeat', seat: 1 }));
+    value(room.host.setBot(1, 'easy'));
+    room.flush();
+    expect(room.host.state()?.seats[1]?.kind).toBe('bot');
+    expect(room.second.seatRequest()).toEqual({
+      seat: 1,
+      phase: 'rejected',
+      reason: 'seat-unavailable',
+    });
+  });
+
+  test('a stale refusal never re-sends over a newer choice', () => {
+    const room = setup();
+    active.push(room);
+    room.flush();
+    value(room.second.request({ kind: 'takeSeat', seat: 1 }));
+    value(room.host.request({ kind: 'setName', name: 'Renamed host' }));
+    value(room.second.request({ kind: 'spectate' }));
+    expect(room.second.seatRequest()).toBeNull();
+    room.flush();
+    expect(room.host.state()?.seats[1]?.kind).toBe('open');
+    expect(room.second.seatRequest()).toBeNull();
+  });
+
+  test('a lobby that keeps changing stops the automatic re-sends with stale-lobby', () => {
+    let bumps = 0;
+    let bump = false;
+    const room = twoPeerRoom({
+      beforeHostReceives: () => {
+        if (!bump) return;
+        bumps += 1;
+        value(room.host.request({ kind: 'setName', name: `Host ${bumps}` }));
+      },
+    });
+    bump = true;
+    value(room.guest.request({ kind: 'takeSeat', seat: 1 }));
+    room.net.clock.advanceBy(0);
+    expect(bumps).toBe(3);
+    expect(room.host.state()?.seats[1]?.kind).toBe('open');
+    expect(room.guest.seatRequest()).toEqual({ seat: 1, phase: 'rejected', reason: 'stale-lobby' });
+    bump = false;
+    value(room.guest.request({ kind: 'takeSeat', seat: 1 }));
+    room.net.clock.advanceBy(0);
+    expect(room.host.state()?.seats[1]?.kind).toBe('human');
+    expect(room.guest.seatRequest()).toBeNull();
+  });
+
+  test('an unanswered Take seat times out and can be retried', () => {
+    let drop = false;
+    const room = twoPeerRoom({ dropGuestSends: () => drop });
+    expect(room.guest.state()).not.toBeNull();
+    drop = true;
+    value(room.guest.request({ kind: 'takeSeat', seat: 1 }));
+    room.net.clock.advanceBy(LOBBY_SEAT_REQUEST_TIMEOUT_MS - 1);
+    expect(room.guest.seatRequest()).toEqual({ seat: 1, phase: 'pending', attempts: 1 });
+    room.net.clock.advanceBy(1);
+    expect(room.guest.seatRequest()).toEqual({ seat: 1, phase: 'timeout' });
+    drop = false;
+    value(room.guest.request({ kind: 'takeSeat', seat: 1 }));
+    room.net.clock.advanceBy(0);
+    expect(room.host.state()?.seats[1]?.kind).toBe('human');
+    expect(room.guest.seatRequest()).toBeNull();
+    // No late timer fires after the seat was granted.
+    room.net.clock.advanceBy(LOBBY_SEAT_REQUEST_TIMEOUT_MS);
+    expect(room.guest.seatRequest()).toBeNull();
+  });
+
+  test('only a host-signed refusal of the pending request reaches the guest', () => {
+    let drop = false;
+    const room = twoPeerRoom({ dropGuestSends: () => drop });
+    drop = true;
+    value(room.guest.request({ kind: 'takeSeat', seat: 1 }));
+    const version = required(room.guest.state()).version;
+    const valid = {
+      lobbyId: 'seat_room',
+      hostEpoch: 0,
+      version,
+      peer: room.hostPeer,
+      target: room.guestPeer,
+      nonce: 1,
+      reason: 'invalid-request',
+    };
+    const deliver = (body: Record<string, unknown>, key: Uint8Array) => {
+      room.net.transport(room.hostPeer).send(
+        room.guestPeer,
+        canonicalEncode({
+          t: 'LOBBY_REJECT',
+          reject: { body, sig: signObject('lobby-reject', body, key) },
+        }),
+      );
+      room.net.clock.advanceBy(0);
+    };
+    const pending = { seat: 1, phase: 'pending', attempts: 1 };
+    deliver(valid, required(room.keys[1]));
+    expect(room.guest.seatRequest()).toEqual(pending);
+    deliver({ ...valid, target: room.hostPeer }, required(room.keys[0]));
+    expect(room.guest.seatRequest()).toEqual(pending);
+    deliver({ ...valid, nonce: 7 }, required(room.keys[0]));
+    expect(room.guest.seatRequest()).toEqual(pending);
+    deliver({ ...valid, reason: 'nope' }, required(room.keys[0]));
+    expect(room.guest.getDiagnostic()).toMatchObject({ kind: 'invalid-message' });
+    expect(room.guest.seatRequest()).toEqual(pending);
+    deliver(valid, required(room.keys[0]));
+    expect(room.guest.seatRequest()).toEqual({
+      seat: 1,
+      phase: 'rejected',
+      reason: 'invalid-request',
+    });
+  });
+
+  test('the host answers a refused request once and ignores its replay', () => {
+    const room = twoPeerRoom();
+    const received: string[] = [];
+    room.net.transport(room.guestPeer).onMessage((_from, bytes) => {
+      const text = new TextDecoder().decode(bytes);
+      if (text.includes('LOBBY_REJECT')) received.push('reject');
+    });
+    const body = {
+      lobbyId: 'seat_room',
+      hostEpoch: 0,
+      baseVersion: 0,
+      nonce: 5,
+      peer: room.guestPeer,
+      action: { kind: 'setName', name: 'Not seated' },
+    };
+    const packet = canonicalEncode({
+      t: 'LOBBY_REQ',
+      request: { body, sig: signObject('lobby-request', body, required(room.keys[1])) },
+    });
+    room.net.transport(room.guestPeer).send(room.hostPeer, packet);
+    room.net.clock.advanceBy(0);
+    room.net.transport(room.guestPeer).send(room.hostPeer, packet);
+    room.net.clock.advanceBy(0);
+    expect(received).toEqual(['reject']);
   });
 });

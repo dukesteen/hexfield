@@ -100,11 +100,19 @@ friends.
 - **Browser checks drifted (fixed).** The transfer check read the room
   registry from the resource-timing buffer, which the grown app now overflows;
   it sets a larger buffer, as the takeover check already did.
-- **Seat requests can be dropped (open).** A guest's "Take seat" request that
-  races another lobby commit (for example a name autosave) is rejected as
-  stale without a reply, so the click appears to do nothing. The 2026-09-28
-  readiness window only covers `setReady`. The browser checks retry the click;
-  a product fix needs a rejection acknowledgement or a wider window.
+- **Seat requests could be dropped (fixed).** A guest's "Take seat" request
+  that raced another lobby commit (for example a name autosave or a settings
+  change) was signed against an older lobby version; the host refused it as
+  stale without a reply, so the click appeared to do nothing. The 2026-09-28
+  readiness window only covers `setReady`. The host now answers every
+  authenticated refusal with a signed `LOBBY_REJECT` (`stale-lobby`,
+  `seat-unavailable` or `invalid-request`) after resending its snapshot. The
+  guest re-sends a stale Take seat against the newer snapshot (up to three
+  attempts) while the seat is still open. Otherwise it says the seat is gone,
+  or after 10 s without an answer offers "Try again". The button shows
+  "Taking seat…" while waiting (`lobby.ts`, `OnlineLobby.tsx`; `lobby.test.ts`
+  "Take seat feedback", `OnlineLobby.seat.test.tsx`; DECISIONS 2026-09-30).
+  The browser checks no longer retry the click.
 
 ## Browser checks run (2026-09-30, local signaling on 127.0.0.1:8909)
 
@@ -113,6 +121,7 @@ friends.
 | `online-chat.e2e.ts` (desktop host, phone guest, landscape)                      | passed, 12.9–17.9 s |
 | `online-takeover.e2e.ts` with `CP2P_ONLINE_TAKEOVER_RETURN_ONLY=1` (four humans) | passed, 2.2 min     |
 | `online-transfer.e2e.ts` (transfer and certified cancellation)                   | 2 passed, 1.1 min   |
+| `online-chat.e2e.ts` and `online-transfer.e2e.ts` after the seat fix, one click  | 3 passed, 1.1 min   |
 
 The takeover check stops after the returned human's first certified command.
 Its full form (second takeover, finish and three audits) was not rerun; the

@@ -334,6 +334,7 @@ export function OnlineLobby({
                         seat={seat}
                         isHost={isHost}
                         ownSeat={ownSeat?.seat === seat.seat}
+                        seated={!!ownSeat}
                         editable={state.status === 'open' && !snapshot.startup && !startBusy}
                         namePending={namePending}
                         settingsPending={settingsPending}
@@ -442,6 +443,7 @@ function LobbySeatRow({
   seat,
   isHost,
   ownSeat,
+  seated,
   editable,
   namePending,
   settingsPending,
@@ -453,6 +455,8 @@ function LobbySeatRow({
   seat: LobbySeat;
   isHost: boolean;
   ownSeat: boolean;
+  /** This device already holds a seat; a second one cannot be taken. */
+  seated: boolean;
   editable: boolean;
   namePending: boolean;
   settingsPending: boolean;
@@ -466,6 +470,16 @@ function LobbySeatRow({
   if (!lobby) return null;
 
   const request = (action: Parameters<typeof lobby.request>[0]) => report(lobby.request(action));
+  const seatRequest = snapshot.seatRequest ?? null;
+  const seatPending = seatRequest?.phase === 'pending';
+  const takingHere = seatPending && seatRequest.seat === seat.seat;
+  const seatOutcome =
+    seatRequest && seatRequest.phase !== 'pending' && seatRequest.seat === seat.seat
+      ? seatRequest
+      : null;
+  const retryable =
+    seatOutcome?.phase === 'timeout' ||
+    (seatOutcome?.phase === 'rejected' && seatOutcome.reason === 'stale-lobby');
 
   return (
     <article className={`online-seat-row online-seat-${seat.kind}`}>
@@ -490,6 +504,22 @@ function LobbySeatRow({
               ? t('lobby:onlineBotHostedHere')
               : t('lobby:onlineBotHostedByPlayer')}
           </small>
+        )}
+        {takingHere && (
+          <small className="muted" role="status">
+            {t('lobby:onlineSeatRequestPending')}
+          </small>
+        )}
+        {seatOutcome && (
+          <p className="online-seat-notice" role="alert">
+            {seatOutcome.phase === 'timeout'
+              ? t('lobby:onlineSeatRequestTimeout')
+              : seatOutcome.reason === 'seat-unavailable'
+                ? t('lobby:onlineSeatRequestUnavailable')
+                : seatOutcome.reason === 'stale-lobby'
+                  ? t('lobby:onlineSeatRequestStale')
+                  : t('lobby:onlineSeatRequestInvalid')}
+          </p>
         )}
         {ownSeat && member && (
           <div className="online-seat-edit">
@@ -534,13 +564,19 @@ function LobbySeatRow({
         )}
       </div>
       <div className="online-seat-actions">
-        {seat.kind === 'open' && !ownSeat && (
+        {seat.kind === 'open' && !seated && (
           <button
             className="button button-quiet"
             type="button"
+            disabled={seatPending}
+            aria-busy={takingHere}
             onClick={() => request({ kind: 'takeSeat', seat: seat.seat })}
           >
-            {t('lobby:onlineTakeSeat')}
+            {takingHere
+              ? t('lobby:onlineTakingSeat')
+              : retryable
+                ? t('lobby:onlineTakeSeatRetry')
+                : t('lobby:onlineTakeSeat')}
           </button>
         )}
         {isHost && (seat.kind === 'open' || seat.kind === 'bot') && (

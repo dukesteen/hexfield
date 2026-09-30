@@ -42,10 +42,9 @@ test('game chat is one tap away, counts unread messages and works on a phone', a
     const invitation = await host.getByRole('textbox', { name: /^Invitation link/ }).inputValue();
     await guest.goto(invitation);
     await expect(guest.getByRole('heading', { name: 'Chat check' })).toBeVisible();
-    await expect(async () => {
-      await guest.getByRole('button', { name: 'Take seat' }).click({ timeout: 2_000 });
-      await expect(guest.getByRole('button', { name: 'Ready up' })).toBeVisible({ timeout: 5_000 });
-    }).toPass({ timeout: 45_000 });
+    // One click: a request that races another lobby commit is re-sent by the lobby itself.
+    await guest.getByRole('button', { name: 'Take seat' }).click();
+    await expect(guest.getByRole('button', { name: 'Ready up' })).toBeVisible({ timeout: 15_000 });
     await host.getByRole('button', { name: 'Ready up' }).click();
     await guest.getByRole('button', { name: 'Ready up' }).click();
     await expect(host.getByRole('button', { name: 'Start game' })).toBeEnabled();

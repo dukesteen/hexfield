@@ -34,7 +34,7 @@ interface LobbyState {
 }
 ```
 
-Messages: `LOBBY_STATE`, `LOBBY_REQ { kind: 'takeSeat' | 'leaveSeat' | 'setName' | 'setColour' | 'setReady' | 'spectate' }`, `LOBBY_CONFIG { patch }` (host only), `LOBBY_KICK` (host only), `LOBBY_START` (host only, needs all humans ready).
+Messages: `LOBBY_STATE`, `LOBBY_REQ { kind: 'takeSeat' | 'leaveSeat' | 'setName' | 'setColour' | 'setReady' | 'spectate' }`, `LOBBY_CONFIG { patch }` (host only), `LOBBY_KICK` (host only), `LOBBY_START` (host only, needs all humans ready), `LOBBY_REJECT { nonce, reason: 'stale-lobby' | 'seat-unavailable' | 'invalid-request' }` (host only, answers a refused request after resending the snapshot; a stale Take seat is re-sent by the guest).
 
 Rules:
 

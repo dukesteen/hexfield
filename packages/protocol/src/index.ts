@@ -143,7 +143,11 @@ export type { PeerId, ProtocolClock, Transport, Unsubscribe } from './transport.
 export { PROTOCOL_VERSION } from './types.js';
 export { DEFAULT_TAKEOVER_POLICY, takeoverPolicySchema } from './takeover-policy.js';
 export type { TakeoverPolicy } from './takeover-policy.js';
-export { LobbyController, verifyLobbyFreezeAgreement } from './lobby.js';
+export {
+  LOBBY_SEAT_REQUEST_TIMEOUT_MS,
+  LobbyController,
+  verifyLobbyFreezeAgreement,
+} from './lobby.js';
 export type { LobbyControllerOptions, HostLobbyOptions, JoinLobbyOptions } from './lobby.js';
 export { LOBBY_COLOURS } from './lobby-types.js';
 export type {
@@ -152,8 +156,10 @@ export type {
   LobbyDiagnostic,
   LobbyFreezeAck,
   LobbyFreezeAgreement,
+  LobbyRejectReason,
   LobbyRequest,
   LobbySeat,
+  LobbySeatRequest,
   LobbyState,
 } from './lobby-types.js';
 export {

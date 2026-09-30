@@ -30,8 +30,10 @@ import type {
   LobbyDiagnostic,
   LobbyFreezeAck,
   LobbyFreezeAgreement,
+  LobbyRejectReason,
   LobbyRequest,
   LobbySeat,
+  LobbySeatRequest,
   LobbyState,
 } from './lobby-types.js';
 
@@ -41,6 +43,10 @@ const MAX_FREEZE_ATTEMPTS = 32;
 const HELLO_RETRY_MS = 1_000;
 const MAX_HELLO_ATTEMPTS = 12;
 const HELLO_REPLY_MIN_MS = 500;
+/** How long a guest waits for the host to seat or refuse it before offering a retry. */
+export const LOBBY_SEAT_REQUEST_TIMEOUT_MS = 10_000;
+/** Automatic re-sends of one Take seat click after `stale-lobby` refusals. */
+const MAX_SEAT_ATTEMPTS = 3;
 const roomSchema = v.pipe(
   v.string(),
   v.minLength(1),
@@ -167,6 +173,24 @@ const frozenBodySchema = v.strictObject({
   acks: v.pipe(v.array(signedAckSchema), v.minLength(1), v.maxLength(6)),
 });
 const signedFrozenSchema = v.strictObject({ body: frozenBodySchema, sig: signature64Schema });
+const rejectReasonSchema = v.picklist([
+  'stale-lobby',
+  'seat-unavailable',
+  'invalid-request',
+] as const);
+const signedRejectSchema = v.strictObject({
+  body: v.strictObject({
+    lobbyId: roomSchema,
+    hostEpoch: nonnegativeIntegerSchema,
+    /** The host's version when it refused; the requester waits for at least this snapshot. */
+    version: nonnegativeIntegerSchema,
+    peer: key32Schema,
+    target: key32Schema,
+    nonce: nonnegativeIntegerSchema,
+    reason: rejectReasonSchema,
+  }),
+  sig: signature64Schema,
+});
 const messageSchema = v.variant('t', [
   v.strictObject({ t: v.literal('LOBBY_HELLO'), hello: signedHelloSchema }),
   v.strictObject({ t: v.literal('LOBBY_STATE'), snapshot: signedStateSchema }),
@@ -176,6 +200,7 @@ const messageSchema = v.variant('t', [
   v.strictObject({ t: v.literal('LOBBY_START'), edit: signedStartSchema }),
   v.strictObject({ t: v.literal('LOBBY_FREEZE_ACK'), ack: signedAckSchema }),
   v.strictObject({ t: v.literal('LOBBY_FROZEN'), agreement: signedFrozenSchema }),
+  v.strictObject({ t: v.literal('LOBBY_REJECT'), reject: signedRejectSchema }),
 ]);
 
 type LobbyMessage = v.InferOutput<typeof messageSchema>;
@@ -330,6 +355,7 @@ export class LobbyController {
   private readonly offPeer: Unsubscribe;
   private readonly listeners = new Set<(state: LobbyState | null) => void>();
   private readonly diagnosticListeners = new Set<(diagnostic: LobbyDiagnostic | null) => void>();
+  private readonly seatListeners = new Set<(request: LobbySeatRequest | null) => void>();
   private readonly seenNonce = new Map<PeerId, number>();
   private readonly freezeSignatures = new Map<PeerId, LobbyFreezeAck>();
   private readonly ackedAttempts = new Map<string, string>();
@@ -345,6 +371,11 @@ export class LobbyController {
   private disposed = false;
   private helloAttempts = 0;
   private helloTimer: unknown = null;
+  // The guest's own Take seat click: its latest signed nonce and the snapshot a re-send awaits.
+  private seatView: LobbySeatRequest | null = null;
+  private seatNonce = 0;
+  private seatAwaitVersion: number | null = null;
+  private seatTimer: unknown = null;
 
   private constructor(
     private readonly options: LobbyControllerOptions,
@@ -454,6 +485,17 @@ export class LobbyController {
       this.diagnosticListeners.delete(listener);
     };
   }
+  /** The guest's pending or refused Take seat request; null once seated or never asked. */
+  seatRequest(): LobbySeatRequest | null {
+    return this.seatView ? clone(this.seatView) : null;
+  }
+  onSeatRequest(listener: (request: LobbySeatRequest | null) => void): Unsubscribe {
+    this.seatListeners.add(listener);
+    listener(this.seatRequest());
+    return () => {
+      this.seatListeners.delete(listener);
+    };
+  }
   freezeAgreement(): LobbyFreezeAgreement | null {
     return this.agreement && this.fullHumanMesh() ? clone(this.agreement) : null;
   }
@@ -464,18 +506,13 @@ export class LobbyController {
       return failure('lobby-unavailable', 'Lobby is not open');
     const parsed = v.safeParse(requestSchema, action);
     if (!parsed.success) return failure('lobby-request', 'Lobby request is malformed');
-    const body = {
-      lobbyId: state.lobbyId,
-      hostEpoch: state.hostEpoch,
-      baseVersion: state.version,
-      nonce: ++this.sentNonce,
-      peer: this.peer,
-      action: parsed.output,
-    };
-    const request = { body, sig: signObject('lobby-request', body, this.key) };
-    return this.peer === state.hostPeer
-      ? this.applyRequest(this.peer, request)
-      : this.send(state.hostPeer, { t: 'LOBBY_REQ', request });
+    if (this.peer === state.hostPeer) return this.sendRequest(state, parsed.output).result;
+    // A newer choice supersedes an earlier Take seat click; it is never re-sent over it.
+    this.clearSeat();
+    const sent = this.sendRequest(state, parsed.output);
+    if (sent.result.ok && parsed.output.kind === 'takeSeat')
+      this.trackSeat(parsed.output.seat, sent.nonce, 1);
+    return sent.result;
   }
 
   configure(
@@ -648,9 +685,11 @@ export class LobbyController {
     this.offMessage();
     this.offPeer();
     this.stopHello();
+    this.stopSeatTimer();
     this.key.fill(0);
     this.listeners.clear();
     this.diagnosticListeners.clear();
+    this.seatListeners.clear();
     this.freezeSignatures.clear();
     this.helloReplies.clear();
     this.agreement = null;
@@ -677,6 +716,148 @@ export class LobbyController {
         /* UI observers cannot change lobby authority. */
       }
     }
+  }
+
+  private sendRequest(
+    state: LobbyState,
+    action: LobbyRequest,
+  ): { readonly nonce: number; readonly result: Result<void> } {
+    const body = {
+      lobbyId: state.lobbyId,
+      hostEpoch: state.hostEpoch,
+      baseVersion: state.version,
+      nonce: ++this.sentNonce,
+      peer: this.peer,
+      action,
+    };
+    const request = { body, sig: signObject('lobby-request', body, this.key) };
+    return {
+      nonce: body.nonce,
+      result:
+        this.peer === state.hostPeer
+          ? this.applyRequest(this.peer, request)
+          : this.send(state.hostPeer, { t: 'LOBBY_REQ', request }),
+    };
+  }
+
+  private setSeatView(view: LobbySeatRequest | null): void {
+    this.seatView = view;
+    if (!view || view.phase !== 'pending') {
+      this.seatAwaitVersion = null;
+      this.stopSeatTimer();
+    }
+    for (const listener of this.seatListeners) {
+      try {
+        listener(this.seatRequest());
+      } catch {
+        /* UI observers cannot change lobby authority. */
+      }
+    }
+  }
+
+  private stopSeatTimer(): void {
+    if (this.seatTimer !== null) this.options.clock.clearTimeout(this.seatTimer);
+    this.seatTimer = null;
+  }
+
+  private clearSeat(): void {
+    if (this.seatView) this.setSeatView(null);
+  }
+
+  private trackSeat(seat: Seat, nonce: number, attempts: number): void {
+    this.stopSeatTimer();
+    this.seatNonce = nonce;
+    this.seatAwaitVersion = null;
+    this.setSeatView({ seat, phase: 'pending', attempts });
+    this.seatTimer = this.options.clock.setTimeout(() => {
+      this.seatTimer = null;
+      if (this.disposed || this.seatView?.phase !== 'pending' || this.seatNonce !== nonce) return;
+      this.setSeatView({ seat, phase: 'timeout' });
+    }, LOBBY_SEAT_REQUEST_TIMEOUT_MS);
+  }
+
+  /** Clears a request the snapshot answered, or re-sends one refused against an older snapshot. */
+  private reconcileSeat(): void {
+    const view = this.seatView;
+    const state = this.current;
+    if (!view || !state) return;
+    if (state.seats.some((seat) => seat.kind === 'human' && seat.peer === this.peer)) {
+      this.clearSeat();
+      return;
+    }
+    if (
+      view.phase !== 'pending' ||
+      this.seatAwaitVersion === null ||
+      state.version < this.seatAwaitVersion
+    )
+      return;
+    this.seatAwaitVersion = null;
+    if (
+      this.seatNonce !== this.sentNonce ||
+      state.status !== 'open' ||
+      state.seats[view.seat]?.kind !== 'open'
+    ) {
+      this.setSeatView({ seat: view.seat, phase: 'rejected', reason: 'seat-unavailable' });
+      return;
+    }
+    if (view.attempts >= MAX_SEAT_ATTEMPTS) {
+      this.setSeatView({ seat: view.seat, phase: 'rejected', reason: 'stale-lobby' });
+      return;
+    }
+    const sent = this.sendRequest(state, { kind: 'takeSeat', seat: view.seat });
+    if (sent.result.ok) this.trackSeat(view.seat, sent.nonce, view.attempts + 1);
+    else this.setSeatView({ seat: view.seat, phase: 'timeout' });
+  }
+
+  private receiveReject(from: PeerId, signed: v.InferOutput<typeof signedRejectSchema>): void {
+    const state = this.current;
+    const { body } = signed;
+    if (
+      !state ||
+      from !== state.hostPeer ||
+      body.peer !== from ||
+      body.target !== this.peer ||
+      body.lobbyId !== state.lobbyId ||
+      body.hostEpoch !== state.hostEpoch ||
+      !verify('lobby-reject', body, signed.sig, from)
+    )
+      return;
+    const view = this.seatView;
+    // Refusals of other requests, or of a superseded Take seat, need no feedback here.
+    if (!view || view.phase !== 'pending' || body.nonce !== this.seatNonce) return;
+    if (body.reason !== 'stale-lobby') {
+      this.setSeatView({ seat: view.seat, phase: 'rejected', reason: body.reason });
+      return;
+    }
+    // The host sent its newer snapshot first; if that was lost, wait for the next one.
+    this.seatAwaitVersion = body.version;
+    this.reconcileSeat();
+  }
+
+  /** Host: refuse an authenticated request, with the current snapshot so the guest can re-send. */
+  private reject(
+    from: PeerId,
+    nonce: number,
+    reason: LobbyRejectReason,
+    result: Result<void>,
+  ): Result<void> {
+    const state = this.current;
+    if (from === this.peer || !state) return result;
+    this.sendState(from);
+    const body = {
+      lobbyId: state.lobbyId,
+      hostEpoch: state.hostEpoch,
+      version: state.version,
+      peer: this.peer,
+      target: from,
+      nonce,
+      reason,
+    };
+    this.send(from, {
+      t: 'LOBBY_REJECT',
+      reject: { body, sig: signObject('lobby-reject', body, this.key) },
+    });
+    return result;
   }
 
   private send(to: PeerId, message: LobbyMessage): Result<void> {
@@ -805,6 +986,9 @@ export class LobbyController {
       case 'LOBBY_FROZEN':
         this.receiveFrozen(from, message.agreement);
         break;
+      case 'LOBBY_REJECT':
+        this.receiveReject(from, message.reject);
+        break;
       case 'LOBBY_CONFIG':
       case 'LOBBY_KICK':
       case 'LOBBY_START':
@@ -883,6 +1067,7 @@ export class LobbyController {
     this.freezeSignatures.clear();
     this.setDiagnostic(null);
     this.emit();
+    this.reconcileSeat();
   }
 
   private applyRequest(
@@ -897,10 +1082,6 @@ export class LobbyController {
       body.peer !== from ||
       body.lobbyId !== state.lobbyId ||
       body.hostEpoch !== state.hostEpoch ||
-      (body.baseVersion !== state.version &&
-        (body.action.kind !== 'setReady' ||
-          body.baseVersion < this.readinessVersionFloor ||
-          body.baseVersion > state.version)) ||
       !connected(this.options.transport, from) ||
       !verify('lobby-request', body, signed.sig, from)
     )
@@ -909,7 +1090,39 @@ export class LobbyController {
       return failure('lobby-request-replay', 'Request nonce was already used');
     if (!this.seenNonce.has(from) && this.seenNonce.size >= MAX_PEERS)
       return failure('lobby-capacity', 'Lobby request roster is full');
-    const action = body.action;
+    // Every later refusal is answered once; the nonce is spent so a replay gets no reply.
+    this.seenNonce.set(from, body.nonce);
+    // Only Ready may commute across newer commits (readiness-only ones); nothing else widens.
+    if (
+      body.baseVersion !== state.version &&
+      (body.action.kind !== 'setReady' ||
+        body.baseVersion < this.readinessVersionFloor ||
+        body.baseVersion > state.version)
+    )
+      return this.reject(
+        from,
+        body.nonce,
+        'stale-lobby',
+        failure('lobby-request-stale', 'Request was signed against an older lobby snapshot'),
+      );
+    const next = this.requestedState(state, from, body.action);
+    if (!next.ok)
+      return this.reject(
+        from,
+        body.nonce,
+        body.action.kind === 'takeSeat' && next.error.code === 'lobby-seat'
+          ? 'seat-unavailable'
+          : 'invalid-request',
+        next,
+      );
+    return this.commit(next.value, body.action.kind === 'setReady');
+  }
+
+  private requestedState(
+    state: LobbyState,
+    from: PeerId,
+    action: LobbyRequest,
+  ): Result<LobbyState> {
     const seats = state.seats.map((seat): LobbySeat => ({ ...seat }));
     const ownIndex = seats.findIndex((seat) => seat.kind === 'human' && seat.peer === from);
     let spectators = [...state.spectators];
@@ -969,10 +1182,7 @@ export class LobbyController {
     }
     if (action.kind === 'takeSeat' || action.kind === 'leaveSeat' || action.kind === 'spectate')
       for (const seat of seats) if (seat.kind === 'human') seat.ready = false;
-    const next = validState({ ...state, seats, spectators });
-    if (!next.ok) return next;
-    this.seenNonce.set(from, body.nonce);
-    return this.commit(next.value, action.kind === 'setReady');
+    return validState({ ...state, seats, spectators });
   }
 
   private receiveAck(from: PeerId, ack: LobbyFreezeAck): Result<void> {
