@@ -11,6 +11,7 @@ import type { SavedOnlineGameRecord } from './online-game-records.js';
 import {
   encodeOnlinePublicArchive,
   MAX_ONLINE_PUBLIC_ARCHIVE_BYTES,
+  peekOnlinePublicArchiveVersion,
   validateOnlinePublicArchive,
 } from './online-public-archive.js';
 import {
@@ -328,3 +329,53 @@ test('content-address mismatch and catalogue corruption do not open a voting pat
   expect((await listOnlinePublicArchives(store)).ok).toBe(false);
   expect([...store.records.keys()].every((key) => key.startsWith('online-replay/v1/'))).toBe(true);
 });
+
+/** Rewrites the declared engine version without re-signing, like an archive from another build. */
+function withDeclaredEngineVersion(engineVersion: string): Uint8Array {
+  const headerLength = (Number(archiveBytes[5]) << 8) | Number(archiveBytes[6]);
+  const contentAt = 7 + headerLength;
+  const payload = canonicalDecode(archiveBytes.subarray(contentAt));
+  const genesis = Reflect.get(
+    Reflect.get(Reflect.get(Object(payload), 'start'), 'result'),
+    'genesis',
+  );
+  Reflect.set(genesis, 'engineVersion', engineVersion);
+  const changed = canonicalEncode(payload);
+  const bytes = new Uint8Array(contentAt + changed.length);
+  bytes.set(archiveBytes.subarray(0, contentAt));
+  bytes.set(changed, contentAt);
+  return bytes;
+}
+
+test('an archive from another engine version stays closed and says which version made it', async () => {
+  expect(peekOnlinePublicArchiveVersion(archiveBytes)).toBeNull();
+  const older = withDeclaredEngineVersion('0.0.9');
+  expect(peekOnlinePublicArchiveVersion(older)).toEqual({
+    relation: 'older',
+    version: 'engine 0.0.9',
+  });
+  expect(peekOnlinePublicArchiveVersion(withDeclaredEngineVersion('10.0.0'))).toEqual({
+    relation: 'newer',
+    version: 'engine 10.0.0',
+  });
+
+  const store = new MemoryStore();
+  const imported = await runPublicArchiveWorkerRequest(
+    { id: 21, kind: 'import', bytes: older.slice() },
+    store,
+  );
+  expect(imported).toMatchObject({ kind: 'error', version: { relation: 'older' } });
+  expect(store.records.size).toBe(0);
+
+  // An archive imported by an earlier build, opened after an update: verification still decides.
+  const id = '0'.repeat(64);
+  store.records.set(`online-replay/v1/archive/${id}`, older);
+  const opened = await runPublicArchiveWorkerRequest(
+    { id: 22, kind: 'open', archiveId: id },
+    store,
+  );
+  expect(opened).toMatchObject({
+    kind: 'error',
+    version: { relation: 'older', version: 'engine 0.0.9' },
+  });
+}, 60_000);

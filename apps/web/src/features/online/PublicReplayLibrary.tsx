@@ -3,6 +3,7 @@ import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useImportPublicReplay, usePublicReplays } from '../../queries/online-public-replays.js';
 import { MAX_ONLINE_PUBLIC_ARCHIVE_BYTES } from '../../session/online-public-archive-format.js';
+import { replayFailureMessage } from './replay-failure.js';
 
 export function PublicReplayLibrary() {
   const { t } = useTranslation('lobby');
@@ -10,10 +11,10 @@ export function PublicReplayLibrary() {
   const catalogue = usePublicReplays();
   const imported = useImportPublicReplay();
   const input = useRef<HTMLInputElement>(null);
-  const [error, setError] = useState(false);
+  const [error, setError] = useState<unknown>(null);
   const chooseFile = async (file: File | undefined) => {
     if (!file || imported.isPending) return;
-    setError(false);
+    setError(null);
     try {
       // Check before File.arrayBuffer() so a huge file never enters JS memory.
       if (file.size < 1 || file.size > MAX_ONLINE_PUBLIC_ARCHIVE_BYTES)
@@ -21,8 +22,8 @@ export function PublicReplayLibrary() {
       const bytes = new Uint8Array(await file.arrayBuffer());
       const id = await imported.mutateAsync(bytes);
       await navigate({ to: '/replay/$archiveId', params: { archiveId: id } });
-    } catch {
-      setError(true);
+    } catch (failed) {
+      setError(failed ?? new Error('Public replay import failed'));
     } finally {
       if (input.current) input.current.value = '';
     }
@@ -49,7 +50,9 @@ export function PublicReplayLibrary() {
         {t('lobby:publicReplayImport')}
       </button>
       {imported.isPending && <p role="status">{t('lobby:publicReplayVerifying')}</p>}
-      {(error || catalogue.isError) && <p role="alert">{t('lobby:publicReplayFailed')}</p>}
+      {(error !== null || catalogue.isError) && (
+        <p role="alert">{replayFailureMessage(error ?? catalogue.error, t)}</p>
+      )}
       {catalogue.data?.map((item) => (
         <Link
           key={item.id}

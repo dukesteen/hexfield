@@ -1,7 +1,7 @@
 import { canonicalDecode, canonicalEncode, sha256, toHex } from '@cp2p/codec';
-import { failure, success } from '@cp2p/engine';
+import { ENGINE_VERSION, failure, success } from '@cp2p/engine';
 import type { GameEvent, GameState, Input, Result } from '@cp2p/engine';
-import { entryHash } from '@cp2p/protocol';
+import { entryHash, PROTOCOL_VERSION } from '@cp2p/protocol';
 import type { CertifiedEntry } from '@cp2p/protocol';
 import * as v from 'valibot';
 import type { SavedOnlineGameRecord } from './online-game-records.js';
@@ -74,6 +74,67 @@ function archiveHeader(bytes: Uint8Array): Result<{
     });
   } catch {
     return failure('public-archive-header', 'Public replay archive header is malformed');
+  }
+}
+
+/** The versions an archive's genesis declares, when they differ from this build's. */
+export interface PublicArchiveVersion {
+  readonly relation: 'older' | 'newer';
+  /** The differing version as shown to players, e.g. `engine 0.1.0` or `protocol 5`. */
+  readonly version: string;
+}
+
+const declaredVersionSchema = v.object({
+  start: v.object({
+    result: v.object({
+      genesis: v.object({
+        protocolVersion: v.pipe(v.number(), v.integer(), v.minValue(0)),
+        engineVersion: v.pipe(v.string(), v.maxLength(32)),
+      }),
+    }),
+  }),
+});
+
+function versionParts(value: string): number[] {
+  return value.split(/[.-]/).map((part) => Number.parseInt(part, 10));
+}
+
+function compareEngineVersions(left: string, right: string): number {
+  const a = versionParts(left);
+  const b = versionParts(right);
+  for (let index = 0; index < Math.max(a.length, b.length); index += 1) {
+    const difference = (a[index] ?? 0) - (b[index] ?? 0);
+    if (Number.isNaN(difference)) return left < right ? -1 : 1;
+    if (difference !== 0) return difference;
+  }
+  return 0;
+}
+
+/**
+ * Reads, without verifying anything, the versions an archive claims. It only chooses which
+ * message explains a failed verification ("created with an older version"); it never lets an
+ * archive open. Returns null when the archive is unreadable or declares this build's versions.
+ */
+export function peekOnlinePublicArchiveVersion(bytes: Uint8Array): PublicArchiveVersion | null {
+  const header = archiveHeader(bytes);
+  if (!header.ok) return null;
+  try {
+    const declared = v.safeParse(declaredVersionSchema, canonicalDecode(header.value.bootstrap));
+    if (!declared.success) return null;
+    const { protocolVersion, engineVersion } = declared.output.start.result.genesis;
+    if (protocolVersion !== PROTOCOL_VERSION)
+      return {
+        relation: protocolVersion < PROTOCOL_VERSION ? 'older' : 'newer',
+        version: `protocol ${protocolVersion}`,
+      };
+    if (engineVersion !== ENGINE_VERSION)
+      return {
+        relation: compareEngineVersions(engineVersion, ENGINE_VERSION) < 0 ? 'older' : 'newer',
+        version: `engine ${engineVersion}`,
+      };
+    return null;
+  } catch {
+    return null;
   }
 }
 

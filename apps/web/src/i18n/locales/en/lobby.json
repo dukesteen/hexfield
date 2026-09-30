@@ -525,5 +525,9 @@
   "onlineAddBotLevel_hard": "Hard bot",
   "gameplay": "Gameplay",
   "pickStealCard": "Pick the card to steal",
-  "pickStealCardHint": "Off: steal as soon as you choose a player."
+  "pickStealCardHint": "Off: steal as soon as you choose a player.",
+  "onlineUpdateNow": "Update now",
+  "onlineUpdateLatest": "This device already has the newest version of Hexfield. Ask the other players to update.",
+  "publicReplayOlderVersion": "This replay was created with an older version of Hexfield ({{version}}). This version cannot verify its history, so it cannot be shown.",
+  "publicReplayNewerVersion": "This replay was created with a newer version of Hexfield ({{version}}). Update the app to open it."
 }

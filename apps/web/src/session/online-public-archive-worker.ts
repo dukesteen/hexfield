@@ -5,10 +5,15 @@ import {
   importOnlinePublicArchive,
   listOnlinePublicArchiveSummaries,
   openOnlinePublicArchive,
+  peekStoredOnlinePublicArchiveVersion,
 } from './online-public-archive-store.js';
 import type { PublicArchiveSummary } from './online-public-archive-store.js';
 import { MAX_ONLINE_PUBLIC_ARCHIVE_BYTES } from './online-public-archive.js';
-import { encodeOnlinePublicArchive } from './online-public-archive.js';
+import {
+  encodeOnlinePublicArchive,
+  peekOnlinePublicArchiveVersion,
+} from './online-public-archive.js';
+import type { PublicArchiveVersion } from './online-public-archive.js';
 import { loadOnlineGameRecord } from './online-game-records.js';
 import { canonicalEncode } from '@cp2p/codec';
 import { certifiedEntrySchema, logEntrySchema } from '@cp2p/protocol';
@@ -53,7 +58,13 @@ export type PublicArchiveWorkerResponse =
       readonly archives: readonly PublicArchiveSummary[];
     }
   | { readonly id: number; readonly kind: 'encoded'; readonly bytes: Uint8Array }
-  | { readonly id: number; readonly kind: 'error'; readonly error: string };
+  | {
+      readonly id: number;
+      readonly kind: 'error';
+      readonly error: string;
+      /** Set when the archive declares another version: the viewer explains that instead. */
+      readonly version?: PublicArchiveVersion;
+    };
 
 function validRequest(value: unknown): value is PublicArchiveWorkerRequest {
   if (typeof value !== 'object' || value === null) return false;
@@ -139,10 +150,28 @@ export async function runPublicArchiveWorkerRequest(
       },
     };
   } catch {
-    return { id, kind: 'error', error: 'Public replay could not be verified or opened' };
+    const version = await declaredVersion(supplied, store);
+    return {
+      id,
+      kind: 'error',
+      error: 'Public replay could not be verified or opened',
+      ...(version ? { version } : {}),
+    };
   } finally {
     await store.close();
   }
+}
+
+/** Only for choosing the failure message; a differing version never makes an archive open. */
+async function declaredVersion(
+  supplied: unknown,
+  store: EscrowCeremonyStore,
+): Promise<PublicArchiveVersion | null> {
+  if (!validRequest(supplied)) return null;
+  if (supplied.kind === 'import') return peekOnlinePublicArchiveVersion(supplied.bytes);
+  if (supplied.kind === 'open')
+    return peekStoredOnlinePublicArchiveVersion(store, supplied.archiveId);
+  return null;
 }
 
 function sameBytes(left: Uint8Array, right: Uint8Array): boolean {

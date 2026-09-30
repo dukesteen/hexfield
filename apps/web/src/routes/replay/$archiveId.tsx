@@ -8,6 +8,7 @@ import { useBoardAppearance } from '../../features/game/use-appearance.js';
 import { usePublicReplay } from '../../queries/online-public-replays.js';
 import type { PublicArchiveDisplay } from '../../session/online-public-archive-worker.js';
 import type { GamePresentation } from '../../queries/repositories/saved-games.js';
+import { replayFailureMessage } from '../../features/online/replay-failure.js';
 import './replay.css';
 import { PLAYER_SHAPES } from '../../features/players/identity';
 
@@ -85,7 +86,7 @@ function PublicReplayPage() {
   if (replay.isError || !replay.data)
     return (
       <main className="app-page message-page">
-        <h1>{t('lobby:publicReplayFailed')}</h1>
+        <h1>{replayFailureMessage(replay.error, t)}</h1>
         <Link to="/" className="button button-primary">
           {t('lobby:backHome')}
         </Link>

@@ -5,9 +5,10 @@ import type { EscrowCeremonyStore } from '@cp2p/protocol';
 import * as v from 'valibot';
 import {
   MAX_ONLINE_PUBLIC_ARCHIVE_BYTES,
+  peekOnlinePublicArchiveVersion,
   validateOnlinePublicArchive,
 } from './online-public-archive.js';
-import type { VerifiedPublicOnlineArchive } from './online-public-archive.js';
+import type { PublicArchiveVersion, VerifiedPublicOnlineArchive } from './online-public-archive.js';
 
 const NAMESPACE = 'online-replay/v1';
 const CATALOGUE_KEY = `${NAMESPACE}/catalogue`;
@@ -96,6 +97,22 @@ export async function openOnlinePublicArchive(
       : failure('public-archive-id', 'Stored public replay differs from its content address');
   } catch {
     return failure('public-archive-storage', 'Stored public replay could not be opened');
+  }
+}
+
+/** Why a stored archive failed to open, when it declares another version (unverified). */
+export async function peekStoredOnlinePublicArchiveVersion(
+  store: EscrowCeremonyStore,
+  id: string,
+): Promise<PublicArchiveVersion | null> {
+  if (!ID.test(id)) return null;
+  try {
+    const bytes = await store.load(archiveKey(id));
+    return bytes && bytes.length <= MAX_ONLINE_PUBLIC_ARCHIVE_BYTES
+      ? peekOnlinePublicArchiveVersion(bytes)
+      : null;
+  } catch {
+    return null;
   }
 }
 

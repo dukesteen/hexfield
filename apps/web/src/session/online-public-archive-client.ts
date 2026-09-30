@@ -1,6 +1,7 @@
 import type { PublicArchiveSummary } from './online-public-archive-store.js';
 import { getOnlineVaultController } from './online-vault-controller.js';
 import { MAX_ONLINE_PUBLIC_ARCHIVE_BYTES } from './online-public-archive-format.js';
+import type { PublicArchiveVersion } from './online-public-archive.js';
 import type {
   PublicArchiveDisplay,
   PublicArchiveWorkerResponse,
@@ -16,6 +17,26 @@ interface WorkerPort {
 export type PublicArchiveWorkerFactory = () => WorkerPort;
 
 const WORKER_DEADLINE_MS = 120_000;
+
+/** The archive failed verification and declares another protocol or engine version. */
+export class PublicReplayVersionError extends Error {
+  constructor(readonly version: PublicArchiveVersion) {
+    super(
+      `Public replay was created with a${version.relation === 'older' ? 'n older' : ' newer'} version`,
+    );
+    this.name = 'PublicReplayVersionError';
+  }
+}
+
+function validVersion(value: unknown): value is PublicArchiveVersion {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    (Reflect.get(value, 'relation') === 'older' || Reflect.get(value, 'relation') === 'newer') &&
+    typeof Reflect.get(value, 'version') === 'string' &&
+    String(Reflect.get(value, 'version')).length <= 48
+  );
+}
 let nextRequestId = 1;
 
 function defaultWorker(): WorkerPort {
@@ -27,7 +48,11 @@ function defaultWorker(): WorkerPort {
 function validResponse(value: unknown, id: number): value is PublicArchiveWorkerResponse {
   if (typeof value !== 'object' || value === null || Reflect.get(value, 'id') !== id) return false;
   const kind = Reflect.get(value, 'kind');
-  if (kind === 'error') return typeof Reflect.get(value, 'error') === 'string';
+  if (kind === 'error')
+    return (
+      typeof Reflect.get(value, 'error') === 'string' &&
+      (Reflect.get(value, 'version') === undefined || validVersion(Reflect.get(value, 'version')))
+    );
   if (kind === 'imported') return /^[0-9a-f]{64}$/.test(String(Reflect.get(value, 'archiveId')));
   if (kind === 'encoded')
     return (
@@ -89,7 +114,12 @@ async function runJob(
         signal?.removeEventListener('abort', onAbort);
         activeWorker.terminate();
         if (outcome instanceof Error) reject(outcome);
-        else if (outcome.kind === 'error') reject(new Error(outcome.error));
+        else if (outcome.kind === 'error')
+          reject(
+            outcome.version
+              ? new PublicReplayVersionError(outcome.version)
+              : new Error(outcome.error),
+          );
         else resolve(outcome);
       };
       const onMessage: EventListener = (event) => {
