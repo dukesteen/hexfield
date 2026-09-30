@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as EditorRouteImport } from './routes/editor'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as DevBoardRouteImport } from './routes/dev/board'
 import { Route as DevNetworkRouteImport } from './routes/dev/network'
@@ -29,6 +30,11 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const EditorRoute = EditorRouteImport.update({
+  id: '/editor',
+  path: '/editor',
+  getParentRoute: () => rootRouteImport,
+} as any).lazy(() => import('./routes/editor.lazy').then((d) => d.Route))
 const SettingsRoute = SettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
@@ -97,6 +103,7 @@ const TransferCodeRoute = TransferCodeRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/editor': typeof EditorRoute
   '/settings': typeof SettingsRoute
   '/dev/board': typeof DevBoardRoute
   '/dev/network': typeof DevNetworkRoute
@@ -113,6 +120,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/editor': typeof EditorRoute
   '/settings': typeof SettingsRoute
   '/dev/board': typeof DevBoardRoute
   '/dev/network': typeof DevNetworkRoute
@@ -130,6 +138,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/editor': typeof EditorRoute
   '/settings': typeof SettingsRoute
   '/dev/board': typeof DevBoardRoute
   '/dev/network': typeof DevNetworkRoute
@@ -148,6 +157,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/editor'
     | '/settings'
     | '/dev/board'
     | '/dev/network'
@@ -164,6 +174,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/editor'
     | '/settings'
     | '/dev/board'
     | '/dev/network'
@@ -180,6 +191,7 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/editor'
     | '/settings'
     | '/dev/board'
     | '/dev/network'
@@ -197,6 +209,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  EditorRoute: typeof EditorRoute
   SettingsRoute: typeof SettingsRoute
   DevBoardRoute: typeof DevBoardRoute
   DevNetworkRoute: typeof DevNetworkRoute
@@ -219,6 +232,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/editor': {
+      id: '/editor'
+      path: '/editor'
+      fullPath: '/editor'
+      preLoaderRoute: typeof EditorRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/settings': {
@@ -317,6 +337,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  EditorRoute: EditorRoute,
   SettingsRoute: SettingsRoute,
   DevBoardRoute: DevBoardRoute,
   DevNetworkRoute: DevNetworkRoute,

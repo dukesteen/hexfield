@@ -34,6 +34,8 @@ export interface BoardViewProps {
   readonly onFixtureSelect?: (fixtureId: string) => void;
   /** Outline every island. Defaults to the `debugIslands` flag in development builds. */
   readonly debugIslands?: boolean;
+  /** Extra renderer layers beside the modules' own (the map editor's overlay). Read once. */
+  readonly layers?: readonly RenderLayerPlugin[];
 }
 
 /** Development builds outline islands when the page URL, or its hash route, has `debugIslands`. */
@@ -78,6 +80,7 @@ export function BoardView({
   moduleIds = [],
   onFixtureSelect,
   debugIslands = islandDebugFlag(),
+  layers,
 }: BoardViewProps) {
   const { t } = useTranslation('common');
   const keyboardHelpId = useId();
@@ -123,6 +126,7 @@ export function BoardView({
     moduleIds,
     onFixtureSelect,
     debugIslands,
+    layers,
   });
   propsRef.current = {
     model,
@@ -139,6 +143,7 @@ export function BoardView({
     moduleIds,
     onFixtureSelect,
     debugIslands,
+    layers,
   };
 
   useEffect(() => {
@@ -147,6 +152,7 @@ export function BoardView({
     let active = true;
     const initialize = async (): Promise<void> => {
       try {
+        const moduleOptions = moduleRendererOptions(propsRef.current.moduleIds);
         const renderer = await createBoardRenderer(host, {
           ...(propsRef.current.appearance ? { appearance: propsRef.current.appearance } : {}),
           reducedMotion: propsRef.current.reducedMotion,
@@ -157,7 +163,8 @@ export function BoardView({
           formatHarborLabel: (kind) => propsRef.current.formatHarborLabel(kind),
           onSelect: (hit) => propsRef.current.onSelect?.(hit),
           onHover: (hit) => propsRef.current.onHover?.(hit),
-          ...moduleRendererOptions(propsRef.current.moduleIds),
+          ...moduleOptions,
+          layers: [...moduleOptions.layers, ...(propsRef.current.layers ?? [])],
           onFixtureSelect: (fixture) => propsRef.current.onFixtureSelect?.(fixture),
           onReady: (readyRenderer) => {
             if (active) {
