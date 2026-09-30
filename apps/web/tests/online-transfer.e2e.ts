@@ -12,6 +12,11 @@ test.use(
 );
 
 const SIGNALING_URL = 'ws://127.0.0.1:8909';
+const SHOTS = process.env.CP2P_SCREENSHOT_DIR;
+
+async function shot(page: Page, name: string): Promise<void> {
+  if (SHOTS) await page.screenshot({ path: `${SHOTS}/${name}.png` });
+}
 let registryModulePath: string | null = null;
 
 async function loadedRegistryPath(page: Page): Promise<string> {
@@ -218,6 +223,12 @@ test('a certified seat transfer retires the old signer and the new device makes 
 }) => {
   test.setTimeout(180_000);
   const contexts = await Promise.all(Array.from({ length: 3 }, () => browser.newContext()));
+  // The app loads more modules than the default timing buffer keeps; the registry lookup needs it.
+  await Promise.all(
+    contexts.map((context) =>
+      context.addInitScript(() => performance.setResourceTimingBufferSize(5_000)),
+    ),
+  );
   const [source, survivor, destination] = await Promise.all(
     contexts.map((context) => context.newPage()),
   );
@@ -241,7 +252,13 @@ test('a certified seat transfer retires the old signer and the new device makes 
     const invitation = await source.getByRole('textbox', { name: /^Invitation link/ }).inputValue();
     await survivor.goto(invitation);
     await expect(survivor.getByRole('heading', { name: 'Transfer acceptance' })).toBeVisible();
-    await survivor.getByRole('button', { name: 'Take seat' }).click();
+    // A seat request that races another lobby commit is dropped without a reply; ask again.
+    await expect(async () => {
+      await survivor.getByRole('button', { name: 'Take seat' }).click({ timeout: 2_000 });
+      await expect(survivor.getByRole('button', { name: 'Ready up' })).toBeVisible({
+        timeout: 5_000,
+      });
+    }).toPass({ timeout: 45_000 });
     await expect(source.getByText('Source', { exact: true })).toBeVisible();
     await source.getByRole('button', { name: 'Ready up' }).click();
     await survivor.getByRole('button', { name: 'Ready up' }).click();
@@ -277,6 +294,7 @@ test('a certified seat transfer retires the old signer and the new device makes 
     await expect(transferDialog.getByRole('button', { name: 'Confirm move' })).toBeVisible({
       timeout: 35_000,
     });
+    await shot(source, 'transfer-source-confirm');
     await transferDialog.getByRole('button', { name: 'Confirm move' }).click();
 
     await Promise.race([
@@ -292,6 +310,7 @@ test('a certified seat transfer retires the old signer and the new device makes 
           );
         }),
     ]);
+    await shot(destination, 'transfer-destination-ready');
     await destination.getByRole('button', { name: 'Open game on this device' }).click();
     await expect(destination).toHaveURL(new RegExp(`/game/${gameId}$`), { timeout: 30_000 });
     await expect
@@ -372,6 +391,12 @@ test('certified cancellation keeps the source in control after delayed genuine r
 }) => {
   test.setTimeout(180_000);
   const contexts = await Promise.all(Array.from({ length: 3 }, () => browser.newContext()));
+  // The app loads more modules than the default timing buffer keeps; the registry lookup needs it.
+  await Promise.all(
+    contexts.map((context) =>
+      context.addInitScript(() => performance.setResourceTimingBufferSize(5_000)),
+    ),
+  );
   await Promise.all(
     contexts.map((context) =>
       context.addInitScript(() => performance.setResourceTimingBufferSize(5000)),

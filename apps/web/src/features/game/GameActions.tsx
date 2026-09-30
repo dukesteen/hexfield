@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import {
   getGameArtUrl,
   getPieceIconUrl,
@@ -71,6 +72,11 @@ import { cardInfo } from '../knights/catalogue';
 import { improvableTracks } from '../knights/improve';
 import { CARD_KINDS, KNIGHTS_PLACEMENT_KINDS } from '../knights/placements';
 import { isKnights, knightLevel, knightsState } from '../knights/state';
+
+/** A retired seat is not a failure: its controller moved (transfer) or a bot took over. */
+function stoppedText(t: TFunction<'game'>, status: { readonly code?: string }): string {
+  return status.code === 'seat-retired' ? t('game:seatRetired') : t('game:sessionStopped');
+}
 
 const boardOrder: readonly PlacementKind[] = [
   'settlement',
@@ -988,7 +994,7 @@ export function useGameActions(
       {conflicted ? (
         <p role="alert">{t('game:saveConflictStopped')}</p>
       ) : status?.kind === 'error' ? (
-        <p role="alert">{t('game:sessionStopped')}</p>
+        <p role="alert">{stoppedText(t, status)}</p>
       ) : voided ? (
         <p role="status">{t('lobby:onlineGameVoidTitle')}</p>
       ) : seat === null || !availability ? (
@@ -1322,7 +1328,7 @@ export function useGameActions(
         </p>
       )}
       {conflicted && <p role="alert">{t('game:saveConflictStopped')}</p>}
-      {status?.kind === 'error' && <p role="alert">{t('game:sessionStopped')}</p>}
+      {status?.kind === 'error' && <p role="alert">{stoppedText(t, status)}</p>}
     </div>
   );
   const mobileBuild = (
@@ -1568,7 +1574,7 @@ export function useGameActions(
   if (conflicted) {
     nextStep = { kind: 'text', tone: 'alert', text: t('game:saveConflictStopped') };
   } else if (status?.kind === 'error') {
-    nextStep = { kind: 'text', tone: 'alert', text: t('game:sessionStopped') };
+    nextStep = { kind: 'text', tone: 'alert', text: stoppedText(t, status) };
   } else if (voided) {
     nextStep = { kind: 'text', tone: 'muted', text: t('lobby:onlineGameVoidTitle') };
   } else if (isSubmitting) {

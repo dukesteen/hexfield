@@ -1,16 +1,9 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { PeerId } from '@cp2p/protocol';
 import type { ChatContent, ChatSnapshot } from '../../session/online-chat.js';
 import type { OnlineRoomHandleValue } from './room-registry.js';
-
-const emotes = [
-  { name: 'wave', symbol: '👋' },
-  { name: 'cheer', symbol: '🎉' },
-  { name: 'laugh', symbol: '😄' },
-  { name: 'wow', symbol: '😮' },
-  { name: 'thanks', symbol: '❤️' },
-] as const;
+import { CHAT_EMOTES as emotes, chatText } from './chat-emotes.js';
 const segmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
 
 export function ChatPanel({
@@ -18,11 +11,14 @@ export function ChatPanel({
   chat,
   labels,
   self,
+  onClose,
 }: {
   room: Pick<OnlineRoomHandleValue, 'sendChat' | 'muteChat'>;
   chat: ChatSnapshot | undefined;
   labels: ReadonlyMap<PeerId, string>;
   self: PeerId;
+  /** Renders a close control beside the heading when the panel is a dialog. */
+  onClose?: () => void;
 }) {
   const { t } = useTranslation('lobby');
   const emoteLabels = {
@@ -38,6 +34,13 @@ export function ChatPanel({
   const [muting, setMuting] = useState<PeerId | null>(null);
   const mutingRef = useRef<PeerId | null>(null);
   const [error, setError] = useState(false);
+  const history = useRef<HTMLOListElement>(null);
+  const shown = chat?.ready ? chat.events.length : 0;
+  useEffect(() => {
+    // Keep the newest message in view as it arrives.
+    const element = history.current;
+    if (element) element.scrollTop = element.scrollHeight;
+  }, [shown]);
   if (!chat) return null;
   const length = [...segmenter.segment(draft)].length;
   const send = async (content: ChatContent) => {
@@ -72,8 +75,16 @@ export function ChatPanel({
   };
   return (
     <section className="online-chat" aria-label={t('lobby:chatTitle')}>
-      <h2>{t('lobby:chatTitle')}</h2>
-      <ol className="online-chat-history" aria-live="polite">
+      <div className="section-heading">
+        <h2>{t('lobby:chatTitle')}</h2>
+        {onClose && (
+          <button className="button button-quiet" type="button" onClick={onClose}>
+            {t('lobby:manualClose')}
+          </button>
+        )}
+      </div>
+      <ol ref={history} className="online-chat-history" aria-live="polite">
+        {shown === 0 && <li className="online-chat-empty muted">{t('lobby:chatEmpty')}</li>}
         {(chat.ready ? chat.events : []).map(({ packet }) => {
           const { sender, eventId, content } = packet.body;
           return (
@@ -83,34 +94,13 @@ export function ChatPanel({
                   ? t('lobby:onlineYou')
                   : (labels.get(sender) ?? sender.slice(0, 8))}
               </strong>{' '}
-              <span>
-                {content.kind === 'text'
-                  ? content.text
-                  : emotes.find((item) => item.name === content.emote)?.symbol}
+              <span className={content.kind === 'emote' ? 'online-chat-emote' : undefined}>
+                {chatText(content)}
               </span>
             </li>
           );
         })}
       </ol>
-      {room.muteChat && labels.size > 1 && (
-        <div className="online-chat-mutes">
-          {Array.from(labels, ([peer, label]) => ({ peer, label }))
-            .filter(({ peer }) => peer !== self)
-            .map(({ peer, label }) => (
-              <button
-                className="button button-quiet"
-                key={peer}
-                type="button"
-                disabled={muting !== null}
-                onClick={() => void mute(peer, !chat.muted.includes(peer))}
-              >
-                {chat.muted.includes(peer)
-                  ? t('lobby:chatUnmute', { player: label })
-                  : t('lobby:chatMutePlayer', { player: label })}
-              </button>
-            ))}
-        </div>
-      )}
       <div className="online-chat-emotes" aria-label={t('lobby:chatEmotes')}>
         {emotes.map(({ name, symbol }) => (
           <button
@@ -133,22 +123,45 @@ export function ChatPanel({
         }}
       >
         <label htmlFor="online-chat-text">{t('lobby:chatMessage')}</label>
-        <input
-          id="online-chat-text"
-          value={draft}
-          maxLength={4096}
-          onChange={(event) => setDraft(event.target.value)}
-          placeholder={t('lobby:chatPlaceholder')}
-        />
+        <div className="online-chat-compose">
+          <input
+            id="online-chat-text"
+            value={draft}
+            maxLength={4096}
+            enterKeyHint="send"
+            autoComplete="off"
+            onChange={(event) => setDraft(event.target.value)}
+            placeholder={t('lobby:chatPlaceholder')}
+          />
+          <button
+            className="button button-primary"
+            type="submit"
+            disabled={!chat.ready || busy || !draft.trim() || length > 300 || !room.sendChat}
+          >
+            {t('lobby:chatSend')}
+          </button>
+        </div>
         <small aria-live="polite">{t('lobby:chatLength', { count: length })}</small>
-        <button
-          className="button button-primary"
-          type="submit"
-          disabled={!chat.ready || busy || !draft.trim() || length > 300 || !room.sendChat}
-        >
-          {t('lobby:chatSend')}
-        </button>
       </form>
+      {room.muteChat && labels.size > 1 && (
+        <div className="online-chat-mutes">
+          {Array.from(labels, ([peer, label]) => ({ peer, label }))
+            .filter(({ peer }) => peer !== self)
+            .map(({ peer, label }) => (
+              <button
+                className="button button-quiet"
+                key={peer}
+                type="button"
+                disabled={muting !== null}
+                onClick={() => void mute(peer, !chat.muted.includes(peer))}
+              >
+                {chat.muted.includes(peer)
+                  ? t('lobby:chatUnmute', { player: label })
+                  : t('lobby:chatMutePlayer', { player: label })}
+              </button>
+            ))}
+        </div>
+      )}
       {length > 300 && <p role="alert">{t('lobby:chatTooLong')}</p>}
       {(error || chat.error) && <p role="alert">{t('lobby:chatFailed')}</p>}
     </section>

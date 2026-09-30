@@ -17,6 +17,13 @@ test.use(
 test.skip(process.env.CP2P_ONLINE_TAKEOVER_E2E !== '1', 'Requires native Chrome and signaling');
 
 const SIGNALING_URL = 'ws://127.0.0.1:8909';
+/** Stop after the returned human's first certified command. */
+const RETURN_ONLY = process.env.CP2P_ONLINE_TAKEOVER_RETURN_ONLY === '1';
+const SHOTS = process.env.CP2P_SCREENSHOT_DIR;
+
+async function shot(page: Page, name: string): Promise<void> {
+  if (SHOTS) await page.screenshot({ path: `${SHOTS}/${name}.png` });
+}
 
 const optionalActions = new Set([
   'CLAIM_VICTORY',
@@ -382,8 +389,44 @@ test('four humans certify takeover, recovered bot continues, and original device
       );
     }
     expect(botCommand).toBe(true);
-    await initiator.locator('summary[aria-label="Open game menu"]').click();
-    await initiator.getByRole('button', { name: 'Return player 1 to a device' }).click();
+    // The original device, reopened, learns that it no longer controls its seat and how to return.
+    const reopened = await contexts[0]?.newPage();
+    if (!reopened) throw new Error('Original device context was lost');
+    reopened.on('pageerror', (error) => errors.push(error.message));
+    await reopened.goto(`/#/game/${gameId}`);
+    try {
+      // It holds only its retired key, so it learns of the change as a retirement.
+      await expect(reopened.getByText('This device no longer plays seat 1').first()).toBeVisible({
+        timeout: 60_000,
+      });
+    } catch (error) {
+      await shot(reopened, 'takeover-recovered-self-failure');
+      const modulePath = await registryPath(reopened);
+      const status = await reopened.evaluate(
+        async ({ id, path }) => {
+          const { getOnlineGameRoom } = (await import(
+            /* @vite-ignore */ path
+          )) as typeof import('../src/features/online/room-registry.js');
+          const session = getOnlineGameRoom(id)?.getGame()?.session;
+          let seen: unknown = null;
+          session?.subscribe((update) => {
+            seen = { status: update.status, seats: update.state.seats.map((seat) => seat.status) };
+          })();
+          return JSON.stringify(seen);
+        },
+        { id: gameId, path: modulePath },
+      );
+      throw new Error(`Reopened original device: ${status}`, {
+        cause: error,
+      });
+    }
+    await shot(reopened, 'takeover-recovered-self');
+    await reopened.close();
+    // The bot's host sees the return action on the board, not only in the menu.
+    const returnNotice = initiator.getByText('Original is played by a bot on this device');
+    await expect(returnNotice.first()).toBeVisible({ timeout: 30_000 });
+    await shot(initiator, 'takeover-return-notice');
+    await initiator.getByRole('button', { name: 'Return player 1 to a device' }).first().click();
     const dialog = initiator.getByRole('dialog', { name: 'Return this player to their device' });
     const returnInvite = await dialog
       .getByRole('textbox', { name: /^Seat transfer invitation/ })
@@ -426,6 +469,12 @@ test('four humans certify takeover, recovered bot continues, and original device
     expect(returnedCommand).toBe(true);
     await dialog.getByRole('button', { name: 'Close', exact: true }).click();
     await expect(dialog).not.toBeVisible();
+    await expect(returnNotice).toHaveCount(0);
+    await shot(returnedPage, 'takeover-returned');
+    if (RETURN_ONLY) {
+      expect(errors).toEqual([]);
+      return;
+    }
     await returnedPage.close();
     const secondRequest = initiator.getByRole('button', { name: /Request takeover of Original/ });
     // The original four-seat quorum still has all three surviving human voters.

@@ -20,7 +20,8 @@ export type SessionStatus =
   | { kind: 'running' }
   | { kind: 'complete' }
   | { kind: 'void' }
-  | { kind: 'error'; message: string }
+  /** `seat-retired`: certified history gave this seat a new controller (a transfer or a takeover). */
+  | { kind: 'error'; message: string; code?: 'seat-retired' }
   | { kind: 'disposed' };
 
 /** Public facts derived only from the locally verified certified history. */

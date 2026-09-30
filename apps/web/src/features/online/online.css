@@ -538,18 +538,138 @@
 }
 .online-chat-emotes,
 .online-chat-mutes,
-.online-chat-form {
+.online-chat-compose {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 0.5rem;
 }
-.online-chat-form input {
-  flex: 1 1 12rem;
+.online-chat-form {
+  display: grid;
+  gap: 0.35rem;
+}
+.online-chat-compose {
+  flex-wrap: nowrap;
+}
+.online-chat-compose input {
+  flex: 1 1 auto;
   min-width: 0;
+}
+.online-chat-emotes .button {
+  min-width: 44px;
+  padding-inline: 0.5rem;
+  font-size: 1.2rem;
+}
+.online-chat-mutes .button {
+  min-height: 36px;
+  font-size: 0.85rem;
 }
 .online-chat-dialog {
   width: min(32rem, calc(100vw - 2rem));
+}
+.online-chat-empty {
+  font-style: italic;
+}
+.online-chat-emote {
+  font-size: 1.35rem;
+  line-height: 1;
+}
+
+/* On-board chat access; sits under the game menu button. */
+/* Below the game menu (z-index 30) so its open panel covers the launcher. */
+.online-chat-launcher {
+  position: fixed;
+  z-index: 29;
+  top: calc(64px + env(safe-area-inset-top));
+  left: 12px;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  pointer-events: none;
+}
+.online-chat-launcher > * {
+  pointer-events: auto;
+}
+.online-chat-launcher-button {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 3px 0 var(--panel-shadow, #090b0e33);
+  cursor: pointer;
+}
+.online-chat-launcher-button svg {
+  width: 22px;
+  height: 22px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linejoin: round;
+}
+.online-chat-badge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border-radius: 10px;
+  background: #c2493a;
+  color: #fff8ec;
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 20px;
+  text-align: center;
+}
+.online-chat-preview {
+  display: grid;
+  gap: 2px;
+  max-width: min(18rem, calc(100vw - 88px));
+  padding: 8px 12px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 3px 0 var(--panel-shadow, #090b0e33);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+  animation: online-chat-preview-in 160ms ease-out;
+}
+.online-chat-preview span {
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow-wrap: anywhere;
+}
+@keyframes online-chat-preview-in {
+  from {
+    opacity: 0;
+    transform: translateX(-6px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .online-chat-preview {
+    animation: none;
+  }
+}
+@media (max-height: 500px) {
+  .online-chat-launcher {
+    top: calc(60px + env(safe-area-inset-top));
+  }
+}
+@media (min-width: 768px) and (min-height: 501px) {
+  .online-chat-launcher {
+    top: 72px;
+    left: 18px;
+  }
 }
 
 /* Room layout shares the game table's parchment palette. */
