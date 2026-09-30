@@ -63,6 +63,9 @@ const pwa = VitePWA({
     globIgnores: ['og.png', 'og-square.png'],
     // The largest single file is the pre-rendered board preview (~1.8 MB).
     maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
+    // The renderer loads SVG textures as `file.svg?resolution=2`; the query picks a raster size,
+    // not different bytes, so it must still hit the precache offline.
+    ignoreURLParametersMatching: [/^utm_/, /^fbclid$/, /^resolution$/],
     navigateFallback: 'index.html',
     navigateFallbackDenylist: [/^\/(?:room|api)(?:\/|$)/, /^\/healthz$/],
     cleanupOutdatedCaches: true,
