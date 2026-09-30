@@ -9,7 +9,7 @@ import {
 } from '@cp2p/maps';
 import type { HarborKind, MapDef, MapTerrain } from '@cp2p/maps';
 import { createMapEditorLayer } from '@cp2p/renderer';
-import type { BoardHit, BoardHighlights } from '@cp2p/renderer';
+import type { BoardHit, BoardHighlights, BoardRenderer } from '@cp2p/renderer';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { BoardView } from '../board/BoardView';
@@ -43,6 +43,11 @@ const NO_PLAYERS = { players: [], botDelayMs: 0 };
 
 /** A fresh seed for the randomiser and the number solver. */
 const seed = (): number => crypto.getRandomValues(new Uint32Array(1))[0] ?? 1;
+
+/** Development builds expose the canvas renderer so browser tests can tap hexes and edges. */
+function exposeRenderer(renderer: BoardRenderer): void {
+  if (import.meta.env.DEV) Reflect.set(window, '__cp2pMapEditor', { renderer });
+}
 
 function isTypingTarget(target: EventTarget | null): boolean {
   return (
@@ -130,6 +135,8 @@ export function MapEditor({ initial, loadError }: MapEditorProps) {
         break;
     }
   };
+
+  useEffect(() => () => void Reflect.deleteProperty(window, '__cp2pMapEditor'), []);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -318,6 +325,7 @@ export function MapEditor({ initial, loadError }: MapEditorProps) {
             onSelect={onSelect}
             layers={LAYERS}
             label={t('editor:mapBoard')}
+            onRendererReady={exposeRenderer}
           />
           <div className="map-board-status" aria-hidden="true">
             <span data-state={report.errors.length > 0 ? 'error' : 'ok'}>
